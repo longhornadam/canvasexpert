@@ -1,0 +1,146 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "All Question Types Sampler (CS)",
+  "instructions": "<p>This quiz includes one of every QuizForge question type. It is a fixture for testing the QuizForge-to-Canvas pipeline.</p>",
+  "metadata": {
+    "subject": "Intro to Computer Science",
+    "grade": 8,
+    "standard": "Mixed - fixture exercising every QuizForge item type.",
+    "variant_group": "all_types_sampler",
+    "variant_label": "Coverage fixture"
+  },
+  "items": [
+    {
+      "id": "stim_snippet",
+      "type": "STIMULUS",
+      "format": "code",
+      "prompt": "<pre style='background-color:#272822;color:#F8F8F2;padding:10px;border-radius:4px;font-family:Courier New, Consolas, monospace;white-space:pre;display:block;'><code>x = 5\nprint(x * 2)</code></pre>"
+    },
+    {
+      "id": "mc_snippet_out",
+      "metadata": { "teks": "126.34(c)(4)(A)" },
+      "type": "MC",
+      "stimulus_id": "stim_snippet",
+      "prompt": "<p>What does the program above print?</p>",
+      "choices": [
+        { "id": "A", "text": "10", "correct": true },
+        { "id": "B", "text": "52", "correct": false },
+        { "id": "C", "text": "5 * 2", "correct": false }
+      ]
+    },
+    { "id": "stim_snippet_end", "type": "STIMULUS_END", "prompt": "" },
+    {
+      "id": "tf_indent",
+      "type": "TF",
+      "prompt": "<p>In Python, indentation is part of the syntax and changes how code runs.</p>",
+      "answer": true
+    },
+    {
+      "id": "ma_outputs",
+      "metadata": { "teks": "126.34(c)(5)(A)" },
+      "type": "MA",
+      "prompt": "<p>Which of the following are ways a program can show information to a user? Select all that apply.</p>",
+      "choices": [
+        { "id": "A", "text": "print() to the screen", "correct": true },
+        { "id": "B", "text": "Writing text to a file", "correct": true },
+        { "id": "C", "text": "Declaring a variable", "correct": false },
+        { "id": "D", "text": "Adding a comment with #", "correct": false }
+      ]
+    },
+    {
+      "id": "match_symbols",
+      "type": "MATCHING",
+      "prompt": "<p>Match each Python symbol to its meaning.</p>",
+      "pairs": [
+        { "left": "=", "right": "Assigns a value to a variable" },
+        { "left": "==", "right": "Checks whether two values are equal" },
+        { "left": "+", "right": "Adds two numbers" }
+      ],
+      "distractors": ["Checks whether two values are NOT equal"]
+    },
+    {
+      "id": "fitb_variable",
+      "metadata": { "teks": "126.34(c)(4)(A)" },
+      "type": "FITB",
+      "prompt": "<p>A [blank] is a named container that stores a value you can use later.</p>",
+      "accept": ["variable"],
+      "answer_mode": "open_entry",
+      "case_sensitive": false
+    },
+    {
+      "id": "num_modulo",
+      "metadata": { "teks": "126.34(c)(4)(C)" },
+      "type": "NUMERICAL",
+      "prompt": "<p>In Python, what is the result of <code>7 % 3</code>?</p>",
+      "answer": 1,
+      "evaluation": { "mode": "exact", "value": 1 }
+    },
+    {
+      "id": "order_steps",
+      "type": "ORDERING",
+      "header": "First step at top, last step at bottom",
+      "prompt": "<p>Put the steps of writing and running a Python program in the correct order.</p>",
+      "items": [
+        "Write the code in the editor",
+        "Save the file",
+        "Run the program",
+        "Read the output"
+      ]
+    },
+    {
+      "id": "cat_tokens",
+      "metadata": { "teks": "126.34(c)(4)(A)" },
+      "type": "CATEGORIZATION",
+      "prompt": "<p>Sort each Python piece into the correct group.</p>",
+      "categories": ["Keyword", "Operator"],
+      "items": [
+        { "label": "for", "category": "Keyword" },
+        { "label": "if", "category": "Keyword" },
+        { "label": "+", "category": "Operator" },
+        { "label": "==", "category": "Operator" }
+      ]
+    },
+    {
+      "id": "essay_describe",
+      "type": "ESSAY",
+      "prompt": "<p>Describe, in your own words, the difference between <code>=</code> and <code>==</code> in Python.</p>",
+      "length_guidance": "2-3 sentences",
+      "rubric_hint": "= assigns a value; == compares two values and results in True or False."
+    },
+    {
+      "id": "upload_project",
+      "type": "FILEUPLOAD",
+      "prompt": "<p>Upload your finished Python program for this unit.</p>",
+      "requirements": "Submit a single .py file that runs without errors.",
+      "accepted_formats": [".py"],
+      "max_file_size_mb": 5
+    }
+  ],
+  "rationales": [
+    {
+      "item_id": "mc_snippet_out",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "x holds 5 and 5 * 2 evaluates to 10" },
+        { "id": "B", "correct": false, "rationale": "that is what joining characters would give, but x holds the number 5 so Python does math" },
+        { "id": "C", "correct": false, "rationale": "Python evaluates the expression and prints its result, not the literal characters 5 * 2" }
+      ]
+    },
+    { "item_id": "tf_indent", "rationale": "Python uses indentation to define code blocks, so changing it changes how the code runs" },
+    {
+      "item_id": "ma_outputs",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "print() sends information to the screen for the user to see" },
+        { "id": "B", "correct": true, "rationale": "writing to a file is another way a program outputs information" },
+        { "id": "C", "correct": false, "rationale": "declaring a variable only stores data and shows nothing to the user" },
+        { "id": "D", "correct": false, "rationale": "comments are ignored by Python and never shown to the user" }
+      ]
+    },
+    { "item_id": "match_symbols", "rationale": "= assigns, == compares for equality, and + adds; checking NOT equal is the job of !=, the distractor." },
+    { "item_id": "fitb_variable", "rationale": "A variable is a named container that stores a value for later use." },
+    { "item_id": "num_modulo", "rationale": "The % operator gives the remainder; 7 divided by 3 leaves a remainder of 1." },
+    { "item_id": "order_steps", "rationale": "You write the code, save the file, run the program, then read the output it produces." },
+    { "item_id": "cat_tokens", "rationale": "for and if are reserved keywords; + and == are operators that act on values." }
+  ]
+}
+</QUIZFORGE_JSON>

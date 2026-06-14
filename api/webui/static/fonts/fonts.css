@@ -1,0 +1,61 @@
+/* Local font-face declarations — no external connections required.
+   Generated from Google Fonts CSS for:
+   - Schibsted Grotesk 700, 800
+   - Public Sans 400, 500, 600, 700
+   - JetBrains Mono 400, 500
+*/
+
+/* Schibsted Grotesk */
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/schibsted-grotesk-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/static/fonts/schibsted-grotesk-800.woff2') format('woff2');
+}
+
+/* Public Sans */
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/public-sans-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 500 600;
+  font-display: swap;
+  src: url('/static/fonts/public-sans-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Public Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/public-sans-700.woff2') format('woff2');
+}
+
+/* JetBrains Mono */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('/static/fonts/jetbrains-mono-500.woff2') format('woff2');
+}

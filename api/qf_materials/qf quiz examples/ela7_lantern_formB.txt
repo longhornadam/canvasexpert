@@ -1,0 +1,88 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "Reading Check: \"The Lantern\" (Form B)",
+  "instructions": "<p>Read the passage, then answer the questions that follow.</p>",
+  "metadata": {
+    "subject": "ELA 7",
+    "grade": 7,
+    "standard": "Cite textual evidence, draw inferences, and identify literary terms (RL.7.1, RL.7.2, L.7.5).",
+    "variant_group": "ela7_lantern",
+    "variant_label": "Form B"
+  },
+  "items": [
+    {
+      "id": "stim_lantern",
+      "type": "STIMULUS",
+      "format": "text",
+      "layout": "right",
+      "prompt": "<p><strong>The Lantern</strong></p><p>Every evening, just as the sky turned the color of ash, old Mr. Hale climbed the spiral stair of the lighthouse. He carried a single lantern, its flame held steady against the wind that pushed through the cracks. The fishing boats far out on the water watched for his light the way travelers watch for a familiar face. Some nights the storms were fierce, and the climb left his hands raw on the cold rail. Still, he never missed a night. The town below slept easier knowing the old keeper and his lantern stood guard.</p>"
+    },
+    {
+      "id": "mc_inference",
+      "type": "MC",
+      "stimulus_id": "stim_lantern",
+      "prompt": "<p>Why most likely did the town sleep easier?</p>",
+      "choices": [
+        { "id": "A", "text": "They trusted the keeper's light would guide and warn the boats.", "correct": true },
+        { "id": "B", "text": "The storms had finally stopped for good.", "correct": false },
+        { "id": "C", "text": "The keeper had retired from his job.", "correct": false },
+        { "id": "D", "text": "The lighthouse had been rebuilt with new cracks sealed.", "correct": false }
+      ]
+    },
+    {
+      "id": "ma_evidence",
+      "type": "MA",
+      "stimulus_id": "stim_lantern",
+      "prompt": "<p>Which details show the keeper was dedicated? Select all that apply.</p>",
+      "choices": [
+        { "id": "A", "text": "He never missed a night.", "correct": true },
+        { "id": "B", "text": "He climbed even when storms were fierce.", "correct": true },
+        { "id": "C", "text": "The sky turned the color of ash.", "correct": false },
+        { "id": "D", "text": "The boats were far out on the water.", "correct": false }
+      ]
+    },
+    {
+      "id": "match_lit_terms",
+      "type": "MATCHING",
+      "prompt": "<p>Match each literary term to its meaning.</p>",
+      "pairs": [
+        { "left": "Setting", "right": "Where and when a story takes place" },
+        { "left": "Simile", "right": "A comparison using like or as" },
+        { "left": "Mood", "right": "The feeling a passage creates in the reader" }
+      ],
+      "distractors": ["The turning point of the plot"]
+    },
+    {
+      "id": "essay_simile",
+      "type": "ESSAY",
+      "stimulus_id": "stim_lantern",
+      "prompt": "<p>The passage compares the boats watching for the light to <em>travelers watching for a familiar face</em>. Explain what this comparison suggests about how the boats felt about the light.</p>",
+      "length_guidance": "3-4 sentences",
+      "rubric_hint": "Interprets the simile as comfort, safety, or trust in something familiar."
+    },
+    { "id": "stim_lantern_end", "type": "STIMULUS_END", "prompt": "" }
+  ],
+  "rationales": [
+    {
+      "item_id": "mc_inference",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "The light guided boats like a familiar face, so trust in it would ease worry." },
+        { "id": "B", "correct": false, "rationale": "The passage says storms were sometimes fierce, not that they had stopped." },
+        { "id": "C", "correct": false, "rationale": "He never missed a night, so he had not retired." },
+        { "id": "D", "correct": false, "rationale": "The cracks are mentioned but nothing says the lighthouse was rebuilt." }
+      ]
+    },
+    {
+      "item_id": "ma_evidence",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "Never missing a night directly shows steady commitment." },
+        { "id": "B", "correct": true, "rationale": "Working through fierce storms shows he pushed past hardship." },
+        { "id": "C", "correct": false, "rationale": "The ash-colored sky sets the time of day, not the keeper's dedication." },
+        { "id": "D", "correct": false, "rationale": "The boats' distance describes the scene, not the keeper's effort." }
+      ]
+    },
+    { "item_id": "match_lit_terms", "rationale": "Setting is where/when; a simile compares with like or as; mood is the reader's feeling. The turning point describes climax, the distractor." }
+  ]
+}
+</QUIZFORGE_JSON>

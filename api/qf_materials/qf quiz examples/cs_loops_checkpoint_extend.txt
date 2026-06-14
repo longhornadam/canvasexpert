@@ -1,0 +1,108 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "Loops & Variables Checkpoint",
+  "instructions": "<p>Trace the program carefully and be ready to justify your reasoning with evidence from the code.</p>",
+  "metadata": {
+    "subject": "Intro to Computer Science",
+    "grade": 8,
+    "standard": "Trace and predict output of simple Python for loops; identify valid variable names.",
+    "tier": 4,
+    "variant_group": "cs_loops_checkpoint",
+    "variant_label": "Extend"
+  },
+  "items": [
+    {
+      "id": "stim_accum",
+      "type": "STIMULUS",
+      "format": "code",
+      "prompt": "<pre style='background-color:#272822;color:#F8F8F2;padding:10px;border-radius:4px;font-family:Courier New, Consolas, monospace;white-space:pre;display:block;'><code>total = 0\nfor n in range(1, 4):\n    total = total + n\nprint(total)</code></pre>"
+    },
+    {
+      "id": "mc_accum_output",
+      "type": "MC",
+      "stimulus_id": "stim_accum",
+      "prompt": "<p>What does this program print?</p>",
+      "choices": [
+        { "id": "A", "text": "6", "correct": true },
+        { "id": "B", "text": "3", "correct": false },
+        { "id": "C", "text": "10", "correct": false },
+        { "id": "D", "text": "0", "correct": false }
+      ]
+    },
+    {
+      "id": "ma_accum_true",
+      "type": "MA",
+      "stimulus_id": "stim_accum",
+      "prompt": "<p>Which statements about this program are true? Select all that apply.</p>",
+      "choices": [
+        { "id": "A", "text": "n takes the values 1, 2, and 3", "correct": true },
+        { "id": "B", "text": "The loop body runs three times", "correct": true },
+        { "id": "C", "text": "range(1, 4) includes the value 4", "correct": false },
+        { "id": "D", "text": "total is reset to 0 on every pass of the loop", "correct": false }
+      ]
+    },
+    {
+      "id": "num_accum_total",
+      "type": "NUMERICAL",
+      "stimulus_id": "stim_accum",
+      "prompt": "<p>What is the value of <code>total</code> after the loop finishes?</p>",
+      "answer": 6,
+      "evaluation": { "mode": "exact", "value": 6 }
+    },
+    {
+      "id": "fitb_accum_var",
+      "type": "FITB",
+      "stimulus_id": "stim_accum",
+      "prompt": "<p>The variable that keeps a running sum across the loop is named [blank].</p>",
+      "accept": ["total"],
+      "answer_mode": "open_entry",
+      "case_sensitive": true
+    },
+    {
+      "id": "cat_keywords",
+      "type": "CATEGORIZATION",
+      "prompt": "<p>Sort each Python keyword into the correct category.</p>",
+      "categories": ["Loops", "Conditionals"],
+      "items": [
+        { "label": "for", "category": "Loops" },
+        { "label": "while", "category": "Loops" },
+        { "label": "if", "category": "Conditionals" },
+        { "label": "elif", "category": "Conditionals" }
+      ]
+    },
+    {
+      "id": "essay_justify",
+      "type": "ESSAY",
+      "stimulus_id": "stim_accum",
+      "prompt": "<p>Explain how the value of <code>total</code> changes on each pass of the loop. Use specific values from the code as evidence.</p>",
+      "length_guidance": "3-5 sentences",
+      "rubric_hint": "Traces total as 0 -> 1 -> 3 -> 6 and cites the values 1, 2, 3 from range(1, 4)."
+    },
+    { "id": "stim_accum_end", "type": "STIMULUS_END", "prompt": "" }
+  ],
+  "rationales": [
+    {
+      "item_id": "mc_accum_output",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "total accumulates 1 + 2 + 3, ending at 6, which is what print() shows." },
+        { "id": "B", "correct": false, "rationale": "3 is only the last value added; the total keeps the running sum of all values." },
+        { "id": "C", "correct": false, "rationale": "10 would be 1 + 2 + 3 + 4, but range(1, 4) stops before 4." },
+        { "id": "D", "correct": false, "rationale": "0 is the starting value before the loop adds anything." }
+      ]
+    },
+    {
+      "item_id": "ma_accum_true",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "range(1, 4) yields 1, 2, 3, which n takes in turn." },
+        { "id": "B", "correct": true, "rationale": "Three values means the body runs three times." },
+        { "id": "C", "correct": false, "rationale": "range stops before its second argument, so 4 is excluded." },
+        { "id": "D", "correct": false, "rationale": "total = 0 runs once before the loop, not on each pass." }
+      ]
+    },
+    { "item_id": "num_accum_total", "rationale": "0 + 1 + 2 + 3 equals 6, the final value of total." },
+    { "item_id": "fitb_accum_var", "rationale": "total holds the running sum; it is updated each pass with total = total + n." },
+    { "item_id": "cat_keywords", "rationale": "for and while repeat code (loops); if and elif choose between paths (conditionals)." }
+  ]
+}
+</QUIZFORGE_JSON>
