@@ -11,32 +11,49 @@ Routes: GET  /api/calendar
 """
 import json
 import os
+import re
 
 from fastapi import APIRouter, Form
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from .. import config
 from ..calendar_csv import _parse_calendar_csv
-from ..deps import PISD_CALENDAR_PATHS, _PISD_LABELS
+from ..deps import API_DIR, _calendar_label, _calendars_dir, list_calendar_files
 
 router = APIRouter(tags=["calendar"])
+
+_TEMPLATE_PATH = os.path.join(API_DIR, "default_docs", "Calendars", "calendar_template.csv")
+
+
+def _file_key(filename: str) -> str:
+    """'Summer_Session_Sample.csv' → 'summer_session_sample' (calendar storage key)."""
+    stem = os.path.splitext(filename)[0]
+    return re.sub(r'[^a-z0-9]+', '_', stem.lower()).strip('_')
 
 
 @router.get("/api/calendar")
 def get_calendar():
-    return JSONResponse({"ok": True, "calendars": config.get_calendars()})
+    return JSONResponse({"ok": True, "calendars": config.get_calendars(),
+                         "available": list_calendar_files()})
 
 
 @router.post("/api/calendar/load-builtin")
-def load_builtin_calendar(year: str = Form(default="2026_27")):
-    path  = PISD_CALENDAR_PATHS.get(year, PISD_CALENDAR_PATHS["2026_27"])
-    key   = f"sample_isd_{year}"
-    label = _PISD_LABELS.get(year, f"sample ISD {year.replace('_', '-')}")
-    if not os.path.exists(path):
-        return JSONResponse({"ok": False, "error": f"Built-in calendar not found for {year}."})
+def load_builtin_calendar(name: str = Form(...)):
+    """Load a calendar CSV from the workspace Calendars folder by filename.
+
+    District-agnostic: `name` is a file the teacher placed (or that was seeded)
+    in their Calendars folder. No district data is baked into source.
+    """
+    cal_dir = _calendars_dir()
+    safe = os.path.basename(name)  # never traverse outside the Calendars folder
+    path = os.path.join(cal_dir or "", safe)
+    if not cal_dir or not os.path.exists(path):
+        return JSONResponse({"ok": False, "error": f"Calendar file not found: {safe}"})
     with open(path, encoding="utf-8") as f:
         content = f.read()
     dates, periods = _parse_calendar_csv(content)
+    key   = _file_key(safe)
+    label = _calendar_label(safe)
     config.set_calendar(key, label, dates, periods)
     return JSONResponse({"ok": True, "key": key, "label": label,
                          "count": len(dates), "grading_periods": periods})
@@ -55,12 +72,11 @@ def set_calendar_route(source: str = Form(...), dates: str = Form(...),
 
 
 @router.get("/api/calendar/template")
-def calendar_template(year: str = "2026_27"):
-    """Download a PISD calendar CSV as a template for editing to a new year."""
-    path  = PISD_CALENDAR_PATHS.get(year, PISD_CALENDAR_PATHS["2026_27"])
-    fname = f"calendar_template_{year}.csv"
-    if os.path.exists(path):
-        return FileResponse(path, media_type="text/csv", filename=fname)
+def calendar_template(year: str = ""):
+    """Download a blank, district-agnostic calendar CSV template for editing."""
+    fname = "calendar_template.csv"
+    if os.path.exists(_TEMPLATE_PATH):
+        return FileResponse(_TEMPLATE_PATH, media_type="text/csv", filename=fname)
     fallback = (
         "school_year,row_type,code,name,start_date,end_date,report_issue_date,basis\n"
         "YYYY-YY,Academic Period,T1,Term 1 / Report Card 1,YYYY-MM-DD,YYYY-MM-DD,YYYY-MM-DD,\n"

@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Welcome — Canvas Expert{% endblock %}
+{% block main_class %}page page--welcome{% endblock %}
+{% block content %}
+
+<div class="wizard">
+
+  <div class="wizard-header">
+    <h1>Welcome to Canvas Expert</h1>
+    <p class="hint">Let's get you set up in a few quick steps.</p>
+  </div>
+
+  <!-- Step indicators -->
+  <div class="wizard-steps" id="step-indicators">
+    <div class="wiz-step active" data-step="0">1. Workspace</div>
+    <div class="wiz-step" data-step="1">2. Canvas URL</div>
+    <div class="wiz-step" data-step="2">3. API Token</div>
+    <div class="wiz-step" data-step="3">4. Calendars</div>
+  </div>
+
+  <!-- Step 0 — Workspace -->
+  <div class="wizard-panel" id="step-0">
+    <h2>Where should Canvas Expert keep your files?</h2>
+    <p class="hint">
+      Canvas Expert stores your quizzes, assignments, pages, rubrics, and exports
+      in a local folder. If you use <strong>OneDrive</strong>, put it there so
+      everything syncs across your computers automatically.
+    </p>
+    <form id="workspace-form">
+      <label>
+        Workspace folder
+        <input type="text" name="path" id="workspace-path"
+               value="{{ workspace_suggestion }}"
+               placeholder="C:\Users\You\CanvasExpert" autocomplete="off" required>
+      </label>
+      <div id="workspace-result" class="callout" style="display:none"></div>
+      <div class="actions">
+        <button type="submit" class="primary">Confirm folder</button>
+      </div>
+    </form>
+    <div id="workspace-done" style="display:none">
+      <div class="callout ok">✓ Workspace ready</div>
+      <div class="actions">
+        <button type="button" class="primary" onclick="wizardNext()">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1 — Canvas URL -->
+  <div class="wizard-panel" id="step-1" style="display:none">
+    <h2>What web address do you use to log into Canvas?</h2>
+    <p class="hint">
+      Paste the full address you type in your browser — we'll strip it down to
+      the base URL automatically.
+    </p>
+    <form id="canvas-url-form">
+      <label>
+        Canvas address
+        <input type="text" name="base_url" id="canvas-url"
+               value="{{ canvas_base }}" data-saved="{{ canvas_base }}"
+               placeholder="https://yourschool.instructure.com" autocomplete="url" required>
+      </label>
+      <p class="hint" style="font-size:13px">
+        Examples: <code>https://yourschool.instructure.com</code>,
+        <code>https://canvas.yourschool.org</code>
+      </p>
+      <div id="canvas-url-result" class="callout" style="display:none"></div>
+      <div class="actions">
+        <button type="button" onclick="wizardBack()">← Back</button>
+        <button type="submit" class="primary">Save &amp; continue</button>
+      </div>
+    </form>
+    <div id="canvas-url-done" style="display:none">
+      <div class="callout ok">✓ Canvas address saved</div>
+      <div class="actions">
+        <button type="button" onclick="wizardBack()">← Back</button>
+        <button type="button" class="primary" onclick="wizardNext()">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 — Token -->
+  <div class="wizard-panel" id="step-2" style="display:none">
+    <h2>Connect your Canvas account</h2>
+    <p class="hint">
+      Create a personal access token in Canvas and paste it below. This token
+      gives Canvas Expert access to <em>your</em> courses — it's stored in your
+      <strong>Windows Credential Manager</strong>, never in any file.
+    </p>
+    <div class="callout" style="margin-bottom:12px">
+      <strong>How to get a token:</strong>
+      <ol style="margin:6px 0 0 16px;padding:0">
+        <li>Click the button below to open Canvas in a new tab</li>
+        <li>Go to <strong>Approved Integrations</strong> → <strong>+ New Access Token</strong></li>
+        <li>Name it <strong>Canvas Expert</strong>, set no expiry (unless required)</li>
+        <li>Click <strong>Generate Token</strong>, then <strong>copy it</strong></li>
+        <li>Come back here and paste it below</li>
+      </ol>
+    </div>
+    <div class="actions" style="margin-bottom:12px">
+      <a class="small-link" id="token-canvas-link" href="#" target="_blank" rel="noopener">Open Canvas token page ↗</a>
+    </div>
+    <form id="token-form">
+      <label>
+        API token
+        <input type="password" name="token" id="token-input"
+               placeholder="Paste your Canvas token here" autocomplete="off" required>
+      </label>
+      <div id="token-result" class="callout" style="display:none"></div>
+      <div class="actions">
+        <button type="button" onclick="wizardBack()">← Back</button>
+        <button type="submit" class="primary">Test &amp; save</button>
+      </div>
+    </form>
+    <div id="token-done" style="display:none">
+      <div class="callout ok" id="token-ok-msg">✓ Connected as <span id="connected-name"></span></div>
+      <div class="actions">
+        <button type="button" onclick="wizardBack()">← Back</button>
+        <button type="button" class="primary" onclick="wizardNext()">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 — Calendars -->
+  <div class="wizard-panel" id="step-3" style="display:none">
+    <h2>Activate school calendars (optional)</h2>
+    <p class="hint">
+      Calendar files tell Canvas Expert about your school's holidays, grading
+      periods, and semester dates. This powers the <strong>late-work,
+      extension, and grading period</strong> features. You can skip this and
+      set it up later in Settings.
+    </p>
+    <div id="calendar-list">
+      <p class="hint">Loading available calendars…</p>
+    </div>
+    <form id="calendar-form" style="display:none">
+      <div id="calendar-checkboxes"></div>
+      <div id="calendar-result" class="callout" style="display:none"></div>
+      <div class="actions">
+        <button type="button" onclick="wizardBack()">← Back</button>
+        <button type="submit" class="primary">Activate selected</button>
+        <button type="button" id="skip-calendars" onclick="wizardFinish()">Skip — I'll do this later</button>
+      </div>
+    </form>
+    <div id="calendar-done" style="display:none">
+      <div class="callout ok" id="calendar-ok-msg"></div>
+      <div class="actions">
+        <button type="button" onclick="wizardBack()">← Back</button>
+        <button type="button" class="primary" onclick="wizardFinish()">Done — start using Canvas Expert!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Finish / summary -->
+  <div class="wizard-panel" id="step-done" style="display:none">
+    <div class="callout ok" style="font-size:18px;text-align:center;padding:24px">
+      ✓ All set! You're ready to use Canvas Expert.
+    </div>
+    <div class="actions" style="justify-content:center">
+      <a href="/" class="primary button-like">Go to Dashboard</a>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/welcome.js"></script>
+{% endblock %}

@@ -96,6 +96,8 @@ EXPECTED = [
     ('/settings/courses/{course_id}/set-active', ('POST',)),
     ('/settings/download-root', ('POST',)),
     ('/settings/test-connection', ('POST',)),
+    ('/welcome', ('GET',)),
+    ('/welcome/workspace', ('POST',)),
 ]
 
 

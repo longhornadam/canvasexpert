@@ -8,9 +8,9 @@
   "applies_to": ["SCR", "ECR", "Argument", "Informational", "Correspondence"],
   "total_points": 100,
   "metadata": {
-    "school": "Sample School, sample ISD",
+    "school": "",
     "grade": 7,
-    "tracks": ["Pre-AP (4th/5th period)", "On-Level (6th/7th period)"],
+    "tracks": ["Pre-AP", "On-Level"],
     "track_note": "Same rubric for both tracks. Rigor difference is in the task/prompt complexity, not the scoring criteria.",
     "grade_scale": { "90-100": "Excellent Progress", "80-89": "Good Progress", "75-79": "Average Progress", "70-74": "Poor Progress", "0-69": "Failure" }
   },

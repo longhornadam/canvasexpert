@@ -35,7 +35,7 @@ from .schooldays import (
 )
 
 from .deps import (
-    WEBUI_DIR, API_DIR, REPO_ROOT, PISD_CALENDAR_PATHS, _PISD_LABELS,
+    WEBUI_DIR, API_DIR, REPO_ROOT,
     _key_to_year, QUIZ_FOLDERS, WORKSPACE_ROOT, _workspace_folder, _exports_dir,
     RUBRIC_FOLDERS, ASSIGNMENT_FOLDERS, PAGE_FOLDERS, AI_TA_DIR, TEMP_DIR, templates,
     _CUSTOM_DIR, list_quiz_files, list_assignment_files, list_page_files,
@@ -46,6 +46,7 @@ from .routes.calendar import router as _calendar_router
 from .routes.courses import router as _courses_router
 from .routes.gradebook import router as _gradebook_router
 from .routes.library import router as _library_router
+from .routes.onboarding import router as _onboarding_router
 from .routes.pages import router as _pages_router
 from .routes.push import router as _push_router
 from .routes.reports import router as _reports_router
@@ -73,7 +74,26 @@ async def _lifespan(app):
 app = FastAPI(title="Canvas Expert", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), name="static")
 
+# ── Onboarding gate ──────────────────────────────────────────────────────
+# If Canvas URL or token is not yet configured, redirect HTML page requests
+# to the /welcome wizard. Never gate API/static endpoints or the wizard itself.
 
+_ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/static", "/api", "/openapi.json", "/docs", "/redoc")
+
+
+@app.middleware("http")
+async def _onboarding_gate(request: Request, call_next):
+    if not config.token_is_set() or not config.get_canvas_base():
+        path = request.url.path
+        wants_html = "text/html" in request.headers.get("accept", "")
+        allowlisted = any(path.startswith(p) for p in _ALLOWLIST_PREFIXES)
+        if wants_html and not allowlisted:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url="/welcome", status_code=303)
+    return await call_next(request)
+
+
+app.include_router(_onboarding_router)
 app.include_router(_calendar_router)
 app.include_router(_courses_router)
 app.include_router(_gradebook_router)

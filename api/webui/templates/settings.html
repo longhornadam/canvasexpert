@@ -17,18 +17,21 @@
     just that token from the same Canvas page.
   </p>
 
+  {% if canvas_base %}
   <div class="actions" style="margin:0 0 10px">
     <a class="small-link" href="{{ canvas_base }}/profile/settings" target="_blank" rel="noopener">Get my token ↗</a>
   </div>
+  {% endif %}
 
   <form id="canvas-account-form">
     <label>
       Canvas base URL
       <div class="url-row">
-        <span id="url-display" class="url-static">{{ canvas_base }}</span>
+        <span id="url-display" class="url-static">{{ canvas_base or "Not set — enter your Canvas address" }}</span>
         <button type="button" id="btn-edit-url" class="small">Edit</button>
         <input type="url" name="base_url" id="base_url_input"
-               value="{{ canvas_base }}" style="display:none;flex:1" required>
+               value="{{ canvas_base }}" placeholder="https://yourschool.instructure.com"
+               style="{% if canvas_base %}display:none;{% endif %}flex:1" required>
       </div>
     </label>
 
@@ -57,6 +60,9 @@
     </div>
     <p id="account-status" class="status"></p>
   </form>
+  <div class="actions" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+    <a href="/welcome" class="small-link">Re-run setup wizard →</a>
+  </div>
 </section>
 
 <section class="card" id="tier-tags-card">
@@ -229,10 +235,22 @@
     {% endif %}
   </div>
 
-  <div class="actions" style="margin-top:0">
-    <button type="button" id="btn-cal-builtin-2526">Load sample ISD 2025–26</button>
-    <button type="button" id="btn-cal-builtin-2627" class="primary">Load sample ISD 2026–27</button>
+  {% if calendar_files %}
+  <p class="hint" style="margin:0 0 6px">
+    Calendars found in your workspace <strong>Calendars</strong> folder — click to load one.
+    Drop more CSVs in that folder (or add one below) and they'll appear here.
+  </p>
+  <div class="actions" id="cal-builtin-actions" style="margin-top:0; flex-wrap:wrap">
+    {% for cal in calendar_files %}
+    <button type="button" class="cal-load-btn" data-cal-file="{{ cal.name }}">Load {{ cal.label }}</button>
+    {% endfor %}
   </div>
+  {% else %}
+  <p class="hint" style="margin:0">
+    No calendar files in your workspace <strong>Calendars</strong> folder yet. Add one below,
+    or download the template to build your own.
+  </p>
+  {% endif %}
   <p id="cal-op-status" class="status" style="margin-top:10px"></p>
 
   <details style="margin-top:18px">
@@ -248,10 +266,9 @@
         Dates can be <code>MM/DD/YYYY</code> or <code>YYYY-MM-DD</code>.
       </p>
       <p class="hint" style="margin:0 0 10px; font-size:12.5px">
-        Need a starting point? Download a template:
-        <a href="/api/calendar/template?year=2025_26" download="calendar_template_2025_26.csv">2025–26</a> ·
-        <a href="/api/calendar/template?year=2026_27" download="calendar_template_2026_27.csv">2026–27</a>
-        — then ask an LLM to update it for a new year.
+        Need a starting point?
+        <a href="/api/calendar/template" download="calendar_template.csv">Download the blank template</a>
+        — then ask an LLM to fill it in for your district and year.
       </p>
       <details style="margin-bottom:12px">
         <summary class="delivery-summary" style="font-size:12.5px">LLM prompt for generating a new year's calendar</summary>

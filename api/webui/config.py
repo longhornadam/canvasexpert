@@ -15,21 +15,16 @@ from . import workspace
 SERVICE   = "quizforge-api"
 TOKEN_KEY = "canvas_token"
 
-CANVAS_BASE_DEFAULT   = "https://sample.instructure.com"
+# Empty by default — the first-run wizard collects the teacher's Canvas URL.
+# An empty base is the signal that onboarding is not yet complete.
+CANVAS_BASE_DEFAULT   = ""
 DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas Downloads")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags")
 
 
-_BUILTIN_LABELS = {
-    "sample_isd_2025_26": "sample ISD 2025-26",
-    "sample_isd_2026_27": "sample ISD 2026-27",
-}
-
-
 def _source_label(key: str) -> str:
-    if key in _BUILTIN_LABELS:
-        return _BUILTIN_LABELS[key]
+    """Prettify a calendar key into a display label (district-agnostic)."""
     return key.replace("_", " ").title().replace("Isd", "ISD")
 
 
@@ -159,6 +154,20 @@ def save_canvas_account(base_url: str, token: str | None = None):
     set_canvas_base(base_url)
     if token:
         set_token(token)
+
+
+# --------------------------------------------------------------------------
+# Workspace path (machine-local override)
+# --------------------------------------------------------------------------
+
+def get_workspace_path() -> str | None:
+    return _machine_load().get("workspace_path") or None
+
+
+def set_workspace_path(path: str):
+    state = _machine_load()
+    state["workspace_path"] = path.strip()
+    _machine_save(state)
 
 
 # --------------------------------------------------------------------------

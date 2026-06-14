@@ -320,13 +320,12 @@
     }).join("");
   }
 
-  async function _loadBuiltin(year, label) {
-    const btn = document.getElementById(`btn-cal-builtin-${year.replace("_", "")}`);
+  async function _loadCalendarFile(name, label, btn) {
     if (btn) btn.disabled = true;
     setCalStatus(calOpStatus, `Loading ${label}…`, "");
     try {
       const fd = new FormData();
-      fd.append("year", year);
+      fd.append("name", name);
       const d = await fetch("/api/calendar/load-builtin", { method: "POST", body: fd }).then(r => r.json());
       if (d.ok) {
         const note = (d.grading_periods || []).length
@@ -340,10 +339,11 @@
     } finally { if (btn) btn.disabled = false; }
   }
 
-  document.getElementById("btn-cal-builtin-2526")?.addEventListener("click",
-    () => _loadBuiltin("2025_26", "sample ISD 2025–26"));
-  document.getElementById("btn-cal-builtin-2627")?.addEventListener("click",
-    () => _loadBuiltin("2026_27", "sample ISD 2026–27"));
+  document.getElementById("cal-builtin-actions")?.addEventListener("click", e => {
+    const btn = e.target.closest(".cal-load-btn");
+    if (!btn) return;
+    _loadCalendarFile(btn.dataset.calFile, btn.textContent.replace(/^Load\s+/, ""), btn);
+  });
 
   document.getElementById("cal-list")?.addEventListener("click", async e => {
     const btn = e.target.closest(".cal-remove-btn");
