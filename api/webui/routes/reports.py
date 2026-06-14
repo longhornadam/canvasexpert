@@ -298,6 +298,20 @@ def open_folder(path: str = Form(...)):
         return JSONResponse({"ok": False, "error": str(e)})
 
 
+@router.post("/open-file")
+def open_file(path: str = Form(...)):
+    """Open a local file with its default app (local server only) — used by the
+    FeedbackExpert manual lane to open a pseudonymized bundle for MagicSchool/Copilot."""
+    path = os.path.normpath(path)
+    if not os.path.isfile(path):
+        return JSONResponse({"ok": False, "error": "File not found."})
+    try:
+        os.startfile(path)  # noqa: Windows-only; this app is local Windows-only
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
 @router.post("/pick-download-folder")
 def pick_download_folder():
     """Native folder picker → set as the download root (local app only)."""

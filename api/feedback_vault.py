@@ -65,5 +65,17 @@ class Vault:
         return {"canvas_id": cid, "real_name": e.get("real_name", ""),
                 "sis_id": e.get("sis_id", "")}
 
+    def all_real_identifiers(self):
+        """(names, ids) sets of every real identifier the vault knows — used by the
+        outbound safety scan to detect any leak before transmission."""
+        names, ids = set(), set()
+        for cid, e in self._by_id.items():
+            ids.add(str(cid))
+            if e.get("sis_id"):
+                ids.add(str(e["sis_id"]))
+            if e.get("real_name"):
+                names.add(e["real_name"])
+        return names, ids
+
     def __len__(self):
         return len(self._by_id)

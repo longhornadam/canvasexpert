@@ -14,6 +14,11 @@ from . import workspace
 
 SERVICE   = "quizforge-api"
 TOKEN_KEY = "canvas_token"
+OPENROUTER_KEY = "openrouter_key"
+
+# Default LLM for FeedbackExpert via OpenRouter. Editable in the UI — verify the
+# exact model id at openrouter.ai/models; OpenRouter slugs change over time.
+DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.5"
 
 # Empty by default — the first-run wizard collects the teacher's Canvas URL.
 # An empty base is the signal that onboarding is not yet complete.
@@ -155,6 +160,33 @@ def save_canvas_account(base_url: str, token: str | None = None):
     set_canvas_base(base_url)
     if token:
         set_token(token)
+
+
+# --------------------------------------------------------------------------
+# OpenRouter (FeedbackExpert LLM) — key in keyring, model machine-local
+# --------------------------------------------------------------------------
+
+def get_openrouter_key() -> str | None:
+    return keyring.get_password(SERVICE, OPENROUTER_KEY)
+
+
+def set_openrouter_key(key: str):
+    keyring.set_password(SERVICE, OPENROUTER_KEY, key)
+
+
+def has_openrouter_key() -> bool:
+    k = get_openrouter_key()
+    return bool(k and not k.startswith("PASTE"))
+
+
+def get_openrouter_model() -> str:
+    return _machine_load().get("openrouter_model") or DEFAULT_OPENROUTER_MODEL
+
+
+def set_openrouter_model(model: str):
+    state = _machine_load()
+    state["openrouter_model"] = (model or "").strip()
+    _machine_save(state)
 
 
 # --------------------------------------------------------------------------
