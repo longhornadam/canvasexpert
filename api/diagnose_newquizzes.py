@@ -161,16 +161,46 @@ def run_diagnostics(course_id, assignment_id=None):
             "interpretation": "SKIPPED — no Classic quiz in this course to compare.",
             "body": ""})
 
-    nq_read = results[1]["authorized"]
-    nq_report = results[2]["authorized"]
+    # Honest three-state verdict. "Blocked" requires a *definitive* 401/403;
+    # a skipped report probe or a network error is INCONCLUSIVE, not blocked.
+    token_valid   = results[0]["status"] == 200
+    read_status   = results[1]["status"]            # New Quizzes list
+    report_status = results[2]["status"]            # None if no NQ found/skipped
+
+    works   = read_status in (200, 201) or report_status in (200, 201, 400, 409)
+    blocked = read_status in (401, 403) or report_status in (401, 403)
+    tested_reports = report_status is not None
+
+    if not token_valid:
+        state = "inconclusive"
+        verdict = ("INCONCLUSIVE — the token failed the basic core-API sanity "
+                   "check above. Fix/replace the token before trusting anything else.")
+    elif works:
+        state = "works"
+        verdict = ("PAT CAN reach New Quizzes — the OAuth-only assumption does "
+                   "NOT hold here; update api/README.md."
+                   + ("" if tested_reports else
+                      " (Reads succeeded, but the reports endpoint was not "
+                      "exercised — point --assignment at a New Quiz to confirm "
+                      "the actual report pull.)"))
+    elif blocked:
+        state = "blocked"
+        verdict = ("PAT is blocked on New Quizzes — the OAuth/developer-key "
+                   "requirement holds. Note 401 (admin can add the scope) vs "
+                   "403 (separate dev key + OAuth needed) above.")
+    else:
+        state = "inconclusive"
+        verdict = ("INCONCLUSIVE — nothing conclusive was probed (no New Quiz / "
+                   "Classic quiz found, or a network/other error). Re-run against "
+                   "a course that HAS a New Quiz, or pass --assignment <id>. An "
+                   "empty New Quiz in your collab course is enough — auth is all "
+                   "we're testing.")
+
     summary = {
-        "pat_works_for_new_quizzes": bool(nq_read or nq_report),
-        "verdict": (
-            "PAT CAN reach New Quizzes — the OAuth-only assumption is WRONG for "
-            "this instance/config; update api/README.md."
-            if (nq_read or nq_report) else
-            "PAT is blocked on New Quizzes — the OAuth/developer-key requirement "
-            "holds. Note 401 (add scope) vs 403 (separate dev key needed) above."),
+        "token_valid": token_valid,
+        "state": state,
+        "pat_works_for_new_quizzes": works,
+        "verdict": verdict,
     }
     return results, summary
 
