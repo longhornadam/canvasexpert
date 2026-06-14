@@ -17,6 +17,11 @@ DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 WORKSPACE_NAME = "CanvasExpert"
 WORKSPACE_SUBFOLDERS = ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports", "Calendars"]
 
+# FeedbackExpert numbered drop-folder workflow (nested under the workspace).
+FEEDBACK_NAME = "FeedbackExpert"
+FEEDBACK_SUBFOLDERS = ["1_Inbox", "2_ForLLM", "3_FromLLM", "4_ToEnter", "_archive",
+                       "_vault", "_audit"]
+
 
 def _machine_config():
     if not os.path.exists(CONFIG_PATH):
@@ -85,6 +90,11 @@ def ensure_workspace():
         if os.path.exists(target):
             continue
         shutil.copy2(source, target)
+
+    # FeedbackExpert nested workflow tree.
+    fb_root = os.path.join(root, FEEDBACK_NAME)
+    for sub in FEEDBACK_SUBFOLDERS:
+        os.makedirs(os.path.join(fb_root, sub), exist_ok=True)
     return root
 
 
@@ -93,3 +103,17 @@ def folder(name):
     if not root:
         return None
     return os.path.join(root, name)
+
+
+def feedback_root():
+    root = workspace_root()
+    if not root:
+        return None
+    return os.path.join(root, FEEDBACK_NAME)
+
+
+def feedback_folder(sub):
+    fb = feedback_root()
+    if not fb:
+        return None
+    return os.path.join(fb, sub)

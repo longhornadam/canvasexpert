@@ -97,6 +97,23 @@ def ai_expert_page(request: Request):
     })
 
 
+@router.get("/feedback-expert", response_class=HTMLResponse)
+def feedback_expert_page(request: Request):
+    fb = workspace.feedback_root()
+    folders = {}
+    if fb:
+        folders = {k: workspace.feedback_folder(v) for k, v in {
+            "inbox": "1_Inbox", "forllm": "2_ForLLM",
+            "fromllm": "3_FromLLM", "toenter": "4_ToEnter"}.items()}
+    return templates.TemplateResponse("feedback_expert.html", {
+        "request":       request,
+        "nav_section":   "feedback",
+        "persona":       config.get_ai_ta_persona(),
+        "feedback_root": fb,
+        "folders":       folders,
+    })
+
+
 @router.get("/about", response_class=HTMLResponse)
 def about(request: Request):
     return templates.TemplateResponse("about.html", {"request": request, "nav_section": "about"})

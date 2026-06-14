@@ -100,6 +100,10 @@ EXPECTED = [
     ('/settings/test-connection', ('POST',)),
     ('/welcome', ('GET',)),
     ('/welcome/workspace', ('POST',)),
+    ('/feedback-expert', ('GET',)),
+    ('/api/feedback/persona', ('POST',)),
+    ('/api/feedback/process-inbox', ('POST',)),
+    ('/api/feedback/reidentify', ('POST',)),
 ]
 
 
