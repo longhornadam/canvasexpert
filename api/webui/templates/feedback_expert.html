@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Feedback Expert — Canvas Expert{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Feedback Expert</h2>
+  <p class="hint" style="margin-top:0">
+    Use an LLM to help score student writing and draft feedback — <strong>safely and
+    honestly</strong>. Student work is <strong>pseudonymized</strong> before it ever leaves
+    this machine (real names stay in a private vault here), and any AI-drafted feedback
+    <strong>identifies itself</strong> so students always know an assistant helped.
+  </p>
+  {% if not feedback_root %}
+  <div class="callout warn" style="margin-top:10px">
+    No workspace configured yet — finish setup (Settings) so Feedback Expert has a place to
+    work. It uses a <strong>FeedbackExpert</strong> folder in your synced workspace.
+  </div>
+  {% endif %}
+</section>
+
+<section class="card" id="persona-card">
+  <h2>Your AI teaching assistant</h2>
+  <p class="hint" style="margin-top:0">
+    Give your assistant a name and personality. It introduces itself by this name in every
+    piece of feedback it drafts — honesty by design.
+  </p>
+  <form id="persona-form">
+    <label>Name
+      <input type="text" id="ta-name" value="{{ persona.name }}" placeholder="e.g. Sage" autocomplete="off">
+    </label>
+    <label>Personality / tone <small class="lbl-hint">(optional)</small>
+      <textarea id="ta-personality" rows="3"
+        placeholder="e.g. Warm, specific, encouraging; focuses on one next step.">{{ persona.personality }}</textarea>
+    </label>
+    <div class="actions">
+      <button type="submit" class="primary">Save assistant</button>
+      <span id="persona-status" class="hint"></span>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>The workflow</h2>
+  <p class="hint" style="margin-top:0">
+    Four steps. Nothing identifiable leaves your machine, and you stay in control —
+    review before anything is entered.
+  </p>
+
+  <ol class="fx-steps">
+    <li>
+      <strong>1 · Drop CSVs in the Inbox.</strong> Download each New Quiz's
+      <em>Student Analysis</em> CSV from Canvas and drop it into the Inbox folder.
+      <div class="actions" style="margin-top:6px">
+        <button type="button" class="small fx-open" data-folder="inbox" {% if not feedback_root %}disabled{% endif %}>Open Inbox</button>
+      </div>
+    </li>
+    <li>
+      <strong>2 · Process the Inbox.</strong> Pseudonymizes each CSV into an LLM-ready bundle.
+      <div class="callout" style="margin:6px 0">Review the bundle for any self-identifying
+        details in the writing before sending it to an LLM.</div>
+      <div class="actions" style="margin-top:6px">
+        <button type="button" id="fx-process" class="primary" {% if not feedback_root %}disabled{% endif %}>Process Inbox</button>
+        <button type="button" class="small fx-open" data-folder="forllm" {% if not feedback_root %}disabled{% endif %}>Open ForLLM</button>
+        <span id="fx-process-status" class="hint"></span>
+      </div>
+      <pre id="fx-process-log" class="log" hidden></pre>
+    </li>
+    <li>
+      <strong>3 · Score with your LLM.</strong> Paste a bundle + its <em>HOW-TO-SCORE</em> file
+      (and your rubric) into your LLM, then save the LLM's JSON output into the FromLLM folder.
+      <div class="actions" style="margin-top:6px">
+        <button type="button" class="small fx-open" data-folder="fromllm" {% if not feedback_root %}disabled{% endif %}>Open FromLLM</button>
+      </div>
+    </li>
+    <li>
+      <strong>4 · Re-identify.</strong> Maps the LLM's results back to real students into a
+      ready-to-enter CSV. (Automatic posting to Canvas comes later.)
+      <div class="actions" style="margin-top:6px">
+        <button type="button" id="fx-reidentify" class="primary" {% if not feedback_root %}disabled{% endif %}>Re-identify results</button>
+        <button type="button" class="small fx-open" data-folder="toenter" {% if not feedback_root %}disabled{% endif %}>Open ToEnter</button>
+        <span id="fx-reid-status" class="hint"></span>
+      </div>
+      <pre id="fx-reid-log" class="log" hidden></pre>
+    </li>
+  </ol>
+</section>
+
+<script>
+(function () {
+  var folders = {{ folders | tojson }};
+
+  function openFolder(key) {
+    var path = folders[key];
+    if (!path) return;
+    fetch("/api/open-folder", { method: "POST", body: new URLSearchParams({ path: path }) });
+  }
+  document.querySelectorAll(".fx-open").forEach(function (b) {
+    b.addEventListener("click", function () { openFolder(b.dataset.folder); });
+  });
+
+  var pForm = document.getElementById("persona-form");
+  pForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var st = document.getElementById("persona-status");
+    st.textContent = "Saving…";
+    fetch("/api/feedback/persona", { method: "POST", body: new URLSearchParams({
+      name: document.getElementById("ta-name").value.trim(),
+      personality: document.getElementById("ta-personality").value.trim() }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { st.textContent = d.ok ? "Saved." : ("Error: " + (d.error || "failed")); })
+      .catch(function (e) { st.textContent = "Error: " + e; });
+  });
+
+  function runStep(url, btn, statusEl, logEl) {
+    btn.disabled = true; statusEl.textContent = "Working…"; logEl.hidden = true;
+    fetch(url, { method: "POST" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.log && d.log.length) { logEl.textContent = d.log.join("\n"); logEl.hidden = false; }
+        statusEl.textContent = d.ok ? "Done." : ("Error: " + (d.error || "failed"));
+      })
+      .catch(function (e) { statusEl.textContent = "Error: " + e; })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  document.getElementById("fx-process").addEventListener("click", function () {
+    runStep("/api/feedback/process-inbox", this,
+            document.getElementById("fx-process-status"),
+            document.getElementById("fx-process-log"));
+  });
+  document.getElementById("fx-reidentify").addEventListener("click", function () {
+    runStep("/api/feedback/reidentify", this,
+            document.getElementById("fx-reid-status"),
+            document.getElementById("fx-reid-log"));
+  });
+})();
+</script>
+{% endblock %}

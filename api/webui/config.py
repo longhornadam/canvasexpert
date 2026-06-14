@@ -20,7 +20,8 @@ TOKEN_KEY = "canvas_token"
 CANVAS_BASE_DEFAULT   = ""
 DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas Downloads")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
-SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags")
+SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags",
+               "ai_ta_persona")
 
 
 def _source_label(key: str) -> str:
@@ -260,6 +261,24 @@ def get_tier_tags() -> dict:
 def set_tier_tags(tags: dict):
     clean = {name: str(tags.get(name, "")).strip() for name in TIER_NAMES}
     _save_synced_key("tier_tags", clean)
+
+
+# --------------------------------------------------------------------------
+# FeedbackExpert — AI-TA persona (name + personality). Disclosed in feedback.
+# --------------------------------------------------------------------------
+
+AI_TA_PERSONA_DEFAULT = {"name": "", "personality": ""}
+
+
+def get_ai_ta_persona() -> dict:
+    saved = _synced_state().get("ai_ta_persona", {})
+    return {"name": str(saved.get("name", "")).strip(),
+            "personality": str(saved.get("personality", "")).strip()}
+
+
+def set_ai_ta_persona(name: str, personality: str = ""):
+    _save_synced_key("ai_ta_persona",
+                     {"name": (name or "").strip(), "personality": (personality or "").strip()})
 
 
 def get_sweep_settings() -> dict:
