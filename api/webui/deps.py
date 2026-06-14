@@ -35,18 +35,36 @@ def _calendars_dir():
     from . import workspace as _ws
     return _ws.folder("Calendars")
 
-PISD_CALENDAR_PATHS = {
-    "2025_26": os.path.join(_calendars_dir() or "", "sample_ISD_2025_26_periods_and_days_off.csv"),
-    "2026_27": os.path.join(_calendars_dir() or "", "sample_ISD_2026_27_estimated_periods_and_days_off.csv"),
-}
-_PISD_LABELS = {
-    "2025_26": "sample ISD 2025-26",
-    "2026_27": "sample ISD 2026-27",
-}
+
+def _calendar_label(filename: str) -> str:
+    """'Summer_Session_Sample.csv' → 'Summer Session Sample' (district-agnostic)."""
+    stem = os.path.splitext(filename)[0]
+    return stem.replace("_", " ").replace("-", " ").strip()
+
+
+def list_calendar_files():
+    """CSV calendars available in the user's workspace Calendars folder.
+
+    Data-driven: whatever the teacher (or the first-run seed) placed in the
+    Calendars folder shows up here. No district names are baked into source.
+    Returns [{name, label, path}] sorted by name.
+    """
+    cal_dir = _calendars_dir()
+    if not cal_dir or not os.path.isdir(cal_dir):
+        return []
+    found = []
+    for path in sorted(_glob.glob(os.path.join(cal_dir, "*.csv"))):
+        name = os.path.basename(path)
+        found.append({
+            "name":  name,
+            "label": _calendar_label(name),
+            "path":  os.path.abspath(path),
+        })
+    return found
 
 
 def _key_to_year(key: str) -> str:
-    """'sample_isd_2025_26' → '25-26', 'custom' → ''"""
+    """'something_2025_26' → '25-26', 'custom' → ''"""
     import re as _re
     m = _re.search(r'(\d{4})_(\d{2})$', key)
     return f"{m.group(1)[-2:]}-{m.group(2)}" if m else ""

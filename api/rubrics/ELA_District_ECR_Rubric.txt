@@ -8,7 +8,7 @@
   "applies_to": ["ECR"],
   "total_points": 10,
   "metadata": {
-    "note": "sample ISD requires 0-10 ECR scoring but publishes no rubric. This instrument doubles the STAAR ECR construct (D&O 0-3 -> 0-6, Conventions 0-2 -> 0-4): each STAAR point becomes a 2-point band, with the in-band choice expressing gradation. Not normalized against TEA anchors.",
+    "note": "Some districts require 0-10 ECR scoring but publish no rubric. This instrument doubles the STAAR ECR construct (D&O 0-3 -> 0-6, Conventions 0-2 -> 0-4): each STAAR point becomes a 2-point band, with the in-band choice expressing gradation. Not normalized against TEA anchors.",
     "grade": 7
   },
   "student_page": {

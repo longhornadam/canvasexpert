@@ -39,8 +39,11 @@ Browse your live course list and bookmark the handful you use regularly. Mark ea
 set here are the display names used throughout the app.
 
 ### Academic calendars
-Load one or more district calendars (built-in: sample ISD 2025-26 / 2026-27) or
-paste a custom CSV. Two CSV formats accepted:
+Load one or more calendars from your workspace **Calendars** folder, or paste a
+custom CSV. The repo ships **no district data** — only a blank `calendar_template.csv`
+and a fictional `Summer_Session_Sample.csv` (seeded into the Calendars folder on
+first run). Whatever CSVs you drop into that folder appear as one-click "Load"
+buttons in Settings. Two CSV formats accepted:
 
 - **Canonical 7-col:** `school_year,row_type,code,name,start_date,end_date,report_issue_date,basis`
   — row_type values `Holiday`, `No School for Students`, `Holiday for Students/Teachers`
@@ -48,10 +51,10 @@ paste a custom CSV. Two CSV formats accepted:
 - **Simple 4-col:** `Category,Name,Start Date,End Date` — `Student Day Off` →
   no-count dates; `Academic Period` → presets.
 
-Multiple calendars can be active simultaneously. The sweep automatically filters
-to holidays within the swept date range. Source CSVs:
-`dev/sample_ISD_2025_26_periods_and_days_off.csv` and
-`dev/sample_ISD_2026_27_estimated_periods_and_days_off.csv`.
+Multiple calendars can be active simultaneously; none are active by default. The
+sweep automatically filters to holidays within the swept date range. To build a
+new calendar, download the template and ask an LLM to fill it in for your district
+and year (there's a ready-made prompt in Settings).
 
 ### Download location
 Root folder for submission downloads. Each course gets its own subfolder.

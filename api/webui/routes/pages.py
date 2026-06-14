@@ -19,7 +19,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from .. import config, workspace
 from ..deps import (
     AI_TA_DIR, API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
-    list_ai_ta_files, list_assignment_files, list_page_files, list_quiz_files,
+    list_ai_ta_files, list_assignment_files, list_calendar_files,
+    list_page_files, list_quiz_files,
 )
 
 router = APIRouter(tags=["pages"])
@@ -177,6 +178,7 @@ def settings_page(request: Request):
         "download_root": config.get_download_root(),
         "ai_ta_dir":     AI_TA_DIR,
         "calendars":     config.get_calendars(),
+        "calendar_files": list_calendar_files(),
         "workspace_root": root,
         "workspace_files": [
             {"name": "AI-TA", "path": workspace.folder("AI-TA")},
