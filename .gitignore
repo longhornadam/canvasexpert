@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Canvas token + machine-local config (NEVER commit)
+.env
+.env.*
+api/.env
+api/webui/config.json
+
+# Runtime / user data
+api/webui/curve_events.json
+api/temp/
+api/out/
+api/webui/profiles.json
+api/teks_outcomes.json
+api/.experiment_state.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

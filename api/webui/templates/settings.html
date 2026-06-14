@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}Settings — Canvas Expert{% endblock %}
+{% block content %}
+
+<section class="card" id="workspace-card" data-path="{{ workspace_root or '' }}">
+  <h2>Canvas account</h2>
+  <p class="hint">
+    Your Canvas API token gives Canvas Expert access to all your courses — paste it
+    once here and you never need to touch it again. It's stored in your
+    <strong>Windows Credential Manager</strong> (not in any file on disk).
+  </p>
+  <p class="hint" style="margin-top:8px">
+    In Canvas: Account → Settings → <strong>+ New Access Token</strong>. Name it
+    <strong>CanvasExpert – {{ computer_name }}</strong>, use no expiry unless your
+    district requires one, copy it, and paste it here. Generate a fresh token on
+    each computer; never reuse one or write it down. If a machine is lost, delete
+    just that token from the same Canvas page.
+  </p>
+
+  <div class="actions" style="margin:0 0 10px">
+    <a class="small-link" href="{{ canvas_base }}/profile/settings" target="_blank" rel="noopener">Get my token ↗</a>
+  </div>
+
+  <form id="canvas-account-form">
+    <label>
+      Canvas base URL
+      <div class="url-row">
+        <span id="url-display" class="url-static">{{ canvas_base }}</span>
+        <button type="button" id="btn-edit-url" class="small">Edit</button>
+        <input type="url" name="base_url" id="base_url_input"
+               value="{{ canvas_base }}" style="display:none;flex:1" required>
+      </div>
+    </label>
+
+    <label>
+      Canvas API token
+      {% if token_is_set %}
+      <div class="token-row">
+        <span class="token-saved">●●●●●●●● saved in Windows Credential Manager</span>
+        <button type="button" id="btn-replace-token" class="small">Replace</button>
+      </div>
+      <input type="password" name="token" id="token_input" autocomplete="off"
+             placeholder="Paste new token to replace" style="display:none">
+      {% else %}
+      <div class="callout warn" style="margin-top:8px">
+        No token saved yet — paste your Canvas personal access token below.
+        To create one: Canvas → Account → Settings → New Access Token.
+      </div>
+      <input type="password" name="token" id="token_input" autocomplete="off"
+             placeholder="Paste your Canvas token here" required>
+      {% endif %}
+    </label>
+
+    <div class="actions">
+      <button type="button" id="btn-test">Test connection</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+    <p id="account-status" class="status"></p>
+  </form>
+</section>
+
+<section class="card" id="tier-tags-card">
+  <h2>Differentiation tags</h2>
+  <p class="hint">
+    Optional. Canvas Expert's tiers — <strong>Support, Core, Accelerate, Extend</strong> —
+    stay private. The tag you set here is the only label a <em>student</em> sees on that
+    tier's assignment, so keep it neutral (a color, a form letter). Leave a tag blank for a
+    completely untagged assignment name. Tags double as version labels for anti-cheating and
+    A/B testing — students can't tell a tier from a random form.
+  </p>
+  <form id="tier-tags-form">
+    <div class="settings-grid" style="grid-template-columns:1fr 1fr">
+      {% for name in ["Support", "Core", "Accelerate", "Extend"] %}
+      <label>{{ name }} tag <small class="lbl-hint">(student-visible; blank = none)</small>
+        <input type="text" class="tier-tag-input" data-tier="{{ name }}"
+               value="{{ tier_tags[name] }}" placeholder="e.g. {{ {'Support':'Red','Core':'Blue','Accelerate':'Silver','Extend':'White'}[name] }}"
+               autocomplete="off">
+      </label>
+      {% endfor %}
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary">Save tags</button>
+    </div>
+    <p id="tier-tags-status" class="status"></p>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Workspace</h2>
+  <p class="hint">
+    {% if workspace_is_local %}
+    no OneDrive found — using local folders for now.
+    {% else %}
+    Your synced content home lives at <strong>{{ workspace_status }}</strong>.
+    {% endif %}
+  </p>
+  <div class="actions" style="margin-top:0">
+    <button type="button" id="btn-workspace-open" class="small" {% if workspace_is_local %}disabled{% endif %}>Open folder</button>
+  </div>
+  <div style="margin-top:12px">
+    <strong style="font-size:13px">Folders here</strong>
+    <ul id="workspace-file-list" style="margin:8px 0 0; padding-left:18px">
+      {% for item in workspace_files %}
+      <li>{{ item.name }}{% if item.path %} <span class="muted">({{ item.path }})</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Bookmarked courses</h2>
+  <p class="hint">
+    Save the courses you push to often — they appear at the top of the course
+    picker on the dashboard. You can always browse all your courses live from
+    the dashboard too.
+  </p>
+
+  {% if saved_courses %}
+  <p class="hint" style="margin-bottom:10px">
+    Only <strong>Active</strong> courses appear in the dashboard picker and multi-course
+    push list. Mark courses you no longer need as Inactive to keep things tidy.
+  </p>
+  <table class="profiles">
+    <thead><tr><th>Nickname</th><th>Course name</th><th>ID</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for c in saved_courses %}
+      <tr id="course-row-{{ c.id }}">
+        <td><strong>{{ c.nickname }}</strong></td>
+        <td class="muted">{{ c.name }}</td>
+        <td class="muted">#{{ c.id }}</td>
+        <td>
+          {% if c.active %}
+          <button class="small active-toggle" style="color:#2f8132;border-color:#a8d5b5"
+                  data-course-id="{{ c.id }}" data-current="true">✓ Active</button>
+          {% else %}
+          <button class="small active-toggle" style="color:var(--muted)"
+                  data-course-id="{{ c.id }}" data-current="false">Inactive</button>
+          {% endif %}
+        </td>
+        <td>
+          <button class="danger small" data-remove-course="{{ c.id }}"
+                  data-remove-name="{{ c.nickname }}">Remove</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="hint">No bookmarks yet — fetch your courses below and add some.</p>
+  {% endif %}
+
+  <div class="actions" style="margin-top:16px">
+    <button type="button" id="btn-fetch-courses">Browse all my courses…</button>
+  </div>
+
+  <div id="course-browser" hidden style="margin-top:16px">
+    <label>
+      Search / pick a course
+      <input type="text" id="course-search" placeholder="Type to filter…" autocomplete="off">
+    </label>
+    <div id="course-list"></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Download location</h2>
+  <p class="hint">
+    Where downloaded submissions are saved on this machine.
+    Each course gets its own subfolder here.
+  </p>
+  <form id="download-root-form">
+    <label>
+      Download root folder
+      <div style="display:flex; gap:8px; margin-top:6px; align-items:center">
+        <input type="text" id="download-root-input" name="path"
+               value="{{ download_root }}" style="flex:1" placeholder="e.g. C:\Users\You\Desktop\Canvas Downloads">
+        <button type="submit" class="primary small">Save</button>
+      </div>
+    </label>
+    <p id="download-root-status" class="status" style="margin-top:6px"></p>
+  </form>
+</section>
+
+<section class="card" id="ai-ta-card" data-path="{{ ai_ta_dir }}">
+  <h2>AI-TA Library</h2>
+  <p class="hint">
+    This folder contains the paste-ready skill files you can load into MagicSchool or Copilot. Canvas Expert regenerates it from the current contracts and rubric library, so the contents stay current.
+  </p>
+  <p class="hint">
+    Paste one whole file into your chat assistant, then keep the conversation inside that file's instructions.
+  </p>
+  <div class="actions" style="margin-top:0">
+    <button type="button" id="btn-ai-ta-open" class="small">Open folder</button>
+    <button type="button" id="btn-ai-ta-rebuild" class="primary small">Rebuild</button>
+    <span id="ai-ta-status" class="status" style="display:inline-block; margin:0; align-self:center"></span>
+  </div>
+  <div style="margin-top:14px">
+    <strong style="font-size:13px">Files</strong>
+    <ul id="ai-ta-file-list" style="margin:8px 0 0; padding-left:18px"></ul>
+  </div>
+</section>
+
+<section class="card" id="cal">
+  <h2>Academic calendars <small class="lbl-hint">(used by Late Work Sweep &amp; Extensions)</small></h2>
+  <p class="hint">
+    Multiple calendars can be active at once. The sweep automatically uses holidays from
+    whichever calendar covers the selected date range.
+    No calendar = only weekends are skipped.
+  </p>
+
+  <div id="cal-list" style="margin-bottom:14px">
+    {% if calendars %}
+      {% for key, cal in calendars.items() %}
+      <div class="cal-row" data-cal-key="{{ key }}">
+        <div>
+          <strong>{{ cal.label }}</strong>
+          <span class="muted" style="font-size:12.5px; margin-left:8px">
+            {{ cal.no_count_dates | length }} day(s) off ·
+            {{ cal.grading_periods | length }} grading period(s)
+          </span>
+        </div>
+        <button class="danger small cal-remove-btn" data-cal-key="{{ key }}">Remove</button>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="callout warn" id="cal-none-callout">
+        No academic calendar configured — only weekends are skipped by default.
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="actions" style="margin-top:0">
+    <button type="button" id="btn-cal-builtin-2526">Load sample ISD 2025–26</button>
+    <button type="button" id="btn-cal-builtin-2627" class="primary">Load sample ISD 2026–27</button>
+  </div>
+  <p id="cal-op-status" class="status" style="margin-top:10px"></p>
+
+  <details style="margin-top:18px">
+    <summary class="delivery-summary">Add a custom CSV calendar</summary>
+    <div class="delivery-inner">
+      <p class="hint" style="margin:0 0 6px">
+        Paste a calendar CSV. Two formats are accepted:<br>
+        <strong>Canonical (7 columns):</strong> <code>school_year,row_type,code,name,start_date,end_date,report_issue_date,basis</code>
+        — <code>row_type</code> values <em>Holiday</em>, <em>No School for Students</em>, and <em>Holiday for Students/Teachers</em> become no-count dates;
+        <em>Academic Period</em> rows become grading-period presets in the sweep.<br>
+        <strong>Simple (4 columns):</strong> <code>Category,Name,Start Date,End Date</code>
+        — <em>Student Day Off</em> becomes no-count dates; <em>Academic Period</em> becomes grading-period presets.
+        Dates can be <code>MM/DD/YYYY</code> or <code>YYYY-MM-DD</code>.
+      </p>
+      <p class="hint" style="margin:0 0 10px; font-size:12.5px">
+        Need a starting point? Download a template:
+        <a href="/api/calendar/template?year=2025_26" download="calendar_template_2025_26.csv">2025–26</a> ·
+        <a href="/api/calendar/template?year=2026_27" download="calendar_template_2026_27.csv">2026–27</a>
+        — then ask an LLM to update it for a new year.
+      </p>
+      <details style="margin-bottom:12px">
+        <summary class="delivery-summary" style="font-size:12.5px">LLM prompt for generating a new year's calendar</summary>
+        <div class="delivery-inner">
+          <p class="hint" style="margin:0 0 8px; font-size:12px">Copy this, attach the downloaded CSV, and send to any LLM:</p>
+          <textarea id="llm-prompt-text" readonly rows="5"
+            style="font-size:12px; font-family:monospace; background:var(--bg); resize:none; cursor:text"
+>Update the attached CSV to the [DISTRICT NAME] [YEAR]-[YEAR+1] school year. Keep the same 7-column format (school_year,row_type,code,name,start_date,end_date,report_issue_date,basis) exactly. Use YYYY-MM-DD dates. Include all grading periods as "Academic Period" rows (use row_type exactly) and all student days off (holidays, breaks, staff days without students) as "Holiday" or "No School for Students" rows with correct start and end dates. Do not add extra columns or change the header.</textarea>
+          <button type="button" id="btn-copy-llm-prompt" class="small" style="margin-top:6px">Copy prompt</button>
+        </div>
+      </details>
+      <label>CSV contents
+        <textarea id="cal-csv-input" rows="8" placeholder="school_year,row_type,code,name,start_date,end_date,report_issue_date,basis&#10;2026-27,Academic Period,T1,Term 1 / Report Card 1,2026-09-01,2026-10-09,,&#10;2026-27,Holiday,,Labor Day,2026-09-07,2026-09-07,,"></textarea>
+      </label>
+      <div id="cal-parse-preview" hidden style="margin:10px 0; padding:10px 14px; background:var(--bg); border-radius:var(--r-sm); border:1px solid var(--line); font-size:13px"></div>
+      <div class="actions" style="margin-top:8px">
+        <button type="button" id="btn-cal-parse">Parse &amp; preview</button>
+        <button type="button" id="btn-cal-save" class="primary" hidden>Save this calendar</button>
+      </div>
+      <p id="cal-custom-status" class="status" style="margin-top:8px"></p>
+    </div>
+  </details>
+</section>
+
+<script src="/static/settings.js"></script>
+
+<script>
+(function () {
+  var form = document.getElementById("tier-tags-form");
+  if (!form) return;
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var tags = {};
+    document.querySelectorAll(".tier-tag-input").forEach(function (inp) {
+      tags[inp.dataset.tier] = inp.value.trim();
+    });
+    var status = document.getElementById("tier-tags-status");
+    status.textContent = "Saving…";
+    fetch("/api/tier-tags", { method: "POST",
+      body: new URLSearchParams({ tags: JSON.stringify(tags) }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { status.textContent = d.ok ? "Saved." : ("Error: " + (d.error || "failed")); })
+      .catch(function (e) { status.textContent = "Error: " + e; });
+  });
+})();
+</script>
+{% endblock %}

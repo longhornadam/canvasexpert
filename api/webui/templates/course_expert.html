@@ -1,0 +1,882 @@
+{% extends "base.html" %}
+{% block title %}Course Expert — Canvas Expert{% endblock %}
+{% block main_class %}ce-page{% endblock %}
+{% block content %}
+
+{% if not token_is_set %}
+<div class="callout warn" style="max-width:680px; margin:32px auto">
+  No Canvas token saved — <a href="/settings">go to Settings</a> to add one.
+</div>
+{% else %}
+
+<!-- ── Header band ──────────────────────────────────────────────────────── -->
+<div class="ce-header">
+  <div class="ce-header-inner">
+    <h1 class="ce-title">Course Expert</h1>
+    <div class="ce-course-row">
+      <details class="ce-course-picker" id="ce-course-picker">
+        <summary class="ce-picker-trigger">
+          <span id="ce-picker-label">— pick courses —</span>
+          <span class="ce-picker-caret">▾</span>
+        </summary>
+        <div class="ce-picker-pop">
+          <div class="ce-picker-head">
+            Target courses <span id="target-count" class="cc-count"></span>
+          </div>
+          <div id="course-checklist" class="course-checklist">
+            {% for c in saved_courses %}
+            <div class="cc-row" data-id="{{ c.id }}" data-name="{{ c.name }}">
+              <input type="checkbox" class="cc-cb" value="{{ c.id }}" data-name="{{ c.name }}">
+              <span class="cc-star" title="Bookmarked">★</span>
+              <button type="button" class="cc-focus" title="Focus this course">{{ c.nickname }}</button>
+            </div>
+            {% endfor %}
+            {% if not saved_courses %}
+            <p class="hint" style="font-size:13px; margin:0">
+              No bookmarked courses yet. <a href="/settings">Add some in Settings</a>.
+            </p>
+            {% endif %}
+          </div>
+          <div id="ci-targets" class="ci-targets" hidden></div>
+          <div class="ce-picker-links">
+            <a href="/course" class="small-link">Course info ↗</a>
+            <a href="/settings" class="small-link">Manage ↗</a>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- ── Tab bar ─────────────────────────────────────────────────────────── -->
+<div class="ce-tabs" role="tablist">
+  <button type="button" class="ce-tab active" data-tab="quiz">Quiz</button>
+  <button type="button" class="ce-tab" data-tab="assignment">Assignment</button>
+  <button type="button" class="ce-tab" data-tab="page">Page</button>
+  <button type="button" class="ce-tab" data-tab="rubric">Rubric</button>
+  <button type="button" class="ce-tab" data-tab="download">Download Work</button>
+  <button type="button" class="ce-tab" data-tab="students">Student Reports</button>
+  <button type="button" class="ce-tab ce-tab--alt" data-tab="quick"><em>Quick</em></button>
+</div>
+
+<!-- ── Tab content ─────────────────────────────────────────────────────── -->
+<div class="ce-content ce-panels-wrap">
+
+  <!-- ── Quiz tab ──────────────────────────────────────────────────────── -->
+  <div id="ce-tab-quiz" class="ce-panel active">
+
+    <!-- Whole-class picker (top) -->
+    <div class="card" id="quiz-whole">
+      <h2 style="margin-bottom:14px">Push quiz</h2>
+      <div class="mode-toggle" role="group" aria-label="Push mode" style="margin-bottom:14px">
+        <button type="button" class="mode-seg active" data-mode="whole">Whole class</button>
+        <button type="button" class="mode-seg" data-mode="diff">Differentiated</button>
+      </div>
+      <label>Quiz file</label>
+      <div class="file-source">
+        <select id="quizfile">
+          <option value="">— select —</option>
+          {% for f in quiz_files %}
+          <option value="{{ f.path }}">{{ f.label }}</option>
+          {% endfor %}
+        </select>
+        <div class="file-source-row">
+          <button type="button" class="file-src-btn active" data-src="select">Library</button>
+          <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+          <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+          <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+        </div>
+        <textarea class="file-src-paste" placeholder="Paste your &lt;QUIZFORGE_JSON&gt;…" style="display:none"></textarea>
+        <p class="file-src-hint" style="display:none"></p>
+      </div>
+      <details class="forge-howto">
+        <summary>Don't have a quiz yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the quiz content (or ask it to write one).</li>
+          <li>Have it format the result as a <code>&lt;QUIZFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.quiz %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.quiz }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.quiz | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint" style="margin:0">Need a QTI-ZIP for manual import instead?
+          <a href="/forge/quizforge/" target="_blank" rel="noopener">Open the QuizForge app ↗</a>
+          · More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+      </details>
+      <div class="actions">
+        <button id="btn-validate">Validate</button>
+        <button id="btn-preview">Dry-run preview</button>
+        <button id="btn-push" class="primary">Push live quiz…</button>
+      </div>
+      <pre id="result" class="log" hidden></pre>
+      <div id="push-banner" class="push-banner" hidden></div>
+    </div>
+
+    <!-- Differentiated picker -->
+    <div class="card" id="quiz-diff" hidden>
+      <p id="groups-status" class="status hint"></p>
+      <div id="variant-rows"></div>
+      <div class="actions">
+        <button id="btn-add-variant">+ Add row</button>
+      </div>
+      <p class="hint" style="margin:14px 0 0; font-size:13px">
+        Tiers push to <strong>every checked course</strong> in the Targets list.
+        Groups are matched by name across courses.
+      </p>
+      <div class="actions" style="margin-top:10px">
+        <button id="btn-push-variants" class="primary">Push tiers to checked course(s)…</button>
+      </div>
+      <pre id="variants-result" class="log" hidden></pre>
+      <div id="variants-banner" class="push-banner" hidden></div>
+    </div>
+
+    <!-- Delivery options (below the picker) -->
+    <div class="card">
+      <h2 style="margin-bottom:14px">Delivery options</h2>
+      <div class="settings-grid">
+        <label>Due date <small class="lbl-hint">(optional)</small>
+          <input type="datetime-local" id="due-at">
+        </label>
+        <label>Available from <small class="lbl-hint">(unlock date)</small>
+          <input type="datetime-local" id="unlock-at">
+        </label>
+        <label>Available until <small class="lbl-hint">(lock date)</small>
+          <input type="datetime-local" id="lock-at">
+        </label>
+      </div>
+      <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+        <label>Grading category <small class="lbl-hint js-ag-hint" id="ag-hint">(select a course)</small>
+          <select id="assignment-group-select" class="js-aggroups" disabled>
+            <option value="">— none / default —</option>
+          </select>
+        </label>
+        <label>Add to module <small class="lbl-hint js-mod-hint" id="mod-hint">(select a course)</small>
+          <select id="module-select" class="js-modules" data-default="first" disabled>
+            <option value="">— don't add to a module —</option>
+            <option value="__new__">＋ Create new module…</option>
+          </select>
+          <input type="text" id="new-module-name" class="js-new-module" placeholder="New module name…"
+                 style="display:none; margin-top:6px">
+        </label>
+      </div>
+      <div class="opt-checks">
+        <label class="opt-check"><input type="checkbox" id="shuffle-answers" checked> Shuffle answer choices</label>
+        <label class="opt-check"><input type="checkbox" id="shuffle-questions"> Shuffle question order</label>
+        <label class="opt-check"><input type="checkbox" id="post-to-sis"> Sync to SIS</label>
+        <label class="opt-check"><input type="checkbox" id="publish-now"> Publish immediately</label>
+        <label class="opt-check"><input type="checkbox" id="hide-results"> Hide results from students</label>
+        <label class="opt-check"><input type="checkbox" id="access-code-enable"> Require access code</label>
+        <div id="access-code-wrap" class="opt-subpanel" hidden>
+          <label>Access code
+            <input type="text" id="access-code" placeholder="e.g. period2quiz" autocomplete="off">
+          </label>
+        </div>
+        <label class="opt-check"><input type="checkbox" id="allow-attempts"> Allow multiple attempts</label>
+        <div id="attempts-wrap" class="opt-subpanel" hidden>
+          <div class="settings-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+            <label>Attempts allowed
+              <select id="allowed-attempts">
+                <option value="-1">Unlimited</option>
+                {% for n in range(2, 11) %}
+                <option value="{{ n }}"{% if n == 2 %} selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+                <option value="15">15</option>
+                <option value="20">20</option>
+              </select>
+            </label>
+            <label>Score to keep
+              <select id="score-to-keep">
+                <option value="highest" selected>Highest</option>
+                <option value="latest">Latest</option>
+                <option value="average">Average</option>
+                <option value="first">First</option>
+              </select>
+            </label>
+            <label>Cooldown between attempts <small class="lbl-hint">(min, 0 = none)</small>
+              <input type="number" id="attempt-cooldown" value="0" min="0" max="1440">
+            </label>
+            <label class="opt-check" style="align-self:end; padding-bottom:6px">
+              <input type="checkbox" id="build-on-last"> Build on last attempt
+            </label>
+          </div>
+        </div>
+        <label class="opt-check"><input type="checkbox" id="has-time-limit"> Time limit</label>
+        <div id="time-limit-wrap" class="opt-subpanel" hidden>
+          <label>Minutes
+            <input type="number" id="time-limit-minutes" value="30" min="1" max="600" style="width:80px">
+          </label>
+        </div>
+        <label class="opt-check"><input type="checkbox" id="one-at-a-time"> One question at a time</label>
+        <div id="one-at-a-time-wrap" class="opt-subpanel" hidden>
+          <label class="opt-check">
+            <input type="checkbox" id="allow-backtracking" checked> Allow backtracking
+          </label>
+        </div>
+        <label>Calculator <small class="lbl-hint">(shown during quiz)</small>
+          <select id="calculator-type" style="width:auto; margin-top:4px">
+            <option value="none" selected>None</option>
+            <option value="basic">Basic</option>
+            <option value="scientific">Scientific</option>
+          </select>
+        </label>
+        <label class="opt-check" style="margin-top:6px">
+          <input type="checkbox" id="physical-version">
+          Also save a printable version
+          <small class="lbl-hint">(QuizForge DOCX → Exports folder)</small>
+        </label>
+      </div>
+    </div>
+
+  </div><!-- /#ce-tab-quiz -->
+
+  <!-- ── Assignment tab ──────────────────────────────────────────────────── -->
+  <div id="ce-tab-assignment" class="ce-panel">
+
+    <div id="assignment">
+      <h2 class="section-heading">Push Assignment</h2>
+      <div class="card">
+        <h2 style="margin-bottom:6px">From AssignmentForge file</h2>
+        <p class="hint" style="margin:0 0 14px">
+          Push an LLM-authored <code>&lt;ASSIGNMENTFORGE_JSON&gt;</code> file to every checked
+          course — HTML description, submission settings, and differentiation tiers come from the file.
+        </p>
+      <details class="forge-howto">
+        <summary>Don't have an assignment yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the assignment content (or ask it to write one).</li>
+          <li>Have it format the result as a <code>&lt;ASSIGNMENTFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.assignment %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.assignment }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.assignment | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+      </details>
+        <label>AssignmentForge file</label>
+        <div class="file-source">
+          <select id="af-file">
+            <option value="">— select —</option>
+            {% for f in assignment_files %}
+            <option value="{{ f.path }}">{{ f.label }}</option>
+            {% endfor %}
+          </select>
+          <div class="file-source-row">
+            <button type="button" class="file-src-btn active" data-src="select">Library</button>
+            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+            <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+          </div>
+          <textarea class="file-src-paste" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…" style="display:none"></textarea>
+          <p class="file-src-hint" style="display:none"></p>
+        </div>
+        <label style="margin-top:12px; display:block">RubricForge file
+          <select id="af-rubric">
+            <option value="">No rubric</option>
+          </select>
+        </label>
+        <div id="af-rubric-controls" hidden>
+          <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+            <label>Rubric mode
+              <select id="af-rubric-mode">
+                <option value="grading">Grade with rubric (points match rubric)</option>
+                <option value="feedback">Feedback only (keep assignment points)</option>
+              </select>
+            </label>
+            <label class="opt-check" style="margin-top:26px">
+              <input type="checkbox" id="af-rubric-link" checked> Link the student explainer page in the description
+            </label>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button type="button" id="btn-af-copy-prompt" class="small">Copy scoring prompt</button>
+            <span id="af-rubric-status" class="hint" style="align-self:center"></span>
+          </div>
+        </div>
+        <div class="settings-grid" style="margin-top:14px">
+          <label>Due date <small class="lbl-hint">(optional)</small>
+            <input type="datetime-local" id="af-due">
+          </label>
+          <label>Available from <small class="lbl-hint">(unlock date)</small>
+            <input type="datetime-local" id="af-unlock">
+          </label>
+          <label>Available until <small class="lbl-hint">(lock date)</small>
+            <input type="datetime-local" id="af-lock">
+          </label>
+        </div>
+        <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+          <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
+            <select id="af-aggroup" class="js-aggroups" disabled>
+              <option value="">— none / default —</option>
+            </select>
+          </label>
+          <label>Add to module <small class="lbl-hint js-mod-hint">(select a course)</small>
+            <select id="af-module" class="js-modules" data-default="none" disabled>
+              <option value="">— don't add to a module —</option>
+            </select>
+            <input type="text" id="af-new-module" class="js-new-module" placeholder="New module name…"
+                   style="display:none; margin-top:6px">
+          </label>
+        </div>
+        <div class="opt-checks">
+          <label class="opt-check"><input type="checkbox" id="af-sis"> Sync to SIS</label>
+          <label class="opt-check"><input type="checkbox" id="af-publish"> Publish immediately</label>
+        </div>
+        <div class="actions">
+          <button id="btn-af-validate">Validate</button>
+          <button id="btn-af-push" class="primary">Push assignment…</button>
+        </div>
+        <pre id="af-log" class="log" hidden></pre>
+        <div id="af-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+
+    </div><!-- /#ce-tab-assignment -->
+
+  <!-- ── Page tab ──────────────────────────────────────────────────────── -->
+  <div id="ce-tab-page" class="ce-panel">
+
+    <div id="page">
+      <h2 class="section-heading">Push Page</h2>
+      <div class="card">
+        <h2 style="margin-bottom:6px">From PageForge file</h2>
+        <p class="hint" style="margin:0 0 14px">
+          Push an LLM-authored <code>&lt;PAGEFORGE_JSON&gt;</code> file to every checked
+          course — title and HTML body come from the file;
+          <code>{{ '{{file:…}}' }}</code> and <code>{{ '{{page:…}}' }}</code> placeholders resolve per course.
+        </p>
+      <details class="forge-howto">
+        <summary>Don't have a page yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the page content (or ask it to write one).</li>
+          <li>Have it format the result as a <code>&lt;PAGEFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.page %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.page }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.page | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+      </details>
+        <label>PageForge file</label>
+        <div class="file-source">
+          <select id="pf-file">
+            <option value="">— select —</option>
+            {% for f in page_files %}
+            <option value="{{ f.path }}">{{ f.label }}</option>
+            {% endfor %}
+          </select>
+          <div class="file-source-row">
+            <button type="button" class="file-src-btn active" data-src="select">Library</button>
+            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+            <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+          </div>
+          <textarea class="file-src-paste" placeholder="Paste your &lt;PAGEFORGE_JSON&gt;…" style="display:none"></textarea>
+          <p class="file-src-hint" style="display:none"></p>
+        </div>
+        <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+          <label>Add to module <small class="lbl-hint js-mod-hint">(select a course)</small>
+            <select id="pf-module" class="js-modules" data-default="none" disabled>
+              <option value="">— don't add to a module —</option>
+            </select>
+            <input type="text" id="pf-new-module" class="js-new-module" placeholder="New module name…"
+                   style="display:none; margin-top:6px">
+          </label>
+          <div class="opt-checks" style="margin-top:26px">
+            <label class="opt-check"><input type="checkbox" id="pf-publish"> Publish immediately</label>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btn-pf-validate">Validate</button>
+          <button id="btn-pf-push" class="primary">Push page…</button>
+        </div>
+        <pre id="pf-log" class="log" hidden></pre>
+        <div id="pf-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+
+  </div><!-- /#ce-tab-page -->
+
+  <!-- ── Rubric tab ─────────────────────────────────────────────────────── -->
+  <div id="ce-tab-rubric" class="ce-panel">
+
+    <div id="rubric">
+      <h2 class="section-heading">Push Rubric</h2>
+      <div class="card">
+        <h2 style="margin-bottom:6px">From RubricForge file</h2>
+        <p class="hint" style="margin:0 0 14px">
+          Push a <code>&lt;RUBRICFORGE_JSON&gt;</code> file to every checked course.
+          Canvas Expert creates (or reuses) the course rubric and updates the student explainer page.
+        </p>
+      <details class="forge-howto">
+        <summary>Don't have a rubric yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the rubric criteria (or ask it to design one).</li>
+          <li>Have it format the result as a <code>&lt;RUBRICFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.rubric %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.rubric }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.rubric | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+      </details>
+        <label>RubricForge file</label>
+        <div class="file-source">
+          <select id="rf-file">
+            <option value="">— select —</option>
+          </select>
+          <div class="file-source-row">
+            <button type="button" class="file-src-btn active" data-src="select">Library</button>
+            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+            <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+          </div>
+          <textarea class="file-src-paste" placeholder="Paste your &lt;RUBRICFORGE_JSON&gt;…" style="display:none"></textarea>
+          <p class="file-src-hint" style="display:none"></p>
+        </div>
+        <div class="actions">
+          <button id="btn-rf-validate">Validate</button>
+          <button id="btn-rf-push" class="primary">Push rubric…</button>
+        </div>
+        <pre id="rf-log" class="log" hidden></pre>
+        <div id="rf-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+
+  </div><!-- /#ce-tab-rubric -->
+
+  <!-- ── Download Work tab ─────────────────────────────────────────────── -->
+  <div id="ce-tab-download" class="ce-panel">
+
+    <div id="download">
+      <h2 class="section-heading">Download student work</h2>
+      <div class="card">
+        <p class="hint" style="margin:0 0 14px">
+          Downloads student work to your local folder from the <strong>focused course</strong>
+          (click a course name in Targets above to focus it).
+          Text entries → .html, file uploads → original file.
+          All students get an entry in _index.csv even with no submission.
+        </p>
+        <div class="dl-toolbar">
+          <button id="btn-load-assignments" class="small">Load assignments…</button>
+          <span id="dl-filter-wrap" hidden>
+            <select id="dl-type-filter" class="small-select">
+              <option value="">All types</option>
+              <option value="online_text_entry">Text</option>
+              <option value="online_upload">Upload</option>
+              <option value="discussion_topic">Discussion</option>
+              <option value="online_url">URL</option>
+            </select>
+            <button id="btn-dl-select-all" class="small">Select all</button>
+            <button id="btn-dl-clear" class="small">Clear</button>
+          </span>
+        </div>
+        <div id="dl-date-bar" class="dl-date-bar" hidden>
+          <span class="hint" style="white-space:nowrap">Due between</span>
+          <input type="date" id="dl-date-from" class="small-input">
+          <span class="hint">–</span>
+          <input type="date" id="dl-date-to" class="small-input">
+          <span class="dl-presets">
+            <button class="chip" data-preset="all">All</button>
+            <button class="chip" data-preset="fall">Fall</button>
+            <button class="chip" data-preset="spring">Spring</button>
+            <button class="chip" data-preset="30d">30 days</button>
+            <button class="chip" data-preset="90d">90 days</button>
+          </span>
+          <span id="dl-visible-count" class="hint"></span>
+        </div>
+        <div class="actions" id="dl-action-row" style="display:none">
+          <button id="btn-download-selected" class="primary">⬇ Download selected</button>
+          <span id="dl-selected-count" class="hint"></span>
+        </div>
+        <div id="dl-assignment-table" hidden>
+          <table class="dl-table">
+            <thead>
+              <tr>
+                <th style="width:32px"><input type="checkbox" id="dl-check-all" title="Toggle all downloadable"></th>
+                <th>Assignment</th>
+                <th>Type</th>
+                <th>Due</th>
+                <th>Pts</th>
+              </tr>
+            </thead>
+            <tbody id="dl-tbody"></tbody>
+          </table>
+        </div>
+        <pre id="dl-log" class="log" hidden></pre>
+        <div id="dl-banner" class="push-banner" hidden></div>
+        <div id="folder-row" class="folder-row" hidden>
+          <span class="hint" style="font-size:12px; white-space:nowrap">Saves to:</span>
+          <code id="folder-path" class="folder-path" title=""></code>
+          <div class="folder-actions">
+            <button type="button" class="small" id="btn-open-folder">📁 Open ↗</button>
+            <button type="button" class="small" id="btn-change-folder">Change…</button>
+            <span id="folder-note" class="hint" style="font-size:11px"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /#ce-tab-download -->
+
+  <!-- ── Student Reports tab ───────────────────────────────────────────── -->
+  <div id="ce-tab-students" class="ce-panel">
+    <div class="card">
+      <h2 style="margin-bottom:12px">Student Reports</h2>
+      <p class="hint" style="margin-top:0">
+        Pick a student and compile copies of their work plus summaries across every
+        active course they're in. Saved to your Student Reports folder (synced via OneDrive).
+      </p>
+
+      <div class="sr-pick">
+        <label>Course
+          <select id="sr-course">
+            <option value="">— pick a course —</option>
+            {% for c in saved_courses %}<option value="{{ c.id }}">{{ c.nickname }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Student
+          <select id="sr-student"><option value="">— pick a course first —</option></select>
+        </label>
+        <button type="button" id="sr-monitor" class="small" hidden>☆ Monitor</button>
+      </div>
+
+      <fieldset class="sr-sections">
+        <legend>Include</legend>
+        <label><input type="checkbox" class="sr-sec" value="standing" checked> Standing &amp; grades</label>
+        <label><input type="checkbox" class="sr-sec" value="late" checked> Late &amp; extended due dates</label>
+        <label><input type="checkbox" class="sr-sec" value="adjustments" checked> Adjustments (curves)</label>
+        <label><input type="checkbox" class="sr-sec" value="comments"> Comments</label>
+        <label><input type="checkbox" class="sr-sec" value="work" checked> Work samples</label>
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" id="sr-generate" class="primary" disabled>Generate packet</button>
+        <a id="sr-open" class="small open-link" hidden>Open folder</a>
+        <span id="sr-status" class="hint"></span>
+      </div>
+      <pre id="sr-log" class="log" hidden></pre>
+    </div>
+  </div><!-- /#ce-tab-students -->
+
+  <!-- ── Quick tab ─────────────────────────────────────────────────────── -->
+  <div id="ce-tab-quick" class="ce-panel">
+    <div id="quick">
+      <h2 class="section-heading">Quick assignment</h2>
+      <div class="card">
+        <h2 style="margin-bottom:6px">Fast gradebook column</h2>
+        <p class="hint" style="margin:0 0 14px">
+          For a fast gradebook column across your courses.
+          Authoring real instructions? Use AssignmentForge above.
+        </p>
+        <label>Assignment name
+          <input type="text" id="qa-name" placeholder="e.g. Exit Ticket Week 5">
+        </label>
+        <div class="settings-grid" style="grid-template-columns:130px 1fr 1fr; align-items:start">
+          <label>Points
+            <input type="number" id="qa-points" value="100" min="0" step="0.5">
+          </label>
+          <label>Submission type
+            <select id="qa-subtype">
+              <option value="on_paper">On paper</option>
+              <option value="none">No submission</option>
+              <option value="online_text_entry">Text entry</option>
+            </select>
+          </label>
+          <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
+            <select id="qa-aggroup" class="js-aggroups" disabled>
+              <option value="">— none / default —</option>
+            </select>
+          </label>
+        </div>
+        <div class="settings-grid" style="margin-top:8px; grid-template-columns:1fr auto">
+          <label>Due date <small class="lbl-hint">(optional)</small>
+            <input type="datetime-local" id="qa-due">
+          </label>
+          <div class="opt-checks" style="margin-top:28px">
+            <label class="opt-check"><input type="checkbox" id="qa-publish"> Publish immediately</label>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="btn-qa-push" class="primary">Create assignment…</button>
+        </div>
+        <pre id="qa-log" class="log" hidden></pre>
+        <div id="qa-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+  </div><!-- /#ce-tab-quick -->
+
+</div><!-- /.ce-panels-wrap -->
+
+<script>
+  window.QF_FILES            = {{ quiz_files | tojson }};
+  window.QF_QUIZ_FILES       = {{ quiz_files | tojson }};
+  window.QF_ASSIGNMENT_FILES = {{ assignment_files | tojson }};
+  window.QF_PAGE_FILES       = {{ page_files | tojson }};
+  window.QF_CANVAS_BASE      = {{ canvas_base | tojson }};
+  window.QF_HISTORY          = [];
+  window.QF_SAVED            = {{ saved_courses | tojson }};
+</script>
+<script src="/static/push.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ── Tab switching ─────────────────────────────────────────────────────
+  function activateTab(tabName) {
+    document.querySelectorAll(".ce-tab").forEach(function (t) {
+      t.classList.toggle("active", t.dataset.tab === tabName);
+    });
+    document.querySelectorAll(".ce-panel").forEach(function (p) {
+      p.classList.toggle("active", p.id === "ce-tab-" + tabName);
+    });
+  }
+
+  document.querySelectorAll(".ce-tab").forEach(function (tab) {
+    tab.addEventListener("click", function () { activateTab(tab.dataset.tab); });
+  });
+
+  // Open tab from ?tab= query param or hash
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var tab = params.get("tab") || location.hash.replace("#", "");
+    if (tab && document.querySelector(".ce-tab[data-tab='" + tab + "']")) activateTab(tab);
+  })();
+
+  // ── Delivery-option toggles ───────────────────────────────────────────
+  document.getElementById("access-code-enable")?.addEventListener("change", function () {
+    document.getElementById("access-code-wrap").hidden = !this.checked;
+    if (this.checked) document.getElementById("access-code").focus();
+  });
+  document.getElementById("allow-attempts")?.addEventListener("change", function () {
+    document.getElementById("attempts-wrap").hidden = !this.checked;
+  });
+  document.getElementById("has-time-limit")?.addEventListener("change", function () {
+    document.getElementById("time-limit-wrap").hidden = !this.checked;
+    if (this.checked) document.getElementById("time-limit-minutes").focus();
+  });
+  document.getElementById("one-at-a-time")?.addEventListener("change", function () {
+    document.getElementById("one-at-a-time-wrap").hidden = !this.checked;
+  });
+
+  // ── Whole / differentiated mode toggle ───────────────────────────────
+  var segs  = document.querySelectorAll(".mode-seg");
+  var whole = document.getElementById("quiz-whole");
+  var diff  = document.getElementById("quiz-diff");
+  segs.forEach(function (seg) {
+    seg.addEventListener("click", function () {
+      segs.forEach(function (s) { s.classList.toggle("active", s === seg); });
+      var m = seg.dataset.mode;
+      // mode-seg lives inside quiz-whole; show/hide the two distinct picker cards
+      if (m === "diff") {
+        if (diff) diff.hidden = false;
+        // hide the file-source and push buttons within quiz-whole, show diff card
+        document.getElementById("quiz-whole")?.querySelector(".file-source")?.closest("label")?.parentElement;
+      } else {
+        if (diff) diff.hidden = true;
+      }
+      if (m === "diff" && window.QF_loadGroups) window.QF_loadGroups();
+    });
+  });
+
+  // ── Quick assignment push ─────────────────────────────────────────────
+  document.getElementById("btn-qa-push")?.addEventListener("click", function () {
+    var name = document.getElementById("qa-name")?.value.trim();
+    if (!name) return alert("Give the assignment a name.");
+    var payload = {
+      name:            name,
+      points:          parseFloat(document.getElementById("qa-points")?.value) || 100,
+      submission_type: document.getElementById("qa-subtype")?.value || "none",
+      published:       document.getElementById("qa-publish")?.checked || false,
+    };
+    var due = typeof localToISO === "function"
+              ? localToISO(document.getElementById("qa-due")?.value || "") : "";
+    if (due) payload.due_at = due;
+    var agSel = document.getElementById("qa-aggroup");
+    if (agSel?.value) payload.assignment_group_name = agSel.selectedOptions[0].text;
+    pushContent("quick", payload,
+      document.getElementById("qa-log"),
+      document.getElementById("qa-banner"),
+      this,
+      'Create quick assignment "' + name + '"');
+  });
+
+  // ── File source: paste / upload handling ─────────────────────────────
+  function initFileSource(wrapper) {
+    if (!wrapper) return;
+    var sel      = wrapper.querySelector("select");
+    var pasteEl  = wrapper.querySelector(".file-src-paste");
+    var fileInp  = wrapper.querySelector(".file-src-input");
+    var hintEl   = wrapper.querySelector(".file-src-hint");
+    var srcBtns  = Array.from(wrapper.querySelectorAll(".file-src-btn"));
+
+    function setMode(mode) {
+      srcBtns.forEach(function (b) { b.classList.toggle("active", b.dataset.src === mode); });
+      if (sel)     sel.style.display     = mode === "select" ? "" : "none";
+      if (pasteEl) pasteEl.style.display = mode === "paste"  ? "" : "none";
+      if (mode !== "paste") {
+        if (hintEl) { hintEl.style.display = "none"; hintEl.textContent = ""; hintEl.className = "file-src-hint"; }
+      }
+    }
+
+    function setTempOption(path, label) {
+      if (!sel) return;
+      var opt = sel.querySelector("option[data-temp]");
+      if (!opt) { opt = document.createElement("option"); opt.dataset.temp = "1"; sel.appendChild(opt); }
+      opt.value = path;
+      opt.textContent = label;
+      sel.value = path;
+    }
+
+    async function uploadContent(content) {
+      try {
+        var r = await fetch("/api/temp-upload", { method: "POST", body: new URLSearchParams({ content: content }) });
+        var d = await r.json();
+        return d.ok ? d.path : null;
+      } catch (e) { return null; }
+    }
+
+    async function uploadFile(file) {
+      try {
+        var fd = new FormData(); fd.append("file", file);
+        var r = await fetch("/api/temp-upload", { method: "POST", body: fd });
+        var d = await r.json();
+        return d.ok ? d.path : null;
+      } catch (e) { return null; }
+    }
+
+    srcBtns.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (btn.dataset.src === "upload") { if (fileInp) fileInp.click(); }
+        else setMode(btn.dataset.src);
+      });
+    });
+
+    if (fileInp) {
+      fileInp.addEventListener("change", async function () {
+        var file = this.files[0]; if (!file) return;
+        if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint"; hintEl.textContent = "Uploading…"; }
+        var path = await uploadFile(file);
+        if (path) {
+          setTempOption(path, "📎 " + file.name);
+          setMode("select");
+          if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint ok"; hintEl.textContent = "Ready: " + file.name; }
+        } else {
+          if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint err"; hintEl.textContent = "Upload failed."; }
+          setMode("select");
+        }
+        this.value = "";
+      });
+    }
+
+    var _timer;
+    if (pasteEl) {
+      pasteEl.addEventListener("input", function () {
+        clearTimeout(_timer);
+        var val = pasteEl.value.trim();
+        if (!val) { if (hintEl) hintEl.style.display = "none"; return; }
+        _timer = setTimeout(async function () {
+          if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint"; hintEl.textContent = "Saving…"; }
+          var path = await uploadContent(val);
+          if (path) {
+            setTempOption(path, "📋 Pasted JSON");
+            if (hintEl) { hintEl.className = "file-src-hint ok"; hintEl.textContent = "Ready — click Validate or Push"; }
+          } else {
+            if (hintEl) { hintEl.className = "file-src-hint err"; hintEl.textContent = "Error saving content."; }
+          }
+        }, 600);
+      });
+    }
+  }
+
+  // ── Forge: copy authoring skill to clipboard ──────────────────────────
+  async function copySkill(name, btn) {
+    if (!name) return;
+    var orig = btn.textContent;
+    btn.textContent = "Copying…"; btn.disabled = true;
+    try {
+      var r = await fetch("/api/ai-ta/file?name=" + encodeURIComponent(name));
+      if (!r.ok) throw 0;
+      await navigator.clipboard.writeText(await r.text());
+      btn.textContent = "Copied!";
+    } catch (e) { btn.textContent = "Failed"; }
+    setTimeout(function () { btn.textContent = orig; btn.disabled = false; }, 1800);
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".btn-copy-skill");
+    if (b) copySkill(b.dataset.name, b);
+  });
+
+  // ── Course picker: close on outside click ─────────────────────────────
+  var _picker = document.getElementById("ce-course-picker");
+  if (_picker) document.addEventListener("click", function (e) {
+    if (_picker.open && !e.target.closest("#ce-course-picker")) _picker.open = false;
+  });
+
+  document.querySelectorAll(".file-source").forEach(function (w) { initFileSource(w); });
+
+  // ── Student Reports tab ──────────────────────────────────────────────
+  (function () {
+    var courseSel = document.getElementById("sr-course");
+    if (!courseSel) return;
+    var stuSel = document.getElementById("sr-student"),
+        monBtn = document.getElementById("sr-monitor"),
+        genBtn = document.getElementById("sr-generate"),
+        openA  = document.getElementById("sr-open"),
+        status = document.getElementById("sr-status"),
+        logEl  = document.getElementById("sr-log");
+
+    function selName(){ var o = stuSel.options[stuSel.selectedIndex]; return o ? o.textContent : ""; }
+    function refreshMonBtn(mon){ monBtn.hidden = !stuSel.value; monBtn.textContent = mon ? "★ Monitored" : "☆ Monitor"; monBtn.dataset.mon = mon ? "1" : "0"; }
+
+    courseSel.addEventListener("change", function () {
+      stuSel.innerHTML = '<option value="">Loading…</option>';
+      genBtn.disabled = true; monBtn.hidden = true;
+      if (!courseSel.value) { stuSel.innerHTML = '<option value="">— pick a course first —</option>'; return; }
+      fetch("/api/students?course_id=" + encodeURIComponent(courseSel.value))
+        .then(function(r){return r.json();}).then(function(d){
+          stuSel.innerHTML = '<option value="">— pick a student —</option>';
+          (d.students||[]).forEach(function(s){
+            var o = document.createElement("option");
+            o.value = s.id; o.textContent = s.name; o.dataset.mon = s.monitored ? "1" : "0";
+            stuSel.appendChild(o);
+          });
+        });
+    });
+
+    stuSel.addEventListener("change", function () {
+      genBtn.disabled = !stuSel.value;
+      var o = stuSel.options[stuSel.selectedIndex];
+      refreshMonBtn(o && o.dataset.mon === "1");
+    });
+
+    monBtn.addEventListener("click", function () {
+      var on = monBtn.dataset.mon !== "1";
+      fetch("/api/students/monitor", {method:"POST", body:new URLSearchParams({
+        user_id: stuSel.value, name: selName(), monitored: on ? "true" : "false"})})
+        .then(function(){ stuSel.options[stuSel.selectedIndex].dataset.mon = on ? "1" : "0"; refreshMonBtn(on); });
+    });
+
+    genBtn.addEventListener("click", function () {
+      var secs = Array.prototype.map.call(document.querySelectorAll(".sr-sec:checked"), function(c){return c.value;});
+      genBtn.disabled = true; openA.hidden = true;
+      logEl.hidden = false; logEl.textContent = "";
+      status.textContent = "Generating…";
+      var qs = new URLSearchParams({user_id: stuSel.value, student_name: selName(), sections: secs.join(",")});
+      var es = new EventSource("/api/student-packet/stream?" + qs.toString());
+      var done = false;
+      es.onmessage = function (e) {
+        var line = JSON.parse(e.data);   // server sends JSON-encoded lines (see _sse)
+        if (line === "[exit 0]" || line === "[exit 1]") {
+          done = true; es.close(); genBtn.disabled = false;
+          status.textContent = line === "[exit 0]" ? "Done." : "Finished with errors.";
+          return;
+        }
+        if (line.indexOf("FOLDER: ") === 0) {
+          openA.setAttribute("data-open-path", line.slice(8)); openA.hidden = false; return;
+        }
+        logEl.textContent += line + "\n"; logEl.scrollTop = logEl.scrollHeight;
+      };
+      es.onerror = function(){ if (done) return; es.close(); genBtn.disabled = false; status.textContent = "Connection lost."; };
+    });
+  })();
+
+})();
+</script>
+
+{% endif %}
+{% endblock %}

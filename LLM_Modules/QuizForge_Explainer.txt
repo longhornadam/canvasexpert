@@ -1,0 +1,62 @@
+# QuizForge Explainer for Teachers
+
+## What is QuizForge?
+QuizForge is a tool designed to help teachers quickly generate, validate, and package quizzes for Canvas New Quizzes. It leverages AI to create quiz content to spec, supports a wide range of question types, and outputs files ready for import or printing.
+
+## Key Features
+- **AI-powered quiz generation**: Create quizzes from objectives, standards, or custom prompts.
+- **Canvas compatibility**: Outputs are formatted for Canvas New Quizzes (QTI 1.2), including ZIPs and DOCX files.
+- **Multiple question types**: Supports MC, MA, TF, FITB, Essay, File Upload, Matching, Ordering, Categorization, Stimulus blocks, and more.
+- **Rationales and feedback**: Generates rationales for each question to support custom feedback in Canvas.
+- **Accessibility and UDL defaults**: Ensures quizzes are accessible and pedagogically sound by default.
+- **Flexible workflow**: Use via web client, CLI, or API.
+
+## How does it work?
+1. Load the QuizForge Base Module and any relevant objectives into your AI chat.
+2. Describe the quiz you want (topic, grade, question types, rigor, etc.).
+3. The AI generates a QuizForge TXT file to download or copy/paste.
+4. Upload or paste the TXT into the QuizForge web client or CLI.
+5. QuizForge processes the TXT, validates, and packages the results.
+6. Download the ZIP and import into Canvas, or print as needed.
+
+## FAQ
+**Q: What question types are supported?**
+A: All Canvas New Quizzes types: MC, MA, TF, FITB, Essay, File Upload, Matching, Ordering, Categorization, Stimulus, and more.
+
+**Q: How do I import the quiz into Canvas?**
+A: After processing, download the ZIP, unzip it, and import the inner ZIP file into Canvas New Quizzes using "Import Content".
+
+**Q: Can I edit the quiz after import?**
+A: Yes, all questions and feedback are editable in Canvas after import.
+
+**Q: What if QuizForge fails to process my TXT?**
+A: Copy the error message and send it to the AI for troubleshooting. Fix and retry.
+
+**Q: Does QuizForge support rationales and feedback?**
+A: Yes, it generates a rationales DOCX for custom feedback in Canvas.
+
+**Q: Is QuizForge accessible for all students?**
+A: Yes, it applies UDL and accessibility defaults to all quiz content.
+
+## Common Pain Points
+- **TXT formatting errors**: Ensure the AI output matches QuizForge spec (see Base Module).
+- **Canvas import issues**: Always use the inner ZIP file for import, not the outer ZIP.
+- **Rationale placement**: Paste rationales into Canvas "Custom Feedback" for best results.
+- **AI misunderstanding**: Be specific with your quiz requirements and review the output before uploading.
+
+## Support
+## Converting Old Quizzes (PDF, DOCX, Scans, Photos)
+
+QuizForge can help modernize and digitize your existing quizzes, even if they are in non-editable formats:
+
+- **PDF/DOCX**: You can copy and paste text from digital documents into the AI chat, or use OCR tools to extract text if the file is not selectable. The AI can then reformat the content to QuizForge spec.
+- **Scans/Photos**: Use OCR (Optical Character Recognition) apps or online services to convert images of quizzes into editable text. Review the extracted text for accuracy before submitting to the AI.
+- **Manual Entry**: For handwritten or complex layouts, you may need to manually type the questions and answers into the AI chat for conversion.
+
+**Tips:**
+- Clean up formatting and check for errors after OCR.
+- Clearly separate questions, choices, and answers when pasting into the AI.
+- Specify the desired question types and structure for best results.
+
+QuizForge is designed to make it easy to bring legacy quizzes into Canvas, saving time and improving accessibility.
+For troubleshooting, consult the Base Module, this explainer, or reach out to the QuizForge Core Team.
