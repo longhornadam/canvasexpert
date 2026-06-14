@@ -8,12 +8,14 @@ import subprocess
 import sys
 from datetime import datetime
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
 import requests
 
 import downloader
+import nq_report
+import portfolio
 import student_packet
 from .. import config
 from ..canvas_client import _canvas_get_all, _canvas_headers
@@ -179,6 +181,45 @@ def api_student_packet_stream(user_id: str, student_name: str,
             yield "[exit 1]"
 
     return StreamingResponse(_sse(lines()), media_type="text/event-stream")
+
+
+# --------------------------------------------------------------------------
+# New Quizzes writing portfolio (from a manually-downloaded Student Analysis CSV)
+# --------------------------------------------------------------------------
+
+@router.post("/portfolio/from-nq-csv")
+async def portfolio_from_nq_csv(file: UploadFile = File(...),
+                                quiz_title: str = Form("")):
+    """Parse an uploaded New Quizzes 'Student Analysis' CSV and render one writing
+    portfolio DOCX per student into the synced Student Reports folder.
+
+    The CSV is parsed in memory and never written to disk; only the per-student
+    DOCX outputs land in the (FERPA-safe, gitignored/synced) reports root.
+    """
+    title = (quiz_title or "").strip() or os.path.splitext(file.filename or "")[0] or "New Quiz"
+    try:
+        raw = await file.read()
+        text = raw.decode("utf-8-sig", errors="replace")
+        data = nq_report.parse_student_analysis(text)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Could not read CSV: {e}"})
+
+    students = data.get("students") or []
+    if not students:
+        return JSONResponse({"ok": False,
+                             "error": "No student rows found — is this a New Quizzes "
+                                      "Student Analysis CSV?"})
+
+    out_dir = os.path.join(config.get_student_reports_root(),
+                           downloader.safe_name(title) + " - Portfolios")
+    try:
+        written = portfolio.render_portfolio(data, out_dir, quiz_title=title)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Render failed: {e}"})
+
+    return JSONResponse({"ok": True, "folder": out_dir,
+                         "count": len(written), "quiz_title": title,
+                         "students": [s.get("name", "") for s in students]})
 
 
 # --------------------------------------------------------------------------

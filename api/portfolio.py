@@ -72,7 +72,10 @@ def render_student_docx(student: dict, dest: str, quiz_title: str = "New Quiz") 
             doc.add_paragraph("(no response)")
         ep = it.get("earned_points")
         if ep is not None:
-            doc.add_paragraph(f"Points earned: {ep:g}").italic = True
+            poss = it.get("points_possible_est")
+            label = (f"Points earned: {ep:g} ({poss:g} possible)"
+                     if poss is not None else f"Points earned: {ep:g}")
+            doc.add_paragraph(label).italic = True
 
     os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
     doc.save(dest)

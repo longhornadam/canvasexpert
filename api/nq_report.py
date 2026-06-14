@@ -145,8 +145,23 @@ def parse_student_analysis(text: str) -> dict:
             "items":          items,
         })
 
+    # Per-item points-possible is NOT in the CSV (only per-item earned + the quiz
+    # total). Infer each item's max from the cohort: the highest earned across all
+    # students. Exact for auto-graded choice; reliable for essays when anyone maxes
+    # the item. (Phase 2 can replace this with exact values from the items API.)
+    item_max = [None] * num_items
+    for s in students:
+        for i, it in enumerate(s["items"]):
+            ep = it["earned_points"]
+            if ep is not None:
+                item_max[i] = ep if item_max[i] is None else max(item_max[i], ep)
+    for s in students:
+        for i, it in enumerate(s["items"]):
+            it["points_possible_est"] = item_max[i]
+
     pts = students[0]["points_possible"] if students else None
-    return {"quiz": {"item_prompts": prompts, "points_possible": pts},
+    return {"quiz": {"item_prompts": prompts, "points_possible": pts,
+                     "item_points_possible": item_max},
             "students": students}
 
 

@@ -80,6 +80,15 @@ def test_constructed_responses_filters_choice():
     assert all(it["type"] != "choice" for it in written)
 
 
+def test_item_points_possible_inferred_from_cohort():
+    data = _parsed()
+    # Cohort maxima: c1 Paris=4, c2 CO2=4, essay1 max=10 (Alan), essay2 max=8 (Ada).
+    assert data["quiz"]["item_points_possible"] == [4.0, 4.0, 10.0, 8.0]
+    # And attached per-item on each student.
+    ada = data["students"][0]
+    assert ada["items"][2]["points_possible_est"] == 10.0
+
+
 def test_render_docx(tmp_path):
     ada = _parsed()["students"][0]
     dest = tmp_path / "ada.docx"
@@ -89,3 +98,4 @@ def test_render_docx(tmp_path):
     text = "\n".join(p.text for p in doc.paragraphs)   # headings are paragraphs too
     assert "Ada Lovelace" in text                       # title heading rendered
     assert "crisp" in text                              # autumn essay body rendered
+    assert "(8 possible)" in text                       # earned (possible) shown for scale

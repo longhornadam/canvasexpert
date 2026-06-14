@@ -551,6 +551,66 @@
       </div>
       <pre id="sr-log" class="log" hidden></pre>
     </div>
+
+    <div class="card" id="nq-portfolio-card">
+      <h2 style="margin-bottom:12px">New Quizzes Writing Portfolio</h2>
+      <p class="hint" style="margin-top:0">
+        New Quizzes responses can't be pulled from the API, so in Canvas open the quiz →
+        <strong>Reports → Student Analysis</strong> and download the CSV, then drop it
+        here. Canvas Expert builds one writing-portfolio document per student (prompts +
+        their responses, with a performance summary) into your Student Reports folder.
+      </p>
+      <div class="sr-pick">
+        <label>Student Analysis CSV
+          <input type="file" id="nqp-file" accept=".csv">
+        </label>
+        <label>Quiz title <small class="lbl-hint">(optional)</small>
+          <input type="text" id="nqp-title" placeholder="e.g. THG Ch 1–9 Test" autocomplete="off">
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" id="nqp-generate" class="primary" disabled>Generate portfolios</button>
+        <a id="nqp-open" class="small open-link" hidden>Open folder</a>
+        <span id="nqp-status" class="hint"></span>
+      </div>
+    </div>
+    <script>
+    (function () {
+      var fileInp = document.getElementById("nqp-file"),
+          titleInp = document.getElementById("nqp-title"),
+          genBtn = document.getElementById("nqp-generate"),
+          openLink = document.getElementById("nqp-open"),
+          status = document.getElementById("nqp-status");
+      if (!fileInp) return;
+      fileInp.addEventListener("change", function () {
+        genBtn.disabled = !fileInp.files.length;
+      });
+      genBtn.addEventListener("click", function () {
+        if (!fileInp.files.length) return;
+        genBtn.disabled = true; openLink.hidden = true;
+        status.textContent = "Generating…";
+        var fd = new FormData();
+        fd.append("file", fileInp.files[0]);
+        fd.append("quiz_title", titleInp.value.trim());
+        fetch("/api/portfolio/from-nq-csv", { method: "POST", body: fd })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.ok) {
+              status.textContent = "✓ " + d.count + " portfolio(s) created in " + d.folder;
+              openLink.hidden = false;
+              openLink.onclick = function () {
+                fetch("/api/open-folder", { method: "POST",
+                  body: new URLSearchParams({ path: d.folder }) });
+              };
+            } else {
+              status.textContent = "Error: " + (d.error || "failed");
+            }
+          })
+          .catch(function (e) { status.textContent = "Error: " + e; })
+          .finally(function () { genBtn.disabled = false; });
+      });
+    })();
+    </script>
   </div><!-- /#ce-tab-students -->
 
   <!-- ── Quick tab ─────────────────────────────────────────────────────── -->
