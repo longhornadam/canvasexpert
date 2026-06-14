@@ -6,30 +6,30 @@
   <h2>Feedback Expert</h2>
   <p class="hint" style="margin-top:0">
     Use an LLM to help score student writing and draft feedback — <strong>safely and
-    honestly</strong>. Student work is <strong>pseudonymized</strong> before it ever leaves
-    this machine (real names stay in a private vault here), and any AI-drafted feedback
+    honestly</strong>. Student work is <strong>pseudonymized</strong> before it ever leaves this
+    machine (real names stay in a private vault here), and any AI-drafted feedback
     <strong>identifies itself</strong> so students always know an assistant helped.
   </p>
   {% if not feedback_root %}
   <div class="callout warn" style="margin-top:10px">
-    No workspace configured yet — finish setup (Settings) so Feedback Expert has a place to
-    work. It uses a <strong>FeedbackExpert</strong> folder in your synced workspace.
+    No workspace configured yet — finish setup (Settings) so Feedback Expert has a place to work.
   </div>
   {% endif %}
 </section>
 
+<!-- Shared: the AI teaching assistant -->
 <section class="card" id="persona-card">
   <h2>Your AI teaching assistant</h2>
   <p class="hint" style="margin-top:0">
-    Give your assistant a name and personality. It introduces itself by this name in every
-    piece of feedback it drafts — honesty by design.
+    Name your assistant and set its tone. It introduces itself by this name in every piece of
+    feedback it drafts — honesty by design. Applies to both lanes below.
   </p>
   <form id="persona-form">
     <label>Name
       <input type="text" id="ta-name" value="{{ persona.name }}" placeholder="e.g. Sage" autocomplete="off">
     </label>
     <label>Personality / tone <small class="lbl-hint">(optional)</small>
-      <textarea id="ta-personality" rows="3"
+      <textarea id="ta-personality" rows="2"
         placeholder="e.g. Warm, specific, encouraging; focuses on one next step.">{{ persona.personality }}</textarea>
     </label>
     <div class="actions">
@@ -39,42 +39,49 @@
   </form>
 </section>
 
+<!-- Shared prep: pseudonymize -->
 <section class="card">
-  <h2>The workflow</h2>
+  <h2>Step 1 · Prepare the work (pseudonymize)</h2>
   <p class="hint" style="margin-top:0">
-    Four steps. Nothing identifiable leaves your machine, and you stay in control —
-    review before anything is entered.
+    Drop each New Quiz's <em>Student Analysis</em> CSV into the Inbox, then Process. This strips
+    names/IDs into LLM-safe bundles (real identities stay in the private vault). Both lanes start here.
   </p>
+  <div class="actions">
+    <button type="button" class="small fx-open" data-folder="inbox" {% if not feedback_root %}disabled{% endif %}>Open Inbox</button>
+    <button type="button" id="fx-process" class="primary" {% if not feedback_root %}disabled{% endif %}>Process Inbox</button>
+    <span id="fx-process-status" class="hint"></span>
+  </div>
+  <pre id="fx-process-log" class="log" hidden></pre>
+</section>
 
+<!-- Lane chooser -->
+<section class="card">
+  <h2>Step 2 · Choose how you'll score</h2>
+  <p class="hint" style="margin-top:0">Two lanes, different handling. Pick the one you use.</p>
+  <div class="actions" id="lane-chooser" style="margin-bottom:4px">
+    <button type="button" class="lane-btn primary" data-lane="manual">I'm using my own LLM tool</button>
+    <button type="button" class="lane-btn" data-lane="openrouter">I'm using OpenRouter</button>
+  </div>
+  <p class="hint" id="lane-sub" style="font-size:12.5px"></p>
+</section>
+
+<!-- LANE 1: outside LLM tool (MagicSchool / in-tenant Copilot / etc.) -->
+<section class="card fx-lane" id="lane-manual">
+  <h2>Lane: your own LLM tool</h2>
+  <p class="hint" style="margin-top:0">
+    For MagicSchool, in-tenant M365 Copilot, ChatGPT, etc. Open a pseudonymized bundle, paste it
+    (with its <em>HOW-TO-SCORE</em> file and your rubric) into your tool, then save the tool's JSON
+    output into the FromLLM folder and re-identify.
+  </p>
+  <strong style="font-size:13px">Pseudonymized bundles — open &amp; paste into your tool</strong>
+  <div id="manual-bundles" style="margin:8px 0 14px"></div>
   <ol class="fx-steps">
-    <li>
-      <strong>1 · Drop CSVs in the Inbox.</strong> Download each New Quiz's
-      <em>Student Analysis</em> CSV from Canvas and drop it into the Inbox folder.
-      <div class="actions" style="margin-top:6px">
-        <button type="button" class="small fx-open" data-folder="inbox" {% if not feedback_root %}disabled{% endif %}>Open Inbox</button>
-      </div>
-    </li>
-    <li>
-      <strong>2 · Process the Inbox.</strong> Pseudonymizes each CSV into an LLM-ready bundle.
-      <div class="callout" style="margin:6px 0">Review the bundle for any self-identifying
-        details in the writing before sending it to an LLM.</div>
-      <div class="actions" style="margin-top:6px">
-        <button type="button" id="fx-process" class="primary" {% if not feedback_root %}disabled{% endif %}>Process Inbox</button>
-        <button type="button" class="small fx-open" data-folder="forllm" {% if not feedback_root %}disabled{% endif %}>Open ForLLM</button>
-        <span id="fx-process-status" class="hint"></span>
-      </div>
-      <pre id="fx-process-log" class="log" hidden></pre>
-    </li>
-    <li>
-      <strong>3 · Score with your LLM.</strong> Paste a bundle + its <em>HOW-TO-SCORE</em> file
-      (and your rubric) into your LLM, then save the LLM's JSON output into the FromLLM folder.
+    <li><strong>Paste &amp; score</strong> in your tool, then save its JSON result into FromLLM.
       <div class="actions" style="margin-top:6px">
         <button type="button" class="small fx-open" data-folder="fromllm" {% if not feedback_root %}disabled{% endif %}>Open FromLLM</button>
       </div>
     </li>
-    <li>
-      <strong>4 · Re-identify.</strong> Maps the LLM's results back to real students into a
-      ready-to-enter CSV. (Automatic posting to Canvas comes later.)
+    <li><strong>Re-identify</strong> → real-name, ready-to-enter CSV.
       <div class="actions" style="margin-top:6px">
         <button type="button" id="fx-reidentify" class="primary" {% if not feedback_root %}disabled{% endif %}>Re-identify results</button>
         <button type="button" class="small fx-open" data-folder="toenter" {% if not feedback_root %}disabled{% endif %}>Open ToEnter</button>
@@ -85,78 +92,26 @@
   </ol>
 </section>
 
-<script>
-(function () {
-  var folders = {{ folders | tojson }};
-
-  function openFolder(key) {
-    var path = folders[key];
-    if (!path) return;
-    fetch("/api/open-folder", { method: "POST", body: new URLSearchParams({ path: path }) });
-  }
-  document.querySelectorAll(".fx-open").forEach(function (b) {
-    b.addEventListener("click", function () { openFolder(b.dataset.folder); });
-  });
-
-  var pForm = document.getElementById("persona-form");
-  pForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var st = document.getElementById("persona-status");
-    st.textContent = "Saving…";
-    fetch("/api/feedback/persona", { method: "POST", body: new URLSearchParams({
-      name: document.getElementById("ta-name").value.trim(),
-      personality: document.getElementById("ta-personality").value.trim() }) })
-      .then(function (r) { return r.json(); })
-      .then(function (d) { st.textContent = d.ok ? "Saved." : ("Error: " + (d.error || "failed")); })
-      .catch(function (e) { st.textContent = "Error: " + e; });
-  });
-
-  function runStep(url, btn, statusEl, logEl) {
-    btn.disabled = true; statusEl.textContent = "Working…"; logEl.hidden = true;
-    fetch(url, { method: "POST" })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (d.log && d.log.length) { logEl.textContent = d.log.join("\n"); logEl.hidden = false; }
-        statusEl.textContent = d.ok ? "Done." : ("Error: " + (d.error || "failed"));
-      })
-      .catch(function (e) { statusEl.textContent = "Error: " + e; })
-      .finally(function () { btn.disabled = false; });
-  }
-
-  document.getElementById("fx-process").addEventListener("click", function () {
-    runStep("/api/feedback/process-inbox", this,
-            document.getElementById("fx-process-status"),
-            document.getElementById("fx-process-log"));
-  });
-  document.getElementById("fx-reidentify").addEventListener("click", function () {
-    runStep("/api/feedback/reidentify", this,
-            document.getElementById("fx-reid-status"),
-            document.getElementById("fx-reid-log"));
-  });
-})();
-</script>
-
-<section class="card" id="openrouter-card">
-  <h2>Automated scoring with OpenRouter <small class="lbl-hint">(optional)</small></h2>
+<!-- LANE 2: OpenRouter (automated) -->
+<section class="card fx-lane" id="lane-openrouter" hidden>
+  <h2>Lane: OpenRouter (automated)</h2>
   <p class="hint" style="margin-top:0">
-    Skip the copy-paste: send your <strong>pseudonymized</strong> bundles straight to an LLM and
-    get scored feedback back automatically. A bundle is <strong>only sendable when it shows
-    🟢 green</strong> (pseudonymized) — the Send button stays locked otherwise. Sending costs
-    money; you'll confirm first. Prefer MagicSchool or in-tenant Copilot? Use the
-    <em>Open</em> link on each bundle below and paste it there instead.
+    One click: send 🟢 pseudonymized bundles to an LLM and get scored feedback back. A bundle is
+    <strong>only sendable when it shows 🟢 green</strong> — Send stays locked otherwise. Calls a
+    paid API; you'll confirm the cost first.
   </p>
 
   <details style="margin-bottom:12px">
     <summary class="delivery-summary">OpenRouter API key &amp; model</summary>
     <div class="delivery-inner">
       <p class="hint" style="margin:0 0 8px">
-        Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys ↗</a>.
-        Stored in Windows Credential Manager — never in a file. Verify the model id at
+        Key from <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys ↗</a>
+        (stored in Windows Credential Manager — never in a file). Verify the model id at
         <a href="https://openrouter.ai/models" target="_blank" rel="noopener">openrouter.ai/models ↗</a>.
       </p>
       <form id="or-config">
         <label>API key <span id="or-key-state" class="hint"></span>
-          <input type="password" id="or-key" placeholder="sk-or-… (leave blank to keep saved key)" autocomplete="off">
+          <input type="password" id="or-key" placeholder="sk-or-… (blank = keep saved key)" autocomplete="off">
         </label>
         <label>Model
           <input type="text" id="or-model" placeholder="anthropic/claude-sonnet-4.5" autocomplete="off">
@@ -173,7 +128,8 @@
     <select id="or-rubric"><option value="">— none (LLM uses only the prompt) —</option></select>
   </label>
 
-  <div id="or-bundles" style="margin:12px 0"></div>
+  <strong style="font-size:13px; display:block; margin-top:12px">Bundles &amp; safety status</strong>
+  <div id="or-bundles" style="margin:8px 0"></div>
 
   <div class="actions">
     <button type="button" id="or-send" class="primary" disabled>Send 🟢 bundles to OpenRouter</button>
@@ -186,88 +142,149 @@
 <script>
 (function () {
   var folders = {{ folders | tojson }};
-  var bundlesEl = document.getElementById("or-bundles"),
-      sendBtn = document.getElementById("or-send"),
-      sendStatus = document.getElementById("or-send-status"),
-      rubricSel = document.getElementById("or-rubric"),
-      logEl = document.getElementById("or-log"),
-      keyState = document.getElementById("or-key-state"),
-      modelInp = document.getElementById("or-model");
-  var greenTokens = 0, hasKey = false;
 
-  function openFile(name) {
+  // ── shared helpers ─────────────────────────────────────────────────────
+  function openFolder(key) {
+    if (!folders[key]) return;
+    fetch("/api/open-folder", { method: "POST", body: new URLSearchParams({ path: folders[key] }) });
+  }
+  function openBundle(name) {
     if (!folders.forllm) return;
-    fetch("/api/open-file", { method: "POST",
-      body: new URLSearchParams({ path: folders.forllm + "\\" + name }) });
+    fetch("/api/open-file", { method: "POST", body: new URLSearchParams({ path: folders.forllm + "\\" + name }) });
+  }
+  document.querySelectorAll(".fx-open").forEach(function (b) {
+    b.addEventListener("click", function () { openFolder(b.dataset.folder); });
+  });
+  function runStep(url, btn, statusEl, logEl, after) {
+    btn.disabled = true; statusEl.textContent = "Working…"; if (logEl) logEl.hidden = true;
+    fetch(url, { method: "POST" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (logEl && d.log && d.log.length) { logEl.textContent = d.log.join("\n"); logEl.hidden = false; }
+      statusEl.textContent = d.ok ? "Done." : ("Error: " + (d.error || "failed"));
+      if (after) after(d);
+    }).catch(function (e) { statusEl.textContent = "Error: " + e; }).finally(function () { btn.disabled = false; });
   }
 
+  // ── persona ────────────────────────────────────────────────────────────
+  document.getElementById("persona-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var st = document.getElementById("persona-status"); st.textContent = "Saving…";
+    fetch("/api/feedback/persona", { method: "POST", body: new URLSearchParams({
+      name: document.getElementById("ta-name").value.trim(),
+      personality: document.getElementById("ta-personality").value.trim() }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { st.textContent = d.ok ? "Saved." : "Error"; })
+      .catch(function (e) { st.textContent = "Error: " + e; });
+  });
+
+  // ── shared prep ────────────────────────────────────────────────────────
+  document.getElementById("fx-process").addEventListener("click", function () {
+    runStep("/api/feedback/process-inbox", this,
+            document.getElementById("fx-process-status"),
+            document.getElementById("fx-process-log"), loadStatus);
+  });
+  document.getElementById("fx-reidentify").addEventListener("click", function () {
+    runStep("/api/feedback/reidentify", this,
+            document.getElementById("fx-reid-status"),
+            document.getElementById("fx-reid-log"));
+  });
+
+  // ── lane chooser ───────────────────────────────────────────────────────
+  var subs = {
+    manual: "Your work is pseudonymized here, then you score it in your own tool and bring results back.",
+    openrouter: "Your work is pseudonymized here, then sent automatically to OpenRouter and brought back."
+  };
+  function setLane(lane) {
+    document.getElementById("lane-manual").hidden = (lane !== "manual");
+    document.getElementById("lane-openrouter").hidden = (lane !== "openrouter");
+    document.querySelectorAll(".lane-btn").forEach(function (b) {
+      b.classList.toggle("primary", b.dataset.lane === lane);
+    });
+    document.getElementById("lane-sub").textContent = subs[lane] || "";
+  }
+  document.querySelectorAll(".lane-btn").forEach(function (b) {
+    b.addEventListener("click", function () { setLane(b.dataset.lane); });
+  });
+  setLane("manual");
+
+  // ── status → render both lanes' bundle lists ───────────────────────────
+  var greenTokens = 0, hasKey = false;
+  function badge(b) {
+    return b.green
+      ? '<span style="color:#2f8132;font-weight:600">🟢 Pseudonymized</span>'
+      : '<span style="color:#b3261e;font-weight:600">🔴 Identifiable data — do not send</span>';
+  }
+  function softNote(b) {
+    return b.soft ? ('<div class="hint" style="color:#9a6700">⚠ Mentions a roster name in the writing (' +
+      (b.soft_names || []).join(", ") + ') — review before sending.</div>') : "";
+  }
   function render(d) {
     hasKey = d.has_key;
-    keyState.textContent = d.has_key ? "✓ saved" : "— not set";
+    document.getElementById("or-key-state").textContent = d.has_key ? "✓ saved" : "— not set";
+    var modelInp = document.getElementById("or-model");
     if (d.model && !modelInp.value) modelInp.value = d.model;
-    rubricSel.innerHTML = '<option value="">— none —</option>' +
+    document.getElementById("or-rubric").innerHTML = '<option value="">— none —</option>' +
       (d.rubrics || []).map(function (r) { return '<option>' + r + '</option>'; }).join("");
+
+    var manual = document.getElementById("manual-bundles");
+    var orList = document.getElementById("or-bundles");
     greenTokens = 0;
     if (!d.bundles || !d.bundles.length) {
-      bundlesEl.innerHTML = '<p class="hint">No bundles in ForLLM yet — run “Process Inbox” above.</p>';
+      manual.innerHTML = orList.innerHTML = '<p class="hint">No bundles yet — Process the Inbox above.</p>';
     } else {
-      bundlesEl.innerHTML = d.bundles.map(function (b) {
-        var badge = b.green
-          ? '<span style="color:#2f8132;font-weight:600">🟢 Pseudonymized — safe to send</span>'
-          : '<span style="color:#b3261e;font-weight:600">🔴 Contains identifiable data — cannot send</span>';
-        if (b.green) greenTokens += b.tokens || 0;
-        var softNote = b.soft ? ('<div class="hint" style="color:#9a6700">⚠ Mentions a roster name in the writing (' +
-          (b.soft_names || []).join(", ") + ') — review before sending.</div>') : "";
-        return '<div class="cal-row" style="display:block">' +
-          '<div><strong>' + b.name + '</strong> &nbsp; ' + badge +
-          ' <span class="muted" style="font-size:12px">· ~' + (b.tokens || 0) + ' tokens</span>' +
-          ' <button type="button" class="small or-open" data-name="' + b.name + '">Open (paste into MagicSchool/Copilot)</button></div>' +
-          softNote + '</div>';
+      manual.innerHTML = d.bundles.map(function (b) {
+        return '<div class="cal-row" style="display:block"><div><strong>' + b.name + '</strong> ' +
+          badge(b) + ' <button type="button" class="small m-open" data-name="' + b.name +
+          '">Open</button></div>' + softNote(b) + '</div>';
       }).join("");
-      bundlesEl.querySelectorAll(".or-open").forEach(function (btn) {
-        btn.addEventListener("click", function () { openFile(btn.dataset.name); });
+      manual.querySelectorAll(".m-open").forEach(function (btn) {
+        btn.addEventListener("click", function () { openBundle(btn.dataset.name); });
       });
+      orList.innerHTML = d.bundles.map(function (b) {
+        if (b.green) greenTokens += b.tokens || 0;
+        return '<div class="cal-row" style="display:block"><div><strong>' + b.name + '</strong> ' +
+          badge(b) + ' <span class="muted" style="font-size:12px">· ~' + (b.tokens || 0) + ' tokens</span></div>' +
+          softNote(b) + '</div>';
+      }).join("");
     }
-    sendBtn.disabled = !(hasKey && greenTokens > 0);
-    sendBtn.textContent = "Send 🟢 bundles to OpenRouter" + (greenTokens ? " (~" + greenTokens + " tokens)" : "");
+    var send = document.getElementById("or-send");
+    send.disabled = !(hasKey && greenTokens > 0);
+    send.textContent = "Send 🟢 bundles to OpenRouter" + (greenTokens ? " (~" + greenTokens + " tokens)" : "");
   }
-
   function loadStatus() {
     fetch("/api/feedback/status").then(function (r) { return r.json(); }).then(render).catch(function () {});
   }
 
+  // ── OpenRouter config + send ───────────────────────────────────────────
   document.getElementById("or-config").addEventListener("submit", function (e) {
     e.preventDefault();
-    var st = document.getElementById("or-config-status");
-    st.textContent = "Saving…";
+    var st = document.getElementById("or-config-status"); st.textContent = "Saving…";
     fetch("/api/feedback/openrouter-config", { method: "POST", body: new URLSearchParams({
       api_key: document.getElementById("or-key").value.trim(),
-      model: modelInp.value.trim() }) })
+      model: document.getElementById("or-model").value.trim() }) })
       .then(function (r) { return r.json(); })
       .then(function () { st.textContent = "Saved."; document.getElementById("or-key").value = ""; loadStatus(); })
       .catch(function (e) { st.textContent = "Error: " + e; });
   });
-
-  sendBtn.addEventListener("click", function () {
-    if (!confirm("Send all 🟢 green (pseudonymized) bundles to OpenRouter?\n\n" +
-                 "~" + greenTokens + " input tokens. This calls a paid API and costs money. Continue?")) return;
-    sendBtn.disabled = true; sendStatus.textContent = "Scoring via OpenRouter…"; logEl.hidden = true;
+  document.getElementById("or-send").addEventListener("click", function () {
+    if (!confirm("Send all 🟢 green (pseudonymized) bundles to OpenRouter?\n\n~" + greenTokens +
+                 " input tokens. This calls a paid API and costs money. Continue?")) return;
+    var btn = this, st = document.getElementById("or-send-status"), logEl = document.getElementById("or-log");
+    btn.disabled = true; st.textContent = "Scoring via OpenRouter…"; logEl.hidden = true;
     fetch("/api/feedback/score-openrouter", { method: "POST",
-      body: new URLSearchParams({ rubric_name: rubricSel.value }) })
+      body: new URLSearchParams({ rubric_name: document.getElementById("or-rubric").value }) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.log && d.log.length) { logEl.textContent = d.log.join("\n"); logEl.hidden = false; }
-        sendStatus.textContent = d.ok ? "Done — review in ToEnter before posting." : ("Error: " + (d.error || "failed"));
+        st.textContent = d.ok ? "Done — review in ToEnter before posting." : ("Error: " + (d.error || "failed"));
         if (d.ok && d.folder) {
-          var open = document.getElementById("or-open-toenter");
-          open.hidden = false;
+          var open = document.getElementById("or-open-toenter"); open.hidden = false;
           open.onclick = function () { fetch("/api/open-folder", { method: "POST",
             body: new URLSearchParams({ path: d.folder }) }); };
         }
         loadStatus();
       })
-      .catch(function (e) { sendStatus.textContent = "Error: " + e; })
-      .finally(function () { sendBtn.disabled = false; });
+      .catch(function (e) { st.textContent = "Error: " + e; })
+      .finally(function () { btn.disabled = false; });
   });
 
   loadStatus();
