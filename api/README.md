@@ -179,15 +179,23 @@ ANTHROPIC_KEY=
 - **Per-question Outcome (TEKS) alignment is UI-only** — not in the API; we embed
   visible labels instead.
 - **Pulling New Quizzes content (per-question responses / item & student analysis)
-  requires OAuth, not a PAT.** Every `/api/quiz/v1/...` endpoint returns **403** on a
-  personal access token even for an active Teacher — confirmed live. The supported path
-  is the **New Quizzes Reports API**
+  appears to require OAuth, not a PAT** — but this is *instance-specific and worth
+  re-confirming.** The official docs ([New Quizzes Reports](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes_reports))
+  only specify OAuth2 *scopes* per endpoint; they never explicitly say a PAT is rejected.
+  Our evidence is a single live 403 on a Teacher PAT against `/api/quiz/v1/...` plus broad
+  community reports. Scope enforcement is account-level, so another instance may differ.
+  The supported path is the **New Quizzes Reports API**
   (`POST /api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`,
   `report_type=student_analysis|item_analysis`), which needs an **admin-granted
   developer key** scoped to `url:POST|/api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`.
   Canvas still enforces enrollment, so the key only ever reaches *your own* courses.
-  **Until that key exists, New Quizzes downloads stay blocked** (scores alone are
-  readable via the regular Submissions API; response *content* is not).
+  **Re-test on a fresh PAT before assuming it's blocked** — run
+  `py diagnose_newquizzes.py --course <id>` (see `api/diagnose_newquizzes.py`). It
+  distinguishes **401** (key just lacks the scope — an admin can grant it) from **403**
+  (the LTI service refuses a user PAT — you need a separate developer key + OAuth), and
+  contrasts with the Classic Quizzes reports endpoint, which *does* work with a PAT.
+  Meanwhile the **Student Analysis CSV downloads fine from the New Quizzes UI** (full
+  responses included) — so manual export is always available even while API pull is blocked.
 - **Common Cartridge import is the zero-auth power path** (Settings → Import Course
   Content). Vanilla CC 1.x carries only the portable common subset, but a **Canvas-flavored
   export package** (CC + Canvas extensions: `canvas_export.txt`, `course_settings/*.xml`)
