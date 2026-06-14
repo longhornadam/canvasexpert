@@ -57,6 +57,7 @@ EXPECTED = [
     ('/api/pf/validate', ('POST',)),
     ('/api/physical/quiz', ('POST',)),
     ('/api/pick-download-folder', ('POST',)),
+    ('/api/portfolio/from-nq-csv', ('POST',)),
     ('/api/push-multi-whole/stream', ('GET',)),
     ('/api/push-multi/stream', ('GET',)),
     ('/api/push-variants/stream', ('GET',)),
