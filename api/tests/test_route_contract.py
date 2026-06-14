@@ -104,6 +104,10 @@ EXPECTED = [
     ('/api/feedback/persona', ('POST',)),
     ('/api/feedback/process-inbox', ('POST',)),
     ('/api/feedback/reidentify', ('POST',)),
+    ('/api/feedback/status', ('GET',)),
+    ('/api/feedback/openrouter-config', ('POST',)),
+    ('/api/feedback/score-openrouter', ('POST',)),
+    ('/api/open-file', ('POST',)),
 ]
 
 
