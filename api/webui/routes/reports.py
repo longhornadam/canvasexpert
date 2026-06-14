@@ -16,6 +16,7 @@ import requests
 import downloader
 import nq_report
 import portfolio
+import portfolio_service
 import student_packet
 from .. import config
 from ..canvas_client import _canvas_get_all, _canvas_headers
@@ -220,6 +221,64 @@ async def portfolio_from_nq_csv(file: UploadFile = File(...),
     return JSONResponse({"ok": True, "folder": out_dir,
                          "count": len(written), "quiz_title": title,
                          "students": [s.get("name", "") for s in students]})
+
+
+@router.post("/portfolio/merged")
+async def portfolio_merged(course_id: str = Form(...),
+                           cohort: str = Form("monitored"),
+                           quiz_title: str = Form(""),
+                           date_from: str = Form(""),
+                           date_to: str = Form(""),
+                           file: UploadFile = File(None)):
+    """Build one merged, chronological writing portfolio per student: Assignment text
+    entries + uploaded files/photos (live) plus New Quizzes responses (optional CSV,
+    matched by Canvas id). Synchronous — scope to the monitored cohort for speed.
+    """
+    token, base = config.get_token(), config.get_canvas_base()
+    if not token:
+        return JSONResponse({"ok": False, "error": "No Canvas token saved."})
+
+    course = next((c for c in config.saved_courses() if str(c["id"]) == str(course_id)),
+                  {"id": course_id, "name": str(course_id)})
+
+    if cohort == "monitored":
+        students = [{"id": uid, "name": v["name"]}
+                    for uid, v in config.get_monitored_students().items()]
+    else:
+        users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
+                                     {"enrollment_type[]": "student", "per_page": 100})
+        if err:
+            return JSONResponse({"ok": False, "error": err})
+        students = [{"id": str(u["id"]),
+                     "name": u.get("sortable_name") or u.get("name", "")}
+                    for u in (users or [])]
+    if not students:
+        return JSONResponse({"ok": False, "error": "No students in the selected cohort."})
+
+    parsed_nq, title = None, (quiz_title or "").strip()
+    if file is not None and file.filename:
+        try:
+            parsed_nq = nq_report.parse_student_analysis(
+                (await file.read()).decode("utf-8-sig", errors="replace"))
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": f"Could not read CSV: {e}"})
+        if not title:
+            title = os.path.splitext(file.filename)[0]
+
+    log, folder = [], config.get_student_reports_root()
+    try:
+        for line in portfolio_service.build_merged_portfolios(
+                course, students, parsed_nq, title, base, token, folder,
+                date_from.strip() or None, date_to.strip() or None):
+            if line.startswith("FOLDER: "):
+                folder = line[len("FOLDER: "):]
+            else:
+                log.append(line)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e), "log": log})
+
+    made = sum(1 for ln in log if ln.startswith("✓"))
+    return JSONResponse({"ok": True, "folder": folder, "count": made, "log": log})
 
 
 # --------------------------------------------------------------------------

@@ -611,6 +611,90 @@
       });
     })();
     </script>
+
+    <div class="card" id="merged-portfolio-card">
+      <h2 style="margin-bottom:12px">Combined Writing Portfolio</h2>
+      <p class="hint" style="margin-top:0">
+        One chronological document per student across sources: <strong>Assignment text
+        entries + uploaded files/photos</strong>, plus <strong>New Quizzes</strong>
+        responses if you add the CSV. Pulls live from the chosen course — scope to your
+        <strong>Monitored</strong> students for speed. Saved to your Student Reports folder.
+      </p>
+      <div class="sr-pick">
+        <label>Course
+          <select id="mp-course">
+            <option value="">— pick a course —</option>
+            {% for c in saved_courses %}<option value="{{ c.id }}">{{ c.nickname }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Students
+          <select id="mp-cohort">
+            <option value="monitored">Monitored students only</option>
+            <option value="all">All students in course</option>
+          </select>
+        </label>
+      </div>
+      <div class="sr-pick">
+        <label>New Quizzes CSV <small class="lbl-hint">(optional)</small>
+          <input type="file" id="mp-file" accept=".csv">
+        </label>
+        <label>From <small class="lbl-hint">(optional)</small><input type="date" id="mp-from"></label>
+        <label>To <small class="lbl-hint">(optional)</small><input type="date" id="mp-to"></label>
+      </div>
+      <div class="actions">
+        <button type="button" id="mp-generate" class="primary" disabled>Generate portfolios</button>
+        <a id="mp-open" class="small open-link" hidden>Open folder</a>
+        <span id="mp-status" class="hint"></span>
+      </div>
+      <pre id="mp-log" class="log" hidden></pre>
+    </div>
+    <script>
+    (function () {
+      var courseSel = document.getElementById("mp-course"),
+          cohortSel = document.getElementById("mp-cohort"),
+          fileInp = document.getElementById("mp-file"),
+          fromInp = document.getElementById("mp-from"),
+          toInp = document.getElementById("mp-to"),
+          genBtn = document.getElementById("mp-generate"),
+          openLink = document.getElementById("mp-open"),
+          status = document.getElementById("mp-status"),
+          logEl = document.getElementById("mp-log");
+      if (!courseSel) return;
+      courseSel.addEventListener("change", function () {
+        genBtn.disabled = !courseSel.value;
+      });
+      genBtn.addEventListener("click", function () {
+        if (!courseSel.value) return;
+        genBtn.disabled = true; openLink.hidden = true; logEl.hidden = true;
+        status.textContent = "Generating… this can take a minute for a full class.";
+        var fd = new FormData();
+        fd.append("course_id", courseSel.value);
+        fd.append("cohort", cohortSel.value);
+        fd.append("date_from", fromInp.value);
+        fd.append("date_to", toInp.value);
+        if (fileInp.files.length) fd.append("file", fileInp.files[0]);
+        fetch("/api/portfolio/merged", { method: "POST", body: fd })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.log && d.log.length) {
+              logEl.textContent = d.log.join("\n"); logEl.hidden = false;
+            }
+            if (d.ok) {
+              status.textContent = "✓ " + d.count + " portfolio(s) created in " + d.folder;
+              openLink.hidden = false;
+              openLink.onclick = function () {
+                fetch("/api/open-folder", { method: "POST",
+                  body: new URLSearchParams({ path: d.folder }) });
+              };
+            } else {
+              status.textContent = "Error: " + (d.error || "failed");
+            }
+          })
+          .catch(function (e) { status.textContent = "Error: " + e; })
+          .finally(function () { genBtn.disabled = false; });
+      });
+    })();
+    </script>
   </div><!-- /#ce-tab-students -->
 
   <!-- ── Quick tab ─────────────────────────────────────────────────────── -->
