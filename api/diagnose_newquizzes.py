@@ -30,6 +30,7 @@ POST, which only enqueues a report (Canvas already generates these for the UI).
 """
 import argparse
 import sys
+import time
 
 import requests
 
@@ -39,11 +40,13 @@ except ModuleNotFoundError:           # imported as api.diagnose_newquizzes (tes
     from api.webui import config
 
 # Statuses that prove the request got past authentication/authorization.
-_AUTHORIZED = {200, 201, 400, 409}
+_AUTHORIZED = {200, 201, 202, 400, 409}
+# Transient gateway/server errors from the quiz-LTI service — not auth failures.
+_TRANSIENT = {429, 500, 502, 503, 504}
 
 
 def _interpret(status: int) -> str:
-    if status in (200, 201):
+    if status in (200, 201, 202):
         return "OK — token accepted here (works)."
     if status in (400, 409):
         return ("AUTHORIZED — request reached the endpoint past auth "
@@ -52,30 +55,50 @@ def _interpret(status: int) -> str:
         return ("BLOCKED (401) — the developer key behind this token lacks the "
                 "scope. An admin can grant the matching `url:...` scope to the key.")
     if status == 403:
-        return ("BLOCKED (403) — the New Quizzes service refuses this token. "
-                "A user PAT is not enough here; you need an admin-issued "
-                "developer key with OAuth (client_credentials).")
+        return ("BLOCKED (403) — New Quizzes refuses this token for THIS course. "
+                "Most common cause: your enrollment here is concluded/inactive "
+                "(New Quizzes is an LTI tool that needs an ACTIVE enrollment). "
+                "Can also mean a missing developer-key scope. Compare with a "
+                "course where you're actively enrolled.")
+    if status == 404:
+        return ("NOT FOUND (404) — wrong id, or the report subresource isn't "
+                "available for this quiz/course (often follows a 403 on the course).")
+    if status in _TRANSIENT:
+        return (f"TRANSIENT (HTTP {status}) — reached the quiz-LTI service, which "
+                "errored at the gateway (flaky, or no submissions to report on). "
+                "This is NOT an auth failure; retry.")
     return f"Unexpected HTTP {status} — inspect the body."
 
 
-def _probe(label, method, url, *, data=None, params=None):
-    """Issue one request; return a structured result dict (never raises)."""
+def _probe(label, method, url, *, data=None, params=None, retries=0):
+    """Issue one request; return a structured result dict (never raises).
+
+    Retries up to `retries` times on transient 5xx/429 (the quiz-LTI gateway is
+    known-flaky) so a transient blip isn't mistaken for the real result.
+    """
     token = config.get_token()
     headers = {"Authorization": f"Bearer {token}"}
-    try:
-        r = requests.request(method, url, headers=headers, data=data,
-                             params=params, timeout=20)
-    except requests.RequestException as e:
-        return {"label": label, "method": method, "url": url,
-                "status": None, "authorized": False,
-                "interpretation": f"NETWORK ERROR — {e}", "body": ""}
-    return {
-        "label": label, "method": method, "url": url,
-        "status": r.status_code,
-        "authorized": r.status_code in _AUTHORIZED,
-        "interpretation": _interpret(r.status_code),
-        "body": (r.text or "")[:300],
-    }
+    last_exc = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.request(method, url, headers=headers, data=data,
+                                 params=params, timeout=20)
+        except requests.RequestException as e:
+            last_exc = e
+            break
+        if r.status_code in _TRANSIENT and attempt < retries:
+            time.sleep(1.5 * (attempt + 1))
+            continue
+        return {
+            "label": label, "method": method, "url": url,
+            "status": r.status_code,
+            "authorized": r.status_code in _AUTHORIZED,
+            "interpretation": _interpret(r.status_code),
+            "body": (r.text or "")[:300],
+        }
+    return {"label": label, "method": method, "url": url,
+            "status": None, "authorized": False,
+            "interpretation": f"NETWORK ERROR — {last_exc}", "body": ""}
 
 
 def _find_nq_assignment(base, course_id):
@@ -136,7 +159,8 @@ def run_diagnostics(course_id, assignment_id=None):
             f"New Quizzes student_analysis report (assignment {aid})", "POST",
             f"{base}/api/quiz/v1/courses/{course_id}/quizzes/{aid}/reports",
             data={"quiz_report[report_type]": "student_analysis",
-                  "quiz_report[format]": "csv"}))
+                  "quiz_report[format]": "csv"},
+            retries=2))
     else:
         results.append({
             "label": "New Quizzes student_analysis report",
@@ -167,9 +191,24 @@ def run_diagnostics(course_id, assignment_id=None):
     read_status   = results[1]["status"]            # New Quizzes list
     report_status = results[2]["status"]            # None if no NQ found/skipped
 
-    works   = read_status in (200, 201) or report_status in (200, 201, 400, 409)
+    reads_ok   = read_status in (200, 201)
+    reports_ok = report_status in (200, 201, 202, 400, 409)
+    works   = reads_ok or reports_ok
     blocked = read_status in (401, 403) or report_status in (401, 403)
-    tested_reports = report_status is not None
+
+    if report_status is None:
+        report_note = (" (Reads succeeded, but the reports endpoint wasn't "
+                       "exercised — point --assignment at a New Quiz to confirm "
+                       "the actual report pull.)")
+    elif reports_ok:
+        report_note = " The report endpoint is reachable too — full pull is viable."
+    elif report_status in _TRANSIENT:
+        report_note = (f" Reads work, but the report POST hit a transient gateway "
+                       f"error (HTTP {report_status}) — re-run against a quiz that "
+                       "HAS submissions to confirm the pull end-to-end.")
+    else:
+        report_note = (f" Reads work; the report probe was inconclusive "
+                       f"(HTTP {report_status}).")
 
     if not token_valid:
         state = "inconclusive"
@@ -177,17 +216,16 @@ def run_diagnostics(course_id, assignment_id=None):
                    "check above. Fix/replace the token before trusting anything else.")
     elif works:
         state = "works"
-        verdict = ("PAT CAN reach New Quizzes — the OAuth-only assumption does "
-                   "NOT hold here; update api/README.md."
-                   + ("" if tested_reports else
-                      " (Reads succeeded, but the reports endpoint was not "
-                      "exercised — point --assignment at a New Quiz to confirm "
-                      "the actual report pull.)"))
+        verdict = ("PAT CAN reach New Quizzes here — the blanket OAuth-only "
+                   "assumption does NOT hold (it depends on active enrollment)."
+                   + report_note)
     elif blocked:
         state = "blocked"
-        verdict = ("PAT is blocked on New Quizzes — the OAuth/developer-key "
-                   "requirement holds. Note 401 (admin can add the scope) vs "
-                   "403 (separate dev key + OAuth needed) above.")
+        verdict = ("PAT is blocked on New Quizzes for THIS course. Most likely "
+                   "your enrollment here is concluded/inactive (try an actively-"
+                   "enrolled course — the same PAT may well work there). 403 can "
+                   "also mean a missing dev-key scope; 401 means an admin just "
+                   "needs to grant the scope.")
     else:
         state = "inconclusive"
         verdict = ("INCONCLUSIVE — nothing conclusive was probed (no New Quiz / "

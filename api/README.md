@@ -178,24 +178,27 @@ ANTHROPIC_KEY=
   Preview** inside the New Quizzes editor.
 - **Per-question Outcome (TEKS) alignment is UI-only** — not in the API; we embed
   visible labels instead.
-- **Pulling New Quizzes content (per-question responses / item & student analysis)
-  appears to require OAuth, not a PAT** — but this is *instance-specific and worth
-  re-confirming.** The official docs ([New Quizzes Reports](https://developerdocs.instructure.com/services/canvas/resources/new_quizzes_reports))
-  only specify OAuth2 *scopes* per endpoint; they never explicitly say a PAT is rejected.
-  Our evidence is a single live 403 on a Teacher PAT against `/api/quiz/v1/...` plus broad
-  community reports. Scope enforcement is account-level, so another instance may differ.
-  The supported path is the **New Quizzes Reports API**
-  (`POST /api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`,
-  `report_type=student_analysis|item_analysis`), which needs an **admin-granted
-  developer key** scoped to `url:POST|/api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`.
-  Canvas still enforces enrollment, so the key only ever reaches *your own* courses.
-  **Re-test on a fresh PAT before assuming it's blocked** — run
-  `py diagnose_newquizzes.py --course <id>` (see `api/diagnose_newquizzes.py`). It
-  distinguishes **401** (key just lacks the scope — an admin can grant it) from **403**
-  (the LTI service refuses a user PAT — you need a separate developer key + OAuth), and
-  contrasts with the Classic Quizzes reports endpoint, which *does* work with a PAT.
-  Meanwhile the **Student Analysis CSV downloads fine from the New Quizzes UI** (full
-  responses included) — so manual export is always available even while API pull is blocked.
+- **A PAT *can* reach New Quizzes (`/api/quiz/v1/...`) — the gate is ACTIVE ENROLLMENT,
+  not PAT-vs-OAuth.** This corrects an earlier note that claimed a PAT always 403s.
+  Confirmed live 2026-06 with one PAT across two courses: in an **actively-enrolled**
+  course `GET /api/quiz/v1/courses/:id/quizzes` returns **200**; in a **concluded /
+  past-enrollment** course the same call returns **403**. New Quizzes is an LTI tool, so
+  access follows your live enrollment — the old "403" was a past-enrollment course, not a
+  PAT limitation. Use `py diagnose_newquizzes.py --course <id> [--assignment <nq_id>]`
+  (see `api/diagnose_newquizzes.py`) to check any course; it reads 401 (missing scope —
+  admin can grant), 403 (concluded enrollment, or missing scope), and transient 5xx apart.
+- **The Reports API (student/item analysis) is the response-content path, but the gateway
+  is flaky.** `POST /api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`
+  (`report_type=student_analysis|item_analysis`, `format=csv|json`) enqueues a report and
+  returns a Progress object. Against an actively-enrolled course it gets **past auth**, but
+  has been seen returning a transient **502** from the quiz-LTI gateway (e.g. a quiz with no
+  submissions) — retry, and confirm end-to-end against a quiz that has submissions before
+  relying on it. The supported zero-flakiness alternative for cross-course/admin use is an
+  **admin-granted developer key** scoped to
+  `url:POST|/api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`.
+  Regardless of the API, the **Student Analysis CSV downloads fine from the New Quizzes UI**
+  (full responses included) — the always-available manual fallback, and the only option for
+  courses where your enrollment has concluded.
 - **Common Cartridge import is the zero-auth power path** (Settings → Import Course
   Content). Vanilla CC 1.x carries only the portable common subset, but a **Canvas-flavored
   export package** (CC + Canvas extensions: `canvas_export.txt`, `course_settings/*.xml`)
