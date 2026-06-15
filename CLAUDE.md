@@ -20,6 +20,12 @@ PageForge, RubricForge). These are **canonical**. `api/` *consumes* them — nev
 **`api/README.md`** (read it before touching push logic — it records hard-won live-probe
 findings like the `result_view_settings` feedback rule and the New Quizzes 403/PAT limit).
 
+**FeedbackExpert** (safe, honest LLM scoring/feedback) is built around the **Feedback Scoring
+Contract** (`docs/contracts/feedback-scoring-contract.md`) — the LLM-agnostic, pseudonymized
+JSON that any scoring tool emits and that Phase C (Push to Canvas) consumes. We deliberately do
+**not** depend on an OpenRouter key; the contract is the seam that makes the LLM choice
+irrelevant. Direction + status: `docs/handoffs/feedback-expert-next.md`.
+
 ## Guardrails (non-negotiable)
 
 1. **Never commit secrets.** The Canvas token lives **only** in the OS credential store
