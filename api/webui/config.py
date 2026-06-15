@@ -296,12 +296,85 @@ def set_tier_tags(tags: dict):
 
 
 # --------------------------------------------------------------------------
-# FeedbackExpert — AI-TA persona (name + personality). Disclosed in feedback.
+# FeedbackExpert — AI-TA persona library (synced, multiple starters)
 # --------------------------------------------------------------------------
 
 AI_TA_PERSONA_DEFAULT = {"name": "", "personality": ""}
 
+# Three shipped starter personas — Sage (default), Pip, Coach Vale
+BUILTIN_PERSONAS = [
+    {
+        "id": "sage",
+        "name": "Sage",
+        "personality": (
+            "A calm, thoughtful mentor. Warm and patient; names what's working "
+            "before what to fix; precise without being cold."
+        ),
+    },
+    {
+        "id": "pip",
+        "name": "Pip",
+        "personality": (
+            "Upbeat and energetic; plain language, short punchy sentences. "
+            "Built for reluctant readers — high warmth, low jargon."
+        ),
+    },
+    {
+        "id": "coach_vale",
+        "name": "Coach Vale",
+        "personality": (
+            "Direct and action-oriented; frames feedback as 'your next rep.' "
+            "Concrete, motivating, no fluff."
+        ),
+    },
+]
 
+
+def list_personas() -> list[dict]:
+    """Return built-in + any custom personas the teacher has saved.
+    Each: {id, name, personality, builtin: bool}."""
+    builtins = [{"builtin": True, **p} for p in BUILTIN_PERSONAS]
+    custom_raw = _synced_state().get("custom_personas", [])
+    custom = [{"id": c.get("id", ""), "name": c.get("name", ""),
+               "personality": c.get("personality", ""), "builtin": False}
+              for c in custom_raw if c.get("name")]
+    return builtins + custom
+
+
+def get_persona(persona_id: str = "") -> dict:
+    """Get a persona by id, falling back to 'sage' or blank default."""
+    for p in list_personas():
+        if p["id"] == (persona_id or "sage"):
+            return {"name": p["name"], "personality": p["personality"]}
+    return dict(AI_TA_PERSONA_DEFAULT)
+
+
+def save_custom_persona(persona_id: str, name: str, personality: str):
+    """Add or update a custom persona. Builtins are read-only."""
+    if any(p["id"] == persona_id for p in BUILTIN_PERSONAS):
+        return  # can't overwrite builtins
+    state = _synced_state()
+    custom = state.setdefault("custom_personas", [])
+    for i, p in enumerate(custom):
+        if p.get("id") == persona_id:
+            custom[i] = {"id": persona_id, "name": name.strip(), "personality": personality.strip()}
+            _save_synced_key("custom_personas", custom)
+            return
+    custom.append({"id": persona_id, "name": name.strip(), "personality": personality.strip()})
+    _save_synced_key("custom_personas", custom)
+
+
+def remove_custom_persona(persona_id: str):
+    """Remove a user-created persona."""
+    if any(p["id"] == persona_id for p in BUILTIN_PERSONAS):
+        return
+    state = _synced_state()
+    state["custom_personas"] = [p for p in state.get("custom_personas", [])
+                                 if p.get("id") != persona_id]
+    _save_synced_key("custom_personas", state["custom_personas"])
+
+
+# Legacy single-persona getter/setter — kept for backward compat, delegates to library.
 def get_ai_ta_persona() -> dict:
     saved = _synced_state().get("ai_ta_persona", {})
     return {"name": str(saved.get("name", "")).strip(),
@@ -311,6 +384,31 @@ def get_ai_ta_persona() -> dict:
 def set_ai_ta_persona(name: str, personality: str = ""):
     _save_synced_key("ai_ta_persona",
                      {"name": (name or "").strip(), "personality": (personality or "").strip()})
+
+
+# --------------------------------------------------------------------------
+# FeedbackExpert — Feedback Patterns (synced)
+# --------------------------------------------------------------------------
+
+FEEDBACK_PATTERNS_DEFAULT = [
+    {
+        "id": "basic",
+        "name": "Glows & Grows (Basic)",
+        "score_from_rubric": True,
+        "glows": {"min": 2, "max": 3},
+        "grows": {"min": 1, "max": 2},
+        "strategy_sentences": {"min": 2, "max": 3},
+        "sign_with_persona": True,
+    },
+]
+
+
+def list_feedback_patterns() -> list[dict]:
+    return list(_synced_state().get("feedback_patterns", FEEDBACK_PATTERNS_DEFAULT))
+
+
+def set_feedback_patterns(patterns: list[dict]):
+    _save_synced_key("feedback_patterns", patterns)
 
 
 def get_sweep_settings() -> dict:

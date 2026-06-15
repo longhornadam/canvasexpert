@@ -111,6 +111,7 @@ def feedback_expert_page(request: Request):
         "persona":       config.get_ai_ta_persona(),
         "feedback_root": fb,
         "folders":       folders,
+        "saved_courses": config.active_courses(),
     })
 
 
