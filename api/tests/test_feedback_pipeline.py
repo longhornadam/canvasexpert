@@ -155,6 +155,74 @@ def test_submissions_round_trip_reidentify(tmp_path):
     assert rows[0]["sis_id"] == "5002"
 
 
+# --------------------------------------------------------------------------
+# Phase C seam: the Feedback Scoring Contract (validate_results)
+# docs/contracts/feedback-scoring-contract.md
+# --------------------------------------------------------------------------
+
+def _score_like_an_llm(bundle):
+    """Stand in for the scoring LLM: emit one contract-conforming result per
+    response in the bundle (Glows/Grows/Next, signed, with disclosure). This is
+    the self-test — proving the contract is concrete enough to author against."""
+    out = []
+    for s in bundle["students"]:
+        for r in s["responses"]:
+            out.append({
+                "pseudonym": s["pseudonym"],
+                "item_id": r["item_id"],
+                "score": (r["possible"] or 10) - 1,
+                "feedback": ("Glows: clear thesis; concrete example.\n"
+                             "Grows: connect the middle back to the prompt.\n"
+                             "Next step: add one cited quote.\n"
+                             "— Sage (AI teaching assistant)"),
+                "disclosure": "Drafted by Sage (AI), reviewed by your teacher.",
+            })
+    return {"contract_version": "1.0", "results": out}
+
+
+def test_self_authored_results_conform_to_contract(tmp_path):
+    parsed = parse_student_analysis_file(FIXTURE)
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize(parsed, v, "THG")
+
+    payload = _score_like_an_llm(bundle)               # I act as the LLM here
+    verdict = fp.validate_results(payload, bundle, v)
+    assert verdict["ok"], verdict["errors"]
+    assert verdict["warnings"] == []                   # full coverage, in-range scores
+
+    rows = fp.reidentify(payload["results"], v)        # push-ready, re-identified
+    assert rows and all(r["resolved"] for r in rows)
+    assert all(r["feedback"].endswith("(AI teaching assistant)") for r in rows)
+
+
+def test_validate_results_catches_violations(tmp_path):
+    parsed = parse_student_analysis_file(FIXTURE)
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize(parsed, v, "THG")
+    bad = [
+        {"pseudonym": "S001", "item_id": "does-not-exist", "score": "high", "feedback": ""},
+        {"item_id": "x", "score": 5, "feedback": "ok"},          # no pseudonym
+        {"pseudonym": "S404", "item_id": "y", "score": 1, "feedback": "ok"},  # not in vault
+    ]
+    out = fp.validate_results(bad, bundle, v)
+    assert out["ok"] is False
+    blob = " | ".join(out["errors"])
+    assert "'score' must be a number" in blob
+    assert "non-empty text" in blob
+    assert "not in the vault" in blob
+    assert "not in the bundle" in blob
+
+
+def test_validate_results_warns_on_partial_coverage(tmp_path):
+    parsed = parse_student_analysis_file(FIXTURE)
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize(parsed, v, "THG")
+    full = _score_like_an_llm(bundle)["results"]
+    out = fp.validate_results(full[:1], bundle, v)      # only the first student scored
+    assert out["ok"] is True                            # not a hard error…
+    assert any("left unscored" in w for w in out["warnings"])  # …but flagged for review
+
+
 def test_build_request_injects_feedback_pattern():
     bundle = {"students": []}
     pattern = {"id": "basic", "name": "Glows & Grows (Basic)",
