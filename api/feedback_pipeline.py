@@ -54,6 +54,66 @@ def pseudonymize(parsed: dict, vault: Vault, quiz_title: str) -> dict:
             "review_required": True, "note": _REVIEW_NOTE, "students": students}
 
 
+def pseudonymize_submissions(submissions: list, vault: Vault,
+                              assignment_title: str) -> dict:
+    """Build an LLM-safe bundle from Canvas API submissions (assignments path).
+
+    Each submission is keyed on the vault by canvas_id (student user_id). One entry
+    per student with the assignment as a single response item. Mutates the vault;
+    caller saves.
+
+    Args:
+        submissions: list of Canvas submission objects from /students/submissions
+        vault: Vault instance
+        assignment_title: display name for the assignment
+    """
+    # Group submissions by student (latest per assignment). The real name/sis come
+    # from include[]=user on the fetch; they go ONLY into the vault, never the bundle.
+    by_student: dict = {}
+    for s in submissions:
+        uid = str(s.get("user_id", ""))
+        if not uid:
+            continue
+        a = s.get("assignment") or {}
+        user = s.get("user") or {}
+        prompt = html_to_text(a.get("description") or "")
+        response = html_to_text(s.get("body") or "")
+        if not response and not (s.get("attachments") or []):
+            continue
+        entry = {
+            "item_id":  str(a.get("id", "")),
+            "prompt":   prompt,
+            "response": response,
+            "possible": a.get("points_possible"),
+            "submitted_at": s.get("submitted_at", ""),
+            "score":    s.get("score"),
+            "real_name": user.get("name") or user.get("sortable_name") or "",
+            "sis_id":    str(user.get("sis_user_id") or ""),
+        }
+        # Keep latest submission per assignment
+        existing = by_student.get(uid)
+        if existing is None or (entry["submitted_at"] or "") > (existing.get("_submitted_at") or ""):
+            by_student[uid] = {**entry, "_submitted_at": entry["submitted_at"]}
+
+    students = []
+    for uid, entry in by_student.items():
+        pseudo = vault.get_or_assign(uid, entry["real_name"], entry["sis_id"])
+        students.append({
+            "pseudonym": pseudo,
+            "responses": [{
+                "item_id":  entry["item_id"],
+                "prompt":   entry["prompt"],
+                "response": entry["response"],
+                "possible": entry["possible"],
+            }],
+        })
+
+    return {"contract_version": CONTRACT_VERSION,
+            "quiz_title": assignment_title,
+            "source": "assignment",
+            "review_required": True, "note": _REVIEW_NOTE, "students": students}
+
+
 def build_contract_text(ai_ta_name: str = "your AI teaching assistant") -> str:
     """Instructions the teacher pastes into their LLM alongside the bundle + rubric.
     Extends the Essay Scorer skill: keyed batch output for automatic re-identification,

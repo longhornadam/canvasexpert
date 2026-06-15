@@ -1109,3 +1109,36 @@ html[data-theme="dark"] .philosophy-list li::before { color: #c084fc; }
 .rt-byo-cols > div { flex:1 1 240px; }
 .rt-byo-cols h3 { font-size:13px; margin:0 0 6px; }
 .rt-byo-cols ul { margin:0; padding-left:18px; line-height:1.9; font-size:13px; }
+
+/* ── Feedback Expert — Guided flow pickers ─────────────────────────────── */
+.guided-pickers {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px; margin: 14px 0;
+}
+.guided-pickers label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+}
+.guided-pickers select {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: var(--r-sm); background: var(--card); color: var(--ink);
+  font: 13px var(--font);
+}
+
+/* Progress bar */
+.progress-bar {
+  width: 100%; height: 8px; background: var(--line);
+  border-radius: 4px; overflow: hidden; margin: 12px 0 8px;
+}
+.progress-fill {
+  height: 100%; width: 0%; background: var(--ce-blue);
+  border-radius: 4px; transition: width .3s ease;
+}
+
+/* Guided flow log */
+#gf-log { max-height: 320px; }
+
+/* Push coming-soon button */
+#gf-push {
+  opacity: .6; cursor: not-allowed;
+}

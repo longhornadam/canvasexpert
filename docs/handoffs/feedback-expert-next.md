@@ -46,8 +46,12 @@ Assignments-first headline.
 1. **Assignment-driven guided flow + progress bar.** New UI: course picker → assignment picker
    (reuse `GET /api/assignments-full` from `routes/reports.py`) → AI-TA → Rubric → Feedback Pattern
    → GO. Because there's no file upload (selections only), use **SSE** for the progress bar —
-   clean GET stream, none of the upload+SSE friction we hit before. New route e.g.
-   `GET /api/feedback/run/stream?course_id=&assignment_id=&ai_ta=&rubric=&pattern=`.
+   clean GET stream, none of the upload+SSE friction we hit before. **Built as two steps** so the
+   paid call is cost-gated (an SSE stream can't pause mid-flight for a client OK):
+   `GET /api/feedback/run/prepare?course_id=&assignment_id=&rubric_name=` (fetch → pseudonymize →
+   HARD safety gate → write bundle → return token estimate; nothing paid) then, after the teacher
+   confirms cost, `GET /api/feedback/run/stream?bundle_name=&persona_id=&rubric_name=&pattern_id=`
+   (re-scan → score → re-identify → ToEnter).
    Orchestrate existing pieces:
    - Fetch submissions: mirror `api/portfolio_service.py::build_merged_portfolios` /
      `student_packet.build_packet` (the `/students/submissions?include[]=assignment` call).
