@@ -61,16 +61,39 @@ Assignments-first headline.
      `_audit`.
 
 2. **Pre-built AI-TA persona library + dropdown + custom.** Today persona is a single synced
-   `{name, personality}` (`config.get/set_ai_ta_persona`). Make it a **library**: ship a handful of
-   ready-made personas (name + personality), present a **dropdown** + a "create your own" option;
-   selected persona drives the contract/disclosure. Storage: synced (travels with the teacher).
+   `{name, personality}` (`config.get/set_ai_ta_persona`). Make it a **library**: ship the
+   ready-made personas below (name + personality), present a **dropdown** + a "create your own"
+   option; selected persona drives the contract/disclosure. Storage: synced (travels with the
+   teacher). **Ship these 3 starter personas (DECIDED):**
+   - **Sage** — a calm, thoughtful mentor. Warm and patient; names what's working before what to
+     fix; precise without being cold. Default.
+   - **Pip** — upbeat and energetic; plain language, short punchy sentences. Built for reluctant
+     readers — high warmth, low jargon.
+   - **Coach Vale** — direct and action-oriented; frames feedback as "your next rep." Concrete,
+     motivating, no fluff.
 
-3. **Define + build "Feedback Pattern".** New concept the teacher named, distinct from the rubric.
-   A Feedback Pattern = the **pedagogical shape of the narrative feedback** (e.g. Glow/Grow,
-   Two-Stars-and-a-Wish, WWW/EBI, Praise-Question-Polish, "one concrete next step", tone/length).
-   Decide: data shape, a prebuilt set, custom creation, where stored (synced), and how it's injected
-   into the scoring contract (`feedback_pipeline.build_contract_text` /
-   `openrouter_client.build_request`). Selectable in the guided flow.
+3. **Build "Feedback Pattern" — keep it BASIC for now (DECIDED).** A Feedback Pattern = the
+   pedagogical shape of the narrative feedback, distinct from the rubric. The teacher's reasoning:
+   *kids don't read a ton of feedback*, so keep it short and skimmable. The one shipped pattern:
+   - **LLM score** derived from the selected **rubric**
+   - **2–3 glows**, **1–2 grows**
+   - a **2–3 sentence** overall improvement strategy
+   - signed with the **AI-TA persona's name** (disclosure)
+
+   Proposed data shape (synced storage; injected into `feedback_pipeline.build_contract_text` /
+   `openrouter_client.build_request`):
+   ```json
+   {
+     "id": "basic",
+     "name": "Glows & Grows (Basic)",
+     "score_from_rubric": true,
+     "glows": { "min": 2, "max": 3 },
+     "grows": { "min": 1, "max": 2 },
+     "strategy_sentences": { "min": 2, "max": 3 },
+     "sign_with_persona": true
+   }
+   ```
+   Build the selector + injection now; the library can grow later. Selectable in the guided flow.
 
 4. **Stop leading with New Quizzes.** Make course/assignment selection the prominent first action;
    demote the CSV/NQ drop-folder to the clearly-labeled secondary (NQ + own-tool) path.
@@ -88,14 +111,20 @@ Assignments-first headline.
 - SSE pattern: `deps._sse` + `StreamingResponse` (see `routes/reports.py` packet stream).
 - Rubrics: `deps.list_rubric_files()`. Persona/config: `webui/config.py`.
 
-## Open questions / decisions for next session
+## Decisions (LOCKED by teacher — do not re-litigate)
 
-- **Feedback Pattern**: exact schema + the prebuilt set (needs a quick teacher gut-check).
-- **"Push to Canvas" now or stub?** Recommend stub/disabled this round (Phase C), flow ends at
-  review + ToEnter. Confirm with the teacher.
-- **Progress granularity**: per-student SSE lines vs a coarse bar. Per-student is cheap and matches
-  the existing packet stream.
-- **Multiple attempts / ungraded** handling on assignment submissions.
+- **Feedback Pattern**: basic only — score from rubric, 2–3 glows / 1–2 grows, 2–3 sentence
+  strategy, signed by persona. Schema in Task 3 above. (Rationale: kids don't read much feedback.)
+- **AI-TA personas**: ship the 3 starters in Task 2 (Sage / Pip / Coach Vale) + "create your own."
+- **"Push to Canvas"**: **stub for now** — wire the button disabled/"coming soon"; flow ends at
+  review + ToEnter CSV. (Phase C stays deferred.)
+- **Progress granularity**: **per-student** SSE lines (matches the existing packet stream).
+- **Multiple attempts**: treat the **latest submission at the time of scoring** as the canonical
+  event. (No attempt-picking UI.)
+- **Late / ungraded**: **timestamp** the submission, then route through the **existing late-work
+  process** (enter # of days late) rather than inventing new handling here.
+- **OpenRouter model slug**: teacher will specify/verify later — not a blocker for this build
+  (mock the call in offline tests; default slug may be stale).
 
 ## Guardrails (unchanged, non-negotiable)
 
