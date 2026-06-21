@@ -17,10 +17,31 @@ DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 WORKSPACE_NAME = "CanvasExpert"
 WORKSPACE_SUBFOLDERS = ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports", "Calendars"]
 
-# FeedbackExpert numbered drop-folder workflow (nested under the workspace).
+# FeedbackExpert zone folders (nested under the workspace).
 FEEDBACK_NAME = "FeedbackExpert"
-FEEDBACK_SUBFOLDERS = ["1_Inbox", "2_ForLLM", "3_FromLLM", "4_ToEnter", "_archive",
-                       "_vault", "_audit"]
+FEEDBACK_SUBFOLDERS = ["SAFE", "PRIVATE", "_system"]
+
+
+def _ensure_system_subfolders(fb_root):
+    """Create _system sub-directories: vault, archive, audit."""
+    sys_root = os.path.join(fb_root, "_system")
+    for sub in ("vault", "archive", "audit"):
+        os.makedirs(os.path.join(sys_root, sub), exist_ok=True)
+
+
+def _migrate_old_layout(fb_root):
+    """One-time migration: move old _vault, _archive, _audit into _system/."""
+    sys_root = os.path.join(fb_root, "_system")
+    old_new = [
+        ("_vault", "vault"),
+        ("_archive", "archive"),
+        ("_audit", "audit"),
+    ]
+    for old_name, new_name in old_new:
+        old_dir = os.path.join(fb_root, old_name)
+        new_dir = os.path.join(sys_root, new_name)
+        if os.path.isdir(old_dir) and not os.path.isdir(new_dir):
+            shutil.move(old_dir, new_dir)
 
 
 def _machine_config():
@@ -91,10 +112,26 @@ def ensure_workspace():
             continue
         shutil.copy2(source, target)
 
-    # FeedbackExpert nested workflow tree.
+    # FeedbackExpert zone folders.
     fb_root = os.path.join(root, FEEDBACK_NAME)
     for sub in FEEDBACK_SUBFOLDERS:
         os.makedirs(os.path.join(fb_root, sub), exist_ok=True)
+    _ensure_system_subfolders(fb_root)
+    _migrate_old_layout(fb_root)
+
+    # Seed a READ-ME file at the FeedbackExpert root.
+    readme_path = os.path.join(fb_root, "READ-ME (what's safe to share).txt")
+    if not os.path.exists(readme_path):
+        with open(readme_path, "w", encoding="utf-8") as f:
+            f.write(
+                "Canvas Expert — FeedbackExpert Folder Zones\n"
+                "=============================================\n\n"
+                "SAFE/       = pseudonymized (fake-name) copies of student work.\n"
+                "              Safe to paste into ChatGPT, Claude, MagicSchool, etc.\n\n"
+                "PRIVATE/    = real-name originals, who-is-who decoders, raw\n"
+                "              downloads. NEVER leaves this PC.\n\n"
+                "_system/    = vault database, archives, logs. Don't touch.\n"
+            )
     return root
 
 
@@ -113,7 +150,21 @@ def feedback_root():
 
 
 def feedback_folder(sub):
+    """Resolve a FeedbackExpert sub-folder path. Translates legacy names to new zones.
+    Legacy: 1_Inbox, 2_ForLLM, 3_FromLLM, 4_ToEnter, _vault, _archive, _audit.
+    New:    SAFE, PRIVATE, _system/vault, _system/archive, _system/audit.
+    """
+    translation = {
+        "1_Inbox": "PRIVATE",
+        "2_ForLLM": "SAFE",
+        "3_FromLLM": "SAFE",
+        "4_ToEnter": "PRIVATE",
+        "_vault": os.path.join("_system", "vault"),
+        "_archive": os.path.join("_system", "archive"),
+        "_audit": os.path.join("_system", "audit"),
+    }
+    resolved = translation.get(sub, sub)
     fb = feedback_root()
     if not fb:
         return None
-    return os.path.join(fb, sub)
+    return os.path.join(fb, resolved)

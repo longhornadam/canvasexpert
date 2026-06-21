@@ -114,7 +114,18 @@ EXPECTED = [
     ('/api/feedback/patterns', ('POST',)),
     ('/api/feedback/run/prepare', ('GET',)),
     ('/api/feedback/run/stream', ('GET',)),
+    ('/api/names/backup-vault', ('POST',)),
+    ('/api/names/collisions', ('GET',)),
+    ('/api/names/nickname', ('POST',)),
+    ('/api/names/protected', ('GET',)),
+    ('/api/names/protected', ('POST',)),
+    ('/api/names/pseudonym', ('POST',)),
+    ('/api/names/pseudonym/regenerate', ('POST',)),
+    ('/api/names/roster', ('GET',)),
+    ('/api/names/scrub-test', ('POST',)),
+    ('/api/names/who-is-who', ('POST',)),
     ('/api/open-file', ('POST',)),
+    ('/name-manager', ('GET',)),
 ]
 
 

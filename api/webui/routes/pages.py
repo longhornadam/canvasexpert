@@ -104,13 +104,25 @@ def feedback_expert_page(request: Request):
     if fb:
         folders = {k: workspace.feedback_folder(v) for k, v in {
             "inbox": "1_Inbox", "forllm": "2_ForLLM",
-            "fromllm": "3_FromLLM", "toenter": "4_ToEnter"}.items()}
+            "fromllm": "3_FromLLM", "toenter": "4_ToEnter",
+            "safe": "SAFE", "private": "PRIVATE", "system": "_system"}.items()}
     return templates.TemplateResponse("feedback_expert.html", {
         "request":       request,
         "nav_section":   "feedback",
         "persona":       config.get_ai_ta_persona(),
         "feedback_root": fb,
         "folders":       folders,
+        "saved_courses": config.active_courses(),
+    })
+
+
+@router.get("/name-manager", response_class=HTMLResponse)
+def name_manager_page(request: Request):
+    fb = workspace.feedback_root()
+    return templates.TemplateResponse("name_manager.html", {
+        "request":       request,
+        "nav_section":   "feedback",
+        "feedback_root": fb,
         "saved_courses": config.active_courses(),
     })
 

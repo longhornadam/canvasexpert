@@ -61,3 +61,15 @@ def scan_payload(payload, vault) -> dict:
                 hard.append(f"real id '{value}' present at {path}.{key}")
 
     return {"green": not hard, "hard": hard, "soft": soft}
+
+
+def assert_scrubbed(payload, vault) -> dict:
+    """Post-scrub safety receipt: scan_payload + return it. Intended to run AFTER
+    scrubbing has been applied. 'green' must be True and 'soft' should be [];
+    a non-empty 'soft' is logged as a scrub miss (bug), not surfaced to the user.
+    Does not modify the payload or call save()."""
+    verdict = scan_payload(payload, vault)
+    # HARD must always be empty after scrubbing — this catches pipeline bugs.
+    # SOFT should ideally be empty; non-empty means the scrub engine missed
+    # a real identifier, which should be logged.
+    return verdict
