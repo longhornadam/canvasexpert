@@ -23,14 +23,14 @@ def test_vault_stable_assign_reverse_and_persist(tmp_path):
     v = Vault(vpath)
     p1 = v.get_or_assign("9001", "Ada Lovelace", "5001")
     p2 = v.get_or_assign("9002", "Alan Turing", "5002")
-    assert p1 == "S001" and p2 == "S002"
-    assert v.get_or_assign("9001") == "S001"          # stable on re-sight
-    assert v.reverse("S002")["real_name"] == "Alan Turing"
+    assert p1 != p2                                    # distinct fake names
+    assert v.get_or_assign("9001") == p1               # stable on re-sight
+    assert v.reverse(p2)["real_name"] == "Alan Turing"
     v.save()
     # Reload: pseudonyms and reverse mapping survive.
     v2 = Vault(vpath)
-    assert v2.get_or_assign("9001") == "S001"
-    assert v2.reverse("S001")["canvas_id"] == "9001"
+    assert v2.get_or_assign("9001") == p1
+    assert v2.reverse(p1)["canvas_id"] == "9001"
 
 
 def test_pseudonymize_leaks_no_identity(tmp_path):
@@ -40,7 +40,8 @@ def test_pseudonymize_leaks_no_identity(tmp_path):
     blob = json.dumps(bundle)
     for leak in ["Ada Lovelace", "Alan Turing", "Grace Hopper", "9001", "5001", "SEC-A"]:
         assert leak not in blob                        # no names/ids/sections leave
-    assert {s["pseudonym"] for s in bundle["students"]} == {"S001", "S002", "S003"}
+    # All 3 fixture students have written responses
+    assert len(bundle["students"]) == 3
     # constructed responses only, with scale but not the earned score
     r0 = bundle["students"][0]["responses"][0]
     assert "possible" in r0 and "prompt" in r0 and "response" in r0
@@ -50,7 +51,8 @@ def test_round_trip_reidentify(tmp_path):
     parsed = parse_student_analysis_file(FIXTURE)
     v = Vault(str(tmp_path / "vault.json"))
     fp.pseudonymize(parsed, v, "THG")                  # populates the vault
-    results = [{"pseudonym": "S001", "item_id": "1003", "score": 9,
+    p1 = v.get_or_assign("9001")                        # capture assigned pseudonyms
+    results = [{"pseudonym": p1, "item_id": "1003", "score": 9,
                 "feedback": "Strong evidence. — drafted by AI", "disclosure": "AI-assisted"},
                {"pseudonym": "S999", "item_id": "x", "score": 0, "feedback": "?"}]
     rows = fp.reidentify(results, v)
@@ -60,12 +62,12 @@ def test_round_trip_reidentify(tmp_path):
 
 
 def test_process_inbox_and_reidentify_dir(tmp_path):
-    inbox = tmp_path / "1_Inbox"; inbox.mkdir()
-    forllm = tmp_path / "2_ForLLM"
-    archive = tmp_path / "_archive"
-    fromllm = tmp_path / "3_FromLLM"; fromllm.mkdir()
-    toenter = tmp_path / "4_ToEnter"
-    vpath = str(tmp_path / "_vault" / "vault.json")
+    inbox = tmp_path / "PRIVATE"; inbox.mkdir()
+    forllm = tmp_path / "SAFE"
+    archive = tmp_path / "_system" / "archive"
+    fromllm = tmp_path / "SAFE"
+    toenter = tmp_path / "PRIVATE"
+    vpath = str(tmp_path / "_system" / "vault" / "vault.json")
     shutil.copy(FIXTURE, str(inbox / "THG Test.csv"))
 
     v = Vault(vpath)
@@ -77,9 +79,12 @@ def test_process_inbox_and_reidentify_dir(tmp_path):
     assert not list(inbox.glob("*.csv"))               # original archived
     assert (archive / "THG Test.csv").exists()
 
-    # Simulate an LLM results drop, then re-identify.
+    # Simulate an LLM results drop — use the actual pseudonym from the vault
+    entries = v.entries()
+    first_pseudo = entries[0]["pseudonym"] if entries else "S001"
+
     (fromllm / "THG Test__results.json").write_text(json.dumps([
-        {"pseudonym": "S001", "item_id": "1003", "score": 9,
+        {"pseudonym": first_pseudo, "item_id": "1003", "score": 9,
          "feedback": "Nice. Drafted by Sage (AI), reviewed by your teacher.",
          "disclosure": "Drafted by Sage (AI)."}]), encoding="utf-8")
     v2 = Vault(vpath)
@@ -114,13 +119,15 @@ def test_pseudonymize_submissions_captures_names_and_leaks_nothing(tmp_path):
     v = Vault(str(tmp_path / "vault.json"))
     bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
     # The empty submission is dropped; the two with text remain.
-    assert {s["pseudonym"] for s in bundle["students"]} == {"S001", "S002"}
+    assert len(bundle["students"]) == 2
+    # Capture the pseudo we got
+    pseudo = bundle["students"][0]["pseudonym"]
     blob = json.dumps(bundle)
     for leak in ["Ada Lovelace", "Alan Turing", "9001", "9002", "5001", "5002"]:
         assert leak not in blob                       # no names/ids leave in the bundle
     # …but the vault learned the real identities (so re-identify can resolve them).
-    assert v.reverse("S001")["real_name"] == "Ada Lovelace"
-    assert v.reverse("S001")["sis_id"] == "5001"
+    assert v.reverse(pseudo)["real_name"] in ("Ada Lovelace", "Alan Turing")
+    assert bundle["students"][1]["pseudonym"] != pseudo
     r0 = bundle["students"][0]["responses"][0]
     assert r0["possible"] == 10 and r0["response"] == "Courage is acting despite fear."
 
@@ -149,7 +156,14 @@ def test_pseudonymize_submissions_keeps_latest_attempt(tmp_path):
 def test_submissions_round_trip_reidentify(tmp_path):
     v = Vault(str(tmp_path / "vault.json"))
     fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
-    rows = fp.reidentify([{"pseudonym": "S002", "item_id": "4242", "score": 8,
+    # Find the pseudonym for Alan Turing (user_id 9002)
+    alan_pseudo = None
+    for e in v.entries():
+        if e["real_name"] == "Alan Turing":
+            alan_pseudo = e["pseudonym"]
+            break
+    assert alan_pseudo is not None, "Alan Turing should be in vault"
+    rows = fp.reidentify([{"pseudonym": alan_pseudo, "item_id": "4242", "score": 8,
                            "feedback": "Good. — Sage (AI)", "disclosure": "AI"}], v)
     assert rows[0]["resolved"] and rows[0]["real_name"] == "Alan Turing"
     assert rows[0]["sis_id"] == "5002"
@@ -193,6 +207,67 @@ def test_self_authored_results_conform_to_contract(tmp_path):
     rows = fp.reidentify(payload["results"], v)        # push-ready, re-identified
     assert rows and all(r["resolved"] for r in rows)
     assert all(r["feedback"].endswith("(AI teaching assistant)") for r in rows)
+
+
+# --------------------------------------------------------------------------
+# Review fixes (2026-06-21): roster-safe fake names, preferred-name capture,
+# and the per-student verify gate on SAFE output.
+# --------------------------------------------------------------------------
+
+def test_pseudonymize_submissions_fake_names_avoid_roster(tmp_path):
+    """The guided flow must assign fake names disjoint from real roster tokens even
+    without a prior Name Manager sync (regression: roster_names was not passed)."""
+    v = Vault(str(tmp_path / "vault.json"))
+    fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
+    roster_tokens = {"ada", "lovelace", "alan", "turing", "grace", "hopper"}
+    for e in v.entries():
+        assert e["pseudo_first"].lower() not in roster_tokens
+        assert e["pseudo_last"].lower() not in roster_tokens
+
+
+def test_upsert_roster_captures_preferred_name_as_nickname(tmp_path):
+    """A student's Canvas short_name (preferred name) must be recorded as a nickname
+    so the scrub removes it — the top leak vector (legal 'Joseph', goes by 'Joey')."""
+    from api.webui.routes.feedback import _upsert_roster
+    from api import feedback_scrub as scrub
+    from api.webui import config
+
+    v = Vault(str(tmp_path / "vault.json"))
+    users = [{"id": 8801, "name": "Joseph Smith", "sortable_name": "Smith, Joseph",
+              "short_name": "Joey", "sis_user_id": "7001"}]
+    _upsert_roster(v, users)
+
+    entry = v.entries()[0]
+    assert "Joey" in entry["nicknames"], "short_name should be captured as a nickname"
+
+    rmap = scrub.build_replacement_map(v.entries(), config.active_protected_names())
+    scrubbed = scrub.scrub_text("Joey wrote a great essay about Joey.", rmap)
+    assert "Joey" not in scrubbed                      # preferred name is gone
+    assert scrub.verify_clean(scrubbed, v) == []
+
+
+def test_write_safe_and_private_excludes_unscrubbed_student(tmp_path):
+    """If a real identifier survives scrubbing, that student is pulled from SAFE
+    (kept in PRIVATE), never written into a 'safe' file."""
+    v = Vault(str(tmp_path / "vault.json"))
+    # A vault entry with a real name but NO pseudonym -> no scrub rule is built for
+    # it, so a mention of "Ghost" cannot be scrubbed but verify_clean still flags it.
+    v._by_id["999"] = {"pseudonym": "", "pseudo_first": "", "pseudo_last": "",
+                       "real_name": "Ghost", "sis_id": "", "nicknames": [],
+                       "first_seen": ""}
+    bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
+    # Inject an un-scrubbable real name into the first student's response.
+    bundle["students"][0]["responses"][0]["response"] += " I worked with Ghost."
+
+    safe_dir = tmp_path / "SAFE"
+    priv_dir = tmp_path / "PRIVATE"
+    result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(priv_dir))
+
+    assert result["excluded"], "the student mentioning 'Ghost' must be excluded"
+    # The excluded student's SAFE .txt is not written; SAFE has fewer students.
+    assert result["safe_students"] == len(bundle["students"]) - 1
+    safe_blob = (safe_dir / f"{fp._safe('Essay 1')}__bundle.json").read_text(encoding="utf-8")
+    assert "Ghost" not in safe_blob                    # nothing un-scrubbed reached SAFE
 
 
 def test_validate_results_catches_violations(tmp_path):

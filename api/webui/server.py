@@ -45,6 +45,7 @@ from .deps import (
 from .routes.calendar import router as _calendar_router
 from .routes.courses import router as _courses_router
 from .routes.feedback import router as _feedback_router
+from .routes.feedback import names_router as _names_router
 from .routes.gradebook import router as _gradebook_router
 from .routes.library import router as _library_router
 from .routes.onboarding import router as _onboarding_router
@@ -98,6 +99,7 @@ app.include_router(_onboarding_router)
 app.include_router(_calendar_router)
 app.include_router(_courses_router)
 app.include_router(_feedback_router)
+app.include_router(_names_router)
 app.include_router(_gradebook_router)
 app.include_router(_library_router)
 app.include_router(_pages_router)

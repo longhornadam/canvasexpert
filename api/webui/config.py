@@ -479,6 +479,60 @@ def get_combined_calendar_for_range(
 
 
 # --------------------------------------------------------------------------
+# FeedbackExpert — Protected-names store + literary character packs
+# Not PII — fine to sync and to ship the packs in-repo.
+# --------------------------------------------------------------------------
+
+LITERARY_PACKS = [
+    {"id": "outsiders",  "title": "The Outsiders",
+     "names": ["Ponyboy","Johnny","Dally","Dallas","Sodapop","Darry","Two-Bit","Cherry","Bob"]},
+    {"id": "hunger_games","title": "The Hunger Games",
+     "names": ["Katniss","Peeta","Gale","Prim","Haymitch","Effie","Rue","Cinna","Snow"]},
+    {"id": "giver",       "title": "The Giver",
+     "names": ["Jonas","Asher","Fiona","Gabriel","Lily"]},
+    {"id": "romeo_juliet","title": "Romeo & Juliet",
+     "names": ["Romeo","Juliet","Tybalt","Mercutio","Benvolio","Capulet","Montague","Friar"]},
+]
+
+
+def list_protected_packs() -> list[dict]:
+    """Return all literary packs with their enabled status."""
+    enabled = _synced_state().get("protected_packs_enabled", {})
+    return [
+        {"id": p["id"], "title": p["title"], "names": p["names"],
+         "enabled": enabled.get(p["id"], False)}
+        for p in LITERARY_PACKS
+    ]
+
+
+def set_pack_enabled(pack_id: str, enabled: bool):
+    state = _synced_state()
+    enabled_map = state.get("protected_packs_enabled", {})
+    enabled_map[pack_id] = enabled
+    _save_synced_key("protected_packs_enabled", enabled_map)
+
+
+def get_custom_protected_names() -> list[str]:
+    return list(_synced_state().get("protected_names_custom", []))
+
+
+def set_custom_protected_names(names: list[str]):
+    clean = sorted(set(n.strip() for n in names if n and n.strip()))
+    _save_synced_key("protected_names_custom", clean)
+
+
+def active_protected_names() -> set[str]:
+    """Union of enabled packs' names + custom, lowercased."""
+    result: set[str] = set()
+    for p in list_protected_packs():
+        if p["enabled"]:
+            result.update(n.lower() for n in p["names"])
+    for n in get_custom_protected_names():
+        result.add(n.lower())
+    return result
+
+
+# --------------------------------------------------------------------------
 # Runtime credential bundle
 # --------------------------------------------------------------------------
 

@@ -2,7 +2,8 @@
 bundle, and re-identify the LLM's results back to real students via the vault.
 
 Pure-ish stdlib + the NQ parser. Offline-testable. Only pseudonymized payloads are
-ever written to the ForLLM folder; real identities live only in the vault.
+ever written to the SAFE folder; real identities live only in the vault and PRIVATE
+folder.
 """
 import csv
 import io
@@ -12,9 +13,13 @@ import os
 try:                                   # script context (run from api/)
     from nq_report import constructed_responses, html_to_text, parse_student_analysis_file
     from feedback_vault import Vault
+    import feedback_scrub
+    import feedback_safety
 except ModuleNotFoundError:            # package context (tests: api.feedback_pipeline)
     from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
     from api.feedback_vault import Vault
+    from api import feedback_scrub
+    from api import feedback_safety
 
 CONTRACT_VERSION = "1.0"
 _REVIEW_NOTE = ("Pseudonymized for privacy. Review the response text for any "
@@ -95,9 +100,19 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
         if existing is None or (entry["submitted_at"] or "") > (existing.get("_submitted_at") or ""):
             by_student[uid] = {**entry, "_submitted_at": entry["submitted_at"]}
 
+    # Roster tokens for collision-safe fake-name assignment: a fake name must not
+    # match any real first/last token in this batch (otherwise the scrub's chained
+    # replacement can cross-link students). The Name Manager roster sync does this
+    # too; we repeat it here so the guided flow is correct even without a prior sync.
+    roster_tokens: set = set()
+    for entry in by_student.values():
+        for t in (entry.get("real_name") or "").split():
+            roster_tokens.add(t.lower())
+
     students = []
     for uid, entry in by_student.items():
-        pseudo = vault.get_or_assign(uid, entry["real_name"], entry["sis_id"])
+        pseudo = vault.get_or_assign(uid, entry["real_name"], entry["sis_id"],
+                                     roster_names=roster_tokens)
         students.append({
             "pseudonym": pseudo,
             "responses": [{
@@ -150,6 +165,166 @@ def write_bundle(bundle: dict, forllm_dir: str, ai_ta_name: str = "your AI teach
     with open(cpath, "w", encoding="utf-8") as f:
         f.write(build_contract_text(ai_ta_name))
     return bpath, cpath
+
+
+# --------------------------------------------------------------------------
+# Scrub-integrated SAFE / PRIVATE writing (v2 pipeline)
+# --------------------------------------------------------------------------
+
+def _scrub_bundle(bundle: dict, vault: Vault,
+                  protected: set[str] | None = None) -> dict:
+    """Deep-scrub every text field in a bundle. Returns a new bundle dict
+    with prompts and responses scrubbed."""
+    rmap = feedback_scrub.build_replacement_map(vault.entries(),
+                                                protected or set())
+    import copy
+    out = copy.deepcopy(bundle)
+    for s in out.get("students", []):
+        for r in s.get("responses", []):
+            if r.get("prompt"):
+                r["prompt"] = feedback_scrub.scrub_text(r["prompt"], rmap)
+            if r.get("response"):
+                r["response"] = feedback_scrub.scrub_text(r["response"], rmap)
+    return out
+
+
+def write_safe_and_private(
+    bundle: dict,
+    vault: Vault,
+    safe_dir: str,
+    private_dir: str,
+    ai_ta_name: str = "your AI teaching assistant",
+    protected: set[str] | None = None,
+    submissions: list | None = None,
+) -> dict:
+    """Write a scrubbed SAFE bundle + unscrubbed PRIVATE copy + who-is-who.
+
+    1. Deep-scrub every prompt/response using the vault name map + protected set.
+    2. Run assert_scrubbed — green required.
+    3. Write SAFE/ bundle (assignment title named) + per-student .txt files
+       named with pseudonym.
+    4. Write PRIVATE/ raw bundle + who-is-who.csv.
+    5. Track attachment-only submissions (excluded from SAFE).
+
+    Returns {
+        "safe_bundle": path,
+        "safe_students": n,
+        "private_bundle": path,
+        "who_is_who": path,
+        "student_txts": [path, ...],
+        "attachment_only": [submission_info, ...],
+        "log": [str, ...],
+    }
+    """
+    os.makedirs(safe_dir, exist_ok=True)
+    os.makedirs(private_dir, exist_ok=True)
+    log: list[str] = []
+    attachment_only: list[dict] = []
+    excluded: list[str] = []
+    stem = _safe(bundle.get("quiz_title", "assignment"))
+
+    # Step 1: scrub
+    safe = _scrub_bundle(bundle, vault, protected=protected)
+
+    # Step 2: assert_scrubbed receipt — structural HARD gate (forbidden identity
+    # keys / raw ids). A correctly built bundle never trips this; it catches a
+    # raw payload reaching the writer at all.
+    receipt = feedback_safety.assert_scrubbed(safe, vault)
+    if not receipt["green"]:
+        log.append(f"!! SAFETY BLOCK — hard violations in {stem}: {receipt['hard'][:3]}")
+        return {"safe_bundle": None, "safe_students": 0, "private_bundle": None,
+                "who_is_who": None, "student_txts": [],
+                "attachment_only": [], "excluded": [], "log": log}
+
+    # Step 2b: per-student verify gate (the real receipt). Word-boundary re-scan of
+    # each scrubbed student against EVERY real identifier the vault knows. A survivor
+    # means the scrub missed a real name — we PULL that student from SAFE entirely
+    # (they stay in PRIVATE for manual scoring) rather than write a real name into a
+    # "safe" file. Never block the whole batch; never leak.
+    clean_students = []
+    for s in safe.get("students", []):
+        blob = " ".join((r.get("prompt") or "") + " " + (r.get("response") or "")
+                        for r in s.get("responses", []))
+        survivors = feedback_scrub.verify_clean(blob, vault)
+        if survivors:
+            excluded.append(s.get("pseudonym", "?"))
+            log.append(f"!! EXCLUDED {s.get('pseudonym','?')} from SAFE — scrub left a "
+                       f"real identifier ({len(survivors)} hit); score this one manually.")
+        else:
+            clean_students.append(s)
+    safe["students"] = clean_students
+
+    # Step 3: identify attachment-only submissions
+    if submissions:
+        for s in submissions:
+            body = s.get("body") or ""
+            if not body.strip() and (s.get("attachments") or []):
+                user = s.get("user") or {}
+                attachment_only.append({
+                    "user_id": s.get("user_id"),
+                    "name": user.get("name") or "",
+                    "urls": [a.get("url") for a in s.get("attachments", []) if a.get("url")],
+                })
+
+    # Step 4: write SAFE bundle
+    bpath = os.path.join(safe_dir, f"{stem}__bundle.json")
+    with open(bpath, "w", encoding="utf-8") as f:
+        json.dump(safe, f, indent=2, ensure_ascii=False)
+    # Write HOW-TO-SCORE.txt
+    cpath = os.path.join(safe_dir, f"{stem}__HOW-TO-SCORE.txt")
+    with open(cpath, "w", encoding="utf-8") as f:
+        f.write(build_contract_text(ai_ta_name))
+    log.append(f"✓ {stem}: SAFE bundle ({len(safe['students'])} student(s))")
+
+    # Step 5: per-student .txt files named with pseudonym
+    student_txts: list[str] = []
+    for s in safe.get("students", []):
+        pseudo = s.get("pseudonym", "unknown")
+        safe_name = pseudo.replace(" ", "-")
+        txt_path = os.path.join(safe_dir, f"{safe_name}__SAFE.txt")
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(f"Pseudonym: {pseudo}\n")
+            f.write(f"Assignment: {stem}\n")
+            f.write(f"{'='*50}\n\n")
+            for r in s.get("responses", []):
+                if r.get("prompt"):
+                    f.write(f"Prompt:\n{r['prompt']}\n\n")
+                if r.get("response"):
+                    f.write(f"Response:\n{r['response']}\n\n")
+        student_txts.append(txt_path)
+    log.append(f"✓ {stem}: {len(student_txts)} per-student SAFE .txt file(s)")
+
+    # Step 6: write PRIVATE raw bundle
+    priv_path = os.path.join(private_dir, f"{stem}__PRIVATE.json")
+    with open(priv_path, "w", encoding="utf-8") as f:
+        json.dump(bundle, f, indent=2, ensure_ascii=False)
+    log.append(f"✓ {stem}: PRIVATE raw bundle saved")
+
+    # Step 7: write who-is-who.csv to PRIVATE (all vault entries for context)
+    who_path = os.path.join(private_dir, f"{stem}__who-is-who.csv")
+    with open(who_path, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["Real Name", "Canvas ID", "SIS ID", "Pseudonym", "Nicknames"])
+        for e in vault.entries():
+            w.writerow([
+                e.get("real_name", ""),
+                e.get("canvas_id", ""),
+                e.get("sis_id", ""),
+                e.get("pseudonym", ""),
+                ", ".join(e.get("nicknames", [])),
+            ])
+    log.append(f"✓ {stem}: who-is-who.csv saved")
+
+    return {
+        "safe_bundle": bpath,
+        "safe_students": len(safe.get("students", [])),
+        "private_bundle": priv_path,
+        "who_is_who": who_path,
+        "student_txts": student_txts,
+        "attachment_only": attachment_only,
+        "excluded": excluded,
+        "log": log,
+    }
 
 
 # --------------------------------------------------------------------------

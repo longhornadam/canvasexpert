@@ -1,5 +1,12 @@
 # Handoff: FeedbackExpert — Phase B done, Phase C is next
 
+> **SUPERSEDED (2026-06-21):** the active V1 is now **`feedbackexpert-name-manager-v1.md`**
+> (SAFE/PRIVATE folders, aggressive scrub, fake-name pseudonyms, a Name Manager screen).
+> **Automated re-identification / Phase C push is parked** in favor of a SpeedGrader-manual
+> model (teacher takes SAFE files to any LLM, enters grades by hand using a who-is-who
+> decoder). The Phase C section below + the Feedback Scoring Contract remain as *dormant*
+> code/notes; do not extend them. Read the V1 handoff for current direction.
+
 **Lane:** Ferrari plan → can hand mechanical parts to Toyota. **Do not start until read.**
 
 > **STATUS (2026-06-15): Phase B is BUILT and on `dev`** — assignment-driven guided flow,
