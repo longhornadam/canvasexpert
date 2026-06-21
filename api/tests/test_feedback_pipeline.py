@@ -228,7 +228,7 @@ def test_pseudonymize_submissions_fake_names_avoid_roster(tmp_path):
 def test_upsert_roster_captures_preferred_name_as_nickname(tmp_path):
     """A student's Canvas short_name (preferred name) must be recorded as a nickname
     so the scrub removes it — the top leak vector (legal 'Joseph', goes by 'Joey')."""
-    from api.webui.routes.feedback import _upsert_roster
+    from api.webui.routes.names import _upsert_roster
     from api import feedback_scrub as scrub
     from api.webui import config
 
