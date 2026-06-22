@@ -291,6 +291,19 @@ def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
     assert "image has alt text" in how_to
 
 
+def test_push_payload_shapes():
+    """Phase C: grade + comment, comment-only (null score), grade-only, and nothing."""
+    from api.webui.routes.feedback import _push_payload
+    both = _push_payload({"score": 8, "feedback": "Nice work. — Sage (AI)"})
+    assert both["submission"]["posted_grade"] == "8"
+    assert both["comment"]["text_comment"].startswith("Nice work")
+    comment_only = _push_payload({"score": None, "feedback": "See note. — Sage (AI)"})
+    assert "submission" not in comment_only and "comment" in comment_only
+    grade_only = _push_payload({"score": 5, "feedback": "   "})
+    assert grade_only == {"submission": {"posted_grade": "5"}}
+    assert _push_payload({"score": None, "feedback": ""}) == {}
+
+
 def test_validate_results_catches_violations(tmp_path):
     parsed = parse_student_analysis_file(FIXTURE)
     v = Vault(str(tmp_path / "vault.json"))
