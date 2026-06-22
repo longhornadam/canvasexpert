@@ -423,12 +423,26 @@
         var soft = (d.soft && d.soft.length)
           ? "\n⚠ " + d.soft.length + " possible name(s) in student text — review the output."
           : "";
-        logEl.textContent = "Ready: " + d.students + " student(s), ~" + d.tokens +
-          " input tokens for '" + d.assignment_name + "'." + soft;
+        var att = (d.attachment_only && d.attachment_only.length)
+          ? "\n📎 " + d.attachment_only.length + " student(s) uploaded non-text files (images/PDF) — score those manually."
+          : "";
+        logEl.textContent = "SAFE bundle ready: " + d.students + " student(s) for '" +
+          d.assignment_name + "'." + soft + att;
+
+        // No OpenRouter key → this IS the workflow: SAFE files are written, take them
+        // to your own LLM, then paste results into Push to Canvas. Skip the paid prompt.
+        if (!d.has_key) {
+          fill.style.width = "100%";
+          status.textContent = "✓ SAFE bundle ready — open the SAFE folder, score it in your LLM, then paste results into Push to Canvas below.";
+          resultActions.hidden = false;
+          btn.disabled = false;
+          return;
+        }
 
         if (!confirm("~" + d.tokens + " input tokens estimated for " + d.students +
                      " student(s). This will call the paid OpenRouter API. Continue?")) {
-          status.textContent = "Cancelled — nothing sent.";
+          status.textContent = "Cancelled — SAFE bundle is still saved; open the SAFE folder to use it manually.";
+          resultActions.hidden = false;
           btn.disabled = false;
           return;
         }
