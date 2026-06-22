@@ -8,6 +8,7 @@ import json
 import os
 from datetime import datetime
 
+import requests
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -17,7 +18,7 @@ import feedback_scrub
 import feedback_vault
 import openrouter_client as orc
 from .. import config, workspace
-from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
+from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_headers, _canvas_send
 from ..deps import _sse, list_rubric_files
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
@@ -258,6 +259,44 @@ def save_patterns(patterns: str = Form()):
 #      the prepared bundle, re-scan (defense in depth), score, re-identify.
 # ======================================================================
 
+# Plain-text code/text files we can fold into the scored response. (HTML files are
+# included raw — see pseudonymize_submissions — so their tags survive scoring.)
+_CODE_EXTS = {".py", ".html", ".htm", ".css", ".js", ".txt", ".md", ".json", ".csv"}
+_MAX_CODE_BYTES = 256 * 1024
+
+
+def _enrich_with_code_files(subs):
+    """For each submission, download plain-text code-file attachments into
+    s['code_files'] = [{filename, text}]. Non-text attachments (image/PDF/DOCX) are
+    left untouched (still surfaced as attachment-only). Best-effort: any fetch
+    failure or oversized/binary file is skipped, never fatal. Student file content
+    is PII — it stays local (scrubbed into SAFE, raw into PRIVATE), never logged."""
+    hdrs, _ = _canvas_headers()
+    if not hdrs:
+        return
+    sess = requests.Session()
+    sess.headers.update(hdrs)
+    for s in subs:
+        files = []
+        for att in (s.get("attachments") or []):
+            fn = att.get("filename") or att.get("display_name") or ""
+            if os.path.splitext(fn)[1].lower() not in _CODE_EXTS:
+                continue
+            if (att.get("size") or 0) > _MAX_CODE_BYTES:
+                continue
+            url = att.get("url")
+            if not url:
+                continue
+            try:
+                r = sess.get(url, timeout=30)
+            except requests.RequestException:
+                continue
+            if r.status_code == 200 and len(r.content) <= _MAX_CODE_BYTES:
+                files.append({"filename": fn, "text": r.text})
+        if files:
+            s["code_files"] = files
+
+
 def _fetch_submissions(course_id: str, assignment_id: str):
     """Fetch one assignment's submissions (with user, for vault names). Narrowed
     server-side by assignment_ids[] so we don't pull the whole course. Returns
@@ -284,8 +323,10 @@ def feedback_run_prepare(
     Returns the token estimate so the client can confirm cost before /run/stream."""
     if not course_id or not assignment_id:
         return JSONResponse({"ok": False, "error": "course_id and assignment_id are required."})
-    if not config.has_openrouter_key():
-        return JSONResponse({"ok": False, "error": "No OpenRouter API key saved — configure in Settings."})
+    # No OpenRouter key gate here: generating the SAFE bundle is a local, free
+    # operation (fetch → pseudonymize → scrub → write SAFE/PRIVATE). It is the
+    # primary path for the own-LLM workflow. Only the paid /run/stream step needs
+    # a key, and it checks for one itself.
 
     subs, assignment_name, err = _fetch_submissions(course_id, assignment_id)
     if err:
@@ -293,6 +334,7 @@ def feedback_run_prepare(
     if not subs:
         return JSONResponse({"ok": False, "error": "No submissions returned for this assignment."})
 
+    _enrich_with_code_files(subs)              # fold in .py/.html uploads as scored text
     vault = _vault()
     bundle = fp.pseudonymize_submissions(subs, vault, assignment_name)
     if not bundle["students"]:
@@ -329,6 +371,7 @@ def feedback_run_prepare(
                      "tokens": tokens, "students": len(bundle["students"]),
                      "bundle_name": os.path.basename(result["safe_bundle"]),
                      "assignment_name": assignment_name,
+                     "has_key": config.has_openrouter_key(),
                      "attachment_only": result.get("attachment_only", [])}
     return JSONResponse(response_data)
 

@@ -82,7 +82,14 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
         a = s.get("assignment") or {}
         user = s.get("user") or {}
         prompt = html_to_text(a.get("description") or "")
-        response = html_to_text(s.get("body") or "")
+        body_text = html_to_text(s.get("body") or "")
+        # Plain-text code-file uploads (.py/.html/...) are folded in as RAW text —
+        # never html_to_text'd, or an HTML submission's tags (the thing being graded)
+        # would be stripped. The route fetches these into s["code_files"].
+        code_files = s.get("code_files") or []
+        code_text = "\n\n".join(f"--- {cf.get('filename', 'file')} ---\n{cf.get('text', '')}"
+                                for cf in code_files if cf.get("text"))
+        response = "\n\n".join(p for p in (body_text, code_text) if p).strip()
         if not response and not (s.get("attachments") or []):
             continue
         entry = {
@@ -266,16 +273,20 @@ def write_safe_and_private(
             clean_students.append(s)
     safe["students"] = clean_students
 
-    # Step 3: identify attachment-only submissions
+    # Step 3: identify submissions we still can't score — no text body AND no
+    # plain-text code files, but some attachment (image/PDF/DOCX). Code-file uploads
+    # ARE scored (folded into the response above), so they are NOT flagged here.
     if submissions:
         for s in submissions:
             body = s.get("body") or ""
-            if not body.strip() and (s.get("attachments") or []):
+            has_code = bool(s.get("code_files"))
+            non_code = [a for a in (s.get("attachments") or [])]
+            if not body.strip() and not has_code and non_code:
                 user = s.get("user") or {}
                 attachment_only.append({
                     "user_id": s.get("user_id"),
                     "name": user.get("name") or "",
-                    "urls": [a.get("url") for a in s.get("attachments", []) if a.get("url")],
+                    "urls": [a.get("url") for a in non_code if a.get("url")],
                 })
 
     # Step 4: write SAFE bundle

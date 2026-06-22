@@ -291,6 +291,37 @@ def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
     assert "image has alt text" in how_to
 
 
+def _code_submission():
+    """An upload-only submission: a student turned in an HTML file (no text entry).
+    code_files is what the route's _enrich_with_code_files populates from the upload."""
+    a = {"id": 7, "name": "Webpage 1", "points_possible": 10, "description": "<p>Build a page.</p>"}
+    return [{
+        "user_id": 9001, "body": "", "submitted_at": "2026-06-10T10:00:00Z", "score": None,
+        "assignment": a, "user": {"name": "Ada Lovelace", "sis_user_id": "5001"},
+        "attachments": [{"filename": "index.html", "url": "https://x/f"}],
+        "code_files": [{"filename": "index.html",
+                        "text": "<h1>Ada's Hobbies</h1>\n<!-- by Ada Lovelace -->\n<p>Hi</p>"}],
+    }]
+
+
+def test_code_file_upload_is_scored_html_preserved_and_name_scrubbed(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    subs = _code_submission()
+    bundle = fp.pseudonymize_submissions(subs, v, "Webpage 1")
+    assert len(bundle["students"]) == 1
+    resp = bundle["students"][0]["responses"][0]["response"]
+    assert "<h1>" in resp and "--- index.html ---" in resp   # raw HTML kept; file header added
+
+    safe_dir = tmp_path / "SAFE"
+    result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(tmp_path / "PRIVATE"),
+                                       submissions=subs)
+    assert result["attachment_only"] == []     # code upload is scored, not excluded
+    assert result["safe_students"] == 1         # not pulled by the verify gate
+    safe_blob = (safe_dir / f"{fp._safe('Webpage 1')}__bundle.json").read_text(encoding="utf-8")
+    assert "<h1>" in safe_blob                  # HTML tags survived the scrub
+    assert "Ada" not in safe_blob and "Lovelace" not in safe_blob   # name scrubbed from code
+
+
 def test_push_payload_shapes():
     """Phase C: grade + comment, comment-only (null score), grade-only, and nothing."""
     from api.webui.routes.feedback import _push_payload
