@@ -22,9 +22,19 @@ findings like the `result_view_settings` feedback rule and the New Quizzes 403/P
 
 **FeedbackExpert** (safe, honest LLM scoring/feedback) is built around the **Feedback Scoring
 Contract** (`docs/contracts/feedback-scoring-contract.md`) — the LLM-agnostic, pseudonymized
-JSON that any scoring tool emits and that Phase C (Push to Canvas) consumes. We deliberately do
-**not** depend on an OpenRouter key; the contract is the seam that makes the LLM choice
-irrelevant. Direction + status: `docs/handoffs/feedback-expert-next.md`.
+JSON that any scoring tool emits and that Push to Canvas consumes. We deliberately do **not**
+depend on an OpenRouter key; the contract is the seam that makes the LLM choice irrelevant.
+
+Built and on `dev`: assignment-driven **guided scoring** (fetch submissions — text entries *and*
+plain-text `.py`/`.html` uploads — → pseudonymize/scrub → write a **SAFE** fake-name bundle the
+teacher takes to any LLM); a **Name Manager** screen (`/name-manager`: roster sync, nicknames,
+fake-name pseudonyms, protected book-character names) backed by the pseudonym **vault**; and
+**Push to Canvas** (paste the LLM's contract JSON → validate → re-identify → review → `PUT` grade +
+comment per student). Workspace layout is **SAFE / PRIVATE / _system** zones under
+`<workspace>/FeedbackExpert/` (SAFE = fake names, shareable; PRIVATE = real names, local only;
+`_system/vault` = the re-identification key). New Quizzes write-back stays parked (PAT/403 limit).
+Reference docs: the contract above + `docs/guides/cs-project-authoring.md` (authoring for LLM
+scoring). The `docs/handoffs/feedbackexpert-*.md` files are historical build specs (now implemented).
 
 ## Guardrails (non-negotiable)
 
