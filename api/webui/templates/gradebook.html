@@ -11,31 +11,6 @@
 </div>
 {% else %}
 
-<!-- ── Header band ─────────────────────────────────────────────────────── -->
-<div class="gb-header">
-  <div class="gb-header-inner">
-    <h1 class="gb-title">Gradebook Expert</h1>
-    <div class="gb-course-row">
-      <select id="gb-course-sel">
-        <option value="">— pick a course —</option>
-        {% for c in saved_courses %}
-        <option value="{{ c.id }}" data-name="{{ c.name }}">{{ c.nickname }}</option>
-        {% endfor %}
-      </select>
-      {% if has_calendars %}
-      <span class="gb-cal-badge" title="{% for key, cal in calendars.items() %}{{ cal.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
-        📅 {{ total_holiday_count }} day(s) off ·
-        {{ all_grading_periods | length }} grading periods
-      </span>
-      {% else %}
-      <span class="gb-cal-badge">
-        No calendar · <a href="/settings#cal">add in Settings</a>
-      </span>
-      {% endif %}
-    </div>
-  </div>
-</div>
-
 <!-- ── Tab bar ────────────────────────────────────────────────────────── -->
 <div class="gb-tabs" role="tablist">
   <button type="button" class="gb-tab active" data-tab="policy">Policy &amp; Sweep</button>
@@ -47,6 +22,32 @@
 
 <!-- ── Tab content ───────────────────────────────────────────────────── -->
 <div class="gb-content">
+  <section class="card tool-course-card gb-course-work-card">
+    <div class="tool-course-card-head">
+      <div>
+        <h2>Course</h2>
+        <p class="hint">Select the course these gradebook tools should read or update.</p>
+      </div>
+      <div class="gb-course-row">
+        <select id="gb-course-sel">
+          <option value="">— pick a course —</option>
+          {% for c in saved_courses %}
+          <option value="{{ c.id }}" data-name="{{ c.name }}">{{ c.nickname }}</option>
+          {% endfor %}
+        </select>
+        {% if has_calendars %}
+        <span class="gb-cal-badge" title="{% for key, cal in calendars.items() %}{{ cal.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
+          📅 {{ total_holiday_count }} day(s) off ·
+          {{ all_grading_periods | length }} grading periods
+        </span>
+        {% else %}
+        <span class="gb-cal-badge">
+          No calendar · <a href="/settings#cal">add in Settings</a>
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </section>
 
   <!-- ── Policy & Sweep ────────────────────────────────────────────────── -->
   <div id="gb-tab-policy" class="gb-panel active" id="policy">

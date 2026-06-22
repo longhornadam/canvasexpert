@@ -10,18 +10,18 @@
   <link rel="stylesheet" href="/static/fonts/fonts.css">
   <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <header class="topbar">
-    <a class="brand" href="/">{% include "_ce_logo.svg" %} Canvas Expert</a>
+    <a class="brand" href="/">{% include "_ce_logo.svg" %} CanvasExpert</a>
     <nav>
-      <a href="/">Dashboard</a>
-      <a href="/course-expert"{% if nav_section == 'course' %} class="nav-active"{% endif %}>Course Expert</a>
-      <a href="/gradebook"{% if nav_section == 'gradebook' %} class="nav-active"{% endif %}>Gradebook Expert</a>
-      <a href="/ai-expert"{% if nav_section == 'ai' %} class="nav-active"{% endif %}>AI Expert</a>
-      <a href="/feedback-expert"{% if nav_section == 'feedback' %} class="nav-active"{% endif %}>Feedback Expert</a>
-      <a href="/name-manager"{% if nav_section == 'names' %} class="nav-active"{% endif %}>Names</a>
-      <a href="/routines"{% if nav_section == 'routines' %} class="nav-active"{% endif %}>Routines</a>
-      <a href="/about"{% if nav_section == 'about' %} class="nav-active"{% endif %}>About</a>
+      <a class="nav-link nav-dashboard{% if nav_section == 'dashboard' %} nav-active{% endif %}" href="/">Dashboard</a>
+      <a class="nav-link nav-course{% if nav_section == 'course' %} nav-active{% endif %}" href="/course-expert">Course Expert</a>
+      <a class="nav-link nav-gradebook{% if nav_section == 'gradebook' %} nav-active{% endif %}" href="/gradebook">Gradebook Expert</a>
+      <a class="nav-link nav-ai{% if nav_section == 'ai' %} nav-active{% endif %}" href="/ai-expert">AI Expert</a>
+      <a class="nav-link nav-feedback{% if nav_section == 'feedback' %} nav-active{% endif %}" href="/feedback-expert">Feedback Expert</a>
+      <a class="nav-link nav-names{% if nav_section == 'names' %} nav-active{% endif %}" href="/name-manager">Names</a>
+      <a class="nav-link nav-routines{% if nav_section == 'routines' %} nav-active{% endif %}" href="/routines">Routines</a>
+      <a class="nav-link nav-about{% if nav_section == 'about' %} nav-active{% endif %}" href="/about">About</a>
     </nav>
     <div class="topbar-right">
       <a href="/settings" class="topbar-settings-link">Settings</a>
