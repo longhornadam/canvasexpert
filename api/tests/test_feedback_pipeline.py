@@ -270,6 +270,27 @@ def test_write_safe_and_private_excludes_unscrubbed_student(tmp_path):
     assert "Ghost" not in safe_blob                    # nothing un-scrubbed reached SAFE
 
 
+def test_build_contract_text_inlines_rubric():
+    """With a rubric, HOW-TO-SCORE is self-contained; without, it points elsewhere."""
+    with_rubric = fp.build_contract_text("Sage", rubric_text="3 pts: uses a loop")
+    assert "3 pts: uses a loop" in with_rubric
+    assert "RUBRIC" in with_rubric
+    without = fp.build_contract_text("Sage")
+    assert "attached as Knowledge" in without
+    assert "3 pts: uses a loop" not in without
+
+
+def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
+    """The rubric travels into the SAFE HOW-TO-SCORE so the teacher's LLM gets it."""
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
+    safe_dir = tmp_path / "SAFE"
+    fp.write_safe_and_private(bundle, v, str(safe_dir), str(tmp_path / "PRIVATE"),
+                              rubric_text="Criterion: image has alt text")
+    how_to = (safe_dir / f"{fp._safe('Essay 1')}__HOW-TO-SCORE.txt").read_text(encoding="utf-8")
+    assert "image has alt text" in how_to
+
+
 def test_validate_results_catches_violations(tmp_path):
     parsed = parse_student_analysis_file(FIXTURE)
     v = Vault(str(tmp_path / "vault.json"))

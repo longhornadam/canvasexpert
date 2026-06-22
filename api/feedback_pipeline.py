@@ -129,13 +129,25 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
             "review_required": True, "note": _REVIEW_NOTE, "students": students}
 
 
-def build_contract_text(ai_ta_name: str = "your AI teaching assistant") -> str:
-    """Instructions the teacher pastes into their LLM alongside the bundle + rubric.
-    Extends the Essay Scorer skill: keyed batch output for automatic re-identification,
-    with mandatory disclosure naming the AI-TA."""
+def build_contract_text(ai_ta_name: str = "your AI teaching assistant",
+                        rubric_text: str = "") -> str:
+    """Instructions the teacher pastes into their LLM alongside the bundle. When
+    `rubric_text` is provided it is inlined below so the file is self-contained
+    (prompt context lives in the bundle; the rubric travels here) — no separate
+    attach step. When omitted, the older "attach the rubric as Knowledge" wording
+    is used (the parked NQ / OpenRouter lanes supply the rubric separately).
+    Extends the Essay Scorer skill: keyed batch output for automatic
+    re-identification, with mandatory disclosure naming the AI-TA."""
+    if rubric_text.strip():
+        rubric_clause = ("The scoring rubric is included at the bottom of this file "
+                         "— score strictly by it, do not invent criteria.")
+        rubric_block = f"\n\n--- RUBRIC (score strictly by this) ---\n{rubric_text.strip()}\n"
+    else:
+        rubric_clause = ("A RubricForge rubric is attached as Knowledge — score "
+                         "strictly by it, do not invent criteria.")
+        rubric_block = ""
     return f"""You are {ai_ta_name}, an AI teaching assistant helping a real teacher
-score student writing and draft feedback. A RubricForge rubric is attached as
-Knowledge — score strictly by it, do not invent criteria.
+score student writing and draft feedback. {rubric_clause}
 
 You will receive a JSON bundle of pseudonymized responses. For EACH response return
 one result object. Output ONLY a JSON array, each element exactly:
@@ -149,8 +161,7 @@ Rules:
 - Quote briefly from the response to justify the score.
 - Every `feedback` value must end with the `disclosure` sentence — students are
   told, honestly, that an AI helped.
-- Use the full score range; `possible` gives each item's maximum.
-"""
+- Use the full score range; `possible` gives each item's maximum.{rubric_block}"""
 
 
 def write_bundle(bundle: dict, forllm_dir: str, ai_ta_name: str = "your AI teaching assistant"):
@@ -196,6 +207,7 @@ def write_safe_and_private(
     ai_ta_name: str = "your AI teaching assistant",
     protected: set[str] | None = None,
     submissions: list | None = None,
+    rubric_text: str = "",
 ) -> dict:
     """Write a scrubbed SAFE bundle + unscrubbed PRIVATE copy + who-is-who.
 
@@ -270,10 +282,11 @@ def write_safe_and_private(
     bpath = os.path.join(safe_dir, f"{stem}__bundle.json")
     with open(bpath, "w", encoding="utf-8") as f:
         json.dump(safe, f, indent=2, ensure_ascii=False)
-    # Write HOW-TO-SCORE.txt
+    # Write HOW-TO-SCORE.txt — rubric inlined so the file is self-contained for the
+    # teacher's own LLM (prompt context lives in the bundle; rubric travels here).
     cpath = os.path.join(safe_dir, f"{stem}__HOW-TO-SCORE.txt")
     with open(cpath, "w", encoding="utf-8") as f:
-        f.write(build_contract_text(ai_ta_name))
+        f.write(build_contract_text(ai_ta_name, rubric_text=rubric_text))
     log.append(f"✓ {stem}: SAFE bundle ({len(safe['students'])} student(s))")
 
     # Step 5: per-student .txt files named with pseudonym
