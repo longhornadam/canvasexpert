@@ -316,8 +316,11 @@ html[data-theme="dark"] .wiz-step.done { background: rgba(47,129,50,.18); border
 .dash-tool-card.rf .dash-tool-header { background: #7e22ce; }
 .dash-tool-card.rf .dash-tool-links a:hover { border-color: #7e22ce; color: #7e22ce; background: rgba(126,34,206,.05); }
 .dash-tool-card.uf .dash-tool-header { background: var(--muted); }
+.dash-tool-card.fb .dash-tool-header { background: #0d9488; }
+.dash-tool-card.fb .dash-tool-links a:hover { border-color: #0d9488; color: #0f766e; background: rgba(13,148,136,.06); }
 
 html[data-theme="dark"] .dash-tool-card.ce .dash-tool-header { background: #581c87; }
+html[data-theme="dark"] .dash-tool-card.fb .dash-tool-header { background: #134e4a; }
 html[data-theme="dark"] .dash-tool-card.gb .dash-tool-header { background: #7c2d12; }
 html[data-theme="dark"] .dash-tool-card.ai .dash-tool-header { background: #14532d; }
 html[data-theme="dark"] .dash-tool-card.qf .dash-tool-header { background: #14532d; }
