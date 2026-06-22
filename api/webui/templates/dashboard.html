@@ -76,49 +76,142 @@
     </div>
   </div>
 
-  <!-- ── Experts ───────────────────────────────────────────────────────── -->
+  <!-- ── Push content to Canvas ────────────────────────────────────────── -->
   <section class="dash-section">
-    <div class="dash-section-label">Experts &mdash; live Canvas tools via API</div>
+    <div class="dash-section-label">Push content to Canvas</div>
     <div class="dash-tool-grid">
 
       <div class="dash-tool-card ce">
         <div class="dash-tool-header">
-          <h3>Course Expert</h3>
-          <p>Push quizzes, assignments, pages, and rubrics across all your courses at once.</p>
+          <h3>Push a Quiz, Assignment, Page, or Rubric</h3>
+          <p>Send AI-authored content (QuizForge / AssignmentForge / PageForge / RubricForge) to one or many courses at once, with Course Expert.</p>
         </div>
         <div class="dash-tool-body">
           <div class="dash-tool-links">
-            <a href="/course-expert?tab=quiz">Push Quiz</a>
-            <a href="/course-expert?tab=assignment">Push Assignment</a>
-            <a href="/course-expert?tab=quick">Quick Assignment</a>
-            <a href="/course-expert?tab=page">Push Page</a>
-            <a href="/course-expert?tab=rubric">Push Rubric</a>
-            <a href="/course-expert?tab=download">Download Work</a>
-            <a href="/course">Course Info</a>
+            <a href="/course-expert?tab=quiz">Quiz</a>
+            <a href="/course-expert?tab=assignment">Assignment</a>
+            <a href="/course-expert?tab=page">Page</a>
+            <a href="/course-expert?tab=rubric">Rubric</a>
           </div>
         </div>
       </div>
 
+      <div class="dash-tool-card ce">
+        <div class="dash-tool-header">
+          <h3>Create a Quick Assignment</h3>
+          <p>Spin up a simple assignment shell in seconds — no authoring file needed.</p>
+        </div>
+        <div class="dash-tool-body">
+          <div class="dash-tool-links">
+            <a href="/course-expert?tab=quick">Quick Assignment</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-tool-card qf">
+        <div class="dash-tool-header">
+          <h3>Build a quiz in QuizForge</h3>
+          <p>Author a quiz with your AI &rarr; compile to QTI &amp; DOCX &rarr; import into Canvas. No token needed.</p>
+        </div>
+        <div class="dash-tool-body">
+          <div class="dash-tool-links">
+            <a href="/forge/quizforge/" target="_blank" rel="noopener">Open QuizForge ↗</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Grade & give feedback ─────────────────────────────────────────── -->
+  <section class="dash-section">
+    <div class="dash-section-label">Grade &amp; give feedback</div>
+    <div class="dash-tool-grid">
+
+      <div class="dash-tool-card fb">
+        <div class="dash-tool-header">
+          <h3>Download Student Work</h3>
+          <p>Pull every student's submissions (text entries and file uploads) for an assignment to your computer.</p>
+        </div>
+        <div class="dash-tool-body">
+          <div class="dash-tool-links">
+            <a href="/course-expert?tab=download">Download Work</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-tool-card fb">
+        <div class="dash-tool-header">
+          <h3>Score &amp; Draft Feedback with an LLM</h3>
+          <p>Turn an assignment's submissions into a privacy-safe (fake-name) bundle to score in any LLM — pasted text and <code>.py</code>/<code>.html</code> uploads alike.</p>
+        </div>
+        <div class="dash-tool-body">
+          <div class="dash-tool-links">
+            <a href="/feedback-expert">Open Feedback Expert</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-tool-card fb">
+        <div class="dash-tool-header">
+          <h3>Push Grades &amp; Feedback to Canvas</h3>
+          <p>Paste your LLM's scores back, re-identify locally, review, and post grade + comment per student.</p>
+        </div>
+        <div class="dash-tool-body">
+          <div class="dash-tool-links">
+            <a href="/feedback-expert#push-section">Push to Canvas</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-tool-card fb">
+        <div class="dash-tool-header">
+          <h3>Manage Student Names</h3>
+          <p>Sync your roster, set nicknames &amp; pseudonyms, and protect book-character names so the privacy scrub stays accurate.</p>
+        </div>
+        <div class="dash-tool-body">
+          <div class="dash-tool-links">
+            <a href="/name-manager">Name Manager</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Manage the gradebook ──────────────────────────────────────────── -->
+  <section class="dash-section">
+    <div class="dash-section-label">Manage the gradebook</div>
+    <div class="dash-tool-grid">
+
       <div class="dash-tool-card gb">
         <div class="dash-tool-header">
-          <h3>Gradebook Expert</h3>
-          <p>Late policy, school-day sweeps, curves, extensions, and grading snapshots.</p>
+          <h3>Late Work, Curves &amp; Extensions</h3>
+          <p>School-day late sweeps, late policy, grade curves, due-date extensions, extra-time roster, and grading snapshots.</p>
         </div>
         <div class="dash-tool-body">
           <div class="dash-tool-links">
             <a href="/gradebook">Late Policy &amp; Sweep</a>
-            <a href="/gradebook">Extra-time</a>
-            <a href="/gradebook">Extensions</a>
             <a href="/gradebook">Curves</a>
+            <a href="/gradebook">Extensions</a>
+            <a href="/gradebook">Extra-time</a>
             <a href="/gradebook">Snapshot</a>
           </div>
         </div>
       </div>
 
+    </div>
+  </section>
+
+  <!-- ── Set up & automate ─────────────────────────────────────────────── -->
+  <section class="dash-section">
+    <div class="dash-section-label">Set up &amp; automate</div>
+    <div class="dash-tool-grid">
+
       <div class="dash-tool-card ai">
         <div class="dash-tool-header">
-          <h3>AI Expert</h3>
-          <p>Turn MagicSchool into a Teaching Assistant that authors and scores Canvas content.</p>
+          <h3>Set up your AI Teaching Assistant</h3>
+          <p>Turn MagicSchool into a TA that authors and scores Canvas content — with ready-made authoring &amp; scoring skills.</p>
         </div>
         <div class="dash-tool-body">
           <div class="dash-tool-links">
@@ -130,74 +223,26 @@
         </div>
       </div>
 
-    </div>
-  </section>
-
-  <!-- ── Forges ────────────────────────────────────────────────────────── -->
-  <section class="dash-section">
-    <div class="dash-section-label">Forges &mdash; author content with your AI, then push</div>
-    <div class="dash-tool-grid">
-
-      <div class="dash-tool-card qf">
+      <div class="dash-tool-card gb">
         <div class="dash-tool-header">
-          <h3>QuizForge</h3>
-          <p>Author a quiz with your AI &rarr; compile to QTI &amp; DOCX &rarr; import into Canvas. No token needed.</p>
+          <h3>Run a Saved Routine</h3>
+          <p>One-click multi-step actions you've saved (e.g. nightly late sweeps across courses).</p>
         </div>
         <div class="dash-tool-body">
           <div class="dash-tool-links">
-            <a href="/forge/quizforge/" target="_blank" rel="noopener">Open QuizForge ↗</a>
-            <a href="/ai-expert#authoring">Authoring skill</a>
+            <a href="/routines">Routines</a>
           </div>
         </div>
       </div>
 
-      <div class="dash-tool-card af">
+      <div class="dash-tool-card ce">
         <div class="dash-tool-header">
-          <h3>AssignmentForge</h3>
-          <p>Author an assignment with full HTML body, submission settings, and tier scaffolding.</p>
+          <h3>View Course Info</h3>
+          <p>Browse a course's roster, groups, modules, and assignments.</p>
         </div>
         <div class="dash-tool-body">
           <div class="dash-tool-links">
-            <a href="/course-expert?tab=assignment">Push via Course Expert</a>
-            <a href="/ai-expert#authoring">Authoring skill</a>
-          </div>
-        </div>
-      </div>
-
-      <div class="dash-tool-card pf">
-        <div class="dash-tool-header">
-          <h3>PageForge</h3>
-          <p>Author unit hubs and resource pages with full HTML body and per-course placeholders.</p>
-        </div>
-        <div class="dash-tool-body">
-          <div class="dash-tool-links">
-            <a href="/course-expert?tab=page">Push via Course Expert</a>
-            <a href="/ai-expert#authoring">Authoring skill</a>
-          </div>
-        </div>
-      </div>
-
-      <div class="dash-tool-card rf">
-        <div class="dash-tool-header">
-          <h3>RubricForge</h3>
-          <p>Author rubrics with student explainer pages, scoring prompts, and multi-course push.</p>
-        </div>
-        <div class="dash-tool-body">
-          <div class="dash-tool-links">
-            <a href="/course-expert?tab=rubric">Push via Course Expert</a>
-            <a href="/ai-expert#authoring">Authoring skill</a>
-          </div>
-        </div>
-      </div>
-
-      <div class="dash-tool-card uf soon">
-        <div class="dash-tool-header">
-          <h3>UnitForge</h3>
-          <p>Build a full Canvas IMSCC course cartridge from a unit plan. Coming soon.</p>
-        </div>
-        <div class="dash-tool-body">
-          <div class="dash-tool-links">
-            <a href="#">Coming soon</a>
+            <a href="/course">Course Info</a>
           </div>
         </div>
       </div>
