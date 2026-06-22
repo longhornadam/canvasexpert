@@ -92,11 +92,17 @@
     <button type="button" id="gf-go" class="primary" disabled>▶ Run guided scoring</button>
     <span id="gf-status" class="hint"></span>
   </div>
+  <div class="actions" style="margin-top:6px">
+    <button type="button" class="small fx-open" data-folder="safe" {% if not feedback_root %}disabled{% endif %}>📁 Open SAFE folder</button>
+    <button type="button" class="small fx-open" data-folder="private" {% if not feedback_root %}disabled{% endif %}>🔒 Open PRIVATE folder</button>
+    <span class="hint">SAFE = fake-name copies to paste into any LLM. PRIVATE = real names, stays on this PC.</span>
+  </div>
   <div id="gf-progress-wrap" hidden>
     <div class="progress-bar"><div class="progress-fill" id="gf-progress-fill"></div></div>
     <pre id="gf-log" class="log"></pre>
     <div id="gf-result-actions" hidden>
-      <button type="button" class="small" id="gf-open-toenter">Open ToEnter folder</button>
+      <button type="button" class="small" id="gf-open-safe">📁 Open SAFE folder</button>
+      <button type="button" class="small" id="gf-open-private">🔒 Open PRIVATE folder</button>
       <button type="button" class="small" id="gf-push" disabled title="Coming in Phase C">Push to Canvas (coming soon)</button>
     </div>
   </div>
@@ -416,8 +422,11 @@
       .catch(function () { fill.style.width = "100%"; fail("Network error during prepare."); });
   });
 
-  document.getElementById("gf-open-toenter").addEventListener("click", function () {
-    openFolder("toenter");
+  document.getElementById("gf-open-safe").addEventListener("click", function () {
+    openFolder("safe");
+  });
+  document.getElementById("gf-open-private").addEventListener("click", function () {
+    openFolder("private");
   });
 
   // ── Shared prep (CSV lane) ──────────────────────────────────────────────

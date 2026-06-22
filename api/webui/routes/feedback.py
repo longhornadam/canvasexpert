@@ -307,7 +307,10 @@ def feedback_run_prepare(
                              "error": "PII safety gate blocked this batch.",
                              "hard": verdict["hard"][:5]})
 
-    # Write scrubbed SAFE bundle + PRIVATE copy + who-is-who
+    # Write scrubbed SAFE bundle + PRIVATE copy + who-is-who. The rubric is inlined
+    # into the SAFE HOW-TO-SCORE so the teacher's own LLM gets prompt + rubric + work
+    # as one self-contained package (it is teacher-authored, not student PII).
+    rubric_text = _load_rubric_text(rubric_name)
     protected = config.active_protected_names()
     result = fp.write_safe_and_private(
         bundle, vault,
@@ -316,11 +319,11 @@ def feedback_run_prepare(
         config.get_persona().get("name") or _ai_ta_name(),
         protected=protected,
         submissions=subs,
+        rubric_text=rubric_text,
     )
     if not result["safe_bundle"]:
         return JSONResponse({"ok": False, "error": f"SAFE write failed: {result['log']}"})
 
-    rubric_text = _load_rubric_text(rubric_name)
     tokens = orc.estimate_tokens(bundle, rubric_text)
     response_data = {"ok": True, "green": True, "soft": verdict["soft"],
                      "tokens": tokens, "students": len(bundle["students"]),
