@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Course Expert — Canvas Expert{% endblock %}
+{% block body_class %}ce-screen{% endblock %}
 {% block main_class %}ce-page{% endblock %}
 {% block content %}
 
@@ -8,45 +9,6 @@
   No Canvas token saved — <a href="/settings">go to Settings</a> to add one.
 </div>
 {% else %}
-
-<!-- ── Header band ──────────────────────────────────────────────────────── -->
-<div class="ce-header">
-  <div class="ce-header-inner">
-    <h1 class="ce-title">Course Expert</h1>
-    <div class="ce-course-row">
-      <details class="ce-course-picker" id="ce-course-picker">
-        <summary class="ce-picker-trigger">
-          <span id="ce-picker-label">— pick courses —</span>
-          <span class="ce-picker-caret">▾</span>
-        </summary>
-        <div class="ce-picker-pop">
-          <div class="ce-picker-head">
-            Target courses <span id="target-count" class="cc-count"></span>
-          </div>
-          <div id="course-checklist" class="course-checklist">
-            {% for c in saved_courses %}
-            <div class="cc-row" data-id="{{ c.id }}" data-name="{{ c.name }}">
-              <input type="checkbox" class="cc-cb" value="{{ c.id }}" data-name="{{ c.name }}">
-              <span class="cc-star" title="Bookmarked">★</span>
-              <button type="button" class="cc-focus" title="Focus this course">{{ c.nickname }}</button>
-            </div>
-            {% endfor %}
-            {% if not saved_courses %}
-            <p class="hint" style="font-size:13px; margin:0">
-              No bookmarked courses yet. <a href="/settings">Add some in Settings</a>.
-            </p>
-            {% endif %}
-          </div>
-          <div id="ci-targets" class="ci-targets" hidden></div>
-          <div class="ce-picker-links">
-            <a href="/course" class="small-link">Course info ↗</a>
-            <a href="/settings" class="small-link">Manage ↗</a>
-          </div>
-        </div>
-      </details>
-    </div>
-  </div>
-</div>
 
 <!-- ── Tab bar ─────────────────────────────────────────────────────────── -->
 <div class="ce-tabs" role="tablist">
@@ -61,12 +23,52 @@
 
 <!-- ── Tab content ─────────────────────────────────────────────────────── -->
 <div class="ce-content ce-panels-wrap">
+  <section class="card tool-course-card ce-course-work-card">
+    <div class="tool-course-card-head">
+      <div>
+        <h2>Target courses</h2>
+        <p class="hint">Choose the focused course for Canvas-specific options. Checked courses receive pushes.</p>
+      </div>
+      <div class="ce-course-row">
+        <details class="ce-course-picker" id="ce-course-picker">
+          <summary class="ce-picker-trigger">
+            <span id="ce-picker-label">— pick courses —</span>
+            <span class="ce-picker-caret">▾</span>
+          </summary>
+          <div class="ce-picker-pop">
+            <div class="ce-picker-head">
+              Target courses <span id="target-count" class="cc-count"></span>
+            </div>
+            <div id="course-checklist" class="course-checklist">
+              {% for c in saved_courses %}
+              <div class="cc-row" data-id="{{ c.id }}" data-name="{{ c.name }}">
+                <input type="checkbox" class="cc-cb" value="{{ c.id }}" data-name="{{ c.name }}">
+                <span class="cc-star" title="Bookmarked">★</span>
+                <button type="button" class="cc-focus" title="Focus this course">{{ c.nickname }}</button>
+              </div>
+              {% endfor %}
+              {% if not saved_courses %}
+              <p class="hint" style="font-size:13px; margin:0">
+                No bookmarked courses yet. <a href="/settings">Add some in Settings</a>.
+              </p>
+              {% endif %}
+            </div>
+            <div id="ci-targets" class="ci-targets" hidden></div>
+            <div class="ce-picker-links">
+              <a href="/course" class="small-link">Course info ↗</a>
+              <a href="/settings" class="small-link">Manage ↗</a>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
 
   <!-- ── Quiz tab ──────────────────────────────────────────────────────── -->
   <div id="ce-tab-quiz" class="ce-panel active">
 
     <!-- Whole-class picker (top) -->
-    <div class="card" id="quiz-whole">
+    <div class="card ce-quiz-card" id="quiz-whole">
       <h2 style="margin-bottom:14px">Push quiz</h2>
       <div class="mode-toggle" role="group" aria-label="Push mode" style="margin-bottom:14px">
         <button type="button" class="mode-seg active" data-mode="whole">Whole class</button>
@@ -74,19 +76,19 @@
       </div>
       <label>Quiz file</label>
       <div class="file-source">
-        <select id="quizfile">
+        <select id="quizfile" style="display:none">
           <option value="">— select —</option>
           {% for f in quiz_files %}
           <option value="{{ f.path }}">{{ f.label }}</option>
           {% endfor %}
         </select>
         <div class="file-source-row">
-          <button type="button" class="file-src-btn active" data-src="select">Library</button>
-          <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+          <button type="button" class="file-src-btn" data-src="select">Library</button>
+          <button type="button" class="file-src-btn active" data-src="paste">Paste JSON</button>
           <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
           <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
         </div>
-        <textarea class="file-src-paste" placeholder="Paste your &lt;QUIZFORGE_JSON&gt;…" style="display:none"></textarea>
+        <textarea class="file-src-paste" placeholder="Paste your &lt;QUIZFORGE_JSON&gt;…"></textarea>
         <p class="file-src-hint" style="display:none"></p>
       </div>
       <details class="forge-howto">
@@ -130,7 +132,7 @@
     </div>
 
     <!-- Delivery options (below the picker) -->
-    <div class="card">
+    <div class="card ce-delivery-card">
       <h2 style="margin-bottom:14px">Delivery options</h2>
       <div class="settings-grid">
         <label>Due date <small class="lbl-hint">(optional)</small>

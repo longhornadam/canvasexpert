@@ -33,14 +33,20 @@ router = APIRouter(tags=["pages"])
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     courses = config.active_courses()
+    workspace_root = workspace.workspace_root()
+    workspace_status = "local folders"
+    if workspace_root:
+        parts = os.path.normpath(workspace_root).split(os.sep)
+        folder = parts[-1] if parts else workspace_root
+        workspace_status = f"OneDrive/{folder}" if any("OneDrive" in p for p in parts) else folder
     return templates.TemplateResponse("dashboard.html", {
         "request":        request,
-        "nav_section":    "",
+        "nav_section":    "dashboard",
         "token_is_set":   config.token_is_set(),
         "canvas_base":    config.get_canvas_base(),
         "saved_courses":  courses,
         "active_count":   len(courses),
-        "workspace_status": workspace.workspace_root() or "local folders",
+        "workspace_status": workspace_status,
     })
 
 
@@ -121,7 +127,7 @@ def name_manager_page(request: Request):
     fb = workspace.feedback_root()
     return templates.TemplateResponse("name_manager.html", {
         "request":       request,
-        "nav_section":   "feedback",
+        "nav_section":   "names",
         "feedback_root": fb,
         "saved_courses": config.active_courses(),
     })
