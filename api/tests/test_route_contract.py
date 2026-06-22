@@ -114,6 +114,8 @@ EXPECTED = [
     ('/api/feedback/patterns', ('POST',)),
     ('/api/feedback/run/prepare', ('GET',)),
     ('/api/feedback/run/stream', ('GET',)),
+    ('/api/feedback/push/preview', ('POST',)),
+    ('/api/feedback/push/apply', ('POST',)),
     ('/api/names/backup-vault', ('POST',)),
     ('/api/names/collisions', ('GET',)),
     ('/api/names/nickname', ('POST',)),
