@@ -46,18 +46,20 @@ the guided flow travels to your LLM automatically — no separate attach step. F
 - Keep the point scale small (the shipped Glows & Grows pattern expects a single rubric
   score). Per-criterion scoring is a future extension.
 
-## Submission type: paste vs. upload
+## Submission type: paste or upload — both work
 
-This decides whether the work reaches the scorer at all today:
+Either reaches the scorer:
 
 - **`online_text_entry` (paste code)** → the code lands in `submission.body` and flows through
-  scoring. **Recommended for now.** Ask students to paste their `.py`/`.html` into the text box.
-- **`online_upload` (file)** → currently flagged attachment-only and **excluded from SAFE**
-  (plain-text code scrub is a planned v1.1 fix, but not in yet). If you require uploads today,
-  those submissions won't be scored automatically.
+  scoring.
+- **`online_upload` (file)** → plain-text code/text files (`.py`, `.html`, `.css`, `.js`, `.txt`,
+  `.md`, `.json`, `.csv`, up to 256 KB) are downloaded and folded into the scored response, raw,
+  so an HTML submission's tags survive. Each file is headed with `--- filename ---`.
+- **Not scored:** non-text attachments (images, PDF, DOCX). Those submissions are listed in the
+  run summary as "score manually" rather than silently dropped.
 
 Set this in AssignmentForge via `submission.types` (and `allowed_extensions` like `py`, `html`
-if you do use upload).
+for upload).
 
 ## Privacy note
 

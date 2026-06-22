@@ -1,5 +1,12 @@
 # Handoff: FeedbackExpert V1 — Name Manager + Scrub + SAFE/PRIVATE folders
 
+> **STATUS: IMPLEMENTED (on `dev`).** This is a historical build spec, kept for context.
+> All six tasks shipped, plus **Push to Canvas** (Phase C) and **plain-text code-file scoring**
+> (the v1.1 "attachment-only excluded" deferral below was closed — `.py`/`.html`/etc. uploads
+> are now scored). For current behavior see `CLAUDE.md` and
+> `docs/contracts/feedback-scoring-contract.md`; don't treat the "OUT/deferred" items below as
+> still-open without checking the code.
+
 **Lane:** Ferrari-planned, Toyota-implementable. This doc is self-contained — do not
 round-trip to the planner. Read it fully before starting.
 

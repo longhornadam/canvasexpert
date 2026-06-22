@@ -90,22 +90,29 @@ Rules (enforced by `validate_results`):
 
 ---
 
-## How Phase C (Push to Canvas) consumes this
+## How Phase C (Push to Canvas) consumes this — BUILT
 
-1. Teacher drops a conforming results file in `FeedbackExpert/3_FromLLM/`.
+Implemented in `api/webui/routes/feedback.py` (`/api/feedback/push/preview` + `/push/apply`)
+and surfaced as the **Push to Canvas** panel on the Feedback Expert page.
+
+1. Teacher **pastes** the conforming results JSON into the Push panel (no drop folder — the old
+   `3_FromLLM` stage was retired with the SAFE/PRIVATE restructure).
 2. `validate_results(results, bundle, vault)` → must be `ok` (hard errors block; warnings shown).
+   The SAFE bundle is loaded best-effort for coverage/score-range cross-checks.
 3. `reidentify(results, vault)` maps `pseudonym → canvas_id / real_name`.
-4. In-browser **review preview** (real names, scores, comments) — teacher deselects any row.
-5. Push, per selected row:
+4. In-browser **review preview** (real names, **current Canvas grade**, new score, comment) —
+   already-graded rows are unchecked by default (overwrite is opt-in); unresolved pseudonyms
+   can't be posted.
+5. On explicit count-confirm, push per selected row via `_canvas_send`:
    ```
    PUT /api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{canvas_id}
-       submission[posted_grade] = <score>      # omitted when score is null
+       submission[posted_grade] = <score>      # omitted when score is null (comment-only)
        comment[text_comment]    = <feedback>   # includes the AI disclosure
    ```
-   Late / ungraded submissions are routed through the **existing late-work flow**
-   (enter # days late), not blind-posted. Works on **Assignments** today (PAT in active
-   courses). **New Quizzes write-back stays parked** (same PAT/403 limit as the report pull).
-6. An audit line per push lands in `_audit/` (pseudonymous/content-free).
+   Works on **Assignments** today (PAT in active courses). **New Quizzes write-back stays parked**
+   (same PAT/403 limit as the report pull). Late penalties are **not** handled here — they stay in
+   Gradebook Expert's late-sweep, by design.
+6. An audit line per push lands in `_audit/` — **content-free (counts only)**, never names/scores.
 
-Push must be **explicitly confirmed** (it changes real grades and notifies students) and
-**idempotent-aware** (re-running should not silently double-post).
+Push is **explicitly confirmed** (it changes real grades and notifies students) and
+**idempotency-aware** (the preview shows the current grade; graded rows are opt-in to overwrite).
