@@ -188,9 +188,10 @@ reuses by title) the course rubric and creates/updates the student explainer pag
 ### Download Work tab
 Downloads student work from the **focused** course. Load assignments, filter by
 type and due-date range (All / Fall / Spring / 30d / 90d presets), select, download
-to a local folder tree: `by_assignment/<Asgn>/<Student>.html`,
-`by_student/<Student>/…`, `_index.csv` per assignment, `_portfolio.csv` per student.
-Text → `.html`, uploads → original file, URL → `.txt`.
+to a local folder tree: `by_assignment/<Asgn>/...`, `by_student/<Student>/...`,
+`_index.csv` per assignment, `_portfolio.csv` per student. Files are named
+`<Asgn> - <F Last>.html`, `<Asgn> - <F Last> - URL.txt`, or
+`<Asgn> - <F Last> - <original file>`.
 
 ### Quick tab (italicized — a different kind of tool)
 **Fast gradebook column**: name, points, submission type (on-paper / none / text
@@ -204,8 +205,9 @@ the student is in, not just the one used to load the roster.
 
 **Packet structure** (in the synced workspace, `<student_reports_root>/<Student>/<Course>/`):
 - `Assignments/` — work samples in their original formats (HTML for text entries,
-  original files for uploads, URL redirects as `.txt`). New Quizzes item-level work
-  is unavailable (PAT limitation, not OAuth — only scores appear in the Info DOCX).
+  original files for uploads, URL redirects as `.txt`), named as
+  `<Asgn> - <F Last>...`. New Quizzes item-level work is unavailable (PAT limitation,
+  not OAuth — only scores appear in the Info DOCX).
 - `Info/` — a dated `<Student> - <Course> - <YYYY-MM-DD>.docx` with per-assignment
   rows for grade, status, and submission date; neutral factual lines for late
   submissions, extended due dates, and curve adjustments; submission comments.
