@@ -10,7 +10,10 @@ from datetime import datetime
 import requests
 from docx import Document
 
-from downloader import _download_binary, safe_name, _get_all_pages
+from downloader import (
+    _download_binary, _get_all_pages, _reserve_filename, _student_file_tag,
+    _work_filename, safe_name,
+)
 
 # Section keys the UI offers (order preserved in the document):
 SECTIONS = ["standing", "late", "adjustments", "comments", "work"]
@@ -116,6 +119,7 @@ def build_packet(user_id, student_name, sections, courses, base, token,
     session = requests.Session()
     session.headers["Authorization"] = f"Bearer {token}"
     stu_root = os.path.join(reports_root, safe_name(student_name))
+    file_tag = _student_file_tag({"name": student_name}, user_id)
     os.makedirs(stu_root, exist_ok=True)
     man_path = os.path.join(stu_root, "_manifest.json")
     try:
@@ -171,33 +175,42 @@ def build_packet(user_id, student_name, sections, courses, base, token,
         if "work" in sections:
             asg_dir = os.path.join(course_dir, "Assignments")
             os.makedirs(asg_dir, exist_ok=True)
+            used_filenames = set()
             n = 0
             for s in subs:
                 a = s.get("assignment") or {}
-                stem = safe_name(a.get("name", "work"))
+                assignment_name = a.get("name", "work")
                 body = (s.get("body") or "").strip()
                 if body:
-                    with open(os.path.join(asg_dir, stem + ".html"), "w",
-                              encoding="utf-8") as f:
+                    fname = _reserve_filename(
+                        _work_filename(assignment_name, file_tag, ".html"),
+                        used_filenames,
+                    )
+                    with open(os.path.join(asg_dir, fname), "w", encoding="utf-8") as f:
                         f.write(body)
                     n += 1
                 url = (s.get("url") or "").strip()
                 if url:
-                    with open(os.path.join(asg_dir, stem + "_url.txt"), "w",
-                              encoding="utf-8") as f:
+                    fname = _reserve_filename(
+                        _work_filename(assignment_name, file_tag, ".txt", "URL"),
+                        used_filenames,
+                    )
+                    with open(os.path.join(asg_dir, fname), "w", encoding="utf-8") as f:
                         f.write(url + "\n")
                     n += 1
                 for att in (s.get("attachments") or []):
                     orig = att.get("filename") or att.get("display_name") or "file"
-                    dest = os.path.join(asg_dir, stem + " - " + safe_name(orig))
-                    ext = os.path.splitext(orig)[1]
-                    if ext and not dest.endswith(ext):
-                        dest += ext
+                    detail, ext = os.path.splitext(orig)
+                    fname = _reserve_filename(
+                        _work_filename(assignment_name, file_tag, ext, detail or "file"),
+                        used_filenames,
+                    )
+                    dest = os.path.join(asg_dir, fname)
                     try:
                         _download_binary(session, att["url"], dest)
                         n += 1
                     except Exception as e:
-                        yield f"  !! {cname}/{stem}: {e}"
+                        yield f"  !! {cname}/{safe_name(assignment_name)}: {e}"
             yield f"✓ {cname}: {n} work file(s)"
 
         # Info DOCX

@@ -6,14 +6,14 @@ Writes student submissions to a structured local folder tree:
     <Course Name>/
       by_assignment/
         <Assignment Title>/
-          _index.csv                   -- every student: score, state, files
-          <Student>.html               -- online_text_entry / discussion body
-          <Student> - <filename>.<ext> -- online_upload (original file)
+          _index.csv                         -- every student: score, state, files
+          <Assignment> - <F Last>.html       -- online_text_entry / discussion body
+          <Assignment> - <F Last> - <file>   -- online_upload (original file)
       by_student/
         <Student Name>/
           _portfolio.csv               -- all assignments + scores for this student
-          <Assignment Title>.html
-          <Assignment Title> - <file>
+          <Assignment> - <F Last>.html
+          <Assignment> - <F Last> - <file>
 
 Usage (as a generator — yields progress strings):
     for line in run_download(course_id, course_name, assignment_ids,
@@ -38,6 +38,62 @@ def safe_name(s: str, max_len: int = 80) -> str:
     s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(s))
     s = s.strip('. ')
     return s[:max_len] or '_unnamed'
+
+
+def _name_parts(raw_name):
+    """Best-effort first/last extraction from Canvas display or sortable names."""
+    raw = (raw_name or "").strip()
+    if not raw:
+        return "", ""
+    if "," in raw:
+        last, first = raw.split(",", 1)
+        first = first.strip().split()
+        return (first[0] if first else ""), last.strip()
+    parts = raw.split()
+    if len(parts) >= 2:
+        return parts[0], parts[-1]
+    return "", ""
+
+
+def _student_file_tag(user, fallback_user_id=None):
+    """Return the requested first-initial + last-name suffix for filenames."""
+    user = user or {}
+    for key in ("sortable_name", "name"):
+        first, last = _name_parts(user.get(key))
+        if first and last:
+            return safe_name(f"{first[:1].upper()} {last}", 40)
+    fallback = (user.get("name") or user.get("sortable_name")
+                or f"user_{fallback_user_id}")
+    return safe_name(fallback, 40)
+
+
+def _assignment_student_stem(assignment_name, student_tag, max_len=110):
+    """Build '<assignment> - <F Last>' while preserving the student suffix."""
+    tag = safe_name(student_tag, 40)
+    sep = " - "
+    max_assignment = max(1, max_len - len(sep) - len(tag))
+    assignment_part = safe_name(assignment_name, max_assignment)
+    return f"{assignment_part}{sep}{tag}"
+
+
+def _work_filename(assignment_name, student_tag, ext="", detail=""):
+    """Filename for one downloaded work item."""
+    stem = _assignment_student_stem(assignment_name, student_tag)
+    if detail:
+        stem += " - " + safe_name(detail, 40)
+    return stem + (ext or "")
+
+
+def _reserve_filename(filename, used):
+    """Keep names stable on rerun while preventing collisions in this batch."""
+    stem, ext = os.path.splitext(filename)
+    candidate = filename
+    n = 2
+    while candidate in used:
+        candidate = f"{stem} ({n}){ext}"
+        n += 1
+    used.add(candidate)
+    return candidate
 
 
 def _get_all_pages(session, url, params=None):
@@ -128,10 +184,13 @@ def _download_assignment(session, canvas_base, course_id, assignment, course_dir
 
     index_rows = []
     n_written  = 0
+    used_filenames = set()
 
     for sub in subs:
         user     = sub.get("user") or {}
-        name     = user.get("name") or f"user_{sub['user_id']}"
+        name     = (user.get("name") or user.get("sortable_name")
+                    or f"user_{sub['user_id']}")
+        file_tag = _student_file_tag(user, sub.get("user_id"))
         score    = sub.get("score", "")
         state    = sub.get("workflow_state", "")
         sub_at   = (sub.get("submitted_at") or "")[:19].replace("T", " ")
@@ -140,10 +199,11 @@ def _download_assignment(session, canvas_base, course_id, assignment, course_dir
         # ── inline text ─────────────────────────────────────────────────
         body = (sub.get("body") or "").strip()
         if body:
-            # by_assignment/: [Student].html  (one per student, unique in that folder)
-            fname       = safe_name(name) + ".html"
-            # by_student/:    [Student] - [Assignment].html  (unique across assignments)
-            mirror_name = safe_name(name) + " - " + safe_name(asgn_name) + ".html"
+            fname       = _reserve_filename(
+                _work_filename(asgn_name, file_tag, ".html"),
+                used_filenames,
+            )
+            mirror_name = fname
             dest  = os.path.join(by_asgn, fname)
             _write_text_file(dest, name, asgn_name, score, sub_at, body)
             _mirror(by_stu, name, mirror_name, dest)
@@ -153,8 +213,11 @@ def _download_assignment(session, canvas_base, course_id, assignment, course_dir
         # ── URL submission ───────────────────────────────────────────────
         url_sub = (sub.get("url") or "").strip()
         if url_sub:
-            fname       = safe_name(name) + "_url.txt"
-            mirror_name = safe_name(name) + " - " + safe_name(asgn_name) + "_url.txt"
+            fname       = _reserve_filename(
+                _work_filename(asgn_name, file_tag, ".txt", "URL"),
+                used_filenames,
+            )
+            mirror_name = fname
             dest  = os.path.join(by_asgn, fname)
             with open(dest, "w", encoding="utf-8") as f:
                 f.write(f"Student:    {name}\n")
@@ -169,16 +232,12 @@ def _download_assignment(session, canvas_base, course_id, assignment, course_dir
         # ── file attachments ─────────────────────────────────────────────
         for att in (sub.get("attachments") or []):
             orig  = att.get("filename") or att.get("display_name") or "file"
-            # by_assignment/: [Student] - [original filename]
-            fname = safe_name(name) + " - " + safe_name(orig)
-            # by_student/:    [Student] - [Assignment] - [original filename]
-            mirror_name = safe_name(name) + " - " + safe_name(asgn_name) + " - " + safe_name(orig)
-            # Preserve original extension on both names
-            ext_orig = os.path.splitext(orig)[1]
-            if ext_orig and not fname.endswith(ext_orig):
-                fname += ext_orig
-            if ext_orig and not mirror_name.endswith(ext_orig):
-                mirror_name += ext_orig
+            detail, ext_orig = os.path.splitext(orig)
+            fname = _reserve_filename(
+                _work_filename(asgn_name, file_tag, ext_orig, detail or "file"),
+                used_filenames,
+            )
+            mirror_name = fname
             dest = os.path.join(by_asgn, fname)
             try:
                 _download_binary(session, att["url"], dest)
