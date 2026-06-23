@@ -25,6 +25,11 @@
   var groupLabelsRows = document.getElementById("roster-group-labels-rows");
   var groupLabelsSaveBtn = document.getElementById("roster-group-labels-save");
   var groupLabelsStatus = document.getElementById("roster-group-labels-status");
+  var newGroupSetName = document.getElementById("roster-new-group-set-name");
+  var newGroupNames = document.getElementById("roster-new-group-names");
+  var createGroupSetBtn = document.getElementById("roster-create-group-set");
+  var addGroupsBtn = document.getElementById("roster-add-groups");
+  var groupBuilderStatus = document.getElementById("roster-group-builder-status");
 
   // Protected names
   var protectedPacksEl = document.getElementById("roster-protected-packs");
@@ -61,6 +66,11 @@
   function setStatus(msg, isOk) {
     statusEl.textContent = msg;
     statusEl.className = "hint" + (isOk ? " ok" : " error");
+  }
+
+  function setGroupBuilderStatus(msg, isOk) {
+    groupBuilderStatus.textContent = msg;
+    groupBuilderStatus.className = "hint" + (isOk ? " ok" : " error");
   }
 
   function toast(msg, isError) {
@@ -177,6 +187,13 @@
       .catch(function (e) {
         setStatus("Network error: " + e.message, false);
       });
+  }
+
+  function parseGroupNameText() {
+    return (newGroupNames.value || "")
+      .split(/\r?\n|,/)
+      .map(function (name) { return name.trim(); })
+      .filter(Boolean);
   }
 
   function renderSummary(counts) {
@@ -492,6 +509,74 @@
     saveGroupSetPreference();
     populateCanvasGroupSelects();
     renderTable();
+  });
+
+  createGroupSetBtn.addEventListener("click", function () {
+    var cid = courseSelect.value;
+    var setName = newGroupSetName.value.trim();
+    var names = parseGroupNameText();
+    if (!cid) { setGroupBuilderStatus("Select a course first.", false); return; }
+    if (!setName) { setGroupBuilderStatus("Name the group set first.", false); return; }
+
+    createGroupSetBtn.disabled = true;
+    addGroupsBtn.disabled = true;
+    setGroupBuilderStatus("Creating in Canvas...", true);
+    var body = new URLSearchParams();
+    body.append("course_id", cid);
+    body.append("name", setName);
+    body.append("group_names", JSON.stringify(names));
+
+    fetch("/api/roster/group-set", { method: "POST", body: body })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) {
+          setGroupBuilderStatus(data.error || "Create failed.", false);
+          return;
+        }
+        newGroupSetName.value = "";
+        newGroupNames.value = "";
+        setGroupBuilderStatus("Created group set" + (data.created_groups && data.created_groups.length ? " and " + data.created_groups.length + " group(s)." : "."), true);
+        loadCourse();
+      })
+      .catch(function (e) { setGroupBuilderStatus("Error: " + e.message, false); })
+      .finally(function () {
+        createGroupSetBtn.disabled = false;
+        addGroupsBtn.disabled = false;
+      });
+  });
+
+  addGroupsBtn.addEventListener("click", function () {
+    var cid = courseSelect.value;
+    var categoryId = groupSetPicker.value;
+    var names = parseGroupNameText();
+    if (!cid) { setGroupBuilderStatus("Select a course first.", false); return; }
+    if (!categoryId) { setGroupBuilderStatus("Select a group set first.", false); return; }
+    if (!names.length) { setGroupBuilderStatus("Enter at least one group name.", false); return; }
+
+    createGroupSetBtn.disabled = true;
+    addGroupsBtn.disabled = true;
+    setGroupBuilderStatus("Creating groups in Canvas...", true);
+    var body = new URLSearchParams();
+    body.append("course_id", cid);
+    body.append("category_id", categoryId);
+    body.append("group_names", JSON.stringify(names));
+
+    fetch("/api/roster/groups", { method: "POST", body: body })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) {
+          setGroupBuilderStatus(data.error || "Create failed.", false);
+          return;
+        }
+        newGroupNames.value = "";
+        setGroupBuilderStatus("Created " + (data.created_groups || []).length + " group(s).", true);
+        loadCourse();
+      })
+      .catch(function (e) { setGroupBuilderStatus("Error: " + e.message, false); })
+      .finally(function () {
+        createGroupSetBtn.disabled = false;
+        addGroupsBtn.disabled = false;
+      });
   });
 
   function saveGroupSetPreference() {
