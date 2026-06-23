@@ -11,17 +11,22 @@
 </div>
 {% else %}
 
-<!-- ── Tab bar ────────────────────────────────────────────────────────── -->
-<div class="gb-tabs" role="tablist">
-  <button type="button" class="gb-tab active" data-tab="policy">Policy &amp; Sweep</button>
-  <button type="button" class="gb-tab" data-tab="extra-time">Extra-time</button>
-  <button type="button" class="gb-tab" data-tab="extensions">Extensions</button>
-  <button type="button" class="gb-tab" data-tab="curves">Curves</button>
-  <button type="button" class="gb-tab" data-tab="snapshot">Snapshot</button>
-</div>
+<div class="expert-shell expert-shell--gradebook">
+  <!-- ── Sidebar navigation ───────────────────────────────────────────── -->
+  <aside class="expert-sidebar expert-sidebar--gradebook" aria-label="Gradebook Expert sections">
+    <div class="expert-sidebar-kicker">Gradebook Expert</div>
+    <div class="gb-tabs expert-side-tabs" role="tablist" aria-orientation="vertical">
+      <button type="button" class="gb-tab active" data-tab="policy">Policy &amp; Sweep</button>
+      <button type="button" class="gb-tab" data-tab="extra-time">Extra-time</button>
+      <button type="button" class="gb-tab" data-tab="extensions">Extensions</button>
+      <button type="button" class="gb-tab" data-tab="curves">Curves</button>
+      <button type="button" class="gb-tab" data-tab="snapshot">Snapshot</button>
+      <button type="button" class="gb-tab" data-tab="routines">Routines</button>
+    </div>
+  </aside>
 
-<!-- ── Tab content ───────────────────────────────────────────────────── -->
-<div class="gb-content">
+  <!-- ── Tab content ─────────────────────────────────────────────────── -->
+  <div class="gb-content expert-main">
   <section class="card tool-course-card gb-course-work-card">
     <div class="tool-course-card-head">
       <div>
@@ -356,7 +361,13 @@
     </div>
   </div>
 
-</div><!-- /gb-content -->
+  <!-- ── Routines ─────────────────────────────────────────────────────── -->
+  <div id="gb-tab-routines" class="gb-panel">
+    {% include "_routines_panel.html" %}
+  </div>
+
+  </div><!-- /gb-content -->
+</div><!-- /.expert-shell -->
 
 {% endif %}
 

@@ -30,6 +30,26 @@ router = APIRouter(tags=["pages"])
 # Page routes
 # --------------------------------------------------------------------------
 
+def _routines_template_context() -> dict:
+    """Template values shared by the standalone route and the Gradebook tab."""
+    def _entry(name):
+        return {"name": name, "path": os.path.normpath(os.path.join(_CUSTOM_DIR, name))}
+
+    custom_active, custom_templates = [], []
+    if os.path.isdir(_CUSTOM_DIR):
+        for path in sorted(glob.glob(os.path.join(_CUSTOM_DIR, "*.py"))):
+            name = os.path.basename(path)
+            (custom_templates if name.startswith("_") else custom_active).append(_entry(name))
+
+    return {
+        "custom_dir":       os.path.normpath(_CUSTOM_DIR),
+        "authoring_path":   os.path.normpath(os.path.join(_CUSTOM_DIR, "AUTHORING.md")),
+        "custom_active":    custom_active,
+        "custom_templates": custom_templates,
+        "active_count":     len(config.active_courses()),
+    }
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     courses = config.active_courses()
@@ -127,7 +147,7 @@ def name_manager_page(request: Request):
     fb = workspace.feedback_root()
     return templates.TemplateResponse("name_manager.html", {
         "request":       request,
-        "nav_section":   "names",
+        "nav_section":   "feedback",
         "feedback_root": fb,
         "saved_courses": config.active_courses(),
     })
@@ -173,6 +193,7 @@ def gradebook_page(request: Request):
         "has_calendars":        bool(cals),
         "all_grading_periods":  all_gp,
         "total_holiday_count":  total_days,
+        **_routines_template_context(),
     })
 
 
@@ -182,22 +203,11 @@ def routines_page(request: Request):
 
     Scans the custom_routines folder so the page can show the real path and the
     files it found (active vs. _-prefixed templates)."""
-    def _entry(name):
-        return {"name": name, "path": os.path.normpath(os.path.join(_CUSTOM_DIR, name))}
-    custom_active, custom_templates = [], []
-    if os.path.isdir(_CUSTOM_DIR):
-        for path in sorted(glob.glob(os.path.join(_CUSTOM_DIR, "*.py"))):
-            name = os.path.basename(path)
-            (custom_templates if name.startswith("_") else custom_active).append(_entry(name))
     return templates.TemplateResponse("routines.html", {
         "request":          request,
-        "nav_section":      "routines",
+        "nav_section":      "gradebook",
         "token_is_set":     config.token_is_set(),
-        "custom_dir":       os.path.normpath(_CUSTOM_DIR),
-        "authoring_path":   os.path.normpath(os.path.join(_CUSTOM_DIR, "AUTHORING.md")),
-        "custom_active":    custom_active,
-        "custom_templates": custom_templates,
-        "active_count":     len(config.active_courses()),
+        **_routines_template_context(),
     })
 
 
