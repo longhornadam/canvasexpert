@@ -127,7 +127,13 @@ EXPECTED = [
     ('/api/names/scrub-test', ('POST',)),
     ('/api/names/who-is-who', ('POST',)),
     ('/api/open-file', ('POST',)),
+    ('/api/roster', ('GET',)),
+    ('/api/roster/bulk', ('POST',)),
+    ('/api/roster/student', ('POST',)),
+    ('/api/roster/tier-scheme', ('GET',)),
+    ('/api/roster/tier-scheme', ('POST',)),
     ('/name-manager', ('GET',)),
+    ('/roster', ('GET',)),
 ]
 
 

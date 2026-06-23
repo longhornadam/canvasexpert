@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Roster Console — Canvas Expert{% endblock %}
+{% block content %}
+
+<meta name="canvas-base" content="{{ canvas_base }}">
+
+<!-- ── Compact toolbar ──────────────────────────────────────────────── -->
+<div class="roster-v2-toolbar" id="roster-toolbar">
+  <div class="roster-v2-toolbar-row">
+    <label class="roster-v2-course-picker">
+      Course
+      <select id="roster-course">
+        <option value="">— select a course —</option>
+        {% for c in saved_courses %}
+        <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" id="roster-refresh" class="primary small">Refresh</button>
+    <a href="#" id="roster-open-canvas" class="button small" target="_blank" rel="noopener">Canvas People</a>
+    <span id="roster-v2-summary" class="roster-v2-summary">
+      <span class="roster-v2-summary-item" id="roster-summary-total">0 students</span>
+      <span class="roster-v2-summary-item" id="roster-summary-extra">Extra 0</span>
+      <span class="roster-v2-summary-item" id="roster-summary-monitored">Monitored 0</span>
+      <span class="roster-v2-summary-item" id="roster-summary-tier-unset">Unset 0</span>
+      <span class="roster-v2-summary-item" id="roster-summary-warnings">!</span>
+    </span>
+    <span id="roster-status" class="hint"></span>
+  </div>
+  <div class="roster-v2-toolbar-row">
+    <input type="text" id="roster-search" placeholder="Search students..." class="roster-search-input">
+    <div class="roster-filters">
+      <button type="button" class="roster-filter-btn active" data-filter="all">All</button>
+      <button type="button" class="roster-filter-btn" data-filter="extra_time">Extra time</button>
+      <button type="button" class="roster-filter-btn" data-filter="monitored">Monitored</button>
+      <button type="button" class="roster-filter-btn" data-filter="tier_unset">Unset</button>
+      <button type="button" class="roster-filter-btn" data-filter="warnings">!</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bulk action bar ──────────────────────────────────────────────── -->
+<div class="roster-bulk-bar" id="roster-bulk-bar" hidden>
+  <span id="roster-bulk-count">0 selected</span>
+  <span class="roster-bulk-actions">
+    <label>Set tier
+      <select id="roster-bulk-tier" class="roster-bulk-select">
+        <option value="">— unset —</option>
+      </select>
+    </label>
+    <label>Extra time
+      <input type="number" id="roster-bulk-extra-days" class="roster-bulk-days" min="0" max="30" value="2" placeholder="days">
+    </label>
+    <button type="button" class="small" data-bulk="set_extra_time">Set</button>
+    <button type="button" class="small" data-bulk="clear_extra_time">Clear ET</button>
+    <button type="button" class="small" data-bulk="set_monitored">Monitor</button>
+    <button type="button" class="small" data-bulk="clear_monitored">Unmonitor</button>
+    <button type="button" class="small" data-bulk="clear_tier">Clear tier</button>
+  </span>
+</div>
+
+<!-- ── Roster table ─────────────────────────────────────────────────── -->
+<div class="roster-v2-table-wrap" id="roster-table-card" hidden>
+  <table class="roster-v2-table" id="roster-table">
+    <thead>
+      <tr>
+        <th class="roster-col-check"><input type="checkbox" id="roster-select-all"></th>
+        <th class="roster-col-name">Student</th>
+        <th class="roster-col-nicknames">Nicknames</th>
+        <th class="roster-col-pseudo">Pseudonym</th>
+        <th class="roster-col-extratime">Extra time</th>
+        <th class="roster-col-tier">Tier / Alias</th>
+        <th class="roster-col-monitor">M</th>
+        <th class="roster-col-note">Note</th>
+        <th class="roster-col-status">Status</th>
+      </tr>
+    </thead>
+    <tbody id="roster-table-body">
+      <tr><td colspan="9" class="roster-empty">Select a course and click Refresh.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ── Tier scheme customization ────────────────────────────────────── -->
+<details class="roster-v2-details" id="roster-tier-editor" hidden>
+  <summary><strong>Tier aliases</strong></summary>
+  <div class="roster-v2-tier-editor" id="roster-tier-editor-body">
+    <div class="roster-v2-tier-rows" id="roster-tier-rows">
+      <!-- populated by JS -->
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button type="button" id="roster-tier-add" class="small">Add tier</button>
+      <button type="button" id="roster-tier-save" class="primary small">Save aliases</button>
+      <span id="roster-tier-status" class="hint"></span>
+    </div>
+  </div>
+</details>
+
+<!-- ── AI safety card ───────────────────────────────────────────────── -->
+<details class="roster-v2-details" id="roster-safety-card">
+  <summary><strong>AI safety tools</strong></summary>
+  <div class="guided-pickers" style="margin-top:12px; padding:4px 0">
+    <div class="roster-safety-row">
+      <label>Protected name packs</label>
+      <div id="roster-protected-packs"></div>
+    </div>
+    <div class="roster-safety-row">
+      <label>Custom protected names</label>
+      <input type="text" id="roster-custom-protected" placeholder="Comma-separated" style="width:300px">
+    </div>
+    <div class="actions">
+      <button type="button" id="roster-save-protected" class="small">Save protected names</button>
+    </div>
+    <div class="roster-safety-row">
+      <label>Scrub test</label>
+      <textarea id="roster-scrub-text" rows="3" placeholder="Paste text to test name scrubbing..." style="width:100%"></textarea>
+      <div class="actions">
+        <button type="button" id="roster-scrub-run" class="small">Test scrub</button>
+      </div>
+      <pre id="roster-scrub-result" class="roster-scrub-result" hidden></pre>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button type="button" id="roster-export-who" class="small">Export who-is-who</button>
+      <button type="button" id="roster-backup-vault" class="small">Back up vault</button>
+    </div>
+  </div>
+</details>
+
+<script src="/static/roster.js?v={{ asset_v }}"></script>
+{% endblock %}
