@@ -1,9 +1,8 @@
 /**
- * Roster Console V2 — compact inline editor.
+ * Roster Console V3 — Canvas groups are the source of truth.
  *
- * Inline editing: nicknames (input), pseudonym (input+regen), extra time
- * (checkbox+days), tier (select), monitor (checkbox), note (popover).
- * Autosaves per-cell on change/blur.
+ * Canvas group column shows real Canvas groups from a selected group set.
+ * Status: "synced to Canvas" or actual Canvas error.
  */
 (function () {
   "use strict";
@@ -19,14 +18,13 @@
   var selectAll = document.getElementById("roster-select-all");
   var bulkBar = document.getElementById("roster-bulk-bar");
   var bulkCount = document.getElementById("roster-bulk-count");
-  var bulkTier = document.getElementById("roster-bulk-tier");
+  var bulkGroup = document.getElementById("roster-bulk-group");
   var bulkExtraDays = document.getElementById("roster-bulk-extra-days");
   var safetyCard = document.getElementById("roster-safety-card");
-  var tierEditor = document.getElementById("roster-tier-editor");
-  var tierRows = document.getElementById("roster-tier-rows");
-  var tierAddBtn = document.getElementById("roster-tier-add");
-  var tierSaveBtn = document.getElementById("roster-tier-save");
-  var tierStatus = document.getElementById("roster-tier-status");
+  var groupLabelsEditor = document.getElementById("roster-group-labels-editor");
+  var groupLabelsRows = document.getElementById("roster-group-labels-rows");
+  var groupLabelsSaveBtn = document.getElementById("roster-group-labels-save");
+  var groupLabelsStatus = document.getElementById("roster-group-labels-status");
 
   // Protected names
   var protectedPacksEl = document.getElementById("roster-protected-packs");
@@ -38,9 +36,14 @@
   var exportWhoBtn = document.getElementById("roster-export-who");
   var backupVaultBtn = document.getElementById("roster-backup-vault");
 
+  // Group set picker
+  var groupSetPicker = document.getElementById("roster-group-set-picker");
+
   // State
   var students = [];
-  var tierScheme = [];
+  var groups = [];
+  var selectedGroupCategoryId = null;
+  var groupLabelScheme = {};
   var selectedStudentId = null;
   var filteredStudents = [];
   var currentCourseId = "";
@@ -75,7 +78,52 @@
     var el = row.querySelector(".roster-v2-status");
     if (!el) return;
     el.textContent = msg;
+    el.title = msg;
     el.className = "roster-v2-status " + (cls || "");
+  }
+
+  function warningLabel(code) {
+    var labels = {
+      missing_pseudonym: "Missing pseudonym",
+      extra_time_without_days: "Extra time needs days",
+      group_unset: "Group unset",
+      multiple_groups_in_selected_set: "Multiple groups",
+      protected_name_collision: "Protected name collision",
+      nickname_collision: "Nickname collision"
+    };
+    return labels[code] || String(code || "Issue").replace(/_/g, " ");
+  }
+
+  function rowStatus(warnings, canvasGroup) {
+    var issues = (warnings || []).map(warningLabel);
+    if (canvasGroup && canvasGroup.group_id) {
+      // Canvas-backed field
+      if (issues.length > 0) {
+        return {
+          text: issues[0] + (issues.length > 1 ? " +" + (issues.length - 1) : ""),
+          title: issues.join("; "),
+          cls: "roster-v2-status-warning"
+        };
+      }
+      return {
+        text: "synced to Canvas",
+        title: "Synced to Canvas",
+        cls: "roster-v2-status-ok"
+      };
+    }
+    // No group assigned
+    if (issues.length > 0) {
+      return {
+        text: issues[0] + (issues.length > 1 ? " +" + (issues.length - 1) : ""),
+        title: issues.join("; "),
+        cls: "roster-v2-status-warning"
+      };
+    }
+    return {
+      text: "not in group",
+      title: "Not assigned to a group in the selected set",
+      cls: "roster-v2-status-none"
+    };
   }
 
   function findStudent(id) {
@@ -91,7 +139,7 @@
     var cid = courseSelect.value;
     if (!cid) {
       tableCard.hidden = true;
-      tierEditor.hidden = true;
+      groupLabelsEditor.hidden = true;
       safetyCard.hidden = true;
       return;
     }
@@ -109,15 +157,21 @@
           return;
         }
         students = data.students || [];
-        tierScheme = data.tier_scheme || [];
+        groups = data.groups || [];
+        selectedGroupCategoryId = data.selected_group_category_id;
+        groupLabelScheme = data.group_label_scheme || {};
         renderSummary(data.counts);
-        populateTierSelects();
+        populateGroupSetPicker();
+        populateCanvasGroupSelects();
         renderTable();
         tableCard.hidden = false;
-        tierEditor.hidden = false;
+        groupLabelsEditor.hidden = false;
         safetyCard.hidden = false;
-        renderTierEditor();
+        renderGroupLabelsEditor();
         setStatus("Loaded " + students.length + " students" + (data.note ? " — " + data.note : ""), true);
+        if (data.legacy_tier_count) {
+          toast("This course has old local tier assignments. Canvas groups are now the source of truth.", true);
+        }
         if (scrubText.value) scrubRun.click();
       })
       .catch(function (e) {
@@ -130,21 +184,26 @@
     document.getElementById("roster-summary-total").textContent = counts.total + " students";
     document.getElementById("roster-summary-extra").textContent = "Extra " + counts.extra_time;
     document.getElementById("roster-summary-monitored").textContent = "Monitored " + counts.monitored;
-    document.getElementById("roster-summary-tier-unset").textContent = "Unset " + counts.tier_unset;
-    document.getElementById("roster-summary-warnings").textContent = "!" + counts.warnings;
+    document.getElementById("roster-summary-group-unset").textContent = "Unset " + counts.group_unset;
+    document.getElementById("roster-summary-warnings").textContent = "Issues " + counts.warnings;
   }
 
-  function populateTierSelects() {
-    // Bulk tier select
-    bulkTier.innerHTML = '<option value="">— unset —</option>';
-    for (var i = 0; i < tierScheme.length; i++) {
-      var t = tierScheme[i];
-      if (!t.active) continue;
-      var opt = document.createElement("option");
-      opt.value = t.id;
-      opt.textContent = t.teacher_label + " / " + t.alias;
-      bulkTier.appendChild(opt);
+  function populateGroupSetPicker() {
+    groupSetPicker.innerHTML = "";
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i];
+      var sel = g.category_id === selectedGroupCategoryId ? " selected" : "";
+      groupSetPicker.innerHTML += '<option value="' + esc(g.category_id) + '"' + sel + '>' + esc(g.category_name) + '</option>';
     }
+  }
+
+  function populateCanvasGroupSelects() {
+    // Build the list of groups in the selected category
+    var category = groups.find(function(g) { return g.category_id === selectedGroupCategoryId; });
+    var categoryGroups = category ? category.groups : [];
+
+    // Store for use in row rendering
+    window._currentCategoryGroups = categoryGroups;
   }
 
   // ── Render table ───────────────────────────────────────────────────
@@ -154,15 +213,18 @@
     var activeFilter = document.querySelector(".roster-filter-btn.active");
     var filter = activeFilter ? activeFilter.dataset.filter : "all";
 
+    var categoryGroups = window._currentCategoryGroups || [];
+
     filteredStudents = students.filter(function (s) {
       if (q) {
         var haystack = (s.name + " " + s.display_name + " " + s.short_name + " " +
-          (s.nicknames || []).join(" ") + " " + (s.pseudonym || "")).toLowerCase();
+          (s.nicknames || []).join(" ") + " " + (s.pseudonym || "") + " " +
+          ((s.monitored && s.monitored.note) || "")).toLowerCase();
         if (haystack.indexOf(q) === -1) return false;
       }
       if (filter === "extra_time" && !s.extra_time.enabled) return false;
       if (filter === "monitored" && !s.monitored.enabled) return false;
-      if (filter === "tier_unset" && s.tier_id) return false;
+      if (filter === "group_unset" && s.canvas_group && s.canvas_group.group_id) return false;
       if (filter === "warnings" && (!s.warnings || s.warnings.length === 0)) return false;
       return true;
     });
@@ -172,14 +234,14 @@
       return;
     }
 
-    // Build tier select HTML (shared)
-    function tierOptions(selected) {
-      var h = '<option value="">— unset —</option>';
-      for (var i = 0; i < tierScheme.length; i++) {
-        var t = tierScheme[i];
-        if (!t.active) continue;
-        var sel = t.id === selected ? " selected" : "";
-        h += '<option value="' + esc(t.id) + '"' + sel + '>' + esc(t.teacher_label) + " / " + esc(t.alias) + "</option>";
+    // Build canvas group select HTML
+    function canvasGroupOptions(selected) {
+      var h = '<option value="">— no group —</option>';
+      for (var i = 0; i < categoryGroups.length; i++) {
+        var g = categoryGroups[i];
+        var label = g.teacher_label ? g.teacher_label + " / " + g.name : g.name;
+        var sel = g.group_id === selected ? " selected" : "";
+        h += '<option value="' + esc(g.group_id) + '"' + sel + '>' + esc(label) + "</option>";
       }
       return h;
     }
@@ -189,15 +251,11 @@
       var s = filteredStudents[i];
       var sel = selectedStudentId === s.id ? ' class="roster-v2-row-selected"' : "";
 
-      // Warn icons
-      var warnHtml = "";
-      for (var wi = 0; wi < (s.warnings || []).length; wi++) {
-        warnHtml += '<span class="roster-warn-dot" title="' + esc(s.warnings[wi]) + '">!</span>';
-      }
-
-      var tierDisplay = s.tier_display || "";
+      var canvasGroup = s.canvas_group || {};
       var nnVal = esc((s.nicknames || []).join(", "));
       var pseudoVal = esc(s.pseudonym || "");
+      var noteVal = esc((s.monitored && s.monitored.note) || "");
+      var status = rowStatus(s.warnings, canvasGroup);
 
       html += "<tr" + sel + ' data-id="' + esc(s.id) + '">' +
         '<td class="roster-col-check"><input type="checkbox" class="roster-row-check" data-id="' + esc(s.id) + '"></td>' +
@@ -207,10 +265,10 @@
         '<td class="roster-col-extratime"><label class="roster-v2-et"><input type="checkbox" class="roster-v2-et-cb" data-id="' + esc(s.id) + '"' + (s.extra_time.enabled ? " checked" : "") + ">" +
         (s.extra_time.enabled ? ('<input type="number" class="roster-v2-et-days" value="' + (s.extra_time.days || 0) + '" min="0" max="30" data-id="' + esc(s.id) + '">') : '<input type="number" class="roster-v2-et-days" value="0" min="0" max="30" data-id="' + esc(s.id) + '" hidden>') +
         "</label></td>" +
-        '<td class="roster-col-tier"><select class="roster-v2-tier" data-id="' + esc(s.id) + '">' + tierOptions(s.tier_id) + "</select></td>" +
+        '<td class="roster-col-group"><select class="roster-v2-canvas-group" data-id="' + esc(s.id) + '" data-category="' + esc(selectedGroupCategoryId || "") + '">' + canvasGroupOptions(canvasGroup.group_id) + "</select></td>" +
         '<td class="roster-col-monitor"><input type="checkbox" class="roster-v2-monitor" data-id="' + esc(s.id) + '"' + (s.monitored.enabled ? " checked" : "") + "></td>" +
-        '<td class="roster-col-note"><button type="button" class="roster-v2-note-btn" data-id="' + esc(s.id) + '" title="Edit private note">&#9998;</button></td>" +
-        '<td class="roster-col-status"><span class="roster-v2-status">' + warnHtml + "saved</span></td>" +
+        '<td class="roster-col-note"><input type="text" class="roster-v2-input roster-v2-note" value="' + noteVal + '" data-id="' + esc(s.id) + '"></td>' +
+        '<td class="roster-col-status"><span class="roster-v2-status ' + status.cls + '" title="' + esc(status.title) + '">' + esc(status.text) + '</span></td>' +
         "</tr>";
     }
     tableBody.innerHTML = html;
@@ -294,24 +352,24 @@
       el.addEventListener("change", function () {
         var id = el.dataset.id;
         var s = findStudent(id);
+        var noteInput = el.closest("tr").querySelector(".roster-v2-note");
         saveField(id, "monitored", {
           enabled: el.checked,
           name: s ? (s.display_name || s.name) : "",
-          note: s ? (s.monitored.note || "") : ""
+          note: noteInput ? noteInput.value : (s ? (s.monitored.note || "") : "")
         });
       });
     });
 
-    // Note button — inline popover
-    tableBody.querySelectorAll(".roster-v2-note-btn").forEach(function (el) {
-      el.addEventListener("click", function () {
+    // Private note: stored with the monitored-student metadata.
+    tableBody.querySelectorAll(".roster-v2-note").forEach(function (el) {
+      el.addEventListener("change", function () {
         var id = el.dataset.id;
         var s = findStudent(id);
         if (!s) return;
-        var note = prompt("Private note for " + (s.display_name || s.name) + ":", s.monitored.note || "");
-        if (note === null) return;
+        var note = el.value.trim();
         saveField(id, "monitored", {
-          enabled: s.monitored.enabled,
+          enabled: s.monitored.enabled || !!note,
           name: s.display_name || s.name,
           note: note
         });
@@ -322,7 +380,7 @@
   // ── Autosave ───────────────────────────────────────────────────────
 
   function saveField(userId, key, value) {
-    setRowStatus(userId, "saving...", "roster-v2-status-saving");
+    setRowStatus(userId, "saving locally...", "roster-v2-status-saving");
 
     if (saveTimeouts[userId]) {
       clearTimeout(saveTimeouts[userId]);
@@ -342,19 +400,53 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.ok) {
-            setRowStatus(userId, "saved", "roster-v2-status-ok");
-            // Update local student state without full refresh
-            // (re-fetch patch response to get the updated state)
+            updateLocalStudent(userId, key, value);
+            setRowStatus(userId, "saved locally", "roster-v2-status-ok");
           } else {
-            setRowStatus(userId, "error", "roster-v2-status-error");
-            toast(data.error || "Save failed.", true);
+            var apiMsg = data.error || "Save failed.";
+            setRowStatus(userId, "Error: " + apiMsg, "roster-v2-status-error");
+            toast(apiMsg, true);
           }
         })
         .catch(function (e) {
-          setRowStatus(userId, "error", "roster-v2-status-error");
-          toast("Network error: " + e.message, true);
+          var netMsg = "Network error: " + e.message;
+          setRowStatus(userId, netMsg, "roster-v2-status-error");
+          toast(netMsg, true);
         });
     }, 300);
+  }
+
+  function updateLocalStudent(userId, key, value) {
+    var s = findStudent(userId);
+    if (!s) return;
+    if (key === "nicknames") {
+      s.nicknames = value;
+    } else if (key === "pseudonym") {
+      s.pseudonym = [value.first, value.last].filter(Boolean).join(" ");
+    } else if (key === "extra_time") {
+      s.extra_time = { enabled: !!value.enabled, days: value.days || 0 };
+    } else if (key === "canvas_group") {
+      s.canvas_group = value;
+    } else if (key === "monitored") {
+      s.monitored = { enabled: !!value.enabled, note: value.note || "" };
+    }
+  }
+
+  // ── Group set picker change ─────────────────────────────────────────
+
+  groupSetPicker.addEventListener("change", function () {
+    selectedGroupCategoryId = this.value;
+    saveGroupSetPreference();
+    populateCanvasGroupSelects();
+    renderTable();
+  });
+
+  function saveGroupSetPreference() {
+    var body = new URLSearchParams();
+    body.append("course_id", currentCourseId);
+    body.append("category_id", selectedGroupCategoryId || "");
+    fetch("/api/roster/group-set-preference", { method: "POST", body: body })
+      .catch(function (e) { /* silent fail */ });
   }
 
   // ── Filters ─────────────────────────────────────────────────────────
@@ -400,7 +492,7 @@
   function updateBulkBar() {
     var ids = getSelectedIds();
     bulkBar.hidden = ids.length === 0;
-    if (ids.length > 0) bulkCount.textContent = ids.length + " selected";
+    if (ids.length > 0) bulkCount.textContent = "Bulk edit: " + ids.length + " selected";
   }
 
   // ── Bulk actions ────────────────────────────────────────────────────
@@ -417,11 +509,11 @@
       value = { days: parseInt(bulkExtraDays.value, 10) || 2, names: getSelectedNameMap() };
     } else if (action === "set_monitored") {
       value = { names: getSelectedNameMap() };
-    } else if (action === "set_tier") {
-      var tid = bulkTier.value;
-      if (!tid) { toast("Select a tier first.", true); return; }
-      value = { tier_id: tid };
-      action = "set_tier";
+    } else if (action === "set_canvas_group") {
+      var gid = bulkGroup.value;
+      if (!gid) { toast("Select a group first.", true); return; }
+      value = { category_id: selectedGroupCategoryId, group_id: gid };
+      action = "set_canvas_group";
     }
 
     doBulkAction(action, ids, value);
@@ -448,7 +540,11 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.ok) {
-          toast("Updated " + data.updated + " students.", false);
+          var msg = "Updated " + data.updated + " students.";
+          if (data.failed && data.failed > 0) {
+            msg = "Updated " + data.updated + "; failed " + data.failed + ": " + (data.errors || []).join("; ");
+          }
+          toast(msg, data.failed > 0);
           loadCourse();
         } else {
           toast(data.error || "Bulk action failed.", true);
@@ -457,165 +553,78 @@
       .catch(function (e) { toast("Error: " + e.message, true); });
   }
 
-  // ── Tier scheme editor ──────────────────────────────────────────────
+  // ── Group labels editor ─────────────────────────────────────────────
 
-  function renderTierEditor() {
-    tierRows.innerHTML = "";
-    for (var i = 0; i < tierScheme.length; i++) {
-      var t = tierScheme[i];
+  function renderGroupLabelsEditor() {
+    groupLabelsRows.innerHTML = "";
+    var categoryGroups = window._currentCategoryGroups || [];
+    for (var i = 0; i < categoryGroups.length; i++) {
+      var g = categoryGroups[i];
+      var label = groupLabelScheme[g.group_id] || {};
+      var teacherLabel = label.teacher_label || "";
+      var meaning = label.meaning || "";
+
       var row = document.createElement("div");
       row.className = "roster-v2-tier-row";
-      row.dataset.tierId = t.id;
+      row.dataset.groupId = g.group_id;
 
-      var idInput = document.createElement("input");
-      idInput.type = "hidden";
-      idInput.className = "roster-v2-tier-id";
-      idInput.value = t.id;
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "roster-v2-group-name";
+      nameSpan.textContent = g.name;
 
-      var labelInput = document.createElement("input");
-      labelInput.type = "text";
-      labelInput.className = "roster-v2-tier-label";
-      labelInput.value = t.teacher_label;
-      labelInput.title = "Teacher label";
-      labelInput.placeholder = "Label";
-
-      var aliasInput = document.createElement("input");
-      aliasInput.type = "text";
-      aliasInput.className = "roster-v2-tier-alias";
-      aliasInput.value = t.alias;
-      aliasInput.title = "Canvas-safe alias";
-      aliasInput.placeholder = "Alias";
+      var teacherLabelInput = document.createElement("input");
+      teacherLabelInput.type = "text";
+      teacherLabelInput.className = "roster-v2-tier-label";
+      teacherLabelInput.value = teacherLabel;
+      teacherLabelInput.title = "Teacher label";
+      teacherLabelInput.placeholder = "Label";
 
       var meaningInput = document.createElement("input");
       meaningInput.type = "text";
       meaningInput.className = "roster-v2-tier-meaning";
-      meaningInput.value = t.meaning || "";
+      meaningInput.value = meaning;
       meaningInput.title = "Meaning";
       meaningInput.placeholder = "Meaning";
 
-      var activeCb = document.createElement("input");
-      activeCb.type = "checkbox";
-      activeCb.className = "roster-v2-tier-active";
-      activeCb.checked = t.active !== false;
-      activeCb.title = "Active";
-
-      var delBtn = document.createElement("button");
-      delBtn.type = "button";
-      delBtn.className = "small roster-v2-tier-del";
-      delBtn.textContent = "X";
-      delBtn.title = "Remove tier";
-      delBtn.addEventListener("click", function () {
-        this.closest(".roster-v2-tier-row").remove();
-      });
-
-      row.appendChild(idInput);
-      row.appendChild(labelInput);
+      row.appendChild(nameSpan);
       row.appendChild(document.createTextNode(" → "));
-      row.appendChild(aliasInput);
+      row.appendChild(teacherLabelInput);
       row.appendChild(meaningInput);
-      row.appendChild(activeCb);
-      row.appendChild(document.createTextNode(" active"));
-      row.appendChild(delBtn);
-      tierRows.appendChild(row);
+      groupLabelsRows.appendChild(row);
     }
   }
 
-  tierAddBtn.addEventListener("click", function () {
-    var row = document.createElement("div");
-    row.className = "roster-v2-tier-row";
-
-    var idInput = document.createElement("input");
-    idInput.type = "hidden";
-    idInput.className = "roster-v2-tier-id";
-    idInput.value = "new_" + Date.now();
-
-    var labelInput = document.createElement("input");
-    labelInput.type = "text";
-    labelInput.className = "roster-v2-tier-label";
-    labelInput.placeholder = "Label";
-    labelInput.title = "Teacher label";
-
-    var aliasInput = document.createElement("input");
-    aliasInput.type = "text";
-    aliasInput.className = "roster-v2-tier-alias";
-    aliasInput.placeholder = "Alias";
-    aliasInput.title = "Canvas-safe alias";
-
-    var meaningInput = document.createElement("input");
-    meaningInput.type = "text";
-    meaningInput.className = "roster-v2-tier-meaning";
-    meaningInput.placeholder = "Meaning";
-    meaningInput.title = "Meaning";
-
-    var activeCb = document.createElement("input");
-    activeCb.type = "checkbox";
-    activeCb.className = "roster-v2-tier-active";
-    activeCb.checked = true;
-    activeCb.title = "Active";
-
-    var delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.className = "small roster-v2-tier-del";
-    delBtn.textContent = "X";
-    delBtn.title = "Remove tier";
-    delBtn.addEventListener("click", function () {
-      this.closest(".roster-v2-tier-row").remove();
-    });
-
-    row.appendChild(idInput);
-    row.appendChild(labelInput);
-    row.appendChild(document.createTextNode(" → "));
-    row.appendChild(aliasInput);
-    row.appendChild(meaningInput);
-    row.appendChild(activeCb);
-    row.appendChild(document.createTextNode(" active"));
-    row.appendChild(delBtn);
-    tierRows.appendChild(row);
-  });
-
-  tierSaveBtn.addEventListener("click", function () {
-    var rows = tierRows.querySelectorAll(".roster-v2-tier-row");
-    var scheme = [];
-    var order = 10;
+  groupLabelsSaveBtn.addEventListener("click", function () {
+    var rows = groupLabelsRows.querySelectorAll(".roster-v2-tier-row");
+    var labels = {};
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
+      var gid = r.dataset.groupId;
       var label = r.querySelector(".roster-v2-tier-label").value.trim();
-      var alias = r.querySelector(".roster-v2-tier-alias").value.trim();
       var meaning = r.querySelector(".roster-v2-tier-meaning").value.trim();
-      var active = r.querySelector(".roster-v2-tier-active").checked;
-      var id = r.querySelector(".roster-v2-tier-id").value.trim();
-      if (!label || !alias) continue;
-      if (!id) id = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-      scheme.push({
-        id: id,
-        teacher_label: label,
-        alias: alias,
-        meaning: meaning,
-        order: order,
-        active: active,
-      });
-      order += 10;
+      if (label) {
+        labels[gid] = { teacher_label: label, meaning: meaning };
+      }
     }
 
-    tierStatus.textContent = "Saving...";
+    groupLabelsStatus.textContent = "Saving...";
     var body = new URLSearchParams();
     body.append("course_id", currentCourseId);
-    body.append("scheme", JSON.stringify(scheme));
+    body.append("labels", JSON.stringify(labels));
 
-    fetch("/api/roster/tier-scheme", { method: "POST", body: body })
+    fetch("/api/roster/group-labels", { method: "POST", body: body })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.ok) {
-          tierStatus.textContent = "Saved.";
-          tierScheme = data.tier_scheme || [];
-          populateTierSelects();
-          renderTierEditor();
-          loadCourse(); // refresh roster with new tier options
+          groupLabelsStatus.textContent = "Saved.";
+          groupLabelScheme = data.group_labels || {};
+          renderGroupLabelsEditor();
+          loadCourse(); // refresh roster with new labels
         } else {
-          tierStatus.textContent = data.error || "Save failed.";
+          groupLabelsStatus.textContent = data.error || "Save failed.";
         }
       })
-      .catch(function (e) { tierStatus.textContent = "Error: " + e.message; });
+      .catch(function (e) { groupLabelsStatus.textContent = "Error: " + e.message; });
   });
 
   // ── Protected names ─────────────────────────────────────────────────
