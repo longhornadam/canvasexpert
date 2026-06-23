@@ -108,7 +108,7 @@ def _compute_warnings(student: dict, vault_entries_by_id: dict,
         warnings.append("extra_time_without_days")
 
     # V3: Check for group_unset or multiple_groups_in_selected_set
-    canvas_group = student.get("canvas_group", {})
+    canvas_group = student.get("canvas_group") or {}
     if selected_category_id and not canvas_group.get("group_id"):
         warnings.append("group_unset")
 
@@ -523,7 +523,10 @@ def roster_get(course_id: str = Query("")):
     total = len(students_out)
     extra_time_count = sum(1 for s in students_out if s["extra_time"]["enabled"])
     monitored_count = sum(1 for s in students_out if s["monitored"]["enabled"])
-    group_unset_count = sum(1 for s in students_out if not s.get("canvas_group", {}).get("group_id"))
+    group_unset_count = sum(
+        1 for s in students_out
+        if selected_category_id and not (s.get("canvas_group") or {}).get("group_id")
+    )
     warning_count = sum(1 for s in students_out if s["warnings"])
 
     note = ""

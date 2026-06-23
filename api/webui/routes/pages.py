@@ -72,34 +72,86 @@ def dashboard(request: Request):
 
 @router.get("/assessment", response_class=HTMLResponse)
 def assessment_page(request: Request):
-    return RedirectResponse(url="/course-expert", status_code=302)
+    return RedirectResponse(url="/", status_code=302)
 
 
 @router.get("/course-expert", response_class=HTMLResponse)
 def course_expert_page(request: Request):
-    _skills = list_ai_ta_files()
-    def _skill(prefix):
-        for f in _skills:
-            if f["label"].startswith(prefix):
-                return f["label"]
-        return ""
-    authoring_skills = {
-        "quiz":       _skill("Author a Quiz"),
-        "assignment": _skill("Author an Assignment"),
-        "page":       _skill("Author a Page"),
-        "rubric":     _skill("Author a Rubric"),
+    return RedirectResponse(url="/", status_code=302)
+
+
+def _authoring_skill(skills: list, prefix: str) -> str:
+    for f in skills:
+        if f["label"].startswith(prefix):
+            return f["label"]
+    return ""
+
+
+def _push_base_ctx(request: Request) -> dict:
+    return {
+        "request":       request,
+        "nav_section":   "assignments",
+        "token_is_set":  config.token_is_set(),
+        "canvas_base":   config.get_canvas_base(),
+        "saved_courses": config.active_courses(),
     }
-    return templates.TemplateResponse("course_expert.html", {
-        "request":          request,
-        "nav_section":      "course",
-        "token_is_set":     config.token_is_set(),
-        "canvas_base":      config.get_canvas_base(),
-        "saved_courses":    config.active_courses(),
-        "quiz_files":       list_quiz_files(),
-        "assignment_files": list_assignment_files(),
-        "page_files":       list_page_files(),
-        "authoring_skills": authoring_skills,
+
+
+@router.get("/push/quiz", response_class=HTMLResponse)
+def push_quiz_page(request: Request):
+    skill = _authoring_skill(list_ai_ta_files(), "Author a Quiz")
+    return templates.TemplateResponse("push_quiz.html", {
+        **_push_base_ctx(request),
+        "quiz_files":    list_quiz_files(),
+        "authoring_skill": skill,
     })
+
+
+@router.get("/push/assignment", response_class=HTMLResponse)
+def push_assignment_page(request: Request):
+    skill = _authoring_skill(list_ai_ta_files(), "Author an Assignment")
+    return templates.TemplateResponse("push_assignment.html", {
+        **_push_base_ctx(request),
+        "assignment_files": list_assignment_files(),
+        "authoring_skill":  skill,
+    })
+
+
+@router.get("/push/page", response_class=HTMLResponse)
+def push_page_page(request: Request):
+    skill = _authoring_skill(list_ai_ta_files(), "Author a Page")
+    return templates.TemplateResponse("push_page.html", {
+        **_push_base_ctx(request),
+        "page_files":      list_page_files(),
+        "authoring_skill": skill,
+    })
+
+
+@router.get("/push/rubric", response_class=HTMLResponse)
+def push_rubric_page(request: Request):
+    skill = _authoring_skill(list_ai_ta_files(), "Author a Rubric")
+    return templates.TemplateResponse("push_rubric.html", {
+        **_push_base_ctx(request),
+        "authoring_skill": skill,
+    })
+
+
+@router.get("/push/quick", response_class=HTMLResponse)
+def push_quick_page(request: Request):
+    return templates.TemplateResponse("push_quick.html", _push_base_ctx(request))
+
+
+@router.get("/download-work", response_class=HTMLResponse)
+def download_work_page(request: Request):
+    return templates.TemplateResponse("download_work.html", _push_base_ctx(request))
+
+
+@router.get("/student-reports", response_class=HTMLResponse)
+def student_reports_page(request: Request):
+    return templates.TemplateResponse(
+        "student_reports.html",
+        {**_push_base_ctx(request), "nav_section": "feedback"},
+    )
 
 
 @router.get("/ai-expert", response_class=HTMLResponse)

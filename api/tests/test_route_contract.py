@@ -137,6 +137,13 @@ EXPECTED = [
     ('/api/roster/tier-scheme', ('POST',)),
     ('/name-manager', ('GET',)),
     ('/roster', ('GET',)),
+    ('/push/quiz', ('GET',)),
+    ('/push/assignment', ('GET',)),
+    ('/push/page', ('GET',)),
+    ('/push/rubric', ('GET',)),
+    ('/push/quick', ('GET',)),
+    ('/download-work', ('GET',)),
+    ('/student-reports', ('GET',)),
 ]
 
 

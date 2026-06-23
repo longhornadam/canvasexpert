@@ -14,11 +14,43 @@
   <header class="topbar">
     <a class="brand" href="/">{% include "_ce_logo.svg" %} CanvasExpert</a>
     <nav>
-      <a class="nav-link nav-course{% if nav_section == 'course' %} nav-active{% endif %}" href="/course-expert">Course Expert</a>
       <a class="nav-link nav-roster{% if nav_section == 'roster' %} nav-active{% endif %}" href="/roster">Roster</a>
-      <a class="nav-link nav-gradebook{% if nav_section == 'gradebook' %} nav-active{% endif %}" href="/gradebook">Gradebook Expert</a>
-      <a class="nav-link nav-ai{% if nav_section == 'ai' %} nav-active{% endif %}" href="/ai-expert">AI Expert</a>
-      <a class="nav-link nav-feedback{% if nav_section == 'feedback' %} nav-active{% endif %}" href="/feedback-expert">Feedback Expert</a>
+
+      <details class="nav-dd{% if nav_section == 'assignments' %} nav-dd--active{% endif %}">
+        <summary>Assignments ▾</summary>
+        <div class="dd-menu">
+          <a href="/push/quiz">Push quiz</a>
+          <a href="/push/assignment">Push assignment</a>
+          <a href="/push/page">Push page</a>
+          <a href="/push/rubric">Push rubric</a>
+          <a href="/push/quick">Quick assignment</a>
+          <div class="dd-sep"></div>
+          <a href="/download-work">Download student work</a>
+        </div>
+      </details>
+
+      <details class="nav-dd{% if nav_section == 'gradebook' %} nav-dd--active{% endif %}">
+        <summary>Gradebook ▾</summary>
+        <div class="dd-menu">
+          <a href="/gradebook?tab=policy">Policy &amp; sweep</a>
+          <a href="/gradebook?tab=extra-time">Extra-time</a>
+          <a href="/gradebook?tab=extensions">Extensions</a>
+          <a href="/gradebook?tab=curves">Curves</a>
+          <a href="/gradebook?tab=snapshot">Snapshot</a>
+          <a href="/gradebook?tab=routines">Routines</a>
+        </div>
+      </details>
+
+      <details class="nav-dd{% if nav_section in ['feedback', 'ai'] %} nav-dd--active{% endif %}">
+        <summary>Feedback ▾</summary>
+        <div class="dd-menu">
+          <a href="/feedback-expert">Score with AI</a>
+          <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
+          <a href="/student-reports">Student reports</a>
+          <div class="dd-sep"></div>
+          <a href="/ai-expert">AI tools &amp; skills</a>
+        </div>
+      </details>
     </nav>
     <div class="topbar-right">
       <a href="/settings" class="topbar-settings-link">Settings</a>

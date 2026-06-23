@@ -186,6 +186,36 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     assert "Groups" not in str(data.get("groups", ""))
 
 
+def test_roster_get_handles_student_without_canvas_group(monkeypatch, isolated_roster):
+    isolated_roster["group_schemes"] = {
+        "1": {"selected_group_category_id": "7", "group_labels": {}}
+    }
+    users = [{
+        "id": 101,
+        "name": "Ada Lovelace",
+        "sortable_name": "Lovelace, Ada",
+        "short_name": "Ada",
+        "enrollments": [{"course_section_id": 44}],
+    }]
+    groups = [{
+        "category_id": "7",
+        "category_name": "Reading tiers",
+        "groups": [{"id": "8", "name": "Blue", "student_ids": []}],
+    }]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {"44": "Period 1"})
+    monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: (groups, None, ""))
+
+    resp = client.get("/api/roster?course_id=1")
+    data = resp.json()
+
+    assert resp.status_code == 200
+    assert data["ok"] is True
+    assert data["students"][0]["canvas_group"] is None
+    assert data["counts"]["group_unset"] == 1
+    assert "group_unset" in data["students"][0]["warnings"]
+
+
 def test_roster_student_requires_ids():
     resp = client.post("/api/roster/student", data={
         "course_id": "", "user_id": "", "patch": "{}"
