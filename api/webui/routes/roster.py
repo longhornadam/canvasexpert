@@ -224,18 +224,54 @@ def _get_group_memberships(course_id: str, group_id: str) -> tuple[list[dict], s
         return [], str(e)
 
 
-def _update_student_canvas_group(course_id: str, user_id: str, category_id: str, target_group_id: str | None) -> tuple[bool, str | None]:
+def _validate_canvas_group_target(
+    course_id: str,
+    category_id: str,
+    target_group_id: str | None,
+) -> tuple[list[dict], dict | None, str | None]:
+    """Validate a Canvas group category and optional target group for a course."""
+    categories, group_err, _ = load_group_categories(course_id)
+    if group_err:
+        return categories, None, group_err
+
+    category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
+    if not category:
+        return categories, None, f"Invalid category_id '{category_id}'."
+
+    if target_group_id:
+        group_ids = {str(g.get("id")) for g in category.get("groups", [])}
+        if str(target_group_id) not in group_ids:
+            return categories, category, f"Invalid group_id '{target_group_id}' for category {category_id}."
+
+    return categories, category, None
+
+
+def _update_student_canvas_group(
+    course_id: str,
+    user_id: str,
+    category_id: str,
+    target_group_id: str | None,
+    categories: list[dict] | None = None,
+) -> tuple[bool, str | None]:
     """Update a student's Canvas group membership.
 
     1. Remove from all groups in the category.
     2. Add to target group if specified.
     Returns (success, error_message).
     """
-    # Get all groups in the category
-    categories, _, _ = load_group_categories(course_id)
-    category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
-    if not category:
-        return False, f"Group category {category_id} not found"
+    # Get all groups in the category and validate the target before mutating.
+    if categories is None:
+        categories, _, err = _validate_canvas_group_target(course_id, category_id, target_group_id)
+        if err:
+            return False, err
+    else:
+        category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
+        if not category:
+            return False, f"Invalid category_id '{category_id}'."
+        if target_group_id:
+            group_ids = {str(g.get("id")) for g in category.get("groups", [])}
+            if str(target_group_id) not in group_ids:
+                return False, f"Invalid group_id '{target_group_id}' for category {category_id}."
 
     # Get current memberships for this user in this category
     user_groups = _user_id_set_from_canvas_groups(categories).get(str(user_id), [])
@@ -317,6 +353,25 @@ def _compute_canvas_group_display(course_id: str, group_id: str | None, group_na
     }
 
 
+def _annotate_group_labels(course_id: str, categories: list[dict]) -> None:
+    """Attach teacher labels/display text to Canvas group objects in-place."""
+    for cat in categories:
+        for group in cat.get("groups", []):
+            group_id = str(group.get("id", ""))
+            group_name = group.get("name", "")
+            saved = config.get_group_label(course_id, group_id) or {}
+            teacher_label = saved.get("teacher_label") or config.default_group_label(group_name)
+            meaning = saved.get("meaning", "")
+            if teacher_label:
+                group["teacher_label"] = teacher_label
+                group["display"] = config.compute_group_display(teacher_label, group_name)
+            else:
+                group["teacher_label"] = None
+                group["display"] = group_name
+            if meaning:
+                group["meaning"] = meaning
+
+
 @router.get("")
 def roster_get(course_id: str = Query("")):
     """Full roster merge for one course (V3: Canvas groups are source of truth).
@@ -342,6 +397,7 @@ def roster_get(course_id: str = Query("")):
 
     # Groups (V3: now used for tier/group assignment)
     categories, group_err, group_msg = load_group_categories(course_id)
+    _annotate_group_labels(course_id, categories)
     user_groups = _user_id_set_from_canvas_groups(categories)
 
     # Determine selected group category
@@ -425,12 +481,13 @@ def roster_get(course_id: str = Query("")):
                 "category_name": canvas_group_info.get("category_name"),
                 "group_id": canvas_group_info.get("group_id"),
                 "group_name": canvas_group_info.get("group_name"),
-                "teacher_label": config.get_group_label(course_id, canvas_group_info.get("group_id", {})).get("teacher_label") if config.get_group_label(course_id, canvas_group_info.get("group_id", {})) else None,
+                "teacher_label": None,
                 "display": None,
             }
             if canvas_group_info.get("group_id"):
                 label = config.get_group_label(course_id, canvas_group_info["group_id"])
-                teacher_label = label.get("teacher_label") if label else None
+                teacher_label = (label.get("teacher_label") if label else None) or config.default_group_label(
+                    canvas_group_info.get("group_name", ""))
                 canvas_group["teacher_label"] = teacher_label
                 canvas_group["display"] = config.compute_group_display(
                     teacher_label, canvas_group_info.get("group_name", ""))
@@ -603,23 +660,14 @@ def roster_student_update(
         if not category_id:
             return JSONResponse({"ok": False, "error": "canvas_group.category_id required."})
 
-        # Validate category exists
-        categories, _, _ = load_group_categories(course_id)
-        if not any(c.get("category_id") == str(category_id) for c in categories):
-            return JSONResponse({"ok": False, "error": f"Invalid category_id '{category_id}'."})
-
         # If clearing or setting a group, update Canvas
         target_group_id = None if not group_id else str(group_id)
 
-        # Validate group belongs to category if specified
-        if target_group_id:
-            category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
-            if category:
-                group_ids = [g.get("id") for g in category.get("groups", [])]
-                if target_group_id not in group_ids:
-                    return JSONResponse({"ok": False, "error": f"Invalid group_id '{group_id}' for category {category_id}."})
+        categories, _, validation_err = _validate_canvas_group_target(course_id, category_id, target_group_id)
+        if validation_err:
+            return JSONResponse({"ok": False, "error": validation_err})
 
-        ok, err = _update_student_canvas_group(course_id, user_id, category_id, target_group_id)
+        ok, err = _update_student_canvas_group(course_id, user_id, category_id, target_group_id, categories)
         if not ok:
             return JSONResponse({"ok": False, "error": err})
 
@@ -696,8 +744,13 @@ def roster_bulk_update(
         group_id = val.get("group_id")
         if not category_id:
             return JSONResponse({"ok": False, "error": "set_canvas_group requires category_id."})
+        categories, _, validation_err = _validate_canvas_group_target(
+            course_id, category_id, str(group_id) if group_id else None)
+        if validation_err:
+            return JSONResponse({"ok": False, "error": validation_err})
         for uid in ids:
-            ok, err = _update_student_canvas_group(course_id, str(uid), category_id, str(group_id) if group_id else None)
+            ok, err = _update_student_canvas_group(
+                course_id, str(uid), category_id, str(group_id) if group_id else None, categories)
             if ok:
                 updated += 1
             else:
@@ -710,8 +763,11 @@ def roster_bulk_update(
         category_id = val.get("category_id")
         if not category_id:
             return JSONResponse({"ok": False, "error": "clear_canvas_group requires category_id."})
+        categories, _, validation_err = _validate_canvas_group_target(course_id, category_id, None)
+        if validation_err:
+            return JSONResponse({"ok": False, "error": validation_err})
         for uid in ids:
-            ok, err = _update_student_canvas_group(course_id, str(uid), category_id, None)
+            ok, err = _update_student_canvas_group(course_id, str(uid), category_id, None, categories)
             if ok:
                 updated += 1
             else:
@@ -820,9 +876,13 @@ def save_group_labels(
         return JSONResponse({"ok": False, "error": f"Invalid labels JSON: {e}"})
     if not isinstance(parsed, dict):
         return JSONResponse({"ok": False, "error": "labels must be an object."})
-    # Save each label individually
+    clean = {}
     for group_id, label_info in parsed.items():
-        teacher_label = label_info.get("teacher_label", "") if isinstance(label_info, dict) else ""
-        meaning = label_info.get("meaning", "") if isinstance(label_info, dict) else ""
-        config.set_group_label(course_id, group_id, teacher_label, meaning)
-    return JSONResponse({"ok": True, "group_labels": parsed})
+        if not isinstance(label_info, dict):
+            continue
+        teacher_label = str(label_info.get("teacher_label", "") or "").strip()
+        meaning = str(label_info.get("meaning", "") or "").strip()
+        if teacher_label or meaning:
+            clean[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
+    config.set_group_labels(course_id, clean)
+    return JSONResponse({"ok": True, "group_labels": clean})
