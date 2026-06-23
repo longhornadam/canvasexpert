@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Push Assignment — CanvasExpert{% endblock %}
+{% block body_class %}ce-screen{% endblock %}
+{% block main_class %}ce-page{% endblock %}
+{% block content %}
+
+{% if not token_is_set %}
+<div class="ce-content">
+  <div class="callout warn">No Canvas token saved — <a href="/settings">go to Settings</a> to add one.</div>
+</div>
+{% else %}
+
+<meta name="canvas-base" content="{{ canvas_base }}">
+
+<div class="ce-content">
+
+  {% include "_course_picker.html" %}
+
+  <div class="card">
+    <h2 style="margin-bottom:6px">Push assignment</h2>
+    <p class="hint" style="margin:0 0 14px">
+      Push an LLM-authored <code>&lt;ASSIGNMENTFORGE_JSON&gt;</code> file to every checked
+      course — HTML description, submission settings, and differentiation tiers come from the file.
+    </p>
+    <details class="forge-howto">
+      <summary>Don't have an assignment yet? Forge one with your LLM →</summary>
+      <ol>
+        <li>Give your AI the assignment content (or ask it to write one).</li>
+        <li>Have it format the result as a <code>&lt;ASSIGNMENTFORGE_JSON&gt;</code> file —
+          {% if authoring_skill %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skill }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skill | urlencode }}" download title="Download as .txt">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+        </li>
+        <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+      </ol>
+      <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+    </details>
+    <label>AssignmentForge file</label>
+    <div class="file-source">
+      <select id="af-file">
+        <option value="">— select —</option>
+        {% for f in assignment_files %}
+        <option value="{{ f.path }}">{{ f.label }}</option>
+        {% endfor %}
+      </select>
+      <div class="file-source-row">
+        <button type="button" class="file-src-btn active" data-src="select">Library</button>
+        <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+        <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+        <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+      </div>
+      <textarea class="file-src-paste" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…" style="display:none"></textarea>
+      <p class="file-src-hint" style="display:none"></p>
+    </div>
+    <label style="margin-top:12px; display:block">RubricForge file
+      <select id="af-rubric">
+        <option value="">No rubric</option>
+      </select>
+    </label>
+    <div id="af-rubric-controls" hidden>
+      <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+        <label>Rubric mode
+          <select id="af-rubric-mode">
+            <option value="grading">Grade with rubric (points match rubric)</option>
+            <option value="feedback">Feedback only (keep assignment points)</option>
+          </select>
+        </label>
+        <label class="opt-check" style="margin-top:26px">
+          <input type="checkbox" id="af-rubric-link" checked> Link the student explainer page in the description
+        </label>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button type="button" id="btn-af-copy-prompt" class="small">Copy scoring prompt</button>
+        <span id="af-rubric-status" class="hint" style="align-self:center"></span>
+      </div>
+    </div>
+    <div class="settings-grid" style="margin-top:14px">
+      <label>Due date <small class="lbl-hint">(optional)</small>
+        <input type="datetime-local" id="af-due">
+      </label>
+      <label>Available from <small class="lbl-hint">(unlock date)</small>
+        <input type="datetime-local" id="af-unlock">
+      </label>
+      <label>Available until <small class="lbl-hint">(lock date)</small>
+        <input type="datetime-local" id="af-lock">
+      </label>
+    </div>
+    <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+      <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
+        <select id="af-aggroup" class="js-aggroups" disabled>
+          <option value="">— none / default —</option>
+        </select>
+      </label>
+      <label>Add to module <small class="lbl-hint js-mod-hint">(select a course)</small>
+        <select id="af-module" class="js-modules" data-default="none" disabled>
+          <option value="">— don't add to a module —</option>
+        </select>
+        <input type="text" id="af-new-module" class="js-new-module" placeholder="New module name…"
+               style="display:none; margin-top:6px">
+      </label>
+    </div>
+    <div class="opt-checks">
+      <label class="opt-check"><input type="checkbox" id="af-sis"> Sync to SIS</label>
+      <label class="opt-check"><input type="checkbox" id="af-publish"> Publish immediately</label>
+    </div>
+    <div class="actions">
+      <button id="btn-af-validate">Validate</button>
+      <button id="btn-af-push" class="primary">Push assignment…</button>
+    </div>
+    <pre id="af-log" class="log" hidden></pre>
+    <div id="af-banner" class="push-banner" hidden></div>
+  </div>
+
+</div><!-- /.ce-content -->
+
+<script>
+  window.QF_FILES            = [];
+  window.QF_QUIZ_FILES       = [];
+  window.QF_ASSIGNMENT_FILES = {{ assignment_files | tojson }};
+  window.QF_PAGE_FILES       = [];
+  window.QF_CANVAS_BASE      = {{ canvas_base | tojson }};
+  window.QF_HISTORY          = [];
+  window.QF_SAVED            = {{ saved_courses | tojson }};
+</script>
+<script src="/static/push.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+  document.querySelectorAll(".file-source").forEach(function (w) {
+    if (typeof initFileSource === "function") initFileSource(w);
+  });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".btn-copy-skill");
+    if (b && typeof copySkill === "function") copySkill(b.dataset.name, b);
+  });
+  var _picker = document.getElementById("ce-course-picker");
+  if (_picker) document.addEventListener("click", function (e) {
+    if (_picker.open && !e.target.closest("#ce-course-picker")) _picker.open = false;
+  });
+})();
+</script>
+
+{% endif %}
+{% endblock %}

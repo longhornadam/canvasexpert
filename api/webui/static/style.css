@@ -119,6 +119,7 @@ body.nav-section-about { --active-tool-accent: #1d4ed8; }
 }
 .dd-menu a:hover { background: var(--bg); color: var(--accent); }
 .dd-disabled { color: var(--muted); cursor: default; }
+.dd-sep { height: 1px; margin: 6px 0; background: var(--line); }
 .nav-dd--forges summary { color: rgba(255,255,255,.8); }
 html[data-theme="dark"] .dd-menu { background: var(--card); border-color: var(--line); }
 html[data-theme="dark"] .dd-menu a:hover { background: rgba(255,255,255,.06); }

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Quick Assignment — CanvasExpert{% endblock %}
+{% block body_class %}ce-screen{% endblock %}
+{% block main_class %}ce-page{% endblock %}
+{% block content %}
+
+{% if not token_is_set %}
+<div class="ce-content">
+  <div class="callout warn">No Canvas token saved — <a href="/settings">go to Settings</a> to add one.</div>
+</div>
+{% else %}
+
+<meta name="canvas-base" content="{{ canvas_base }}">
+
+<div class="ce-content">
+
+  {% include "_course_picker.html" %}
+
+  <div class="card">
+    <h2 style="margin-bottom:6px">Quick assignment</h2>
+    <p class="hint" style="margin:0 0 14px">
+      For a fast gradebook column across your courses.
+      Authoring real instructions? Use <a href="/push/assignment">Push assignment</a> instead.
+    </p>
+    <label>Assignment name
+      <input type="text" id="qa-name" placeholder="e.g. Exit Ticket Week 5">
+    </label>
+    <div class="settings-grid" style="grid-template-columns:130px 1fr 1fr; align-items:start">
+      <label>Points
+        <input type="number" id="qa-points" value="100" min="0" step="0.5">
+      </label>
+      <label>Submission type
+        <select id="qa-subtype">
+          <option value="on_paper">On paper</option>
+          <option value="none">No submission</option>
+          <option value="online_text_entry">Text entry</option>
+        </select>
+      </label>
+      <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
+        <select id="qa-aggroup" class="js-aggroups" disabled>
+          <option value="">— none / default —</option>
+        </select>
+      </label>
+    </div>
+    <div class="settings-grid" style="margin-top:8px; grid-template-columns:1fr auto">
+      <label>Due date <small class="lbl-hint">(optional)</small>
+        <input type="datetime-local" id="qa-due">
+      </label>
+      <div class="opt-checks" style="margin-top:28px">
+        <label class="opt-check"><input type="checkbox" id="qa-publish"> Publish immediately</label>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btn-qa-push" class="primary">Create assignment…</button>
+    </div>
+    <pre id="qa-log" class="log" hidden></pre>
+    <div id="qa-banner" class="push-banner" hidden></div>
+  </div>
+
+</div><!-- /.ce-content -->
+
+<script>
+  window.QF_FILES            = [];
+  window.QF_QUIZ_FILES       = [];
+  window.QF_ASSIGNMENT_FILES = [];
+  window.QF_PAGE_FILES       = [];
+  window.QF_CANVAS_BASE      = {{ canvas_base | tojson }};
+  window.QF_HISTORY          = [];
+  window.QF_SAVED            = {{ saved_courses | tojson }};
+</script>
+<script src="/static/push.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+
+  document.getElementById("btn-qa-push")?.addEventListener("click", function () {
+    var name = document.getElementById("qa-name")?.value.trim();
+    if (!name) return alert("Give the assignment a name.");
+    var payload = {
+      name:            name,
+      points:          parseFloat(document.getElementById("qa-points")?.value) || 100,
+      submission_type: document.getElementById("qa-subtype")?.value || "none",
+      published:       document.getElementById("qa-publish")?.checked || false,
+    };
+    var due = typeof localToISO === "function"
+              ? localToISO(document.getElementById("qa-due")?.value || "") : "";
+    if (due) payload.due_at = due;
+    var agSel = document.getElementById("qa-aggroup");
+    if (agSel?.value) payload.assignment_group_name = agSel.selectedOptions[0].text;
+    if (typeof pushContent === "function") {
+      pushContent("quick", payload,
+        document.getElementById("qa-log"),
+        document.getElementById("qa-banner"),
+        this,
+        'Create quick assignment "' + name + '"');
+    }
+  });
+
+  var _picker = document.getElementById("ce-course-picker");
+  if (_picker) document.addEventListener("click", function (e) {
+    if (_picker.open && !e.target.closest("#ce-course-picker")) _picker.open = false;
+  });
+})();
+</script>
+
+{% endif %}
+{% endblock %}

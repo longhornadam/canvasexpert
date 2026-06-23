@@ -190,6 +190,10 @@
 
   function populateGroupSetPicker() {
     groupSetPicker.innerHTML = "";
+    if (!groups.length) {
+      groupSetPicker.innerHTML = '<option value="">— no group sets —</option>';
+      return;
+    }
     for (var i = 0; i < groups.length; i++) {
       var g = groups[i];
       var sel = g.category_id === selectedGroupCategoryId ? " selected" : "";
