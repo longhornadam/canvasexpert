@@ -216,6 +216,56 @@ def test_roster_get_handles_student_without_canvas_group(monkeypatch, isolated_r
     assert "group_unset" in data["students"][0]["warnings"]
 
 
+def test_create_group_set_with_groups(monkeypatch, isolated_roster):
+    calls = []
+
+    def fake_canvas_send(method, path, payload):
+        calls.append((method, path, payload))
+        if path == "/api/v1/courses/1/group_categories":
+            return {"id": 7, "name": payload["name"]}, None
+        if path == "/api/v1/group_categories/7/groups":
+            return {"id": len(calls), "name": payload["name"]}, None
+        return None, "unexpected call"
+
+    monkeypatch.setattr(roster_routes, "_canvas_send", fake_canvas_send)
+
+    resp = client.post("/api/roster/group-set", data={
+        "course_id": "1",
+        "name": "Reading groups",
+        "group_names": '["Blue", "Green"]',
+    })
+    data = resp.json()
+
+    assert data["ok"] is True
+    assert data["group_category"]["id"] == 7
+    assert [g["name"] for g in data["created_groups"]] == ["Blue", "Green"]
+    assert isolated_roster["group_schemes"]["1"]["selected_group_category_id"] == "7"
+    assert calls == [
+        ("POST", "/api/v1/courses/1/group_categories", {"name": "Reading groups"}),
+        ("POST", "/api/v1/group_categories/7/groups", {"name": "Blue"}),
+        ("POST", "/api/v1/group_categories/7/groups", {"name": "Green"}),
+    ]
+
+
+def test_create_groups_rejects_existing_name(monkeypatch):
+    groups = [{
+        "category_id": "7",
+        "category_name": "Reading tiers",
+        "groups": [{"id": "8", "name": "Blue", "student_ids": []}],
+    }]
+    monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: (groups, None, ""))
+
+    resp = client.post("/api/roster/groups", data={
+        "course_id": "1",
+        "category_id": "7",
+        "group_names": '["Blue"]',
+    })
+    data = resp.json()
+
+    assert data["ok"] is False
+    assert "already exists" in data["error"]
+
+
 def test_roster_student_requires_ids():
     resp = client.post("/api/roster/student", data={
         "course_id": "", "user_id": "", "patch": "{}"

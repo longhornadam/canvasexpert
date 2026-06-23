@@ -46,6 +46,26 @@
   </div>
 </div>
 
+<!-- ── Canvas group builder ─────────────────────────────────────────── -->
+<details class="roster-v2-details roster-group-builder" id="roster-group-builder">
+  <summary><strong>Create Canvas groups</strong></summary>
+  <div class="roster-group-builder-body">
+    <div class="roster-group-builder-row">
+      <label>New group set
+        <input type="text" id="roster-new-group-set-name" placeholder="Group set name">
+      </label>
+      <button type="button" id="roster-create-group-set" class="primary small">Create group set</button>
+    </div>
+    <label>Groups
+      <textarea id="roster-new-group-names" rows="3" placeholder="One group name per line"></textarea>
+    </label>
+    <div class="actions">
+      <button type="button" id="roster-add-groups" class="small">Add to selected group set</button>
+      <span id="roster-group-builder-status" class="hint"></span>
+    </div>
+  </div>
+</details>
+
 <!-- ── Bulk action bar ──────────────────────────────────────────────── -->
 <div class="roster-bulk-bar" id="roster-bulk-bar" hidden>
   <span id="roster-bulk-count" class="roster-bulk-title">Bulk edit: 0 selected</span>

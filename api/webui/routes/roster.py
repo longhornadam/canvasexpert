@@ -160,6 +160,40 @@ def _value_name(value: dict | None, user_id: str) -> str:
     return str(value.get("name", "") or "")
 
 
+def _parse_group_names(raw: str) -> tuple[list[str], str | None]:
+    """Parse a JSON array or newline/comma separated group-name list."""
+    raw = (raw or "").strip()
+    if not raw:
+        return [], None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = [part.strip() for part in _re.split(r"[\r\n,]+", raw)]
+    if not isinstance(parsed, list):
+        return [], "group_names must be a list or separated text."
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in parsed:
+        name = str(item or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            return [], f"Duplicate group name '{name}'."
+        seen.add(key)
+        names.append(name)
+    return names, None
+
+
+def _create_canvas_group(category_id: str, name: str) -> tuple[dict | None, str | None]:
+    return _canvas_send(
+        "POST",
+        f"/api/v1/group_categories/{category_id}/groups",
+        {"name": name},
+    )
+
+
 # --------------------------------------------------------------------------
 # Canvas Group Membership Helpers (V3)
 # --------------------------------------------------------------------------
@@ -855,6 +889,94 @@ def save_group_set_preference(
         return JSONResponse({"ok": False, "error": "course_id required."})
     config.set_selected_group_category_id(course_id, category_id or None)
     return JSONResponse({"ok": True})
+
+
+@router.post("/group-set")
+def create_group_set(
+    course_id: str = Form(...),
+    name: str = Form(...),
+    group_names: str = Form("[]"),
+):
+    """Create a Canvas group set, then optionally create groups inside it."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    set_name = (name or "").strip()
+    if not set_name:
+        return JSONResponse({"ok": False, "error": "Group set name required."})
+    names, parse_err = _parse_group_names(group_names)
+    if parse_err:
+        return JSONResponse({"ok": False, "error": parse_err})
+
+    category, err = _canvas_send(
+        "POST",
+        f"/api/v1/courses/{course_id}/group_categories",
+        {"name": set_name},
+    )
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    category_id = str(category.get("id", "") if isinstance(category, dict) else "")
+    if not category_id:
+        return JSONResponse({"ok": False, "error": "Canvas did not return a group set id."})
+
+    created_groups = []
+    for group_name in names:
+        group, group_err = _create_canvas_group(category_id, group_name)
+        if group_err:
+            return JSONResponse({
+                "ok": False,
+                "error": f"Created group set, but failed to create '{group_name}': {group_err}",
+                "group_category": category,
+                "created_groups": created_groups,
+            })
+        created_groups.append(group)
+
+    config.set_selected_group_category_id(course_id, category_id)
+    return JSONResponse({
+        "ok": True,
+        "group_category": category,
+        "created_groups": created_groups,
+    })
+
+
+@router.post("/groups")
+def create_groups(
+    course_id: str = Form(...),
+    category_id: str = Form(...),
+    group_names: str = Form(...),
+):
+    """Create Canvas groups in an existing group set."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    if not category_id:
+        return JSONResponse({"ok": False, "error": "group set required."})
+    names, parse_err = _parse_group_names(group_names)
+    if parse_err:
+        return JSONResponse({"ok": False, "error": parse_err})
+    if not names:
+        return JSONResponse({"ok": False, "error": "At least one group name required."})
+
+    categories, _, validation_err = _validate_canvas_group_target(course_id, category_id, None)
+    if validation_err:
+        return JSONResponse({"ok": False, "error": validation_err})
+    category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
+    existing = {str(g.get("name", "")).strip().lower()
+                for g in (category or {}).get("groups", [])}
+    for group_name in names:
+        if group_name.lower() in existing:
+            return JSONResponse({"ok": False, "error": f"Group '{group_name}' already exists."})
+
+    created_groups = []
+    for group_name in names:
+        group, group_err = _create_canvas_group(str(category_id), group_name)
+        if group_err:
+            return JSONResponse({
+                "ok": False,
+                "error": f"Failed to create '{group_name}': {group_err}",
+                "created_groups": created_groups,
+            })
+        created_groups.append(group)
+
+    return JSONResponse({"ok": True, "created_groups": created_groups})
 
 
 @router.get("/group-labels")
