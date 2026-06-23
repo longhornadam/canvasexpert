@@ -10,19 +10,23 @@
 </div>
 {% else %}
 
-<!-- ── Tab bar ─────────────────────────────────────────────────────────── -->
-<div class="ce-tabs" role="tablist">
-  <button type="button" class="ce-tab active" data-tab="quiz">Quiz</button>
-  <button type="button" class="ce-tab" data-tab="assignment">Assignment</button>
-  <button type="button" class="ce-tab" data-tab="page">Page</button>
-  <button type="button" class="ce-tab" data-tab="rubric">Rubric</button>
-  <button type="button" class="ce-tab" data-tab="download">Download Work</button>
-  <button type="button" class="ce-tab" data-tab="students">Student Reports</button>
-  <button type="button" class="ce-tab ce-tab--alt" data-tab="quick"><em>Quick</em></button>
-</div>
+<div class="expert-shell expert-shell--course">
+  <!-- ── Sidebar navigation ───────────────────────────────────────────── -->
+  <aside class="expert-sidebar expert-sidebar--course" aria-label="Course Expert sections">
+    <div class="expert-sidebar-kicker">Course Expert</div>
+    <div class="ce-tabs expert-side-tabs" role="tablist" aria-orientation="vertical">
+      <button type="button" class="ce-tab active" data-tab="quiz">Quiz</button>
+      <button type="button" class="ce-tab" data-tab="assignment">Assignment</button>
+      <button type="button" class="ce-tab" data-tab="page">Page</button>
+      <button type="button" class="ce-tab" data-tab="rubric">Rubric</button>
+      <button type="button" class="ce-tab" data-tab="download">Download Work</button>
+      <button type="button" class="ce-tab" data-tab="students">Student Reports</button>
+      <button type="button" class="ce-tab ce-tab--alt" data-tab="quick"><em>Quick Assignment</em></button>
+    </div>
+  </aside>
 
-<!-- ── Tab content ─────────────────────────────────────────────────────── -->
-<div class="ce-content ce-panels-wrap">
+  <!-- ── Tab content ───────────────────────────────────────────────────── -->
+  <div class="ce-content ce-panels-wrap expert-main">
   <section class="card tool-course-card ce-course-work-card">
     <div class="tool-course-card-head">
       <div>
@@ -746,7 +750,8 @@
     </div>
   </div><!-- /#ce-tab-quick -->
 
-</div><!-- /.ce-panels-wrap -->
+  </div><!-- /.ce-panels-wrap -->
+</div><!-- /.expert-shell -->
 
 <script>
   window.QF_FILES            = {{ quiz_files | tojson }};

@@ -166,16 +166,29 @@
 
   // ── Tab switching ──────────────────────────────────────────────────────
 
+  function _activateGradebookTab(tabName) {
+    const tab = [...document.querySelectorAll(".gb-tab")].find(t => t.dataset.tab === tabName);
+    if (!tab) return false;
+    document.querySelectorAll(".gb-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".gb-panel").forEach(p => p.classList.remove("active"));
+    tab.classList.add("active");
+    const panel = document.getElementById("gb-tab-" + tabName);
+    if (panel) panel.classList.add("active");
+    _autoloadTab(tabName);
+    return true;
+  }
+
   document.querySelectorAll(".gb-tab").forEach(tab => {
     tab.addEventListener("click", function () {
-      document.querySelectorAll(".gb-tab").forEach(t => t.classList.remove("active"));
-      document.querySelectorAll(".gb-panel").forEach(p => p.classList.remove("active"));
-      this.classList.add("active");
-      const panel = document.getElementById("gb-tab-" + this.dataset.tab);
-      if (panel) panel.classList.add("active");
-      _autoloadTab(this.dataset.tab);
+      _activateGradebookTab(this.dataset.tab);
     });
   });
+
+  (function () {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab") || location.hash.replace("#", "");
+    if (tab) _activateGradebookTab(tab);
+  })();
 
   function _autoloadTab(tab) {
     if (!gbCourseId()) return;
