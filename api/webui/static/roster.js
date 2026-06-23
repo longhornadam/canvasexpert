@@ -204,6 +204,37 @@
 
     // Store for use in row rendering
     window._currentCategoryGroups = categoryGroups;
+
+    bulkGroup.innerHTML = '<option value="">Choose group...</option>';
+    for (var i = 0; i < categoryGroups.length; i++) {
+      var g = categoryGroups[i];
+      var gid = groupId(g);
+      var label = groupDisplay(g);
+      bulkGroup.innerHTML += '<option value="' + esc(gid) + '">' + esc(label) + '</option>';
+    }
+  }
+
+  function groupId(group) {
+    return String((group && (group.id || group.group_id)) || "");
+  }
+
+  function groupLabel(group) {
+    var gid = groupId(group);
+    return (groupLabelScheme && groupLabelScheme[gid]) || {};
+  }
+
+  function groupDisplay(group) {
+    var label = groupLabel(group).teacher_label || group.teacher_label || "";
+    return label && label !== group.name ? label + " / " + group.name : group.name;
+  }
+
+  function findCurrentCategoryGroup(targetGroupId) {
+    var categoryGroups = window._currentCategoryGroups || [];
+    var target = String(targetGroupId || "");
+    for (var i = 0; i < categoryGroups.length; i++) {
+      if (groupId(categoryGroups[i]) === target) return categoryGroups[i];
+    }
+    return null;
   }
 
   // ── Render table ───────────────────────────────────────────────────
@@ -239,9 +270,10 @@
       var h = '<option value="">— no group —</option>';
       for (var i = 0; i < categoryGroups.length; i++) {
         var g = categoryGroups[i];
-        var label = g.teacher_label ? g.teacher_label + " / " + g.name : g.name;
-        var sel = g.group_id === selected ? " selected" : "";
-        h += '<option value="' + esc(g.group_id) + '"' + sel + '>' + esc(label) + "</option>";
+        var gid = groupId(g);
+        var label = groupDisplay(g);
+        var sel = gid === String(selected || "") ? " selected" : "";
+        h += '<option value="' + esc(gid) + '"' + sel + '>' + esc(label) + "</option>";
       }
       return h;
     }
@@ -339,11 +371,14 @@
       });
     });
 
-    // Tier select
-    tableBody.querySelectorAll(".roster-v2-tier").forEach(function (el) {
+    // Canvas group select: writes real Canvas group membership.
+    tableBody.querySelectorAll(".roster-v2-canvas-group").forEach(function (el) {
       el.addEventListener("change", function () {
         var id = el.dataset.id;
-        saveField(id, "tier_id", el.value || "");
+        saveField(id, "canvas_group", {
+          category_id: el.dataset.category || selectedGroupCategoryId,
+          group_id: el.value || null
+        });
       });
     });
 
@@ -380,7 +415,8 @@
   // ── Autosave ───────────────────────────────────────────────────────
 
   function saveField(userId, key, value) {
-    setRowStatus(userId, "saving locally...", "roster-v2-status-saving");
+    var isCanvasGroup = key === "canvas_group";
+    setRowStatus(userId, isCanvasGroup ? "syncing to Canvas..." : "saving locally...", "roster-v2-status-saving");
 
     if (saveTimeouts[userId]) {
       clearTimeout(saveTimeouts[userId]);
@@ -401,7 +437,7 @@
         .then(function (data) {
           if (data.ok) {
             updateLocalStudent(userId, key, value);
-            setRowStatus(userId, "saved locally", "roster-v2-status-ok");
+            setRowStatus(userId, isCanvasGroup ? "synced to Canvas" : "saved locally", "roster-v2-status-ok");
           } else {
             var apiMsg = data.error || "Save failed.";
             setRowStatus(userId, "Error: " + apiMsg, "roster-v2-status-error");
@@ -426,7 +462,20 @@
     } else if (key === "extra_time") {
       s.extra_time = { enabled: !!value.enabled, days: value.days || 0 };
     } else if (key === "canvas_group") {
-      s.canvas_group = value;
+      var group = findCurrentCategoryGroup(value.group_id);
+      if (group && value.group_id) {
+        var label = groupLabel(group).teacher_label || group.teacher_label || "";
+        s.canvas_group = {
+          category_id: value.category_id,
+          category_name: (groups.find(function (g) { return g.category_id === value.category_id; }) || {}).category_name || "",
+          group_id: groupId(group),
+          group_name: group.name,
+          teacher_label: label || null,
+          display: groupDisplay(group)
+        };
+      } else {
+        s.canvas_group = null;
+      }
     } else if (key === "monitored") {
       s.monitored = { enabled: !!value.enabled, note: value.note || "" };
     }
@@ -514,6 +563,9 @@
       if (!gid) { toast("Select a group first.", true); return; }
       value = { category_id: selectedGroupCategoryId, group_id: gid };
       action = "set_canvas_group";
+    } else if (action === "clear_canvas_group") {
+      if (!selectedGroupCategoryId) { toast("Select a group set first.", true); return; }
+      value = { category_id: selectedGroupCategoryId };
     }
 
     doBulkAction(action, ids, value);
@@ -560,13 +612,14 @@
     var categoryGroups = window._currentCategoryGroups || [];
     for (var i = 0; i < categoryGroups.length; i++) {
       var g = categoryGroups[i];
-      var label = groupLabelScheme[g.group_id] || {};
+      var gid = groupId(g);
+      var label = groupLabelScheme[gid] || {};
       var teacherLabel = label.teacher_label || "";
       var meaning = label.meaning || "";
 
       var row = document.createElement("div");
       row.className = "roster-v2-tier-row";
-      row.dataset.groupId = g.group_id;
+      row.dataset.groupId = gid;
 
       var nameSpan = document.createElement("span");
       nameSpan.className = "roster-v2-group-name";

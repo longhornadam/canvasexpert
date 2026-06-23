@@ -270,17 +270,44 @@ def test_roster_student_rejects_obsolete_tier(isolated_roster):
     assert "obsolete" in data.get("error", "").lower()
 
 
-def test_roster_student_accepts_canvas_group(isolated_roster):
-    """V3: canvas_group should be accepted."""
+def test_roster_student_accepts_canvas_group(monkeypatch, isolated_roster):
+    """V3: canvas_group writes the selected Canvas group membership."""
+    calls = []
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: ([{
+                            "category_id": "7",
+                            "category_name": "Differentiation",
+                            "groups": [{"id": "8", "name": "Blue", "student_ids": [], "memberships": []}],
+                        }], None, ""))
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
+                        lambda *args: calls.append(args) or (True, None))
     resp = client.post("/api/roster/student", data={
         "course_id": "1", "user_id": "101",
         "patch": '{"canvas_group": {"category_id": "7", "group_id": "8"}}'
     })
-    # Will fail because Canvas API not available in test, but should not reject the key
     assert resp.status_code == 200
     data = resp.json()
-    # The request should be accepted (even if Canvas write fails)
-    assert "obsolete" not in data.get("error", "").lower()
+    assert data.get("ok") is True
+    assert calls
+    assert calls[0][:4] == ("1", "101", "7", "8")
+
+
+def test_roster_student_rejects_canvas_group_outside_category(monkeypatch, isolated_roster):
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: ([{
+                            "category_id": "7",
+                            "category_name": "Differentiation",
+                            "groups": [{"id": "8", "name": "Blue", "student_ids": [], "memberships": []}],
+                        }], None, ""))
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
+                        lambda *args: pytest.fail("_update_student_canvas_group should not be called"))
+    resp = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": '{"canvas_group": {"category_id": "7", "group_id": "999"}}'
+    })
+    data = resp.json()
+    assert data.get("ok") is False
+    assert "invalid group_id" in data.get("error", "").lower()
 
 
 def test_roster_student_validates_extra_time_days():
@@ -358,32 +385,66 @@ def test_roster_bulk_rejects_obsolete_set_tier(isolated_roster):
     assert "obsolete" in data.get("error", "").lower()
 
 
-def test_roster_bulk_set_canvas_group(isolated_roster):
-    """V3: set_canvas_group should be accepted."""
+def test_roster_bulk_set_canvas_group(monkeypatch, isolated_roster):
+    """V3: set_canvas_group writes Canvas membership for every selected user."""
+    calls = []
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: ([{
+                            "category_id": "7",
+                            "category_name": "Differentiation",
+                            "groups": [{"id": "8", "name": "Blue", "student_ids": [], "memberships": []}],
+                        }], None, ""))
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
+                        lambda *args: calls.append(args) or (True, None))
     resp = client.post("/api/roster/bulk", data={
-        "course_id": "1", "user_ids": '["101"]',
+        "course_id": "1", "user_ids": '["101", "102"]',
         "action": "set_canvas_group", "value": '{"category_id": "7", "group_id": "8"}'
     })
-    # Will fail because Canvas API not available in test, but should not reject the action
     assert resp.status_code == 200
     data = resp.json()
-    # The action should be accepted (even if Canvas write fails)
-    assert "obsolete" not in data.get("error", "").lower()
+    assert data.get("ok") is True
+    assert data.get("updated") == 2
+    assert [c[:4] for c in calls] == [
+        ("1", "101", "7", "8"),
+        ("1", "102", "7", "8"),
+    ]
+
+
+def test_roster_bulk_rejects_canvas_group_outside_category(monkeypatch, isolated_roster):
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: ([{
+                            "category_id": "7",
+                            "category_name": "Differentiation",
+                            "groups": [{"id": "8", "name": "Blue", "student_ids": [], "memberships": []}],
+                        }], None, ""))
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
+                        lambda *args: pytest.fail("_update_student_canvas_group should not be called"))
+    resp = client.post("/api/roster/bulk", data={
+        "course_id": "1", "user_ids": '["101"]',
+        "action": "set_canvas_group", "value": '{"category_id": "7", "group_id": "999"}'
+    })
+    data = resp.json()
+    assert data.get("ok") is False
+    assert "invalid group_id" in data.get("error", "").lower()
 
 
 def test_roster_bulk_clear_canvas_group(monkeypatch, isolated_roster):
     """V3: clear_canvas_group should be accepted."""
+    calls = []
     # Mock load_group_categories to return a valid category
     monkeypatch.setattr(roster_routes, "load_group_categories",
                         lambda course_id: ([{"category_id": "7", "category_name": "Test", "groups": []}], None, ""))
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
+                        lambda *args: calls.append(args) or (True, None))
     resp = client.post("/api/roster/bulk", data={
         "course_id": "1", "user_ids": '["101"]',
         "action": "clear_canvas_group", "value": '{"category_id": "7"}'
     })
     assert resp.status_code == 200
     data = resp.json()
-    # Will fail because Canvas API not available in test, but should not reject the action
-    assert "obsolete" not in data.get("error", "").lower()
+    assert data.get("ok") is True
+    assert data.get("updated") == 1
+    assert calls[0][:4] == ("1", "101", "7", None)
 
 
 def test_roster_bulk_set_extra_time_uses_name_map(isolated_roster):
