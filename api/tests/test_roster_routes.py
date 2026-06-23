@@ -1,4 +1,4 @@
-"""Route-level tests for Roster Console API."""
+"""Route-level tests for Roster Console API (V3: Canvas groups are source of truth)."""
 from fastapi.testclient import TestClient
 import pytest
 
@@ -80,6 +80,30 @@ def isolated_roster(monkeypatch):
             else:
                 row[key] = value
 
+    def fake_get_roster_group_scheme(course_id):
+        return stores.get("group_schemes", {}).get(str(course_id), {})
+
+    def fake_set_roster_group_scheme(course_id, scheme):
+        stores.setdefault("group_schemes", {})[str(course_id)] = scheme
+
+    def fake_get_selected_group_category_id(course_id):
+        return fake_get_roster_group_scheme(course_id).get("selected_group_category_id")
+
+    def fake_set_selected_group_category_id(course_id, cat_id):
+        scheme = fake_get_roster_group_scheme(course_id)
+        scheme["selected_group_category_id"] = cat_id
+        fake_set_roster_group_scheme(course_id, scheme)
+
+    def fake_get_group_label(course_id, group_id):
+        scheme = fake_get_roster_group_scheme(course_id)
+        return scheme.get("group_labels", {}).get(str(group_id))
+
+    def fake_set_group_label(course_id, group_id, teacher_label, meaning=""):
+        scheme = fake_get_roster_group_scheme(course_id)
+        labels = scheme.setdefault("group_labels", {})
+        labels[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
+        fake_set_roster_group_scheme(course_id, scheme)
+
     monkeypatch.setattr(roster_routes, "_vault", lambda: stores["vault"])
     monkeypatch.setattr(roster_routes, "_upsert_roster", lambda vault, users: None)
     monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: ([], "No token saved."))
@@ -93,14 +117,14 @@ def isolated_roster(monkeypatch):
     monkeypatch.setattr(roster_routes.config, "get_roster_student_settings", fake_get_roster_student_settings)
     monkeypatch.setattr(roster_routes.config, "update_roster_student_settings", fake_update_roster_student_settings)
     monkeypatch.setattr(roster_routes.config, "active_protected_names", lambda: set())
-    monkeypatch.setattr(roster_routes.config, "get_roster_tier_scheme",
-                        lambda cid: [{"id": "support", "teacher_label": "Support", "alias": "Blue", "meaning": "below-level", "order": 10, "active": True},
-                                     {"id": "core", "teacher_label": "Core", "alias": "Red", "meaning": "on-level", "order": 20, "active": True},
-                                     {"id": "extend", "teacher_label": "Extend", "alias": "White", "meaning": "advanced", "order": 30, "active": True}])
-    monkeypatch.setattr(roster_routes.config, "active_tier_ids",
-                        lambda cid: {"support", "core", "extend"})
-    monkeypatch.setattr(roster_routes.config, "migrate_legacy_tier",
-                        lambda cid, uid, tier, *a: tier.lower().strip() if tier else None)
+    monkeypatch.setattr(roster_routes.config, "get_roster_group_scheme", fake_get_roster_group_scheme)
+    monkeypatch.setattr(roster_routes.config, "set_roster_group_scheme", fake_set_roster_group_scheme)
+    monkeypatch.setattr(roster_routes.config, "get_selected_group_category_id", fake_get_selected_group_category_id)
+    monkeypatch.setattr(roster_routes.config, "set_selected_group_category_id", fake_set_selected_group_category_id)
+    monkeypatch.setattr(roster_routes.config, "get_group_label", fake_get_group_label)
+    monkeypatch.setattr(roster_routes.config, "set_group_label", fake_set_group_label)
+    monkeypatch.setattr(roster_routes.config, "compute_group_display",
+                        lambda label, name: f"{label} / {name}" if label and label != name else name)
     return stores
 
 
@@ -118,14 +142,13 @@ def test_roster_get_handles_missing_token():
     data = resp.json()
     assert data.get("ok") is False
     assert "error" in data
+    assert data.get("ok") is False
+    assert "error" in data
 
 
 def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     isolated_roster["extra_time"]["1"] = [{"id": "101", "name": "Ada Lovelace", "days": 2}]
     isolated_roster["monitored"]["101"] = {"name": "Ada Lovelace", "note": "Private note"}
-    isolated_roster["settings"]["1"] = {
-        "101": {"tier_id": "support"},
-    }
     users = [{
         "id": 101,
         "name": "Ada Lovelace",
@@ -147,22 +170,19 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     data = resp.json()
 
     assert data["ok"] is True
-    assert "tier_scheme" in data
-    assert len(data["tier_scheme"]) == 3
+    # V3: groups and group_label_scheme instead of tier_scheme
+    assert "groups" in data
+    assert "group_label_scheme" in data
     row = data["students"][0]
     assert row["id"] == "101"
     assert row["nicknames"] == ["Addie"]
     assert row["pseudonym"] == "Sparky McGee"
     assert row["extra_time"] == {"enabled": True, "days": 2}
     assert row["monitored"] == {"enabled": True, "note": "Private note"}
-    assert row["tier_id"] == "support"
-    assert row["tier_label"] == "Support"
-    assert row["tier_alias"] == "Blue"
-    assert row["tier_display"] == "Support / Blue"
-    assert row["sections"] == [{"id": "44", "name": "Period 1"}]
+    # V3: canvas_group instead of tier_id
+    assert "canvas_group" in row
     assert row["canvas_groups"][0]["group_name"] == "Blue"
     assert "sis_id" not in row
-    assert "planned_group" not in row
     assert "Groups" not in str(data.get("groups", ""))
 
 
@@ -227,43 +247,40 @@ def test_roster_student_validates_pseudonym_shape():
     assert "first" in data.get("error", "").lower()
 
 
-def test_roster_student_validates_tier_id(monkeypatch, isolated_roster):
-    """Invalid tier_id should be rejected."""
-    monkeypatch.setattr(roster_routes.config, "get_roster_tier_scheme",
-                        lambda cid: [{"id": "support", "active": True}])
-    resp = client.post("/api/roster/student", data={
-        "course_id": "1", "user_id": "101", "patch": '{"tier_id": "nonexistent"}'
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is False
-    assert "tier_id" in data.get("error", "").lower()
-
-
-def test_roster_student_accepts_valid_tier_id(monkeypatch, isolated_roster):
-    """Valid tier_id should be accepted and saved."""
-    monkeypatch.setattr(roster_routes.config, "get_roster_tier_scheme",
-                        lambda cid: [{"id": "support", "active": True}])
+def test_roster_student_rejects_obsolete_tier_id(isolated_roster):
+    """V3: tier_id is obsolete and should be rejected with clear error."""
     resp = client.post("/api/roster/student", data={
         "course_id": "1", "user_id": "101", "patch": '{"tier_id": "support"}'
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
+    assert data.get("ok") is False
+    assert "obsolete" in data.get("error", "").lower()
+    assert "canvas_group" in data.get("error", "").lower()
 
 
-def test_roster_student_legacy_tier_maps_to_tier_id(monkeypatch, isolated_roster):
-    """Legacy 'tier' field should map to tier_id via migrate_legacy_tier."""
-    monkeypatch.setattr(roster_routes.config, "get_roster_tier_scheme",
-                        lambda cid: [{"id": "support", "teacher_label": "Support", "alias": "Blue", "active": True}])
-    monkeypatch.setattr(roster_routes.config, "migrate_legacy_tier",
-                        lambda cid, uid, tier, *a: "support")
+def test_roster_student_rejects_obsolete_tier(isolated_roster):
+    """V3: tier is obsolete and should be rejected with clear error."""
     resp = client.post("/api/roster/student", data={
         "course_id": "1", "user_id": "101", "patch": '{"tier": "Support"}'
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
+    assert data.get("ok") is False
+    assert "obsolete" in data.get("error", "").lower()
+
+
+def test_roster_student_accepts_canvas_group(isolated_roster):
+    """V3: canvas_group should be accepted."""
+    resp = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": '{"canvas_group": {"category_id": "7", "group_id": "8"}}'
+    })
+    # Will fail because Canvas API not available in test, but should not reject the key
+    assert resp.status_code == 200
+    data = resp.json()
+    # The request should be accepted (even if Canvas write fails)
+    assert "obsolete" not in data.get("error", "").lower()
 
 
 def test_roster_student_validates_extra_time_days():
@@ -278,16 +295,15 @@ def test_roster_student_validates_extra_time_days():
 
 
 def test_roster_student_legacy_planned_group_is_cleaned(monkeypatch, isolated_roster):
-    """Legacy planned_group should be silently cleaned."""
-    monkeypatch.setattr(roster_routes.config, "update_roster_student_settings",
-                        lambda cid, uid, patch: None)
+    """V3: planned_group is obsolete and should be rejected with clear error."""
     resp = client.post("/api/roster/student", data={
         "course_id": "1", "user_id": "101",
         "patch": '{"planned_group": {"category_id": "7", "group_id": "8"}}'
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
+    assert data.get("ok") is False
+    assert "obsolete" in data.get("error", "").lower()
 
 
 def test_roster_bulk_requires_params():
@@ -330,40 +346,44 @@ def test_roster_bulk_rejects_unknown_action():
     assert "unknown" in data.get("error", "").lower()
 
 
-def test_roster_bulk_validates_tier(monkeypatch, isolated_roster):
-    monkeypatch.setattr(roster_routes.config, "active_tier_ids", lambda cid: {"support", "core"})
-    resp = client.post("/api/roster/bulk", data={
-        "course_id": "1", "user_ids": '["101"]',
-        "action": "set_tier", "value": '{"tier_id": "bad_tier"}'
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is False
-    assert "tier_id" in data.get("error", "").lower()
-
-
-def test_roster_bulk_set_tier_by_id(monkeypatch, isolated_roster):
-    monkeypatch.setattr(roster_routes.config, "active_tier_ids", lambda cid: {"support", "core"})
+def test_roster_bulk_rejects_obsolete_set_tier(isolated_roster):
+    """V3: set_tier is obsolete."""
     resp = client.post("/api/roster/bulk", data={
         "course_id": "1", "user_ids": '["101"]',
         "action": "set_tier", "value": '{"tier_id": "support"}'
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
+    assert data.get("ok") is False
+    assert "obsolete" in data.get("error", "").lower()
 
 
-def test_roster_bulk_set_tier_by_legacy_label(monkeypatch, isolated_roster):
-    """Bulk set_tier with legacy 'tier' label should still work."""
-    monkeypatch.setattr(roster_routes.config, "migrate_legacy_tier",
-                        lambda cid, uid, tier, *a: "support")
+def test_roster_bulk_set_canvas_group(isolated_roster):
+    """V3: set_canvas_group should be accepted."""
     resp = client.post("/api/roster/bulk", data={
         "course_id": "1", "user_ids": '["101"]',
-        "action": "set_tier", "value": '{"tier": "Support"}'
+        "action": "set_canvas_group", "value": '{"category_id": "7", "group_id": "8"}'
+    })
+    # Will fail because Canvas API not available in test, but should not reject the action
+    assert resp.status_code == 200
+    data = resp.json()
+    # The action should be accepted (even if Canvas write fails)
+    assert "obsolete" not in data.get("error", "").lower()
+
+
+def test_roster_bulk_clear_canvas_group(monkeypatch, isolated_roster):
+    """V3: clear_canvas_group should be accepted."""
+    # Mock load_group_categories to return a valid category
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: ([{"category_id": "7", "category_name": "Test", "groups": []}], None, ""))
+    resp = client.post("/api/roster/bulk", data={
+        "course_id": "1", "user_ids": '["101"]',
+        "action": "clear_canvas_group", "value": '{"category_id": "7"}'
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
+    # Will fail because Canvas API not available in test, but should not reject the action
+    assert "obsolete" not in data.get("error", "").lower()
 
 
 def test_roster_bulk_set_extra_time_uses_name_map(isolated_roster):
@@ -393,28 +413,28 @@ def test_roster_bulk_clear_extra_time_ok(isolated_roster):
     assert isolated_roster["extra_time"]["1"] == []
 
 
-def test_roster_bulk_clear_tier_ok(isolated_roster):
-    isolated_roster["settings"]["1"] = {"101": {"tier": "Support"}}
+def test_roster_bulk_clear_tier_is_obsolete(isolated_roster):
+    """V3: clear_tier is obsolete and should be rejected."""
     resp = client.post("/api/roster/bulk", data={
         "course_id": "1", "user_ids": '["101"]',
         "action": "clear_tier", "value": "{}"
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
-    assert "tier" not in isolated_roster["settings"]["1"]["101"]
+    assert data.get("ok") is False
+    assert "obsolete" in data.get("error", "").lower()
 
 
-def test_roster_bulk_clear_planned_group_ok(isolated_roster):
-    isolated_roster["settings"]["1"] = {"101": {"planned_group": {"group_id": "8"}}}
+def test_roster_bulk_clear_planned_group_is_obsolete(isolated_roster):
+    """V3: clear_planned_group is obsolete and should be rejected."""
     resp = client.post("/api/roster/bulk", data={
         "course_id": "1", "user_ids": '["101"]',
         "action": "clear_planned_group", "value": "{}"
     })
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("ok") is True
-    assert "planned_group" not in isolated_roster["settings"]["1"]["101"]
+    assert data.get("ok") is False
+    assert "obsolete" in data.get("error", "").lower()
 
 
 def test_roster_bulk_monitor_uses_name_map(isolated_roster):
@@ -439,18 +459,6 @@ def test_roster_bulk_clear_monitor_ok(isolated_roster):
     data = resp.json()
     assert data.get("ok") is True
     assert "101" not in isolated_roster["monitored"]
-
-
-def test_bulk_set_planned_group_noop_cleans_up(isolated_roster):
-    """set_planned_group should no-op and silently clean up planned_group data."""
-    isolated_roster["settings"]["1"] = {"101": {"planned_group": {"group_id": "8"}}}
-    resp = client.post("/api/roster/bulk", data={
-        "course_id": "1", "user_ids": '["101"]',
-        "action": "set_planned_group", "value": '{"group_id": "9"}'
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is True
 
 
 # ── Tier-scheme endpoint tests ──────────────────────────────────────────

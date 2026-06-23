@@ -102,6 +102,8 @@ def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
     /courses/:id/groups still returns the same groups with their
     group_category_id. So: try group_categories for proper set names, fall
     back to bucketing /courses/:id/groups by category id.
+
+    V3: Also returns membership IDs for Canvas write operations.
     """
     hdrs, base = _canvas_headers()
     if not hdrs:
@@ -115,9 +117,10 @@ def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
         except Exception as e:
             return (0, None)
 
-    def member_ids(group_id):
+    def memberships(group_id):
+        """Return list of membership dicts for a group."""
         st, members = get(f"/api/v1/groups/{group_id}/memberships", {"per_page": 200})
-        return [m["user_id"] for m in (members or [])]
+        return members or []
 
     # Preferred path: real group sets with names.
     st, cats = get(f"/api/v1/courses/{course_id}/group_categories", {"per_page": 50})
@@ -125,11 +128,16 @@ def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
         result = []
         for cat in cats:
             _, groups_raw = get(f"/api/v1/group_categories/{cat['id']}/groups", {"per_page": 100})
-            groups_out = [{
-                "id":          str(grp["id"]),
-                "name":        grp["name"],
-                "student_ids": member_ids(grp["id"]),
-            } for grp in (groups_raw or [])]
+            groups_out = []
+            for grp in (groups_raw or []):
+                grp_id = str(grp["id"])
+                mems = memberships(grp_id)
+                groups_out.append({
+                    "id":          grp_id,
+                    "name":        grp["name"],
+                    "student_ids": [m["user_id"] for m in mems],
+                    "memberships": mems,
+                })
             result.append({"category_id":   str(cat["id"]),
                            "category_name": cat["name"],
                            "groups":        groups_out})
@@ -155,7 +163,8 @@ def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
             "groups": [{
                 "id":          str(grp["id"]),
                 "name":        grp["name"],
-                "student_ids": member_ids(grp["id"]),
+                "student_ids": [m["user_id"] for m in (memberships(grp["id"]) or [])],
+                "memberships": memberships(grp["id"]),
             } for grp in grps],
         })
     return result, None, ""

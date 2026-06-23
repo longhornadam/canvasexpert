@@ -1891,8 +1891,13 @@ html[data-theme="dark"] .philosophy-list li::before { color: #c084fc; }
 }
 
 /* ── Roster Console V2 — compact inline editor ─────────────────────── */
+.roster-page {
+  width: 100%;
+  max-width: none;
+  padding: 14px 18px 40px;
+}
 .roster-v2-toolbar {
-  background: var(--card); border-radius: var(--r-lg); padding: 10px 14px;
+  background: var(--card); border-radius: var(--r-sm); padding: 8px 10px;
   margin-bottom: 8px; border: 1px solid var(--line);
 }
 .roster-v2-toolbar-row {
@@ -1937,6 +1942,12 @@ html[data-theme="dark"] .philosophy-list li::before { color: #c084fc; }
   padding: 6px 12px; background: var(--card); border: 1px solid var(--line);
   border-radius: var(--r-sm); margin-bottom: 6px; font-size: 12px;
 }
+.roster-bulk-bar[hidden] {
+  display: none;
+}
+.roster-bulk-title {
+  font-weight: 700; color: var(--ink);
+}
 .roster-bulk-bar label {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 11px; font-weight: 600; color: var(--ink-2);
@@ -1949,11 +1960,12 @@ html[data-theme="dark"] .philosophy-list li::before { color: #c084fc; }
 
 /* Table */
 .roster-v2-table-wrap {
-  overflow-x: auto; background: var(--card); border-radius: var(--r-lg);
-  border: 1px solid var(--line);
+  width: 100%; overflow-x: auto; background: var(--card);
+  border-radius: var(--r-sm); border: 1px solid var(--line);
 }
 .roster-v2-table {
-  width: 100%; border-collapse: collapse; font-size: 12px;
+  width: 100%; min-width: 1320px; border-collapse: collapse;
+  table-layout: fixed; font-size: 12px;
 }
 .roster-v2-table th {
   padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--line);
@@ -1963,7 +1975,7 @@ html[data-theme="dark"] .philosophy-list li::before { color: #c084fc; }
   position: sticky; top: 0; background: var(--card); z-index: 2;
 }
 .roster-v2-table td {
-  padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap;
   vertical-align: middle;
 }
 .roster-v2-table tbody tr:hover {
@@ -2015,21 +2027,24 @@ html[data-theme="dark"] .philosophy-list li::before { color: #c084fc; }
   color: var(--ink-2);
 }
 .roster-v2-status {
+  display: inline-block; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; vertical-align: middle;
   font-size: 10px; color: #16a34a;
 }
 .roster-v2-status-saving { color: #d97706; }
+.roster-v2-status-warning { color: #92400e; font-weight: 600; }
 .roster-v2-status-error { color: #dc2626; font-weight: 600; }
 
 /* Column widths */
 .roster-col-check { width: 28px; }
-.roster-col-name { min-width: 120px; }
-.roster-col-nicknames { min-width: 100px; }
-.roster-col-pseudo { min-width: 110px; }
-.roster-col-extratime { min-width: 70px; }
-.roster-col-tier { min-width: 90px; }
-.roster-col-monitor { width: 30px; text-align: center; }
-.roster-col-note { width: 32px; }
-.roster-col-status { width: 50px; }
+.roster-col-name { width: 210px; }
+.roster-col-nicknames { width: 190px; }
+.roster-col-pseudo { width: 220px; }
+.roster-col-extratime { width: 105px; }
+.roster-col-tier { width: 170px; }
+.roster-col-monitor { width: 42px; text-align: center; }
+.roster-col-note { width: 170px; }
+.roster-col-status { width: 150px; }
 
 /* Warnings */
 .roster-warn-dot {
@@ -2047,7 +2062,7 @@ html[data-theme="dark"] .roster-warn-dot {
 
 /* Tier scheme editor */
 .roster-v2-details {
-  background: var(--card); border-radius: var(--r-lg); padding: 10px 14px;
+  background: var(--card); border-radius: var(--r-sm); padding: 10px 14px;
   margin-top: 8px; border: 1px solid var(--line);
 }
 .roster-v2-details summary {

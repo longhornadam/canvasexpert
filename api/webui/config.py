@@ -26,7 +26,8 @@ CANVAS_BASE_DEFAULT   = ""
 DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas Downloads")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags",
-               "ai_ta_persona", "roster_student_settings", "roster_tier_schemes")
+               "ai_ta_persona", "roster_student_settings", "roster_tier_schemes",
+               "roster_group_schemes")
 
 
 def _source_label(key: str) -> str:
@@ -774,3 +775,86 @@ def migrate_legacy_tier(course_id: str, user_id: str, tier_val: str, roster_sett
     scheme.append(new_tier)
     set_roster_tier_scheme(course_id, scheme)
     return slug
+
+
+# --------------------------------------------------------------------------
+# Roster Console V3 — Canvas group-backed group schemes (per-course)
+# --------------------------------------------------------------------------
+
+# Default color-to-label mapping for common Canvas group names
+DEFAULT_GROUP_LABELS = {
+    "blue": "Support",
+    "red": "Core",
+    "white": "Extend",
+}
+
+
+def get_roster_group_scheme(course_id: str) -> dict:
+    """Return the group scheme for a course.
+
+    Returns: {
+        "selected_group_category_id": "<category_id>" | None,
+        "group_labels": {
+            "<group_id>": {"teacher_label": "Support", "meaning": "..."}
+        }
+    }
+    """
+    schemes = _synced_state().get("roster_group_schemes", {})
+    return schemes.get(str(course_id), {})
+
+
+def set_roster_group_scheme(course_id: str, scheme: dict):
+    """Save the group scheme for a course."""
+    state = _synced_state()
+    schemes = state.setdefault("roster_group_schemes", {})
+    schemes[str(course_id)] = scheme
+    _save_synced_key("roster_group_schemes", schemes)
+
+
+def get_selected_group_category_id(course_id: str) -> str | None:
+    """Get the preferred group category ID for a course."""
+    scheme = get_roster_group_scheme(course_id)
+    return scheme.get("selected_group_category_id")
+
+
+def set_selected_group_category_id(course_id: str, category_id: str | None):
+    """Save the preferred group category ID for a course."""
+    scheme = get_roster_group_scheme(course_id)
+    scheme["selected_group_category_id"] = category_id
+    set_roster_group_scheme(course_id, scheme)
+
+
+def get_group_label(course_id: str, group_id: str) -> dict | None:
+    """Get the teacher label and meaning for a Canvas group."""
+    scheme = get_roster_group_scheme(course_id)
+    return scheme.get("group_labels", {}).get(str(group_id))
+
+
+def set_group_label(course_id: str, group_id: str, teacher_label: str, meaning: str = ""):
+    """Save a teacher label for a Canvas group."""
+    scheme = get_roster_group_scheme(course_id)
+    labels = scheme.setdefault("group_labels", {})
+    labels[str(group_id)] = {
+        "teacher_label": teacher_label,
+        "meaning": meaning,
+    }
+    set_roster_group_scheme(course_id, scheme)
+
+
+def set_group_labels(course_id: str, labels: dict):
+    """Save multiple group labels for a course."""
+    scheme = get_roster_group_scheme(course_id)
+    scheme["group_labels"] = labels
+    set_roster_group_scheme(course_id, scheme)
+
+
+def compute_group_display(teacher_label: str | None, group_name: str) -> str:
+    """Compute display text: 'Support / Blue' or just 'Blue'."""
+    if teacher_label and teacher_label != group_name:
+        return f"{teacher_label} / {group_name}"
+    return group_name
+
+
+def default_group_label(group_name: str) -> str | None:
+    """Return default label for common group names (Blue -> Support, etc.)."""
+    return DEFAULT_GROUP_LABELS.get(group_name.lower())

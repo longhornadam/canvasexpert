@@ -9,8 +9,8 @@ Routes:
     GET  /api/roster/tier-scheme  — get course tier scheme
     POST /api/roster/tier-scheme  — save course tier scheme
 
-Depends on the existing vault, extra-time, monitored-student, and group helpers.
-Does NOT write Canvas groups in V2.
+V3: Canvas groups are the source of truth for tier/group assignment.
+Does NOT write local tier_id.
 """
 import json
 import re as _re
@@ -20,20 +20,25 @@ from fastapi.responses import JSONResponse
 
 import feedback_scrub
 from .. import config
-from ..canvas_client import _canvas_get_all
+from ..canvas_client import _canvas_get_all, _canvas_send
 from .courses import load_group_categories
 from .names import _fetch_students, _upsert_roster, _vault
 
 router = APIRouter(prefix="/api/roster", tags=["roster"])
 
+# V3: Canvas group-backed keys only
 ALLOWED_STUDENT_PATCH_KEYS = {
     "nicknames", "pseudonym", "regenerate_pseudonym",
-    "extra_time", "monitored", "tier_id", "tier", "planned_group",
+    "extra_time", "monitored", "canvas_group",
 }
+
+# Legacy keys that are rejected with clear errors
+OBSOLETE_PATCH_KEYS = {"tier_id", "tier", "planned_group"}
 
 WARNING_CODES = (
     "missing_pseudonym", "extra_time_without_days",
-    "tier_unset", "nickname_collision", "protected_name_collision",
+    "group_unset", "multiple_groups_in_selected_set",
+    "nickname_collision", "protected_name_collision",
 )
 
 
@@ -87,7 +92,8 @@ def _resolve_tier_display(course_id: str, tier_id: str | None,
 
 
 def _compute_warnings(student: dict, vault_entries_by_id: dict,
-                       protected_names: set[str], collisions: dict) -> list[str]:
+                       protected_names: set[str], collisions: dict,
+                       selected_category_id: str | None = None) -> list[str]:
     """Return warning string codes for one student row."""
     warnings: list[str] = []
     cid = student["id"]
@@ -101,8 +107,17 @@ def _compute_warnings(student: dict, vault_entries_by_id: dict,
     if et.get("enabled") and not (et.get("days") and int(et.get("days", 0)) > 0):
         warnings.append("extra_time_without_days")
 
-    if not student.get("tier_id"):
-        warnings.append("tier_unset")
+    # V3: Check for group_unset or multiple_groups_in_selected_set
+    canvas_group = student.get("canvas_group", {})
+    if selected_category_id and not canvas_group.get("group_id"):
+        warnings.append("group_unset")
+
+    # Check if student is in multiple groups in the selected set
+    canvas_groups = student.get("canvas_groups", [])
+    if selected_category_id:
+        groups_in_selected = [g for g in canvas_groups if g.get("category_id") == selected_category_id]
+        if len(groups_in_selected) > 1:
+            warnings.append("multiple_groups_in_selected_set")
 
     # Nickname collisions
     nicknames = vault_entry.get("nicknames", [])
@@ -145,8 +160,111 @@ def _value_name(value: dict | None, user_id: str) -> str:
     return str(value.get("name", "") or "")
 
 
+# --------------------------------------------------------------------------
+# Canvas Group Membership Helpers (V3)
+# --------------------------------------------------------------------------
+
+def canvas_add_group_membership(group_id: str, user_id: str) -> tuple[bool, str | None]:
+    """Add a user to a Canvas group.
+
+    Returns (success, error_message).
+    Canvas endpoint: POST /api/v1/groups/{group_id}/memberships
+    """
+    try:
+        r = _canvas_send(
+            "POST",
+            f"/api/v1/groups/{group_id}/memberships",
+            {"user_id": user_id},
+        )
+        if r[1]:
+            return False, r[1]
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def canvas_remove_group_membership(group_id: str, membership_id: str) -> tuple[bool, str | None]:
+    """Remove a user from a Canvas group by membership ID.
+
+    Returns (success, error_message).
+    Canvas endpoint: DELETE /api/v1/groups/{group_id}/memberships/{membership_id}
+    """
+    try:
+        r = _canvas_send(
+            "DELETE",
+            f"/api/v1/groups/{group_id}/memberships/{membership_id}",
+            {},
+        )
+        if r[1]:
+            return False, r[1]
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def _get_group_memberships(course_id: str, group_id: str) -> tuple[list[dict], str | None]:
+    """Get all memberships for a Canvas group."""
+    hdrs, base = _canvas_get_all.__wrapped__.__self__._canvas_headers() if hasattr(_canvas_get_all, '__wrapped__') else (None, None)
+    import requests
+    from ..canvas_client import _canvas_headers
+    hdrs, base = _canvas_headers()
+    if not hdrs:
+        return [], "No Canvas token saved"
+    try:
+        r = requests.get(
+            f"{base}/api/v1/groups/{group_id}/memberships",
+            headers=hdrs,
+            params={"per_page": 200},
+            timeout=20,
+        )
+        if r.status_code != 200:
+            return [], f"HTTP {r.status_code}: {r.text[:200]}"
+        return r.json() or [], None
+    except Exception as e:
+        return [], str(e)
+
+
+def _update_student_canvas_group(course_id: str, user_id: str, category_id: str, target_group_id: str | None) -> tuple[bool, str | None]:
+    """Update a student's Canvas group membership.
+
+    1. Remove from all groups in the category.
+    2. Add to target group if specified.
+    Returns (success, error_message).
+    """
+    # Get all groups in the category
+    categories, _, _ = load_group_categories(course_id)
+    category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
+    if not category:
+        return False, f"Group category {category_id} not found"
+
+    # Get current memberships for this user in this category
+    user_groups = _user_id_set_from_canvas_groups(categories).get(str(user_id), [])
+    groups_in_category = [g for g in user_groups if g.get("category_id") == str(category_id)]
+
+    # Remove from all groups in the category
+    for g in groups_in_category:
+        gid = g.get("group_id")
+        mem_id = g.get("membership_id")
+        if mem_id:
+            ok, err = canvas_remove_group_membership(gid, mem_id)
+            if not ok:
+                return False, f"Failed to remove from group {gid}: {err}"
+
+    # Add to target group if specified
+    if target_group_id:
+        ok, err = canvas_add_group_membership(str(target_group_id), str(user_id))
+        if not ok:
+            return False, f"Failed to add to group {target_group_id}: {err}"
+
+    return True, None
+
+
 def _user_id_set_from_canvas_groups(categories: list[dict]) -> dict:
-    """Return {user_id_str: [group_info, ...]} from categories."""
+    """Return {user_id_str: [group_info, ...]} from categories.
+
+    Each group_info includes: category_id, category_name, group_id, group_name,
+    and optionally membership_id (from Canvas membership response).
+    """
     result: dict[str, list[dict]] = {}
     for cat in categories:
         cat_id = cat.get("category_id", "")
@@ -154,6 +272,8 @@ def _user_id_set_from_canvas_groups(categories: list[dict]) -> dict:
         for grp in cat.get("groups", []):
             gid = grp.get("id", "")
             gname = grp.get("name", "")
+            # Include membership_id if present (for Canvas writes)
+            memberships = grp.get("memberships", [])
             for sid in grp.get("student_ids", []):
                 sid_str = str(sid)
                 result.setdefault(sid_str, []).append({
@@ -161,40 +281,50 @@ def _user_id_set_from_canvas_groups(categories: list[dict]) -> dict:
                     "category_name": cat_name,
                     "group_id": gid,
                     "group_name": gname,
+                    "membership_id": None,  # Will be populated if Canvas returns it
                 })
+            # Also index by membership if available
+            for mem in memberships:
+                mem_user_id = str(mem.get("user_id", ""))
+                if mem_user_id:
+                    for gi in result.get(mem_user_id, []):
+                        if gi["group_id"] == gid:
+                            gi["membership_id"] = mem.get("id")
     return result
 
 
-def _migrate_and_clean_settings(course_id: str, roster_settings: dict) -> dict:
-    """Migrate legacy V1 tier/planned_group to V2 tier_id. Returns cleaned settings dict."""
-    result = {}
-    for uid, local in roster_settings.items():
-        entry = {}
-        tier_id = local.get("tier_id")
-        if tier_id:
-            entry["tier_id"] = tier_id
-        else:
-            legacy_tier = local.get("tier", "")
-            if legacy_tier:
-                migrated = config.migrate_legacy_tier(course_id, uid, legacy_tier, roster_settings)
-                if migrated:
-                    entry["tier_id"] = migrated
-            # Remove legacy fields from output
-        # Preserve only V2 keys
-        if "tier_id" in entry or not local.get("tier"):
-            pass  # clean
-        result[uid] = entry
-    return result
+def _compute_canvas_group_display(course_id: str, group_id: str | None, group_name: str | None) -> dict:
+    """Compute Canvas group display info for a student row."""
+    if not group_id or not group_name:
+        return {
+            "category_id": None,
+            "category_name": None,
+            "group_id": None,
+            "group_name": None,
+            "teacher_label": None,
+            "display": None,
+        }
+    group_label = config.get_group_label(course_id, group_id)
+    teacher_label = group_label.get("teacher_label") if group_label else None
+    display = config.compute_group_display(teacher_label, group_name)
+    return {
+        "category_id": None,  # Will be filled by caller
+        "category_name": None,
+        "group_id": group_id,
+        "group_name": group_name,
+        "teacher_label": teacher_label,
+        "display": display,
+    }
 
 
 @router.get("")
 def roster_get(course_id: str = Query("")):
-    """Full roster merge for one course.
+    """Full roster merge for one course (V3: Canvas groups are source of truth).
 
     1. Fetch students from Canvas + upsert into vault.
     2. Fetch sections and groups.
-    3. Merge vault entries, extra-time, monitored, and local settings.
-    4. Return unified rows with counts, warnings, and tier_scheme.
+    3. Merge vault entries, extra-time, monitored, and Canvas group assignments.
+    4. Return unified rows with counts, warnings, and group scheme.
     """
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
@@ -210,9 +340,24 @@ def roster_get(course_id: str = Query("")):
     section_map = _fetch_sections(course_id)
     enrollment_secs = _enrollment_section_ids(users)
 
-    # Groups (read-only in V2)
+    # Groups (V3: now used for tier/group assignment)
     categories, group_err, group_msg = load_group_categories(course_id)
     user_groups = _user_id_set_from_canvas_groups(categories)
+
+    # Determine selected group category
+    group_scheme = config.get_roster_group_scheme(course_id)
+    selected_category_id = group_scheme.get("selected_group_category_id")
+
+    # If no saved preference, try to find a likely differentiation group set
+    if not selected_category_id and categories:
+        likely_names = ("tier", "differentiation", "diff", "level", "groups")
+        for cat in categories:
+            cat_name = cat.get("category_name", "").lower()
+            if any(name in cat_name for name in likely_names):
+                selected_category_id = cat.get("category_id")
+                break
+        if not selected_category_id and categories:
+            selected_category_id = categories[0].get("category_id")
 
     # Extra time
     extra_time_list = config.get_extra_time(course_id)
@@ -222,13 +367,6 @@ def roster_get(course_id: str = Query("")):
 
     # Monitored
     monitored = config.get_monitored_students()
-
-    # Local roster settings — migrate legacy tier/planned_group
-    raw_roster_settings = config.get_roster_student_settings(course_id)
-    roster_settings = _migrate_and_clean_settings(course_id, raw_roster_settings)
-
-    # Tier scheme
-    tier_scheme = config.get_roster_tier_scheme(course_id)
 
     # Protected names for collision check
     protected_names = {p.lower() for p in config.active_protected_names()}
@@ -268,18 +406,37 @@ def roster_get(course_id: str = Query("")):
         monitored_flag = bool(mon)
         monitored_note = mon.get("note", "") if mon else ""
 
-        # Local settings (V2)
-        local = roster_settings.get(uid, {})
-
-        # Canvas groups (read-only in V2)
+        # Canvas groups (V3: source of truth)
         canvas_groups = user_groups.get(uid, [])
+
+        # Find the student's group in the selected category
+        canvas_group_info = None
+        if selected_category_id:
+            for g in canvas_groups:
+                if g.get("category_id") == str(selected_category_id):
+                    canvas_group_info = g
+                    break
+
+        # Build canvas_group field for the row
+        canvas_group = None
+        if canvas_group_info:
+            canvas_group = {
+                "category_id": canvas_group_info.get("category_id"),
+                "category_name": canvas_group_info.get("category_name"),
+                "group_id": canvas_group_info.get("group_id"),
+                "group_name": canvas_group_info.get("group_name"),
+                "teacher_label": config.get_group_label(course_id, canvas_group_info.get("group_id", {})).get("teacher_label") if config.get_group_label(course_id, canvas_group_info.get("group_id", {})) else None,
+                "display": None,
+            }
+            if canvas_group_info.get("group_id"):
+                label = config.get_group_label(course_id, canvas_group_info["group_id"])
+                teacher_label = label.get("teacher_label") if label else None
+                canvas_group["teacher_label"] = teacher_label
+                canvas_group["display"] = config.compute_group_display(
+                    teacher_label, canvas_group_info.get("group_name", ""))
 
         # Nicknames from vault
         nicknames = ve.get("nicknames", [])
-
-        # Tier display
-        tier_id = local.get("tier_id", "")
-        tier_info = _resolve_tier_display(course_id, tier_id, tier_scheme)
 
         row = {
             "id": uid,
@@ -295,11 +452,11 @@ def roster_get(course_id: str = Query("")):
             "extra_time": et,
             "monitored": {"enabled": monitored_flag, "note": monitored_note},
             "canvas_groups": canvas_groups,
+            "canvas_group": canvas_group,
             "warnings": [],
-            **tier_info,
         }
         row["warnings"] = _compute_warnings(
-            row, vault_by_id, protected_names, collisions)
+            row, vault_by_id, protected_names, collisions, selected_category_id)
         students_out.append(row)
         name_order_map[uid] = (sortable or display).lower()
 
@@ -309,7 +466,7 @@ def roster_get(course_id: str = Query("")):
     total = len(students_out)
     extra_time_count = sum(1 for s in students_out if s["extra_time"]["enabled"])
     monitored_count = sum(1 for s in students_out if s["monitored"]["enabled"])
-    tier_unset_count = sum(1 for s in students_out if not s.get("tier_id"))
+    group_unset_count = sum(1 for s in students_out if not s.get("canvas_group", {}).get("group_id"))
     warning_count = sum(1 for s in students_out if s["warnings"])
 
     note = ""
@@ -318,19 +475,28 @@ def roster_get(course_id: str = Query("")):
     elif group_msg:
         note = group_msg
 
+    # Check for legacy tier assignments
+    legacy_tier_count = 0
+    raw_roster_settings = config.get_roster_student_settings(course_id)
+    for uid, local in raw_roster_settings.items():
+        if local.get("tier_id") or local.get("tier") or local.get("planned_group"):
+            legacy_tier_count += 1
+
     return JSONResponse({
         "ok": True,
         "students": students_out,
         "groups": categories,
-        "tier_scheme": tier_scheme,
+        "selected_group_category_id": selected_category_id,
+        "group_label_scheme": group_scheme.get("group_labels", {}),
         "counts": {
             "total": total,
             "extra_time": extra_time_count,
             "monitored": monitored_count,
-            "tier_unset": tier_unset_count,
+            "group_unset": group_unset_count,
             "warnings": warning_count,
         },
         "note": note or None,
+        "legacy_tier_count": legacy_tier_count if legacy_tier_count > 0 else None,
     })
 
 
@@ -340,11 +506,12 @@ def roster_student_update(
     user_id: str = Form(...),
     patch: str = Form(...),
 ):
-    """Update one student's roster settings.
+    """Update one student's roster settings (V3: Canvas groups are source of truth).
 
-    V2 accepted patch fields: nicknames, pseudonym, regenerate_pseudonym,
-    extra_time, monitored, tier_id.
-    Legacy: tier (maps to tier_id), planned_group (ignored/no-op).
+    Accepted patch fields: nicknames, pseudonym, regenerate_pseudonym,
+    extra_time, monitored, canvas_group.
+
+    Obsolete fields (rejected with clear error): tier_id, tier, planned_group.
     """
     if not course_id or not user_id:
         return JSONResponse({"ok": False, "error": "course_id and user_id required."})
@@ -356,14 +523,21 @@ def roster_student_update(
     if not isinstance(data, dict):
         return JSONResponse({"ok": False, "error": "patch must be a JSON object."})
 
+    # Reject obsolete keys
+    obsolete = set(data.keys()) & OBSOLETE_PATCH_KEYS
+    if obsolete:
+        return JSONResponse({
+            "ok": False,
+            "error": f"Local tier/group assignment is obsolete; update canvas_group instead. "
+                     f"Rejected keys: {sorted(obsolete)}"
+        })
+
     # Validate keys
     unknown = set(data.keys()) - ALLOWED_STUDENT_PATCH_KEYS
     if unknown:
         return JSONResponse({"ok": False, "error": f"Unknown patch keys: {sorted(unknown)}"})
 
     vault = _vault()
-    tier_scheme = config.get_roster_tier_scheme(course_id)
-    active_tiers = {t["id"] for t in tier_scheme if t.get("active", True)}
 
     # --- Nicknames ---
     if "nicknames" in data:
@@ -417,38 +591,37 @@ def roster_student_update(
         else:
             config.remove_monitored_student(user_id)
 
-    # --- Tier (V2: tier_id) ---
-    tier_id_val = data.get("tier_id")
-    if tier_id_val is not None:
-        if tier_id_val and tier_id_val not in active_tiers:
-            return JSONResponse(
-                {"ok": False,
-                 "error": f"Invalid tier_id '{tier_id_val}'. Valid: {sorted(active_tiers)}"})
-        patch_data = {"tier_id": tier_id_val if tier_id_val else None}
-        # Clean up legacy V1 fields
-        config.update_roster_student_settings(course_id, user_id, patch_data)
-        # Also remove legacy fields
-        config.update_roster_student_settings(course_id, user_id, {"tier": None})
-        config.update_roster_student_settings(course_id, user_id, {"planned_group": None})
+    # --- Canvas Group (V3: writes to Canvas) ---
+    if "canvas_group" in data:
+        cg = data["canvas_group"]
+        if not isinstance(cg, dict):
+            return JSONResponse({"ok": False, "error": "canvas_group must be an object."})
 
-    # --- Legacy tier (V1 compat — map to tier_id) ---
-    if "tier" in data and "tier_id" not in data:
-        legacy_tier = data["tier"]
-        if legacy_tier:
-            migrated = config.migrate_legacy_tier(course_id, user_id, legacy_tier)
-            if migrated and migrated in active_tiers:
-                config.update_roster_student_settings(course_id, user_id, {"tier_id": migrated})
-            else:
-                config.update_roster_student_settings(course_id, user_id, {"tier_id": migrated})
-            config.update_roster_student_settings(course_id, user_id, {"tier": None})
-        else:
-            config.update_roster_student_settings(course_id, user_id, {"tier_id": None})
-            config.update_roster_student_settings(course_id, user_id, {"tier": None})
+        category_id = cg.get("category_id")
+        group_id = cg.get("group_id")  # None or empty string means clear
 
-    # --- Legacy planned_group (V2: no-op / cleanup) ---
-    if "planned_group" in data:
-        # Silently clean up — remove planned_group from storage
-        config.update_roster_student_settings(course_id, user_id, {"planned_group": None})
+        if not category_id:
+            return JSONResponse({"ok": False, "error": "canvas_group.category_id required."})
+
+        # Validate category exists
+        categories, _, _ = load_group_categories(course_id)
+        if not any(c.get("category_id") == str(category_id) for c in categories):
+            return JSONResponse({"ok": False, "error": f"Invalid category_id '{category_id}'."})
+
+        # If clearing or setting a group, update Canvas
+        target_group_id = None if not group_id else str(group_id)
+
+        # Validate group belongs to category if specified
+        if target_group_id:
+            category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
+            if category:
+                group_ids = [g.get("id") for g in category.get("groups", [])]
+                if target_group_id not in group_ids:
+                    return JSONResponse({"ok": False, "error": f"Invalid group_id '{group_id}' for category {category_id}."})
+
+        ok, err = _update_student_canvas_group(course_id, user_id, category_id, target_group_id)
+        if not ok:
+            return JSONResponse({"ok": False, "error": err})
 
     return JSONResponse({"ok": True})
 
@@ -460,11 +633,12 @@ def roster_bulk_update(
     action: str = Form(...),
     value: str = Form(""),
 ):
-    """Bulk action on many students.
+    """Bulk action on many students (V3: Canvas groups are source of truth).
 
-    V2 supported actions: set_extra_time, clear_extra_time, set_tier, clear_tier,
-    set_monitored, clear_monitored.
-    Legacy: set/clear_planned_group accepted but no-op (cleanup only).
+    V3 supported actions: set_extra_time, clear_extra_time, set_canvas_group,
+    clear_canvas_group, set_monitored, clear_monitored.
+
+    Legacy actions (rejected): set_tier, clear_tier, set_planned_group, clear_planned_group.
     """
     if not course_id or not user_ids or not action:
         return JSONResponse({"ok": False, "error": "course_id, user_ids, and action required."})
@@ -483,6 +657,8 @@ def roster_bulk_update(
         return JSONResponse({"ok": False, "error": f"Invalid value JSON: {e}"})
 
     updated = 0
+    failed = 0
+    errors = []
 
     if action == "set_extra_time":
         if not isinstance(val, dict):
@@ -513,41 +689,40 @@ def roster_bulk_update(
         config.set_extra_time(course_id, et_list)
         updated = len(ids)
 
-    elif action == "set_tier":
-        tier_id = str(val) if isinstance(val, str) else (val.get("tier_id", "") if isinstance(val, dict) else "")
-        if not tier_id and isinstance(val, dict) and val.get("tier"):
-            # Legacy: map tier label
-            tier_label = val["tier"]
-            for uid in ids:
-                migrated = config.migrate_legacy_tier(course_id, uid, tier_label)
-                if migrated:
-                    config.update_roster_student_settings(course_id, uid, {"tier_id": migrated})
-                    config.update_roster_student_settings(course_id, uid, {"tier": None})
-                    config.update_roster_student_settings(course_id, uid, {"planned_group": None})
-                updated += 1
-        else:
-            active_tiers = config.active_tier_ids(course_id)
-            if tier_id and tier_id not in active_tiers:
-                return JSONResponse(
-                    {"ok": False,
-                     "error": f"Invalid tier_id '{tier_id}'. Valid: {sorted(active_tiers)}"})
-            for uid in ids:
-                config.update_roster_student_settings(course_id, uid, {"tier_id": tier_id or None})
-                config.update_roster_student_settings(course_id, uid, {"tier": None})
-                config.update_roster_student_settings(course_id, uid, {"planned_group": None})
-                updated += 1
-
-    elif action == "clear_tier":
+    elif action == "set_canvas_group":
+        if not isinstance(val, dict):
+            return JSONResponse({"ok": False, "error": "set_canvas_group requires value object."})
+        category_id = val.get("category_id")
+        group_id = val.get("group_id")
+        if not category_id:
+            return JSONResponse({"ok": False, "error": "set_canvas_group requires category_id."})
         for uid in ids:
-            config.update_roster_student_settings(course_id, uid, {"tier_id": None})
-            config.update_roster_student_settings(course_id, uid, {"tier": None})
-            updated += 1
+            ok, err = _update_student_canvas_group(course_id, str(uid), category_id, str(group_id) if group_id else None)
+            if ok:
+                updated += 1
+            else:
+                failed += 1
+                errors.append(f"User {uid}: {err}")
 
-    elif action in ("set_planned_group", "clear_planned_group"):
-        # V2: no-op, silently clean up
+    elif action == "clear_canvas_group":
+        if not isinstance(val, dict):
+            return JSONResponse({"ok": False, "error": "clear_canvas_group requires value object."})
+        category_id = val.get("category_id")
+        if not category_id:
+            return JSONResponse({"ok": False, "error": "clear_canvas_group requires category_id."})
         for uid in ids:
-            config.update_roster_student_settings(course_id, uid, {"planned_group": None})
-            updated += 1
+            ok, err = _update_student_canvas_group(course_id, str(uid), category_id, None)
+            if ok:
+                updated += 1
+            else:
+                failed += 1
+                errors.append(f"User {uid}: {err}")
+
+    elif action in ("set_tier", "clear_tier", "set_planned_group", "clear_planned_group"):
+        return JSONResponse({
+            "ok": False,
+            "error": f"'{action}' is obsolete in V3; use set_canvas_group or clear_canvas_group."
+        })
 
     elif action in ("set_monitored", "clear_monitored"):
         is_set = action == "set_monitored"
@@ -562,33 +737,28 @@ def roster_bulk_update(
     else:
         return JSONResponse({"ok": False, "error": f"Unknown action '{action}'."})
 
-    # Rebuild minimal local counts
-    extra_time_list = config.get_extra_time(course_id)
-    et_count = len(extra_time_list)
-    monitored_dict = config.get_monitored_students()
-    mon_count = len(monitored_dict)
-    roster_settings = config.get_roster_student_settings(course_id)
-    tier_unset = sum(1 for v in roster_settings.values() if not v.get("tier_id"))
+    # Build response
+    result = {"ok": True, "updated": updated}
+    if failed > 0:
+        result["failed"] = failed
+        result["errors"] = errors[:5]  # Limit error details
+        if updated > 0:
+            result["message"] = f"Updated {updated}; failed {failed}."
+        else:
+            result["ok"] = False
+            result["error"] = f"All {failed} updates failed: " + "; ".join(errors[:3])
 
-    return JSONResponse({
-        "ok": True,
-        "updated": updated,
-        "counts": {
-            "extra_time": et_count,
-            "monitored": mon_count,
-            "tier_unset": tier_unset,
-        },
-    })
+    return JSONResponse(result)
 
 
 # --------------------------------------------------------------------------
-# Tier-scheme endpoints
+# Tier-scheme endpoints (kept for backward compatibility)
 # --------------------------------------------------------------------------
 
 
 @router.get("/tier-scheme")
 def get_tier_scheme(course_id: str = Query("")):
-    """Get the tier scheme for a course."""
+    """Get the tier scheme for a course (V2 compatibility)."""
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
     scheme = config.get_roster_tier_scheme(course_id)
@@ -609,3 +779,50 @@ def save_tier_scheme(course_id: str = Form(...), scheme: str = Form(...)):
     except ValueError as e:
         return JSONResponse({"ok": False, "error": str(e)})
     return JSONResponse({"ok": True, "tier_scheme": config.get_roster_tier_scheme(course_id)})
+
+
+# --------------------------------------------------------------------------
+# V3: Group set preference and group labels
+# --------------------------------------------------------------------------
+
+
+@router.post("/group-set-preference")
+def save_group_set_preference(
+    course_id: str = Form(...),
+    category_id: str = Form(""),
+):
+    """Save the preferred group set for a course."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    config.set_selected_group_category_id(course_id, category_id or None)
+    return JSONResponse({"ok": True})
+
+
+@router.get("/group-labels")
+def get_group_labels(course_id: str = Query("")):
+    """Get group labels for a course."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    return JSONResponse({"ok": True, "group_labels": config.get_roster_group_scheme(course_id).get("group_labels", {})})
+
+
+@router.post("/group-labels")
+def save_group_labels(
+    course_id: str = Form(...),
+    labels: str = Form(...),
+):
+    """Save group labels for a course."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    try:
+        parsed = json.loads(labels)
+    except json.JSONDecodeError as e:
+        return JSONResponse({"ok": False, "error": f"Invalid labels JSON: {e}"})
+    if not isinstance(parsed, dict):
+        return JSONResponse({"ok": False, "error": "labels must be an object."})
+    # Save each label individually
+    for group_id, label_info in parsed.items():
+        teacher_label = label_info.get("teacher_label", "") if isinstance(label_info, dict) else ""
+        meaning = label_info.get("meaning", "") if isinstance(label_info, dict) else ""
+        config.set_group_label(course_id, group_id, teacher_label, meaning)
+    return JSONResponse({"ok": True, "group_labels": parsed})

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Roster Console — Canvas Expert{% endblock %}
+{% block main_class %}roster-page{% endblock %}
 {% block content %}
 
 <meta name="canvas-base" content="{{ canvas_base }}">
@@ -22,40 +23,47 @@
       <span class="roster-v2-summary-item" id="roster-summary-total">0 students</span>
       <span class="roster-v2-summary-item" id="roster-summary-extra">Extra 0</span>
       <span class="roster-v2-summary-item" id="roster-summary-monitored">Monitored 0</span>
-      <span class="roster-v2-summary-item" id="roster-summary-tier-unset">Unset 0</span>
-      <span class="roster-v2-summary-item" id="roster-summary-warnings">!</span>
+      <span class="roster-v2-summary-item" id="roster-summary-group-unset">Unset 0</span>
+      <span class="roster-v2-summary-item" id="roster-summary-warnings">Issues 0</span>
     </span>
     <span id="roster-status" class="hint"></span>
   </div>
   <div class="roster-v2-toolbar-row">
+    <label class="roster-v2-group-set-picker">
+      Group set
+      <select id="roster-group-set-picker">
+        <option value="">— no group sets —</option>
+      </select>
+    </label>
     <input type="text" id="roster-search" placeholder="Search students..." class="roster-search-input">
     <div class="roster-filters">
       <button type="button" class="roster-filter-btn active" data-filter="all">All</button>
       <button type="button" class="roster-filter-btn" data-filter="extra_time">Extra time</button>
       <button type="button" class="roster-filter-btn" data-filter="monitored">Monitored</button>
-      <button type="button" class="roster-filter-btn" data-filter="tier_unset">Unset</button>
-      <button type="button" class="roster-filter-btn" data-filter="warnings">!</button>
+      <button type="button" class="roster-filter-btn" data-filter="group_unset">Unset</button>
+      <button type="button" class="roster-filter-btn" data-filter="warnings">Issues</button>
     </div>
   </div>
 </div>
 
 <!-- ── Bulk action bar ──────────────────────────────────────────────── -->
 <div class="roster-bulk-bar" id="roster-bulk-bar" hidden>
-  <span id="roster-bulk-count">0 selected</span>
+  <span id="roster-bulk-count" class="roster-bulk-title">Bulk edit: 0 selected</span>
   <span class="roster-bulk-actions">
-    <label>Set tier
-      <select id="roster-bulk-tier" class="roster-bulk-select">
-        <option value="">— unset —</option>
+    <label>Canvas group
+      <select id="roster-bulk-group" class="roster-bulk-select">
+        <option value="">Choose group...</option>
       </select>
     </label>
-    <label>Extra time
+    <button type="button" class="small" data-bulk="set_canvas_group">Apply group</button>
+    <button type="button" class="small" data-bulk="clear_canvas_group">Clear group</button>
+    <label>Extra days
       <input type="number" id="roster-bulk-extra-days" class="roster-bulk-days" min="0" max="30" value="2" placeholder="days">
     </label>
-    <button type="button" class="small" data-bulk="set_extra_time">Set</button>
+    <button type="button" class="small" data-bulk="set_extra_time">Set extra time</button>
     <button type="button" class="small" data-bulk="clear_extra_time">Clear ET</button>
     <button type="button" class="small" data-bulk="set_monitored">Monitor</button>
     <button type="button" class="small" data-bulk="clear_monitored">Unmonitor</button>
-    <button type="button" class="small" data-bulk="clear_tier">Clear tier</button>
   </span>
 </div>
 
@@ -69,7 +77,7 @@
         <th class="roster-col-nicknames">Nicknames</th>
         <th class="roster-col-pseudo">Pseudonym</th>
         <th class="roster-col-extratime">Extra time</th>
-        <th class="roster-col-tier">Tier / Alias</th>
+        <th class="roster-col-group">Canvas group</th>
         <th class="roster-col-monitor">M</th>
         <th class="roster-col-note">Note</th>
         <th class="roster-col-status">Status</th>
@@ -81,17 +89,16 @@
   </table>
 </div>
 
-<!-- ── Tier scheme customization ────────────────────────────────────── -->
-<details class="roster-v2-details" id="roster-tier-editor" hidden>
-  <summary><strong>Tier aliases</strong></summary>
-  <div class="roster-v2-tier-editor" id="roster-tier-editor-body">
-    <div class="roster-v2-tier-rows" id="roster-tier-rows">
+<!-- ── Group labels editor ───────────────────────────────────────────── -->
+<details class="roster-v2-details" id="roster-group-labels-editor" hidden>
+  <summary><strong>Group labels</strong></summary>
+  <div class="roster-v2-tier-editor" id="roster-group-labels-body">
+    <div class="roster-v2-tier-rows" id="roster-group-labels-rows">
       <!-- populated by JS -->
     </div>
     <div class="actions" style="margin-top:8px">
-      <button type="button" id="roster-tier-add" class="small">Add tier</button>
-      <button type="button" id="roster-tier-save" class="primary small">Save aliases</button>
-      <span id="roster-tier-status" class="hint"></span>
+      <button type="button" id="roster-group-labels-save" class="primary small">Save labels</button>
+      <span id="roster-group-labels-status" class="hint"></span>
     </div>
   </div>
 </details>
