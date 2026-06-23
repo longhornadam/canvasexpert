@@ -87,7 +87,15 @@ def course_detail(course_id: str):
 
 @router.get("/api/groups")
 def list_groups(course_id: str):
-    """Group sets + groups + member IDs for a course (used by diff panel).
+    """Group sets + groups + member IDs for a course (used by diff panel)."""
+    categories, err, message = load_group_categories(course_id)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    return JSONResponse({"ok": True, "categories": categories, "message": message})
+
+
+def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
+    """Return (categories, error, message) for a course's group sets.
 
     Canvas note (confirmed live 2026-06): teacher PATs may get 403 on every
     /group_categories endpoint (district permission), while
@@ -97,7 +105,7 @@ def list_groups(course_id: str):
     """
     hdrs, base = _canvas_headers()
     if not hdrs:
-        return JSONResponse({"ok": False, "error": "No token saved."})
+        return [], "No token saved.", ""
 
     def get(path, params=None):
         try:
@@ -125,17 +133,16 @@ def list_groups(course_id: str):
             result.append({"category_id":   str(cat["id"]),
                            "category_name": cat["name"],
                            "groups":        groups_out})
-        return JSONResponse({"ok": True, "categories": result})
+        return result, None, ""
 
     # Fallback: course groups bucketed by category id (category names 403-gated).
     st2, groups_raw = get(f"/api/v1/courses/{course_id}/groups", {"per_page": 100})
     if st2 != 200:
-        return JSONResponse({"ok": False,
-                             "error": f"Canvas returned {st or st2} for course groups "
-                                      f"(group_categories: {st}; groups: {st2})."})
+        return [], (f"Canvas returned {st or st2} for course groups "
+                    f"(group_categories: {st}; groups: {st2})."), ""
+
     if not groups_raw:
-        return JSONResponse({"ok": True, "categories": [],
-                             "message": "No group sets found in this course."})
+        return [], None, "No group sets found in this course."
 
     buckets = {}
     for grp in groups_raw:
@@ -151,4 +158,4 @@ def list_groups(course_id: str):
                 "student_ids": member_ids(grp["id"]),
             } for grp in grps],
         })
-    return JSONResponse({"ok": True, "categories": result})
+    return result, None, ""

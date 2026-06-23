@@ -142,15 +142,22 @@ def feedback_expert_page(request: Request):
     })
 
 
-@router.get("/name-manager", response_class=HTMLResponse)
-def name_manager_page(request: Request):
-    fb = workspace.feedback_root()
-    return templates.TemplateResponse("name_manager.html", {
+@router.get("/roster", response_class=HTMLResponse)
+def roster_page(request: Request):
+    """Roster Console — unified student settings surface."""
+    return templates.TemplateResponse("roster.html", {
         "request":       request,
-        "nav_section":   "feedback",
-        "feedback_root": fb,
+        "nav_section":   "roster",
+        "token_is_set":  config.token_is_set(),
+        "canvas_base":   config.get_canvas_base(),
         "saved_courses": config.active_courses(),
     })
+
+
+@router.get("/name-manager", response_class=HTMLResponse)
+def name_manager_page(request: Request):
+    """Old Name Manager — redirect to the new Roster Console."""
+    return RedirectResponse(url="/roster", status_code=302)
 
 
 @router.get("/about", response_class=HTMLResponse)

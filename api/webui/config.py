@@ -26,7 +26,7 @@ CANVAS_BASE_DEFAULT   = ""
 DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas Downloads")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags",
-               "ai_ta_persona")
+               "ai_ta_persona", "roster_student_settings", "roster_tier_schemes")
 
 
 def _source_label(key: str) -> str:
@@ -608,3 +608,169 @@ def remove_monitored_student(user_id: str):
     mon = state.setdefault("monitored_students", {})
     mon.pop(str(user_id), None)
     _machine_save(state)
+
+
+# --------------------------------------------------------------------------
+# Roster Console — local student settings (tier, planned group)
+# Stored per course in the synced workspace. Contains Canvas user ids — treat
+# as private synced data like extra_time.
+# --------------------------------------------------------------------------
+
+
+def get_roster_student_settings(course_id: str) -> dict:
+    """{user_id: {tier, planned_group}} for a course."""
+    return _synced_state().get("roster_student_settings", {}).get(str(course_id), {})
+
+
+def set_roster_student_settings(course_id: str, settings: dict):
+    """Replace local roster settings for one course."""
+    state = _synced_state()
+    all_settings = state.setdefault("roster_student_settings", {})
+    all_settings[str(course_id)] = settings
+    _save_synced_key("roster_student_settings", all_settings)
+
+
+def update_roster_student_settings(course_id: str, user_id: str, patch: dict):
+    """Patch one student's local roster settings."""
+    state = _synced_state()
+    all_settings = state.setdefault("roster_student_settings", {})
+    course_settings = all_settings.setdefault(str(course_id), {})
+    student = course_settings.setdefault(str(user_id), {})
+    for k, v in patch.items():
+        if v is None:
+            student.pop(k, None)
+        else:
+            student[k] = v
+    _save_synced_key("roster_student_settings", all_settings)
+
+
+# --------------------------------------------------------------------------
+# Roster Console V2 — tier scheme (alias system, per-course)
+# --------------------------------------------------------------------------
+
+ROSTER_DEFAULT_TIER_SCHEME = [
+    {
+        "id": "support",
+        "teacher_label": "Support",
+        "meaning": "below-level",
+        "alias": "Blue",
+        "order": 10,
+        "active": True,
+    },
+    {
+        "id": "core",
+        "teacher_label": "Core",
+        "meaning": "on-level",
+        "alias": "Red",
+        "order": 20,
+        "active": True,
+    },
+    {
+        "id": "extend",
+        "teacher_label": "Extend",
+        "meaning": "advanced",
+        "alias": "White",
+        "order": 30,
+        "active": True,
+    },
+]
+
+
+def _validate_tier_scheme(scheme: list[dict]) -> str | None:
+    """Validate a tier scheme. Returns error string or None if valid."""
+    if not isinstance(scheme, list) or not scheme:
+        return "Scheme must be a non-empty list."
+    seen_ids: set[str] = set()
+    for i, t in enumerate(scheme):
+        if not isinstance(t, dict):
+            return f"Item {i} is not an object."
+        tid = t.get("id", "")
+        if not tid or not isinstance(tid, str):
+            return f"Item {i}: missing or invalid 'id'."
+        if tid in seen_ids:
+            return f"Duplicate tier id '{tid}'."
+        seen_ids.add(tid)
+        label = t.get("teacher_label", "")
+        if not label or not isinstance(label, str):
+            return f"Tier '{tid}': missing 'teacher_label'."
+        alias = t.get("alias", "")
+        if not alias or not isinstance(alias, str):
+            return f"Tier '{tid}': missing or blank 'alias'."
+    return None
+
+
+def _normalize_tier_scheme(scheme: list[dict]) -> list[dict]:
+    """Ensure every tier has order, active, and clean defaults."""
+    out = []
+    for i, t in enumerate(scheme):
+        out.append({
+            "id": str(t.get("id", "")),
+            "teacher_label": str(t.get("teacher_label", "")),
+            "meaning": str(t.get("meaning", "")),
+            "alias": str(t.get("alias", "")),
+            "order": t.get("order", (i + 1) * 10),
+            "active": t.get("active", True),
+        })
+    return out
+
+
+def get_roster_tier_scheme(course_id: str) -> list[dict]:
+    """Return this course's tier scheme, or the default three-tier scheme."""
+    schemes = _synced_state().get("roster_tier_schemes", {})
+    saved = schemes.get(str(course_id))
+    if saved:
+        return _normalize_tier_scheme(saved)
+    return list(ROSTER_DEFAULT_TIER_SCHEME)
+
+
+def set_roster_tier_scheme(course_id: str, scheme: list[dict]):
+    """Validate and save this course's tier scheme."""
+    err = _validate_tier_scheme(scheme)
+    if err:
+        raise ValueError(err)
+    norm = _normalize_tier_scheme(scheme)
+    state = _synced_state()
+    schemes = state.setdefault("roster_tier_schemes", {})
+    schemes[str(course_id)] = norm
+    _save_synced_key("roster_tier_schemes", schemes)
+
+
+def roster_tier_by_id(course_id: str) -> dict:
+    """Return {tier_id: tier_dict} for all saved tiers (active + inactive)."""
+    scheme = get_roster_tier_scheme(course_id)
+    return {t["id"]: t for t in scheme}
+
+
+def active_tier_ids(course_id: str) -> set[str]:
+    """Return set of active tier ids for a course."""
+    return {t["id"] for t in get_roster_tier_scheme(course_id) if t.get("active", True)}
+
+
+def migrate_legacy_tier(course_id: str, user_id: str, tier_val: str, roster_settings: dict | None = None) -> str | None:
+    """Migrate a legacy V1 'tier' string to a V2 'tier_id'.
+
+    If the tier matches a known teacher_label (case-insensitive), return the
+    matching tier id. If unknown, add it to the course scheme as a custom tier
+    and return its slug. Returns None if tier_val is blank.
+    """
+    if not tier_val:
+        return None
+    scheme = get_roster_tier_scheme(course_id)
+    tier_lower = tier_val.strip().lower()
+    for t in scheme:
+        if t.get("teacher_label", "").lower() == tier_lower:
+            return t["id"]
+    # Unknown tier — add to scheme as custom entry
+    import re
+    slug = re.sub(r'[^a-z0-9]+', '_', tier_lower).strip('_') or f"tier_{len(scheme)}"
+    new_tier = {
+        "id": slug,
+        "teacher_label": tier_val.strip(),
+        "meaning": "",
+        "alias": tier_val.strip(),
+        "order": 1000,
+        "active": True,
+    }
+    scheme.append(new_tier)
+    set_roster_tier_scheme(course_id, scheme)
+    return slug

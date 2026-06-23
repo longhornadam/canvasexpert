@@ -54,96 +54,144 @@
 
 {% else %}
 <div class="dash-page">
-  <section class="dash-status-card" aria-label="Canvas status">
-    <span class="dash-status-dot" aria-hidden="true"></span>
-    <span>Canvas connected</span>
-    <span class="dash-status-separator" aria-hidden="true">&middot;</span>
-    <span>Workspace: <strong>{{ workspace_status }}</strong></span>
-    <span class="dash-status-separator" aria-hidden="true">&middot;</span>
-    <span>Active courses: <strong>{{ active_count }}</strong></span>
+  <section class="dash-status-card" aria-label="CanvasExpert status">
+    <a class="dash-status-item dash-status-item--canvas" href="/settings">
+      <span class="dash-status-dot" aria-hidden="true"></span>
+      <span class="dash-status-label">Canvas</span>
+      <strong>Connected</strong>
+    </a>
+    <a class="dash-status-item" href="/settings">
+      <span class="dash-status-label">Courses</span>
+      <strong>{{ active_count }} active</strong>
+    </a>
+    <a class="dash-status-item" href="/settings">
+      <span class="dash-status-label">Workspace</span>
+      <strong>{{ workspace_status }}</strong>
+    </a>
+    <button type="button" class="dash-status-check" id="dash-check-connection"
+            data-base="{{ canvas_base }}">Check connection</button>
+    <span class="dash-check-result" id="dash-check-result" aria-live="polite"></span>
   </section>
 
-  <section class="dash-section">
-    <h2 class="dash-section-label">Create Content</h2>
-    <div class="dash-card-grid dash-card-grid--create">
-      <a class="dash-action-card dash-action-card--quiz" href="/course-expert?tab=quiz">
-        <span class="dash-action-icon">📝</span>
-        <h3>Quiz</h3>
-        <p>12 question types, rationales, auto-grading</p>
+  <section class="dash-hero">
+    <div>
+      <p class="dash-kicker">CanvasExpert home</p>
+      <h1>Choose the job.</h1>
+      <p>Common teacher workflows stay up front. Everything else is still one scroll away.</p>
+    </div>
+  </section>
+
+  <section class="dash-section dash-section--primary">
+    <div class="dash-section-head">
+      <h2>Most common jobs</h2>
+      <p>Fast entry points for work you are likely to do during a planning period.</p>
+    </div>
+    <div class="dash-job-grid">
+      <a class="dash-job dash-job--primary" href="/course-expert?tab=quick">
+        <span class="dash-job-verb">Create</span>
+        <strong>Quick assignment</strong>
+        <span>Make a gradebook column across checked courses.</span>
       </a>
 
-      <a class="dash-action-card dash-action-card--assignment" href="/course-expert?tab=assignment">
-        <span class="dash-action-icon">✏️</span>
-        <h3>Assignment</h3>
-        <p>Submissions, rubrics, differentiation tiers</p>
+      <a class="dash-job dash-job--primary" href="/course-expert?tab=assignment">
+        <span class="dash-job-verb">Create</span>
+        <strong>Push assignment</strong>
+        <span>Publish instructions, submission settings, rubrics, and tiers.</span>
       </a>
 
-      <a class="dash-action-card dash-action-card--page" href="/course-expert?tab=page">
-        <span class="dash-action-icon">📄</span>
-        <h3>Page</h3>
-        <p>Content hubs, resources, unit overviews</p>
+      <a class="dash-job dash-job--primary" href="/course-expert?tab=quiz">
+        <span class="dash-job-verb">Create</span>
+        <strong>Push quiz</strong>
+        <span>Validate and push a QuizForge assessment.</span>
       </a>
 
-      <a class="dash-action-card dash-action-card--rubric" href="/course-expert?tab=rubric">
-        <span class="dash-action-icon">⭐</span>
-        <h3>Rubric</h3>
-        <p>Criteria, levels, student explainers, AI scoring</p>
+      <a class="dash-job dash-job--primary" href="/course-expert?tab=download">
+        <span class="dash-job-verb">Manage</span>
+        <strong>Download student work</strong>
+        <span>Collect submissions by assignment and by student.</span>
+      </a>
+
+      <a class="dash-job dash-job--primary" href="/gradebook">
+        <span class="dash-job-verb">Manage</span>
+        <strong>Gradebook sweep</strong>
+        <span>Preview and correct school-day lateness.</span>
+      </a>
+
+      <a class="dash-job dash-job--primary" href="/gradebook#extensions">
+        <span class="dash-job-verb">Manage</span>
+        <strong>Grant extension</strong>
+        <span>Move due dates for selected students.</span>
+      </a>
+
+      <a class="dash-job dash-job--primary" href="/feedback-expert">
+        <span class="dash-job-verb">Assess</span>
+        <strong>Score writing with AI</strong>
+        <span>Pseudonymize submissions, draft feedback, and review before posting.</span>
+      </a>
+
+      <a class="dash-job dash-job--primary" href="/roster">
+        <span class="dash-job-verb">Manage</span>
+        <strong>Manage roster</strong>
+        <span>Set nicknames, pseudonyms, and roster-safe names before AI or group work.</span>
       </a>
     </div>
   </section>
 
-  <section class="dash-section">
-    <h2 class="dash-section-label">Manage Grades &amp; Work</h2>
-    <div class="dash-card-grid dash-card-grid--manage">
-      <a class="dash-action-card dash-action-card--gradebook" href="/gradebook">
-        <span class="dash-action-icon">⚙️</span>
-        <h3>Gradebook</h3>
-        <p>Late policies, sweeps, curves, extensions</p>
-      </a>
+  <section class="dash-tools">
+    <div class="dash-section-head">
+      <h2>More tools by job</h2>
+      <p>Less frequent work stays available without competing with the daily tasks.</p>
+    </div>
+    <div class="dash-lane-grid">
+      <div class="dash-lane">
+        <h3>Create</h3>
+        <a href="/course-expert?tab=page">Push page</a>
+        <a href="/course-expert?tab=rubric">Push rubric</a>
+        <a href="/forge/quizforge/" target="_blank" rel="noopener">Open QuizForge compiler</a>
+      </div>
 
-      <a class="dash-action-card dash-action-card--download" href="/course-expert?tab=download">
-        <span class="dash-action-icon">📥</span>
-        <h3>Download Work</h3>
-        <p>Submissions by assignment or student</p>
-      </a>
+      <div class="dash-lane">
+        <h3>Manage</h3>
+        <a href="/roster">Roster names</a>
+        <a href="/roster?focus=extra-time">Extra-time roster</a>
+        <a href="/roster?focus=groups">Course roster &amp; groups</a>
+        <a href="/gradebook#policy">Late policy</a>
+        <a href="/gradebook#curves">Curves</a>
+        <a href="/routines">Routines</a>
+      </div>
 
-      <a class="dash-action-card dash-action-card--automation" href="/gradebook#routines">
-        <span class="dash-action-icon">🤖</span>
-        <h3>Automations</h3>
-        <p>Routines, schedules, late-work sweeps</p>
-      </a>
+      <div class="dash-lane">
+        <h3>Assess</h3>
+        <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
+        <a href="/ai-expert#scoring">Scoring skills</a>
+      </div>
+
+      <div class="dash-lane">
+        <h3>Review</h3>
+        <a href="/gradebook#snapshot">Gradebook snapshot</a>
+        <a href="/course">Course info</a>
+        <a href="/course-expert?tab=students">Writing portfolios</a>
+      </div>
+
+      <div class="dash-lane">
+        <h3>Delegate</h3>
+        <a href="/ai-expert">AI library</a>
+        <a href="/routines">Scheduled routines</a>
+        <a href="/settings">Settings</a>
+      </div>
     </div>
   </section>
 
-  <section class="dash-section">
-    <h2 class="dash-section-label">Recent Activity</h2>
+  <section class="dash-section dash-section--activity">
+    <div class="dash-section-head">
+      <h2>Recent activity</h2>
+    </div>
     <div class="dash-activity-list" id="dash-activity-list">
       <div class="dash-activity-row">
         <span class="dash-activity-check" aria-hidden="true">&#10003;</span>
-        <span class="dash-activity-title">Quiz pushed to 3 courses</span>
-        <span class="dash-activity-time">2 hours ago</span>
+        <span class="dash-activity-title">No recent activity loaded yet</span>
+        <span class="dash-activity-time"></span>
       </div>
-      <div class="dash-activity-row">
-        <span class="dash-activity-check" aria-hidden="true">&#10003;</span>
-        <span class="dash-activity-title">Gradebook sweep completed (12 assignments)</span>
-        <span class="dash-activity-time">Yesterday</span>
-      </div>
-      <div class="dash-activity-row">
-        <span class="dash-activity-check" aria-hidden="true">&#10003;</span>
-        <span class="dash-activity-title">Page created and published</span>
-        <span class="dash-activity-time">2 days ago</span>
-      </div>
-    </div>
-  </section>
-
-  <section class="dash-quick-panel">
-    <h2>Quick Access to Experts</h2>
-    <div class="dash-quick-links">
-      <a href="/course-expert">Course Expert</a>
-      <a href="/gradebook">Gradebook Expert</a>
-      <a href="/ai-expert">AI Expert</a>
-      <a href="/feedback-expert">Feedback Expert</a>
-      <a href="/course">Course Info</a>
     </div>
   </section>
 </div>
@@ -151,6 +199,26 @@
 <script>
 (function(){
 "use strict";
+var checkBtn=document.getElementById("dash-check-connection");
+var checkResult=document.getElementById("dash-check-result");
+if(checkBtn&&checkResult){
+  checkBtn.addEventListener("click",function(){
+    var original=checkBtn.textContent;
+    checkBtn.disabled=true;
+    checkBtn.textContent="Checking...";
+    checkResult.textContent="";
+    var body=new URLSearchParams({base_url:checkBtn.dataset.base||"",token:""});
+    fetch("/settings/test-connection",{method:"POST",body:body})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        checkResult.textContent=d.ok?("Connected as "+(d.display_name||"you")):(d.error||"Connection failed");
+        checkResult.className="dash-check-result "+(d.ok?"ok":"err");
+      })
+      .catch(function(){checkResult.textContent="Connection check failed";checkResult.className="dash-check-result err";})
+      .finally(function(){checkBtn.disabled=false;checkBtn.textContent=original;});
+  });
+}
+
 var list=document.getElementById("dash-activity-list");
 if(!list)return;
 var labels={
