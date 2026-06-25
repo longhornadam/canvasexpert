@@ -1,4 +1,4 @@
-"""Adapt NoteForge guided-cloze JSON into the print-document model."""
+"""Adapt NoteForge JSON into the print-document model."""
 
 from __future__ import annotations
 
@@ -7,7 +7,16 @@ import re
 from pathlib import Path
 from typing import Any
 
-from engine.rendering.physical.printdoc import BulletList, Heading, Para, PrintDoc, Slot
+from engine.rendering.physical.printdoc import (
+    BulletList,
+    CornellLayout,
+    CornellRow,
+    FrayerGrid,
+    Heading,
+    Para,
+    PrintDoc,
+    Slot,
+)
 
 TAG_OPEN = "<NOTEFORGE_JSON>"
 TAG_CLOSE = "</NOTEFORGE_JSON>"
@@ -29,12 +38,29 @@ def parse_noteforge_json(text: str) -> dict[str, Any]:
 
 
 def to_printdoc(note: dict[str, Any]) -> PrintDoc:
-    """Convert guided-cloze NoteForge JSON to PrintDoc.
+    """Convert NoteForge JSON to PrintDoc.
 
     Trusts the input shape; validation belongs upstream once NoteForge is wired
     into the live product.
     """
 
+    note_type = note.get("type")
+    if note_type == "cornell":
+        blocks = [_cornell_block(note)]
+    elif note_type == "frayer":
+        blocks = [_frayer_block(note)]
+    else:
+        blocks = _guided_blocks(note)
+
+    return PrintDoc(
+        title=note.get("title", "Untitled Notes") or "Untitled Notes",
+        instructions=note.get("topic", "") or "",
+        blocks=blocks,
+        answer_key=None,
+    )
+
+
+def _guided_blocks(note: dict[str, Any]) -> list:
     blocks = []
     for block_index, block in enumerate(note.get("body", []) or []):
         block_type = block.get("type")
@@ -51,12 +77,31 @@ def to_printdoc(note: dict[str, Any]) -> PrintDoc:
                     ]
                 )
             )
+    return blocks
 
-    return PrintDoc(
-        title=note.get("title", "Untitled Notes") or "Untitled Notes",
-        instructions=note.get("topic", "") or "",
-        blocks=blocks,
-        answer_key=None,
+
+def _cornell_block(note: dict[str, Any]) -> CornellLayout:
+    rows = []
+    for row_index, row in enumerate(note.get("rows", []) or []):
+        rows.append(
+            CornellRow(
+                cue=_parse_runs(row.get("cue", "") or "", f"cue{row_index}"),
+                note=_parse_runs(row.get("note", "") or "", f"note{row_index}"),
+            )
+        )
+    return CornellLayout(
+        rows=rows,
+        summary=_parse_runs(note.get("summary", "") or "", "sum"),
+    )
+
+
+def _frayer_block(note: dict[str, Any]) -> FrayerGrid:
+    return FrayerGrid(
+        term=note.get("term", "") or "",
+        definition=_parse_runs(note.get("definition", "") or "", "def"),
+        characteristics=_parse_runs(note.get("characteristics", "") or "", "char"),
+        examples=_parse_runs(note.get("examples", "") or "", "ex"),
+        non_examples=_parse_runs(note.get("non_examples", "") or "", "nonex"),
     )
 
 

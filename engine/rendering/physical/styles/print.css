@@ -230,3 +230,49 @@ td {
 .note-bullets li {
   margin: 5pt 0;
 }
+
+.cornell-table {
+  width: 100%;
+}
+
+.cornell-cue {
+  width: 30%;
+  border: 1pt solid #999999;
+  vertical-align: top;
+  padding: 6pt;
+}
+
+.cornell-note {
+  width: 70%;
+  border: 1pt solid #999999;
+  vertical-align: top;
+  padding: 6pt;
+}
+
+.cornell-summary {
+  border: 1pt solid #999999;
+  padding: 6pt;
+  margin-top: 8pt;
+}
+
+.frayer-term {
+  margin-bottom: 6pt;
+}
+
+.frayer-table {
+  width: 100%;
+}
+
+.frayer-cell {
+  width: 50%;
+  height: 1.8in;
+  border: 1pt solid #999999;
+  vertical-align: top;
+  padding: 6pt;
+}
+
+.frayer-label {
+  font-weight: 700;
+  font-size: 9pt;
+  margin-bottom: 4pt;
+}

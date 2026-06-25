@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "_slot.html.j2" import slot %}
+{% from "_slot.html.j2" import runs %}
 {% block content %}
 <p class="name-line">Name: ________________________________________________</p>
 <h1>{{ printdoc.title }}{% if tier %} - {{ tier }}{% endif %}</h1>
@@ -9,13 +9,39 @@
   {% if block.__class__.__name__ == "Heading" %}
     <h2 class="note-heading">{{ block.text }}</h2>
   {% elif block.__class__.__name__ == "Para" %}
-    <p class="note-para">{% for run in block.runs %}{% if run is string %}{{ run }}{% else %}{{ slot(run) }}{% endif %}{% endfor %}</p>
+    <p class="note-para">{{ runs(block.runs) }}</p>
   {% elif block.__class__.__name__ == "BulletList" %}
     <ul class="note-bullets">
     {% for item in block.items %}
-      <li>{% for run in item %}{% if run is string %}{{ run }}{% else %}{{ slot(run) }}{% endif %}{% endfor %}</li>
+      <li>{{ runs(item) }}</li>
     {% endfor %}
     </ul>
+  {% elif block.__class__.__name__ == "CornellLayout" %}
+    <table class="cornell-table">
+      <tbody>
+      {% for row in block.rows %}
+        <tr>
+          <td class="cornell-cue">{{ runs(row.cue) }}</td>
+          <td class="cornell-note">{{ runs(row.note) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="cornell-summary"><strong>Summary:</strong> {{ runs(block.summary) }}</div>
+  {% elif block.__class__.__name__ == "FrayerGrid" %}
+    <p class="frayer-term"><strong>Term:</strong> {{ block.term }}</p>
+    <table class="frayer-table">
+      <tbody>
+        <tr>
+          <td class="frayer-cell"><div class="frayer-label">Definition</div>{{ runs(block.definition) }}</td>
+          <td class="frayer-cell"><div class="frayer-label">Characteristics</div>{{ runs(block.characteristics) }}</td>
+        </tr>
+        <tr>
+          <td class="frayer-cell"><div class="frayer-label">Examples</div>{{ runs(block.examples) }}</td>
+          <td class="frayer-cell"><div class="frayer-label">Non-Examples</div>{{ runs(block.non_examples) }}</td>
+        </tr>
+      </tbody>
+    </table>
   {% endif %}
 {% endfor %}
 {% endblock %}
