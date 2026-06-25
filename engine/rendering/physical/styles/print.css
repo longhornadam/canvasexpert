@@ -197,3 +197,12 @@ td {
 .total-points {
   margin-top: 12pt;
 }
+
+.slot-given {
+}
+
+.slot-blank {
+  display: inline-block;
+  min-width: 1.5in;
+  border-bottom: 1pt solid #333333;
+}
