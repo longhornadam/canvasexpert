@@ -76,7 +76,7 @@ def api_validate(path: str = Form(...)):
 
 @router.post("/api/physical/quiz")
 def api_physical_quiz(path: str = Form(...)):
-    """Compile a printable DOCX bundle from a <QUIZFORGE_JSON> file."""
+    """Compile printable PDF + DOCX files from a <QUIZFORGE_JSON> file."""
     if REPO_ROOT not in sys.path:
         sys.path.insert(0, REPO_ROOT)
     try:
@@ -111,18 +111,27 @@ def api_physical_quiz(path: str = Form(...)):
         return JSONResponse({"ok": False, "error": str(e)})
 
     log_path = results.get("log_path")
+    warnings = []
     if log_path:
         try:
+            with open(log_path, encoding="utf-8") as fh:
+                warnings = [
+                    line.strip()
+                    for line in fh
+                    if line.startswith("PHYSICAL RENDER WARNING")
+                ]
             os.remove(log_path)
         except OSError:
             pass
 
     files = [os.path.basename(results[k])
-             for k in ("quiz_path", "key_path", "rationale_path")
+             for k in ("quiz_path", "quiz_pdf_path", "key_path", "key_pdf_path", "rationale_path")
              if results.get(k)]
     fallback = not bool(_workspace_folder("Exports"))
     return JSONResponse({"ok": True, "folder": str(folder),
-                         "files": files, "fallback": fallback})
+                         "files": files, "warnings": warnings,
+                         "warning": warnings[0] if warnings else "",
+                         "fallback": fallback})
 
 
 @router.post("/api/af/validate")

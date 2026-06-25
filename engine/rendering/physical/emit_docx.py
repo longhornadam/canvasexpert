@@ -18,7 +18,13 @@ def html_to_docx(html: str, reference_docx: str, out_path: str) -> str:
     converter stack installed.
     """
 
-    import pypandoc
+    try:
+        import pypandoc
+    except ImportError as exc:
+        raise RuntimeError(
+            "pypandoc-binary is not installed. Install API requirements and rerun the render:\n"
+            "  py -m pip install -r api/requirements.txt"
+        ) from exc
 
     html = _TITLE_RE.sub("<title></title>", html)
 
