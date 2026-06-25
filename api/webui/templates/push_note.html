@@ -56,6 +56,56 @@
     <div id="nf-banner" class="push-banner" hidden></div>
   </div>
 
+  <div class="card" id="nf-attach-card">
+    <h2 style="margin-bottom:6px">Attach to Canvas</h2>
+    <p class="hint" style="margin:0 0 14px">
+      Create a Canvas assignment that links the generated printable PDF.
+    </p>
+    <input type="hidden" id="nf-pdf-path">
+    <div class="settings-grid">
+      <label>Assignment title
+        <input type="text" id="nf-attach-title" placeholder="Printable notes">
+      </label>
+      <label>Points
+        <input type="number" id="nf-points" value="0" min="0" step="0.5">
+      </label>
+    </div>
+    <label style="margin-top:12px; display:block">Description
+      <textarea id="nf-description" rows="3" placeholder="Use the attached printable notes in class."></textarea>
+    </label>
+    <div class="settings-grid" style="margin-top:14px">
+      <label>Due date <small class="lbl-hint">(optional)</small>
+        <input type="datetime-local" id="nf-due">
+      </label>
+      <label>Available from <small class="lbl-hint">(unlock date)</small>
+        <input type="datetime-local" id="nf-unlock">
+      </label>
+      <label>Available until <small class="lbl-hint">(lock date)</small>
+        <input type="datetime-local" id="nf-lock">
+      </label>
+    </div>
+    <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+      <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
+        <select id="nf-aggroup" class="js-aggroups" disabled>
+          <option value="">— none / default —</option>
+        </select>
+      </label>
+      <label>Add to module <small class="lbl-hint js-mod-hint">(select a course)</small>
+        <select id="nf-module" class="js-modules" data-default="none" disabled>
+          <option value="">— don't add to a module —</option>
+        </select>
+        <input type="text" id="nf-new-module" class="js-new-module" placeholder="New module name..."
+               style="display:none; margin-top:6px">
+      </label>
+    </div>
+    <div class="opt-checks">
+      <label class="opt-check"><input type="checkbox" id="nf-publish"> Publish immediately</label>
+    </div>
+    <div class="actions">
+      <button id="btn-nf-attach" class="primary" disabled>Attach PDF to Canvas assignment...</button>
+    </div>
+  </div>
+
 </div><!-- /.ce-content -->
 
 <script>

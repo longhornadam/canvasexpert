@@ -83,7 +83,7 @@
     }
   }
 
-  const allBusyBtns = "#btn-validate,#btn-preview,#btn-push,#btn-push-variants,#btn-add-variant,#btn-nf-validate,#btn-nf-generate";
+  const allBusyBtns = "#btn-validate,#btn-preview,#btn-push,#btn-push-variants,#btn-add-variant,#btn-nf-validate,#btn-nf-generate,#btn-nf-attach";
 
   function setBusy(v) {
     document.querySelectorAll(allBusyBtns).forEach(b => { b.disabled = v; });
@@ -893,6 +893,24 @@
 
   // ── NF printable notes ────────────────────────────────────────────────
 
+  function fileStem(path) {
+    const name = String(path || "").split(/[\\/]/).pop() || "";
+    return name.replace(/\.[^.]+$/, "").replace(/_/g, " ");
+  }
+
+  function syncNoteAttachControls() {
+    const printable = window.CE_LAST_NOTE_PRINTABLE || {};
+    const pdfPath = printable.pdf_path || document.getElementById("nf-pdf-path")?.value || "";
+    const pdfInput = document.getElementById("nf-pdf-path");
+    const titleInput = document.getElementById("nf-attach-title");
+    const attachBtn = document.getElementById("btn-nf-attach");
+    if (pdfInput) pdfInput.value = pdfPath;
+    if (titleInput && !titleInput.value && pdfPath) {
+      titleInput.value = printable.title || window.CE_LAST_NOTE_TITLE || fileStem(pdfPath);
+    }
+    if (attachBtn) attachBtn.disabled = !pdfPath;
+  }
+
   document.getElementById("btn-nf-validate")?.addEventListener("click", function () {
     const path = document.getElementById("nf-file")?.value;
     if (!path) return alert("Pick a NoteForge file.");
@@ -924,10 +942,43 @@
         window.CE_LAST_NOTE_PRINTABLE.title =
           window.CE_LAST_NOTE_PRINTABLE.title || window.CE_LAST_NOTE_TITLE || "";
       }
+      syncNoteAttachControls();
     } finally {
       this.disabled = false;
     }
   });
+
+  document.getElementById("btn-nf-attach")?.addEventListener("click", function () {
+    const pdfPath = document.getElementById("nf-pdf-path")?.value ||
+      window.CE_LAST_NOTE_PRINTABLE?.pdf_path || "";
+    if (!pdfPath) return alert("Generate printable notes first.");
+
+    const title = document.getElementById("nf-attach-title")?.value.trim() ||
+      window.CE_LAST_NOTE_PRINTABLE?.title || fileStem(pdfPath) || "Printable notes";
+    const payload = {
+      pdf_path: pdfPath,
+      name: title,
+      description: document.getElementById("nf-description")?.value.trim() || "",
+      points: parseFloat(document.getElementById("nf-points")?.value || "0") || 0,
+      published: document.getElementById("nf-publish")?.checked,
+    };
+    const due    = localToISO(document.getElementById("nf-due")?.value);
+    const unlock = localToISO(document.getElementById("nf-unlock")?.value);
+    const lock   = localToISO(document.getElementById("nf-lock")?.value);
+    if (due)    payload.due_at    = due;
+    if (unlock) payload.unlock_at = unlock;
+    if (lock)   payload.lock_at   = lock;
+    const agSel = document.getElementById("nf-aggroup");
+    if (agSel?.value) payload.assignment_group_name = agSel.selectedOptions[0].text;
+    const mod = moduleChoice("nf-module");
+    if (mod) payload.module_name = mod;
+
+    pushContent("printable", payload,
+      document.getElementById("nf-log"), document.getElementById("nf-banner"), this,
+      `Attach printable PDF "${pdfPath.split(/[\\/]/).pop()}" as assignment "${title}"`);
+  });
+
+  syncNoteAttachControls();
 
   // ── AF push ────────────────────────────────────────────────────────────
 
