@@ -35,6 +35,21 @@ class Question:
 
 
 @dataclass
+class Heading:
+    text: str
+
+
+@dataclass
+class Para:
+    runs: list
+
+
+@dataclass
+class BulletList:
+    items: list
+
+
+@dataclass
 class Slot:
     id: str
     content_html: str
@@ -108,7 +123,7 @@ QPayload: TypeAlias = (
     | Slot
 )
 
-Block: TypeAlias = Stimulus | Question | Slot
+Block: TypeAlias = Stimulus | Question | Slot | Heading | Para | BulletList
 
 
 @dataclass
