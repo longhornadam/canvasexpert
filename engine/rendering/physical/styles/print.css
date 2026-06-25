@@ -101,6 +101,12 @@ td {
   min-width: 4in;
 }
 
+.poetry-gap td {
+  height: 6pt;
+  font-size: 6pt;
+  line-height: 6pt;
+}
+
 .question {
   margin: 0 0 22pt;
   page-break-inside: avoid;

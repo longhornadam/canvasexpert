@@ -19,10 +19,14 @@
         <table class="poetry-table">
           <tbody>
           {% for line in block.body_html | poetry_lines %}
+            {% if line.blank %}
+            <tr class="poetry-gap"><td></td><td>&nbsp;</td></tr>
+            {% else %}
             <tr>
-              <td class="poetry-number">{% if loop.index is divisibleby 5 %}{{ loop.index }}{% endif %}</td>
-              <td class="poetry-line">{{ line }}</td>
+              <td class="poetry-number">{% if line.number %}{{ line.number }}{% endif %}</td>
+              <td class="poetry-line">{{ line.text }}</td>
             </tr>
+            {% endif %}
           {% endfor %}
           </tbody>
         </table>

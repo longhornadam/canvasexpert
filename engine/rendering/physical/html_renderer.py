@@ -49,9 +49,34 @@ def _alpha(index: int) -> str:
     return chr(65 + int(index))
 
 
-def _poetry_lines(value: str) -> list[str]:
+def _poetry_lines(value: str) -> list[dict]:
+    """Split a poem into rows that preserve stanza breaks.
+
+    Blank lines become ``blank`` gap rows (not numbered, not counted). Verse
+    lines carry a sequential ``number`` that is shown only every 5th verse line,
+    so stanza gaps never disturb the line count.
+    """
     cleaned = _strip_outer_paragraphs(value)
-    return [line.strip() for line in cleaned.splitlines() if line.strip()]
+    rows: list[dict] = []
+    verse_no = 0
+    for raw in cleaned.split("\n"):
+        text = raw.strip()
+        if not text:
+            # collapse runs of blank lines into a single gap; skip a leading gap
+            if rows and not rows[-1]["blank"]:
+                rows.append({"text": "", "number": None, "blank": True})
+            continue
+        verse_no += 1
+        rows.append(
+            {
+                "text": text,
+                "number": verse_no if verse_no % 5 == 0 else None,
+                "blank": False,
+            }
+        )
+    while rows and rows[-1]["blank"]:
+        rows.pop()
+    return rows
 
 
 def _prose_blocks(value: str) -> list[str]:
