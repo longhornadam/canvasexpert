@@ -195,9 +195,11 @@ Sequence → (Concept map) → (KWL/sketchnotes).
    pure; fully-given doc = answer key. **Engine + unit tests only — no producer until NoteForge**
    (quizzes have no slots), so no teacher-visible output this slice. Full handoff:
    `docs/handoffs/paper-render-layer-slice3.md`.
-4. **NoteForge contract** — `LLM_Modules/NoteForge_Base.md` (Guided + Cornell first), `mode`,
-   `key`-slot marking, tier semantics. *Canonical; never fork in backend code.*
-5. **NoteForge adapter + templates** for the build-order styles.
+4. **NoteForge vertical slice — guided cloze** (contract + adapter + template + per-tier emission, as
+   a dev CLI). First *visible* tiers: one note JSON → Support→Extend PDFs/DOCX + filled key. Full
+   handoff: `docs/handoffs/paper-render-layer-slice4-noteforge-guided-cloze.md`.
+5. **More note styles + live wiring** — Cornell/Frayer/boxes-and-bullets templates on the same spine;
+   wire NoteForge into the webui/orchestrator (mirrors slice 2).
 6. **(Follow-on, `api/`)** "attach printable to a Canvas assignment" — reuse assignment push.
 
 ---

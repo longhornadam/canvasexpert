@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{{ printdoc.title }}{% if variant == "key" %} - Answer Key{% endif %}</title>
+  <title>{{ printdoc.title }}{% if variant == "key" %} - Answer Key{% elif tier %} - {{ tier }}{% endif %}</title>
   <link rel="stylesheet" href="{{ css_href }}">
   <style>
 {{ inline_css }}

@@ -1,0 +1,21 @@
+{% extends "base.html.j2" %}
+{% from "_slot.html.j2" import slot %}
+{% block content %}
+<p class="name-line">Name: ________________________________________________</p>
+<h1>{{ printdoc.title }}{% if tier %} - {{ tier }}{% endif %}</h1>
+{% if printdoc.instructions %}<p class="note-topic">{{ printdoc.instructions }}</p>{% endif %}
+
+{% for block in printdoc.blocks %}
+  {% if block.__class__.__name__ == "Heading" %}
+    <h2 class="note-heading">{{ block.text }}</h2>
+  {% elif block.__class__.__name__ == "Para" %}
+    <p class="note-para">{% for run in block.runs %}{% if run is string %}{{ run }}{% else %}{{ slot(run) }}{% endif %}{% endfor %}</p>
+  {% elif block.__class__.__name__ == "BulletList" %}
+    <ul class="note-bullets">
+    {% for item in block.items %}
+      <li>{% for run in item %}{% if run is string %}{{ run }}{% else %}{{ slot(run) }}{% endif %}{% endfor %}</li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+{% endfor %}
+{% endblock %}
