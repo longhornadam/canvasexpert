@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Push Notes — CanvasExpert{% endblock %}
+{% block body_class %}ce-screen{% endblock %}
+{% block main_class %}ce-page{% endblock %}
+{% block content %}
+
+{% if not token_is_set %}
+<div class="ce-content">
+  <div class="callout warn">No Canvas token saved — <a href="/settings">go to Settings</a> to add one.</div>
+</div>
+{% else %}
+
+<meta name="canvas-base" content="{{ canvas_base }}">
+
+<div class="ce-content">
+
+  {% include "_course_picker.html" %}
+
+  <div class="card">
+    <h2 style="margin-bottom:6px">Push notes</h2>
+    <p class="hint" style="margin:0 0 14px">
+      Generate printable PDFs and DOCXs from an LLM-authored <code>&lt;NOTEFORGE_JSON&gt;</code> file.
+    </p>
+    <details class="forge-howto">
+      <summary>Don't have notes yet? Forge them with your LLM -></summary>
+      <ol>
+        <li>Give your AI the note content or topic.</li>
+        <li>Have it format the result as a <code>&lt;NOTEFORGE_JSON&gt;</code> file
+          {% if authoring_skill %}- <button type="button" class="small btn-copy-skill" data-name="{{ authoring_skill }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skill | urlencode }}" download title="Download as .txt">Download</a>{% else %}- <a href="/ai-expert#authoring">get the authoring skill -></a>{% endif %}
+        </li>
+        <li>Paste or upload the AI's JSON above.</li>
+      </ol>
+    </details>
+    <label>NoteForge file</label>
+    <div class="file-source">
+      <select id="nf-file">
+        <option value="">— select —</option>
+        {% for f in note_files %}
+        <option value="{{ f.path }}">{{ f.label }}</option>
+        {% endfor %}
+      </select>
+      <div class="file-source-row">
+        <button type="button" class="file-src-btn active" data-src="select">Library</button>
+        <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+        <button type="button" class="file-src-btn" data-src="upload">Upload...</button>
+        <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+      </div>
+      <textarea class="file-src-paste" placeholder="Paste your &lt;NOTEFORGE_JSON&gt;..." style="display:none"></textarea>
+      <p class="file-src-hint" style="display:none"></p>
+    </div>
+    <div class="actions">
+      <button id="btn-nf-validate">Validate</button>
+      <button id="btn-nf-generate" class="primary">Generate printable notes</button>
+    </div>
+    <pre id="nf-log" class="log" hidden></pre>
+    <div id="nf-banner" class="push-banner" hidden></div>
+  </div>
+
+</div><!-- /.ce-content -->
+
+<script>
+  window.QF_FILES            = [];
+  window.QF_QUIZ_FILES       = [];
+  window.QF_ASSIGNMENT_FILES = [];
+  window.QF_PAGE_FILES       = [];
+  window.QF_NOTE_FILES       = {{ note_files | tojson }};
+  window.QF_CANVAS_BASE      = {{ canvas_base | tojson }};
+  window.QF_HISTORY          = [];
+  window.QF_SAVED            = {{ saved_courses | tojson }};
+</script>
+<script src="/static/push.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+  document.querySelectorAll(".file-source").forEach(function (w) {
+    if (typeof initFileSource === "function") initFileSource(w);
+  });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".btn-copy-skill");
+    if (b && typeof copySkill === "function") copySkill(b.dataset.name, b);
+  });
+  var _picker = document.getElementById("ce-course-picker");
+  if (_picker) document.addEventListener("click", function (e) {
+    if (_picker.open && !e.target.closest("#ce-course-picker")) _picker.open = false;
+  });
+})();
+</script>
+
+{% endif %}
+{% endblock %}

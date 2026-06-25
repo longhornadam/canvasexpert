@@ -5,6 +5,8 @@ One APIRouter; 14 routes for file validation, content push, and streaming push o
 Routes: POST /api/temp-upload
         POST /api/validate
         POST /api/physical/quiz
+        POST /api/nf/validate
+        POST /api/physical/note
         POST /api/af/validate
         POST /api/pf/validate
         POST /api/rf/validate
@@ -132,6 +134,114 @@ def api_physical_quiz(path: str = Form(...)):
                          "files": files, "warnings": warnings,
                          "warning": warnings[0] if warnings else "",
                          "fallback": fallback})
+
+
+@router.post("/api/nf/validate")
+def api_nf_validate(path: str = Form(...)):
+    """Validate enough NoteForge shape to summarize what the physical renderer will use."""
+    if REPO_ROOT not in sys.path:
+        sys.path.insert(0, REPO_ROOT)
+    try:
+        from engine.rendering.physical.note_adapter import load_noteforge_json, to_printdoc
+        from engine.rendering.physical.redact import iter_slots
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"engine unavailable: {e}"})
+
+    try:
+        note = load_noteforge_json(path)
+        printdoc = to_printdoc(note)
+    except Exception as e:
+        return JSONResponse({"ok": False, "problems": [str(e)], "summary": None})
+
+    problems = []
+    if note.get("version") != "1.0-json":
+        problems.append(f"version must be \"1.0-json\" (got {note.get('version')!r})")
+    if note.get("type") not in {"guided_notes", "cornell", "frayer"}:
+        problems.append(f"unknown NoteForge type: {note.get('type')!r}")
+
+    summary = {
+        "type": note.get("type"),
+        "title": printdoc.title,
+        "mode": note.get("mode") or "blank",
+        "slot_count": len(list(iter_slots(printdoc))),
+    }
+    return JSONResponse({"ok": not problems, "problems": problems, "summary": summary})
+
+
+def _note_files_from_results(results: dict) -> list[str]:
+    files = []
+    for artifact in (results.get("artifacts") or {}).values():
+        for key in ("docx_path", "pdf_path"):
+            path = artifact.get(key)
+            if path:
+                files.append(os.path.basename(path))
+    return files
+
+
+def _primary_note_pdf(results: dict) -> str:
+    artifacts = results.get("artifacts") or {}
+    for label in ("Core", "Exemplar", "Support", "Accelerate", "Extend"):
+        pdf = (artifacts.get(label) or {}).get("pdf_path")
+        if pdf:
+            return pdf
+    for label, artifact in artifacts.items():
+        if label == "KEY":
+            continue
+        pdf = artifact.get("pdf_path")
+        if pdf:
+            return pdf
+    return ""
+
+
+@router.post("/api/physical/note")
+def api_physical_note(path: str = Form(...)):
+    """Compile tiered printable PDF + DOCX files from a <NOTEFORGE_JSON> file."""
+    if REPO_ROOT not in sys.path:
+        sys.path.insert(0, REPO_ROOT)
+    try:
+        from pathlib import Path as _Path
+        from engine.packagers.note_handler import generate_note_outputs
+        from engine.packaging.folder_creator import create_quiz_folder
+        from engine.rendering.physical.note_adapter import load_noteforge_json, to_printdoc
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"engine unavailable: {e}"})
+
+    try:
+        note = load_noteforge_json(path)
+        title = to_printdoc(note).title
+        base = _exports_dir()
+        os.makedirs(base, exist_ok=True)
+        folder = create_quiz_folder(_Path(base), title)
+        results = generate_note_outputs(note, str(folder))
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+    log_path = results.get("log_path")
+    warnings = []
+    if log_path:
+        try:
+            with open(log_path, encoding="utf-8") as fh:
+                warnings = [
+                    line.strip()
+                    for line in fh
+                    if line.startswith("PHYSICAL RENDER WARNING")
+                ]
+            os.remove(log_path)
+        except OSError:
+            pass
+
+    fallback = not bool(_workspace_folder("Exports"))
+    return JSONResponse({
+        "ok": True,
+        "folder": str(folder),
+        "title": title,
+        "files": _note_files_from_results(results),
+        "artifacts": results.get("artifacts") or {},
+        "primary_pdf": _primary_note_pdf(results),
+        "warnings": warnings,
+        "warning": warnings[0] if warnings else "",
+        "fallback": fallback,
+    })
 
 
 @router.post("/api/af/validate")

@@ -51,6 +51,7 @@
     return [...(checklist?.querySelectorAll(".cc-cb:checked") || [])]
       .map(cb => ({ id: cb.value, name: cb.dataset.name }));
   }
+  window.targetCourses = targetCourses;
 
   function showLog(el) {
     el.hidden = false;
@@ -82,7 +83,7 @@
     }
   }
 
-  const allBusyBtns = "#btn-validate,#btn-preview,#btn-push,#btn-push-variants,#btn-add-variant";
+  const allBusyBtns = "#btn-validate,#btn-preview,#btn-push,#btn-push-variants,#btn-add-variant,#btn-nf-validate,#btn-nf-generate";
 
   function setBusy(v) {
     document.querySelectorAll(allBusyBtns).forEach(b => { b.disabled = v; });
@@ -93,6 +94,155 @@
       .then(r => r.json());
   }
   window.postForm = postForm;
+
+  function initFileSource(wrapper) {
+    if (!wrapper) return;
+    const sel      = wrapper.querySelector("select");
+    const pasteEl  = wrapper.querySelector(".file-src-paste");
+    const fileInp  = wrapper.querySelector(".file-src-input");
+    const hintEl   = wrapper.querySelector(".file-src-hint");
+    const srcBtns  = Array.from(wrapper.querySelectorAll(".file-src-btn"));
+
+    function setMode(mode) {
+      srcBtns.forEach(b => { b.classList.toggle("active", b.dataset.src === mode); });
+      if (sel)     sel.style.display     = mode === "select" ? "" : "none";
+      if (pasteEl) pasteEl.style.display = mode === "paste"  ? "" : "none";
+      if (mode !== "paste" && hintEl) {
+        hintEl.style.display = "none";
+        hintEl.textContent = "";
+        hintEl.className = "file-src-hint";
+      }
+    }
+
+    function setTempOption(path, label) {
+      if (!sel) return;
+      let opt = sel.querySelector("option[data-temp]");
+      if (!opt) {
+        opt = document.createElement("option");
+        opt.dataset.temp = "1";
+        sel.appendChild(opt);
+      }
+      opt.value = path;
+      opt.textContent = label;
+      sel.value = path;
+    }
+
+    async function uploadContent(content) {
+      try {
+        const r = await fetch("/api/temp-upload", {
+          method: "POST",
+          body: new URLSearchParams({ content }),
+        });
+        const d = await r.json();
+        return d.ok ? d.path : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function uploadFile(file) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const r = await fetch("/api/temp-upload", { method: "POST", body: fd });
+        const d = await r.json();
+        return d.ok ? d.path : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    srcBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (btn.dataset.src === "upload") {
+          if (fileInp) fileInp.click();
+        } else {
+          setMode(btn.dataset.src);
+        }
+      });
+    });
+
+    if (fileInp) {
+      fileInp.addEventListener("change", async function () {
+        const file = this.files[0];
+        if (!file) return;
+        if (hintEl) {
+          hintEl.style.display = "";
+          hintEl.className = "file-src-hint";
+          hintEl.textContent = "Uploading...";
+        }
+        const path = await uploadFile(file);
+        if (path) {
+          setTempOption(path, "Uploaded: " + file.name);
+          setMode("select");
+          if (hintEl) {
+            hintEl.style.display = "";
+            hintEl.className = "file-src-hint ok";
+            hintEl.textContent = "Ready: " + file.name;
+          }
+        } else {
+          if (hintEl) {
+            hintEl.style.display = "";
+            hintEl.className = "file-src-hint err";
+            hintEl.textContent = "Upload failed.";
+          }
+          setMode("select");
+        }
+        this.value = "";
+      });
+    }
+
+    let timer;
+    if (pasteEl) {
+      pasteEl.addEventListener("input", () => {
+        clearTimeout(timer);
+        const val = pasteEl.value.trim();
+        if (!val) {
+          if (hintEl) hintEl.style.display = "none";
+          return;
+        }
+        timer = setTimeout(async () => {
+          if (hintEl) {
+            hintEl.style.display = "";
+            hintEl.className = "file-src-hint";
+            hintEl.textContent = "Saving...";
+          }
+          const path = await uploadContent(val);
+          if (path) {
+            setTempOption(path, "Pasted JSON");
+            if (hintEl) {
+              hintEl.className = "file-src-hint ok";
+              hintEl.textContent = "Ready - click Validate or Push";
+            }
+          } else if (hintEl) {
+            hintEl.className = "file-src-hint err";
+            hintEl.textContent = "Error saving content.";
+          }
+        }, 600);
+      });
+    }
+  }
+  window.initFileSource = initFileSource;
+
+  async function copySkill(name, btn) {
+    if (!name || !btn) return;
+    const orig = btn.textContent;
+    btn.textContent = "Copying...";
+    btn.disabled = true;
+    try {
+      const r = await fetch("/api/ai-ta/file?name=" + encodeURIComponent(name));
+      if (!r.ok) throw new Error("skill not found");
+      await navigator.clipboard.writeText(await r.text());
+      btn.textContent = "Copied";
+    } catch (e) {
+      btn.textContent = "Failed";
+    }
+    setTimeout(() => {
+      btn.textContent = orig;
+      btn.disabled = false;
+    }, 1800);
+  }
+  window.copySkill = copySkill;
 
   async function loadRubricFiles() {
     if (!afRubricSel && !rfFileSel) return;
@@ -222,15 +372,27 @@
   }
 
   // ── Printable (PDF + DOCX) version: reuses the zero-auth engine via the backend ─
-  async function generatePhysical(path, logFn, bannerEl) {
-    logFn("\nGenerating printable version (PDF + DOCX)…");
+  async function generatePhysical(path, logFn, bannerEl, kind) {
+    const isNote = kind === "note";
+    const endpoint = isNote ? "/api/physical/note" : "/api/physical/quiz";
+    logFn(isNote
+      ? "\nGenerating printable notes (PDF + DOCX)..."
+      : "\nGenerating printable version (PDF + DOCX)…");
     try {
-      const d = await postForm("/api/physical/quiz", { path });
+      const d = await postForm(endpoint, { path });
       if (!d.ok) { logFn("⚠ Printable version failed: " + (d.error || "unknown error")); return; }
       logFn("✓ Printable version saved to: " + d.folder);
       (d.files || []).forEach(f => logFn("    · " + f));
       (d.warnings || []).forEach(w => logFn("    ⚠ " + w));
       if (d.fallback) logFn("    (No OneDrive workspace found — saved to this PC's local Finished_Exports folder.)");
+      if (isNote) {
+        window.CE_LAST_NOTE_PRINTABLE = {
+          pdf_path: d.primary_pdf || "",
+          folder: d.folder || "",
+          title: d.title || "",
+          artifacts: d.artifacts || {},
+        };
+      }
       if (bannerEl) {
         const prev = bannerEl.hidden ? "" : bannerEl.innerHTML;
         const note = d.fallback
@@ -238,7 +400,7 @@
           : "";
         showBanner(bannerEl, bannerEl.classList.contains("fail") ? "warn" : "ok",
           (prev ? prev + "<br>" : "") +
-          `📄 Printable PDF + DOCX saved to <code>${esc(d.folder)}</code> — ` +
+          `📄 ${isNote ? "Printable notes" : "Printable PDF + DOCX"} saved to <code>${esc(d.folder)}</code> — ` +
           `<a href="#" data-open-folder="${esc(d.folder)}">Open folder ↗</a>` + note);
         bannerEl.querySelector("[data-open-folder]")?.addEventListener("click", async e => {
           e.preventDefault();
@@ -726,6 +888,44 @@
       streamSSE(
         `/api/push-multi/stream?multi_manifest=${encodeURIComponent(JSON.stringify(multiManifest))}`,
         log, document.getElementById("variants-banner"), () => setBusy(false));
+    }
+  });
+
+  // ── NF printable notes ────────────────────────────────────────────────
+
+  document.getElementById("btn-nf-validate")?.addEventListener("click", function () {
+    const path = document.getElementById("nf-file")?.value;
+    if (!path) return alert("Pick a NoteForge file.");
+    const log = showLog(document.getElementById("nf-log"));
+    hideBanner(document.getElementById("nf-banner"));
+    log("Validating...\n");
+    postForm("/api/nf/validate", { path }).then(d => {
+      (d.problems || []).forEach(p => log("✗ " + p));
+      if (d.error) log("ERROR: " + d.error);
+      const s = d.summary;
+      if (s) {
+        window.CE_LAST_NOTE_TITLE = s.title || "";
+        log(`${d.ok ? "✓ VALID" : "✗ INVALID"} - ${s.type}: "${s.title}"`);
+        log(`  mode: ${s.mode}`);
+        log(`  blanks: ${s.slot_count}`);
+      }
+    }).catch(e => log("ERROR: " + e));
+  });
+
+  document.getElementById("btn-nf-generate")?.addEventListener("click", async function () {
+    const path = document.getElementById("nf-file")?.value;
+    if (!path) return alert("Pick a NoteForge file.");
+    const log = showLog(document.getElementById("nf-log"));
+    hideBanner(document.getElementById("nf-banner"));
+    this.disabled = true;
+    try {
+      await generatePhysical(path, log, document.getElementById("nf-banner"), "note");
+      if (window.CE_LAST_NOTE_PRINTABLE) {
+        window.CE_LAST_NOTE_PRINTABLE.title =
+          window.CE_LAST_NOTE_PRINTABLE.title || window.CE_LAST_NOTE_TITLE || "";
+      }
+    } finally {
+      this.disabled = false;
     }
   });
 
