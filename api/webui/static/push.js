@@ -221,14 +221,15 @@
     es.onerror = () => { es.close(); onDone?.(false); };
   }
 
-  // ── Printable (DOCX) version: reuses the zero-auth engine via the backend ─
+  // ── Printable (PDF + DOCX) version: reuses the zero-auth engine via the backend ─
   async function generatePhysical(path, logFn, bannerEl) {
-    logFn("\nGenerating printable version (DOCX)…");
+    logFn("\nGenerating printable version (PDF + DOCX)…");
     try {
       const d = await postForm("/api/physical/quiz", { path });
       if (!d.ok) { logFn("⚠ Printable version failed: " + (d.error || "unknown error")); return; }
       logFn("✓ Printable version saved to: " + d.folder);
       (d.files || []).forEach(f => logFn("    · " + f));
+      (d.warnings || []).forEach(w => logFn("    ⚠ " + w));
       if (d.fallback) logFn("    (No OneDrive workspace found — saved to this PC's local Finished_Exports folder.)");
       if (bannerEl) {
         const prev = bannerEl.hidden ? "" : bannerEl.innerHTML;
@@ -237,7 +238,7 @@
           : "";
         showBanner(bannerEl, bannerEl.classList.contains("fail") ? "warn" : "ok",
           (prev ? prev + "<br>" : "") +
-          `📄 Printable version saved to <code>${esc(d.folder)}</code> — ` +
+          `📄 Printable PDF + DOCX saved to <code>${esc(d.folder)}</code> — ` +
           `<a href="#" data-open-folder="${esc(d.folder)}">Open folder ↗</a>` + note);
         bannerEl.querySelector("[data-open-folder]")?.addEventListener("click", async e => {
           e.preventDefault();

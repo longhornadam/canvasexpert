@@ -205,9 +205,9 @@ class QuizForgeOrchestrator:
             
             if package_results.get('physical'):
                 phys = package_results['physical']
-                print(f"  -> Created: {folder.name}/{Path(phys['quiz_path']).name}")
-                print(f"  -> Created: {folder.name}/{Path(phys['key_path']).name}")
-                print(f"  -> Created: {folder.name}/{Path(phys['rationale_path']).name}")
+                for key in ("quiz_path", "quiz_pdf_path", "key_path", "key_pdf_path", "rationale_path"):
+                    if phys.get(key):
+                        print(f"  -> Created: {folder.name}/{Path(phys[key]).name}")
             
             print(f"  -> All outputs saved to: {folder.name}")
             

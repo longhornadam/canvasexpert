@@ -186,10 +186,11 @@ Sequence → (Concept map) → (KWL/sketchnotes).
    that writes `*_NEW.docx` + `*_NEW.pdf` next to the current files. **Touches nothing in the live
    path.** Full handoff: `docs/handoffs/paper-render-layer-slice1.md`. *Gate:* Adam judges fidelity
    before slice 2.
-2. **Adopt or adjust (pending verdict).** If fidelity passes: wire the new path into `packager.py`,
-   retire the python-docx `physical_handler`, keep the current quiz DOCX as a content/structure
-   regression baseline (visual parity, not byte parity), `py -m pytest engine/tests` green. If it
-   falls short: capture exactly where (which constructs) and iterate the templates/converter choice.
+2. **Adopt — wire into the live pipeline.** ✅ verdict passed (DOCX+PDF; code/prose/poetry). Rewrite
+   the single seam `generate_physical_outputs()` (used by both `orchestrator`→`package_quiz` and the
+   webui `push.py`) to render via the new path, emitting student-locked PDF + editable DOCX for quiz
+   and key; retire the python-docx student/key renderer; keep rationale + log stats. HTML content-parity
+   test as the regression baseline. Full handoff: `docs/handoffs/paper-render-layer-slice2.md`.
 3. **Tier redaction.** `redact(printdoc, tier)` + deterministic seeding + answer-key consistency.
    *Acceptance:* same JSON+tier stable; key always matches blanks; tier monotonicity
    (Support ⊆ Core ⊆ Accelerate blanked sets).
