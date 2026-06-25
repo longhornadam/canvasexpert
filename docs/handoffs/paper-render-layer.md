@@ -191,9 +191,10 @@ Sequence → (Concept map) → (KWL/sketchnotes).
    webui `push.py`) to render via the new path, emitting student-locked PDF + editable DOCX for quiz
    and key; retire the python-docx student/key renderer; keep rationale + log stats. HTML content-parity
    test as the regression baseline. Full handoff: `docs/handoffs/paper-render-layer-slice2.md`.
-3. **Tier redaction.** `redact(printdoc, tier)` + deterministic seeding + answer-key consistency.
-   *Acceptance:* same JSON+tier stable; key always matches blanks; tier monotonicity
-   (Support ⊆ Core ⊆ Accelerate blanked sets).
+3. **Tier-redaction engine.** `redact(printdoc, tier)` + `Slot` primitive: deterministic, monotonic,
+   pure; fully-given doc = answer key. **Engine + unit tests only — no producer until NoteForge**
+   (quizzes have no slots), so no teacher-visible output this slice. Full handoff:
+   `docs/handoffs/paper-render-layer-slice3.md`.
 4. **NoteForge contract** — `LLM_Modules/NoteForge_Base.md` (Guided + Cornell first), `mode`,
    `key`-slot marking, tier semantics. *Canonical; never fork in backend code.*
 5. **NoteForge adapter + templates** for the build-order styles.

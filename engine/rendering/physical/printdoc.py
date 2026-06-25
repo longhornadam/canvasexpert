@@ -35,6 +35,14 @@ class Question:
 
 
 @dataclass
+class Slot:
+    id: str
+    content_html: str
+    key: bool = True
+    given: bool = True
+
+
+@dataclass
 class Choice:
     letter: str
     html: str
@@ -97,9 +105,10 @@ QPayload: TypeAlias = (
     | FITBPayload
     | AnswerLinePayload
     | EmptyPayload
+    | Slot
 )
 
-Block: TypeAlias = Stimulus | Question
+Block: TypeAlias = Stimulus | Question | Slot
 
 
 @dataclass
