@@ -19,6 +19,7 @@ api/.env
 api/webui/config.json
 
 # Runtime / user data
+out/
 api/webui/curve_events.json
 api/temp/
 api/out/
