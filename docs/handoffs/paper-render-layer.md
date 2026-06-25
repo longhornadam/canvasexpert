@@ -198,9 +198,11 @@ Sequence → (Concept map) → (KWL/sketchnotes).
 4. **NoteForge vertical slice — guided cloze** (contract + adapter + template + per-tier emission, as
    a dev CLI). First *visible* tiers: one note JSON → Support→Extend PDFs/DOCX + filled key. Full
    handoff: `docs/handoffs/paper-render-layer-slice4-noteforge-guided-cloze.md`.
-5. **More note styles + live wiring** — Cornell/Frayer/boxes-and-bullets templates on the same spine;
-   wire NoteForge into the webui/orchestrator (mirrors slice 2).
-6. **(Follow-on, `api/`)** "attach printable to a Canvas assignment" — reuse assignment push.
+5. **Note styles — Cornell + Frayer** (column + grid layouts on the same spine; review-first CLI).
+   Full handoff: `docs/handoffs/paper-render-layer-slice5-note-styles-cornell-frayer.md`. Boxes-and-
+   bullets / outline / sequence / two-column follow trivially after.
+6. **Live wiring** — NoteForge → webui route + orchestrator → `Finished_Exports` (mirrors slice 2).
+7. **(Follow-on, `api/`)** "attach printable to a Canvas assignment" — reuse assignment push.
 
 ---
 

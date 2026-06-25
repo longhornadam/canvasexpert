@@ -50,6 +50,27 @@ class BulletList:
 
 
 @dataclass
+class CornellRow:
+    cue: list
+    note: list
+
+
+@dataclass
+class CornellLayout:
+    rows: list
+    summary: list
+
+
+@dataclass
+class FrayerGrid:
+    term: str
+    definition: list
+    characteristics: list
+    examples: list
+    non_examples: list
+
+
+@dataclass
 class Slot:
     id: str
     content_html: str
@@ -123,7 +144,16 @@ QPayload: TypeAlias = (
     | Slot
 )
 
-Block: TypeAlias = Stimulus | Question | Slot | Heading | Para | BulletList
+Block: TypeAlias = (
+    Stimulus
+    | Question
+    | Slot
+    | Heading
+    | Para
+    | BulletList
+    | CornellLayout
+    | FrayerGrid
+)
 
 
 @dataclass

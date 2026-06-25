@@ -5,3 +5,13 @@
     <span class="slot-blank">&nbsp;</span>
   {%- endif -%}
 {%- endmacro %}
+
+{% macro runs(items) -%}
+  {%- for item in items -%}
+    {%- if item is string -%}
+      {{ item }}
+    {%- else -%}
+      {{ slot(item) }}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endmacro %}
