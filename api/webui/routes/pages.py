@@ -20,7 +20,7 @@ from .. import config, workspace
 from ..deps import (
     AI_TA_DIR, API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
     list_ai_ta_files, list_assignment_files, list_calendar_files,
-    list_page_files, list_quiz_files,
+    list_note_files, list_page_files, list_quiz_files,
 )
 
 router = APIRouter(tags=["pages"])
@@ -123,6 +123,16 @@ def push_page_page(request: Request):
     return templates.TemplateResponse("push_page.html", {
         **_push_base_ctx(request),
         "page_files":      list_page_files(),
+        "authoring_skill": skill,
+    })
+
+
+@router.get("/push/note", response_class=HTMLResponse)
+def push_note_page(request: Request):
+    skill = _authoring_skill(list_ai_ta_files(), "Author Notes")
+    return templates.TemplateResponse("push_note.html", {
+        **_push_base_ctx(request),
+        "note_files":      list_note_files(),
         "authoring_skill": skill,
     })
 

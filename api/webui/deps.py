@@ -106,6 +106,13 @@ PAGE_FOLDERS = [os.path.join(API_DIR, "qf_materials", "qf quiz examples")]
 if _workspace_folder("Pages"):
     PAGE_FOLDERS.append(_workspace_folder("Pages"))
 
+NOTE_FOLDERS = [
+    os.path.join(REPO_ROOT, "DropZone"),
+    os.path.join(REPO_ROOT, "Finished_Exports"),
+]
+if _workspace_folder("Notes"):
+    NOTE_FOLDERS.append(_workspace_folder("Notes"))
+
 AI_TA_DIR = _workspace_folder("AI-TA") or os.path.join(REPO_ROOT, "AI-TA")
 
 TEMP_DIR = os.path.join(API_DIR, "temp")
@@ -155,6 +162,10 @@ def list_assignment_files():
 
 def list_page_files():
     return _list_txt_files(PAGE_FOLDERS)
+
+
+def list_note_files():
+    return _list_txt_files(NOTE_FOLDERS)
 
 
 def list_rubric_files():
