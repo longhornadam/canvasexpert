@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ printdoc.title }}{% if variant == "key" %} - Answer Key{% endif %}</title>
+  <link rel="stylesheet" href="{{ css_href }}">
+  <style>
+{{ inline_css }}
+  </style>
+</head>
+<body>
+{% block content %}{% endblock %}
+</body>
+</html>
