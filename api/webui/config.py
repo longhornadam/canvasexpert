@@ -18,7 +18,8 @@ TOKEN_KEY = "canvas_token"
 CANVAS_BASE_DEFAULT   = "https://sample.instructure.com"
 DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas Downloads")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
-SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags")
+SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags",
+               "monitored_students")
 
 
 _BUILTIN_LABELS = {
@@ -94,6 +95,14 @@ def _synced_state():
     if not os.path.exists(path):
         _workspace_save({k: machine[k] for k in SYNCED_KEYS if k in machine})
     ws = _workspace_load()
+    # Backfill synced keys that exist machine-local but were never written to the
+    # workspace — covers keys promoted to SYNCED_KEYS after the workspace was first
+    # seeded (e.g. monitored_students, now PII-synced). Machine data only fills gaps;
+    # the workspace copy stays authoritative once present.
+    missing = {k: machine[k] for k in SYNCED_KEYS if k in machine and k not in ws}
+    if missing:
+        ws.update(missing)
+        _workspace_save(ws)
     merged = dict(machine)
     merged.update(ws)
     return merged
@@ -354,7 +363,7 @@ def set_routine_state(routine_id: str, patch: dict):
 
 
 # --------------------------------------------------------------------------
-# Student Reports — synced-workspace output root + machine-local monitored cohort
+# Student Reports — synced-workspace output root + synced monitored cohort
 # --------------------------------------------------------------------------
 
 STUDENT_REPORTS_DEFAULT = os.path.join(
@@ -380,19 +389,20 @@ def set_student_reports_root(path: str):
 
 
 def get_monitored_students() -> dict:
-    """{user_id(str): {name, note}} — machine-local; note is private, never in a packet."""
-    return _machine_load().get("monitored_students", {})
+    """{user_id(str): {name, note}} — PII, so synced to the OneDrive workspace
+    (in-tenant/FERPA-safe); note is private, never in a packet."""
+    return _synced_state().get("monitored_students", {})
 
 
 def set_monitored_student(user_id: str, name: str, note: str = ""):
-    state = _machine_load()
+    state = _synced_state()
     mon = state.setdefault("monitored_students", {})
     mon[str(user_id)] = {"name": name, "note": note}
-    _machine_save(state)
+    _save_synced_key("monitored_students", mon)
 
 
 def remove_monitored_student(user_id: str):
-    state = _machine_load()
+    state = _synced_state()
     mon = state.setdefault("monitored_students", {})
     mon.pop(str(user_id), None)
-    _machine_save(state)
+    _save_synced_key("monitored_students", mon)
