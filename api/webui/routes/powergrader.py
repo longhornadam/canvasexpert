@@ -1,19 +1,19 @@
-"""SpeedGrader routes — keyboard-driven grading with optional AI assistance.
+"""PowerGrader routes — keyboard-driven grading with optional AI assistance.
 
 Modes:
   fast      Download → queue → keyboard-grade → bulk push
   assisted  Same + OpenRouter pre-fills score/feedback per student
 
 Page routes:
-  GET /speedgrader                     Setup screen
-  GET /speedgrader/session/<id>        Queue screen
+  GET /powergrader                     Setup screen
+  GET /powergrader/session/<id>        Queue screen
 
 API routes:
-  GET  /api/speedgrader/sessions           List workspace sessions
-  POST /api/speedgrader/start              Create session (fetch + optional AI)
-  GET  /api/speedgrader/session/<id>       Get session JSON
-  POST /api/speedgrader/session/<id>/grade Save one student's grade
-  POST /api/speedgrader/session/<id>/push  Push approved to Canvas
+  GET  /api/powergrader/sessions           List workspace sessions
+  POST /api/powergrader/start              Create session (fetch + optional AI)
+  GET  /api/powergrader/session/<id>       Get session JSON
+  POST /api/powergrader/session/<id>/grade Save one student's grade
+  POST /api/powergrader/session/<id>/push  Push approved to Canvas
 """
 import json
 import os
@@ -33,7 +33,7 @@ from .. import config, workspace
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_headers, _canvas_send
 from ..deps import list_rubric_files, templates
 
-router = APIRouter(tags=["speedgrader"])
+router = APIRouter(tags=["powergrader"])
 
 _CODE_EXTS = {".py", ".html", ".htm", ".css", ".js", ".txt", ".md", ".json", ".csv"}
 _MAX_CODE_BYTES = 256 * 1024
@@ -43,17 +43,17 @@ _MAX_CODE_BYTES = 256 * 1024
 # Session storage helpers
 # --------------------------------------------------------------------------
 
-def _sg_dir() -> str | None:
+def _pg_dir() -> str | None:
     root = workspace.workspace_root()
     if not root:
         return None
-    d = os.path.join(root, "SpeedGrader")
+    d = os.path.join(root, "PowerGrader")
     os.makedirs(d, exist_ok=True)
     return d
 
 
 def _session_path(session_id: str) -> str | None:
-    d = _sg_dir()
+    d = _pg_dir()
     if not d:
         return None
     # Guard against path traversal
@@ -127,7 +127,7 @@ def _vault():
     if vpath:
         return feedback_vault.Vault(os.path.join(vpath, "vault.json"))
     root = workspace.workspace_root()
-    fallback = os.path.join(root or ".", "SpeedGrader", "_vault")
+    fallback = os.path.join(root or ".", "PowerGrader", "_vault")
     os.makedirs(fallback, exist_ok=True)
     return feedback_vault.Vault(os.path.join(fallback, "vault.json"))
 
@@ -149,9 +149,9 @@ def _load_rubric_text(rubric_name: str) -> str:
 # Page routes
 # --------------------------------------------------------------------------
 
-@router.get("/speedgrader", response_class=HTMLResponse)
-def speedgrader_setup(request: Request):
-    return templates.TemplateResponse(request, "speedgrader_setup.html", {
+@router.get("/powergrader", response_class=HTMLResponse)
+def powergrader_setup(request: Request):
+    return templates.TemplateResponse(request, "powergrader_setup.html", {
         "nav_section":    "feedback",
         "saved_courses":  config.active_courses(),
         "rubrics":        [r["label"] for r in list_rubric_files()],
@@ -161,12 +161,12 @@ def speedgrader_setup(request: Request):
     })
 
 
-@router.get("/speedgrader/session/{session_id}", response_class=HTMLResponse)
-def speedgrader_queue(request: Request, session_id: str):
+@router.get("/powergrader/session/{session_id}", response_class=HTMLResponse)
+def powergrader_queue(request: Request, session_id: str):
     session = _load_session(session_id)
     if not session:
         return HTMLResponse("<h2>Session not found.</h2>", status_code=404)
-    return templates.TemplateResponse(request, "speedgrader_queue.html", {
+    return templates.TemplateResponse(request, "powergrader_queue.html", {
         "nav_section":      "feedback",
         "session_id":       session_id,
         "assignment_name":  session.get("assignment_name", ""),
@@ -181,9 +181,9 @@ def speedgrader_queue(request: Request, session_id: str):
 # API routes
 # --------------------------------------------------------------------------
 
-@router.get("/api/speedgrader/sessions")
+@router.get("/api/powergrader/sessions")
 def list_sessions():
-    d = _sg_dir()
+    d = _pg_dir()
     if not d:
         return JSONResponse({"sessions": []})
     sessions = []
@@ -212,8 +212,8 @@ def list_sessions():
     return JSONResponse({"sessions": sessions})
 
 
-@router.post("/api/speedgrader/start")
-def sg_start(
+@router.post("/api/powergrader/start")
+def pg_start(
     course_id: str = Form(""),
     assignment_id: str = Form(""),
     mode: str = Form("fast"),
@@ -359,16 +359,16 @@ def sg_start(
     })
 
 
-@router.get("/api/speedgrader/session/{session_id}")
-def sg_get_session(session_id: str):
+@router.get("/api/powergrader/session/{session_id}")
+def pg_get_session(session_id: str):
     session = _load_session(session_id)
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     return JSONResponse({"ok": True, "session": session})
 
 
-@router.post("/api/speedgrader/session/{session_id}/grade")
-def sg_grade(
+@router.post("/api/powergrader/session/{session_id}/grade")
+def pg_grade(
     session_id: str,
     user_id: str = Form(""),
     teacher_score: str = Form(""),
@@ -403,8 +403,8 @@ def sg_grade(
     return JSONResponse({"ok": True, "approved": approved})
 
 
-@router.post("/api/speedgrader/session/{session_id}/push")
-def sg_push(
+@router.post("/api/powergrader/session/{session_id}/push")
+def pg_push(
     session_id: str,
     user_ids: str = Form(""),
 ):

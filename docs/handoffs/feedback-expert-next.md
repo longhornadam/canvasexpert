@@ -2,7 +2,7 @@
 
 > **SUPERSEDED (2026-06-21):** the active V1 is now **`feedbackexpert-name-manager-v1.md`**
 > (SAFE/PRIVATE folders, aggressive scrub, fake-name pseudonyms, a Name Manager screen).
-> **Automated re-identification / Phase C push is parked** in favor of a SpeedGrader-manual
+> **Automated re-identification / Phase C push is parked** in favor of a PowerGrader-manual
 > model (teacher takes SAFE files to any LLM, enters grades by hand using a who-is-who
 > decoder). The Phase C section below + the Feedback Scoring Contract remain as *dormant*
 > code/notes; do not extend them. Read the V1 handoff for current direction.

@@ -36,13 +36,13 @@ comment per student). Workspace layout is **SAFE / PRIVATE / _system** zones und
 Reference docs: the contract above + `docs/guides/cs-project-authoring.md` (authoring for LLM
 scoring). The `docs/handoffs/feedbackexpert-*.md` files are historical build specs (now implemented).
 
-**SpeedGrader** (`/speedgrader`) — built and on `dev`. A keyboard-driven grading queue that
+**PowerGrader** (`/powergrader`) — built and on `dev`. A keyboard-driven grading queue that
 replaces Canvas's own SpeedGrader UI. Two modes: **Fast** (download submissions → queue →
 keyboard-grade → bulk push, no AI required) and **Assisted** (same, but OpenRouter pre-fills
 score + feedback per student using the vault + safety gate). Shows Roster context (tier badge,
 monitored flag, extra-time flag) inline — Canvas SpeedGrader has no equivalent. Sessions are
-stored in `<workspace>/SpeedGrader/` (PRIVATE zone — real names + submission content, never
-committed). Route file: `api/webui/routes/speedgrader.py`. Spec: `docs/handoffs/speedgrader-v1.md`.
+stored in `<workspace>/PowerGrader/` (PRIVATE zone — real names + submission content, never
+committed). Route file: `api/webui/routes/powergrader.py`. Spec: `docs/handoffs/powergrader-v1.md`.
 
 ## Guardrails (non-negotiable)
 
