@@ -219,8 +219,9 @@ via curve on Mar 5: 62 → 70". Section headings: **Standing**, **Late & extende
 dates**, **Adjustments**, **Comments**.
 
 **Monitored toggle:** each student has a ☆ Monitor / ★ Monitored button on their row.
-Monitored students form a private cohort recorded machine-locally (never synced; in
-`config.json`). The **`student_reports`** routine (see Routines below) auto-refreshes
+Monitored students form a private cohort. Because the names and notes are student PII,
+they are synced to the OneDrive workspace (`settings.json`, in-tenant/FERPA-safe), not
+left in machine-local `config.json`. The **`student_reports`** routine (see Routines below) auto-refreshes
 packets for just this cohort, skipping courses whose data hasn't changed (dedupe via
 `_manifest.json`). The private note attached to a monitored student is never rendered
 into any packet.
