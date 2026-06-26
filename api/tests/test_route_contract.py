@@ -99,6 +99,9 @@ EXPECTED = [
     ('/settings/courses/{course_id}/remove', ('POST',)),
     ('/settings/courses/{course_id}/set-active', ('POST',)),
     ('/settings/download-root', ('POST',)),
+    ('/settings/openrouter', ('POST',)),
+    ('/settings/openrouter/models', ('GET',)),
+    ('/settings/openrouter/test', ('POST',)),
     ('/settings/test-connection', ('POST',)),
     ('/welcome', ('GET',)),
     ('/welcome/workspace', ('POST',)),
@@ -148,6 +151,13 @@ EXPECTED = [
     ('/push/rubric', ('GET',)),
     ('/push/quick', ('GET',)),
     ('/download-work', ('GET',)),
+    ('/powergrader', ('GET',)),
+    ('/powergrader/session/{session_id}', ('GET',)),
+    ('/api/powergrader/session/{session_id}', ('GET',)),
+    ('/api/powergrader/session/{session_id}/grade', ('POST',)),
+    ('/api/powergrader/session/{session_id}/push', ('POST',)),
+    ('/api/powergrader/sessions', ('GET',)),
+    ('/api/powergrader/start', ('POST',)),
     ('/student-reports', ('GET',)),
 ]
 

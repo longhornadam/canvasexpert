@@ -98,6 +98,170 @@
     }
   });
 
+  // ── OpenRouter account ────────────────────────────────────────────────
+
+  const openrouterForm     = document.getElementById("openrouter-form");
+  const openrouterKeyInput = document.getElementById("openrouter-key-input");
+  const openrouterModel    = document.getElementById("openrouter-model-input");
+  const openrouterStatus   = document.getElementById("openrouter-status");
+  const btnReplaceOrKey    = document.getElementById("btn-replace-openrouter-key");
+  const btnOpenrouterHelp  = document.getElementById("btn-openrouter-help");
+  const openrouterHelp     = document.getElementById("openrouter-help");
+  const btnOpenrouterAuto  = document.getElementById("btn-openrouter-auto");
+  const btnLoadOrModels    = document.getElementById("btn-openrouter-load-models");
+  const btnTestOpenrouter  = document.getElementById("btn-openrouter-test");
+  const openrouterModels   = document.getElementById("openrouter-model-list");
+  const openrouterMajorBox = document.getElementById("openrouter-major-models");
+  const openrouterMajorList = document.getElementById("openrouter-major-list");
+
+  function setOpenrouterStatus(msg, kind) {
+    if (!openrouterStatus) return;
+    openrouterStatus.textContent = msg;
+    openrouterStatus.className = "status" + (kind ? " " + kind : "");
+  }
+
+  btnReplaceOrKey?.addEventListener("click", () => {
+    const showing = openrouterKeyInput.style.display !== "none";
+    openrouterKeyInput.style.display = showing ? "none" : "";
+    btnReplaceOrKey.textContent = showing ? "Replace" : "Cancel";
+    if (!showing) openrouterKeyInput.focus();
+  });
+
+  btnOpenrouterHelp?.addEventListener("click", () => {
+    if (!openrouterHelp) return;
+    openrouterHelp.hidden = !openrouterHelp.hidden;
+    btnOpenrouterHelp.textContent = openrouterHelp.hidden ? "What is this?" : "Hide instructions";
+  });
+
+  btnOpenrouterAuto?.addEventListener("click", () => {
+    if (openrouterModel) openrouterModel.value = "openrouter/auto";
+    setOpenrouterStatus("Auto Router selected. Save to keep it.", "ok");
+  });
+
+  function formatPrice(v) {
+    if (v === null || v === undefined || Number.isNaN(Number(v))) return "n/a";
+    const n = Number(v);
+    if (n === 0) return "$0";
+    if (n < 0.01) return "$" + n.toFixed(4);
+    if (n < 1) return "$" + n.toFixed(3);
+    return "$" + n.toFixed(2);
+  }
+
+  function formatScenarioCost(v) {
+    if (v === null || v === undefined || Number.isNaN(Number(v))) return "n/a";
+    const n = Number(v);
+    if (n === 0) return "$0";
+    if (n < 0.01) return "<$0.01";
+    if (n < 1) return "$" + n.toFixed(2);
+    return "$" + n.toFixed(2);
+  }
+
+  function estimateText(m) {
+    if (m.scenario_cost_low !== undefined && m.scenario_cost_high !== undefined &&
+        m.scenario_cost_low !== null && m.scenario_cost_high !== null) {
+      return `${formatScenarioCost(m.scenario_cost_low)}-${formatScenarioCost(m.scenario_cost_high)}`;
+    }
+    return formatScenarioCost(m.scenario_cost);
+  }
+
+  function renderMajorModels(models, scenario) {
+    if (!openrouterMajorBox || !openrouterMajorList) return;
+    const rows = models || [];
+    if (!rows.length) {
+      openrouterMajorBox.hidden = true;
+      return;
+    }
+    const scenarioLabel = scenario?.label || "30 1000-word essays";
+    openrouterMajorList.innerHTML =
+      '<table class="profiles" style="margin-top:6px">' +
+      `<thead><tr><th>Family</th><th>Model</th><th>Estimate</th><th>Reference pricing</th><th></th></tr></thead>` +
+      '<tbody>' + rows.map(m =>
+        `<tr>` +
+        `<td>${esc(m.family || "")}</td>` +
+        `<td><strong>${esc(m.name || m.id)}</strong><br><span class="muted">${esc(m.id)}</span><br><span class="muted">${esc(m.strategy || "")}</span></td>` +
+        `<td><strong>${estimateText(m)}</strong><br><span class="muted">${esc(scenarioLabel)}</span></td>` +
+        `<td><span class="muted">Input ${formatPrice(m.input_per_mtok)} / 1M<br>Output ${formatPrice(m.output_per_mtok)} / 1M</span></td>` +
+        `<td><button type="button" class="small" data-openrouter-model="${esc(m.id)}">Use</button></td>` +
+        `</tr>`
+      ).join("") + '</tbody></table>';
+    openrouterMajorBox.hidden = false;
+  }
+
+  openrouterMajorList?.addEventListener("click", e => {
+    const btn = e.target.closest("[data-openrouter-model]");
+    if (!btn) return;
+    if (openrouterModel) openrouterModel.value = btn.dataset.openrouterModel || "";
+    setOpenrouterStatus("Model selected. Save to keep it.", "ok");
+  });
+
+  btnLoadOrModels?.addEventListener("click", async () => {
+    if (!openrouterModels) return;
+    btnLoadOrModels.disabled = true;
+    btnLoadOrModels.textContent = "Loading…";
+    setOpenrouterStatus("Loading current OpenRouter model IDs and prices…");
+    try {
+      const d = await fetch("/settings/openrouter/models").then(r => r.json());
+      if (!d.ok) {
+        setOpenrouterStatus("Could not load models: " + (d.error || "unknown error"), "error");
+        return;
+      }
+      const options = ['<option value="openrouter/auto" label="Auto Router (recommended)"></option>'];
+      (d.models || []).forEach(m => {
+        const label = m.name && m.name !== m.id ? `${m.name}` : "";
+        options.push(`<option value="${esc(m.id)}" label="${esc(label)}"></option>`);
+      });
+      openrouterModels.innerHTML = options.join("");
+      renderMajorModels(d.majors || [], d.scenario || null);
+      setOpenrouterStatus(`Loaded ${d.models?.length || 0} current model ID(s) and ${d.majors?.length || 0} major model price row(s).`, "ok");
+      openrouterModel?.focus();
+    } catch (e) {
+      setOpenrouterStatus("Could not load models: " + e, "error");
+    } finally {
+      btnLoadOrModels.disabled = false;
+      btnLoadOrModels.textContent = "Load current model IDs & prices";
+    }
+  });
+
+  btnTestOpenrouter?.addEventListener("click", async () => {
+    const apiKey = isHidden(openrouterKeyInput) ? "" : (openrouterKeyInput?.value.trim() || "");
+    setOpenrouterStatus(apiKey ? "Testing pasted OpenRouter key…" : "Testing saved OpenRouter key…");
+    const d = await fetch("/settings/openrouter/test", {
+      method: "POST",
+      body: new URLSearchParams({ api_key: apiKey }),
+    }).then(r => r.json());
+    if (d.ok) {
+      const label = d.label ? ` (${d.label})` : "";
+      setOpenrouterStatus(`OpenRouter key works${label}.`, "ok");
+    } else {
+      setOpenrouterStatus("OpenRouter key failed: " + (d.error || "unknown error"), "error");
+    }
+  });
+
+  openrouterForm?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const apiKey = isHidden(openrouterKeyInput) ? "" : (openrouterKeyInput?.value.trim() || "");
+    const model = openrouterModel?.value.trim() || "";
+    if (!apiKey && !model) return setOpenrouterStatus("Enter a key or model first.", "error");
+    setOpenrouterStatus("Saving…");
+    const r = await fetch("/settings/openrouter", {
+      method: "POST",
+      body: new URLSearchParams({ api_key: apiKey, model }),
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      setOpenrouterStatus(d.error || "Could not save OpenRouter settings.", "error");
+      return;
+    }
+    if (openrouterKeyInput) openrouterKeyInput.value = "";
+    if (d.key_valid) {
+      const label = d.key_label ? ` (${d.key_label})` : "";
+      setOpenrouterStatus(`Saved and validated OpenRouter key${label}.`, "ok");
+      setTimeout(() => location.reload(), 900);
+    } else {
+      setOpenrouterStatus("Saved, but OpenRouter validation failed: " + (d.key_error || "unknown error"), "error");
+    }
+  });
+
   // ── Course browser ─────────────────────────────────────────────────────
 
   const btnFetch     = document.getElementById("btn-fetch-courses");

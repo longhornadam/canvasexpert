@@ -16,9 +16,9 @@ SERVICE   = "quizforge-api"
 TOKEN_KEY = "canvas_token"
 OPENROUTER_KEY = "openrouter_key"
 
-# Default LLM for FeedbackExpert via OpenRouter. Editable in the UI — verify the
-# exact model id at openrouter.ai/models; OpenRouter slugs change over time.
-DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.5"
+# Stable OpenRouter router model. It lets OpenRouter choose an available current
+# model instead of us pinning a dated provider slug in source.
+DEFAULT_OPENROUTER_MODEL = "openrouter/auto"
 
 # Empty by default — the first-run wizard collects the teacher's Canvas URL.
 # An empty base is the signal that onboarding is not yet complete.

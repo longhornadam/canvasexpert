@@ -65,6 +65,90 @@
   </div>
 </section>
 
+<section class="card" id="openrouter-card">
+  <h2>AI assistance <small class="lbl-hint">(OpenRouter)</small></h2>
+  <p class="hint">
+    PowerGrader can use OpenRouter to co-score submissions and draft feedback.
+    The API key is stored in <strong>Windows Credential Manager</strong>; the selected
+    model is stored locally on this computer.
+  </p>
+
+  <div class="actions" style="margin:0 0 10px; flex-wrap:wrap">
+    <a class="small-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">Open API keys ↗</a>
+    <a class="small-link" href="https://openrouter.ai/models" target="_blank" rel="noopener">Open models ↗</a>
+    <a class="small-link" href="https://openrouter.ai/settings/credits" target="_blank" rel="noopener">Add credits ↗</a>
+    <button type="button" id="btn-openrouter-help" class="small">What is this?</button>
+  </div>
+
+  <div id="openrouter-help" class="callout warn" hidden style="margin-bottom:12px">
+    <p style="margin-top:0">
+      OpenRouter is a paid API gateway for AI models. Canvas Expert sends only the
+      pseudonymized grading bundle after its safety gate passes, then brings the score
+      and feedback suggestion back for you to review.
+    </p>
+    <ol style="margin:8px 0 0; padding-left:20px">
+      <li>Create or sign in to an OpenRouter account.</li>
+      <li>Go to <strong>API Keys</strong>, create a key named <strong>CanvasExpert - {{ computer_name }}</strong>, and optionally set a small credit limit.</li>
+      <li>Add a small amount of credits before using paid models.</li>
+      <li>Leave the model as <code>openrouter/auto</code> if you want OpenRouter to choose a current model for you.</li>
+      <li>For a fixed model, use <strong>Load current model IDs</strong> below or copy the exact model ID from OpenRouter Models.</li>
+    </ol>
+  </div>
+
+  <form id="openrouter-form">
+    <label>
+      OpenRouter API key
+      {% if openrouter_is_set %}
+      <div class="token-row">
+        <span class="token-saved">●●●●●●●● saved in Windows Credential Manager</span>
+        <button type="button" id="btn-replace-openrouter-key" class="small">Replace</button>
+      </div>
+      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
+             placeholder="Paste new OpenRouter key to replace" style="display:none">
+      {% else %}
+      <div class="callout warn" style="margin-top:8px">
+        No OpenRouter key saved yet — create one at openrouter.ai/keys and paste it below.
+      </div>
+      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
+             placeholder="Paste your OpenRouter API key here">
+      {% endif %}
+    </label>
+
+    <label>
+      Model ID
+      <input type="text" name="model" id="openrouter-model-input"
+             value="{{ openrouter_model }}" placeholder="{{ default_openrouter_model }}"
+             list="openrouter-model-list" autocomplete="off">
+      <datalist id="openrouter-model-list">
+        <option value="openrouter/auto" label="Auto Router (recommended)"></option>
+      </datalist>
+      <small class="lbl-hint">
+        Recommended: <code>openrouter/auto</code>. For a fixed model, use an exact current OpenRouter model ID.
+      </small>
+    </label>
+
+    <div class="actions" style="margin-top:6px">
+      <button type="button" id="btn-openrouter-auto" class="small">Use Auto Router</button>
+      <button type="button" id="btn-openrouter-load-models" class="small">Load current model IDs &amp; prices</button>
+      <button type="button" id="btn-openrouter-test" class="small">Test saved key</button>
+    </div>
+
+    <div id="openrouter-major-models" hidden style="margin-top:12px">
+      <strong style="font-size:13px">Current major models</strong>
+      <p class="hint" style="margin:4px 0 8px">
+        Cost estimate assumes 30 1000-word essays with an attached rubric and feedback template.
+        It uses a rough 50k input tokens + 10k output tokens model; actual cost varies with essay length and feedback length.
+      </p>
+      <div id="openrouter-major-list"></div>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="primary">Save OpenRouter settings</button>
+    </div>
+    <p id="openrouter-status" class="status"></p>
+  </form>
+</section>
+
 <section class="card" id="tier-tags-card">
   <h2>Differentiation tags</h2>
   <p class="hint">
@@ -293,7 +377,7 @@
   </details>
 </section>
 
-<script src="/static/settings.js"></script>
+<script src="/static/settings.js?v={{ asset_v }}"></script>
 
 <script>
 (function () {
