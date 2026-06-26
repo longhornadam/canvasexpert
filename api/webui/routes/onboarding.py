@@ -26,8 +26,7 @@ def welcome_page(request: Request):
     existing = config.get_workspace_path()
     base = workspace.onedrive_root() or os.path.expanduser("~")
     suggestion = existing or os.path.join(base, workspace.WORKSPACE_NAME)
-    return templates.TemplateResponse("welcome.html", {
-        "request":             request,
+    return templates.TemplateResponse(request, "welcome.html", {
         "nav_section":         "",
         "workspace_suggestion": suggestion,
         "canvas_base":         config.get_canvas_base(),

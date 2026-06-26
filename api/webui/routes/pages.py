@@ -59,8 +59,7 @@ def dashboard(request: Request):
         parts = os.path.normpath(workspace_root).split(os.sep)
         folder = parts[-1] if parts else workspace_root
         workspace_status = f"OneDrive/{folder}" if any("OneDrive" in p for p in parts) else folder
-    return templates.TemplateResponse("dashboard.html", {
-        "request":        request,
+    return templates.TemplateResponse(request, "dashboard.html", {
         "nav_section":    "dashboard",
         "token_is_set":   config.token_is_set(),
         "canvas_base":    config.get_canvas_base(),
@@ -89,7 +88,6 @@ def _authoring_skill(skills: list, prefix: str) -> str:
 
 def _push_base_ctx(request: Request) -> dict:
     return {
-        "request":       request,
         "nav_section":   "assignments",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
@@ -100,7 +98,7 @@ def _push_base_ctx(request: Request) -> dict:
 @router.get("/push/quiz", response_class=HTMLResponse)
 def push_quiz_page(request: Request):
     skill = _authoring_skill(list_ai_ta_files(), "Author a Quiz")
-    return templates.TemplateResponse("push_quiz.html", {
+    return templates.TemplateResponse(request, "push_quiz.html", {
         **_push_base_ctx(request),
         "quiz_files":    list_quiz_files(),
         "authoring_skill": skill,
@@ -110,7 +108,7 @@ def push_quiz_page(request: Request):
 @router.get("/push/assignment", response_class=HTMLResponse)
 def push_assignment_page(request: Request):
     skill = _authoring_skill(list_ai_ta_files(), "Author an Assignment")
-    return templates.TemplateResponse("push_assignment.html", {
+    return templates.TemplateResponse(request, "push_assignment.html", {
         **_push_base_ctx(request),
         "assignment_files": list_assignment_files(),
         "authoring_skill":  skill,
@@ -120,7 +118,7 @@ def push_assignment_page(request: Request):
 @router.get("/push/page", response_class=HTMLResponse)
 def push_page_page(request: Request):
     skill = _authoring_skill(list_ai_ta_files(), "Author a Page")
-    return templates.TemplateResponse("push_page.html", {
+    return templates.TemplateResponse(request, "push_page.html", {
         **_push_base_ctx(request),
         "page_files":      list_page_files(),
         "authoring_skill": skill,
@@ -130,7 +128,7 @@ def push_page_page(request: Request):
 @router.get("/push/note", response_class=HTMLResponse)
 def push_note_page(request: Request):
     skill = _authoring_skill(list_ai_ta_files(), "Author Notes")
-    return templates.TemplateResponse("push_note.html", {
+    return templates.TemplateResponse(request, "push_note.html", {
         **_push_base_ctx(request),
         "note_files":      list_note_files(),
         "authoring_skill": skill,
@@ -140,7 +138,7 @@ def push_note_page(request: Request):
 @router.get("/push/rubric", response_class=HTMLResponse)
 def push_rubric_page(request: Request):
     skill = _authoring_skill(list_ai_ta_files(), "Author a Rubric")
-    return templates.TemplateResponse("push_rubric.html", {
+    return templates.TemplateResponse(request, "push_rubric.html", {
         **_push_base_ctx(request),
         "authoring_skill": skill,
     })
@@ -148,18 +146,18 @@ def push_rubric_page(request: Request):
 
 @router.get("/push/quick", response_class=HTMLResponse)
 def push_quick_page(request: Request):
-    return templates.TemplateResponse("push_quick.html", _push_base_ctx(request))
+    return templates.TemplateResponse(request, "push_quick.html", _push_base_ctx(request))
 
 
 @router.get("/download-work", response_class=HTMLResponse)
 def download_work_page(request: Request):
-    return templates.TemplateResponse("download_work.html", _push_base_ctx(request))
+    return templates.TemplateResponse(request, "download_work.html", _push_base_ctx(request))
 
 
 @router.get("/student-reports", response_class=HTMLResponse)
 def student_reports_page(request: Request):
     return templates.TemplateResponse(
-        "student_reports.html",
+        request, "student_reports.html",
         {**_push_base_ctx(request), "nav_section": "feedback"},
     )
 
@@ -174,8 +172,7 @@ def ai_expert_page(request: Request):
             os.path.basename(p)
             for p in glob.glob(os.path.join(toolkit_dir, "*.txt"))
         )
-    return templates.TemplateResponse("ai_expert.html", {
-        "request":        request,
+    return templates.TemplateResponse(request, "ai_expert.html", {
         "nav_section":    "ai",
         "token_is_set":   config.token_is_set(),
         "ai_ta_files":    ai_ta_files,
@@ -194,8 +191,7 @@ def feedback_expert_page(request: Request):
             "inbox": "1_Inbox", "forllm": "2_ForLLM",
             "fromllm": "3_FromLLM", "toenter": "4_ToEnter",
             "safe": "SAFE", "private": "PRIVATE", "system": "_system"}.items()}
-    return templates.TemplateResponse("feedback_expert.html", {
-        "request":       request,
+    return templates.TemplateResponse(request, "feedback_expert.html", {
         "nav_section":   "feedback",
         "persona":       config.get_ai_ta_persona(),
         "feedback_root": fb,
@@ -207,8 +203,7 @@ def feedback_expert_page(request: Request):
 @router.get("/roster", response_class=HTMLResponse)
 def roster_page(request: Request):
     """Roster Console — unified student settings surface."""
-    return templates.TemplateResponse("roster.html", {
-        "request":       request,
+    return templates.TemplateResponse(request, "roster.html", {
         "nav_section":   "roster",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
@@ -224,14 +219,13 @@ def name_manager_page(request: Request):
 
 @router.get("/about", response_class=HTMLResponse)
 def about(request: Request):
-    return templates.TemplateResponse("about.html", {"request": request, "nav_section": "about"})
+    return templates.TemplateResponse(request, "about.html", {"nav_section": "about"})
 
 
 @router.get("/course", response_class=HTMLResponse)
 def course_page(request: Request, course_id: str = ""):
     """Detailed Course Info page — roster, groups, modules, assignments."""
-    return templates.TemplateResponse("course.html", {
-        "request":        request,
+    return templates.TemplateResponse(request, "course.html", {
         "nav_section":    "course",
         "token_is_set":   config.token_is_set(),
         "canvas_base":    config.get_canvas_base(),
@@ -252,8 +246,7 @@ def gradebook_page(request: Request):
         for gp in cal.get("grading_periods", []):
             all_gp.append({**gp, "year": year})
     all_gp.sort(key=lambda g: g["start"])
-    return templates.TemplateResponse("gradebook.html", {
-        "request":              request,
+    return templates.TemplateResponse(request, "gradebook.html", {
         "nav_section":          "gradebook",
         "token_is_set":         config.token_is_set(),
         "canvas_base":          config.get_canvas_base(),
@@ -272,8 +265,7 @@ def routines_page(request: Request):
 
     Scans the custom_routines folder so the page can show the real path and the
     files it found (active vs. _-prefixed templates)."""
-    return templates.TemplateResponse("routines.html", {
-        "request":          request,
+    return templates.TemplateResponse(request, "routines.html", {
         "nav_section":      "gradebook",
         "token_is_set":     config.token_is_set(),
         **_routines_template_context(),
@@ -283,8 +275,7 @@ def routines_page(request: Request):
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
     root = workspace.workspace_root()
-    return templates.TemplateResponse("settings.html", {
-        "request":       request,
+    return templates.TemplateResponse(request, "settings.html", {
         "nav_section":   "",
         "canvas_base":   config.get_canvas_base(),
         "token_is_set":  config.token_is_set(),
