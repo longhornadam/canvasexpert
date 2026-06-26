@@ -73,8 +73,12 @@ def _workspace_load():
     path = _workspace_settings_path()
     if not path or not os.path.exists(path):
         return {}
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        # OSError [Errno 22] on Windows = OneDrive cloud-only file not yet downloaded
+        return {}
 
 
 def _workspace_save(state):
