@@ -281,6 +281,8 @@ var WIZARD = {
         msg.textContent = '✓ ' + ok.length + ' calendar(s) activated.';
         result.style.display = 'none';
         form.style.display = 'none';
+        var skipRow = document.getElementById('calendar-skip-row');
+        if (skipRow) skipRow.style.display = 'none';
         done.style.display = '';
         WIZARD.markStepDone(3);
       } else {
