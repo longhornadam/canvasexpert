@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+{% block title %}SpeedGrader — {{ assignment_name }}{% endblock %}
+{% block body_class %}sg-queue-body{% endblock %}
+{% block main_class %}sg-queue-shell{% endblock %}
+{% block content %}
+
+<meta name="session-id"      content="{{ session_id }}">
+<meta name="assignment-name" content="{{ assignment_name }}">
+<meta name="grading-mode"    content="{{ mode }}">
+<meta name="canvas-base"     content="{{ canvas_base }}">
+
+<!-- ── Top bar ──────────────────────────────────────────────────────── -->
+<div class="sg-topbar">
+  <div class="sg-topbar-left">
+    <a href="/speedgrader" class="sg-back">← Sessions</a>
+    <span class="sg-asn-name">{{ assignment_name }}</span>
+    {% if mode == "assisted" %}<span class="sg-ai-badge">✨ AI</span>{% endif %}
+  </div>
+  <div class="sg-progress-wrap">
+    <span id="sg-progress-label" class="sg-progress-label">Loading…</span>
+    <div class="sg-progress-bar"><div id="sg-progress-fill" class="sg-progress-fill" style="width:0%"></div></div>
+  </div>
+  <div class="sg-topbar-right">
+    <button type="button" id="sg-bulk-push" class="primary small" disabled>Push approved (0)</button>
+  </div>
+</div>
+
+<!-- ── Main pane ─────────────────────────────────────────────────────── -->
+<div class="sg-main">
+
+  <!-- LEFT: Submission viewer -->
+  <div class="sg-submission-pane" id="sg-submission-pane">
+    <div class="sg-submission-loading" id="sg-loading">Loading session…</div>
+  </div>
+
+  <!-- RIGHT: Grading controls -->
+  <div class="sg-grade-pane" id="sg-grade-pane">
+
+    <!-- Context badges -->
+    <div class="sg-context-badges" id="sg-badges"></div>
+
+    <!-- Score -->
+    <div class="sg-score-row">
+      <label class="sg-score-label">Score
+        <input type="number" id="sg-score" min="0" step="0.5"
+               placeholder="0" style="width:80px">
+        <span class="sg-pts-possible" id="sg-pts-possible"></span>
+      </label>
+    </div>
+
+    <!-- AI suggestion (Assisted mode) -->
+    <div id="sg-ai-panel" class="sg-ai-panel" style="display:none">
+      <div class="sg-ai-header">
+        <span class="sg-ai-badge-sm">✨ AI suggestion</span>
+        <button type="button" id="sg-accept-ai" class="small">Accept (A)</button>
+      </div>
+      <div class="sg-ai-score-row">Score: <strong id="sg-ai-score-val">—</strong></div>
+      <div id="sg-ai-feedback-text" class="sg-ai-feedback-text"></div>
+    </div>
+
+    <!-- Rubric reference -->
+    <details id="sg-rubric-details" class="sg-rubric-details" style="display:none">
+      <summary>Rubric reference</summary>
+      <pre id="sg-rubric-text" class="sg-rubric-pre"></pre>
+    </details>
+
+    <!-- Feedback -->
+    <label class="sg-feedback-label">Feedback
+      <textarea id="sg-feedback" rows="6" placeholder="Optional feedback comment posted to Canvas…"></textarea>
+    </label>
+
+    <!-- Actions -->
+    <div class="sg-actions">
+      <button type="button" id="sg-skip" class="small">Skip (X)</button>
+      <button type="button" id="sg-save-next" class="primary">Save &amp; Next (S)</button>
+    </div>
+    <button type="button" id="sg-push-one" class="sg-push-one small" style="margin-top:6px;width:100%">Push this student now</button>
+
+    <!-- Nav -->
+    <div class="sg-nav-row">
+      <button type="button" id="sg-prev" class="small">← Prev (K)</button>
+      <span id="sg-nav-counter" class="sg-nav-counter">— / —</span>
+      <button type="button" id="sg-next" class="small">Next (J) →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Keyboard legend ────────────────────────────────────────────────── -->
+<div class="sg-kbd-legend">
+  <span><kbd>J</kbd>/<kbd>K</kbd> navigate</span>
+  <span><kbd>S</kbd> save &amp; next</span>
+  <span><kbd>X</kbd> skip</span>
+  <span id="sg-kbd-a-hint" style="display:none"><kbd>A</kbd> accept AI</span>
+  <span><kbd>B</kbd> bulk push</span>
+</div>
+
+<!-- ── Status toast ───────────────────────────────────────────────────── -->
+<div id="sg-status-bar" class="sg-status-bar" hidden></div>
+
+<style>
+/* ── Layout ──────────────────────────────────────────────────────── */
+.sg-queue-body  { overflow:hidden; }
+.sg-queue-shell { display:flex; flex-direction:column; height:calc(100vh - 52px); padding:0; }
+
+.sg-topbar {
+  display:flex; align-items:center; gap:12px;
+  padding:8px 16px; border-bottom:1px solid var(--ce-border);
+  background:var(--ce-surface); flex-shrink:0; flex-wrap:wrap;
+}
+.sg-topbar-left  { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+.sg-topbar-right { flex-shrink:0; }
+.sg-back         { font-size:13px; color:var(--ce-text-muted,#888); text-decoration:none; }
+.sg-back:hover   { color:var(--ce-text); }
+.sg-asn-name     { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sg-ai-badge     { background:var(--ce-blue); color:#fff; font-size:11px; padding:2px 7px; border-radius:10px; }
+
+.sg-progress-wrap { flex:1; min-width:140px; max-width:280px; }
+.sg-progress-label { font-size:12px; color:var(--ce-text-muted,#888); display:block; margin-bottom:3px; }
+.sg-progress-bar  { height:6px; background:var(--ce-border); border-radius:3px; overflow:hidden; }
+.sg-progress-fill { height:100%; background:var(--ce-green,#27ae60); border-radius:3px; transition:width .3s; }
+
+.sg-main {
+  display:flex; flex:1; min-height:0; overflow:hidden;
+}
+
+/* LEFT — submission */
+.sg-submission-pane {
+  flex:1; min-width:0; overflow-y:auto;
+  padding:16px; border-right:1px solid var(--ce-border);
+}
+.sg-submission-loading { color:var(--ce-text-muted,#888); font-style:italic; }
+
+.sg-student-name { font-weight:700; font-size:16px; margin:0 0 10px; }
+.sg-sub-section  { margin-top:14px; }
+.sg-sub-label    { font-size:11px; font-weight:600; text-transform:uppercase;
+                   letter-spacing:.04em; color:var(--ce-text-muted,#888); margin-bottom:6px; }
+.sg-body-frame   { width:100%; border:1px solid var(--ce-border); border-radius:4px;
+                   background:var(--ce-surface-alt,#fafafa); min-height:200px; }
+.sg-body-plain   { white-space:pre-wrap; font-size:13px; padding:10px;
+                   background:var(--ce-surface-alt,#fafafa); border:1px solid var(--ce-border);
+                   border-radius:4px; max-height:400px; overflow-y:auto; }
+.sg-code-block   { background:var(--ce-surface-alt,#fafafa); border:1px solid var(--ce-border);
+                   border-radius:4px; padding:10px; font-size:12px; font-family:monospace;
+                   white-space:pre-wrap; max-height:300px; overflow-y:auto; margin-top:8px; }
+.sg-code-fname   { font-size:11px; font-weight:600; color:var(--ce-text-muted,#888); margin-bottom:4px; }
+.sg-att-list     { font-size:13px; padding:0; list-style:none; margin:0; }
+.sg-att-list li  { padding:4px 0; color:var(--ce-text-muted,#888); }
+.sg-no-text      { font-size:13px; font-style:italic; color:var(--ce-text-muted,#888); }
+.sg-already-graded { font-size:12px; padding:6px 10px; background:var(--ce-surface-alt,#f5f5f5);
+                     border-radius:4px; color:var(--ce-text-muted,#888); margin-bottom:10px; }
+
+/* RIGHT — grade pane */
+.sg-grade-pane  {
+  width:300px; flex-shrink:0; overflow-y:auto;
+  padding:14px; display:flex; flex-direction:column; gap:12px;
+}
+
+.sg-context-badges { display:flex; flex-wrap:wrap; gap:6px; min-height:20px; }
+.sg-badge {
+  font-size:11px; padding:3px 8px; border-radius:10px; font-weight:600;
+  white-space:nowrap;
+}
+.sg-badge--tier     { background:var(--ce-blue-faint,#dbeafe); color:var(--ce-blue,#2563eb); }
+.sg-badge--mon      { background:#fef3c7; color:#92400e; cursor:default; }
+.sg-badge--extra    { background:#d1fae5; color:#065f46; }
+.sg-badge--posted   { background:#e8f5e9; color:#2e7d32; }
+
+.sg-score-row       { display:flex; align-items:center; }
+.sg-score-label     { display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; }
+.sg-pts-possible    { font-size:12px; color:var(--ce-text-muted,#888); }
+
+.sg-ai-panel        { background:var(--ce-blue-faint,#eff6ff); border:1px solid var(--ce-blue,#2563eb);
+                      border-radius:6px; padding:10px; font-size:13px; }
+.sg-ai-header       { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.sg-ai-badge-sm     { font-size:11px; font-weight:600; color:var(--ce-blue,#2563eb); }
+.sg-ai-score-row    { margin-bottom:4px; }
+.sg-ai-feedback-text { font-size:12px; color:var(--ce-text-muted,#555); max-height:120px; overflow-y:auto; white-space:pre-wrap; }
+
+.sg-rubric-details  { font-size:12px; }
+.sg-rubric-details summary { cursor:pointer; font-weight:600; color:var(--ce-text-muted,#888); }
+.sg-rubric-pre      { font-size:11px; white-space:pre-wrap; max-height:200px; overflow-y:auto;
+                      background:var(--ce-surface-alt,#fafafa); padding:8px;
+                      border:1px solid var(--ce-border); border-radius:4px; margin:6px 0 0; }
+
+.sg-feedback-label  { font-weight:600; font-size:13px; display:flex; flex-direction:column; gap:4px; }
+.sg-feedback-label textarea { font-size:13px; resize:vertical; }
+
+.sg-actions { display:flex; gap:8px; }
+.sg-actions button { flex:1; }
+.sg-push-one { }
+
+.sg-nav-row     { display:flex; align-items:center; justify-content:space-between; margin-top:4px; }
+.sg-nav-counter { font-size:12px; color:var(--ce-text-muted,#888); }
+
+.sg-kbd-legend {
+  flex-shrink:0; display:flex; gap:16px; padding:6px 16px;
+  border-top:1px solid var(--ce-border); font-size:11px;
+  color:var(--ce-text-muted,#888); background:var(--ce-surface);
+}
+kbd {
+  background:var(--ce-surface-alt,#f0f0f0); border:1px solid var(--ce-border);
+  border-radius:3px; padding:1px 5px; font-family:inherit; font-size:10px;
+}
+
+.sg-status-bar {
+  position:fixed; bottom:36px; left:50%; transform:translateX(-50%);
+  background:var(--ce-surface); border:1px solid var(--ce-border);
+  border-radius:6px; padding:6px 14px; font-size:13px;
+  box-shadow:0 2px 8px rgba(0,0,0,.12); z-index:200;
+  transition:opacity .3s;
+}
+.sg-status-bar.err { border-color:var(--ce-red,#c0392b); color:var(--ce-red,#c0392b); }
+</style>
+
+<script>
+(function(){
+  var SESSION_ID   = document.querySelector('meta[name="session-id"]').content;
+  var MODE         = document.querySelector('meta[name="grading-mode"]').content;
+  var CANVAS_BASE  = document.querySelector('meta[name="canvas-base"]').content;
+
+  var session      = null;
+  var students     = [];
+  var idx          = 0;    // current student index
+  var rubricText   = '';
+
+  // ── DOM refs ────────────────────────────────────────────────────────
+  var subPane      = document.getElementById('sg-submission-pane');
+  var scoreEl      = document.getElementById('sg-score');
+  var ptsEl        = document.getElementById('sg-pts-possible');
+  var feedbackEl   = document.getElementById('sg-feedback');
+  var badgesEl     = document.getElementById('sg-badges');
+  var aiPanel      = document.getElementById('sg-ai-panel');
+  var aiScoreVal   = document.getElementById('sg-ai-score-val');
+  var aiFeedTxt    = document.getElementById('sg-ai-feedback-text');
+  var acceptAiBtn  = document.getElementById('sg-accept-ai');
+  var saveNextBtn  = document.getElementById('sg-save-next');
+  var skipBtn      = document.getElementById('sg-skip');
+  var pushOneBtn   = document.getElementById('sg-push-one');
+  var bulkPushBtn  = document.getElementById('sg-bulk-push');
+  var prevBtn      = document.getElementById('sg-prev');
+  var nextBtn      = document.getElementById('sg-next');
+  var navCounter   = document.getElementById('sg-nav-counter');
+  var progressFill = document.getElementById('sg-progress-fill');
+  var progressLbl  = document.getElementById('sg-progress-label');
+  var statusBar    = document.getElementById('sg-status-bar');
+  var rubricPanel  = document.getElementById('sg-rubric-details');
+  var rubricPre    = document.getElementById('sg-rubric-text');
+  var kbdAHint     = document.getElementById('sg-kbd-a-hint');
+
+  if (MODE === 'assisted') { kbdAHint && (kbdAHint.style.display = ''); }
+
+  // ── Load session ────────────────────────────────────────────────────
+  fetch('/api/speedgrader/session/' + SESSION_ID)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) { showStatus('Failed to load session: ' + (d.error || 'unknown'), true); return; }
+      session  = d.session;
+      students = session.students || [];
+      rubricText = session.rubric_name || '';
+
+      // Try to show rubric text if we have a rubric name
+      if (rubricText) {
+        // We'll fetch rubric via a dedicated endpoint if it exists, otherwise skip
+        rubricPanel.style.display = '';
+        rubricPre.textContent = '(Rubric: ' + rubricText + ' — open via workspace Rubrics folder)';
+      }
+
+      updateProgress();
+      renderStudent(idx);
+    })
+    .catch(function(e){ showStatus('Load error: ' + e, true); });
+
+  // ── Render one student ──────────────────────────────────────────────
+  function renderStudent(i) {
+    if (!students.length) { subPane.innerHTML = '<p class="sg-no-text">No students in session.</p>'; return; }
+    idx = Math.max(0, Math.min(i, students.length - 1));
+    var st = students[idx];
+
+    // Progress
+    updateProgress();
+
+    // Nav counter
+    navCounter.textContent = (idx + 1) + ' / ' + students.length;
+    prevBtn.disabled = idx === 0;
+    nextBtn.disabled = idx === students.length - 1;
+
+    // Badges
+    badgesEl.innerHTML = '';
+    if (st.tier_alias) {
+      var tb = document.createElement('span');
+      tb.className = 'sg-badge sg-badge--tier';
+      tb.textContent = (st.tier_label || st.tier_alias) + (st.tier_alias && st.tier_alias !== st.tier_label ? ' / ' + st.tier_alias : '');
+      badgesEl.appendChild(tb);
+    }
+    if (st.is_monitored) {
+      var mb = document.createElement('span');
+      mb.className = 'sg-badge sg-badge--mon';
+      mb.textContent = '★ Monitored';
+      mb.title = st.monitored_note || 'Monitored student';
+      badgesEl.appendChild(mb);
+    }
+    if (st.extra_time_days) {
+      var eb = document.createElement('span');
+      eb.className = 'sg-badge sg-badge--extra';
+      eb.textContent = '⏱ +' + st.extra_time_days + 'd';
+      badgesEl.appendChild(eb);
+    }
+    if (st.posted) {
+      var pb = document.createElement('span');
+      pb.className = 'sg-badge sg-badge--posted';
+      pb.textContent = '✓ Posted';
+      badgesEl.appendChild(pb);
+    }
+
+    // Points possible
+    ptsEl.textContent = '/ ' + (session.points_possible || '?');
+    scoreEl.max = session.points_possible || 100;
+
+    // Pre-fill score/feedback from saved grade (or AI if no teacher grade yet)
+    if (st.teacher_score !== null && st.teacher_score !== undefined) {
+      scoreEl.value = st.teacher_score;
+    } else if (MODE === 'assisted' && st.ai_score !== null && st.ai_score !== undefined) {
+      scoreEl.value = '';  // don't auto-fill AI score — require explicit accept
+    } else {
+      scoreEl.value = '';
+    }
+    feedbackEl.value = st.teacher_feedback || '';
+
+    // AI panel
+    if (MODE === 'assisted') {
+      aiPanel.style.display = '';
+      if (st.ai_score !== null && st.ai_score !== undefined) {
+        aiScoreVal.textContent = st.ai_score;
+        aiFeedTxt.textContent  = st.ai_feedback || '';
+        acceptAiBtn.disabled   = false;
+      } else {
+        aiScoreVal.textContent = 'No AI score';
+        aiFeedTxt.textContent  = '(No text content to score)';
+        acceptAiBtn.disabled   = true;
+      }
+    } else {
+      aiPanel.style.display = 'none';
+    }
+
+    // Already-graded note
+    var alreadyHtml = '';
+    if (st.current_score !== null && st.current_score !== undefined) {
+      alreadyHtml = '<div class="sg-already-graded">Canvas current score: <strong>' + st.current_score + '</strong></div>';
+    }
+
+    // Submission content
+    var subHtml = '<h3 class="sg-student-name">' + _esc(st.real_name) + '</h3>' + alreadyHtml;
+
+    if (st.body && st.body.trim()) {
+      var isHtml = /<[a-z][\s\S]*>/i.test(st.body);
+      subHtml += '<div class="sg-sub-section"><div class="sg-sub-label">Submission</div>';
+      if (isHtml) {
+        subHtml += '<iframe class="sg-body-frame" sandbox="allow-same-origin" srcdoc="' +
+          st.body.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&amp;')
+          + '" style="min-height:300px" onload="this.style.height=(this.contentDocument.body.scrollHeight+20)+\'px\'"></iframe>';
+        // Use the body as-is in srcdoc since it's HTML
+        subHtml = '<h3 class="sg-student-name">' + _esc(st.real_name) + '</h3>' + alreadyHtml +
+          '<div class="sg-sub-section"><div class="sg-sub-label">Submission</div>' +
+          '<iframe class="sg-body-frame" sandbox="allow-same-origin" id="sg-body-frame" style="min-height:300px"></iframe></div>';
+      } else {
+        subHtml += '<div class="sg-body-plain">' + _esc(st.body) + '</div></div>';
+      }
+    } else {
+      subHtml += '<div class="sg-sub-section"><p class="sg-no-text">No text entry body.</p></div>';
+    }
+
+    // Code files
+    if (st.code_files && st.code_files.length) {
+      st.code_files.forEach(function(cf){
+        subHtml += '<div class="sg-sub-section">' +
+          '<div class="sg-sub-label sg-code-fname">' + _esc(cf.filename) + '</div>' +
+          '<pre class="sg-code-block">' + _esc(cf.text) + '</pre></div>';
+      });
+    }
+
+    // Attachments (non-text)
+    var nonTextAtts = (st.attachments || []).filter(function(a){
+      var ext = (a.filename || '').split('.').pop().toLowerCase();
+      return ['py','html','htm','css','js','txt','md','json','csv'].indexOf(ext) === -1;
+    });
+    if (nonTextAtts.length) {
+      subHtml += '<div class="sg-sub-section"><div class="sg-sub-label">Attachments</div>' +
+        '<ul class="sg-att-list">' +
+        nonTextAtts.map(function(a){ return '<li>📎 ' + _esc(a.filename) + (a.size ? ' (' + Math.round(a.size/1024) + ' KB)' : '') + '</li>'; }).join('') +
+        '</ul></div>';
+    }
+
+    subPane.innerHTML = subHtml;
+
+    // If HTML iframe, write srcdoc manually (innerHTML encoding is unreliable for srcdoc)
+    if (st.body && /<[a-z][\s\S]*>/i.test(st.body)) {
+      var frame = document.getElementById('sg-body-frame');
+      if (frame) {
+        frame.srcdoc = st.body;
+        frame.addEventListener('load', function(){
+          try { frame.style.height = (frame.contentDocument.body.scrollHeight + 20) + 'px'; } catch(e){}
+        });
+      }
+    }
+  }
+
+  // ── Progress ────────────────────────────────────────────────────────
+  function updateProgress() {
+    if (!students.length) return;
+    var posted   = students.filter(function(s){ return s.posted; }).length;
+    var approved = students.filter(function(s){ return s.status === 'approved'; }).length;
+    var total    = students.length;
+    var pct      = Math.round((posted / total) * 100);
+    progressFill.style.width = pct + '%';
+    progressLbl.textContent  = posted + ' posted, ' + approved + ' ready — ' + total + ' total';
+    var readyToPush = students.filter(function(s){ return s.status === 'approved' && !s.posted; }).length;
+    bulkPushBtn.disabled     = readyToPush === 0;
+    bulkPushBtn.textContent  = 'Push approved (' + readyToPush + ')';
+  }
+
+  // ── Save grade ──────────────────────────────────────────────────────
+  function saveGrade(statusVal, advance) {
+    var st = students[idx];
+    if (!st) return;
+    var fd = new FormData();
+    fd.append('user_id', st.user_id);
+    fd.append('teacher_score', scoreEl.value);
+    fd.append('teacher_feedback', feedbackEl.value);
+    fd.append('status', statusVal);
+    fetch('/api/speedgrader/session/' + SESSION_ID + '/grade', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          st.teacher_score    = scoreEl.value ? parseFloat(scoreEl.value) : null;
+          st.teacher_feedback = feedbackEl.value;
+          st.status           = statusVal;
+          showStatus(statusVal === 'skipped' ? 'Skipped.' : 'Saved.', false);
+          updateProgress();
+          if (advance && idx < students.length - 1) renderStudent(idx + 1);
+        } else {
+          showStatus('Save failed: ' + (d.error || 'unknown'), true);
+        }
+      })
+      .catch(function(e){ showStatus('Error: ' + e, true); });
+  }
+
+  // ── Push one student ────────────────────────────────────────────────
+  function pushOne() {
+    var st = students[idx];
+    if (!st) return;
+    var fd = new FormData();
+    fd.append('user_ids', JSON.stringify([st.user_id]));
+    pushOneBtn.disabled = true;
+    fetch('/api/speedgrader/session/' + SESSION_ID + '/push', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.pushed) {
+          st.posted = true;
+          st.status = 'posted';
+          showStatus('Pushed to Canvas.', false);
+          updateProgress();
+          renderStudent(idx);
+        } else {
+          showStatus((d.errors && d.errors[0]) || 'Push failed.', true);
+        }
+        pushOneBtn.disabled = false;
+      })
+      .catch(function(e){ showStatus('Error: ' + e, true); pushOneBtn.disabled = false; });
+  }
+
+  // ── Bulk push ───────────────────────────────────────────────────────
+  function bulkPush() {
+    bulkPushBtn.disabled = true;
+    var fd = new FormData();  // empty = push all approved
+    fetch('/api/speedgrader/session/' + SESSION_ID + '/push', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        // Sync local state
+        students.forEach(function(s){ if (d.pushed > 0 && s.status === 'approved') { s.posted = true; s.status = 'posted'; } });
+        var msg = 'Pushed ' + d.pushed + ' student(s).';
+        if (d.errors && d.errors.length) msg += ' ' + d.errors.length + ' error(s).';
+        showStatus(msg, d.errors && d.errors.length > 0);
+        updateProgress();
+        renderStudent(idx);
+      })
+      .catch(function(e){ showStatus('Error: ' + e, true); bulkPushBtn.disabled = false; });
+  }
+
+  // ── Accept AI ───────────────────────────────────────────────────────
+  acceptAiBtn && acceptAiBtn.addEventListener('click', function(){
+    var st = students[idx];
+    if (!st || !MODE === 'assisted') return;
+    if (st.ai_score !== null && st.ai_score !== undefined) scoreEl.value = st.ai_score;
+    if (st.ai_feedback) feedbackEl.value = st.ai_feedback;
+    scoreEl.focus();
+    showStatus('AI suggestion accepted — edit if needed, then Save.', false);
+  });
+
+  // ── Button listeners ────────────────────────────────────────────────
+  saveNextBtn.addEventListener('click', function(){ saveGrade('approved', true); });
+  skipBtn.addEventListener('click', function(){ saveGrade('skipped', true); });
+  pushOneBtn.addEventListener('click', pushOne);
+  bulkPushBtn.addEventListener('click', bulkPush);
+  prevBtn.addEventListener('click', function(){ renderStudent(idx - 1); });
+  nextBtn.addEventListener('click', function(){ renderStudent(idx + 1); });
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────
+  document.addEventListener('keydown', function(e){
+    if (e.target.matches('textarea, input, select, button')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key.toLowerCase()) {
+      case 'j': case 'arrowdown': renderStudent(idx + 1); e.preventDefault(); break;
+      case 'k': case 'arrowup':   renderStudent(idx - 1); e.preventDefault(); break;
+      case 's': saveGrade('approved', true); e.preventDefault(); break;
+      case 'x': saveGrade('skipped', true);  e.preventDefault(); break;
+      case 'a':
+        if (MODE === 'assisted') { acceptAiBtn && acceptAiBtn.click(); e.preventDefault(); }
+        break;
+      case 'b': bulkPush(); e.preventDefault(); break;
+    }
+  });
+
+  // ── Status toast ────────────────────────────────────────────────────
+  var _statusTimer;
+  function showStatus(msg, isErr) {
+    statusBar.textContent = msg;
+    statusBar.className   = 'sg-status-bar' + (isErr ? ' err' : '');
+    statusBar.hidden      = false;
+    clearTimeout(_statusTimer);
+    _statusTimer = setTimeout(function(){ statusBar.hidden = true; }, 2800);
+  }
+
+  function _esc(s){ var d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
+})();
+</script>
+{% endblock %}

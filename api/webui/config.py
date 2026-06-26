@@ -30,12 +30,6 @@ SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_t
                "roster_group_schemes", "monitored_students")
 
 
-_BUILTIN_LABELS = {
-    "sample_isd_2025_26": "sample ISD 2025-26",
-    "sample_isd_2026_27": "sample ISD 2026-27",
-}
->>>>>>> origin/claude/speedgrade-upgrade-review-c6oxbw
-
 
 def _source_label(key: str) -> str:
     """Prettify a calendar key into a display label (district-agnostic)."""

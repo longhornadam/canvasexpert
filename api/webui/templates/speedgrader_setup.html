@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}SpeedGrader — Canvas Expert{% endblock %}
+{% block content %}
+
+<section class="card" style="max-width:680px;margin:0 auto">
+  <h2>SpeedGrader</h2>
+  <p class="hint" style="margin-top:0">
+    Keyboard-driven grading with optional AI assistance. Faster than Canvas SpeedGrader,
+    with Roster context built in.
+  </p>
+
+  {% if not has_workspace %}
+  <div class="callout warn">No workspace configured — <a href="/settings">finish setup in Settings</a> so SpeedGrader has a place to save sessions.</div>
+  {% endif %}
+
+  <!-- ── New session ─────────────────────────────────────────────────── -->
+  <form id="sg-start-form">
+    <label>Course
+      <select id="sg-course" name="course_id" required>
+        <option value="">— select a course —</option>
+        {% for c in saved_courses %}
+        <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>Assignment
+      <select id="sg-assignment" name="assignment_id" required disabled>
+        <option value="">— select course first —</option>
+      </select>
+    </label>
+
+    <!-- ── AI toggle ──────────────────────────────────────────────────── -->
+    <div class="sg-mode-row" style="display:flex;align-items:center;gap:16px;margin:12px 0 4px">
+      <strong style="font-size:14px">AI assistance</strong>
+      <label class="sg-toggle" title="Enable AI pre-scoring via OpenRouter">
+        <input type="checkbox" id="sg-ai-toggle" {% if not has_openrouter %}disabled{% endif %}>
+        <span class="sg-toggle-track"><span class="sg-toggle-thumb"></span></span>
+      </label>
+      <span id="sg-ai-label" class="hint">
+        {% if has_openrouter %}Off — Fast mode{% else %}No OpenRouter key — <a href="/settings">add one in Settings</a>{% endif %}
+      </span>
+    </div>
+    <input type="hidden" name="mode" id="sg-mode" value="fast">
+
+    <div id="sg-ai-options" style="display:none">
+      <label>Rubric <small class="lbl-hint">(optional — shown as reference even in Fast mode)</small>
+        <select name="rubric_name" id="sg-rubric">
+          <option value="">— no rubric —</option>
+          {% for r in rubrics %}
+          <option value="{{ r }}">{{ r }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>AI persona
+        <select name="persona_id" id="sg-persona">
+          {% for p in personas %}
+          <option value="{{ p.id }}">{{ p.name }}{% if p.builtin %} (built-in){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <!-- Also show rubric picker outside AI panel (useful even in Fast mode) -->
+    <div id="sg-rubric-fast" style="margin-top:4px">
+      <label>Rubric <small class="lbl-hint">(optional reference while grading)</small>
+        <select name="rubric_name" id="sg-rubric-fast-sel">
+          <option value="">— no rubric —</option>
+          {% for r in rubrics %}
+          <option value="{{ r }}">{{ r }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div class="actions" style="margin-top:16px">
+      <button type="submit" class="primary" id="sg-start-btn" {% if not has_workspace %}disabled{% endif %}>
+        Start grading session
+      </button>
+      <span id="sg-start-status" class="hint"></span>
+    </div>
+  </form>
+</section>
+
+<!-- ── Resume existing sessions ──────────────────────────────────────── -->
+<section class="card" id="sg-sessions-card" style="max-width:680px;margin:16px auto;display:none">
+  <h3>Resume a session</h3>
+  <table class="sg-sessions-table" style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:6px 8px">Assignment</th>
+        <th style="text-align:left;padding:6px 8px">Mode</th>
+        <th style="text-align:center;padding:6px 8px">Progress</th>
+        <th style="text-align:left;padding:6px 8px">Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="sg-sessions-tbody"></tbody>
+  </table>
+</section>
+
+<style>
+.sg-toggle { display:inline-flex; align-items:center; cursor:pointer; }
+.sg-toggle input { position:absolute; opacity:0; width:0; height:0; }
+.sg-toggle-track {
+  display:inline-block; width:36px; height:20px; border-radius:10px;
+  background:var(--ce-border); position:relative; transition:background .2s;
+}
+.sg-toggle input:checked ~ .sg-toggle-track { background:var(--ce-blue); }
+.sg-toggle-thumb {
+  position:absolute; top:3px; left:3px; width:14px; height:14px;
+  border-radius:50%; background:#fff; transition:transform .2s;
+  box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.sg-toggle input:checked ~ .sg-toggle-track .sg-toggle-thumb { transform:translateX(16px); }
+.sg-sessions-table th { border-bottom:1px solid var(--ce-border); font-weight:600; }
+.sg-sessions-table td { padding:6px 8px; border-bottom:1px solid var(--ce-border-faint,var(--ce-border)); }
+</style>
+
+<script>
+(function(){
+  var courseEl   = document.getElementById('sg-course');
+  var asnEl      = document.getElementById('sg-assignment');
+  var aiToggle   = document.getElementById('sg-ai-toggle');
+  var aiLabel    = document.getElementById('sg-ai-label');
+  var aiOptions  = document.getElementById('sg-ai-options');
+  var rubricFast = document.getElementById('sg-rubric-fast');
+  var modeInput  = document.getElementById('sg-mode');
+  var startBtn   = document.getElementById('sg-start-btn');
+  var status     = document.getElementById('sg-start-status');
+  var form       = document.getElementById('sg-start-form');
+
+  // Toggle AI mode
+  aiToggle && aiToggle.addEventListener('change', function(){
+    var on = aiToggle.checked;
+    modeInput.value = on ? 'assisted' : 'fast';
+    aiLabel.textContent = on ? 'On — Assisted mode' : 'Off — Fast mode';
+    aiOptions.style.display = on ? '' : 'none';
+    rubricFast.style.display = on ? 'none' : '';
+  });
+
+  // Load assignments when course changes
+  courseEl && courseEl.addEventListener('change', function(){
+    var cid = courseEl.value;
+    if (!cid) { asnEl.disabled = true; asnEl.innerHTML = '<option value="">— select course first —</option>'; loadSessions(); return; }
+    asnEl.disabled = true;
+    asnEl.innerHTML = '<option value="">Loading…</option>';
+    fetch('/api/courses/' + cid + '/assignments')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var list = d.assignments || [];
+        // Only gradeable submission types
+        var gradeable = list.filter(function(a){
+          var t = a.submission_types || [];
+          return t.some(function(x){ return ['online_text_entry','online_upload','online_url','media_recording','student_annotation'].indexOf(x) > -1; });
+        });
+        asnEl.innerHTML = '<option value="">— select an assignment —</option>' +
+          gradeable.map(function(a){ return '<option value="' + a.id + '">' + _esc(a.name) + '</option>'; }).join('');
+        asnEl.disabled = false;
+        loadSessions(cid);
+      })
+      .catch(function(){ asnEl.innerHTML = '<option value="">Error loading assignments</option>'; });
+  });
+
+  // Sync fast-mode rubric to AI rubric select so only one is submitted
+  document.getElementById('sg-rubric-fast-sel') && document.getElementById('sg-rubric-fast-sel').addEventListener('change', function(){
+    var aiRubric = document.getElementById('sg-rubric');
+    if (aiRubric) aiRubric.value = this.value;
+  });
+  document.getElementById('sg-rubric') && document.getElementById('sg-rubric').addEventListener('change', function(){
+    var fastRubric = document.getElementById('sg-rubric-fast-sel');
+    if (fastRubric) fastRubric.value = this.value;
+  });
+
+  // Start session
+  form && form.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var cid = courseEl.value;
+    var aid = asnEl.value;
+    if (!cid || !aid) { setStatus('Select a course and assignment first.', true); return; }
+    startBtn.disabled = true;
+    setStatus('Fetching submissions…', false);
+    var fd = new FormData(form);
+    // Ensure rubric_name comes from whichever picker is visible
+    fetch('/api/speedgrader/start', {method:'POST', body: fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.ok) {
+          setStatus('Session created (' + d.student_count + ' students)…', false);
+          window.location.href = '/speedgrader/session/' + d.session_id;
+        } else {
+          setStatus(d.error || 'Failed to start session.', true);
+          startBtn.disabled = false;
+        }
+      })
+      .catch(function(e){ setStatus(String(e), true); startBtn.disabled = false; });
+  });
+
+  function setStatus(msg, err){
+    status.textContent = msg;
+    status.style.color = err ? 'var(--ce-red, #c0392b)' : '';
+  }
+
+  function _esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+  // Load existing sessions for selected course
+  function loadSessions(cid){
+    fetch('/api/speedgrader/sessions')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var all = d.sessions || [];
+        var filtered = cid ? all.filter(function(s){ return s.course_id === cid; }) : all;
+        var card = document.getElementById('sg-sessions-card');
+        var tbody = document.getElementById('sg-sessions-tbody');
+        if (!filtered.length) { card.style.display = 'none'; return; }
+        card.style.display = '';
+        tbody.innerHTML = filtered.map(function(s){
+          var pct = s.total ? Math.round((s.posted / s.total) * 100) : 0;
+          var dt = s.created ? s.created.replace('T', ' ').slice(0,16) : '';
+          return '<tr>' +
+            '<td><strong>' + _esc(s.assignment_name || '—') + '</strong></td>' +
+            '<td>' + (s.mode === 'assisted' ? '✨ Assisted' : 'Fast') + '</td>' +
+            '<td style="text-align:center">' + s.posted + ' / ' + s.total + ' posted</td>' +
+            '<td style="color:var(--ce-text-muted,#888)">' + dt + '</td>' +
+            '<td><a href="/speedgrader/session/' + s.session_id + '" class="button small">Resume →</a></td>' +
+            '</tr>';
+        }).join('');
+      })
+      .catch(function(){});
+  }
+
+  // Load sessions on page load
+  loadSessions('');
+})();
+</script>
+{% endblock %}
