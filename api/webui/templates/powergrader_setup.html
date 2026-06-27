@@ -294,6 +294,7 @@
 .pg-light.running { background:var(--ce-blue,#2563eb); box-shadow:0 0 0 3px rgba(37,99,235,.16); }
 .pg-privacy-label { font-weight:600; }
 .pg-privacy-detail { color:var(--ce-text-muted,#667085); font-size:12px; line-height:1.35; margin-top:1px; }
+.pg-privacy-actions-inline { margin-top:5px; }
 .pg-source-box {
   margin-top:14px; padding:12px; border:1px solid var(--ce-border);
   border-radius:8px; background:var(--ce-surface-alt,#f8fafc);
@@ -523,10 +524,14 @@
     privacyList.innerHTML = (steps || []).map(function(step){
       var status = step.status || 'pending';
       var light = status === 'ok' ? 'ok' : (status === 'warn' ? 'warn' : (status === 'failed' ? 'failed' : (status === 'running' ? 'running' : '')));
+      var pathButton = step.path
+        ? '<div class="pg-privacy-actions-inline"><button type="button" class="small" data-open-path="' + _esc(step.path) + '">' + _esc(step.action_label || 'Open file') + '</button></div>'
+        : '';
       return '<div class="pg-privacy-step">' +
         '<span class="pg-light ' + light + '"></span>' +
         '<div><div class="pg-privacy-label">' + _esc(step.label || step.id || 'Step') + '</div>' +
         (step.detail ? '<div class="pg-privacy-detail">' + _esc(step.detail) + '</div>' : '') +
+        pathButton +
         '</div></div>';
     }).join('');
   }

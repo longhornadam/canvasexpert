@@ -90,3 +90,35 @@ def test_import_results_updates_session_ai_suggestions(tmp_path, monkeypatch):
     assert data["updated"] == 1
     assert saved["students"][0]["ai_score"] == 2
     assert "Strong theme evidence" in saved["students"][0]["ai_feedback"]
+
+
+def test_openrouter_debug_file_omits_key_and_records_response(tmp_path):
+    exc = powergrader.orc.OpenRouterResponseError(
+        "OpenRouter scoring returned non-JSON response (HTTP 200): <html>bad</html>",
+        context="OpenRouter scoring",
+        status_code="200",
+        response_snippet="<html>bad</html>",
+    )
+
+    path = powergrader._write_openrouter_debug_file(
+        str(tmp_path),
+        "Essay Debug",
+        session_id="sid",
+        course_id="course",
+        assignment_id="assignment",
+        model_id="deepseek/deepseek-v4-flash",
+        safe_students=24,
+        packet_info={"packet_zip": str(tmp_path / "packet.zip")},
+        budget={"estimated_cost": 0.01},
+        privacy_steps=[{"id": "llm_send", "status": "failed"}],
+        exc=exc,
+    )
+
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    raw = json.dumps(data)
+    assert data["openrouter"]["model_id"] == "deepseek/deepseek-v4-flash"
+    assert data["openrouter"]["safe_student_count"] == 24
+    assert data["exception"]["status_code"] == "200"
+    assert data["exception"]["response_snippet"] == "<html>bad</html>"
+    assert "api_key" not in raw.lower()
+    assert "bearer" not in raw.lower()

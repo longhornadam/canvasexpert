@@ -5,6 +5,7 @@ caller MUST run feedback_safety.scan_payload() and confirm GREEN before invoking
 score() — this module assumes it is handed an already-pseudonymized bundle.
 """
 import json
+from json import JSONDecodeError
 
 try:
     from feedback_pipeline import build_contract_text, parse_results
@@ -23,6 +24,68 @@ _KNOWN_PREMIUM_MODEL_MARKERS = (
     "opus",
     "o1-pro",
 )
+
+
+class OpenRouterResponseError(ValueError):
+    """Raised when OpenRouter returns a response PowerGrader cannot parse."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        context: str = "",
+        status_code: str = "unknown",
+        response_snippet: str = "",
+    ):
+        super().__init__(message)
+        self.context = context
+        self.status_code = status_code
+        self.response_snippet = response_snippet
+
+
+def _response_text(resp) -> str:
+    try:
+        return (resp.text or "").strip()
+    except Exception:
+        return ""
+
+
+def _status_code(resp) -> str:
+    try:
+        return str(resp.status_code)
+    except Exception:
+        return "unknown"
+
+
+def _json_or_raise(resp, *, context: str) -> dict:
+    try:
+        return resp.json()
+    except (JSONDecodeError, ValueError) as e:
+        text = _response_text(resp)
+        snippet = text[:500] if text else "<empty response body>"
+        status = _status_code(resp)
+        raise OpenRouterResponseError(
+            f"{context} returned non-JSON response "
+            f"(HTTP {status}): {snippet}",
+            context=context,
+            status_code=status,
+            response_snippet=snippet,
+        ) from e
+
+
+def _raise_for_status_or_raise(resp, *, context: str) -> None:
+    try:
+        resp.raise_for_status()
+    except Exception as e:
+        text = _response_text(resp)
+        snippet = text[:500] if text else "<empty response body>"
+        status = _status_code(resp)
+        raise OpenRouterResponseError(
+            f"{context} returned HTTP {status}: {snippet}",
+            context=context,
+            status_code=status,
+            response_snippet=snippet,
+        ) from e
 
 
 def estimate_tokens(bundle: dict, rubric_text: str = "") -> int:
@@ -75,8 +138,8 @@ def model_pricing(model: str, *, http_get=None, timeout: int = 15) -> dict | Non
         import requests
         http_get = requests.get
     r = http_get(MODELS_ENDPOINT, timeout=timeout)
-    r.raise_for_status()
-    for row in (r.json().get("data") or []):
+    _raise_for_status_or_raise(r, context="OpenRouter model list")
+    for row in (_json_or_raise(r, context="OpenRouter model list").get("data") or []):
         if str(row.get("id") or "").strip() != model:
             continue
         pricing = row.get("pricing") or {}
@@ -234,5 +297,5 @@ def score(bundle: dict, rubric_text: str, persona: dict, *, api_key: str,
     r = http_post(ENDPOINT, headers={"Authorization": f"Bearer {api_key}",
                                      "Content-Type": "application/json"},
                   json=body, timeout=timeout)
-    r.raise_for_status()
-    return parse_response(r.json())
+    _raise_for_status_or_raise(r, context="OpenRouter scoring")
+    return parse_response(_json_or_raise(r, context="OpenRouter scoring"))

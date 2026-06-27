@@ -55,6 +55,78 @@ def test_score_requires_key():
         orc.score(BUNDLE, "", PERSONA, api_key="", model="m")
 
 
+def test_score_reports_non_json_response_body():
+    class _Resp:
+        status_code = 200
+        text = "<html>provider unavailable</html>"
+
+        def raise_for_status(self): pass
+
+        def json(self):
+            raise json.JSONDecodeError("Expecting value", "", 0)
+
+    with pytest.raises(orc.OpenRouterResponseError) as exc:
+        orc.score(
+            BUNDLE,
+            "RUBRIC",
+            PERSONA,
+            api_key="sk-test",
+            model="anthropic/claude-x",
+            http_post=lambda *a, **k: _Resp(),
+        )
+
+    msg = str(exc.value)
+    assert "OpenRouter scoring returned non-JSON response" in msg
+    assert "HTTP 200" in msg
+    assert "provider unavailable" in msg
+
+
+def test_model_pricing_reports_empty_non_json_response():
+    class _Resp:
+        status_code = 503
+        text = ""
+
+        def raise_for_status(self): pass
+
+        def json(self):
+            raise ValueError("Expecting value: line 1 column 1 (char 0)")
+
+    with pytest.raises(orc.OpenRouterResponseError) as exc:
+        orc.model_pricing("deepseek/deepseek-v4-pro", http_get=lambda *a, **k: _Resp())
+
+    msg = str(exc.value)
+    assert "OpenRouter model list returned non-JSON response" in msg
+    assert "HTTP 503" in msg
+    assert "<empty response body>" in msg
+
+
+def test_score_reports_http_error_response_body():
+    class _Resp:
+        status_code = 429
+        text = '{"error":{"message":"rate limited by provider"}}'
+
+        def raise_for_status(self):
+            raise RuntimeError("429 Client Error")
+
+        def json(self):
+            raise AssertionError("json should not be parsed after HTTP failure")
+
+    with pytest.raises(orc.OpenRouterResponseError) as exc:
+        orc.score(
+            BUNDLE,
+            "RUBRIC",
+            PERSONA,
+            api_key="sk-test",
+            model="anthropic/claude-x",
+            http_post=lambda *a, **k: _Resp(),
+        )
+
+    msg = str(exc.value)
+    assert "OpenRouter scoring returned HTTP 429" in msg
+    assert "rate limited by provider" in msg
+    assert exc.value.status_code == "429"
+
+
 def test_estimate_tokens_positive():
     assert orc.estimate_tokens(BUNDLE, "rubric") > 0
     assert orc.estimate_request_input_tokens(BUNDLE, "rubric", PERSONA) >= orc.estimate_tokens(BUNDLE, "rubric")
