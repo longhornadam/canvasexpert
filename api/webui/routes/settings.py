@@ -113,21 +113,6 @@ def _current_major_models(rows: list[dict]) -> list[dict]:
         item["strategy"] = strategy if not prefer or prefer in row["id"].lower() else "newest listed"
         picked.append(item)
         seen.add(row["id"])
-    priced = [r for r in picked if r.get("scenario_cost") is not None]
-    if priced:
-        low = min(r["scenario_cost"] for r in priced)
-        high = max(r["scenario_cost"] for r in priced)
-        picked.insert(0, {
-            "id": "openrouter/auto",
-            "name": "OpenRouter Auto Router",
-            "family": "Auto Router",
-            "strategy": "routes dynamically",
-            "input_per_mtok": None,
-            "output_per_mtok": None,
-            "scenario_cost": None,
-            "scenario_cost_low": low,
-            "scenario_cost_high": high,
-        })
     return picked
 
 

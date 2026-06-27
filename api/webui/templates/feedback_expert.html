@@ -176,7 +176,14 @@
           <input type="password" id="or-key" placeholder="sk-or-… (blank = keep saved key)" autocomplete="off">
         </label>
         <label>Model
-          <input type="text" id="or-model" placeholder="anthropic/claude-sonnet-4.5" autocomplete="off">
+          <input type="text" id="or-model" value="{{ openrouter_model }}"
+                 placeholder="{{ default_openrouter_model }}" list="or-model-list" autocomplete="off">
+          <datalist id="or-model-list">
+            {% for m in openrouter_model_presets %}
+            <option value="{{ m.id }}" label="{{ m.cost_tier }} · {{ m.label }} — input ${{ "%.3g"|format(m.input_per_mtok) }}/M; output ${{ "%.3g"|format(m.output_per_mtok) }}/M; 30 essays ~${{ "%.2f"|format(m.scenario_cost) }} — {{ m.note }}"></option>
+            {% endfor %}
+            <option value="openrouter/auto" label="Auto Router (advanced; variable cost)"></option>
+          </datalist>
         </label>
         <div class="actions">
           <button type="submit" class="primary small">Save</button>
@@ -439,8 +446,21 @@
           return;
         }
 
-        if (!confirm("~" + d.tokens + " input tokens estimated for " + d.students +
-                     " student(s). This will call the paid OpenRouter API. Continue?")) {
+        if (d.budget && d.budget.ok === false) {
+          var reasons = (d.budget.reasons || []).join("; ");
+          status.textContent = "SAFE bundle ready, but paid scoring is blocked by the cost guard: " + reasons;
+          resultActions.hidden = false;
+          btn.disabled = false;
+          return;
+        }
+
+        var estimate = d.budget && d.budget.estimated_cost != null
+          ? ("\nEstimated total cost: $" + Number(d.budget.estimated_cost).toFixed(2))
+          : "\nEstimated total cost: unavailable";
+        if (!confirm("Model: " + (d.model || "unknown") +
+                     "\n~" + d.tokens + " input tokens estimated for " + d.students +
+                     " student(s)." + estimate +
+                     "\n\nThis will call the paid OpenRouter API. Continue?")) {
           status.textContent = "Cancelled — SAFE bundle is still saved; open the SAFE folder to use it manually.";
           resultActions.hidden = false;
           btn.disabled = false;
@@ -551,7 +571,7 @@
     }
     var send = document.getElementById("or-send");
     send.disabled = !(hasKey && greenTokens > 0);
-    send.textContent = "Send 🟢 bundles to OpenRouter" + (greenTokens ? " (~" + greenTokens + " tokens)" : "");
+    send.textContent = "Send 🟢 bundles to OpenRouter" + (greenTokens ? " (~" + greenTokens + " input tokens)" : "");
   }
   function loadCSVStatus() {
     fetch("/api/feedback/status").then(function (r) { return r.json(); }).then(renderCSV).catch(function () {});
@@ -569,7 +589,9 @@
       .catch(function (e) { st.textContent = "Error: " + e; });
   });
   document.getElementById("or-send").addEventListener("click", function () {
-    if (!confirm("Send all 🟢 green (pseudonymized) bundles to OpenRouter?\n\n~" + greenTokens +
+    if (!confirm("Send all 🟢 green (pseudonymized) bundles to OpenRouter?\n\nModel: " +
+                 (document.getElementById("or-model").value.trim() || "saved default") +
+                 "\n~" + greenTokens +
                  " input tokens. This calls a paid API and costs money. Continue?")) return;
     var btn = this, st = document.getElementById("or-send-status"), logEl = document.getElementById("or-log");
     btn.disabled = true; st.textContent = "Scoring via OpenRouter…"; logEl.hidden = true;

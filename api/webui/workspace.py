@@ -15,7 +15,10 @@ REPO_ROOT = os.path.dirname(API_DIR)
 CONFIG_PATH = os.path.join(MODULE_DIR, "config.json")
 DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 WORKSPACE_NAME = "CanvasExpert"
-WORKSPACE_SUBFOLDERS = ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports", "Calendars"]
+WORKSPACE_SUBFOLDERS = [
+    "AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports",
+    "Calendars", "Source Materials",
+]
 
 # FeedbackExpert zone folders (nested under the workspace).
 FEEDBACK_NAME = "FeedbackExpert"

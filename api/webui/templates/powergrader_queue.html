@@ -7,6 +7,7 @@
 <meta name="session-id"      content="{{ session_id }}">
 <meta name="assignment-name" content="{{ assignment_name }}">
 <meta name="grading-mode"    content="{{ mode }}">
+<meta name="mode-label"      content="{{ mode_label }}">
 <meta name="canvas-base"     content="{{ canvas_base }}">
 
 <!-- ── Top bar ──────────────────────────────────────────────────────── -->
@@ -14,15 +15,40 @@
   <div class="pg-topbar-left">
     <a href="/powergrader" class="pg-back">← Sessions</a>
     <span class="pg-asn-name">{{ assignment_name }}</span>
-    {% if mode == "assisted" %}<span class="pg-ai-badge">✨ AI</span>{% endif %}
+    {% if mode != "fast" %}<span class="pg-ai-badge">{{ mode_label }}</span>{% endif %}
   </div>
   <div class="pg-progress-wrap">
     <span id="pg-progress-label" class="pg-progress-label">Loading…</span>
     <div class="pg-progress-bar"><div id="pg-progress-fill" class="pg-progress-fill" style="width:0%"></div></div>
   </div>
   <div class="pg-topbar-right">
-    <button type="button" id="pg-bulk-push" class="primary small" disabled>Push approved (0)</button>
+    <button type="button" id="pg-bulk-push" class="primary small" disabled>Push approved to Canvas (0)</button>
   </div>
+</div>
+
+<div id="pg-privacy-strip" class="pg-privacy-strip" hidden>
+  <div class="pg-privacy-head">
+    <strong>Privacy pipeline</strong>
+    <span id="pg-privacy-summary" class="pg-privacy-summary"></span>
+    <div id="pg-privacy-actions" class="pg-privacy-actions"></div>
+  </div>
+  <div id="pg-privacy-steps" class="pg-privacy-steps"></div>
+</div>
+
+<div id="pg-packet-strip" class="pg-packet-strip" hidden>
+  <div class="pg-packet-head">
+    <strong>Safe AI Packet</strong>
+    <span class="pg-privacy-summary">Use with your AI chat, then paste the JSON results back here.</span>
+    <div id="pg-packet-actions" class="pg-privacy-actions"></div>
+  </div>
+  <details class="pg-import-box">
+    <summary>Paste AI results into this session</summary>
+    <textarea id="pg-import-json" rows="5" placeholder='[{"pseudonym":"...","item_id":"...","score":2,"feedback":"...","disclosure":"Drafted by Sage (AI), reviewed by your teacher."}]'></textarea>
+    <div class="pg-import-actions">
+      <button type="button" id="pg-import-results" class="primary small">Import AI suggestions</button>
+      <span id="pg-import-status" class="hint"></span>
+    </div>
+  </details>
 </div>
 
 <!-- ── Main pane ─────────────────────────────────────────────────────── -->
@@ -48,7 +74,7 @@
       </label>
     </div>
 
-    <!-- AI suggestion (Assisted mode) -->
+    <!-- AI suggestion (manual-chat packet or API mode) -->
     <div id="pg-ai-panel" class="pg-ai-panel" style="display:none">
       <div class="pg-ai-header">
         <span class="pg-ai-badge-sm">✨ AI suggestion</span>
@@ -80,7 +106,7 @@
     <!-- Actions -->
     <div class="pg-actions">
       <button type="button" id="pg-skip" class="small">↓ Skip</button>
-      <button type="button" id="pg-save-next" class="primary">↑ Save &amp; Next</button>
+      <button type="button" id="pg-save-next" class="primary">↑ Approve &amp; Next</button>
     </div>
     <button type="button" id="pg-push-one" class="pg-push-one small" style="margin-top:6px;width:100%">Push this student now</button>
 
@@ -98,7 +124,7 @@
   <span><kbd>←</kbd> previous</span>
   <span><kbd>→</kbd> next</span>
   <span><kbd>↓</kbd> skip</span>
-  <span><kbd>↑</kbd> save &amp; next</span>
+  <span><kbd>↑</kbd> approve &amp; next</span>
   <span id="pg-kbd-a-hint" style="display:none"><kbd>A</kbd> use AI score</span>
   <span><kbd>B</kbd> bulk push</span>
 </div>
@@ -127,6 +153,37 @@
 .pg-progress-label { font-size:12px; color:var(--ce-text-muted,#888); display:block; margin-bottom:3px; }
 .pg-progress-bar  { height:6px; background:var(--ce-border); border-radius:3px; overflow:hidden; }
 .pg-progress-fill { height:100%; background:var(--ce-green,#27ae60); border-radius:3px; transition:width .3s; }
+
+.pg-privacy-strip {
+  flex-shrink:0; padding:9px 16px; border-bottom:1px solid var(--ce-border);
+  background:var(--ce-surface-alt,#f8fafc);
+}
+.pg-packet-strip {
+  flex-shrink:0; padding:9px 16px; border-bottom:1px solid var(--ce-border);
+  background:var(--ce-surface,#fff);
+}
+.pg-privacy-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:7px; }
+.pg-packet-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pg-privacy-summary { font-size:12px; color:var(--ce-text-muted,#667085); }
+.pg-privacy-actions { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+.pg-privacy-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:6px 12px; }
+.pg-privacy-step { display:grid; grid-template-columns:14px 1fr; gap:7px; align-items:start; min-width:0; }
+.pg-light {
+  width:9px; height:9px; border-radius:50%; margin-top:4px; background:#cbd5e1;
+  box-shadow:0 0 0 3px rgba(148,163,184,.14);
+}
+.pg-light.ok { background:#21a366; box-shadow:0 0 0 3px rgba(33,163,102,.14); }
+.pg-light.warn { background:#f6b100; box-shadow:0 0 0 3px rgba(246,177,0,.18); }
+.pg-light.failed { background:#c0392b; box-shadow:0 0 0 3px rgba(192,57,43,.16); }
+.pg-privacy-label { font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pg-privacy-detail { font-size:11.5px; color:var(--ce-text-muted,#667085); line-height:1.3; }
+.pg-import-box { margin-top:8px; font-size:13px; }
+.pg-import-box summary { cursor:pointer; font-weight:700; color:var(--ce-text-muted,#667085); }
+.pg-import-box textarea {
+  width:100%; box-sizing:border-box; margin-top:8px; font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:12px; line-height:1.4;
+}
+.pg-import-actions { display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap; }
 
 .pg-main {
   display:flex; flex:1; min-height:0; overflow:hidden;
@@ -161,7 +218,7 @@
 
 /* RIGHT — grade pane */
 .pg-grade-pane  {
-  width:300px; flex-shrink:0; overflow-y:auto;
+  width:320px; flex-shrink:0; overflow:hidden; min-height:0;
   padding:14px; display:flex; flex-direction:column; gap:12px;
 }
 
@@ -194,8 +251,14 @@
                       background:var(--ce-surface-alt,#fafafa); padding:8px;
                       border:1px solid var(--ce-border); border-radius:4px; margin:6px 0 0; }
 
-.pg-feedback-label  { font-weight:600; font-size:13px; display:flex; flex-direction:column; gap:4px; }
-.pg-feedback-label textarea { font-size:13px; resize:vertical; }
+.pg-feedback-label  {
+  font-weight:600; font-size:13px; display:flex; flex-direction:column; gap:4px;
+  flex:1 1 auto; min-height:220px; min-width:0;
+}
+.pg-feedback-label textarea {
+  font-size:13px; line-height:1.45; resize:none; flex:1 1 auto;
+  min-height:0; width:100%; box-sizing:border-box;
+}
 .pg-feedback-head   { display:flex; align-items:center; justify-content:space-between; }
 .pg-emoji-btn       { background:none; border:1px solid var(--ce-border); border-radius:4px;
                       cursor:pointer; font-size:14px; line-height:1; padding:2px 6px; }
@@ -203,15 +266,16 @@
 .pg-emoji-palette   { display:flex; flex-wrap:wrap; gap:2px; padding:6px;
                       border:1px solid var(--ce-border); border-radius:6px;
                       background:var(--ce-surface); margin-bottom:4px; }
+.pg-emoji-palette[hidden] { display:none; }
 .pg-emoji-palette button { background:none; border:none; cursor:pointer; font-size:18px;
                       line-height:1; padding:3px; border-radius:4px; }
 .pg-emoji-palette button:hover { background:var(--ce-surface-alt,#f0f0f0); }
 
-.pg-actions { display:flex; gap:8px; }
+.pg-actions { display:flex; gap:8px; flex-shrink:0; }
 .pg-actions button { flex:1; }
-.pg-push-one { }
+.pg-push-one { flex-shrink:0; }
 
-.pg-nav-row     { display:flex; align-items:center; justify-content:space-between; margin-top:4px; }
+.pg-nav-row     { display:flex; align-items:center; justify-content:space-between; margin-top:4px; flex-shrink:0; }
 .pg-nav-counter { font-size:12px; color:var(--ce-text-muted,#888); }
 
 .pg-kbd-legend {
@@ -238,6 +302,7 @@ kbd {
 (function(){
   var SESSION_ID   = document.querySelector('meta[name="session-id"]').content;
   var MODE         = document.querySelector('meta[name="grading-mode"]').content;
+  var MODE_LABEL   = document.querySelector('meta[name="mode-label"]').content || MODE;
   var CANVAS_BASE  = document.querySelector('meta[name="canvas-base"]').content;
 
   var session      = null;
@@ -267,12 +332,24 @@ kbd {
   var navCounter   = document.getElementById('pg-nav-counter');
   var progressFill = document.getElementById('pg-progress-fill');
   var progressLbl  = document.getElementById('pg-progress-label');
+  var privacyStrip = document.getElementById('pg-privacy-strip');
+  var privacySummary = document.getElementById('pg-privacy-summary');
+  var privacySteps = document.getElementById('pg-privacy-steps');
+  var privacyActions = document.getElementById('pg-privacy-actions');
+  var packetStrip = document.getElementById('pg-packet-strip');
+  var packetActions = document.getElementById('pg-packet-actions');
+  var importJson = document.getElementById('pg-import-json');
+  var importBtn = document.getElementById('pg-import-results');
+  var importStatus = document.getElementById('pg-import-status');
   var statusBar    = document.getElementById('pg-status-bar');
   var rubricPanel  = document.getElementById('pg-rubric-details');
   var rubricPre    = document.getElementById('pg-rubric-text');
   var kbdAHint     = document.getElementById('pg-kbd-a-hint');
 
-  if (MODE === 'assisted') { kbdAHint && (kbdAHint.style.display = ''); }
+  function isAiMode() {
+    return MODE === 'assisted' || MODE === 'packet';
+  }
+  if (kbdAHint) { kbdAHint.style.display = isAiMode() ? '' : 'none'; }
 
   // ── Load session ────────────────────────────────────────────────────
   fetch('/api/powergrader/session/' + SESSION_ID)
@@ -291,6 +368,8 @@ kbd {
       }
 
       updateProgress();
+      renderPrivacyAudit(session);
+      renderPacketPanel(session);
       renderStudent(idx);
     })
     .catch(function(e){ showStatus('Load error: ' + e, true); });
@@ -341,28 +420,38 @@ kbd {
     ptsEl.textContent = '/ ' + (session.points_possible || '?');
     scoreEl.max = session.points_possible || 100;
 
-    // Pre-fill score/feedback from saved grade (or AI if no teacher grade yet)
+    var hasAiScore = st.ai_score !== null && st.ai_score !== undefined;
+    var hasAiFeed  = !!(st.ai_feedback && st.ai_feedback.trim());
+
+    // Pre-fill score/feedback from saved grade, otherwise from the AI draft.
     if (st.teacher_score !== null && st.teacher_score !== undefined) {
       scoreEl.value = st.teacher_score;
-    } else if (MODE === 'assisted' && st.ai_score !== null && st.ai_score !== undefined) {
-      scoreEl.value = '';  // don't auto-fill AI score — require explicit accept
+    } else if (isAiMode() && hasAiScore) {
+      scoreEl.value = st.ai_score;
     } else {
       scoreEl.value = '';
     }
-    feedbackEl.value = st.teacher_feedback || '';
 
-    // AI panel
-    if (MODE === 'assisted') {
-      aiPanel.style.display = '';
-      var hasScore = st.ai_score !== null && st.ai_score !== undefined;
-      var hasFeed  = !!(st.ai_feedback && st.ai_feedback.trim());
-      aiScoreVal.textContent = hasScore ? st.ai_score : 'No AI score';
-      aiFeedTxt.textContent  = hasFeed ? st.ai_feedback : '(No AI feedback)';
-      useAiScore.disabled    = !hasScore;
-      useAiFeed.disabled     = !hasFeed;
+    var usedAiDraft = false;
+    if (st.teacher_feedback) {
+      feedbackEl.value = st.teacher_feedback;
+    } else if (isAiMode() && (hasAiScore || hasAiFeed)) {
+      feedbackEl.value = buildAiDraft(st);
+      usedAiDraft = true;
     } else {
-      aiPanel.style.display = 'none';
+      feedbackEl.value = '';
     }
+    if (usedAiDraft && feedbackEl.setSelectionRange) {
+      setTimeout(function(){ try { feedbackEl.setSelectionRange(0, 0); } catch(e){} }, 0);
+    }
+
+    // AI draft is now loaded into the editable feedback box, so the separate
+    // suggestion panel stays out of the way and the textarea can use the space.
+    aiPanel.style.display = 'none';
+    aiScoreVal.textContent = hasAiScore ? st.ai_score : 'No AI score';
+    aiFeedTxt.textContent  = hasAiFeed ? formatAiFeedback(st.ai_feedback) : '(No AI feedback)';
+    useAiScore.disabled    = !hasAiScore;
+    useAiFeed.disabled     = !hasAiFeed;
 
     // Already-graded note
     var alreadyHtml = '';
@@ -448,6 +537,130 @@ kbd {
       '</style></head><body>' + bodyHtml + '</body></html>';
   }
 
+  function renderPrivacyAudit(s) {
+    var steps = (s && s.privacy_steps) || [];
+    if (!steps.length || !privacyStrip || !privacySteps) return;
+    privacyStrip.hidden = false;
+    var ok = steps.filter(function(st){ return st.status === 'ok'; }).length;
+    var warn = steps.filter(function(st){ return st.status === 'warn'; }).length;
+    var fail = steps.filter(function(st){ return st.status === 'failed'; }).length;
+    privacySummary.textContent = ok + ' green' + (warn ? ', ' + warn + ' yellow' : '') + (fail ? ', ' + fail + ' red' : '');
+    privacySteps.innerHTML = steps.map(function(step){
+      var status = step.status || '';
+      var light = status === 'ok' ? 'ok' : (status === 'warn' ? 'warn' : (status === 'failed' ? 'failed' : ''));
+      return '<div class="pg-privacy-step">' +
+        '<span class="pg-light ' + light + '"></span>' +
+        '<div><div class="pg-privacy-label" title="' + _esc(step.label || '') + '">' + _esc(step.label || step.id || 'Step') + '</div>' +
+        (step.detail ? '<div class="pg-privacy-detail">' + _esc(step.detail) + '</div>' : '') +
+        '</div></div>';
+    }).join('');
+    var artifacts = s.privacy_artifacts || {};
+    var buttons = [];
+    if (artifacts.safe_folder) buttons.push('<button type="button" class="small" data-open-path="' + _esc(artifacts.safe_folder) + '">Open Safe AI Packet folder</button>');
+    if (artifacts.private_folder) buttons.push('<button type="button" class="small" data-open-path="' + _esc(artifacts.private_folder) + '">Open Private decoder folder</button>');
+    privacyActions.innerHTML = buttons.join('');
+  }
+
+  function renderPacketPanel(s) {
+    var artifacts = (s && s.privacy_artifacts) || {};
+    if (!packetStrip || !packetActions || !artifacts.packet_zip) return;
+    packetStrip.hidden = false;
+    var buttons = [];
+    if (artifacts.packet_folder) {
+      buttons.push('<button type="button" class="small" data-open-path="' + _esc(artifacts.packet_folder) + '">Open packet folder</button>');
+    }
+    buttons.push('<a class="small" href="/api/powergrader/session/' + encodeURIComponent(SESSION_ID) + '/packet" style="padding:4px 10px;border:1px solid var(--line);border-radius:var(--r-sm);text-decoration:none;background:var(--card);color:var(--ink)">Download packet ZIP</a>');
+    packetActions.innerHTML = buttons.join('');
+  }
+
+  importBtn && importBtn.addEventListener('click', function(){
+    var text = importJson ? importJson.value.trim() : '';
+    if (!text) {
+      if (importStatus) importStatus.textContent = 'Paste AI JSON first.';
+      return;
+    }
+    importBtn.disabled = true;
+    if (importStatus) importStatus.textContent = 'Validating and importing...';
+    var fd = new FormData();
+    fd.append('results', text);
+    fetch('/api/powergrader/session/' + SESSION_ID + '/import-results', {method:'POST', body:fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) {
+          if (importStatus) {
+            var details = d.validation && d.validation.errors ? ' ' + d.validation.errors.slice(0, 2).join(' ') : '';
+            importStatus.textContent = (d.error || 'Import failed.') + details;
+          }
+          return;
+        }
+        return fetch('/api/powergrader/session/' + SESSION_ID)
+          .then(function(r){ return r.json(); })
+          .then(function(fresh){
+            if (fresh.ok) {
+              session = fresh.session;
+              students = session.students || [];
+              renderStudent(idx);
+              if (importStatus) {
+                var warnings = d.validation && d.validation.warnings ? d.validation.warnings.length : 0;
+                importStatus.textContent = 'Imported ' + d.updated + ' AI suggestion(s)' + (warnings ? ' with ' + warnings + ' warning(s).' : '.');
+              }
+              showStatus('AI suggestions imported for review.', false);
+            }
+          });
+      })
+      .catch(function(e){ if (importStatus) importStatus.textContent = String(e); })
+      .finally(function(){ importBtn.disabled = false; });
+  });
+
+  function buildAiDraft(st) {
+    var parts = [];
+    var hasScore = st.ai_score !== null && st.ai_score !== undefined;
+    if (hasScore) {
+      parts.push('AI score: ' + st.ai_score + (session && session.points_possible ? ' / ' + session.points_possible : ''));
+    }
+    if (st.ai_feedback && st.ai_feedback.trim()) {
+      parts.push(formatAiFeedback(st.ai_feedback));
+    }
+    return parts.length ? '---------- AI draft ----------\n' + parts.join('\n\n') : '';
+  }
+
+  function formatAiFeedback(raw) {
+    var text = formatFeedbackLinebreaks(raw);
+    var match = text.match(/Drafted by [^.\n]+?\(AI\), reviewed by your teacher\.?/i);
+    if (!match) return text;
+
+    var disclosure = match[0];
+    var persona = (disclosure.match(/Drafted by\s+(.+?)\s+\(AI\),\s*reviewed by your teacher\.?/i) || [])[1] || '';
+    text = removePhrase(text, disclosure)
+      .replace(/^\s*(?:[-\u2013\u2014]\s*)?[\w .,'&-]{1,100}\s+\((?:AI|AI teaching assistant)\)\.?\s*$/gim, '');
+    if (persona) {
+      text = text.replace(new RegExp('(?:[-\\u2013\\u2014]\\s*)?' + escapeRegExp(persona) + '\\s+\\((?:AI|AI teaching assistant)\\)\\.?', 'ig'), '');
+    }
+    text = formatFeedbackLinebreaks(text);
+    return text ? text + '\n\n' + disclosure : disclosure;
+  }
+
+  function formatFeedbackLinebreaks(raw) {
+    var text = String(raw || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!text) return '';
+    text = text.replace(/[ \t]+/g, ' ');
+    text = text.replace(/\s+(?=(Score|Glows?|Grows?|Next(?:\s+step| steps?)?|Strategy|Overall|Evidence|Try this|Revision target|Why this score)\s*:)/gi, '\n\n');
+    text = text.replace(/\s+(?=Drafted by [^.\n]+?\(AI\), reviewed by your teacher\.?)/gi, '\n\n');
+    text = text.replace(/\s+(?=[-*]\s+(Glow|Grow|Next|Evidence|Try)\b)/gi, '\n');
+    text = text.split('\n').map(function(line){ return line.trim(); }).join('\n');
+    return text.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function removePhrase(text, phrase) {
+    if (!phrase) return text;
+    var pattern = escapeRegExp(phrase).replace(/\s+/g, '\\s+');
+    return text.replace(new RegExp(pattern, 'ig'), '').trim();
+  }
+
+  function escapeRegExp(text) {
+    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   // ── Progress ────────────────────────────────────────────────────────
   function updateProgress() {
     if (!students.length) return;
@@ -456,14 +669,14 @@ kbd {
     var total    = students.length;
     var pct      = Math.round((posted / total) * 100);
     progressFill.style.width = pct + '%';
-    progressLbl.textContent  = posted + ' posted, ' + approved + ' ready — ' + total + ' total';
+    progressLbl.textContent  = posted + ' posted, ' + approved + ' approved — ' + total + ' total';
     var readyToPush = students.filter(function(s){ return s.status === 'approved' && !s.posted; }).length;
     bulkPushBtn.disabled     = readyToPush === 0;
-    bulkPushBtn.textContent  = 'Push approved (' + readyToPush + ')';
+    bulkPushBtn.textContent  = 'Push approved to Canvas (' + readyToPush + ')';
   }
 
   // ── Save grade ──────────────────────────────────────────────────────
-  function saveGrade(statusVal, advance) {
+  function saveGrade(statusVal, advance, after) {
     var st = students[idx];
     if (!st) return;
     var fd = new FormData();
@@ -478,29 +691,42 @@ kbd {
           st.teacher_score    = scoreEl.value ? parseFloat(scoreEl.value) : null;
           st.teacher_feedback = feedbackEl.value;
           st.status           = statusVal;
-          showStatus(statusVal === 'skipped' ? 'Skipped.' : 'Saved.', false);
+          showStatus(statusVal === 'skipped' ? 'Skipped.' : (statusVal === 'approved' ? 'Approved.' : 'Saved.'), false);
           updateProgress();
+          if (after) after(true);
           if (advance && idx < students.length - 1) renderStudent(idx + 1);
         } else {
           showStatus('Save failed: ' + (d.error || 'unknown'), true);
+          if (after) after(false);
         }
       })
-      .catch(function(e){ showStatus('Error: ' + e, true); });
+      .catch(function(e){ showStatus('Error: ' + e, true); if (after) after(false); });
   }
 
   // ── Push one student ────────────────────────────────────────────────
   function pushOne() {
     var st = students[idx];
     if (!st) return;
-    var fd = new FormData();
-    fd.append('user_ids', JSON.stringify([st.user_id]));
+    var userId = st.user_id;
     pushOneBtn.disabled = true;
+    saveGrade('approved', false, function(ok){
+      if (!ok) { pushOneBtn.disabled = false; return; }
+      pushSavedOne(userId);
+    });
+  }
+
+  function pushSavedOne(userId) {
+    var fd = new FormData();
+    fd.append('user_ids', JSON.stringify([userId]));
     fetch('/api/powergrader/session/' + SESSION_ID + '/push', {method:'POST', body:fd})
       .then(function(r){ return r.json(); })
       .then(function(d){
+        var pushedStudent = students.find(function(s){ return s.user_id === userId; });
         if (d.pushed) {
-          st.posted = true;
-          st.status = 'posted';
+          if (pushedStudent) {
+            pushedStudent.posted = true;
+            pushedStudent.status = 'posted';
+          }
           showStatus('Pushed to Canvas.', false);
           updateProgress();
           renderStudent(idx);
@@ -541,9 +767,9 @@ kbd {
   }
   function applyAiFeedback(){
     var st = students[idx];
-    if (!st || !st.ai_feedback) return;
-    feedbackEl.value = st.ai_feedback;
-    showStatus("Used AI's feedback — edit if needed, then Save.", false);
+    if (!st || (!st.ai_feedback && st.ai_score === null && st.ai_score === undefined)) return;
+    feedbackEl.value = buildAiDraft(st);
+    showStatus("Restored the AI draft — edit if needed, then approve.", false);
   }
   useAiScore && useAiScore.addEventListener('click', applyAiScore);
   useAiFeed  && useAiFeed.addEventListener('click', applyAiFeedback);
@@ -594,7 +820,7 @@ kbd {
       case 's': saveGrade('approved', true); e.preventDefault(); break;
       case 'x': saveGrade('skipped', true);  e.preventDefault(); break;
       case 'a':
-        if (MODE === 'assisted') { applyAiScore(); e.preventDefault(); }
+        if (isAiMode()) { applyAiScore(); e.preventDefault(); }
         break;
       case 'b': bulkPush(); e.preventDefault(); break;
     }

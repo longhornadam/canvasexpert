@@ -5,6 +5,7 @@ import json
 import pytest
 
 from api import openrouter_client as orc
+from api.webui import config
 
 BUNDLE = {"quiz_title": "THG", "students": [
     {"pseudonym": "S001", "responses": [
@@ -56,3 +57,95 @@ def test_score_requires_key():
 
 def test_estimate_tokens_positive():
     assert orc.estimate_tokens(BUNDLE, "rubric") > 0
+    assert orc.estimate_request_input_tokens(BUNDLE, "rubric", PERSONA) >= orc.estimate_tokens(BUNDLE, "rubric")
+
+
+def test_teacher_budget_allows_default_model():
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [{"id": "deepseek/deepseek-v4-pro",
+                              "pricing": {"prompt": "0.000000435",
+                                          "completion": "0.00000087"}}]}
+
+    verdict = orc.teacher_workflow_budget(
+        BUNDLE, "rubric", "deepseek/deepseek-v4-pro", student_count=30,
+        http_get=lambda *a, **k: _Resp(),
+    )
+    assert verdict["ok"] is True
+    assert verdict["pricing"]["input_per_mtok"] == pytest.approx(0.435)
+    assert verdict["pricing"]["output_per_mtok"] == pytest.approx(0.87)
+
+
+def test_teacher_budget_allows_output_token_preset():
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [{"id": "deepseek/deepseek-v4-pro",
+                              "pricing": {"prompt": "0.000000435",
+                                          "completion": "0.00000087"}}]}
+
+    verdict = orc.teacher_workflow_budget(
+        BUNDLE,
+        "rubric",
+        "deepseek/deepseek-v4-pro",
+        student_count=4,
+        output_tokens_per_student=600,
+        http_get=lambda *a, **k: _Resp(),
+    )
+
+    assert verdict["estimated_output_tokens"] == 2400
+
+
+def test_teacher_budget_allows_verified_premium_model_with_warning():
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [{"id": "openai/gpt-5.5",
+                              "pricing": {"prompt": "0.000005",
+                                          "completion": "0.00003"}}]}
+
+    verdict = orc.teacher_workflow_budget(
+        BUNDLE, "rubric", "openai/gpt-5.5", student_count=30,
+        http_get=lambda *a, **k: _Resp(),
+    )
+    assert verdict["ok"] is True
+    assert verdict["pricing"]["output_per_mtok"] == pytest.approx(30.00)
+    assert any("premium-priced model" in r for r in verdict["warnings"])
+
+
+def test_teacher_budget_blocks_auto_router():
+    verdict = orc.teacher_workflow_budget(BUNDLE, "", "openrouter/auto", student_count=1)
+    assert verdict["ok"] is False
+    assert any("Auto Router" in r for r in verdict["reasons"])
+
+
+def test_teacher_budget_blocks_unverified_model_pricing():
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": []}
+
+    verdict = orc.teacher_workflow_budget(
+        BUNDLE, "rubric", "some/new-model", student_count=30,
+        http_get=lambda *a, **k: _Resp(),
+    )
+    assert verdict["ok"] is False
+    assert any("live pricing could not be verified" in r for r in verdict["reasons"])
+
+
+def test_legacy_auto_router_setting_resolves_to_default(monkeypatch):
+    monkeypatch.setattr(config, "_machine_load", lambda: {"openrouter_model": "openrouter/auto"})
+    assert config.get_openrouter_model() == "deepseek/deepseek-v4-pro"
+
+
+def test_model_presets_start_with_default_and_include_latest_aliases():
+    presets = config.openrouter_model_presets()
+    ids = [p["id"] for p in presets]
+    assert ids[0] == config.DEFAULT_OPENROUTER_MODEL
+    assert any("-latest" in model_id for model_id in ids)
+    assert all("input_per_mtok" in p and "output_per_mtok" in p for p in presets)
+    assert all("scenario_cost" in p for p in presets)
+    assert any(p["id"] == "~anthropic/claude-sonnet-latest" for p in presets)
+    assert any(p["id"] == "~openai/gpt-latest" for p in presets)
+    assert any(p.get("cost_tier") == "$$$" for p in presets if "-latest" in p["id"])

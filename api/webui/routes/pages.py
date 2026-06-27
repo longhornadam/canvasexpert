@@ -197,6 +197,9 @@ def feedback_expert_page(request: Request):
         "feedback_root": fb,
         "folders":       folders,
         "saved_courses": config.active_courses(),
+        "openrouter_model": config.get_openrouter_model(),
+        "default_openrouter_model": config.DEFAULT_OPENROUTER_MODEL,
+        "openrouter_model_presets": config.openrouter_model_presets(),
     })
 
 
@@ -282,6 +285,7 @@ def settings_page(request: Request):
         "openrouter_is_set": config.has_openrouter_key(),
         "openrouter_model": config.get_openrouter_model(),
         "default_openrouter_model": config.DEFAULT_OPENROUTER_MODEL,
+        "openrouter_model_presets": config.openrouter_model_presets(),
         "saved_courses": config.saved_courses(),
         "base_default":  config.CANVAS_BASE_DEFAULT,
         "download_root": config.get_download_root(),
@@ -296,6 +300,7 @@ def settings_page(request: Request):
             {"name": "Assignments", "path": workspace.folder("Assignments")},
             {"name": "Pages", "path": workspace.folder("Pages")},
             {"name": "Exports", "path": workspace.folder("Exports")},
+            {"name": "Source Materials", "path": workspace.folder("Source Materials")},
         ],
         "computer_name": os.environ.get("COMPUTERNAME", "this PC"),
         "tier_tags": config.get_tier_tags(),

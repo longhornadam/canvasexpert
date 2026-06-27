@@ -113,6 +113,7 @@
   const openrouterModels   = document.getElementById("openrouter-model-list");
   const openrouterMajorBox = document.getElementById("openrouter-major-models");
   const openrouterMajorList = document.getElementById("openrouter-major-list");
+  const openrouterDefaultModel = document.getElementById("openrouter-card")?.dataset.defaultModel || "deepseek/deepseek-v4-pro";
 
   function setOpenrouterStatus(msg, kind) {
     if (!openrouterStatus) return;
@@ -134,8 +135,8 @@
   });
 
   btnOpenrouterAuto?.addEventListener("click", () => {
-    if (openrouterModel) openrouterModel.value = "openrouter/auto";
-    setOpenrouterStatus("Auto Router selected. Save to keep it.", "ok");
+    if (openrouterModel) openrouterModel.value = openrouterDefaultModel;
+    setOpenrouterStatus("DeepSeek V4 Pro selected. Save to keep it.", "ok");
   });
 
   function formatPrice(v) {
@@ -205,8 +206,20 @@
         setOpenrouterStatus("Could not load models: " + (d.error || "unknown error"), "error");
         return;
       }
-      const options = ['<option value="openrouter/auto" label="Auto Router (recommended)"></option>'];
+      const seen = new Set();
+      const options = [];
+      Array.from(openrouterModels.querySelectorAll("option")).forEach(opt => {
+        if (!opt.value || seen.has(opt.value)) return;
+        seen.add(opt.value);
+        options.push(`<option value="${esc(opt.value)}" label="${esc(opt.label || opt.value)}"></option>`);
+      });
+      if (!seen.has(openrouterDefaultModel)) {
+        seen.add(openrouterDefaultModel);
+        options.unshift(`<option value="${esc(openrouterDefaultModel)}" label="DeepSeek V4 Pro — default"></option>`);
+      }
       (d.models || []).forEach(m => {
+        if (!m.id || seen.has(m.id)) return;
+        seen.add(m.id);
         const label = m.name && m.name !== m.id ? `${m.name}` : "";
         options.push(`<option value="${esc(m.id)}" label="${esc(label)}"></option>`);
       });

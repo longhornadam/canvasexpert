@@ -42,7 +42,7 @@ def test_ensure_workspace_creates_and_seeds_rubrics(tmp_path, monkeypatch):
     resolved = workspace.ensure_workspace()
     assert resolved == str(root)
 
-    for folder in ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports"]:
+    for folder in ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports", "Source Materials"]:
         assert (root / folder).is_dir()
 
     assert seeded.read_text(encoding="utf-8") == "user edited version"
@@ -84,6 +84,28 @@ def test_config_split_stays_machine_local_without_workspace(tmp_path, monkeypatc
     machine_state = json.loads(machine_config.read_text(encoding="utf-8"))
     assert machine_state["saved_courses"][0]["id"] == "777"
     assert not (tmp_path / "OneDrive").exists()
+
+
+def test_personas_seed_once_then_follow_folder_changes(tmp_path, monkeypatch):
+    root = tmp_path / "CanvasExpert"
+    root.mkdir()
+    monkeypatch.setattr(workspace, "folder", lambda name: str(root / name))
+    monkeypatch.setattr(config, "_synced_state", lambda: {})
+
+    first = config.list_personas()
+    persona_dir = root / "AI-TA" / "Personas"
+    assert any(p["id"] == "sage" for p in first)
+    assert (persona_dir / "Sage.json").exists()
+
+    (persona_dir / "Sage.json").unlink()
+    second = config.list_personas()
+
+    assert not any(p["id"] == "sage" for p in second)
+    assert any(p["id"] == "coach_vale" for p in second)
+
+    for path in persona_dir.glob("*.json"):
+        path.unlink()
+    assert config.list_personas() == []
 
 
 def test_workspace_migration_is_idempotent(tmp_path, monkeypatch):

@@ -20,7 +20,7 @@ Pure stdlib; offline-testable. Verdict is GREEN only when there are zero hard vi
 _FORBIDDEN_KEYS = {"name", "real_name", "canvas_id", "sis_id", "sisid",
                    "section", "sectionnames", "sectionids", "sectionsisids"}
 # Free-text fields where a name is a soft flag, not a hard block.
-_TEXT_FIELDS = {"prompt", "response", "feedback"}
+_TEXT_FIELDS = {"prompt", "response", "feedback", "text", "assignment_description"}
 
 
 def _walk(obj, path=""):

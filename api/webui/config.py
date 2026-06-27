@@ -16,9 +16,104 @@ SERVICE   = "quizforge-api"
 TOKEN_KEY = "canvas_token"
 OPENROUTER_KEY = "openrouter_key"
 
-# Stable OpenRouter router model. It lets OpenRouter choose an available current
-# model instead of us pinning a dated provider slug in source.
-DEFAULT_OPENROUTER_MODEL = "openrouter/auto"
+# Cost-conscious OpenRouter default for teacher grading. Do not use
+# openrouter/auto here: the router can select premium models with very high
+# output prices, which is unsafe for routine class-scale scoring.
+DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-pro"
+
+OPENROUTER_MODEL_PRESETS = [
+    {
+        "id": DEFAULT_OPENROUTER_MODEL,
+        "label": "DeepSeek V4 Pro",
+        "note": "Default for PowerGrader; low cost, large context",
+        "input_per_mtok": 0.435,
+        "output_per_mtok": 0.87,
+        "cost_tier": "$",
+    },
+    {
+        "id": "deepseek/deepseek-v4-flash",
+        "label": "DeepSeek V4 Flash",
+        "note": "Fastest low-cost DeepSeek option",
+        "input_per_mtok": 0.09,
+        "output_per_mtok": 0.18,
+        "cost_tier": "$",
+    },
+    {
+        "id": "~google/gemini-flash-latest",
+        "label": "Gemini Flash Latest",
+        "note": "Latest Flash alias",
+        "input_per_mtok": 1.50,
+        "output_per_mtok": 9.00,
+        "cost_tier": "$$",
+    },
+    {
+        "id": "~openai/gpt-mini-latest",
+        "label": "OpenAI GPT Mini Latest",
+        "note": "Latest mini alias",
+        "input_per_mtok": 0.75,
+        "output_per_mtok": 4.50,
+        "cost_tier": "$",
+    },
+    {
+        "id": "~moonshotai/kimi-latest",
+        "label": "Kimi Latest",
+        "note": "Latest Kimi alias",
+        "input_per_mtok": 0.66,
+        "output_per_mtok": 3.41,
+        "cost_tier": "$",
+    },
+    {
+        "id": "~anthropic/claude-haiku-latest",
+        "label": "Claude Haiku Latest",
+        "note": "Latest Haiku alias",
+        "input_per_mtok": 1.00,
+        "output_per_mtok": 5.00,
+        "cost_tier": "$",
+    },
+    {
+        "id": "~google/gemini-pro-latest",
+        "label": "Gemini Pro Latest",
+        "note": "Latest Pro alias; review estimate before class-scale scoring",
+        "input_per_mtok": 2.00,
+        "output_per_mtok": 12.00,
+        "cost_tier": "$$",
+    },
+    {
+        "id": "~anthropic/claude-sonnet-latest",
+        "label": "Claude Sonnet Latest",
+        "note": "Latest Sonnet alias; premium option",
+        "input_per_mtok": 3.00,
+        "output_per_mtok": 15.00,
+        "cost_tier": "$$",
+    },
+    {
+        "id": "~anthropic/claude-opus-latest",
+        "label": "Claude Opus Latest",
+        "note": "Latest Opus alias; premium option",
+        "input_per_mtok": 5.00,
+        "output_per_mtok": 25.00,
+        "cost_tier": "$$$",
+    },
+    {
+        "id": "~openai/gpt-latest",
+        "label": "OpenAI GPT Latest",
+        "note": "Latest GPT alias; premium option",
+        "input_per_mtok": 5.00,
+        "output_per_mtok": 30.00,
+        "cost_tier": "$$$",
+    },
+    {
+        "id": "openai/gpt-chat-latest",
+        "label": "OpenAI GPT Chat Latest",
+        "note": "Latest ChatGPT alias; premium option",
+        "input_per_mtok": 5.00,
+        "output_per_mtok": 30.00,
+        "cost_tier": "$$$",
+    },
+]
+
+OPENROUTER_PRESET_SCENARIO_INPUT_TOKENS = 50_000
+OPENROUTER_PRESET_SCENARIO_OUTPUT_TOKENS = 10_000
 
 # Empty by default — the first-run wizard collects the teacher's Canvas URL.
 # An empty base is the signal that onboarding is not yet complete.
@@ -194,13 +289,44 @@ def has_openrouter_key() -> bool:
 
 
 def get_openrouter_model() -> str:
-    return _machine_load().get("openrouter_model") or DEFAULT_OPENROUTER_MODEL
+    model = (_machine_load().get("openrouter_model") or "").strip()
+    if not model or model == "openrouter/auto":
+        return DEFAULT_OPENROUTER_MODEL
+    return model
 
 
 def set_openrouter_model(model: str):
     state = _machine_load()
     state["openrouter_model"] = (model or "").strip()
     _machine_save(state)
+
+
+def openrouter_model_presets() -> list[dict]:
+    presets = []
+    for p in OPENROUTER_MODEL_PRESETS:
+        item = dict(p)
+        inp = item.get("input_per_mtok")
+        out = item.get("output_per_mtok")
+        if inp is not None and out is not None:
+            item["scenario_cost"] = (
+                inp * OPENROUTER_PRESET_SCENARIO_INPUT_TOKENS
+                + out * OPENROUTER_PRESET_SCENARIO_OUTPUT_TOKENS
+            ) / 1_000_000
+        item.setdefault("cost_tier", _openrouter_cost_tier(item.get("scenario_cost")))
+        presets.append(item)
+    return presets
+
+
+def _openrouter_cost_tier(scenario_cost) -> str:
+    try:
+        cost = float(scenario_cost)
+    except (TypeError, ValueError):
+        return "$?"
+    if cost < 0.10:
+        return "$"
+    if cost < 0.50:
+        return "$$"
+    return "$$$"
 
 
 # --------------------------------------------------------------------------
@@ -344,14 +470,99 @@ BUILTIN_PERSONAS = [
 ]
 
 
+def _persona_folder() -> str | None:
+    ai_ta_dir = workspace.folder("AI-TA")
+    if not ai_ta_dir:
+        return None
+    return os.path.join(ai_ta_dir, "Personas")
+
+
+def get_persona_folder() -> str | None:
+    folder = _persona_folder()
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+        _seed_persona_folder_once(folder)
+    return folder
+
+
+def _safe_persona_filename(persona: dict) -> str:
+    import re
+    stem = str(persona.get("name") or persona.get("id") or "Persona").strip()
+    stem = re.sub(r"[^\w\- ]+", "", stem)
+    stem = re.sub(r"\s+", " ", stem).strip() or "Persona"
+    return f"{stem}.json"
+
+
+def _seed_persona_folder_once(folder: str):
+    marker = os.path.join(folder, ".personas_seeded")
+    if os.path.exists(marker):
+        return
+    has_personas = any(
+        name.lower().endswith(".json")
+        for name in os.listdir(folder)
+    ) if os.path.isdir(folder) else False
+    if not has_personas:
+        for p in BUILTIN_PERSONAS:
+            path = os.path.join(folder, _safe_persona_filename(p))
+            if os.path.exists(path):
+                continue
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"builtin": True, **p}, f, indent=2)
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write("Canvas Expert seeded the starter personas here once.\n")
+
+
+def _list_file_personas() -> list[dict]:
+    folder = get_persona_folder()
+    if not folder or not os.path.isdir(folder):
+        return []
+    out: list[dict] = []
+    seen: set[str] = set()
+    for name in sorted(os.listdir(folder)):
+        if not name.lower().endswith(".json"):
+            continue
+        path = os.path.join(folder, name)
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        persona_id = str(data.get("id") or os.path.splitext(name)[0]).strip()
+        display_name = str(data.get("name") or persona_id).strip()
+        personality = str(data.get("personality") or "").strip()
+        if not persona_id or not display_name:
+            continue
+        if persona_id in seen:
+            continue
+        seen.add(persona_id)
+        out.append({
+            "id": persona_id,
+            "name": display_name,
+            "personality": personality,
+            "builtin": bool(data.get("builtin", False)),
+            "source": "file",
+            "path": path,
+        })
+    return out
+
+
 def list_personas() -> list[dict]:
-    """Return built-in + any custom personas the teacher has saved.
+    """Return file-backed personas plus any legacy custom personas.
+
+    New installs seed the starter personas into AI-TA/Personas once, which lets
+    teachers add/remove personas by editing that folder. The hard-coded starters
+    remain only as a fallback before the workspace exists.
+
     Each: {id, name, personality, builtin: bool}."""
-    builtins = [{"builtin": True, **p} for p in BUILTIN_PERSONAS]
+    folder_enabled = bool(_persona_folder())
+    file_personas = _list_file_personas()
+    builtins = file_personas if folder_enabled else [{"builtin": True, **p} for p in BUILTIN_PERSONAS]
+    ids = {p["id"] for p in builtins}
     custom_raw = _synced_state().get("custom_personas", [])
     custom = [{"id": c.get("id", ""), "name": c.get("name", ""),
-               "personality": c.get("personality", ""), "builtin": False}
-              for c in custom_raw if c.get("name")]
+               "personality": c.get("personality", ""), "builtin": False,
+               "source": "settings"}
+              for c in custom_raw if c.get("name") and c.get("id") not in ids]
     return builtins + custom
 
 

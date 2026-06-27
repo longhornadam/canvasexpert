@@ -65,7 +65,7 @@
   </div>
 </section>
 
-<section class="card" id="openrouter-card">
+<section class="card" id="openrouter-card" data-default-model="{{ default_openrouter_model }}">
   <h2>AI assistance <small class="lbl-hint">(OpenRouter)</small></h2>
   <p class="hint">
     PowerGrader can use OpenRouter to co-score submissions and draft feedback.
@@ -90,8 +90,8 @@
       <li>Create or sign in to an OpenRouter account.</li>
       <li>Go to <strong>API Keys</strong>, create a key named <strong>CanvasExpert - {{ computer_name }}</strong>, and optionally set a small credit limit.</li>
       <li>Add a small amount of credits before using paid models.</li>
-      <li>Leave the model as <code>openrouter/auto</code> if you want OpenRouter to choose a current model for you.</li>
-      <li>For a fixed model, use <strong>Load current model IDs</strong> below or copy the exact model ID from OpenRouter Models.</li>
+      <li>Use <strong>DeepSeek V4 Pro</strong> (<code>{{ default_openrouter_model }}</code>) for routine grading.</li>
+      <li>Use the searchable model field below for exact OpenRouter model IDs, including latest aliases.</li>
     </ol>
   </div>
 
@@ -120,15 +120,18 @@
              value="{{ openrouter_model }}" placeholder="{{ default_openrouter_model }}"
              list="openrouter-model-list" autocomplete="off">
       <datalist id="openrouter-model-list">
-        <option value="openrouter/auto" label="Auto Router (recommended)"></option>
+        {% for m in openrouter_model_presets %}
+        <option value="{{ m.id }}" label="{{ m.cost_tier }} · {{ m.label }} — input ${{ "%.3g"|format(m.input_per_mtok) }}/M; output ${{ "%.3g"|format(m.output_per_mtok) }}/M; 30 essays ~${{ "%.2f"|format(m.scenario_cost) }} — {{ m.note }}"></option>
+        {% endfor %}
+        <option value="openrouter/auto" label="Auto Router (advanced; variable cost)"></option>
       </datalist>
       <small class="lbl-hint">
-        Recommended: <code>openrouter/auto</code>. For a fixed model, use an exact current OpenRouter model ID.
+        Default: <code>{{ default_openrouter_model }}</code>. Avoid <code>openrouter/auto</code> for grading cost control.
       </small>
     </label>
 
     <div class="actions" style="margin-top:6px">
-      <button type="button" id="btn-openrouter-auto" class="small">Use Auto Router</button>
+      <button type="button" id="btn-openrouter-auto" class="small">Use DeepSeek V4 Pro</button>
       <button type="button" id="btn-openrouter-load-models" class="small">Load current model IDs &amp; prices</button>
       <button type="button" id="btn-openrouter-test" class="small">Test saved key</button>
     </div>

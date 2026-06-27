@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import os
+import re
 
 try:                                   # script context (run from api/)
     from nq_report import constructed_responses, html_to_text, parse_student_analysis_file
@@ -160,14 +161,18 @@ You will receive a JSON bundle of pseudonymized responses. For EACH response ret
 one result object. Output ONLY a JSON array, each element exactly:
 
   {{"pseudonym": "<copy>", "item_id": "<copy>", "score": <number>,
-    "feedback": "<actionable, kind, rubric-anchored feedback for the student>",
+    "feedback": "<actionable, kind, rubric-anchored feedback for the student; end with the disclosure sentence exactly once>",
     "disclosure": "Drafted by {ai_ta_name} (AI), reviewed by your teacher."}}
 
 Rules:
 - Copy `pseudonym` and `item_id` back EXACTLY so results can be matched.
+- If the bundle includes `shared_context`, use that assignment/source material
+  when scoring every response. Do not ask for missing source material unless it
+  is truly impossible to score without it.
 - Quote briefly from the response to justify the score.
-- Every `feedback` value must end with the `disclosure` sentence — students are
-  told, honestly, that an AI helped.
+- Every `feedback` value must end with the `disclosure` sentence exactly once.
+- Do not add a separate signature such as "- {ai_ta_name} (AI teaching assistant)".
+- Students are told, honestly, that an AI helped.
 - Use the full score range; `possible` gives each item's maximum.{rubric_block}"""
 
 
@@ -203,7 +208,28 @@ def _scrub_bundle(bundle: dict, vault: Vault,
                 r["prompt"] = feedback_scrub.scrub_text(r["prompt"], rmap)
             if r.get("response"):
                 r["response"] = feedback_scrub.scrub_text(r["response"], rmap)
+    shared = out.get("shared_context")
+    if isinstance(shared, dict):
+        if shared.get("assignment_description"):
+            shared["assignment_description"] = feedback_scrub.scrub_text(
+                shared.get("assignment_description") or "", rmap
+            )
+        for material in shared.get("materials") or []:
+            if isinstance(material, dict) and material.get("text"):
+                material["text"] = feedback_scrub.scrub_text(material.get("text") or "", rmap)
     return out
+
+
+def _shared_context_blob(shared) -> str:
+    if not isinstance(shared, dict):
+        return ""
+    chunks = []
+    if shared.get("assignment_description"):
+        chunks.append(str(shared.get("assignment_description") or ""))
+    for material in shared.get("materials") or []:
+        if isinstance(material, dict):
+            chunks.append(str(material.get("text") or ""))
+    return "\n\n".join(chunks)
 
 
 def write_safe_and_private(
@@ -240,6 +266,7 @@ def write_safe_and_private(
     log: list[str] = []
     attachment_only: list[dict] = []
     excluded: list[str] = []
+    shared_context_excluded = False
     stem = _safe(bundle.get("quiz_title", "assignment"))
 
     # Step 1: scrub
@@ -273,6 +300,17 @@ def write_safe_and_private(
             clean_students.append(s)
     safe["students"] = clean_students
 
+    shared_blob = _shared_context_blob(safe.get("shared_context"))
+    if shared_blob:
+        shared_survivors = feedback_scrub.verify_clean(shared_blob, vault)
+        if shared_survivors:
+            safe.pop("shared_context", None)
+            shared_context_excluded = True
+            log.append(
+                f"!! EXCLUDED shared source context from SAFE — scrub left a real "
+                f"identifier ({len(shared_survivors)} hit)."
+            )
+
     # Step 3: identify submissions we still can't score — no text body AND no
     # plain-text code files, but some attachment (image/PDF/DOCX). Code-file uploads
     # ARE scored (folded into the response above), so they are NOT flagged here.
@@ -299,6 +337,31 @@ def write_safe_and_private(
     with open(cpath, "w", encoding="utf-8") as f:
         f.write(build_contract_text(ai_ta_name, rubric_text=rubric_text))
     log.append(f"✓ {stem}: SAFE bundle ({len(safe['students'])} student(s))")
+
+    shared_context_path = None
+    shared = safe.get("shared_context")
+    if isinstance(shared, dict) and (
+        shared.get("assignment_description") or shared.get("materials")
+    ):
+        shared_context_path = os.path.join(safe_dir, f"{stem}__SHARED-CONTEXT.txt")
+        with open(shared_context_path, "w", encoding="utf-8") as f:
+            f.write(f"Assignment: {stem}\n")
+            f.write(f"{'='*50}\n\n")
+            if shared.get("assignment_description"):
+                f.write("Assignment directions/context:\n")
+                f.write(str(shared.get("assignment_description") or ""))
+                f.write("\n\n")
+            for material in shared.get("materials") or []:
+                if not isinstance(material, dict):
+                    continue
+                f.write(f"Source material: {material.get('title') or 'Untitled'}\n")
+                if material.get("source"):
+                    f.write(f"From: {material.get('source')}\n")
+                f.write("-" * 50)
+                f.write("\n")
+                f.write(str(material.get("text") or ""))
+                f.write("\n\n")
+        log.append(f"✓ {stem}: SAFE shared context file saved")
 
     # Step 5: per-student .txt files named with pseudonym
     student_txts: list[str] = []
@@ -344,7 +407,10 @@ def write_safe_and_private(
         "safe_students": len(safe.get("students", [])),
         "private_bundle": priv_path,
         "who_is_who": who_path,
+        "how_to_score": cpath,
         "student_txts": student_txts,
+        "shared_context": shared_context_path,
+        "shared_context_excluded": shared_context_excluded,
         "attachment_only": attachment_only,
         "excluded": excluded,
         "log": log,
@@ -354,6 +420,77 @@ def write_safe_and_private(
 # --------------------------------------------------------------------------
 # Re-identify LLM results
 # --------------------------------------------------------------------------
+
+_SECTION_LABELS = (
+    r"Score|Glows?|Grows?|Next(?:\s+step| steps?)?|Strategy|Overall|"
+    r"Evidence|Try this|Revision target|Why this score"
+)
+_AI_SIGNATURE_LINE_RE = re.compile(
+    r"(?im)^\s*(?:[-\u2013\u2014]\s*)?[\w .,'&-]{1,100}\s+"
+    r"\((?:AI|AI teaching assistant)\)\.?\s*$"
+)
+_DISCLOSURE_NAME_RE = re.compile(
+    r"Drafted by\s+(.+?)\s+\(AI\),\s*reviewed by your teacher\.?",
+    re.IGNORECASE,
+)
+
+
+def _format_feedback_linebreaks(text: str) -> str:
+    """Make model feedback readable as plain text in a Canvas comment box."""
+    text = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        return ""
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s+(?=(" + _SECTION_LABELS + r")\s*:)", "\n\n",
+                  text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\s+(?=Drafted by [^.\n]+?\(AI\), reviewed by your teacher\.?)",
+        "\n\n", text, flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\s+(?=[-*]\s+(?:Glow|Grow|Next|Evidence|Try)\b)", "\n",
+                  text, flags=re.IGNORECASE)
+    text = "\n".join(line.strip() for line in text.splitlines())
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _remove_phrase(text: str, phrase: str) -> str:
+    phrase = (phrase or "").strip()
+    if not phrase:
+        return text
+    pattern = re.escape(phrase).replace(r"\ ", r"\s+")
+    return re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
+
+
+def _remove_persona_signature(text: str, disclosure: str) -> str:
+    match = _DISCLOSURE_NAME_RE.search(disclosure or "")
+    if not match:
+        return _AI_SIGNATURE_LINE_RE.sub("", text)
+    persona = re.escape(match.group(1).strip())
+    pattern = (
+        rf"(?i)(?:[-\u2013\u2014]\s*)?{persona}\s+"
+        rf"\((?:AI|AI teaching assistant)\)\.?"
+    )
+    return re.sub(pattern, "", text).strip()
+
+
+def normalize_ai_feedback(feedback: str, disclosure: str = "") -> str:
+    """Clean AI feedback before it becomes a teacher-facing Canvas comment.
+
+    The contract carries a separate disclosure field, while some model outputs also
+    sign the feedback with a persona line. Prefer one disclosure sentence in the
+    final comment and add readable line breaks around common rubric sections.
+    """
+    text = _format_feedback_linebreaks(feedback)
+    disclosure = _format_feedback_linebreaks(disclosure)
+    if not disclosure:
+        return text
+
+    text = _remove_phrase(text, disclosure)
+    text = _AI_SIGNATURE_LINE_RE.sub("", text)
+    text = _remove_persona_signature(text, disclosure)
+    text = _format_feedback_linebreaks(text)
+    return f"{text}\n\n{disclosure}".strip() if text else disclosure
+
 
 def parse_results(text: str) -> list:
     """Parse the LLM's result JSON (an array, or an object wrapping `results`)."""
@@ -441,6 +578,7 @@ def reidentify(results: list, vault: Vault) -> list:
     out = []
     for r in results:
         who = vault.reverse(r.get("pseudonym", ""))
+        disclosure = r.get("disclosure", "")
         out.append({
             "resolved":  who is not None,
             "real_name": (who or {}).get("real_name", ""),
@@ -448,8 +586,8 @@ def reidentify(results: list, vault: Vault) -> list:
             "sis_id":    (who or {}).get("sis_id", ""),
             "item_id":   r.get("item_id", ""),
             "score":     r.get("score"),
-            "feedback":  r.get("feedback", ""),
-            "disclosure": r.get("disclosure", ""),
+            "feedback":  normalize_ai_feedback(r.get("feedback", ""), disclosure),
+            "disclosure": disclosure,
         })
     return out
 

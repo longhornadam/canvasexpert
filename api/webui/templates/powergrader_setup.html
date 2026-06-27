@@ -14,7 +14,7 @@
   {% endif %}
 
   <!-- ── New session ─────────────────────────────────────────────────── -->
-  <form id="pg-start-form">
+  <form id="pg-start-form" enctype="multipart/form-data">
     <label>Course
       <select id="pg-course" name="course_id" required>
         <option value="">— select a course —</option>
@@ -30,21 +30,50 @@
       </select>
     </label>
 
-    <!-- ── AI toggle ──────────────────────────────────────────────────── -->
-    <div class="pg-mode-row" style="display:flex;align-items:center;gap:16px;margin:12px 0 4px">
-      <strong style="font-size:14px">AI assistance</strong>
-      <label class="pg-toggle" title="Enable AI pre-scoring via OpenRouter">
-        <input type="checkbox" id="pg-ai-toggle" {% if not has_openrouter %}disabled{% endif %}>
-        <span class="pg-toggle-track"><span class="pg-toggle-thumb"></span></span>
-      </label>
-      <span id="pg-ai-label" class="hint">
-        {% if has_openrouter %}Off — Fast mode{% else %}No OpenRouter key — <a href="/settings">add one in Settings</a>{% endif %}
-      </span>
+    <!-- ── Grading route ──────────────────────────────────────────────── -->
+    <div class="pg-route-box">
+      <strong style="font-size:14px">Grading route</strong>
+      <div class="pg-route-grid">
+        <label class="pg-route-card is-selected">
+          <input type="radio" name="pg-mode-choice" value="fast" checked>
+          <span><strong>Grade Myself</strong><small>No AI packet and no API call.</small></span>
+        </label>
+        <label class="pg-route-card">
+          <input type="radio" name="pg-mode-choice" value="packet">
+          <span><strong>Use My AI Chat</strong><small>Download a Safe AI Packet for ChatGPT, Claude, Gemini, or another chat tool.</small></span>
+        </label>
+        <label class="pg-route-card {% if not has_openrouter %}is-disabled{% endif %}">
+          <input type="radio" name="pg-mode-choice" value="assisted" {% if not has_openrouter %}disabled{% endif %}>
+          <span><strong>Auto-Score With API</strong><small>{% if has_openrouter %}Send the same safe packet through OpenRouter.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
+        </label>
+      </div>
+      <span id="pg-ai-label" class="hint">Grade Myself — no AI packet or API call.</span>
+      <details class="pg-safety-popout">
+        <summary>How it keeps data safe</summary>
+        <div class="pg-safety-body">
+          <p>
+            PowerGrader is designed to be FERPA-conscious: student names and obvious PII are separated locally
+            before any AI packet is created.
+          </p>
+          <ul>
+            <li><strong>Grade Myself</strong> keeps grading local and does not send an AI packet.</li>
+            <li><strong>Use My AI Chat</strong> creates a Safe AI Packet with pseudonyms and a private decoder that stays on this computer.</li>
+            <li><strong>Auto-Score With API</strong> sends the same anonymized packet through OpenRouter, then reattaches real identities locally.</li>
+          </ul>
+          <p>
+            Rubrics, AI persona instructions, and source excerpts may be included as grading context. Review source
+            material before sending, and avoid pasting unnecessary student identifiers or full copyrighted books.
+          </p>
+        </div>
+      </details>
     </div>
     <input type="hidden" name="mode" id="pg-mode" value="fast">
 
     <div id="pg-ai-options" style="display:none">
-      <label>Rubric <small class="lbl-hint">(optional — shown as reference even in Fast mode)</small>
+      <label>Rubric <small class="lbl-hint">(included in AI packets and API scoring)</small>
+        {% if rubrics_folder %}
+        <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
+        {% endif %}
         <select name="rubric_name" id="pg-rubric">
           <option value="">— no rubric —</option>
           {% for r in rubrics %}
@@ -53,17 +82,91 @@
         </select>
       </label>
       <label>AI persona
+        {% if persona_folder %}
+        <button type="button" class="small pg-inline-open" data-open-path="{{ persona_folder }}">Open Personas folder</button>
+        {% elif ai_ta_folder %}
+        <button type="button" class="small pg-inline-open" data-open-path="{{ ai_ta_folder }}">Open AI-TA folder</button>
+        {% endif %}
         <select name="persona_id" id="pg-persona">
           {% for p in personas %}
           <option value="{{ p.id }}">{{ p.name }}{% if p.builtin %} (built-in){% endif %}</option>
           {% endfor %}
         </select>
       </label>
+      <label class="pg-api-only">AI model <small class="lbl-hint">(OpenRouter; searchable; default is DeepSeek V4 Pro)</small>
+        <div class="pg-model-picker" id="pg-model-picker">
+          <div class="pg-model-input-wrap">
+            <input type="text" name="model_id" id="pg-model"
+                   value="{{ openrouter_model }}" autocomplete="off" spellcheck="false"
+                   role="combobox" aria-expanded="false" aria-controls="pg-model-listbox">
+            <button type="button" id="pg-model-menu-button" class="pg-model-menu-button"
+                    aria-label="Open model list">▾</button>
+          </div>
+          <div id="pg-model-panel" class="pg-model-panel" hidden>
+            <div class="pg-model-panel-head">Type to search, or pick a current preset.</div>
+            <div id="pg-model-listbox" class="pg-model-listbox" role="listbox"></div>
+          </div>
+        </div>
+        <small id="pg-model-cost" class="lbl-hint"></small>
+      </label>
+      <div class="pg-model-actions pg-api-only">
+        <button type="button" id="pg-model-default" class="small">Use DeepSeek V4 Pro</button>
+        <button type="button" id="pg-load-models" class="small">Load latest model list</button>
+        <span id="pg-model-status" class="hint"></span>
+      </div>
+
+      <div class="pg-source-box">
+        <div class="pg-source-head">
+          <strong>Source material</strong>
+          {% if source_materials_folder %}
+          <button type="button" class="small" data-open-path="{{ source_materials_folder }}">Open Source Materials folder</button>
+          {% endif %}
+        </div>
+        <p class="hint" style="margin:4px 0 8px">
+          Use excerpts whenever possible. Whole books can get expensive quickly,
+          especially if you retry or compare models. Estimates assume fresh input;
+          provider prompt caching is not guaranteed.
+        </p>
+        <label>Response type for estimate
+          <select name="response_kind" id="pg-response-kind">
+            {% for key, preset in source_response_presets.items() %}
+            <option value="{{ key }}">{{ preset.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Files already in Source Materials
+          <select id="pg-source-files" multiple size="5">
+            {% for f in source_material_files %}
+            <option value="{{ f.relpath }}" {% if not f.supported %}disabled{% endif %}>
+              {{ f.relpath }}{% if not f.supported %} — save as PDF/DOCX/PPTX first{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          <small class="lbl-hint">Hold Ctrl to select multiple files.</small>
+        </label>
+        <input type="hidden" name="source_files_json" id="pg-source-files-json" value="[]">
+        <label>Choose files from this computer
+          <input type="file" name="source_uploads" id="pg-source-uploads" multiple
+                 accept=".pdf,.docx,.pptx,.xlsx,.odt,.rtf,.txt,.md,.html,.htm,.csv,.json,.xml">
+        </label>
+        <label>Paste source text or excerpt
+          <textarea name="source_text" id="pg-source-text" rows="6"
+            placeholder="Paste the story excerpt, article, poem, or passage students must reference."></textarea>
+        </label>
+        <div class="pg-source-actions">
+          <button type="button" id="pg-estimate" class="small">Estimate tokens &amp; cost</button>
+          <span id="pg-estimate-status" class="hint"></span>
+        </div>
+        <div id="pg-estimate-panel" class="pg-estimate-panel" hidden></div>
+      </div>
     </div>
 
-    <!-- Also show rubric picker outside AI panel (useful even in Fast mode) -->
+    <!-- Also show rubric picker outside AI panel (useful while grading yourself) -->
     <div id="pg-rubric-fast" style="margin-top:4px">
-      <label>Rubric <small class="lbl-hint">(optional reference while grading)</small>
+      <label>Rubric <small class="lbl-hint">(optional reference while grading yourself)</small>
+        {% if rubrics_folder %}
+        <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
+        {% endif %}
         <select name="rubric_name" id="pg-rubric-fast-sel">
           <option value="">— no rubric —</option>
           {% for r in rubrics %}
@@ -78,6 +181,10 @@
         Start grading session
       </button>
       <span id="pg-start-status" class="hint"></span>
+    </div>
+    <div id="pg-privacy-run" class="pg-privacy-run" hidden>
+      <div class="pg-privacy-title">Privacy pipeline</div>
+      <div id="pg-privacy-list" class="pg-privacy-list"></div>
     </div>
   </form>
 </section>
@@ -100,28 +207,115 @@
 </section>
 
 <style>
-.pg-toggle { display:inline-flex; align-items:center; cursor:pointer; }
-.pg-toggle input { position:absolute; opacity:0; width:0; height:0; }
-.pg-toggle-track {
-  display:inline-block; width:36px; height:20px; border-radius:10px;
-  background:var(--ce-border); position:relative; transition:background .2s;
+.pg-route-box { margin:12px 0 8px; display:grid; gap:8px; }
+.pg-route-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.pg-route-card {
+  display:flex; gap:8px; align-items:flex-start; padding:10px;
+  border:1px solid var(--ce-border); border-radius:8px;
+  background:var(--ce-surface,#fff); cursor:pointer; min-width:0;
+  margin:0; font-weight:400;
 }
-.pg-toggle input:checked ~ .pg-toggle-track { background:var(--ce-blue); }
-.pg-toggle-thumb {
-  position:absolute; top:3px; left:3px; width:14px; height:14px;
-  border-radius:50%; background:#fff; transition:transform .2s;
-  box-shadow:0 1px 3px rgba(0,0,0,.2);
+.pg-route-card input[type="radio"] {
+  width:auto; min-width:0; margin:2px 0 0; flex:0 0 auto;
 }
-.pg-toggle input:checked ~ .pg-toggle-track .pg-toggle-thumb { transform:translateX(16px); }
+.pg-route-card span { display:block; min-width:0; }
+.pg-route-card strong { display:block; font-size:13px; }
+.pg-route-card small { display:block; font-size:11.5px; line-height:1.35; color:var(--ce-text-muted,#667085); margin-top:2px; }
+.pg-route-card.is-selected { border-color:var(--ce-blue,#2563eb); box-shadow:0 0 0 2px rgba(37,99,235,.12); }
+.pg-route-card.is-disabled { opacity:.55; cursor:not-allowed; }
+.pg-safety-popout {
+  border:1px solid var(--ce-border); border-radius:8px;
+  background:var(--ce-surface-alt,#f8fafc); padding:8px 10px;
+}
+.pg-safety-popout summary {
+  cursor:pointer; font-weight:700; font-size:13px;
+}
+.pg-safety-body {
+  margin-top:8px; color:var(--ce-text-muted,#667085);
+  font-size:12.5px; line-height:1.42;
+}
+.pg-safety-body p { margin:0 0 8px; }
+.pg-safety-body ul { margin:0 0 8px; padding-left:18px; }
+.pg-safety-body li { margin:3px 0; }
+.pg-safety-body strong { color:var(--ce-text,#111827); }
+@media (max-width: 760px) {
+  .pg-route-grid { grid-template-columns:1fr; }
+}
 .pg-sessions-table th { border-bottom:1px solid var(--ce-border); font-weight:600; }
 .pg-sessions-table td { padding:6px 8px; border-bottom:1px solid var(--ce-border-faint,var(--ce-border)); }
+.pg-model-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:-4px; }
+.pg-inline-open { float:right; margin-top:-2px; }
+.pg-model-picker { position:relative; }
+.pg-model-input-wrap { display:flex; align-items:stretch; }
+.pg-model-input-wrap input { flex:1; min-width:0; border-top-right-radius:0; border-bottom-right-radius:0; }
+.pg-model-menu-button {
+  width:42px; flex:0 0 42px; border-left:0; border-top-left-radius:0; border-bottom-left-radius:0;
+  font-size:14px; padding:0;
+}
+.pg-model-panel {
+  position:absolute; z-index:40; left:0; right:0; top:calc(100% + 4px);
+  background:var(--ce-surface,#fff); border:1px solid var(--ce-border); border-radius:8px;
+  box-shadow:0 10px 24px rgba(15,23,42,.16); max-height:340px; overflow:auto;
+}
+.pg-model-panel-head {
+  padding:8px 10px; font-size:12px; color:var(--ce-text-muted,#667085);
+  border-bottom:1px solid var(--ce-border-faint,var(--ce-border));
+}
+.pg-model-row {
+  display:block; width:100%; border:0; border-bottom:1px solid var(--ce-border-faint,var(--ce-border));
+  background:transparent; text-align:left; padding:10px 12px; cursor:pointer; border-radius:0;
+}
+.pg-model-row:hover, .pg-model-row.is-selected { background:var(--ce-surface-alt,#f6f8fb); }
+.pg-model-row strong { display:block; font-size:13px; margin-bottom:2px; }
+.pg-model-id { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; color:var(--ce-text-muted,#667085); }
+.pg-model-meta { font-size:12px; color:var(--ce-text-muted,#667085); margin-top:4px; line-height:1.35; }
+.pg-model-pill {
+  display:inline-block; font-size:11px; line-height:1; padding:3px 6px; border-radius:999px;
+  background:#e8f4ec; color:#276738; margin-left:6px; vertical-align:1px;
+}
+.pg-model-pill.mid { background:#fff1d6; color:#8a5a00; }
+.pg-model-pill.high { background:#fde2e1; color:#a33a34; }
+.pg-model-pill.unknown { background:var(--ce-surface-alt,#eef1f5); color:var(--ce-text-muted,#667085); }
+.pg-model-empty { padding:12px; font-size:13px; color:var(--ce-text-muted,#667085); }
+.pg-privacy-run {
+  margin-top:14px; padding:10px 12px; border:1px solid var(--ce-border);
+  border-radius:8px; background:var(--ce-surface-alt,#f8fafc);
+}
+.pg-privacy-title { font-weight:700; font-size:13px; margin-bottom:8px; }
+.pg-privacy-list { display:grid; gap:7px; }
+.pg-privacy-step { display:grid; grid-template-columns:16px 1fr; gap:8px; align-items:start; font-size:13px; }
+.pg-light {
+  width:10px; height:10px; border-radius:50%; margin-top:4px; background:#cbd5e1;
+  box-shadow:0 0 0 3px rgba(148,163,184,.14);
+}
+.pg-light.ok { background:#21a366; box-shadow:0 0 0 3px rgba(33,163,102,.14); }
+.pg-light.warn { background:#f6b100; box-shadow:0 0 0 3px rgba(246,177,0,.18); }
+.pg-light.failed { background:#c0392b; box-shadow:0 0 0 3px rgba(192,57,43,.16); }
+.pg-light.running { background:var(--ce-blue,#2563eb); box-shadow:0 0 0 3px rgba(37,99,235,.16); }
+.pg-privacy-label { font-weight:600; }
+.pg-privacy-detail { color:var(--ce-text-muted,#667085); font-size:12px; line-height:1.35; margin-top:1px; }
+.pg-source-box {
+  margin-top:14px; padding:12px; border:1px solid var(--ce-border);
+  border-radius:8px; background:var(--ce-surface-alt,#f8fafc);
+}
+.pg-source-head { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.pg-source-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.pg-estimate-panel {
+  margin-top:10px; border:1px solid var(--ce-border); border-radius:8px;
+  background:var(--ce-surface,#fff); padding:10px; font-size:13px;
+}
+.pg-estimate-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; }
+.pg-estimate-grid div { min-width:0; }
+.pg-estimate-warnings { margin:8px 0 0; padding-left:18px; color:#9a3412; }
+.pg-estimate-materials { margin-top:8px; color:var(--ce-text-muted,#667085); font-size:12px; }
 </style>
 
 <script>
 (function(){
   var courseEl   = document.getElementById('pg-course');
   var asnEl      = document.getElementById('pg-assignment');
-  var aiToggle   = document.getElementById('pg-ai-toggle');
+  var modeChoices = Array.from(document.querySelectorAll('input[name="pg-mode-choice"]'));
+  var routeCards = Array.from(document.querySelectorAll('.pg-route-card'));
   var aiLabel    = document.getElementById('pg-ai-label');
   var aiOptions  = document.getElementById('pg-ai-options');
   var rubricFast = document.getElementById('pg-rubric-fast');
@@ -129,14 +323,382 @@
   var startBtn   = document.getElementById('pg-start-btn');
   var status     = document.getElementById('pg-start-status');
   var form       = document.getElementById('pg-start-form');
+  var privacyRun = document.getElementById('pg-privacy-run');
+  var privacyList = document.getElementById('pg-privacy-list');
+  var modelEl    = document.getElementById('pg-model');
+  var modelPicker = document.getElementById('pg-model-picker');
+  var modelPanel = document.getElementById('pg-model-panel');
+  var modelList  = document.getElementById('pg-model-listbox');
+  var modelCost  = document.getElementById('pg-model-cost');
+  var modelStatus = document.getElementById('pg-model-status');
+  var btnModelDefault = document.getElementById('pg-model-default');
+  var btnLoadModels = document.getElementById('pg-load-models');
+  var btnModelMenu = document.getElementById('pg-model-menu-button');
+  var responseKind = document.getElementById('pg-response-kind');
+  var sourceFiles = document.getElementById('pg-source-files');
+  var sourceFilesJson = document.getElementById('pg-source-files-json');
+  var btnEstimate = document.getElementById('pg-estimate');
+  var estimateStatus = document.getElementById('pg-estimate-status');
+  var estimatePanel = document.getElementById('pg-estimate-panel');
+  var apiOnly = Array.from(document.querySelectorAll('.pg-api-only'));
+  var defaultModel = {{ default_openrouter_model | tojson }};
+  var modelPresets = {{ openrouter_model_presets | tojson }};
+  var modelOptions = [];
 
-  // Toggle AI mode
-  aiToggle && aiToggle.addEventListener('change', function(){
-    var on = aiToggle.checked;
-    modeInput.value = on ? 'assisted' : 'fast';
-    aiLabel.textContent = on ? 'On — Assisted mode' : 'Off — Fast mode';
-    aiOptions.style.display = on ? '' : 'none';
-    rubricFast.style.display = on ? 'none' : '';
+  function modelScenarioText(m) {
+    if (m.scenario_cost === null || m.scenario_cost === undefined || isNaN(Number(m.scenario_cost))) return '';
+    var n = Number(m.scenario_cost);
+    return '30 essays est. ' + (n < 0.01 ? '<$0.01' : '$' + n.toFixed(2));
+  }
+
+  function priceText(v) {
+    if (v === null || v === undefined || isNaN(Number(v))) return 'n/a';
+    var n = Number(v);
+    if (n === 0) return '$0';
+    if (n < 1) return '$' + n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+    return '$' + n.toFixed(2);
+  }
+
+  function whole(n) {
+    var x = Number(n || 0);
+    return x.toLocaleString();
+  }
+
+  function modelCostText(m) {
+    if (!m) return '';
+    var price = 'Input ' + priceText(m.input_per_mtok) + '/M · Output ' + priceText(m.output_per_mtok) + '/M';
+    var scenario = modelScenarioText(m);
+    return scenario ? price + ' · ' + scenario : price;
+  }
+
+  function normalizeModelOption(m, source) {
+    var input = m.input_per_mtok;
+    var output = m.output_per_mtok;
+    var scenario = m.scenario_cost;
+    var tier = m.cost_tier || costTier(scenario);
+    return {
+      id: m.id || '',
+      label: m.label || m.name || m.id || '',
+      note: m.note || (source === 'live' ? 'Current OpenRouter listing' : ''),
+      input_per_mtok: input,
+      output_per_mtok: output,
+      scenario_cost: scenario,
+      cost_tier: tier,
+      source: source || m.source || 'preset'
+    };
+  }
+
+  function costTier(cost) {
+    var n = Number(cost);
+    if (isNaN(n)) return '$?';
+    if (n < 0.10) return '$';
+    if (n < 0.50) return '$$';
+    return '$$$';
+  }
+
+  function tierClass(tier) {
+    return tier === '$$$' ? ' high' : (tier === '$$' ? ' mid' : (tier === '$?' ? ' unknown' : ''));
+  }
+
+  function resetModelOptions() {
+    modelOptions = (modelPresets || []).map(function(m){ return normalizeModelOption(m, 'preset'); });
+    modelOptions.push({
+      id: 'openrouter/auto',
+      label: 'Auto Router',
+      note: 'Advanced; variable cost; exact estimate unavailable',
+      input_per_mtok: null,
+      output_per_mtok: null,
+      scenario_cost: null,
+      cost_tier: '$?',
+      source: 'special'
+    });
+  }
+
+  function mergeModelOptions(rows, source) {
+    var byId = {};
+    modelOptions.forEach(function(m){ byId[m.id] = m; });
+    (rows || []).forEach(function(row){
+      if (!row || !row.id) return;
+      var live = normalizeModelOption(row, source || 'live');
+      if (byId[live.id]) {
+        Object.assign(byId[live.id], {
+          input_per_mtok: live.input_per_mtok,
+          output_per_mtok: live.output_per_mtok,
+          scenario_cost: live.scenario_cost,
+          cost_tier: live.cost_tier
+        });
+      } else {
+        modelOptions.push(live);
+        byId[live.id] = live;
+      }
+    });
+    modelOptions.sort(function(a, b){
+      var aLatest = a.id.indexOf('latest') !== -1 ? 0 : 1;
+      var bLatest = b.id.indexOf('latest') !== -1 ? 0 : 1;
+      if (a.source === 'preset' && b.source !== 'preset') return -1;
+      if (b.source === 'preset' && a.source !== 'preset') return 1;
+      if (aLatest !== bLatest) return aLatest - bLatest;
+      return a.label.localeCompare(b.label);
+    });
+  }
+
+  function findModelOption(id) {
+    return modelOptions.find(function(m){ return m.id === id; }) || null;
+  }
+
+  function updateModelCost() {
+    if (!modelCost || !modelEl) return;
+    var m = findModelOption(modelEl.value);
+    if (!m) {
+      modelCost.textContent = 'Custom model ID. Cost guard will verify live pricing before sending.';
+      return;
+    }
+    modelCost.textContent = m.cost_tier + ' · ' + modelCostText(m) +
+      (m.cost_tier === '$$$' ? ' · premium; review before class-scale scoring' : '');
+  }
+
+  function renderModelOptions(query) {
+    if (!modelList) return;
+    var q = String(query || '').trim().toLowerCase();
+    var rows = modelOptions.filter(function(m){
+      if (!q) return true;
+      return (m.id + ' ' + m.label + ' ' + m.note).toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 80);
+    if (!rows.length) {
+      modelList.innerHTML = '<div class="pg-model-empty">No preset matches. You can still type an exact OpenRouter model ID.</div>';
+      return;
+    }
+    modelList.innerHTML = rows.map(function(m){
+      var selected = modelEl && modelEl.value === m.id;
+      var tier = m.cost_tier || costTier(m.scenario_cost);
+      var pill = '<span class="pg-model-pill' + tierClass(tier) + '">' + _esc(tier) + '</span>';
+      return '<button type="button" class="pg-model-row' + (selected ? ' is-selected' : '') + '" role="option" data-model-id="' + _esc(m.id) + '">' +
+        '<strong>' + _esc(m.label || m.id) + pill + '</strong>' +
+        '<div class="pg-model-id">' + _esc(m.id) + '</div>' +
+        '<div class="pg-model-meta">' + _esc(modelCostText(m)) + '</div>' +
+        (m.note ? '<div class="pg-model-meta">' + _esc(m.note) + '</div>' : '') +
+        '</button>';
+    }).join('');
+  }
+
+  function setModelPanel(open, query) {
+    if (!modelPanel || !modelEl) return;
+    if (open) renderModelOptions(query || '');
+    modelPanel.hidden = !open;
+    modelEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  resetModelOptions();
+  updateModelCost();
+
+  var aiPacketPrivacyPlan = [
+    {id:'download', label:'Download submitted work from Canvas', status:'running', detail:'Fetching only this assignment.'},
+    {id:'source_context', label:'Load shared source material', status:'pending', detail:'Excerpts are sent once as shared context for the batch.'},
+    {id:'pseudonymize', label:'Assign pseudonyms and separate identities', status:'pending', detail:'Real names stay in the local vault.'},
+    {id:'safety_scan', label:'Scan for real names before any LLM call', status:'pending', detail:'Hard matches become yellow or red before sending.'},
+    {id:'safe_private', label:'Write Safe AI Packet and Private decoder', status:'pending', detail:'The packet uses fake names. The decoder stays local.'},
+    {id:'safe_ai_packet', label:'Create Safe AI Packet ZIP', status:'pending', detail:'Ready for your AI chat or the API route.'}
+  ];
+
+  var apiPrivacyTail = [
+    {id:'safe_payload', label:'Load the Safe AI Packet for scoring', status:'pending', detail:'The inspected packet is the LLM payload.'},
+    {id:'price_check', label:'Verify model price estimate', status:'pending', detail:'Premium models are allowed when pricing is known.'},
+    {id:'llm_send', label:'Send only the Safe AI Packet to OpenRouter', status:'pending', detail:'No real names are included.'},
+    {id:'reidentify', label:'Reattach real names locally', status:'pending', detail:'Results are joined back on this machine before review.'}
+  ];
+
+  function privacyPlanForMode(mode) {
+    if (mode === 'assisted') return aiPacketPrivacyPlan.concat(apiPrivacyTail);
+    if (mode === 'packet') {
+      return aiPacketPrivacyPlan.concat([
+        {id:'manual_ai_chat', label:'Ready for your AI chat', status:'pending', detail:'Nothing is sent automatically.'}
+      ]);
+    }
+    return [{id:'download', label:'Download submitted work from Canvas', status:'running', detail:'Grade Myself stays local and skips AI packet creation.'}];
+  }
+
+  function renderPrivacySteps(steps) {
+    if (!privacyRun || !privacyList) return;
+    privacyRun.hidden = false;
+    privacyList.innerHTML = (steps || []).map(function(step){
+      var status = step.status || 'pending';
+      var light = status === 'ok' ? 'ok' : (status === 'warn' ? 'warn' : (status === 'failed' ? 'failed' : (status === 'running' ? 'running' : '')));
+      return '<div class="pg-privacy-step">' +
+        '<span class="pg-light ' + light + '"></span>' +
+        '<div><div class="pg-privacy-label">' + _esc(step.label || step.id || 'Step') + '</div>' +
+        (step.detail ? '<div class="pg-privacy-detail">' + _esc(step.detail) + '</div>' : '') +
+        '</div></div>';
+    }).join('');
+  }
+
+  function selectedSourceFiles() {
+    if (!sourceFiles) return [];
+    return Array.from(sourceFiles.selectedOptions || []).map(function(o){ return o.value; }).filter(Boolean);
+  }
+
+  function syncSourceFilesJson() {
+    if (sourceFilesJson) sourceFilesJson.value = JSON.stringify(selectedSourceFiles());
+  }
+
+  function renderEstimate(d) {
+    if (!estimatePanel) return;
+    var t = d.tokens || {};
+    var cost = d.estimated_cost_label || 'unavailable';
+    var materials = (d.materials || []).map(function(m){
+      return '<div>' + _esc(m.title || m.source || 'Source') + ': ~' + whole(m.tokens_est) + ' tokens</div>';
+    }).join('');
+    var warnings = (d.warnings || []).map(function(w){ return '<li>' + _esc(w) + '</li>'; }).join('');
+    estimatePanel.innerHTML =
+      '<div class="pg-estimate-grid">' +
+        '<div><strong>Students</strong><br>' + whole(d.student_count) + ' <span class="hint">(' + _esc(d.count_basis || 'estimate') + ')</span></div>' +
+        '<div><strong>Estimated cost</strong><br>' + _esc(cost) + '</div>' +
+        '<div><strong>Input tokens</strong><br>' + whole(t.estimated_input) + '</div>' +
+        '<div><strong>Output tokens</strong><br>' + whole(t.estimated_output) + '</div>' +
+        '<div><strong>Source material</strong><br>' + whole(t.source_materials) + '</div>' +
+        '<div><strong>Student preset</strong><br>' + _esc(d.response_label || '') + '</div>' +
+      '</div>' +
+      (materials ? '<div class="pg-estimate-materials">' + materials + '</div>' : '') +
+      '<p class="hint" style="margin:8px 0 0">' + _esc(d.caching_note || '') + '</p>' +
+      (warnings ? '<ul class="pg-estimate-warnings">' + warnings + '</ul>' : '');
+    estimatePanel.hidden = false;
+  }
+
+  btnEstimate && btnEstimate.addEventListener('click', function(){
+    var cid = courseEl.value;
+    var aid = asnEl.value;
+    if (!cid || !aid) {
+      if (estimateStatus) estimateStatus.textContent = 'Select a course and assignment first.';
+      return;
+    }
+    syncSourceFilesJson();
+    btnEstimate.disabled = true;
+    if (estimateStatus) estimateStatus.textContent = 'Estimating...';
+    var fd = new FormData(form);
+    fd.set('course_id', cid);
+    fd.set('assignment_id', aid);
+    fd.set('model_id', (modelEl && modelEl.value) || defaultModel);
+    fd.set('persona_id', document.getElementById('pg-persona')?.value || 'sage');
+    fd.set('response_kind', responseKind?.value || 'scr');
+    fetch('/api/powergrader/estimate', {method:'POST', body: fd})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) {
+          if (estimateStatus) estimateStatus.textContent = d.error || 'Estimate failed.';
+          return;
+        }
+        renderEstimate(d);
+        if (estimateStatus) estimateStatus.textContent = 'Estimate ready.';
+      })
+      .catch(function(e){ if (estimateStatus) estimateStatus.textContent = String(e); })
+      .finally(function(){ btnEstimate.disabled = false; });
+  });
+
+  function modeLabel(mode) {
+    if (mode === 'packet') return 'Use My AI Chat';
+    if (mode === 'assisted') return 'Auto-Score With API';
+    return 'Grade Myself';
+  }
+
+  function currentMode() {
+    var checked = modeChoices.find(function(el){ return el.checked; });
+    return checked ? checked.value : 'fast';
+  }
+
+  function updateRouteMode() {
+    var mode = currentMode();
+    modeInput.value = mode;
+    routeCards.forEach(function(card){
+      var input = card.querySelector('input[type="radio"]');
+      card.classList.toggle('is-selected', !!input && input.checked);
+    });
+    var isAi = mode === 'packet' || mode === 'assisted';
+    aiOptions.style.display = isAi ? '' : 'none';
+    rubricFast.style.display = isAi ? 'none' : '';
+    apiOnly.forEach(function(el){ el.style.display = mode === 'assisted' ? '' : 'none'; });
+    if (mode === 'packet') {
+      aiLabel.textContent = 'Use My AI Chat — create a Safe AI Packet, then paste AI JSON back into PowerGrader.';
+    } else if (mode === 'assisted') {
+      aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + ((modelEl && modelEl.value) || defaultModel);
+    } else {
+      aiLabel.textContent = 'Grade Myself — no AI packet or API call.';
+    }
+  }
+
+  modeChoices.forEach(function(el){ el.addEventListener('change', updateRouteMode); });
+  updateRouteMode();
+
+  modelEl && modelEl.addEventListener('input', function(){
+    if (currentMode() === 'assisted') {
+      aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + (modelEl.value || defaultModel);
+    }
+    setModelPanel(true, modelEl.value);
+    updateModelCost();
+  });
+
+  modelEl && modelEl.addEventListener('focus', function(){
+    setModelPanel(true, '');
+  });
+
+  btnModelMenu && btnModelMenu.addEventListener('click', function(){
+    if (!modelPanel) return;
+    var shouldOpen = modelPanel.hidden;
+    setModelPanel(shouldOpen, '');
+    if (shouldOpen && modelEl) modelEl.focus();
+  });
+
+  modelList && modelList.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-model-id]');
+    if (!btn || !modelEl) return;
+    modelEl.value = btn.getAttribute('data-model-id') || '';
+    setModelPanel(false, '');
+    updateModelCost();
+    if (currentMode() === 'assisted') aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + (modelEl.value || defaultModel);
+    modelEl.focus();
+  });
+
+  document.addEventListener('click', function(e){
+    if (modelPicker && !modelPicker.contains(e.target)) setModelPanel(false, '');
+  });
+
+  modelEl && modelEl.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') setModelPanel(false, '');
+  });
+
+  btnModelDefault && btnModelDefault.addEventListener('click', function(){
+    if (modelEl) modelEl.value = defaultModel;
+    if (modelStatus) modelStatus.textContent = 'Default selected.';
+    if (currentMode() === 'assisted') aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + defaultModel;
+    updateModelCost();
+  });
+
+  btnLoadModels && btnLoadModels.addEventListener('click', function(){
+    if (!modelList) return;
+    btnLoadModels.disabled = true;
+    btnLoadModels.textContent = 'Loading…';
+    if (modelStatus) modelStatus.textContent = 'Loading OpenRouter models and latest aliases…';
+    Promise.all([
+      fetch('/settings/openrouter/models?q=latest&limit=300').then(function(r){ return r.json(); }).catch(function(e){ return {ok:false,error:String(e)}; }),
+      fetch('/settings/openrouter/models?limit=300').then(function(r){ return r.json(); }).catch(function(e){ return {ok:false,error:String(e)}; })
+    ])
+      .then(function(results){
+        var latest = results[0], all = results[1];
+        if (!latest.ok && !all.ok) {
+          if (modelStatus) modelStatus.textContent = 'Could not load models.';
+          return;
+        }
+        resetModelOptions();
+        mergeModelOptions((latest.models || []), 'live');
+        mergeModelOptions((all.models || []), 'live');
+        renderModelOptions('');
+        updateModelCost();
+        if (modelStatus) modelStatus.textContent = 'Loaded ' + (((latest.models || []).length) + ((all.models || []).length)) + ' searchable model rows with prices.';
+        modelEl && modelEl.focus();
+      })
+      .catch(function(){ if (modelStatus) modelStatus.textContent = 'Could not load models.'; })
+      .finally(function(){
+        btnLoadModels.disabled = false;
+        btnLoadModels.textContent = 'Load latest model list';
+      });
   });
 
   // Load assignments when course changes
@@ -182,16 +744,24 @@
     var aid = asnEl.value;
     if (!cid || !aid) { setStatus('Select a course and assignment first.', true); return; }
     startBtn.disabled = true;
-    setStatus('Fetching submissions…', false);
+    var mode = modeInput.value;
+    renderPrivacySteps(privacyPlanForMode(mode));
+    setStatus(mode === 'assisted'
+      ? 'Fetching submissions, building a Safe AI Packet, then scoring with ' + ((modelEl && modelEl.value) || defaultModel) + '…'
+      : (mode === 'packet'
+        ? 'Fetching submissions and building a Safe AI Packet…'
+        : 'Fetching submissions…'), false);
+    syncSourceFilesJson();
     var fd = new FormData(form);
     // Ensure rubric_name comes from whichever picker is visible
     fetch('/api/powergrader/start', {method:'POST', body: fd})
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (d.ok) {
-          setStatus('Session created (' + d.student_count + ' students)…', false);
+          setStatus((d.mode_label || 'Session') + ' created (' + d.student_count + ' students)…', false);
           window.location.href = '/powergrader/session/' + d.session_id;
         } else {
+          if (d.privacy_steps) renderPrivacySteps(d.privacy_steps);
           setStatus(d.error || 'Failed to start session.', true);
           startBtn.disabled = false;
         }
@@ -222,7 +792,7 @@
           var dt = s.created ? s.created.replace('T', ' ').slice(0,16) : '';
           return '<tr>' +
             '<td><strong>' + _esc(s.assignment_name || '—') + '</strong></td>' +
-            '<td>' + (s.mode === 'assisted' ? '✨ Assisted' : 'Fast') + '</td>' +
+            '<td>' + _esc(s.mode_label || modeLabel(s.mode)) + '</td>' +
             '<td style="text-align:center">' + s.posted + ' / ' + s.total + ' posted</td>' +
             '<td style="color:var(--ce-text-muted,#888)">' + dt + '</td>' +
             '<td><a href="/powergrader/session/' + s.session_id + '" class="button small">Resume →</a></td>' +

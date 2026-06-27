@@ -24,6 +24,17 @@ from ..deps import _sse, list_rubric_files
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
 
+def _budget_error_message(budget: dict) -> str:
+    model = budget.get("model") or config.get_openrouter_model()
+    estimate = budget.get("estimated_cost")
+    estimate_text = f" Estimated batch cost: ${estimate:.2f}." if estimate is not None else ""
+    reasons = "; ".join(budget.get("reasons") or ["cost could not be verified"])
+    return (
+        f"OpenRouter model '{model}' cannot be used for teacher auto-scoring. "
+        f"{reasons}.{estimate_text} Use Settings > AI assistance > DeepSeek V4 Pro."
+    )
+
+
 def _vault():
     return feedback_vault.Vault(os.path.join(workspace.feedback_folder("_vault"), "vault.json"))
 
@@ -185,6 +196,17 @@ def score_openrouter(rubric_name: str = Form(""), bundle_name: str = Form("")):
         if not verdict["green"]:
             log.append(f"⛔ {name}: BLOCKED — not pseudonymized ({verdict['hard'][:1]}). Not sent.")
             _audit({"action": "blocked", "bundle": name, "hard": len(verdict["hard"])})
+            continue
+        budget = orc.teacher_workflow_budget(
+            bundle,
+            rubric_text,
+            model,
+            student_count=len(bundle.get("students") or []),
+        )
+        if not budget["ok"]:
+            log.append(f"⛔ {name}: BLOCKED — {_budget_error_message(budget)}")
+            _audit({"action": "blocked_cost", "bundle": name, "model": model,
+                    "tokens_est": budget.get("input_tokens")})
             continue
         try:
             results = orc.score(bundle, rubric_text, persona, api_key=api_key, model=model)
@@ -367,10 +389,19 @@ def feedback_run_prepare(
         return JSONResponse({"ok": False, "error": f"SAFE write failed: {result['log']}"})
 
     tokens = orc.estimate_tokens(bundle, rubric_text)
+    model = config.get_openrouter_model()
+    budget = orc.teacher_workflow_budget(
+        bundle,
+        rubric_text,
+        model,
+        student_count=len(bundle["students"]),
+    ) if config.has_openrouter_key() else None
     response_data = {"ok": True, "green": True, "soft": verdict["soft"],
                      "tokens": tokens, "students": len(bundle["students"]),
                      "bundle_name": os.path.basename(result["safe_bundle"]),
                      "assignment_name": assignment_name,
+                     "model": model,
+                     "budget": budget,
                      "has_key": config.has_openrouter_key(),
                      "attachment_only": result.get("attachment_only", [])}
     return JSONResponse(response_data)
@@ -424,11 +455,25 @@ def feedback_run_stream(
                 yield "[exit 1]"
                 return
 
-            yield f"Scoring {len(bundle['students'])} student(s) via OpenRouter…"
+            model = config.get_openrouter_model()
+            budget = orc.teacher_workflow_budget(
+                bundle,
+                rubric_text,
+                model,
+                student_count=len(bundle.get("students") or []),
+            )
+            if not budget["ok"]:
+                yield f"⛔ COST BLOCK: {_budget_error_message(budget)}"
+                _audit({"action": "blocked_cost", "assignment": assignment_name,
+                        "model": model, "tokens_est": budget.get("input_tokens")})
+                yield "[exit 1]"
+                return
+
+            yield f"Scoring {len(bundle['students'])} student(s) via OpenRouter ({model})…"
             results = orc.score(
                 bundle, rubric_text, persona,
                 api_key=config.get_openrouter_key(),
-                model=config.get_openrouter_model(),
+                model=model,
                 feedback_pattern=fb_pattern,
             )
 

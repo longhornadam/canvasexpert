@@ -206,7 +206,21 @@ def test_self_authored_results_conform_to_contract(tmp_path):
 
     rows = fp.reidentify(payload["results"], v)        # push-ready, re-identified
     assert rows and all(r["resolved"] for r in rows)
-    assert all(r["feedback"].endswith("(AI teaching assistant)") for r in rows)
+    assert all(r["feedback"].endswith("reviewed by your teacher.") for r in rows)
+    assert all("AI teaching assistant" not in r["feedback"] for r in rows)
+
+
+def test_normalize_ai_feedback_removes_duplicate_signature_and_formats():
+    out = fp.normalize_ai_feedback(
+        "Score: 8/10 Glows: clear thesis. Grows: connect evidence back. "
+        "Coach Vale (AI teaching assistant) "
+        "Drafted by Coach Vale (AI), reviewed by your teacher.",
+        "Drafted by Coach Vale (AI), reviewed by your teacher.",
+    )
+    assert out.count("Coach Vale") == 1
+    assert "AI teaching assistant" not in out
+    assert "connect evidence back" in out
+    assert "\n\nGlows:" in out and "\n\nGrows:" in out
 
 
 # --------------------------------------------------------------------------
@@ -291,6 +305,28 @@ def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
     assert "image has alt text" in how_to
 
 
+def test_write_safe_and_private_writes_scrubbed_shared_context(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
+    bundle["shared_context"] = {
+        "assignment_description": "Use the class passage.",
+        "materials": [{
+            "title": "Passage",
+            "source": "pasted",
+            "text": "Ada Lovelace is named inside the source passage.",
+        }],
+    }
+    safe_dir = tmp_path / "SAFE"
+    result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(tmp_path / "PRIVATE"))
+
+    assert result["shared_context"]
+    shared_text = (safe_dir / f"{fp._safe('Essay 1')}__SHARED-CONTEXT.txt").read_text(encoding="utf-8")
+    safe_blob = (safe_dir / f"{fp._safe('Essay 1')}__bundle.json").read_text(encoding="utf-8")
+    assert "Source material: Passage" in shared_text
+    assert "Ada" not in shared_text and "Lovelace" not in shared_text
+    assert "Ada" not in safe_blob and "Lovelace" not in safe_blob
+
+
 def _code_submission():
     """An upload-only submission: a student turned in an HTML file (no text entry).
     code_files is what the route's _enrich_with_code_files populates from the upload."""
@@ -373,3 +409,6 @@ def test_build_request_injects_feedback_pattern():
     assert "Glows & Grows (Basic)" in system
     assert "2–3 Glows" in system and "1–2 Grows" in system
     assert "Sage" in system
+    assert "exactly one disclosure sentence" in system
+    assert "Do not add a separate signature" in system
+    assert "Sign each feedback entry" not in system
