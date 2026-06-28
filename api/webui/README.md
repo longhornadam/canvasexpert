@@ -16,6 +16,7 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | `/` | Dashboard (welcome, status strip, Expert + Forge launch cards) | — |
 | `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js` |
 | `/gradebook` | **Gradebook Expert** — single-course grade operations | `gradebook.js` |
+| `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js`, `powergrader_queue.js` |
 | `/ai-expert` | **AI Expert** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
@@ -264,6 +265,38 @@ Preview only; writes via Canvas grade passback.
 
 ### Tab 5 — Snapshot
 Read-only grade distribution view.
+
+---
+
+## PowerGrader (`/powergrader`)
+
+Keyboard-first grading queue for one Canvas assignment. A teacher starts one
+session, reviews submissions student by student, approves or edits feedback, and
+pushes approved grades/comments back to Canvas.
+
+Modes:
+
+- **Grade Myself** — fetches submitted work and opens the queue with no AI packet
+  or API call.
+- **Use My AI Chat** — writes local SAFE and PRIVATE artifacts, keeps the legacy
+  Safe AI Packet ZIP, and also creates Copilot-friendly batch folders. Each batch
+  folder has exactly three numbered upload files: assignment information, rubric
+  and TA personality, and that batch's pseudonymized student work. Teachers start
+  a fresh Copilot chat per batch, then paste each JSON response back into the
+  matching batch panel in the same PowerGrader session.
+- **Auto-Score With API** — sends only the SAFE pseudonymized packet to the
+  configured OpenRouter model after price checks, then loads AI suggestions into
+  the same review queue.
+
+The Copilot flow is designed for education tenants where ZIP upload or large-file
+context behavior may be limited. Batch imports validate `pseudonym` and `item_id`
+against the selected batch before updating AI suggestions, so a response from one
+batch cannot silently update another batch. AI suggestions remain drafts until the
+teacher reviews, edits, approves, and pushes.
+
+Safety wording is practical rather than absolute: SAFE files use pseudonyms and
+remove obvious student identifiers before upload, but teachers should review the
+files before sending them to any external chat tool.
 
 ---
 

@@ -1,0 +1,425 @@
+"""PowerGrader AI workflow — handles packet creation, safety gate, and OpenRouter scoring.
+
+This module does not call Canvas APIs.
+"""
+
+import json
+
+import feedback_pipeline as fp
+import feedback_safety as safety
+import openrouter_client as orc
+from webui import config, source_materials, workspace
+from powergrader import context, copilot_packet, packet, privacy
+
+
+def run_ai_workflow(
+    *,
+    mode: str,
+    submitted: list[dict],
+    assignment_name: str,
+    assignment_description: str,
+    course_id: str,
+    assignment_id: str,
+    session_id: str,
+    rubric_name: str,
+    persona_id: str,
+    selected_model: str,
+    response_kind: str,
+    source_text: str,
+    source_files_json: str,
+    source_uploads,
+    has_openrouter_key: bool,
+) -> dict:
+    """Run the AI/packet workflow for a PowerGrader session.
+
+    Returns a dict with keys: ok, error, status_code, privacy_steps,
+    privacy_artifacts, ai_by_uid, packet_zip, budget, debug_path.
+    """
+    privacy_steps: list[dict] = []
+    privacy_artifacts: dict = {}
+    ai_by_uid: dict = {}
+    budget_result = None
+    debug_path = None
+    copilot_info = None
+
+    if mode not in {"packet", "assisted"}:
+        privacy_steps.append(privacy.privacy_step(
+            "fast_mode", "Grade Myself selected", "warn",
+            "Grade Myself selected. No AI packet or API call was requested.",
+        ))
+        return {
+            "ok": True,
+            "error": "",
+            "status_code": 200,
+            "privacy_steps": privacy_steps,
+            "privacy_artifacts": privacy_artifacts,
+            "ai_by_uid": ai_by_uid,
+            "packet_zip": None,
+            "budget": None,
+            "debug_path": None,
+            "copilot_packet": None,
+        }
+
+    if mode == "assisted" and not has_openrouter_key:
+        privacy_steps.append(privacy.privacy_step(
+            "llm_send", "Sent Safe AI Packet to selected LLM", "warn",
+            "No OpenRouter key is saved, so PowerGrader stayed local and did not send anything.",
+        ))
+        return {
+            "ok": True,
+            "error": "",
+            "status_code": 200,
+            "privacy_steps": privacy_steps,
+            "privacy_artifacts": privacy_artifacts,
+            "ai_by_uid": ai_by_uid,
+            "packet_zip": None,
+            "budget": None,
+            "debug_path": None,
+            "copilot_packet": None,
+        }
+
+    # ---- Build source context ----
+    workspace.ensure_workspace()
+    try:
+        source_context = context.build_source_context(
+            source_text, source_files_json, source_uploads, strict=True
+        )
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": f"Could not read selected source material: {e}",
+            "status_code": 200,
+            "privacy_steps": privacy_steps,
+            "privacy_artifacts": privacy_artifacts,
+            "ai_by_uid": ai_by_uid,
+            "budget": None,
+            "debug_path": None,
+            "copilot_packet": None,
+        }
+
+    source_warning_text = "; ".join(source_materials.context_warnings(source_context))
+    if source_context.get("materials"):
+        privacy_steps.append(privacy.privacy_step(
+            "source_context", "Loaded shared source material", "warn" if source_warning_text else "ok",
+            (
+                f"{len(source_context['materials'])} source item(s), "
+                f"~{source_context.get('tokens_est', 0):,} input token(s)."
+                + (f" {source_warning_text}" if source_warning_text else "")
+            ),
+        ))
+
+    vault = context.vault()
+    bundle = fp.pseudonymize_submissions(submitted, vault, assignment_name)
+    bundle = context.apply_shared_context(bundle, assignment_description, source_context)
+
+    if not bundle["students"]:
+        # No students passed pseudonymization; fall through to session building
+        pass
+    else:
+        vault.save()
+        privacy_steps.append(privacy.privacy_step(
+            "pseudonymize", "Assigned pseudonyms and separated identities", "ok",
+            f"{len(bundle['students'])} pseudonymized student bundle(s); real names remain in the local vault.",
+        ))
+
+        verdict = safety.scan_payload(bundle, vault)
+        if not verdict["green"]:
+            privacy_steps.append(privacy.privacy_step(
+                "safety_scan", "Checked pseudonymized payload for real names", "warn",
+                (
+                    "Potential real-name text was found before the deeper packet scrub. "
+                    "The packet writer will scrub again and exclude any unsafe student from the LLM payload."
+                ),
+            ))
+        else:
+            privacy_steps.append(privacy.privacy_step(
+                "safety_scan", "Checked pseudonymized payload for real names", "ok",
+                "No hard PII matches found before the file-writing step.",
+            ))
+
+        rubric_text = context.load_rubric_text(rubric_name)
+        persona = config.get_persona(persona_id)
+        patterns = config.list_feedback_patterns()
+        fb_pattern = patterns[0] if patterns else None
+        model = selected_model
+
+        safe_dir, private_dir = privacy.feedback_artifact_dirs()
+        if not safe_dir or not private_dir:
+            privacy_steps.append(privacy.privacy_step(
+                "safe_private", "Wrote Safe AI Packet and Private decoder artifacts", "failed",
+                "Workspace folders were unavailable. Nothing was sent to the LLM.",
+            ))
+            return {
+                "ok": False,
+                "error": "Could not resolve Safe AI Packet / Private decoder folders — finish workspace setup first.",
+                "status_code": 200,
+                "privacy_steps": privacy_steps,
+                "privacy_artifacts": privacy_artifacts,
+                "ai_by_uid": ai_by_uid,
+                "budget": None,
+                "debug_path": None,
+                "copilot_packet": None,
+            }
+
+        write_result = fp.write_safe_and_private(
+            bundle,
+            vault,
+            safe_dir,
+            private_dir,
+            ai_ta_name=persona.get("name") or "your AI teaching assistant",
+            protected=config.active_protected_names(),
+            submissions=submitted,
+            rubric_text=rubric_text,
+        )
+
+        if not write_result.get("safe_bundle"):
+            privacy_steps.append(privacy.privacy_step(
+                "safe_private", "Wrote Safe AI Packet and Private decoder artifacts", "failed",
+                "The deeper scrub found hard violations. Nothing was sent to the LLM.",
+                log=write_result.get("log", []),
+            ))
+            return {
+                "ok": False,
+                "error": "Safe AI Packet write failed — privacy gate blocked this batch.",
+                "status_code": 200,
+                "privacy_steps": privacy_steps,
+                "privacy_artifacts": privacy_artifacts,
+                "ai_by_uid": ai_by_uid,
+                "budget": None,
+                "debug_path": None,
+                "copilot_packet": None,
+            }
+
+        privacy_artifacts = {
+            "safe_folder": safe_dir,
+            "private_folder": private_dir,
+            "safe_bundle": write_result.get("safe_bundle"),
+            "private_bundle": write_result.get("private_bundle"),
+            "who_is_who": write_result.get("who_is_who"),
+            "how_to_score": write_result.get("how_to_score"),
+            "shared_context": write_result.get("shared_context"),
+            "shared_context_excluded": write_result.get("shared_context_excluded"),
+            "student_txt_count": len(write_result.get("student_txts") or []),
+            "attachment_only_count": len(write_result.get("attachment_only") or []),
+            "excluded_count": len(write_result.get("excluded") or []),
+        }
+
+        privacy_steps.append(privacy.privacy_step(
+            "safe_private", "Wrote inspectable Safe AI Packet and Private decoder files", "ok",
+            (
+                f"Fake-name bundle, {privacy_artifacts['student_txt_count']} readable text file(s), "
+                "private raw bundle, and who-is-who decoder saved."
+            ),
+            safe_folder=safe_dir,
+            private_folder=private_dir,
+        ))
+
+        manual_count = privacy_artifacts["attachment_only_count"] + privacy_artifacts["excluded_count"]
+        if manual_count:
+            privacy_steps.append(privacy.privacy_step(
+                "manual_review", "Flagged work that needs teacher/manual handling", "warn",
+                (
+                    f"{manual_count} item(s) were kept local for manual review "
+                    "instead of being sent to the LLM."
+                ),
+            ))
+
+        if privacy_artifacts.get("shared_context_excluded"):
+            privacy_steps.append(privacy.privacy_step(
+                "source_context_safe", "Checked shared source context after scrubbing", "warn",
+                (
+                    "The shared source context was kept out of the Safe AI Packet because a real "
+                    "roster identifier survived scrubbing."
+                ),
+            ))
+
+        try:
+            with open(write_result["safe_bundle"], encoding="utf-8") as f:
+                llm_bundle = json.load(f)
+        except Exception as e:
+            privacy_steps.append(privacy.privacy_step(
+                "safe_payload", "Loaded Safe AI Packet for LLM scoring", "failed",
+                f"Could not reload the Safe AI Packet: {e}. Nothing was sent.",
+            ))
+            return {
+                "ok": False,
+                "error": f"Could not load Safe AI Packet: {e}",
+                "status_code": 200,
+                "privacy_steps": privacy_steps,
+                "privacy_artifacts": privacy_artifacts,
+                "ai_by_uid": ai_by_uid,
+                "budget": None,
+                "debug_path": None,
+                "copilot_packet": None,
+            }
+
+        safe_students = len(llm_bundle.get("students") or [])
+        packet_info = packet.build_safe_ai_packet(assignment_name, safe_dir, write_result, llm_bundle)
+        privacy_artifacts.update(packet_info)
+        privacy_steps.append(privacy.privacy_step(
+            "safe_ai_packet", "Created Safe AI Packet", "ok",
+            (
+                "Packet ZIP includes fake-name student responses, source material, "
+                "rubric instructions, and the paste-back JSON format."
+            ),
+            path=packet_info.get("packet_zip"),
+        ))
+
+        if mode == "packet" and safe_students > 0:
+            copilot_info = copilot_packet.build_copilot_batches(
+                assignment_name=assignment_name,
+                safe_dir=safe_dir,
+                llm_bundle=llm_bundle,
+                rubric_text=rubric_text,
+                persona=persona,
+            )
+            privacy_artifacts["copilot_packet_folder"] = copilot_info.get("packet_folder")
+            privacy_artifacts["copilot_readme"] = copilot_info.get("readme_path")
+            privacy_artifacts["copilot_batch_count"] = copilot_info.get("batch_count", 0)
+            privacy_artifacts["copilot_student_count"] = copilot_info.get("student_count", 0)
+            copilot_warnings = copilot_info.get("warnings") or []
+            copilot_detail = (
+                f"{copilot_info['batch_count']} batch folder(s), each with 3 numbered upload files."
+            )
+            if copilot_warnings:
+                copilot_detail += f" {copilot_warnings[0]}"
+            privacy_steps.append(privacy.privacy_step(
+                "copilot_batches",
+                "Created Copilot batch folders",
+                "warn" if copilot_warnings else "ok",
+                copilot_detail,
+                path=copilot_info.get("packet_folder"),
+                action_label="Open Copilot batch folder",
+            ))
+
+        if safe_students == 0:
+            privacy_steps.append(privacy.privacy_step(
+                "llm_send", "Prepared Safe AI Packet for scoring", "warn",
+                "No students passed the packet writer for automated scoring. Grade this batch by hand.",
+            ))
+            privacy_steps.append(privacy.privacy_step(
+                "reidentify", "Reattached real names locally", "warn",
+                "No AI results were generated, so there was nothing to reattach.",
+            ))
+        elif mode == "packet":
+            privacy_steps.append(privacy.privacy_step(
+                "manual_ai_chat", "Ready for your AI chat", "ok",
+                "Canvas Expert stopped before any API send. Use the Safe AI Packet with your own AI chat, then paste JSON results back here.",
+            ))
+        else:
+            # assisted mode with OpenRouter key
+            privacy_steps.append(privacy.privacy_step(
+                "safe_payload", "Loaded Safe AI Packet for LLM scoring", "ok",
+                f"{safe_students} fake-name student response(s) selected for OpenRouter.",
+            ))
+
+            budget_result = orc.teacher_workflow_budget(
+                llm_bundle,
+                rubric_text,
+                model,
+                student_count=safe_students,
+                persona=persona,
+                feedback_pattern=fb_pattern,
+                output_tokens_per_student=source_materials.response_preset(response_kind)["output_tokens_per_student"],
+            )
+
+            if not budget_result["ok"]:
+                estimate = budget_result.get("estimated_cost")
+                estimate_text = f" Estimated batch cost: ${estimate:.2f}." if estimate is not None else ""
+                privacy_steps.append(privacy.privacy_step(
+                    "price_check", "Verified model price before sending", "failed",
+                    "; ".join(budget_result.get("reasons") or ["cost could not be verified"]) + estimate_text,
+                ))
+                return {
+                    "ok": False,
+                    "error": (
+                        f"OpenRouter model '{model}' cannot be used for teacher auto-scoring. "
+                        + "; ".join(budget_result.get("reasons") or ["cost could not be verified"])
+                        + estimate_text
+                    ),
+                    "status_code": 200,
+                    "privacy_steps": privacy_steps,
+                    "privacy_artifacts": privacy_artifacts,
+                    "ai_by_uid": ai_by_uid,
+                    "budget": budget_result,
+                    "debug_path": None,
+                    "copilot_packet": copilot_info,
+                }
+
+            estimate = budget_result.get("estimated_cost")
+            warning = "; ".join(budget_result.get("warnings") or [])
+            privacy_steps.append(privacy.privacy_step(
+                "price_check", "Verified model price before sending", "warn" if warning else "ok",
+                (
+                    f"Model {model}; estimated batch cost "
+                    + (f"${estimate:.2f}" if estimate is not None else "available after provider billing")
+                    + (f". {warning}" if warning else ".")
+                    + " Estimate assumes fresh input; provider prompt caching is not guaranteed."
+                ),
+            ))
+
+            try:
+                results = orc.score(
+                    llm_bundle, rubric_text, persona,
+                    api_key=config.get_openrouter_key(),
+                    model=model,
+                    feedback_pattern=fb_pattern,
+                )
+                privacy_steps.append(privacy.privacy_step(
+                    "llm_send", "Sent only the Safe AI Packet to OpenRouter", "ok",
+                    f"{safe_students} pseudonymized student bundle(s) sent; real names were not included.",
+                ))
+                rows = fp.reidentify(results, vault)
+                unresolved = sum(1 for row in rows if not row.get("resolved"))
+                privacy_steps.append(privacy.privacy_step(
+                    "reidentify", "Reattached real names locally", "warn" if unresolved else "ok",
+                    (
+                        f"{len(rows)} AI result(s) joined back to local Canvas IDs."
+                        + (f" {unresolved} unresolved result(s) need review." if unresolved else "")
+                    ),
+                ))
+                ai_by_uid = {row["canvas_id"]: row for row in rows if row.get("resolved")}
+            except Exception as e:
+                debug_path = privacy.write_openrouter_debug_file(
+                    private_dir,
+                    assignment_name,
+                    session_id=session_id,
+                    course_id=course_id,
+                    assignment_id=assignment_id,
+                    model_id=model,
+                    safe_students=safe_students,
+                    packet_info=packet_info,
+                    budget=budget_result,
+                    privacy_steps=privacy_steps,
+                    exc=e,
+                )
+                privacy_steps.append(privacy.privacy_step(
+                    "llm_send", "Sent only the Safe AI Packet to OpenRouter", "failed",
+                    f"OpenRouter error: {e}",
+                    path=debug_path,
+                    action_label="Open OpenRouter debug file",
+                ))
+                return {
+                    "ok": False,
+                    "error": f"OpenRouter error: {e}",
+                    "status_code": 200,
+                    "privacy_steps": privacy_steps,
+                    "privacy_artifacts": privacy_artifacts,
+                    "ai_by_uid": ai_by_uid,
+                    "budget": budget_result,
+                    "debug_path": debug_path,
+                    "copilot_packet": copilot_info,
+                }
+
+    return {
+        "ok": True,
+        "error": "",
+        "status_code": 200,
+        "privacy_steps": privacy_steps,
+        "privacy_artifacts": privacy_artifacts,
+        "ai_by_uid": ai_by_uid,
+        "packet_zip": privacy_artifacts.get("packet_zip"),
+        "budget": budget_result,
+        "debug_path": debug_path,
+        "copilot_packet": copilot_info,
+    }

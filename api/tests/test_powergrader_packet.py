@@ -7,6 +7,7 @@ from api.feedback_vault import Vault
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from api.webui.routes import powergrader
+from api.powergrader import session_builder
 
 
 def _bundle(pseudonym="Sparky McGee"):
@@ -122,3 +123,31 @@ def test_openrouter_debug_file_omits_key_and_records_response(tmp_path):
     assert data["exception"]["response_snippet"] == "<html>bad</html>"
     assert "api_key" not in raw.lower()
     assert "bearer" not in raw.lower()
+
+
+def test_build_session_stores_copilot_packet_metadata():
+    copilot_packet = {
+        "version": 1,
+        "packet_type": "copilot_batches",
+        "batch_count": 2,
+        "batches": [],
+    }
+
+    session = session_builder.build_session(
+        session_id="sid",
+        course_id="course",
+        assignment_id="assignment",
+        assignment_name="Essay",
+        points_possible=10,
+        mode="packet",
+        rubric_name="",
+        persona_id="sage",
+        selected_model="",
+        privacy_steps=[],
+        privacy_artifacts={},
+        students=[],
+        mode_label="Use My AI Chat",
+        copilot_packet=copilot_packet,
+    )
+
+    assert session["copilot_packet"] == copilot_packet

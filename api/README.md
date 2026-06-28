@@ -8,6 +8,8 @@ pushes content to live courses via the REST and New Quizzes APIs:
 - **Push Pages** (PageForge JSON → live pages)
 - **Push Rubrics** (RubricForge JSON → live rubrics + student explainer pages)
 - **Gradebook Expert** — late policy sweep, student extensions, curves
+- **PowerGrader** — keyboard grading queue, Safe AI Packet export, Copilot batch
+  import, optional API scoring
 - **Download** — submission bundles by assignment or by student
 
 Local-only, never served. See `CLAUDE.md` Guardrails.
@@ -132,6 +134,7 @@ Gradebook Expert, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `downloader.py` | Submission downloader → `by_assignment/` + `by_student/` tree, `_index.csv` / `_portfolio.csv` |
 | `validate_qf.py` | QuizForge compliance checker |
 | `qf_ui.py` | Launches the local web UI (see "Web UI" above) |
+| `powergrader/` | PowerGrader backend helpers: Canvas fetch, privacy artifacts, Safe AI Packet ZIP, Copilot batch folders, import validation, session mutations |
 | `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, subprocess/SSE runner |
 | `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `../LLM_Modules/QuizForge_Base.md`) |
 
