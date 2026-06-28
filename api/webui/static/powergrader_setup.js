@@ -4,6 +4,36 @@
   var modelPresets = setupConfig.modelPresets || [];
   var modelOptions = [];
 
+  var form = document.getElementById('pg-start-form');
+  var courseEl = document.getElementById('pg-course');
+  var asnEl = document.getElementById('pg-assignment');
+  var modeInput = document.getElementById('pg-mode');
+  var modeChoices = Array.from(document.querySelectorAll('input[name="pg-mode-choice"]'));
+  var routeCards = Array.from(document.querySelectorAll('.pg-route-card'));
+  var aiOptions = document.getElementById('pg-ai-options');
+  var rubricFast = document.getElementById('pg-rubric-fast');
+  var apiOnly = Array.from(document.querySelectorAll('.pg-api-only'));
+  var modelPicker = document.getElementById('pg-model-picker');
+  var modelEl = document.getElementById('pg-model');
+  var modelPanel = document.getElementById('pg-model-panel');
+  var modelList = document.getElementById('pg-model-listbox');
+  var modelCost = document.getElementById('pg-model-cost');
+  var btnModelMenu = document.getElementById('pg-model-menu-button');
+  var btnModelDefault = document.getElementById('pg-model-default');
+  var btnLoadModels = document.getElementById('pg-load-models');
+  var modelStatus = document.getElementById('pg-model-status');
+  var sourceFiles = document.getElementById('pg-source-files');
+  var sourceFilesJson = document.getElementById('pg-source-files-json');
+  var responseKind = document.getElementById('pg-response-kind');
+  var btnEstimate = document.getElementById('pg-estimate');
+  var estimateStatus = document.getElementById('pg-estimate-status');
+  var estimatePanel = document.getElementById('pg-estimate-panel');
+  var startBtn = document.getElementById('pg-start-btn');
+  var status = document.getElementById('pg-start-status');
+  var privacyRun = document.getElementById('pg-privacy-run');
+  var privacyList = document.getElementById('pg-privacy-list');
+  var aiLabel = document.getElementById('pg-ai-label');
+
   function modelScenarioText(m) {
     if (m.scenario_cost === null || m.scenario_cost === undefined || isNaN(Number(m.scenario_cost))) return '';
     var n = Number(m.scenario_cost);
@@ -280,11 +310,11 @@
     rubricFast.style.display = isAi ? 'none' : '';
     apiOnly.forEach(function(el){ el.style.display = mode === 'assisted' ? '' : 'none'; });
     if (mode === 'packet') {
-      aiLabel.textContent = 'Use My AI Chat — create a Safe AI Packet, then paste AI JSON back into PowerGrader.';
+      if (aiLabel) aiLabel.textContent = 'Use My AI Chat — create a Safe AI Packet, then paste AI JSON back into PowerGrader.';
     } else if (mode === 'assisted') {
-      aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + ((modelEl && modelEl.value) || defaultModel);
+      if (aiLabel) aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + ((modelEl && modelEl.value) || defaultModel);
     } else {
-      aiLabel.textContent = 'Grade Myself — no AI packet or API call.';
+      if (aiLabel) aiLabel.textContent = 'Grade Myself — no AI packet or API call.';
     }
   }
 
@@ -293,7 +323,7 @@
 
   modelEl && modelEl.addEventListener('input', function(){
     if (currentMode() === 'assisted') {
-      aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + (modelEl.value || defaultModel);
+      if (aiLabel) aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + (modelEl.value || defaultModel);
     }
     setModelPanel(true, modelEl.value);
     updateModelCost();
@@ -316,7 +346,7 @@
     modelEl.value = btn.getAttribute('data-model-id') || '';
     setModelPanel(false, '');
     updateModelCost();
-    if (currentMode() === 'assisted') aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + (modelEl.value || defaultModel);
+    if (currentMode() === 'assisted' && aiLabel) aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + (modelEl.value || defaultModel);
     modelEl.focus();
   });
 
@@ -331,7 +361,7 @@
   btnModelDefault && btnModelDefault.addEventListener('click', function(){
     if (modelEl) modelEl.value = defaultModel;
     if (modelStatus) modelStatus.textContent = 'Default selected.';
-    if (currentMode() === 'assisted') aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + defaultModel;
+    if (currentMode() === 'assisted' && aiLabel) aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + defaultModel;
     updateModelCost();
   });
 

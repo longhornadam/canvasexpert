@@ -5,8 +5,7 @@
 <section class="card" style="max-width:680px;margin:0 auto">
   <h2>PowerGrader</h2>
   <p class="hint" style="margin-top:0">
-    Keyboard-driven grading with optional AI assistance. Faster than Canvas SpeedGrader,
-    with Roster context built in.
+    SpeedGrader, upgraded. Grade entirely yourself or choose between 2 levels of safe, FERPA-conscious AI assistance.
   </p>
 
   {% if not has_workspace %}
@@ -36,18 +35,17 @@
       <div class="pg-route-grid">
         <label class="pg-route-card is-selected">
           <input type="radio" name="pg-mode-choice" value="fast" checked>
-          <span><strong>Grade Myself</strong><small>No AI packet and no API call.</small></span>
+          <span><strong>Grade Myself</strong><small>No AI packet and no API call. Like SpeedGrader, but faster.</small></span>
         </label>
         <label class="pg-route-card">
           <input type="radio" name="pg-mode-choice" value="packet">
-          <span><strong>Use My AI Chat</strong><small>Download a Safe AI Packet for ChatGPT, Claude, Gemini, or another chat tool.</small></span>
+          <span><strong>Use My AI Chat</strong><small>Download a Safe AI Packet for CoPilot M365, ChatGPT, Claude, Gemini, or another chat tool.</small></span>
         </label>
         <label class="pg-route-card {% if not has_openrouter %}is-disabled{% endif %}">
           <input type="radio" name="pg-mode-choice" value="assisted" {% if not has_openrouter %}disabled{% endif %}>
-          <span><strong>Auto-Score With API</strong><small>{% if has_openrouter %}Send the same safe packet through OpenRouter.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
+          <span><strong>Auto-Score With API</strong><small>{% if has_openrouter %}Advanced mode with true automation. Costs a little money and a little effort, but provides astonishing results.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
         </label>
       </div>
-      <span id="pg-ai-label" class="hint">Grade Myself — no AI packet or API call.</span>
       <details class="pg-safety-popout">
         <summary>How it keeps data safe</summary>
         <div class="pg-safety-body">

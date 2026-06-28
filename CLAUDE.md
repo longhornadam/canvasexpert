@@ -1,48 +1,91 @@
-# CLAUDE.md — Canvas Expert
+# CLAUDE.md - Canvas Expert
 
 Guidance for Claude Code and any AI agent working in this repo. Read this before editing.
+This file is the canonical project guidance; keep it current when repo structure,
+handoff locations, safety rules, major workflows, or tool-routing conventions change.
+Do not create parallel agent guidance that conflicts with this file. If another
+agent-specific file is introduced later, make it point back here instead of duplicating
+policy.
 
 ## What this is
 
-A teacher's toolkit for Canvas LMS, split out of the QuizForge monorepo. Two subsystems:
+Canvas Expert is a teacher's toolkit for Canvas LMS, split out of the QuizForge
+monorepo. The repo has two main subsystems:
 
-- **`api/`** — the **live, token-holding** app. A local FastAPI web UI (`py qf_ui.py` →
-  `http://127.0.0.1:8765`) plus CLI scripts that push authored content to live Canvas
-  courses (quizzes, assignments, pages, rubrics) and run Gradebook Expert (late sweeps,
-  extensions, curves, submission downloads). Holds a Canvas access token. **Local-only,
-  never served.**
-- **`engine/`** — the **offline** quiz-rendering library (parse → validate → render →
-  package to Canvas QTI / physical formats). No network, no token, no student data.
+- **`api/`** - the **live, token-holding** app. It is a local FastAPI web UI
+  (`cd api; py qf_ui.py` -> `http://127.0.0.1:8765`) plus CLI scripts that push
+  authored content to live Canvas courses, run gradebook operations, download work,
+  and support AI-assisted feedback/grading. It holds a Canvas access token and must
+  stay local-only.
+- **`engine/`** - the **offline** quiz/content rendering library (parse -> validate
+  -> render -> package to Canvas QTI / physical formats). It has no network, no
+  token, and no student data.
 
 Authoring contracts live in **`LLM_Modules/*_Base.md`** (QuizForge, AssignmentForge,
-PageForge, RubricForge). These are **canonical**. `api/` *consumes* them — never fork or
-"fix" a contract by editing backend code. Detailed Canvas API facts and per-push behavior:
-**`api/README.md`** (read it before touching push logic — it records hard-won live-probe
-findings like the `result_view_settings` feedback rule and the New Quizzes 403/PAT limit).
+PageForge, RubricForge). These are **canonical**. `api/` consumes them; never fork or
+"fix" a contract by editing backend code. For confirmed Canvas API behavior and push
+details, read **`api/README.md`** before touching push logic.
 
-**FeedbackExpert** (safe, honest LLM scoring/feedback) is built around the **Feedback Scoring
-Contract** (`docs/contracts/feedback-scoring-contract.md`) — the LLM-agnostic, pseudonymized
-JSON that any scoring tool emits and that Push to Canvas consumes. We deliberately do **not**
-depend on an OpenRouter key; the contract is the seam that makes the LLM choice irrelevant.
+## Current feature map
 
-Built and on `dev`: assignment-driven **guided scoring** (fetch submissions — text entries *and*
-plain-text `.py`/`.html` uploads — → pseudonymize/scrub → write a **SAFE** fake-name bundle the
-teacher takes to any LLM); a **Name Manager** screen (`/name-manager`: roster sync, nicknames,
-fake-name pseudonyms, protected book-character names) backed by the pseudonym **vault**; and
-**Push to Canvas** (paste the LLM's contract JSON → validate → re-identify → review → `PUT` grade +
-comment per student). Workspace layout is **SAFE / PRIVATE / _system** zones under
-`<workspace>/FeedbackExpert/` (SAFE = fake names, shareable; PRIVATE = real names, local only;
-`_system/vault` = the re-identification key). New Quizzes write-back stays parked (PAT/403 limit).
-Reference docs: the contract above + `docs/guides/cs-project-authoring.md` (authoring for LLM
-scoring). The `docs/handoffs/feedbackexpert-*.md` files are historical build specs (now implemented).
+**Course Expert** (`/course-expert`) is the primary push/download surface: Quiz,
+Assignment, Page, Rubric, Download Work, Student Reports, and Quick assignment tabs.
+It uses bookmarked courses from Settings, multi-course push selection, local temp
+uploads, and the authoring contracts above.
 
-**PowerGrader** (`/powergrader`) — built and on `dev`. A keyboard-driven grading queue that
-replaces Canvas's own SpeedGrader UI. Two modes: **Fast** (download submissions → queue →
-keyboard-grade → bulk push, no AI required) and **Assisted** (same, but OpenRouter pre-fills
-score + feedback per student using the vault + safety gate). Shows Roster context (tier badge,
-monitored flag, extra-time flag) inline — Canvas SpeedGrader has no equivalent. Sessions are
-stored in `<workspace>/PowerGrader/` (PRIVATE zone — real names + submission content, never
-committed). Route file: `api/webui/routes/powergrader.py`. Spec: `docs/handoffs/powergrader-v1.md`.
+**Gradebook Expert** (`/gradebook`) handles single-course gradebook operations:
+late policy and school-day sweep, extra-time roster, due-date extensions, curves, and
+grade snapshots. Roster context and monitored-student state are private student data.
+
+**Routines** (`/routines`) are local automations, not cloud jobs. Built-ins include
+late-work sweep, download, curve, grading-debt report, and monitored-student report
+refresh. Custom routines can be added under `api/custom_routines/`; see
+`api/custom_routines/AUTHORING.md`.
+
+**FeedbackExpert** is the pseudonymized scoring/feedback pipeline behind
+`/feedback-expert`, `/name-manager`, and Push feedback to Canvas. It is built around
+the **Feedback Scoring Contract** (`docs/contracts/feedback-scoring-contract.md`):
+any scoring tool emits LLM-agnostic JSON, Canvas Expert validates it, re-identifies
+through the local vault, and lets the teacher review before `PUT` grade/comment calls.
+Workspace layout is under `<workspace>/FeedbackExpert/` with SAFE, PRIVATE, and
+system/vault zones. New Quizzes item-level write-back remains blocked by Canvas PAT
+limitations; scores can still be read where the normal Submissions API exposes them.
+
+**PowerGrader** (`/powergrader`) is the keyboard-first grading queue for one Canvas
+assignment. It is now modularized:
+
+- Thin routes: `api/webui/routes/powergrader.py`
+- Backend helpers: `api/powergrader/`
+- Frontend assets: `api/webui/static/powergrader_setup.js`,
+  `api/webui/static/powergrader_queue.js`, and matching CSS files
+- Tests: `api/tests/test_powergrader_packet.py`,
+  `api/tests/test_powergrader_copilot_packet.py`,
+  `api/tests/test_powergrader_import_results.py`
+
+PowerGrader modes:
+
+- **Grade Myself** - fetch submitted work into one local session; no AI packet and no
+  API call.
+- **Use My AI Chat** - write SAFE/PRIVATE artifacts, keep the legacy Safe AI Packet
+  ZIP, and create Copilot-friendly batch folders. Each Copilot batch folder contains
+  exactly three numbered upload files: assignment information, rubric + TA
+  personality, and that batch's pseudonymized StudentWork. The teacher starts a fresh
+  Copilot chat per batch, then pastes each JSON response into the matching batch panel
+  in the same PowerGrader session. Batch imports validate `pseudonym` and `item_id`
+  against the selected batch before updating AI suggestions.
+- **Auto-Score With API** - sends only the SAFE pseudonymized packet to the configured
+  OpenRouter model after price/budget checks, then loads AI suggestions into the same
+  review queue.
+
+PowerGrader sessions are stored under `<workspace>/PowerGrader/`. They are PRIVATE:
+real names, submission content, grades, and teacher comments must never be committed.
+AI suggestions are drafts only until the teacher reviews, edits, approves, and pushes.
+
+**AI Expert** (`/ai-expert`) serves paste-ready LLM skill files from the AI-TA library:
+start-here orientation, authoring skills for the Forge contracts, scoring skills from
+rubrics, and MagicSchool/Copilot-oriented toolkit files.
+
+For a teacher-facing UI reference, read **`api/webui/README.md`**.
 
 ## Guardrails (non-negotiable)
 
@@ -72,7 +115,14 @@ committed). Route file: `api/webui/routes/powergrader.py`. Spec: `docs/handoffs/
 
 4. **Local-only, never exposed.** The Web UI binds `127.0.0.1`. Do not change the bind
    address, add public routes, or otherwise make this app reachable off the machine.
-   Only `web/` is ever published (Netlify); nothing in `api/` is served.
+   Nothing in `api/` is public web infrastructure. If a separate public site exists or
+   is added later, keep it physically and operationally separate from this token-holding
+   app.
+
+5. **AI packet wording must stay honest.** SAFE files use pseudonyms and scrub obvious
+   identifiers, but do not promise that Copilot, ChatGPT, OpenRouter, or any other model
+   is "FERPA safe", "guaranteed anonymous", or unable to infer identity. Tell teachers
+   to review SAFE files before uploading them.
 
 ## Ferrari / Toyota workflow
 
@@ -94,9 +144,55 @@ never has to round-trip back to the expensive planner. A good handoff states:
 
 If a change is security-sensitive or guardrail-adjacent, keep it in the Ferrari lane.
 
+## Handoffs and docs
+
+- New active implementation handoffs belong in `docs/handoffs/`.
+- Completed or historical handoffs belong in `docs/handoffs/archive/`.
+- Do not leave stale active specs at the top level after implementation.
+- Handoffs are implementation instructions, not canonical architecture. Once a handoff
+  is implemented, update this file, `api/README.md`, or `api/webui/README.md` if the
+  project shape changed.
+- `docs/contracts/` contains durable data contracts.
+- `docs/guides/` contains durable usage/authoring guidance.
+- `docs/reference/` contains stable reference notes.
+
+Project-local tool routing lives in `TOOLS.md` and `tools/manifests/`. Do not invent
+tool conventions in scattered handoff docs.
+
+## Tool Awareness Policy
+
+Before using brute-force LLM inspection on large or repetitive inputs, check whether
+an available tool can retrieve, parse, summarize, validate, or reduce the input first.
+
+Check in this order:
+
+1. Project-local `TOOLS.md`
+2. Project-local `tools/manifests/`
+3. Global Codex skills/plugins, if available
+
+Prefer tools for:
+
+- Fetching or scraping documentation
+- Searching or indexing the repository
+- Parsing logs, test output, diffs, HTML, API responses, or structured data
+- Validating schemas, links, dates, IDs, and generated artifacts
+- Reducing large raw inputs into compact structured summaries
+
+Use LLM reasoning for architecture decisions, tradeoff analysis, planning, reviewing
+summarized tool output, writing specs, and explaining behavior.
+
+CanvasExpert routing rules:
+
+- For Canvas LMS API questions, check `canvas-docs-scraper` first.
+- For Canvas course, assignment, module, quiz, rubric, user, or enrollment data, check
+  `canvas-api-inspector` first.
+- For local architecture questions, check `repo-indexer` first.
+- For test failures, use `test-failure-summarizer` before reading raw logs.
+- For large diffs or reviews, use `change-risk-summarizer` before reading full files.
+
 ## Build / test / run
 
-Windows + PowerShell. Python 3.13 (some artifacts show 3.14).
+Windows + PowerShell. Current local test runs use Python 3.14 via the `py` launcher.
 
 ```powershell
 # Run the Web UI (from repo root: "Open Canvas Expert.bat", or:)
@@ -106,6 +202,9 @@ cd api; py qf_ui.py            # http://127.0.0.1:8765
 py -m pytest api/tests
 py -m pytest engine/tests
 
+# Focused PowerGrader regression tests
+py -m pytest api/tests/test_powergrader_packet.py api/tests/test_powergrader_copilot_packet.py api/tests/test_powergrader_import_results.py api/tests/test_route_contract.py
+
 # Install deps
 py -m pip install -r api/requirements.txt
 ```
@@ -113,9 +212,9 @@ py -m pip install -r api/requirements.txt
 ## Onboarding wizard — implemented
 
 The first-run experience (workspace-folder picker → Canvas URL → token → optional
-calendar activation) is now implemented. See spec at
-**`docs/handoffs/onboarding-wizard.md`** for details. An unconfigured app redirects
-to `/welcome` automatically; a "Re-run setup wizard" link is available on Settings.
+calendar activation) is implemented. An unconfigured app redirects to `/welcome`
+automatically; a "Re-run setup wizard" link is available on Settings. The historical
+build spec is archived under `docs/handoffs/archive/onboarding-wizard.md`.
 
 ## Cleanup backlog
 
