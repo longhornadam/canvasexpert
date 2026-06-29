@@ -171,6 +171,10 @@ limit, one-at-a-time (+ backtracking), calculator. Results are **shown by
 default** (rationales + correct answers after last attempt — core QF pedagogy);
 see the `result_view_settings` note in `api/README.md`.
 
+**Printable output:** the physical quiz endpoint compiles the same QuizForge file
+into student and answer-key DOCX/PDF files. PDFs are rendered with the installed
+Microsoft Edge through Playwright; DOCX files are rendered through bundled Pandoc.
+
 ### Assignment tab
 Pick an `<ASSIGNMENTFORGE_JSON>` file, optionally attach a **RubricForge file**
 (grade-with-rubric or feedback-only; can link the student explainer page and copy
@@ -198,6 +202,12 @@ to a local folder tree: `by_assignment/<Asgn>/...`, `by_student/<Student>/...`,
 **Fast gradebook column**: name, points, submission type (on-paper / none / text
 entry), grading category, due date, publish — created in every checked course.
 No Forge file involved; for authored instructions use the Assignment tab.
+
+### NoteForge printable output
+`POST /api/physical/note` compiles `<NOTEFORGE_JSON>` files into tiered Support,
+Core, Accelerate, Extend, and KEY artifacts. Each artifact can include an editable
+DOCX and a locked PDF, subject to the same Edge/Pandoc availability as printable
+quizzes.
 
 ### Student Reports tab
 On-demand per-student packet: pick a course → load the roster → pick a student →
@@ -333,6 +343,11 @@ Assignment / page / rubric / quick-assignment creation and all gradebook +
 course-info reads are direct Canvas REST calls inside `webui/server.py`
 (`/api/content/push`, `/api/gradebook`, `/api/course-detail`). The push logic itself
 (`qf_pusher.py` / `push_tiers.py`) is never modified by the UI.
+
+Printable physical outputs use sync render routes. Keep those routes synchronous
+because Playwright's sync API cannot run inside an active asyncio event loop. The
+PDF renderer launches the installed Microsoft Edge and does not require
+a Playwright-managed browser download.
 
 The `.env` file is still the path for direct CLI / scripting use; the UI does not
 read or write it.

@@ -121,8 +121,7 @@ def _require_native_render_stack() -> None:
     except OSError:
         pytest.skip("Pandoc binary is not available")
 
-    from playwright.sync_api import sync_playwright
+    from engine.rendering.physical.emit_pdf import edge_executable_path
 
-    with sync_playwright() as playwright:
-        if not Path(playwright.chromium.executable_path).exists():
-            pytest.skip("Playwright Chromium is not installed")
+    if edge_executable_path() is None:
+        pytest.skip("Microsoft Edge is not installed")

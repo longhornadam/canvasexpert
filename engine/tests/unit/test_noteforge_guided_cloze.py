@@ -130,11 +130,10 @@ def test_note_spike_native_smoke_when_provisioned(tmp_path):
     except OSError:
         pytest.skip("Pandoc binary is not available")
 
-    from playwright.sync_api import sync_playwright
+    from engine.rendering.physical.emit_pdf import edge_executable_path
 
-    with sync_playwright() as playwright:
-        if not Path(playwright.chromium.executable_path).exists():
-            pytest.skip("Playwright Chromium is not installed")
+    if edge_executable_path() is None:
+        pytest.skip("Microsoft Edge is not installed")
 
     input_path = tmp_path / "water-cycle-note.txt"
     input_path.write_text(SAMPLE_NOTE, encoding="utf-8")

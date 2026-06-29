@@ -19,7 +19,7 @@ Mirror the working quiz printable seam instead of inventing a new rendering path
 
 - Add `engine.packagers.note_handler.generate_note_outputs(note: dict, output_folder: str) -> dict`.
 - Keep native dependencies lazy via `engine.rendering.physical.emit_docx` and `emit_pdf`.
-- Use the same sync Chromium/Pandoc path as `generate_physical_outputs`.
+- Use the same sync Edge/Pandoc path as `generate_physical_outputs`.
 - Add a sync FastAPI route `POST /api/physical/note` in `api/webui/routes/push.py`.
 - Add a `/push/note` page, linked from the Assignments nav/dashboard, with paste/upload/library file
   source, validate, and generate controls.

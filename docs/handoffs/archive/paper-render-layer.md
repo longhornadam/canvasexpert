@@ -69,12 +69,12 @@ engine/packagers/
 forge JSON ─parse/validate (unchanged, upstream)─► PrintDoc ─redact(tier)─► paged HTML+print-CSS
                                                                                   │  (single substrate)
                                                                   ┌───────────────┴───────────────┐
-                                                          WeasyPrint → PDF              html→docx → DOCX
+                                                      Edge/Playwright → PDF             html→docx → DOCX
                                                        (student-locked final)        (teacher-editable master)
 ```
 
 **Chosen (Option C):** every template is authored *once* as HTML + print-CSS. Two emitters consume
-that one substrate — WeasyPrint for the locked student PDF, an html→docx converter for the editable
+that one substrate — installed Edge via Playwright for the locked student PDF, and Pandoc for the editable
 teacher master. PDF and DOCX therefore always match, and a new note style is one HTML/CSS template,
 not two renderers.
 
@@ -110,8 +110,8 @@ current behavior; NoteForge/DeckForge add their own. Renderers depend only on `P
 ### 3. One substrate, two emitters (Option C)
 - **Substrate** — `PrintDoc` (post-redaction) → **paged HTML + print-CSS** via a single template set
   (`engine/rendering/physical/templates/`, `.../styles/*.css`). All layout lives here.
-- **PDF emitter** — WeasyPrint(HTML) → PDF. The locked student artifact.
-- **DOCX emitter** — html→docx converter (see sub-decision) → editable teacher master.
+- **PDF emitter** — installed Edge via Playwright → PDF. The locked student artifact.
+- **DOCX emitter** — Pandoc html→docx via `pypandoc-binary` → editable teacher master.
 - The current python-docx `physical_handler.py` is **retired/replaced** by this path. Its style
   constants in `physical/styles/default_styles.py` become the source values for the print-CSS.
 
@@ -119,12 +119,13 @@ current behavior; NoteForge/DeckForge add their own. Renderers depend only on `P
 
 ## DECISION — PDF/DOCX engine: **Option C** (settled 2026-06-25)
 
-> **Engine update (2026-06-25, post-slice-1):** the HTML→PDF backend is **headless Chromium
-> (Playwright)**, not WeasyPrint — WeasyPrint needed a Windows GTK/Pango install; Chromium is
-> self-contained and higher fidelity. HTML→DOCX is **`pypandoc-binary`** (bundled Pandoc, no PATH).
-> Wherever this doc says "WeasyPrint," read "Chromium."
+> **Engine update (2026-06-29):** the HTML→PDF backend is **installed Microsoft Edge via
+> Playwright**, not Playwright's downloaded Chromium. District-managed PCs may block the Chromium
+> download, while Edge is part of the standard Windows install. HTML→DOCX remains
+> **`pypandoc-binary`** (bundled Pandoc, no PATH). Wherever this archived doc says "Chromium,"
+> read "Microsoft Edge via Playwright."
 
-Author every template once as HTML + print-CSS; emit PDF (Chromium, locked, student) and DOCX
+Author every template once as HTML + print-CSS; emit PDF (Edge, locked, student) and DOCX
 (html→docx via Pandoc, editable, teacher) from that one substrate. Chosen over A (python-docx DOCX + separate
 HTML/PDF) and B (Word-COM DOCX→PDF) because: one template set per note style, PDF/DOCX always match,
 print-CSS is the natural medium for Cornell columns / Frayer quadrants / ruled lines / page-locked
@@ -182,7 +183,7 @@ Sequence → (Concept map) → (KWL/sketchnotes).
 
 1. **Option-C fidelity spike (NON-DESTRUCTIVE).** Stand up the whole substrate on the *quiz*, beside
    the existing renderer, and stop for Adam's fidelity verdict. `PrintDoc` model + `to_printdoc(Quiz)`
-   + Jinja2 HTML/print-CSS + Pandoc html→docx + WeasyPrint html→pdf, driven by a standalone dev CLI
+   + Jinja2 HTML/print-CSS + Pandoc html→docx + Edge/Playwright html→pdf, driven by a standalone dev CLI
    that writes `*_NEW.docx` + `*_NEW.pdf` next to the current files. **Touches nothing in the live
    path.** Full handoff: `docs/handoffs/paper-render-layer-slice1.md`. *Gate:* Adam judges fidelity
    before slice 2.

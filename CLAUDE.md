@@ -87,6 +87,12 @@ rubrics, and MagicSchool/Copilot-oriented toolkit files.
 
 For a teacher-facing UI reference, read **`api/webui/README.md`**.
 
+**Physical rendering stack:** printable PDFs are emitted from shared HTML/print-CSS
+by launching the installed Microsoft Edge through Playwright. Do not reintroduce
+Playwright-managed browser downloads; district-managed PCs may block them.
+Editable DOCX output uses `pypandoc-binary`, which bundles Pandoc. If Edge lives in
+a nonstandard location, `CANVAS_EXPERT_EDGE_PATH` can point to `msedge.exe`.
+
 ## Guardrails (non-negotiable)
 
 1. **Never commit secrets.** The Canvas token lives **only** in the OS credential store
@@ -208,6 +214,10 @@ py -m pytest api/tests/test_powergrader_packet.py api/tests/test_powergrader_cop
 # Install deps
 py -m pip install -r api/requirements.txt
 ```
+
+The local launcher installs Python dependencies only. Printable PDF generation
+requires Microsoft Edge to be installed and allowed by device policy; it does not
+download a Playwright-managed browser.
 
 ## Onboarding wizard — implemented
 

@@ -21,14 +21,14 @@ QTI path, validation, or any `LLM_Modules/*_Base.md` contract. Leave the existin
 
 A standalone dev command that takes a QuizForge JSON/TXT, and emits — *next to* whatever the current
 engine produces — a **student quiz** and **answer key** as both `*_NEW.docx` (Pandoc) and `*_NEW.pdf`
-(WeasyPrint), rendered from **one** Jinja2 HTML + print-CSS substrate. Then Adam compares.
+(Edge via Playwright), rendered from **one** Jinja2 HTML + print-CSS substrate. Then Adam compares.
 
 (Rationale sheet is **out of scope** for the spike — it already renders via `CorrectionDocRenderer`
 and isn't where the layout risk lives. Student quiz + answer key are the fidelity test.)
 
 ## The "highest fidelity" rules baked into this slice
 
-1. **Convergent HTML.** Author templates using constructs that survive *both* WeasyPrint and Pandoc→DOCX:
+1. **Convergent HTML.** Author templates using constructs that survive *both* Edge PDF and Pandoc→DOCX:
    semantic `<table>`, `<p>`, `<ol>/<ul>`, `<strong>/<em>`. **Avoid** CSS grid, flexbox, and absolute
    positioning for anything that must appear in the DOCX — those render in PDF but degrade or vanish in
    DOCX. Where PDF wants a richer layout than DOCX can hold, it's fine for the PDF to be nicer; just
@@ -46,15 +46,13 @@ Add to **`api/requirements.txt`** (CE is local-only; no Netlify/Pyodide constrai
 new emitters **lazy-imported** so importing the core engine stays light):
 
 ```
-weasyprint>=62          # html+print-CSS → PDF (student-locked)
-pypandoc>=1.13          # html → DOCX (teacher-editable); see binary note
+playwright>=1.40        # html+print-CSS → PDF via installed Microsoft Edge
+pypandoc-binary>=1.13   # html → DOCX (teacher-editable; bundles Pandoc)
 ```
 
-**Pandoc binary:** `pypandoc` needs the `pandoc` executable. For dev, install Pandoc system-wide
-(`winget install JohnMacFarlane.Pandoc` or the MSI). Record in this file whether we keep that system
-dependency or switch to `pypandoc-binary` (bundles pandoc) — that's the sub-decision below.
-**WeasyPrint on Windows** pulls GTK/Pango native libs; if install is painful, note it — it's a factor
-in the verdict, not a blocker for judging output.
+**Browser/Pandoc binaries:** the current implementation uses the Windows Microsoft Edge install for
+PDF output and `pypandoc-binary` for DOCX output. No Playwright-managed browser download or system
+Pandoc install is required.
 
 ## Files to create
 
@@ -63,8 +61,8 @@ engine/rendering/physical/
   printdoc.py            # PrintDoc content model (dataclasses) — see schema below
   quiz_adapter.py        # to_printdoc(quiz: Quiz) -> PrintDoc
   html_renderer.py       # render_html(printdoc: PrintDoc, *, variant: "quiz"|"key") -> str  (Jinja2)
-  emit_pdf.py            # html_to_pdf(html: str, css_path: str, out_path: str) -> str  (WeasyPrint, lazy import)
-  emit_docx.py           # html_to_docx(html: str, reference_docx: str, out_path: str) -> str (pypandoc, lazy import)
+  emit_pdf.py            # html_to_pdf(html: str, css_path: str, out_path: str) -> str  (Edge via Playwright, lazy import)
+  emit_docx.py           # html_to_docx(html: str, reference_docx: str, out_path: str) -> str (pypandoc-binary, lazy import)
   reference_doc.py       # build_reference_docx(out_path) -> str  (python-docx; styles from default_styles)
   spike.py               # dev CLI (see below)
   templates/
@@ -141,8 +139,8 @@ scanning — this is a dev tool, not the orchestrator.
 ## How to run / verify (implementer)
 
 ```powershell
-py -m pip install -r api/requirements.txt        # pulls weasyprint, pypandoc
-# ensure pandoc is installed (winget install JohnMacFarlane.Pandoc) or switch to pypandoc-binary
+py -m pip install -r api/requirements.txt        # pulls playwright and pypandoc-binary
+# ensure Microsoft Edge is installed and allowed by device policy
 py -m engine.rendering.physical.spike --input engine/tests/fixtures/<a-quiz> --output out/spike
 ```
 Pick **three** fixtures from `engine/tests/fixtures` that together exercise: (a) MC with short choices
@@ -165,16 +163,16 @@ data; fictional content only).
 ## Optional smoke test (nice to have)
 `engine/tests/unit/test_printdoc_adapter.py`: build a 2-question `Quiz` in-memory, assert
 `to_printdoc` yields the right block count, question numbers, two-column flag, and answer-key rows.
-Pure-Python, no Pandoc/WeasyPrint needed (don't make the suite depend on native libs).
+Pure-Python, no Edge/Pandoc needed (don't make the suite depend on native libs).
 
 ## Guardrails that apply
 - **Non-destructive:** live pipeline untouched (see the NOT-list up top).
-- **Lazy imports:** `import weasyprint` / `import pypandoc` only inside `emit_pdf`/`emit_docx` functions,
+- **Lazy imports:** import Playwright / `pypandoc` only inside `emit_pdf`/`emit_docx` functions,
   so importing the engine doesn't require the native libs.
 - **No PII / FERPA:** fixtures and any hand-authored sample quiz use fictional content only; `out/` is
   gitignored — keep generated files out of the repo.
 - **Offline:** no network in the render path.
-- **Don't add `weasyprint`/`pypandoc` to the repo-root `requirements.txt`** (kept lean for the Netlify
+- **Don't add Playwright / `pypandoc-binary` to the repo-root `requirements.txt`** (kept lean for the Netlify
   web build in the sibling QuizForge repo); they go in `api/requirements.txt`.
 
 ---
@@ -183,9 +181,10 @@ Pure-Python, no Pandoc/WeasyPrint needed (don't make the suite depend on native 
 - **html→docx engine: `pypandoc-binary` (bundled Pandoc).** Initial build used system Pandoc via
   `pypandoc`, which stopped at DOCX emission (no `pandoc` on PATH). Switched to `pypandoc-binary` so
   no teacher ever installs Pandoc; `api/requirements.txt` updated.
-- **PDF engine: headless Chromium via Playwright** (`emit_pdf.py` rewritten). WeasyPrint was tried
-  first and failed on Windows for missing GTK/Pango (`libgobject-2.0-0`, error `0x7e`). Adam chose
-  Chromium for highest fidelity + self-contained install (`py -m playwright install chromium`).
+- **PDF engine: installed Microsoft Edge via Playwright** (`emit_pdf.py` rewritten again on
+  2026-06-29). WeasyPrint was tried first and failed on Windows for missing GTK/Pango
+  (`libgobject-2.0-0`, error `0x7e`). The initial Chromium download path was replaced because
+  district-managed PCs may block Playwright's browser download; Edge is expected on Windows.
   `api/requirements.txt`: `weasyprint` → `playwright`.
 - **Verdict:** DOCX fidelity approved after round-2 template fixes (code-stimulus de-styling + boxing,
   inter-question spacing, title de-dup, categorization paper instruction). Full pipeline emits HTML +

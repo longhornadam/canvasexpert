@@ -67,7 +67,7 @@ def test_generate_note_outputs_logs_converter_warnings(monkeypatch, tmp_path):
         raise RuntimeError("Pandoc unavailable")
 
     def missing_pdf(html: str, css_path: str, out_path: str) -> str:
-        raise RuntimeError("Chromium unavailable")
+        raise RuntimeError("Microsoft Edge unavailable")
 
     monkeypatch.setattr(emit_docx, "html_to_docx", missing_docx)
     monkeypatch.setattr(emit_pdf, "html_to_pdf", missing_pdf)
@@ -78,7 +78,7 @@ def test_generate_note_outputs_logs_converter_warnings(monkeypatch, tmp_path):
         assert artifact == {"docx_path": "", "pdf_path": ""}
     log_text = Path(results["log_path"]).read_text(encoding="utf-8")
     assert "PHYSICAL RENDER WARNING [note Support docx]: Pandoc unavailable" in log_text
-    assert "PHYSICAL RENDER WARNING [note KEY pdf]: Chromium unavailable" in log_text
+    assert "PHYSICAL RENDER WARNING [note KEY pdf]: Microsoft Edge unavailable" in log_text
 
 
 def test_generate_note_outputs_exemplar_mode_emits_exemplar_and_key(monkeypatch, tmp_path):

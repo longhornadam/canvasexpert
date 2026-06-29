@@ -10,7 +10,7 @@
 This is the first thing that makes tier differentiation **visible on paper**. One filled note JSON →
 the *same* notes printed at Support / Core / Accelerate / Extend (more blanks as you go up) + a filled
 answer key. It exercises the whole stack end-to-end: a new **NoteForge** contract → adapter →
-`PrintDoc` (with `Slot`s) → `redact()` (slice 3) → HTML substrate → Chromium PDF + Pandoc DOCX.
+`PrintDoc` (with `Slot`s) → `redact()` (slice 3) → HTML substrate → Edge PDF + Pandoc DOCX.
 
 Scope is deliberately ONE note style: **guided cloze** (fill-in-the-blank prose). It's the workhorse
 and the simplest. Cornell / Frayer / boxes-and-bullets are cheap follow-ons on the same spine (a later
@@ -167,7 +167,7 @@ feels heavy; note it in the CLI `--help`.)
    into the student HTML at any tier (assert a known Extend-blanked term is absent).
 3. **Answer key:** `filled(printdoc)` HTML contains every answer term.
 4. **Exemplar mode:** renders all slots filled, no redaction.
-5. **Render smoke (skip-guarded):** if Chromium+Pandoc present, `note_spike` writes non-empty PDFs/DOCX
+5. **Render smoke (skip-guarded):** if Edge+Pandoc present, `note_spike` writes non-empty PDFs/DOCX
    for each tier + KEY.
 Keep full `pytest` green.
 

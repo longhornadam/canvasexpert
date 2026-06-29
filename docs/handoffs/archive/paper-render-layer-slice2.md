@@ -2,9 +2,9 @@
 
 **Parent spec:** `docs/handoffs/paper-render-layer.md`. **Predecessor:** `paper-render-layer-slice1.md`
 (the non-destructive spike, now committed on `dev` at `270c385`).
-**Lane:** Toyota (well-scoped), with one guardrail-adjacent note (Playwright provisioning).
+**Lane:** Toyota (well-scoped), with one guardrail-adjacent note (Edge/Playwright availability).
 **Status:** ready to implement. Slice 1's fidelity verdict is **approved** (DOCX + PDF, incl. code,
-prose, and poetry stimuli). Engines settled: **PDF = headless Chromium (Playwright)**, **DOCX =
+prose, and poetry stimuli). Current engine: **PDF = installed Microsoft Edge via Playwright**, **DOCX =
 Pandoc via `pypandoc-binary`**.
 
 ## Goal
@@ -80,8 +80,8 @@ def generate_physical_outputs(quiz: Quiz, output_folder: str) -> Dict[str, str]:
 - **Back-compat:** `quiz_path`/`key_path` keep their meaning (the `.docx`, same filenames as today) so
   `orchestrator.py` and `push.py` keep working untouched. PDFs are **additive** (`*_pdf_path`).
 - **Graceful degradation:** a small `_try(fn, label)` helper runs an emit, and on `RuntimeError`
-  (Chromium/Pandoc not provisioned) logs a clear line into `physical_validation.log` and continues, so
-  a teacher who hasn't run `playwright install chromium` yet still gets the DOCX (and vice-versa).
+  (Edge/Pandoc unavailable) logs a clear line into `physical_validation.log` and continues, so
+  a teacher still gets whichever format can be emitted.
   Surface the first missing-engine message to the webui (see step 3).
 
 ### 2. Delete the legacy renderer code — `packagers/physical_handler.py`
@@ -99,16 +99,15 @@ and the `_log_*` stat helpers it calls, and the `PhysicalHandler` class wrapper.
   `quiz_pdf_path`/`key_pdf_path` when present.
 - `api/webui/routes/push.py::api_physical_quiz` — the success JSON / copy says "printable DOCX bundle";
   include the new PDF paths in the response and update copy to "PDF + DOCX". If `generate_physical_outputs`
-  recorded a missing-engine warning, return it so the UI can tell the teacher to run
-  `py -m playwright install chromium`.
+  recorded a missing-engine warning, return it so the UI can tell the teacher whether Edge or Pandoc
+  is unavailable.
 - Check the download/open surface (`pages.py` open-path roots already include `Finished_Exports`; the
   `download_work`/`push_quiz.html`/`push.js` paths) still list the produced files — PDFs should appear.
 
 ### 4. Provisioning (flag; small follow-on, not core slice 2)
-Chromium must be present: `py -m playwright install chromium` (~150 MB download). For the local app this
-belongs in first-run/onboarding (`docs/handoffs/onboarding-wizard.md`) — detect-and-offer, since
-**district-managed machines may block the download** ([[distribution-strategy]]). Out of scope to fully
-solve here; leave a clear TODO + the graceful-degradation message so the app is usable meanwhile.
+Microsoft Edge must be present and allowed by device policy. The local app uses the default Edge
+install and supports `CANVAS_EXPERT_EDGE_PATH` for nonstandard installs. Leave a clear
+missing-Edge message so the app is usable meanwhile.
 
 ## Tests
 
@@ -118,7 +117,7 @@ solve here; leave a clear TODO + the graceful-degradation message so the app is 
    stimulus body line, and blank; and `render_html(..., "key")` contains every answer row + the total.
    This is the regression baseline that replaces "diff the old DOCX." Author the fixture with fictional
    content only (FERPA).
-2. **Native render smoke test** behind a skip guard: `pytest.importorskip` + a check that Chromium/Pandoc
+2. **Native render smoke test** behind a skip guard: `pytest.importorskip` + a check that Edge/Pandoc
    are available; if so, assert `generate_physical_outputs` writes a non-empty `.pdf` and `.docx`. Never
    make CI hard-depend on the browser/Pandoc.
 3. Keep green: `py -m pytest api/tests engine/tests` (esp. `api/tests/test_route_contract.py`,
@@ -129,8 +128,8 @@ solve here; leave a clear TODO + the graceful-degradation message so the app is 
 - DropZone run (`orchestrator`) and the webui `POST /api/physical/quiz` both drop `.docx` **and** `.pdf`
   for quiz + key into the `Finished_Exports` quiz folder, plus the unchanged `_RATIONALE.docx` and log.
 - Legacy python-docx student/key code deleted; rationale + log stats unchanged.
-- With Chromium/Pandoc absent, the DOCX (or whichever engine is present) still emits and a clear
-  "install chromium" message is recorded/surfaced — no traceback, no empty bundle.
+- With Edge/Pandoc absent, the DOCX (or whichever engine is present) still emits and a clear
+  missing-engine message is recorded/surfaced — no traceback, no empty bundle.
 - HTML content-parity test passes; full `pytest` green.
 
 ## Guardrails / do NOT touch

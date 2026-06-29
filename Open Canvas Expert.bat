@@ -13,8 +13,8 @@ if errorlevel 1 (
 
 REM --- First-run / dependency-change guard --------------------------------------
 REM Provision only when requirements.txt differs from what we last installed, so
-REM normal launches go straight to the app (pip + the ~150MB Chromium download are
-REM slow). The marker lives in %LOCALAPPDATA% (per-user, no admin, off the repo).
+REM normal launches go straight to the app. The marker lives in %LOCALAPPDATA%
+REM (per-user, no admin, off the repo).
 set "MARKER=%LOCALAPPDATA%\CanvasExpert\reqs.hash"
 set "CUR="
 for /f "skip=1 delims=" %%H in ('certutil -hashfile requirements.txt SHA256 2^>nul') do (
@@ -29,7 +29,6 @@ if not "%CUR%"=="%OLD%" (
   echo This runs once and needs no admin rights. Please wait.
   echo.
   py -m pip install --user -r requirements.txt || (echo. & echo Setup failed - check your internet connection and try again. & pause & exit /b 1)
-  py -m playwright install chromium || (echo. & echo Browser download failed - check your internet connection and try again. & pause & exit /b 1)
   if not exist "%LOCALAPPDATA%\CanvasExpert" mkdir "%LOCALAPPDATA%\CanvasExpert"
   if defined CUR ( >"%MARKER%" echo %CUR% )
   echo.

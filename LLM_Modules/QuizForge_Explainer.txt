@@ -5,7 +5,7 @@ QuizForge is a tool designed to help teachers quickly generate, validate, and pa
 
 ## Key Features
 - **AI-powered quiz generation**: Create quizzes from objectives, standards, or custom prompts.
-- **Canvas compatibility**: Outputs are formatted for Canvas New Quizzes (QTI 1.2), including ZIPs and DOCX files.
+- **Canvas compatibility**: Outputs are formatted for Canvas New Quizzes (QTI 1.2), including ZIPs and printable DOCX/PDF files.
 - **Multiple question types**: Supports MC, MA, TF, FITB, Essay, File Upload, Matching, Ordering, Categorization, Stimulus blocks, and more.
 - **Rationales and feedback**: Generates rationales for each question to support custom feedback in Canvas.
 - **Accessibility and UDL defaults**: Ensures quizzes are accessible and pedagogically sound by default.

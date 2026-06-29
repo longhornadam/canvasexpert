@@ -38,7 +38,7 @@ language, so nothing gets lost in translation.
   matching, ordering, categorization, stimulus passages, and more). Every
   choice gets a rationale — students learn *why* each answer is right or
   wrong. Quizzes can be pushed live to Canvas, or compiled offline into a
-  Canvas-importable ZIP plus printable Word documents (student copy, answer
+  Canvas-importable ZIP plus printable DOCX/PDF documents (student copy, answer
   key, rationale sheet).
 - **AssignmentForge** — Canvas assignments with submission settings, point
   values, and optional differentiation tiers. A tier is a scaffolded variant
@@ -93,7 +93,7 @@ files you paste whole into MagicSchool, Copilot, or any AI chat:
   work, apply curves with transparent math, and grant extensions — including
   managing your extra-time student list.
 - **QuizForge offline**: quizzes also work with zero Canvas connection via
-  the QuizForge web app — compile to an import ZIP and printable documents,
+  the QuizForge web app — compile to an import ZIP and printable DOCX/PDF documents,
   then import into Canvas by hand.
 
 ## FAQ

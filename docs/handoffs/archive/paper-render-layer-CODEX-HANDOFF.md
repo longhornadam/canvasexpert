@@ -15,7 +15,7 @@ the slice roadmap lives there). The slice 1–5 handoffs in this folder are your
 
 A **paper render layer** that turns authored content into print-ready PDF + DOCX. Architecture =
 **Option C**: render content to **one HTML + print-CSS substrate**, then emit from it two ways:
-- **PDF** via **headless Chromium (Playwright)** — student-locked, highest fidelity.
+- **PDF** via **installed Microsoft Edge (Playwright)** — student-locked, highest fidelity.
 - **DOCX** via **Pandoc (`pypandoc-binary`)** — teacher-editable; styled by a generated reference doc.
 
 Pipeline: `source JSON → adapter → PrintDoc (content model) → [redact(tier)] → render_html → emit_pdf /
@@ -28,7 +28,7 @@ Key modules under `engine/rendering/physical/`:
 - `quiz_adapter.py` (`to_printdoc(quiz)`) and `note_adapter.py` (`to_printdoc(note_dict)`,
   `load_noteforge_json`, `parse_noteforge_json`).
 - `html_renderer.py` — `render_html(printdoc, *, variant, tier=None)`; `variant ∈ {"quiz","key","note"}`.
-- `emit_pdf.py` (Playwright Chromium, **lazy import**), `emit_docx.py` (pypandoc, lazy), `reference_doc.py`.
+- `emit_pdf.py` (Playwright launching installed Edge, **lazy import**), `emit_docx.py` (pypandoc, lazy), `reference_doc.py`.
 - `tiers.py` — `TIERS=("Support","Core","Accelerate","Extend")`, `TIER_BLANK_FRACTION=25/50/90/100%`.
 - `redact.py` — `redact(printdoc, tier)` (pure, deepcopy, deterministic via sha256(slot.id), monotonic),
   `filled(printdoc)` (answer key = all slots given), `iter_slots(doc)` (recursive walk).
@@ -56,10 +56,10 @@ Types: `guided_notes`, plus `cornell`/`frayer` after slice 5. `mode ∈ {blank, 
   names/IDs/grades/submissions never touch the repo, fixtures, logs, or commits. Read `api/README.md`
   before touching Canvas push logic — it records hard-won live-API facts (e.g. New Quizzes write-back is
   parked on a PAT/403 limit). The Canvas token lives only in the OS keychain / `api/.env` (gitignored).
-- **Engines are settled:** PDF = Chromium/Playwright (chosen over WeasyPrint's GTK pain), DOCX =
-  `pypandoc-binary` (bundled, no PATH). Provisioning: `py -m playwright install chromium` installs to
-  `%USERPROFILE%\AppData\Local\ms-playwright` — **user area, no admin** → passes the district's "nothing
-  installed beyond the user's account" rule (the download itself is not expected to be blocked).
+- **Engines are settled:** PDF = installed Microsoft Edge via Playwright (chosen over WeasyPrint's GTK
+  pain and Playwright's downloaded Chromium on district-managed PCs), DOCX = `pypandoc-binary`
+  (bundled, no PATH). The app uses the standard Windows Edge install; set `CANVAS_EXPERT_EDGE_PATH`
+  only for nonstandard Edge locations.
 - **Playwright sync API must not run inside an async event loop.** Both current live call sites are sync
   (CLI; sync FastAPI route in a threadpool) — keep it that way, or wrap with `anyio.to_thread.run_sync`.
 - **Renderers trust input — no validation in the render path.** Convergent HTML only (semantic tables,
