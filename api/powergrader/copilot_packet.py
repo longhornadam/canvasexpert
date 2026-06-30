@@ -6,6 +6,11 @@ import os
 
 from webui.source_materials import estimate_text_tokens
 
+try:
+    import feedback_pipeline as fp
+except ModuleNotFoundError:
+    from api import feedback_pipeline as fp
+
 from .packet import safe_ai_packet_name
 
 
@@ -82,10 +87,20 @@ def _assignment_info_text(assignment_name: str, llm_bundle: dict) -> str:
 
 def _rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) -> str:
     persona = persona or {}
-    ta_name = (persona.get("name") or "").strip() or "your AI teaching assistant"
+    ta_name = (persona.get("name") or "").strip() or "your teaching assistant"
     personality = (persona.get("personality") or "").strip()
-    disclosure = f"Drafted by {ta_name} (AI), reviewed by your teacher."
+    signoff = fp.persona_signoff(persona, ta_name)
     rubric = (rubric_text or "").strip()
+    feedback_hint = "Brief rubric-based feedback."
+    disclosure_line = ""
+    signoff_rule = "- Do not add a separate signature or disclosure beyond the selected persona.\n"
+    if signoff:
+        feedback_hint = "Brief rubric-based feedback. End with the persona signoff exactly once."
+        disclosure_line = f',\n  "disclosure": "{signoff}"'
+        signoff_rule = (
+            f"- End feedback with this persona signoff exactly once: {signoff}\n"
+            "- Do not add a separate signature or disclosure.\n"
+        )
     return (
         "# Rubric and TA Personality - SAFE\n\n"
         f"Assignment: {assignment_name}\n\n"
@@ -103,8 +118,7 @@ def _rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) 
         '  "pseudonym": "<copy from StudentWork exactly>",\n'
         '  "item_id": "<copy from StudentWork exactly>",\n'
         '  "score": 2,\n'
-        '  "feedback": "Brief rubric-based feedback. End with the disclosure sentence exactly once.",\n'
-        f'  "disclosure": "{disclosure}"\n'
+        f'  "feedback": "{feedback_hint}"{disclosure_line}\n'
         "}\n"
         "```\n\n"
         "Rules:\n\n"
@@ -112,7 +126,7 @@ def _rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) 
         "- Copy `pseudonym` and `item_id` exactly.\n"
         "- `score` may be a number or null.\n"
         "- `feedback` must be non-empty.\n"
-        "- End feedback with the disclosure sentence exactly once.\n"
+        f"{signoff_rule}"
         "- Do not identify students.\n"
         "- Do not mention real names.\n"
     )

@@ -1,11 +1,13 @@
-# CLAUDE.md - Canvas Expert
+# AGENTS.md - Canvas Expert
 
-Guidance for Claude Code and any AI agent working in this repo. Read this before editing.
+Guidance for any AI agent working in this repo. Read this before editing.
 This file is the canonical project guidance; keep it current when repo structure,
-handoff locations, safety rules, major workflows, or tool-routing conventions change.
-Do not create parallel agent guidance that conflicts with this file. If another
-agent-specific file is introduced later, make it point back here instead of duplicating
-policy.
+handoff locations, safety rules, branch policy, major workflows, or tool-routing
+conventions change.
+
+Do not create parallel root guidance files named for specific AI vendors or tools.
+If a tool-specific note is unavoidable, make it point back here instead of
+duplicating policy.
 
 ## What this is
 
@@ -25,6 +27,24 @@ Authoring contracts live in **`LLM_Modules/*_Base.md`** (QuizForge, AssignmentFo
 PageForge, RubricForge). These are **canonical**. `api/` consumes them; never fork or
 "fix" a contract by editing backend code. For confirmed Canvas API behavior and push
 details, read **`api/README.md`** before touching push logic.
+
+## Branch policy
+
+This repo uses exactly two durable branches:
+
+- **`main`** - stable baseline / release branch.
+- **`dev`** - active integration branch and the default branch for agent work.
+
+Agents must respect this two-branch model:
+
+- Do normal work on `dev`, unless the user explicitly says otherwise.
+- Do not create, push, or preserve extra long-lived branches.
+- Before claiming a machine is up to date, fetch from the remote and compare the
+  current branch against `origin/dev` and `origin/main`.
+- If a temporary branch is explicitly required for a pull request or experiment,
+  name it clearly, target it back to `dev`, and delete it after merge/closure.
+- Do not merge branch histories or delete branches as cleanup without first checking
+  for unmerged commits and confirming the intended target.
 
 ## Current feature map
 
@@ -98,7 +118,7 @@ a nonstandard location, `CANVAS_EXPERT_EDGE_PATH` can point to `msedge.exe`.
 1. **Never commit secrets.** The Canvas token lives **only** in the OS credential store
    (`keyring`, Windows Credential Manager) for the Web UI, or in `api/.env` (gitignored)
    for CLI. A `.githooks/pre-commit` hook (wired via `core.hooksPath`) blocks the token
-   pattern as a backstop — do not rely on it; don't paste tokens into tracked files,
+   pattern as a backstop - do not rely on it; don't paste tokens into tracked files,
    logs, test fixtures, or commit messages.
 
 2. **Never commit student data (FERPA).** This app reads gradebooks, downloads
@@ -106,18 +126,18 @@ a nonstandard location, `CANVAS_EXPERT_EDGE_PATH` can point to `msedge.exe`.
    content, grades, and private notes must **never** land in the repo, a commit, a test
    fixture, or printed output that could be captured. Student exports go to the synced
    workspace / local output dirs (gitignored: `api/out/`, `api/temp/`, reports roots),
-   in-tenant and FERPA-safe — never the repo. When in doubt, treat anything course- or
+   in-tenant and FERPA-safe - never the repo. When in doubt, treat anything course- or
    roster-derived as PII.
 
 3. **No district-specific config in the repo.** District URLs, calendars, rubric names,
    and the like belong in the **UI** and the **user-chosen synced workspace** (default
-   `OneDrive\CanvasExpert\`, overridable; last-writer-wins `settings.json`) — not in source.
-   The repo is district-agnostic: `CANVAS_BASE_DEFAULT` is empty (an empty base is the
-   signal that first-run onboarding isn't complete); calendars are **data-driven** — the
-   app lists whatever CSVs live in the workspace `Calendars` folder. The only calendar
-   content shipped in-repo is a blank `calendar_template.csv` and a **fictional**
-   `Summer_Session_Sample.csv` for testing. Do not reintroduce a real district's URL,
-   calendar, or school/teacher name anywhere in source.
+   `OneDrive\CanvasExpert\`, overridable; last-writer-wins `settings.json`) - not in
+   source. The repo is district-agnostic: `CANVAS_BASE_DEFAULT` is empty (an empty base
+   is the signal that first-run onboarding isn't complete); calendars are
+   **data-driven** - the app lists whatever CSVs live in the workspace `Calendars`
+   folder. The only calendar content shipped in-repo is a blank `calendar_template.csv`
+   and a **fictional** `Summer_Session_Sample.csv` for testing. Do not reintroduce a
+   real district's URL, calendar, or school/teacher name anywhere in source.
 
 4. **Local-only, never exposed.** The Web UI binds `127.0.0.1`. Do not change the bind
    address, add public routes, or otherwise make this app reachable off the machine.
@@ -126,21 +146,22 @@ a nonstandard location, `CANVAS_EXPERT_EDGE_PATH` can point to `msedge.exe`.
    app.
 
 5. **AI packet wording must stay honest.** SAFE files use pseudonyms and scrub obvious
-   identifiers, but do not promise that Copilot, ChatGPT, OpenRouter, or any other model
-   is "FERPA safe", "guaranteed anonymous", or unable to infer identity. Tell teachers
-   to review SAFE files before uploading them.
+   identifiers, but do not promise that Copilot, ChatGPT, OpenRouter, or any other
+   model is "FERPA safe", "guaranteed anonymous", or unable to infer identity. Tell
+   teachers to review SAFE files before uploading them.
 
 ## Ferrari / Toyota workflow
 
 We split planning from implementation to save tokens, compute, and cost:
 
-- **Ferrari = Claude Code (this tool).** Use for planning, architecture, security-
-  sensitive changes, cross-cutting refactors, and anything touching the guardrails above.
-- **Toyota = VS Code agents.** Use for well-scoped implementation where the plan is
-  already clear.
+- **Ferrari = high-capability planning agent.** Use for planning, architecture,
+  security-sensitive changes, cross-cutting refactors, and anything touching the
+  guardrails above.
+- **Toyota = lower-cost implementation agent.** Use for well-scoped implementation
+  where the plan is already clear.
 
 **A plan handed off to a Toyota implementer must be self-contained** so the cheap agent
-never has to round-trip back to the expensive planner. A good handoff states:
+never has to round-trip back to the planner. A good handoff states:
 
 - Exact files to change (paths) and the function/class signatures involved
 - The behavior change, with edge cases called out
@@ -174,7 +195,7 @@ Check in this order:
 
 1. Project-local `TOOLS.md`
 2. Project-local `tools/manifests/`
-3. Global Codex skills/plugins, if available
+3. Globally available skills/plugins/tools, if available
 
 Prefer tools for:
 
@@ -219,16 +240,16 @@ The local launcher installs Python dependencies only. Printable PDF generation
 requires Microsoft Edge to be installed and allowed by device policy; it does not
 download a Playwright-managed browser.
 
-## Onboarding wizard — implemented
+## Onboarding wizard - implemented
 
-The first-run experience (workspace-folder picker → Canvas URL → token → optional
+The first-run experience (workspace-folder picker -> Canvas URL -> token -> optional
 calendar activation) is implemented. An unconfigured app redirects to `/welcome`
 automatically; a "Re-run setup wizard" link is available on Settings. The historical
 build spec is archived under `docs/handoffs/archive/onboarding-wizard.md`.
 
 ## Cleanup backlog
 
-The district de-hardcoding / PII purge is **done** (hard-coded district URL, calendars, and
-labels removed; the student-PII `default_docs/settings.json` deleted; rubric metadata
-scrubbed; calendars made data-driven). Nothing outstanding here — keep guardrails #2 and #3
-from regressing.
+The district de-hardcoding / PII purge is **done** (hard-coded district URL, calendars,
+and labels removed; the student-PII `default_docs/settings.json` deleted; rubric
+metadata scrubbed; calendars made data-driven). Nothing outstanding here - keep
+guardrails #2 and #3 from regressing.

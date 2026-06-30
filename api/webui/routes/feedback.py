@@ -40,7 +40,7 @@ def _vault():
 
 
 def _ai_ta_name():
-    return config.get_ai_ta_persona().get("name") or "your AI teaching assistant"
+    return config.get_ai_ta_persona().get("name") or "your teaching assistant"
 
 
 def _run(gen):
@@ -376,11 +376,13 @@ def feedback_run_prepare(
     # as one self-contained package (it is teacher-authored, not student PII).
     rubric_text = _load_rubric_text(rubric_name)
     protected = config.active_protected_names()
+    persona = config.get_persona()
     result = fp.write_safe_and_private(
         bundle, vault,
         workspace.feedback_folder("SAFE"),
         workspace.feedback_folder("PRIVATE"),
-        config.get_persona().get("name") or _ai_ta_name(),
+        persona.get("name") or _ai_ta_name(),
+        persona=persona,
         protected=protected,
         submissions=subs,
         rubric_text=rubric_text,

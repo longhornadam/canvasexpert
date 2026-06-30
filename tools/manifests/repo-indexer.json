@@ -26,7 +26,7 @@
   "source_of_truth": [
     "Repository filesystem",
     "README.md",
-    "CLAUDE.md",
+    "AGENTS.md",
     "docs/README.md"
   ],
   "notes": "Planned tool. Until implemented, use rg and targeted file reads to approximate this behavior."

@@ -25,7 +25,7 @@
   "source_of_truth": [
     "git diff",
     "git status",
-    "CLAUDE.md safety guardrails"
+    "AGENTS.md safety guardrails"
   ],
-  "notes": "Planned tool. Until implemented, use git diff --stat, targeted diffs, and the guardrails in CLAUDE.md."
+  "notes": "Planned tool. Until implemented, use git diff --stat, targeted diffs, and the guardrails in AGENTS.md."
 }

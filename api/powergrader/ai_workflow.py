@@ -166,7 +166,8 @@ def run_ai_workflow(
             vault,
             safe_dir,
             private_dir,
-            ai_ta_name=persona.get("name") or "your AI teaching assistant",
+            ai_ta_name=persona.get("name") or "your teaching assistant",
+            persona=persona,
             protected=config.active_protected_names(),
             submissions=submitted,
             rubric_text=rubric_text,
@@ -254,7 +255,7 @@ def run_ai_workflow(
             }
 
         safe_students = len(llm_bundle.get("students") or [])
-        packet_info = packet.build_safe_ai_packet(assignment_name, safe_dir, write_result, llm_bundle)
+        packet_info = packet.build_safe_ai_packet(assignment_name, safe_dir, write_result, llm_bundle, persona)
         privacy_artifacts.update(packet_info)
         privacy_steps.append(privacy.privacy_step(
             "safe_ai_packet", "Created Safe AI Packet", "ok",

@@ -23,6 +23,7 @@ CONTRACT_FILES = {
     "Author an Assignment (AssignmentForge).txt": ("assignment", "ASSIGNMENTFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "AssignmentForge_Base.md")),
     "Author a Page (PageForge).txt": ("page", "PAGEFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "PageForge_Base.md")),
     "Author a Rubric (RubricForge).txt": ("rubric", "RUBRICFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "RubricForge_Base.md")),
+    "Author a TA (TAForge).txt": ("TA persona", "TAFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "TAForge_Base.md")),
 }
 
 
@@ -112,7 +113,7 @@ def _about_text():
         "conversation inside that one file's instructions.\n\n"
         "File categories:\n"
         "- START HERE: Canvas Expert overview and how the system fits together.\n"
-        "- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, and RubricForge.\n"
+        "- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, RubricForge, and TAForge.\n"
         "- Scoring skills: one file per valid rubric in the default rubric library.\n\n"
         "Canvas Expert seeds missing files in this folder, then leaves existing files\n"
         "alone so you can refine them by hand in VS Code.\n"

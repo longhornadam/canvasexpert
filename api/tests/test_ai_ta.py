@@ -16,6 +16,7 @@ def test_build_library_writes_expected_files(tmp_path):
     assert "Author an Assignment (AssignmentForge).txt" in names
     assert "Author a Page (PageForge).txt" in names
     assert "Author a Rubric (RubricForge).txt" in names
+    assert "Author a TA (TAForge).txt" in names
     assert "_about this folder.txt" in names
     assert "Score with - ELA 7 Standard Writing Rubric.txt" in names
 

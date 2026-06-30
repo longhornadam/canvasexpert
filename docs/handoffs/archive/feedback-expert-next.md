@@ -153,7 +153,7 @@ Assignments-first headline.
 
 Only pseudonymized payloads leave the machine; the safety gate hard-blocks non-green even when
 pseudonymization is "internal". Vault + OpenRouter key stay synced-private / keyring, never the
-repo. Disclosure on by default. Cost-confirm before paid calls. See `CLAUDE.md` + the
+repo. Disclosure on by default. Cost-confirm before paid calls. See `AGENTS.md` + the
 `feedbackexpert` memory.
 
 ## Verification (Phase B — done)

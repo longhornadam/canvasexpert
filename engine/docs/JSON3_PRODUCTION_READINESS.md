@@ -4,7 +4,7 @@
 > QuizForge JSON payload. Applies to **QuizForge-Local** and **QuizForge-Web**
 > (both run the engine). The **QuizForge-API** backend does NOT use this path; it
 > compiles QuizForge JSON straight to Canvas via its own `api/transform.py`.
-> Orientation: root `CLAUDE.md`.
+> Orientation: root `AGENTS.md`.
 
 ## Feature flag
 - Env var: `QUIZFORGE_SPEC_MODE`

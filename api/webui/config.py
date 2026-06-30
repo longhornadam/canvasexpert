@@ -439,7 +439,14 @@ def set_tier_tags(tags: dict):
 # FeedbackExpert — AI-TA persona library (synced, multiple starters)
 # --------------------------------------------------------------------------
 
-AI_TA_PERSONA_DEFAULT = {"name": "", "personality": ""}
+AI_TA_PERSONA_DEFAULT = {
+    "name": "",
+    "personality": "",
+    "signoff_policy": "none",
+    "signoff_text": "",
+}
+
+DEFAULT_AI_DISCLOSURE_SIGNOFF = "Drafted by {name} (AI), reviewed by your teacher."
 
 # Three shipped starter personas — Sage (default), Pip, Coach Vale
 BUILTIN_PERSONAS = [
@@ -450,6 +457,8 @@ BUILTIN_PERSONAS = [
             "A calm, thoughtful mentor. Warm and patient; names what's working "
             "before what to fix; precise without being cold."
         ),
+        "signoff_policy": "ai_disclosure",
+        "signoff_text": DEFAULT_AI_DISCLOSURE_SIGNOFF,
     },
     {
         "id": "pip",
@@ -458,6 +467,8 @@ BUILTIN_PERSONAS = [
             "Upbeat and energetic; plain language, short punchy sentences. "
             "Built for reluctant readers — high warmth, low jargon."
         ),
+        "signoff_policy": "ai_disclosure",
+        "signoff_text": DEFAULT_AI_DISCLOSURE_SIGNOFF,
     },
     {
         "id": "coach_vale",
@@ -466,8 +477,12 @@ BUILTIN_PERSONAS = [
             "Direct and action-oriented; frames feedback as 'your next rep.' "
             "Concrete, motivating, no fluff."
         ),
+        "signoff_policy": "ai_disclosure",
+        "signoff_text": DEFAULT_AI_DISCLOSURE_SIGNOFF,
     },
 ]
+
+BUILTIN_PERSONAS_BY_ID = {p["id"]: p for p in BUILTIN_PERSONAS}
 
 
 def _persona_folder() -> str | None:
@@ -530,6 +545,17 @@ def _list_file_personas() -> list[dict]:
         persona_id = str(data.get("id") or os.path.splitext(name)[0]).strip()
         display_name = str(data.get("name") or persona_id).strip()
         personality = str(data.get("personality") or "").strip()
+        builtin_defaults = BUILTIN_PERSONAS_BY_ID.get(persona_id) if data.get("builtin") else None
+        signoff_policy = str(
+            data.get("signoff_policy")
+            if data.get("signoff_policy") is not None
+            else (builtin_defaults or {}).get("signoff_policy", "none")
+        ).strip()
+        signoff_text = str(
+            data.get("signoff_text")
+            if data.get("signoff_text") is not None
+            else (builtin_defaults or {}).get("signoff_text", "")
+        ).strip()
         if not persona_id or not display_name:
             continue
         if persona_id in seen:
@@ -539,6 +565,8 @@ def _list_file_personas() -> list[dict]:
             "id": persona_id,
             "name": display_name,
             "personality": personality,
+            "signoff_policy": signoff_policy,
+            "signoff_text": signoff_text,
             "builtin": bool(data.get("builtin", False)),
             "source": "file",
             "path": path,
@@ -560,7 +588,10 @@ def list_personas() -> list[dict]:
     ids = {p["id"] for p in builtins}
     custom_raw = _synced_state().get("custom_personas", [])
     custom = [{"id": c.get("id", ""), "name": c.get("name", ""),
-               "personality": c.get("personality", ""), "builtin": False,
+               "personality": c.get("personality", ""),
+               "signoff_policy": c.get("signoff_policy", "none"),
+               "signoff_text": c.get("signoff_text", ""),
+               "builtin": False,
                "source": "settings"}
               for c in custom_raw if c.get("name") and c.get("id") not in ids]
     return builtins + custom
@@ -570,7 +601,12 @@ def get_persona(persona_id: str = "") -> dict:
     """Get a persona by id, falling back to 'sage' or blank default."""
     for p in list_personas():
         if p["id"] == (persona_id or "sage"):
-            return {"name": p["name"], "personality": p["personality"]}
+            return {
+                "name": p["name"],
+                "personality": p["personality"],
+                "signoff_policy": p.get("signoff_policy", "none"),
+                "signoff_text": p.get("signoff_text", ""),
+            }
     return dict(AI_TA_PERSONA_DEFAULT)
 
 
@@ -582,10 +618,12 @@ def save_custom_persona(persona_id: str, name: str, personality: str):
     custom = state.setdefault("custom_personas", [])
     for i, p in enumerate(custom):
         if p.get("id") == persona_id:
-            custom[i] = {"id": persona_id, "name": name.strip(), "personality": personality.strip()}
+            custom[i] = {"id": persona_id, "name": name.strip(), "personality": personality.strip(),
+                         "signoff_policy": "none", "signoff_text": ""}
             _save_synced_key("custom_personas", custom)
             return
-    custom.append({"id": persona_id, "name": name.strip(), "personality": personality.strip()})
+    custom.append({"id": persona_id, "name": name.strip(), "personality": personality.strip(),
+                   "signoff_policy": "none", "signoff_text": ""})
     _save_synced_key("custom_personas", custom)
 
 

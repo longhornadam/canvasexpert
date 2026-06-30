@@ -3,7 +3,7 @@
 > **STATUS: IMPLEMENTED (on `dev`).** This is a historical build spec, kept for context.
 > All six tasks shipped, plus **Push to Canvas** (Phase C) and **plain-text code-file scoring**
 > (the v1.1 "attachment-only excluded" deferral below was closed — `.py`/`.html`/etc. uploads
-> are now scored). For current behavior see `CLAUDE.md` and
+> are now scored). For current behavior see `AGENTS.md` and
 > `docs/contracts/feedback-scoring-contract.md`; don't treat the "OUT/deferred" items below as
 > still-open without checking the code.
 
@@ -54,7 +54,7 @@ pseudonym from the start and never contain a real name to clean up.
 
 ---
 
-## Guardrails (non-negotiable — see CLAUDE.md)
+## Guardrails (non-negotiable — see AGENTS.md)
 
 - **FERPA:** real names / canvas_id / sis_id / nicknames are PII. They live **only** in the
   vault (`FeedbackExpert/_system/vault/`, synced-private) and the PRIVATE folder. Never the

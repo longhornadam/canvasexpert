@@ -1,6 +1,6 @@
 # Handoff: First-run onboarding wizard
 
-**Lane:** Toyota (VS Code agent). **Planner:** Claude Code.
+**Lane:** Toyota (VS Code agent). **Planner:** Ferrari planning agent.
 **Status:** ready to implement. This spec is self-contained — you should not need to ask the
 planner anything. If something here conflicts with the code, trust the code and note it.
 
@@ -12,7 +12,7 @@ folder should live. As of the de-district purge, `CANVAS_BASE_DEFAULT` is `""` �
 install has no Canvas URL at all. We need a friendly, neophyte-proof first-run flow that
 collects: (1) workspace folder location, (2) Canvas URL, (3) API token, (4) optional calendars.
 
-Read `CLAUDE.md` first — guardrails (token only in keyring, no PII/district data in repo,
+Read `AGENTS.md` first — guardrails (token only in keyring, no PII/district data in repo,
 local-only, contracts canonical) are non-negotiable and this feature touches credentials.
 
 ## What already exists (reuse — do NOT rebuild)

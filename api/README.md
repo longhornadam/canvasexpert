@@ -13,7 +13,7 @@ pushes content to live courses via the REST and New Quizzes APIs:
   import, optional API scoring
 - **Download** — submission bundles by assignment or by student
 
-Local-only, never served. See `CLAUDE.md` Guardrails.
+Local-only, never served. See `AGENTS.md` Guardrails.
 
 ## Contracts consumed
 

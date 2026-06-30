@@ -2,7 +2,7 @@
 
 ## Goal
 
-Create a lightweight, reusable convention that helps Codex agents discover available tools, decide when to use them instead of brute-force LLM inspection, and document project-specific tools in a consistent way.
+Create a lightweight, reusable convention that helps AI agents discover available tools, decide when to use them instead of brute-force LLM inspection, and document project-specific tools in a consistent way.
 
 This first pass is documentation, templates, manifests, and routing rules only. Do not build the actual scraper, API inspector, or runtime framework in this task.
 
@@ -10,7 +10,7 @@ This first pass is documentation, templates, manifests, and routing rules only. 
 
 We want two layers:
 
-1. A global Codex habit that applies across projects: use tools for retrieval, parsing, summarization, validation, and reduction before spending LLM context on large raw inputs.
+1. A global agent habit that applies across projects: use tools for retrieval, parsing, summarization, validation, and reduction before spending LLM context on large raw inputs.
 2. A project-local convention for CanvasExpert: Canvas-specific tools and routing rules live in this repo and can evolve with it.
 
 The system should be useful even while some tools are only planned.
@@ -20,7 +20,7 @@ The system should be useful even while some tools are only planned.
 Create or update these files:
 
 ```text
-CLAUDE.md
+AGENTS.md
 README.md
 TOOLS.md
 docs/
@@ -38,24 +38,24 @@ tools/
     tool-readme-template.md
 ```
 
-`CLAUDE.md` is the existing LLM guidance file for this repo. Treat it as the canonical project agent guidance unless the user explicitly asks to replace it. Do not create competing guidance that drifts from `CLAUDE.md`.
+`AGENTS.md` is the existing AI-agent guidance file for this repo. Treat it as the canonical project agent guidance unless the user explicitly asks to replace it. Do not create competing guidance that drifts from `AGENTS.md`.
 
-There is currently no obvious root table of contents for new LLM sessions. `CLAUDE.md` contains important orientation material, but future agents should not have to infer the repo map from scattered files. Add a concise root `README.md` and `docs/README.md` as part of this task, and make them point back to `CLAUDE.md` for authoritative agent guardrails.
+There is currently no obvious root table of contents for new AI-agent sessions. `AGENTS.md` contains important orientation material, but future agents should not have to infer the repo map from scattered files. Add a concise root `README.md` and `docs/README.md` as part of this task, and make them point back to `AGENTS.md` for authoritative agent guardrails.
 
-## CLAUDE.md Requirements
+## AGENTS.md Requirements
 
-Update `CLAUDE.md` as the repo's canonical LLM guidance file.
+Update `AGENTS.md` as the repo's canonical AI-agent guidance file.
 
 Add or update a short section explaining:
 
-- Codex and other LLM agents should read `CLAUDE.md` before editing.
-- `CLAUDE.md` should stay current when repo structure, handoff location, safety guardrails, major workflows, or tool-routing conventions change.
-- Do not create parallel agent guidance files that conflict with `CLAUDE.md`.
-- If another agent-specific file is introduced later, it should reference `CLAUDE.md` rather than duplicate policy.
+- AI agents should read `AGENTS.md` before editing.
+- `AGENTS.md` should stay current when repo structure, handoff location, safety guardrails, major workflows, or tool-routing conventions change.
+- Do not create parallel agent guidance files that conflict with `AGENTS.md`.
+- If another agent-specific file is introduced later, it should reference `AGENTS.md` rather than duplicate policy.
 - Project-local tool awareness now lives in `TOOLS.md` and `tools/manifests`.
 - New active handoffs belong in `docs/handoffs`; completed or historical handoffs belong in `docs/handoffs/archive`.
 
-If an `AGENTS.md` file is still desired for compatibility with agent tooling, keep it very small and make it point to `CLAUDE.md`, `TOOLS.md`, and `docs/README.md`. Do not duplicate the full guardrails or project orientation there.
+If a compatibility note is ever needed for a specific agent tool, keep it very small and make it point to `AGENTS.md`, `TOOLS.md`, and `docs/README.md`. Do not duplicate the full guardrails or project orientation there.
 
 ## Repo Orientation Requirements
 
@@ -66,10 +66,10 @@ It should include:
 - What CanvasExpert is
 - The major top-level directories and what they contain
 - Which files new agents should read first
-- A clear pointer that `CLAUDE.md` is the canonical LLM guidance file
+- A clear pointer that `AGENTS.md` is the canonical AI-agent guidance file
 - Where handoffs live
 - Where tool manifests live
-- The basic run/test commands, or a pointer to `CLAUDE.md` if duplicating would drift
+- The basic run/test commands, or a pointer to `AGENTS.md` if duplicating would drift
 - The core safety guardrails at a high level: no secrets, no student data, no district-specific config, local-only app
 
 Create `docs/README.md` as a documentation index.
@@ -85,22 +85,23 @@ It should include:
 
 Do not move archived handoffs in this task.
 
-## Optional AGENTS.md Requirements
+## Compatibility Guidance Requirements
 
-This repo currently uses `CLAUDE.md` for LLM guidance. `AGENTS.md` is optional and should only be created if useful for compatibility with tools that automatically look for it.
+This repo currently uses `AGENTS.md` for AI-agent guidance. Do not create a second
+root guidance file for compatibility with a specific tool.
 
-If created, `AGENTS.md` should be a thin pointer file:
+If a tool-specific compatibility note is unavoidable, it should be a thin pointer:
 
-- Read `CLAUDE.md` first.
+- Read `AGENTS.md` first.
 - Read `TOOLS.md` before brute-force inspection of large inputs.
 - Read `docs/README.md` to find handoffs, contracts, guides, and references.
-- Preserve the safety guardrails in `CLAUDE.md`.
+- Preserve the safety guardrails in `AGENTS.md`.
 
-Do not duplicate the full project policy in `AGENTS.md`.
+Do not duplicate the full project policy outside `AGENTS.md`.
 
 ## Tool Awareness Policy Requirements
 
-Add a section named `Tool Awareness Policy` to `CLAUDE.md`.
+Add a section named `Tool Awareness Policy` to `AGENTS.md`.
 
 The section should explain that before using brute-force LLM inspection on large or repetitive inputs, agents should check for an available tool.
 
@@ -108,7 +109,7 @@ Use this check order:
 
 1. Project-local `TOOLS.md`
 2. Project-local `tools/manifests`
-3. Global Codex skills/plugins, if available
+3. Globally available skills/plugins/tools, if available
 
 Prefer tools for:
 
@@ -325,10 +326,10 @@ It should include sections for:
 
 ## Acceptance Criteria
 
-- `CLAUDE.md` identifies itself as the canonical LLM guidance file and tells Codex/LLM agents to keep it updated when project guidance changes.
-- `CLAUDE.md` includes a tool-awareness and routing section.
-- If `AGENTS.md` is created, it is a thin pointer to `CLAUDE.md`, `TOOLS.md`, and `docs/README.md`, not a competing policy file.
-- Root `README.md` exists and gives new LLM sessions a concise repo table of contents.
+- `AGENTS.md` identifies itself as the canonical AI-agent guidance file and tells agents to keep it updated when project guidance changes.
+- `AGENTS.md` includes a tool-awareness and routing section.
+- No second root guidance file duplicates or competes with `AGENTS.md`.
+- Root `README.md` exists and gives new AI-agent sessions a concise repo table of contents.
 - `docs/README.md` exists and indexes the docs directory, including `docs/handoffs`.
 - `TOOLS.md` exists and describes the registry plus initial CanvasExpert routing rules.
 - `tools/README.md` exists.
@@ -356,7 +357,7 @@ Run these checks from the repo root:
 ```powershell
 Get-ChildItem -Recurse tools
 Get-Content TOOLS.md
-Get-Content CLAUDE.md
+Get-Content AGENTS.md
 Get-Content README.md
 Get-Content docs/README.md
 python -m json.tool tools/manifests/canvas-docs-scraper.json

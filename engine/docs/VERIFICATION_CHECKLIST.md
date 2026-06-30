@@ -60,4 +60,4 @@
 **Result:** ✅ ALL TESTS PASS — migration successful and verified
 
 *(Subsequent work not covered here: JSON 3.0 spec mode, the correction-doc
-renderer, and the QuizForge-API backend. See root `CLAUDE.md`.)*
+renderer, and the QuizForge-API backend. See root `AGENTS.md`.)*

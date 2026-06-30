@@ -8,9 +8,9 @@ import json
 from json import JSONDecodeError
 
 try:
-    from feedback_pipeline import build_contract_text, parse_results
+    from feedback_pipeline import build_contract_text, parse_results, persona_signoff
 except ModuleNotFoundError:
-    from api.feedback_pipeline import build_contract_text, parse_results
+    from api.feedback_pipeline import build_contract_text, parse_results, persona_signoff
 
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models"
@@ -236,9 +236,9 @@ def teacher_workflow_budget(
 def build_request(bundle: dict, rubric_text: str, persona: dict, model: str,
                   feedback_pattern: dict | None = None) -> dict:
     """Build the chat-completions request body (pure)."""
-    name = (persona or {}).get("name") or "your AI teaching assistant"
+    name = (persona or {}).get("name") or "your teaching assistant"
     personality = (persona or {}).get("personality") or ""
-    system = build_contract_text(name)
+    system = build_contract_text(name, persona=persona)
     if personality:
         system += f"\n\nYour personality/tone: {personality}\n"
 
@@ -257,10 +257,16 @@ def build_request(bundle: dict, rubric_text: str, persona: dict, model: str,
             f"- A {ss.get('min', 2)}–{ss.get('max', 3)} sentence overall improvement strategy\n"
         )
         if pattern.get("sign_with_persona", True):
+            signoff = persona_signoff(persona, name)
+            if not signoff:
+                signoff = ""
+        else:
+            signoff = ""
+        if signoff:
             system += (
-                f"\nEnd each feedback entry with exactly one disclosure sentence: "
-                f"'Drafted by {name} (AI), reviewed by your teacher.' "
-                f"Do not add a separate signature or repeat the AI identity."
+                f"\nEnd each feedback entry with exactly this persona signoff once: "
+                f"'{signoff}' "
+                f"Do not add a separate signature or disclosure."
             )
 
     if rubric_text:

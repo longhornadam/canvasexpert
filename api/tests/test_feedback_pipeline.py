@@ -176,8 +176,8 @@ def test_submissions_round_trip_reidentify(tmp_path):
 
 def _score_like_an_llm(bundle):
     """Stand in for the scoring LLM: emit one contract-conforming result per
-    response in the bundle (Glows/Grows/Next, signed, with disclosure). This is
-    the self-test — proving the contract is concrete enough to author against."""
+    response in the bundle (Glows/Grows/Next, no required disclosure). This is
+    the self-test proving the contract is concrete enough to author against."""
     out = []
     for s in bundle["students"]:
         for r in s["responses"]:
@@ -187,9 +187,7 @@ def _score_like_an_llm(bundle):
                 "score": (r["possible"] or 10) - 1,
                 "feedback": ("Glows: clear thesis; concrete example.\n"
                              "Grows: connect the middle back to the prompt.\n"
-                             "Next step: add one cited quote.\n"
-                             "— Sage (AI teaching assistant)"),
-                "disclosure": "Drafted by Sage (AI), reviewed by your teacher.",
+                             "Next step: add one cited quote."),
             })
     return {"contract_version": "1.0", "results": out}
 
@@ -206,8 +204,7 @@ def test_self_authored_results_conform_to_contract(tmp_path):
 
     rows = fp.reidentify(payload["results"], v)        # push-ready, re-identified
     assert rows and all(r["resolved"] for r in rows)
-    assert all(r["feedback"].endswith("reviewed by your teacher.") for r in rows)
-    assert all("AI teaching assistant" not in r["feedback"] for r in rows)
+    assert all("Drafted by" not in r["feedback"] for r in rows)
 
 
 def test_normalize_ai_feedback_removes_duplicate_signature_and_formats():
@@ -289,9 +286,22 @@ def test_build_contract_text_inlines_rubric():
     with_rubric = fp.build_contract_text("Sage", rubric_text="3 pts: uses a loop")
     assert "3 pts: uses a loop" in with_rubric
     assert "RUBRIC" in with_rubric
+    assert "disclosure sentence exactly once" not in with_rubric
     without = fp.build_contract_text("Sage")
     assert "attached as Knowledge" in without
     assert "3 pts: uses a loop" not in without
+
+
+def test_build_contract_text_uses_persona_signoff_when_configured():
+    contract = fp.build_contract_text(
+        persona={
+            "name": "Sage",
+            "signoff_policy": "ai_disclosure",
+            "signoff_text": "Drafted by {name} (AI), reviewed by your teacher.",
+        }
+    )
+    assert "Drafted by Sage (AI), reviewed by your teacher." in contract
+    assert "End each `feedback` value with it exactly once" in contract
 
 
 def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
@@ -404,11 +414,27 @@ def test_build_request_injects_feedback_pattern():
     pattern = {"id": "basic", "name": "Glows & Grows (Basic)",
                "glows": {"min": 2, "max": 3}, "grows": {"min": 1, "max": 2},
                "strategy_sentences": {"min": 2, "max": 3}, "sign_with_persona": True}
-    body = orc.build_request(bundle, "", {"name": "Sage"}, "x/y", feedback_pattern=pattern)
+    body = orc.build_request(
+        bundle, "",
+        {"name": "Sage", "signoff_policy": "ai_disclosure",
+         "signoff_text": "Drafted by {name} (AI), reviewed by your teacher."},
+        "x/y",
+        feedback_pattern=pattern,
+    )
     system = body["messages"][0]["content"]
     assert "Glows & Grows (Basic)" in system
     assert "2–3 Glows" in system and "1–2 Grows" in system
     assert "Sage" in system
-    assert "exactly one disclosure sentence" in system
+    assert "persona signoff" in system
     assert "Do not add a separate signature" in system
     assert "Sign each feedback entry" not in system
+
+
+def test_build_request_does_not_require_signoff_for_plain_persona():
+    body = orc.build_request(
+        {"students": []}, "", {"name": "Plain", "signoff_policy": "none"}, "x/y",
+        feedback_pattern={"id": "basic", "name": "Basic", "sign_with_persona": True},
+    )
+    system = body["messages"][0]["content"]
+    assert "Drafted by" not in system
+    assert "persona signoff" not in system

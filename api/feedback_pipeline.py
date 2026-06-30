@@ -137,15 +137,48 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
             "review_required": True, "note": _REVIEW_NOTE, "students": students}
 
 
-def build_contract_text(ai_ta_name: str = "your AI teaching assistant",
-                        rubric_text: str = "") -> str:
+def persona_signoff(persona: dict | None = None,
+                    ai_ta_name: str = "your teaching assistant") -> str:
+    """Return the persona's student-visible signoff, if that persona wants one."""
+    persona = persona or {}
+    name = str(persona.get("name") or ai_ta_name or "your teaching assistant").strip()
+    policy = str(persona.get("signoff_policy") or "").strip().lower()
+    if not policy:
+        return ""
+    if policy in {"none", "off", "no_signoff"}:
+        return ""
+    template = str(persona.get("signoff_text") or "").strip()
+    if not template and policy == "ai_disclosure":
+        template = "Drafted by {name} (AI), reviewed by your teacher."
+    if not template:
+        return ""
+    return template.replace("{name}", name)
+
+
+def build_contract_text(ai_ta_name: str = "your teaching assistant",
+                        rubric_text: str = "",
+                        persona: dict | None = None) -> str:
     """Instructions the teacher pastes into their LLM alongside the bundle. When
     `rubric_text` is provided it is inlined below so the file is self-contained
     (prompt context lives in the bundle; the rubric travels here) — no separate
     attach step. When omitted, the older "attach the rubric as Knowledge" wording
     is used (the parked NQ / OpenRouter lanes supply the rubric separately).
     Extends the Essay Scorer skill: keyed batch output for automatic
-    re-identification, with mandatory disclosure naming the AI-TA."""
+    re-identification. Student-facing signoff is persona-controlled, not part of
+    the scoring contract."""
+    persona = persona or {}
+    ai_ta_name = str(persona.get("name") or ai_ta_name or "your teaching assistant").strip()
+    signoff = persona_signoff(persona, ai_ta_name)
+    signoff_clause = ""
+    disclosure_example = ""
+    disclosure_rule = "- `disclosure` is optional metadata; leave it empty if the persona has no signoff."
+    if signoff:
+        signoff_clause = (
+            "\n\nThis persona uses this student-visible signoff. End each `feedback` "
+            f"value with it exactly once:\n{signoff}"
+        )
+        disclosure_example = f',\n    "disclosure": "{signoff}"'
+        disclosure_rule = "- If `disclosure` is present, copy the persona signoff exactly."
     if rubric_text.strip():
         rubric_clause = ("The scoring rubric is included at the bottom of this file "
                          "— score strictly by it, do not invent criteria.")
@@ -154,15 +187,14 @@ def build_contract_text(ai_ta_name: str = "your AI teaching assistant",
         rubric_clause = ("A RubricForge rubric is attached as Knowledge — score "
                          "strictly by it, do not invent criteria.")
         rubric_block = ""
-    return f"""You are {ai_ta_name}, an AI teaching assistant helping a real teacher
+    return f"""You are {ai_ta_name}, a teaching assistant helping a real teacher
 score student writing and draft feedback. {rubric_clause}
 
 You will receive a JSON bundle of pseudonymized responses. For EACH response return
 one result object. Output ONLY a JSON array, each element exactly:
 
   {{"pseudonym": "<copy>", "item_id": "<copy>", "score": <number>,
-    "feedback": "<actionable, kind, rubric-anchored feedback for the student; end with the disclosure sentence exactly once>",
-    "disclosure": "Drafted by {ai_ta_name} (AI), reviewed by your teacher."}}
+    "feedback": "<actionable, kind, rubric-anchored feedback for the student>"{disclosure_example}}}
 
 Rules:
 - Copy `pseudonym` and `item_id` back EXACTLY so results can be matched.
@@ -170,13 +202,14 @@ Rules:
   when scoring every response. Do not ask for missing source material unless it
   is truly impossible to score without it.
 - Quote briefly from the response to justify the score.
-- Every `feedback` value must end with the `disclosure` sentence exactly once.
-- Do not add a separate signature such as "- {ai_ta_name} (AI teaching assistant)".
-- Students are told, honestly, that an AI helped.
-- Use the full score range; `possible` gives each item's maximum.{rubric_block}"""
+- Do not identify students.
+- Do not invent a separate signature or disclosure beyond the selected persona.
+{disclosure_rule}
+- Use the full score range; `possible` gives each item's maximum.{signoff_clause}{rubric_block}"""
 
 
-def write_bundle(bundle: dict, forllm_dir: str, ai_ta_name: str = "your AI teaching assistant"):
+def write_bundle(bundle: dict, forllm_dir: str, ai_ta_name: str = "your teaching assistant",
+                 persona: dict | None = None):
     """Write the JSON bundle + the contract text into the ForLLM folder. Returns
     (bundle_path, contract_path)."""
     os.makedirs(forllm_dir, exist_ok=True)
@@ -186,7 +219,7 @@ def write_bundle(bundle: dict, forllm_dir: str, ai_ta_name: str = "your AI teach
     with open(bpath, "w", encoding="utf-8") as f:
         json.dump(bundle, f, indent=2, ensure_ascii=False)
     with open(cpath, "w", encoding="utf-8") as f:
-        f.write(build_contract_text(ai_ta_name))
+        f.write(build_contract_text(ai_ta_name, persona=persona))
     return bpath, cpath
 
 
@@ -237,7 +270,8 @@ def write_safe_and_private(
     vault: Vault,
     safe_dir: str,
     private_dir: str,
-    ai_ta_name: str = "your AI teaching assistant",
+    ai_ta_name: str = "your teaching assistant",
+    persona: dict | None = None,
     protected: set[str] | None = None,
     submissions: list | None = None,
     rubric_text: str = "",
@@ -335,7 +369,7 @@ def write_safe_and_private(
     # teacher's own LLM (prompt context lives in the bundle; rubric travels here).
     cpath = os.path.join(safe_dir, f"{stem}__HOW-TO-SCORE.txt")
     with open(cpath, "w", encoding="utf-8") as f:
-        f.write(build_contract_text(ai_ta_name, rubric_text=rubric_text))
+        f.write(build_contract_text(ai_ta_name, rubric_text=rubric_text, persona=persona))
     log.append(f"✓ {stem}: SAFE bundle ({len(safe['students'])} student(s))")
 
     shared_context_path = None
@@ -476,9 +510,10 @@ def _remove_persona_signature(text: str, disclosure: str) -> str:
 def normalize_ai_feedback(feedback: str, disclosure: str = "") -> str:
     """Clean AI feedback before it becomes a teacher-facing Canvas comment.
 
-    The contract carries a separate disclosure field, while some model outputs also
-    sign the feedback with a persona line. Prefer one disclosure sentence in the
-    final comment and add readable line breaks around common rubric sections.
+    Some personas carry a separate disclosure/signoff field, while some model
+    outputs also sign the feedback inline. When a disclosure is present, prefer one
+    copy in the final comment. When it is absent, leave the formatted feedback
+    unsigned.
     """
     text = _format_feedback_linebreaks(feedback)
     disclosure = _format_feedback_linebreaks(disclosure)
@@ -548,8 +583,6 @@ def validate_results(results, bundle: dict = None, vault: Vault = None,
         sc = r.get("score", None)
         if sc is not None and not isinstance(sc, (int, float)):
             errors.append(f"{where}: 'score' must be a number or null")
-        if not r.get("disclosure"):
-            warnings.append(f"{where}: missing 'disclosure' line")
         key = (ps, it)
         if key in seen:
             errors.append(f"{where}: duplicate result for {key}")
@@ -607,7 +640,7 @@ def reidentified_csv(rows: list) -> str:
 # Drop-folder workflow
 # --------------------------------------------------------------------------
 
-def process_inbox(inbox_dir, forllm_dir, archive_dir, vault, ai_ta_name="your AI teaching assistant"):
+def process_inbox(inbox_dir, forllm_dir, archive_dir, vault, ai_ta_name="your teaching assistant"):
     """Generator of progress strings. Process every CSV in 1_Inbox -> pseudonymized
     bundle in 2_ForLLM, then archive the original. Saves the vault."""
     import glob

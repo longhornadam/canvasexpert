@@ -21,8 +21,7 @@
 <section class="card" id="persona-card">
   <h2>Your AI teaching assistant</h2>
   <p class="hint" style="margin-top:0">
-    Pick an assistant persona or create your own. It introduces itself by this name in every piece of
-    feedback it drafts — honesty by design.
+    Pick an assistant persona or create your own. Its tone and any student-visible signoff come from the selected persona.
   </p>
   <form id="persona-form">
     <label>Persona
@@ -136,7 +135,7 @@
   </div>
   <label style="display:block;margin-top:10px">Scored JSON from your LLM
     <textarea id="pc-json" rows="6" style="width:100%;font-family:monospace;font-size:12px"
-      placeholder='{"contract_version":"1.0","results":[{"pseudonym":"Sparky McGee","item_id":"...","score":8,"feedback":"...","disclosure":"..."}]}'></textarea>
+      placeholder='{"contract_version":"1.0","results":[{"pseudonym":"Sparky McGee","item_id":"...","score":8,"feedback":"..."}]}'></textarea>
   </label>
   <div class="actions" style="margin-top:10px">
     <button type="button" id="pc-preview" class="primary" disabled>Preview</button>

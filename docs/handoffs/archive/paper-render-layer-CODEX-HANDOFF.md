@@ -1,12 +1,12 @@
-# Codex Ferrari handoff — Paper render layer, slices 6 & 7
+# Ferrari handoff - Paper render layer, slices 6 & 7
 
-**You (Codex, Extra High) are taking over as the architect ("Ferrari").** Author slices 6 and 7:
+**You are taking over as the architect ("Ferrari").** Author slices 6 and 7:
 design them as self-contained handoffs in this `docs/handoffs/` folder (match the format of the slice
 1–5 files), then you may implement them. Everything below is the context you need cold — the previous
 architect is out of context, so this doc is the source of truth.
 
 Repo: `D:\Development Projects\CanvasExpert` (Windows, PowerShell; Python 3.13 launched as `py`).
-Read first: `CLAUDE.md` (repo guardrails) and `docs/handoffs/paper-render-layer.md` (the parent spec —
+Read first: `AGENTS.md` (repo guardrails) and `docs/handoffs/paper-render-layer.md` (the parent spec —
 the slice roadmap lives there). The slice 1–5 handoffs in this folder are your **format exemplars**.
 
 ---
@@ -70,7 +70,7 @@ Types: `guided_notes`, plus `cornell`/`frayer` after slice 5. `mode ∈ {blank, 
 
 ## Workflow — match the cadence used for slices 1–5
 
-- **Ferrari/Toyota split** (`CLAUDE.md`): you (Ferrari) author self-contained handoffs; a cheap agent or
+- **Ferrari/Toyota split** (`AGENTS.md`): you (Ferrari) author self-contained handoffs; a cheap agent or
   you implement. A good handoff states exact files+signatures, behavior + edge cases, the test to pass,
   acceptance criteria, applicable guardrails, and what NOT to touch.
 - **Review discipline before committing:** run `py -m pytest engine/tests api/tests` (from repo root;
@@ -120,7 +120,7 @@ multi-course by name where relevant. You author the design and the integration p
 ## Pointers
 - Parent spec + roadmap: `docs/handoffs/paper-render-layer.md`.
 - Format exemplars: `paper-render-layer-slice{1,2,3,4-...,5-...}.md` in this folder.
-- Repo guardrails: `CLAUDE.md`. Canvas API facts: `api/README.md`.
+- Repo guardrails: `AGENTS.md`. Canvas API facts: `api/README.md`.
 - Run: `cd api; py qf_ui.py` (web UI on 127.0.0.1:8765). Tests: `py -m pytest engine/tests api/tests`.
 - Quiz live seam to mirror: `engine/packagers/physical_handler.py` + `api/webui/routes/push.py`.
 - NoteForge to wire: `engine/rendering/physical/{note_adapter,note_spike}.py`, `LLM_Modules/NoteForge_Base.md`.

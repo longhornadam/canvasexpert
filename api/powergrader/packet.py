@@ -69,21 +69,26 @@ def readable_responses_text(bundle: dict) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def paste_format_text(bundle: dict) -> str:
+def paste_format_text(bundle: dict, persona: dict | None = None) -> str:
     first_student = ((bundle or {}).get("students") or [{}])[0]
     first_response = ((first_student.get("responses") or [{}])[0])
     pseudonym = first_student.get("pseudonym") or "<copy pseudonym exactly>"
     item_id = first_response.get("item_id") or "<copy item_id exactly>"
+    signoff = fp.persona_signoff(persona or {})
+    feedback_hint = "Brief rubric-based feedback."
+    if signoff:
+        feedback_hint = (
+            "Brief rubric-based feedback. End with the persona signoff exactly once. "
+            + signoff
+        )
     sample = [{
         "pseudonym": pseudonym,
         "item_id": str(item_id),
         "score": 1,
-        "feedback": (
-            "Brief rubric-based feedback. End with the disclosure sentence exactly once. "
-            "Drafted by <persona name> (AI), reviewed by your teacher."
-        ),
-        "disclosure": "Drafted by <persona name> (AI), reviewed by your teacher.",
+        "feedback": feedback_hint,
     }]
+    if signoff:
+        sample[0]["disclosure"] = signoff
     return (
         "Paste Results Back Here - Format\n"
         "================================\n\n"
@@ -95,6 +100,7 @@ def paste_format_text(bundle: dict) -> str:
         "- Copy pseudonym and item_id exactly from Student Responses.json.\n"
         "- score may be a number or null for comment-only feedback.\n"
         "- feedback must be non-empty.\n"
+        "- disclosure is optional metadata; include it only when the selected persona uses a signoff.\n"
         "- PowerGrader validates this before adding AI suggestions to the session.\n"
     )
 
@@ -104,6 +110,7 @@ def build_safe_ai_packet(
     safe_dir: str,
     write_result: dict,
     llm_bundle: dict,
+    persona: dict | None = None,
 ) -> dict:
     """Create a teacher-facing packet folder + ZIP from the SAFE artifacts."""
     paths = packet_paths(safe_dir, assignment_name)
@@ -123,7 +130,7 @@ def build_safe_ai_packet(
         with open(how_to_path, encoding="utf-8") as f:
             instructions = f.read()
     else:
-        instructions = fp.build_contract_text("your AI teaching assistant")
+        instructions = fp.build_contract_text("your teaching assistant", persona=persona)
     write_packet_file("START HERE - Instructions for your AI.txt", instructions)
 
     bundle_path = os.path.join(packet_dir, "Student Responses.json")
@@ -138,7 +145,7 @@ def build_safe_ai_packet(
         "Source Materials.txt",
         shared_text or "No separate source material was included in this packet.\n",
     )
-    write_packet_file("Paste Results Back Here - Format.txt", paste_format_text(llm_bundle))
+    write_packet_file("Paste Results Back Here - Format.txt", paste_format_text(llm_bundle, persona))
 
     for student_txt in write_result.get("student_txts") or []:
         if os.path.isfile(student_txt):

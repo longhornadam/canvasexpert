@@ -1,6 +1,6 @@
 # engine/docs/
 
-Engine-layer reference docs. **Project orientation is the root `CLAUDE.md`**
+Engine-layer reference docs. **Project orientation is the root `AGENTS.md`**
 (one QuizForge JSON contract → three backends) — read that first.
 
 ## Canonical developer docs (now live in `dev/`)

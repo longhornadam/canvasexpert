@@ -1,7 +1,7 @@
 # Documentation Index
 
 This directory contains durable project documentation and implementation handoffs.
-For canonical LLM guidance and safety rules, read `../CLAUDE.md` first.
+For canonical AI-agent guidance and safety rules, read `../AGENTS.md` first.
 
 ## Sections
 

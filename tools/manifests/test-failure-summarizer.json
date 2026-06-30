@@ -25,7 +25,7 @@
   "source_of_truth": [
     "Local test output",
     "CI logs",
-    "CLAUDE.md build/test commands"
+    "AGENTS.md build/test commands"
   ],
   "notes": "Planned tool. Until implemented, run focused tests and summarize only failing lines and relevant tracebacks."
 }

@@ -6,7 +6,7 @@ pipelines, and an offline content rendering engine.
 
 ## Start Here
 
-- `CLAUDE.md` is the canonical LLM guidance file. Codex and other agents should read it
+- `AGENTS.md` is the canonical AI-agent guidance file. AI agents should read it
   before editing and keep it current when repo structure, handoff conventions, safety
   rules, major workflows, or tool-routing conventions change.
 - `TOOLS.md` is the project-local tool registry for deciding when to use tooling before
@@ -38,7 +38,7 @@ what output to expect, and whether the tool is planned, experimental, or availab
 
 ## Run And Test
 
-See `CLAUDE.md` for the authoritative run/test commands. Current local workflow is
+See `AGENTS.md` for the authoritative run/test commands. Current local workflow is
 Windows PowerShell with the `py` launcher.
 
 ## Safety Guardrails
