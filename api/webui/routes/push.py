@@ -372,9 +372,19 @@ def api_content_push(kind: str = Form(...), courses: str = Form(...), payload: s
         cid = str(t.get("id", ""))
         cname = t.get("name", f"course {cid}")
         notes = []
-        ok, title, url, error = fn(cid, p, notes)
+        result = fn(cid, p, notes)
+        if hasattr(result, "ok"):
+            ok = result.ok
+            title = result.title
+            url = result.url
+            error = result.error
+            assignment_id = getattr(result, "assignment_id", None)
+        else:
+            ok, title, url, error = result
+            assignment_id = None
         results.append({"course_id": cid, "course_name": cname, "ok": ok,
-                        "title": title, "url": url, "error": error, "notes": notes})
+                        "title": title, "url": url, "assignment_id": assignment_id,
+                        "error": error, "notes": notes})
     return JSONResponse({"ok": all(r["ok"] for r in results), "results": results})
 
 

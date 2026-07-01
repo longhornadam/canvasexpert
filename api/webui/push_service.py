@@ -7,12 +7,35 @@ import html
 import mimetypes
 import os
 from pathlib import Path
+from dataclasses import dataclass
 
 import requests
 
+from . import af
 from . import workspace
 from .canvas_client import _canvas_get_all, _canvas_send
 from .deps import REPO_ROOT, TEMP_DIR, _exports_dir
+
+
+@dataclass
+class PushResult:
+    ok: bool
+    title: str
+    url: str | None
+    error: str | None
+    assignment_id: str | None = None
+
+    def __iter__(self):
+        yield self.ok
+        yield self.title
+        yield self.url
+        yield self.error
+
+    def __len__(self):
+        return 4
+
+    def __getitem__(self, index):
+        return (self.ok, self.title, self.url, self.error)[index]
 
 
 def _find_assignment_group(course_id, name):
@@ -57,6 +80,10 @@ def _push_assignment(cid, p, notes):
         a["description"] = p["description"]
     if p.get("points") is not None:
         a["points_possible"] = p["points"]
+    if p.get("allowed_extensions"):
+        a["allowed_extensions"] = p["allowed_extensions"]
+    if p.get("external_tool_tag_attributes"):
+        a["external_tool_tag_attributes"] = p["external_tool_tag_attributes"]
     for k in ("due_at", "unlock_at", "lock_at"):
         if p.get(k):
             a[k] = p[k]
@@ -73,13 +100,14 @@ def _push_assignment(cid, p, notes):
                 f"category '{p['assignment_group_name']}' not in this course — using default")
     resp, err = _canvas_send("POST", f"/api/v1/courses/{cid}/assignments", {"assignment": a})
     if err:
-        return False, a["name"], None, err
+        return PushResult(False, a["name"], None, err)
     if p.get("module_name"):
         mid = _find_or_create_module_id(cid, p["module_name"], notes)
         if mid:
             _add_module_item(cid, mid, {"title": a["name"], "type": "Assignment",
                                         "content_id": resp["id"]}, notes)
-    return True, resp.get("name", a["name"]), resp.get("html_url"), None
+    return PushResult(True, resp.get("name", a["name"]), resp.get("html_url"), None,
+                      str(resp.get("id") or "") or None)
 
 
 def _push_page(cid, p, notes):
@@ -116,8 +144,9 @@ def _push_quick(cid, p, notes):
                 f"category '{p['assignment_group_name']}' not in this course — using default")
     resp, err = _canvas_send("POST", f"/api/v1/courses/{cid}/assignments", {"assignment": a})
     if err:
-        return False, name, None, err
-    return True, resp.get("name", name), resp.get("html_url"), None
+        return PushResult(False, name, None, err)
+    return PushResult(True, resp.get("name", name), resp.get("html_url"), None,
+                      str(resp.get("id") or "") or None)
 
 
 def _allowed_printable_roots():
@@ -249,7 +278,73 @@ def _push_printable_assignment(cid, p, notes):
     return _push_assignment(cid, assignment, notes)
 
 
+def _push_assignmentforge(cid, payload, notes):
+    """Push a plain whole-class AssignmentForge file.
+
+    Tiered AssignmentForge pushes need group override isolation. Until that
+    path is wired, fail closed instead of creating all-visible tier assignments.
+    """
+    path = payload.get("path") or ""
+    data, problems = af.parse_file(path)
+    if data is None or problems:
+        return PushResult(False, "Untitled assignment", None,
+                          "; ".join(problems or ["unreadable file"]))
+
+    title = str(data.get("title") or "Untitled assignment")
+    if data.get("tiers"):
+        return PushResult(
+            False,
+            title,
+            None,
+            "Tiered AssignmentForge push needs Canvas group override wiring before it can be safely enabled.",
+        )
+    if payload.get("rubric_path"):
+        return PushResult(
+            False,
+            title,
+            None,
+            "AssignmentForge rubric attachment is not wired through this push path yet.",
+        )
+
+    tier_payloads = af.tier_payloads(data)
+    if not tier_payloads:
+        return PushResult(False, title, None,
+                          "AssignmentForge file did not produce a push payload")
+
+    tier = tier_payloads[0]
+    assignment = {
+        "name": tier.get("title") or title,
+        "description": tier.get("description") or data.get("description") or "",
+        **af.submission_fields(data),
+    }
+    if af.PLACEHOLDER_RE.search(assignment["description"]):
+        return PushResult(
+            False,
+            title,
+            None,
+            "AssignmentForge placeholders are not wired through this push path yet.",
+        )
+    if assignment.get("_annotatable_file_name"):
+        return PushResult(
+            False,
+            title,
+            None,
+            "Student annotation files are not wired through this push path yet.",
+        )
+    if data.get("points") is not None:
+        assignment["points"] = data.get("points")
+    if payload.get("published") is not None:
+        assignment["published"] = bool(payload.get("published"))
+    if payload.get("post_to_sis"):
+        assignment["post_to_sis"] = True
+    for key in ("due_at", "unlock_at", "lock_at", "assignment_group_name", "module_name"):
+        if payload.get(key):
+            assignment[key] = payload[key]
+    return _push_assignment(cid, assignment, notes)
+
+
 _CONTENT_PUSHERS = {
+    "af": _push_assignmentforge,
     "quick": _push_quick,
     "printable": _push_printable_assignment,
 }
