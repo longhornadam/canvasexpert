@@ -6,13 +6,20 @@ unit-testable without HTTP and keeps route handlers thin.
 import html
 import mimetypes
 import os
+import sys
 from pathlib import Path
 from dataclasses import dataclass
 
 import requests
 
 from . import af, config
-from ..powergrader import autoscore_queue, autopush_policy
+try:
+    from powergrader import autoscore_queue, autopush_policy
+except ModuleNotFoundError:  # pragma: no cover - package context
+    api_dir = Path(__file__).resolve().parents[1]
+    if str(api_dir) not in sys.path:
+        sys.path.insert(0, str(api_dir))
+    from powergrader import autoscore_queue, autopush_policy
 from . import workspace
 from .canvas_client import _canvas_get_all, _canvas_send
 from .deps import REPO_ROOT, TEMP_DIR, _exports_dir
