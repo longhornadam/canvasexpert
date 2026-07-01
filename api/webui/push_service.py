@@ -11,7 +11,8 @@ from dataclasses import dataclass
 
 import requests
 
-from . import af
+from . import af, config
+from ..powergrader import autoscore_queue, autopush_policy
 from . import workspace
 from .canvas_client import _canvas_get_all, _canvas_send
 from .deps import REPO_ROOT, TEMP_DIR, _exports_dir
@@ -278,6 +279,36 @@ def _push_printable_assignment(cid, p, notes):
     return _push_assignment(cid, assignment, notes)
 
 
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _autoscore_settings(payload: dict) -> dict:
+    return {
+        "mode": "assisted",
+        "model_id": str(payload.get("autoscore_model_id") or "").strip()
+        or config.get_openrouter_model(),
+        "persona_id": str(payload.get("autoscore_persona_id") or "sage").strip() or "sage",
+        "response_kind": str(payload.get("autoscore_response_kind") or "scr").strip() or "scr",
+        "rubric_name": str(payload.get("autoscore_rubric_name") or "").strip(),
+        "watch_late": True if payload.get("autoscore_watch_late") is None else _as_bool(payload.get("autoscore_watch_late")),
+    }
+
+
+def _autoscore_push_policy(payload: dict) -> dict:
+    auto_push = _as_bool(payload.get("autoscore_auto_push"))
+    return {
+        "enabled": auto_push,
+        "allow_grade_push": True,
+        "allow_comment_push": True,
+        "policy_version": autopush_policy.POLICY_VERSION,
+    }
+
+
 def _push_assignmentforge(cid, payload, notes):
     """Push a plain whole-class AssignmentForge file.
 
@@ -340,7 +371,44 @@ def _push_assignmentforge(cid, payload, notes):
     for key in ("due_at", "unlock_at", "lock_at", "assignment_group_name", "module_name"):
         if payload.get(key):
             assignment[key] = payload[key]
-    return _push_assignment(cid, assignment, notes)
+    result = _push_assignment(cid, assignment, notes)
+    if not result.ok:
+        return result
+
+    if payload.get("autoscore_schedule"):
+        if not result.assignment_id:
+            notes.append("scheduled PowerGrader Auto-Score skipped because Canvas did not return an assignment ID")
+            return result
+        due_at = str(assignment.get("due_at") or "").strip()
+        if not due_at:
+            notes.append("scheduled PowerGrader Auto-Score skipped because no due date was set")
+            return result
+
+        queue_job = autoscore_queue.upsert_job(
+            course_id=cid,
+            course_name=str(payload.get("course_name") or cid),
+            assignment_id=str(result.assignment_id or ""),
+            assignment_name=result.title,
+            due_at=due_at,
+            source="push",
+            settings=_autoscore_settings(payload),
+            assignment=assignment,
+            auto_push=_as_bool(payload.get("autoscore_auto_push")),
+            push_policy=_autoscore_push_policy(payload),
+        )
+        if queue_job.get("status") == "scheduled":
+            note_kind = "with auto-push enabled" if queue_job.get("auto_push") else "draft session only"
+            notes.append(
+                "scheduled PowerGrader Auto-Score "
+                f"({note_kind}) for {queue_job.get('scheduled_at') or due_at}"
+            )
+            if not config.has_openrouter_key():
+                notes.append("Auto-Score will wait until an OpenRouter key is saved")
+        else:
+            reason = queue_job.get("reason") or "needs attention"
+            notes.append(f"PowerGrader Auto-Score queued with attention: {reason}")
+
+    return result
 
 
 _CONTENT_PUSHERS = {

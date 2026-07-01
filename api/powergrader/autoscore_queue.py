@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
@@ -17,7 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover - package context
 
 QUEUE_FILENAME = "autoscore_queue.json"
 QUEUE_VERSION = 1
-TERMINAL_STATUSES = {"session_ready", "cancelled", "failed"}
+TERMINAL_STATUSES = {"session_ready", "auto_pushed", "partial_auto_pushed", "needs_review", "cancelled", "failed"}
 ELIGIBLE_SUBMISSION_TYPES = {"online_text_entry"}
 READABLE_UPLOAD_EXTS = {
     "txt", "md", "csv", "tsv", "json", "py", "js", "ts", "html", "htm", "css",
@@ -130,6 +131,20 @@ def _upload_extensions(assignment: dict) -> set[str]:
     return out
 
 
+def _assignment_snapshot(assignment: dict) -> dict:
+    assignment = assignment or {}
+    snapshot = {
+        "name": _text(assignment.get("name")),
+        "submission_types": _submission_types(assignment),
+        "allowed_extensions": sorted(_upload_extensions(assignment)),
+    }
+    for key in ("points_possible", "quiz_id", "quiz_type", "description"):
+        value = assignment.get(key)
+        if value not in (None, ""):
+            snapshot[key] = value
+    return snapshot
+
+
 def _is_readable_upload(assignment: dict) -> bool:
     exts = _upload_extensions(assignment)
     if not exts:
@@ -192,6 +207,158 @@ def _now_iso(now=None) -> str:
     return _iso(_parse_dt(str(now)))
 
 
+def _now_dt(now=None) -> datetime:
+    if now is None:
+        current = datetime.now(timezone.utc)
+    elif isinstance(now, datetime):
+        current = now
+    else:
+        current = _parse_dt(str(now)) or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current
+
+
+def machine_id() -> str:
+    override = _text(os.environ.get("CANVAS_EXPERT_MACHINE_ID"))
+    if override:
+        return override
+    for value in (os.environ.get("COMPUTERNAME"), os.environ.get("HOSTNAME"), socket.gethostname()):
+        text = _text(value)
+        if text:
+            return text
+    return "local-machine"
+
+
+def _worker_id(worker_id: str | None = None) -> str:
+    text = _text(worker_id)
+    if text:
+        return text
+    return machine_id()
+
+
+def _lease_until(job: dict) -> datetime | None:
+    return _parse_dt(job.get("lease_until") or "")
+
+
+def _claim_owner(job: dict) -> str:
+    owner = _text(job.get("claimed_by"))
+    if owner:
+        return owner
+    return _text(job.get("machine_id"))
+
+
+def lease_expired(job: dict, now=None) -> bool:
+    lease_until = _lease_until(job or {})
+    if lease_until is None:
+        return False
+    return lease_until <= _now_dt(now)
+
+
+def _claim_fields(job: dict, worker: str, now=None, lease_minutes: int = 30) -> None:
+    current = _now_dt(now)
+    existing_owner = _claim_owner(job)
+    is_same_owner = existing_owner == worker
+    claimed_at = _text(job.get("claimed_at")) if is_same_owner and _text(job.get("claimed_at")) else _now_iso(current)
+    job["claimed_by"] = worker
+    job["machine_id"] = worker
+    job["claimed_at"] = claimed_at
+    job["lease_until"] = _iso(current + timedelta(minutes=int(lease_minutes)))
+    job["updated_at"] = _now_iso(current)
+
+
+def _can_claim(job: dict, worker: str, now=None) -> bool:
+    if not job:
+        return False
+    if job.get("status") in TERMINAL_STATUSES:
+        policy = job.get("push_policy") if isinstance(job.get("push_policy"), dict) else {}
+        may_push_existing_session = (
+            job.get("status") == "session_ready"
+            and job.get("auto_push") is True
+            and policy.get("enabled") is True
+        )
+        if not may_push_existing_session:
+            return False
+    owner = _claim_owner(job)
+    if not owner:
+        return True
+    if owner == worker:
+        return True
+    lease_until = _lease_until(job)
+    if lease_until is None:
+        return True
+    return lease_until <= _now_dt(now)
+
+
+def claim_job(
+    queue: dict,
+    job_id: str,
+    *,
+    worker_id: str | None = None,
+    lease_minutes: int = 30,
+    now=None,
+) -> tuple[bool, dict | None]:
+    job = _find_job(queue or {}, job_id)
+    worker = _worker_id(worker_id)
+    if not _can_claim(job or {}, worker, now=now):
+        return False, None
+    if not job:
+        return False, None
+    _claim_fields(job, worker, now=now, lease_minutes=lease_minutes)
+    return True, job
+
+
+def release_job(
+    queue: dict,
+    job_id: str,
+    *,
+    worker_id: str | None = None,
+    now=None,
+) -> bool:
+    job = _find_job(queue or {}, job_id)
+    if not job:
+        return False
+    worker = _worker_id(worker_id)
+    if _claim_owner(job) != worker:
+        return False
+    job["claimed_by"] = ""
+    job["machine_id"] = ""
+    job["claimed_at"] = ""
+    job["lease_until"] = ""
+    job["updated_at"] = _now_iso(now)
+    return True
+
+
+def refresh_lease(
+    queue: dict,
+    job_id: str,
+    *,
+    worker_id: str | None = None,
+    lease_minutes: int = 30,
+    now=None,
+) -> bool:
+    job = _find_job(queue or {}, job_id)
+    if not job:
+        return False
+    if job.get("status") in TERMINAL_STATUSES:
+        policy = job.get("push_policy") if isinstance(job.get("push_policy"), dict) else {}
+        may_push_existing_session = (
+            job.get("status") == "session_ready"
+            and job.get("auto_push") is True
+            and policy.get("enabled") is True
+        )
+        if not may_push_existing_session:
+            return False
+    worker = _worker_id(worker_id)
+    owner = _claim_owner(job)
+    if owner and owner != worker:
+        return False
+    if owner == worker or not owner or lease_expired(job, now=now):
+        _claim_fields(job, worker, now=now, lease_minutes=lease_minutes)
+        return True
+    return False
+
+
 def _find_job(queue: dict, job_id: str) -> dict | None:
     for job in queue.get("jobs", []):
         if job.get("job_id") == job_id:
@@ -210,14 +377,24 @@ def _build_job(
     source: str,
     settings: dict | None,
     assignment: dict | None,
+    auto_push: bool = False,
+    push_policy: dict | None = None,
     created_at: str,
     updated_at: str,
 ) -> dict:
     eligibility, reason = classify_assignment_for_autoscore(assignment or {})
     scheduled_at = scheduled_at_from_due(due_at, delay_hours)
-    status = eligibility if eligibility != "eligible" else "scheduled"
-    if eligibility == "eligible":
-        status = "scheduled"
+    status = "scheduled" if eligibility == "eligible" else "needs_attention"
+    policy = deepcopy(push_policy) if isinstance(push_policy, dict) else {
+        "enabled": bool(auto_push),
+        "allow_grade_push": True,
+        "allow_comment_push": True,
+        "policy_version": 1,
+    }
+    policy.setdefault("enabled", bool(auto_push))
+    policy.setdefault("allow_grade_push", True)
+    policy.setdefault("allow_comment_push", True)
+    policy.setdefault("policy_version", 1)
     return {
         "job_id": make_job_id(course_id, assignment_id),
         "course_id": _text(course_id),
@@ -231,7 +408,10 @@ def _build_job(
         "due_at": _text(due_at),
         "delay_hours": int(delay_hours),
         "scheduled_at": scheduled_at or "",
+        "assignment": _assignment_snapshot(assignment or {}),
         "settings": deepcopy(settings) if isinstance(settings, dict) else {},
+        "auto_push": bool(auto_push),
+        "push_policy": policy,
         "created_at": created_at,
         "updated_at": updated_at,
         "session_id": "",
@@ -250,6 +430,8 @@ def upsert_job(
     source: str = "push",
     settings: dict | None = None,
     assignment: dict | None = None,
+    auto_push: bool = False,
+    push_policy: dict | None = None,
 ) -> dict:
     queue = load_queue()
     job_id = make_job_id(course_id, assignment_id)
@@ -265,6 +447,8 @@ def upsert_job(
         source=source,
         settings=settings,
         assignment=assignment,
+        auto_push=auto_push,
+        push_policy=push_policy,
         created_at=(existing or {}).get("created_at") or now_iso,
         updated_at=now_iso,
     )
@@ -294,6 +478,7 @@ def reconcile_due_date(job: dict, latest_assignment: dict, now=None) -> dict:
 
     latest_due = _text((latest_assignment or {}).get("due_at"))
     parsed_due = _parse_dt(latest_due)
+    out["assignment"] = _assignment_snapshot(latest_assignment or {})
     if not latest_due or parsed_due is None:
         out["status"] = "needs_attention"
         out["eligibility"] = "needs_attention"
@@ -309,9 +494,40 @@ def reconcile_due_date(job: dict, latest_assignment: dict, now=None) -> dict:
     out["due_at"] = latest_due
     out["scheduled_at"] = scheduled_at_from_due(latest_due, int(out.get("delay_hours", 6)) or 6) or ""
     if out.get("status") not in TERMINAL_STATUSES:
-        out["status"] = "scheduled" if eligibility == "eligible" else eligibility
+        out["status"] = "scheduled" if eligibility == "eligible" else "needs_attention"
     out["updated_at"] = _now_iso(now)
     return out
+
+
+def update_job(queue: dict, job_id: str, *, now=None, **fields) -> dict | None:
+    job = _find_job(queue or {}, job_id)
+    if not job:
+        return None
+    job.update({k: v for k, v in fields.items() if v is not None})
+    job["updated_at"] = _now_iso(now)
+    return job
+
+
+def set_job_status(
+    queue: dict,
+    job_id: str,
+    *,
+    status: str,
+    reason: str | None = None,
+    last_error: str | None = None,
+    session_id: str | None = None,
+    now=None,
+) -> dict | None:
+    job = update_job(
+        queue,
+        job_id,
+        now=now,
+        status=status,
+        reason=reason if reason is not None else None,
+        last_error=last_error if last_error is not None else None,
+        session_id=session_id if session_id is not None else None,
+    )
+    return job
 
 
 def due_jobs(queue: dict, now=None) -> list[dict]:
@@ -321,7 +537,16 @@ def due_jobs(queue: dict, now=None) -> list[dict]:
         current = current.replace(tzinfo=timezone.utc)
     due = []
     for job in jobs:
-        if job.get("status") != "scheduled" or job.get("eligibility") != "eligible":
+        policy = job.get("push_policy") if isinstance(job.get("push_policy"), dict) else {}
+        existing_session_push_due = (
+            job.get("status") == "session_ready"
+            and job.get("auto_push") is True
+            and policy.get("enabled") is True
+            and bool(_text(job.get("session_id")))
+        )
+        if not existing_session_push_due and job.get("status") != "scheduled":
+            continue
+        if job.get("eligibility") != "eligible":
             continue
         scheduled_at = _parse_dt(job.get("scheduled_at") or "")
         if scheduled_at is None:

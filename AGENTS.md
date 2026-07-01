@@ -101,9 +101,19 @@ PowerGrader modes:
   scoring context, appends new AI drafts to the review queue, and still requires
   teacher review before any Canvas grade/comment push.
 
+Scheduled auto-push is allowed only as a teacher-controlled, per-assignment or per-job
+opt-in for a specific scheduled PowerGrader run. It must never become global or
+default behavior. Any implementation that writes Canvas grades/comments from a
+scheduled job must run reviewed policy checks, idempotency protection, and audit
+receipt capture, and it may only push AI-generated results for eligible students.
+Blocked, uncertain, unsupported, or otherwise review-needed cases stay in the review
+path. Local-only, FERPA, and secret-handling guardrails remain unchanged.
+
 PowerGrader sessions are stored under `<workspace>/PowerGrader/`. They are PRIVATE:
 real names, submission content, grades, and teacher comments must never be committed.
-AI suggestions are drafts only until the teacher reviews, edits, approves, and pushes.
+AI suggestions are drafts until the teacher reviews, edits, approves, and pushes,
+except for the narrow scheduled auto-push path above where the teacher has explicitly
+opted in for that specific job and policy/idempotency checks clear the write.
 
 **AI Expert** (`/ai-expert`) serves paste-ready LLM skill files from the AI-TA library:
 start-here orientation, authoring skills for the Forge contracts, scoring skills from

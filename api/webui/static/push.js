@@ -27,6 +27,9 @@
   const afRubricMode = document.getElementById("af-rubric-mode");
   const afRubricLink = document.getElementById("af-rubric-link");
   const afRubricStatus = document.getElementById("af-rubric-status");
+  const afAutoScore = document.getElementById("af-autoscore");
+  const afAutoPush = document.getElementById("af-autoscore-push");
+  const afAutoScoreHint = document.getElementById("af-autoscore-hint");
   const rfFileSel = document.getElementById("rf-file");
 
   // ── State ──────────────────────────────────────────────────────────────
@@ -80,6 +83,21 @@
     if (hasRubric) {
       if (afRubricMode && !afRubricMode.value) afRubricMode.value = "grading";
       if (afRubricLink && afRubricLink.checked == null) afRubricLink.checked = true;
+    }
+  }
+
+  function syncAfAutoscoreControls() {
+    if (!afAutoScore) return;
+    const hasDue = !!document.getElementById("af-due")?.value;
+    afAutoScore.disabled = !hasDue;
+    if (!hasDue) afAutoScore.checked = false;
+    const canAutoPush = hasDue && afAutoScore.checked;
+    if (afAutoPush) {
+      afAutoPush.disabled = !canAutoPush;
+      if (!canAutoPush) afAutoPush.checked = false;
+    }
+    if (afAutoScoreHint) {
+      afAutoScoreHint.textContent = hasDue ? "(optional)" : "(needs a due date)";
     }
   }
 
@@ -983,6 +1001,10 @@
   // ── AF push ────────────────────────────────────────────────────────────
 
   afRubricSel?.addEventListener("change", syncRubricControls);
+  document.getElementById("af-autoscore")?.addEventListener("change", syncAfAutoscoreControls);
+  document.getElementById("af-due")?.addEventListener("change", syncAfAutoscoreControls);
+  document.getElementById("af-due")?.addEventListener("input", syncAfAutoscoreControls);
+  syncAfAutoscoreControls();
 
   document.getElementById("btn-af-validate")?.addEventListener("click", function () {
     const path = document.getElementById("af-file")?.value;
@@ -1035,6 +1057,8 @@
       payload.rubric_mode = afRubricMode?.value || "grading";
       payload.rubric_link_page = afRubricLink?.checked !== false;
     }
+    if (afAutoScore?.checked) payload.autoscore_schedule = true;
+    if (afAutoPush?.checked && !afAutoPush.disabled) payload.autoscore_auto_push = true;
     const due    = localToISO(document.getElementById("af-due")?.value);
     const unlock = localToISO(document.getElementById("af-unlock")?.value);
     const lock   = localToISO(document.getElementById("af-lock")?.value);

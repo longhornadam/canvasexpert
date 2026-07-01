@@ -372,7 +372,9 @@ def api_content_push(kind: str = Form(...), courses: str = Form(...), payload: s
         cid = str(t.get("id", ""))
         cname = t.get("name", f"course {cid}")
         notes = []
-        result = fn(cid, p, notes)
+        course_payload = dict(p)
+        course_payload["course_name"] = cname
+        result = fn(cid, course_payload, notes)
         if hasattr(result, "ok"):
             ok = result.ok
             title = result.title
