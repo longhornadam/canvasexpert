@@ -24,6 +24,8 @@ from ..gradebook_service import (
     _load_curve_events, _save_curve_events, _apply_curve_model,
 )
 from ..schooldays import _school_days_late, _parse_iso_local
+from . import powergrader as pg_routes
+from powergrader import session_store
 
 router = APIRouter(prefix="/api", tags=["routines"])
 
@@ -61,6 +63,12 @@ _ROUTINE_DEFS = {
         "writes": False,
         "default": {"enabled": False, "every_hours": 168,
                     "params": {}},
+    },
+    "powergrader_late_catchup": {
+        "label": "PowerGrader late catch-up",
+        "writes": False,
+        "default": {"enabled": False, "every_hours": 12,
+                    "params": {"max_sessions": 10}},
     },
 }
 
@@ -329,6 +337,48 @@ def _run_routine_student_reports(params):
     return {"ok": ok, "lines": lines, "summary": f"{n} monitored student packet(s) refreshed"}
 
 
+def _run_routine_powergrader_late_catchup(params):
+    if not config.has_openrouter_key():
+        return {"ok": False, "lines": ["✗ no OpenRouter key saved"], "summary": "no OpenRouter key saved"}
+
+    max_sessions = int(params.get("max_sessions", 10) or 10)
+    seen: set[str] = set()
+    lines, ok, processed = [], True, 0
+    course_name = {str(c["id"]): (c.get("nickname") or c.get("name") or str(c["id"]))
+                   for c in config.active_courses()}
+
+    for summary in session_store.list_session_summaries():
+        if processed >= max_sessions:
+            break
+        session_id = str(summary.get("session_id") or "")
+        if not session_id or session_id in seen:
+            continue
+        seen.add(session_id)
+        if summary.get("mode") != "assisted":
+            continue
+        session = session_store.load_session(session_id)
+        if not session:
+            continue
+        late_watch = session.get("late_watch") or {}
+        if not late_watch.get("enabled") or not late_watch.get("supported"):
+            continue
+        result = pg_routes._run_late_catchup_score(session)
+        processed += 1
+        label = f"{course_name.get(str(session.get('course_id')), session.get('course_id', ''))} / {session.get('assignment_name', '')}".strip(" /")
+        if not result.get("ok"):
+            ok = False
+            lines.append(f"✗ {label}: {result.get('error', 'late catch-up failed')}")
+            continue
+        appended = int(result.get("appended") or 0)
+        if appended:
+            lines.append(f"✓ {label}: {appended} late submission(s) added to review")
+        else:
+            lines.append(f"· {label}: no new late submissions")
+
+    summary = f"{processed} PowerGrader session(s) checked; uses OpenRouter"
+    return {"ok": ok, "lines": lines or ["· no watched PowerGrader sessions"], "summary": summary}
+
+
 # --------------------------------------------------------------------------
 # Curve helpers (routines-specific: apply core + revert)
 # --------------------------------------------------------------------------
@@ -391,6 +441,7 @@ _ROUTINE_RUNNERS = {
     "sweep": _run_routine_sweep, "download": _run_routine_download,
     "curve": _run_routine_curve, "grading_debt": _run_routine_grading_debt,
     "student_reports": _run_routine_student_reports,
+    "powergrader_late_catchup": _run_routine_powergrader_late_catchup,
 }
 
 

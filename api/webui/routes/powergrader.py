@@ -28,8 +28,8 @@ from .. import config, source_materials, workspace
 from ..canvas_client import _canvas_get, _canvas_send
 from ..deps import list_rubric_files, templates
 from powergrader import (ai_workflow, canvas_fetch, context, estimates,
-                         import_results, packet, privacy, session_actions,
-                         session_builder, session_store)
+                         import_results, late_catchup, packet, privacy,
+                         session_actions, session_builder, session_store)
 
 try:
     from nq_report import html_to_text
@@ -56,6 +56,161 @@ _vault = context.vault
 
 _CODE_EXTS = {".py", ".html", ".htm", ".css", ".js", ".txt", ".md", ".json", ".csv"}
 AI_MODES = {"packet", "assisted"}
+
+
+def _late_watch_error(session: dict, *, require_key: bool = False, require_source_context: bool = False) -> str | None:
+    if not session or session.get("mode") != "assisted":
+        return "Late catch-up requires Auto-Score With API."
+    late_watch = session.get("late_watch") or {}
+    if not late_watch:
+        return "Late catch-up is not configured for this session."
+    if not late_watch.get("enabled"):
+        return late_watch.get("reason") or "Late catch-up is disabled for this session."
+    if not late_watch.get("supported"):
+        return late_watch.get("reason") or "Late catch-up is not supported for this session."
+    if require_key and not config.has_openrouter_key():
+        return "No OpenRouter key is currently saved."
+    if require_source_context and late_watch.get("source_context") is None:
+        return "Saved source context is missing for this session."
+    return None
+
+
+def _build_late_catchup_students(
+    *,
+    course_id: str,
+    assignment: dict,
+    submitted: list[dict],
+    ai_by_uid: dict,
+    batch_id: str,
+) -> list[dict]:
+    roster_settings = config.get_roster_student_settings(course_id)
+    tier_map = config.roster_tier_by_id(course_id)
+    monitored = config.get_monitored_students()
+    extra_time_list = config.get_extra_time(course_id)
+    extra_time_map = {str(et["id"]): et.get("days", 0) for et in extra_time_list}
+
+    students = session_builder.build_students(
+        submitted=submitted,
+        ai_by_uid=ai_by_uid,
+        roster_settings=roster_settings,
+        tier_map=tier_map,
+        monitored=monitored,
+        extra_time_map=extra_time_map,
+    )
+    sweep_settings = config.get_sweep_settings()
+    holidays = set(sweep_settings.get("holidays") or [])
+    holidays.update(config.get_combined_calendar_for_range().get("no_count_dates") or [])
+    missing_by_user_id: dict[str, dict] = {}
+    for sub in submitted:
+        uid = str(sub.get("user_id", ""))
+        if not uid:
+            continue
+        meta = late_catchup.compute_late_meta(
+            sub=sub,
+            assignment=assignment or sub.get("assignment") or {},
+            course_id=course_id,
+            extra_time_days=int(extra_time_map.get(uid, 0) or 0),
+            skip_weekends=bool(sweep_settings.get("skip_weekends", True)),
+            holidays=holidays,
+            batch_id=batch_id,
+        )
+        missing_by_user_id[uid] = meta
+    return late_catchup.attach_late_meta(students, missing_by_user_id)
+
+
+def _run_late_catchup_score(session: dict) -> dict:
+    """Fetch, score, and append late catch-up submissions for one session."""
+    err = _late_watch_error(session, require_key=True, require_source_context=True)
+    if err:
+        return {"ok": False, "error": err, "status_code": 200, "privacy_steps": []}
+
+    late_watch = session.get("late_watch") or {}
+    course_id = str(session.get("course_id") or "")
+    assignment_id = str(session.get("assignment_id") or "")
+    subs, adata, fetch_err = canvas_fetch.fetch_submissions(course_id, assignment_id)
+    if fetch_err:
+        return {"ok": False, "error": fetch_err, "status_code": 200, "privacy_steps": []}
+
+    new_subs = late_catchup.find_new_submissions(session, subs or [])
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    if not new_subs:
+        late_catchup.update_late_watch_after_preview(session, 0, now_iso)
+        _save_session(session)
+        return {
+            "ok": True,
+            "appended": 0,
+            "ai_scored": 0,
+            "batch_id": "",
+            "session_id": session.get("session_id", ""),
+            "privacy_steps": [],
+            "privacy_artifacts": {},
+            "ai_result": None,
+        }
+
+    canvas_fetch.enrich_with_code_files(new_subs)
+    batch_id = late_catchup.make_late_batch_id()
+    selected_model = session.get("model_id") or config.get_openrouter_model()
+    response_kind = session.get("response_kind") or late_watch.get("response_kind") or "scr"
+    assignment_name = adata.get("name") or session.get("assignment_name") or assignment_id
+    assignment_description = session.get("assignment_description") or html_to_text(adata.get("description") or "")
+    ai_result = ai_workflow.run_ai_workflow(
+        mode="assisted",
+        submitted=new_subs,
+        assignment_name=assignment_name,
+        assignment_description=assignment_description,
+        course_id=course_id,
+        assignment_id=assignment_id,
+        session_id=session.get("session_id", ""),
+        rubric_name=session.get("rubric_name", ""),
+        persona_id=session.get("persona_id", "sage"),
+        selected_model=selected_model,
+        response_kind=response_kind,
+        source_text="",
+        source_files_json="",
+        source_uploads=None,
+        has_openrouter_key=config.has_openrouter_key(),
+        source_context_override=late_watch.get("source_context") or {},
+        artifact_assignment_name=f"{assignment_name} - Late Catch-Up {batch_id}",
+    )
+    if not ai_result["ok"]:
+        return {
+            "ok": False,
+            "error": ai_result["error"],
+            "status_code": ai_result.get("status_code", 200),
+            "privacy_steps": ai_result.get("privacy_steps") or [],
+            "privacy_artifacts": ai_result.get("privacy_artifacts") or {},
+            "budget": ai_result.get("budget"),
+            "debug_path": ai_result.get("debug_path"),
+            "copilot_packet": ai_result.get("copilot_packet"),
+        }
+
+    students = _build_late_catchup_students(
+        course_id=course_id,
+        assignment=adata or {},
+        submitted=new_subs,
+        ai_by_uid=ai_result.get("ai_by_uid") or {},
+        batch_id=batch_id,
+    )
+    appended_user_ids = [str(st.get("user_id", "")) for st in students if st.get("user_id")]
+    session.setdefault("students", []).extend(students)
+    late_catchup.update_late_watch_after_score(session, appended_user_ids, now_iso)
+    session.setdefault("late_catchup_log", []).append({
+        "ts": now_iso,
+        "batch_id": batch_id,
+        "appended": len(students),
+        "ai_scored": len(ai_result.get("ai_by_uid") or {}),
+        "errors": [],
+    })
+    _save_session(session)
+    return {
+        "ok": True,
+        "appended": len(students),
+        "ai_scored": len(ai_result.get("ai_by_uid") or {}),
+        "batch_id": batch_id,
+        "session_id": session.get("session_id", ""),
+        "privacy_steps": ai_result.get("privacy_steps") or [],
+        "privacy_artifacts": ai_result.get("privacy_artifacts") or {},
+    }
 
 
 # --------------------------------------------------------------------------
@@ -216,6 +371,7 @@ def pg_start(
     course_id: str = Form(""),
     assignment_id: str = Form(""),
     mode: str = Form("fast"),
+    watch_late: str = Form("true"),
     rubric_name: str = Form(""),
     persona_id: str = Form("sage"),
     model_id: str = Form(""),
@@ -252,9 +408,37 @@ def pg_start(
         return JSONResponse({"ok": False, "error": "No submitted work found for this assignment.",
                              "privacy_steps": []})
 
+    initial_missing_user_ids = late_catchup.initial_missing_user_ids(subs or [])
+    submitted_user_ids = sorted({str(s.get("user_id", "")) for s in submitted if s.get("user_id")})
+
     canvas_fetch.enrich_with_code_files(submitted)
 
     selected_model = (model_id or "").strip() or config.get_openrouter_model()
+    watch_late_enabled = str(watch_late).lower() in {"1", "true", "yes", "on"}
+    late_supported = mode == "assisted" and config.has_openrouter_key()
+    late_reason = ""
+    if not watch_late_enabled:
+        late_reason = "Late catch-up is disabled for this session."
+    elif mode != "assisted":
+        late_reason = "Late catch-up requires Auto-Score With API."
+        watch_late_enabled = False
+    elif not late_supported:
+        late_reason = "Late catch-up requires Auto-Score With API and a saved OpenRouter key."
+        watch_late_enabled = False
+
+    late_watch = {
+        "enabled": watch_late_enabled,
+        "supported": late_supported,
+        "reason": late_reason,
+        "initial_missing_user_ids": initial_missing_user_ids,
+        "known_user_ids": submitted_user_ids,
+        "scored_user_ids": [],
+        "last_checked": None,
+        "last_scored": None,
+        "last_summary": "",
+        "source_context": {},
+        "response_kind": response_kind,
+    }
 
     # AI workflow
     ai_result = ai_workflow.run_ai_workflow(
@@ -285,6 +469,7 @@ def pg_start(
     privacy_steps = ai_result["privacy_steps"]
     privacy_artifacts = ai_result["privacy_artifacts"]
     ai_by_uid = ai_result["ai_by_uid"]
+    late_watch["source_context"] = ai_result.get("source_context") or {}
 
     # Roster context
     roster_settings = config.get_roster_student_settings(course_id)
@@ -336,11 +521,14 @@ def pg_start(
         rubric_name=rubric_name,
         persona_id=persona_id,
         selected_model=selected_model,
+        assignment_description=assignment_description,
+        response_kind=response_kind,
         privacy_steps=privacy_steps,
         privacy_artifacts=privacy_artifacts,
         students=students,
         mode_label=_mode_label(mode),
         copilot_packet=ai_result.get("copilot_packet"),
+        late_watch=late_watch,
     )
     _save_session(session)
 
@@ -365,6 +553,84 @@ def pg_get_session(session_id: str):
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     return JSONResponse({"ok": True, "session": session})
+
+
+@router.post("/api/powergrader/session/{session_id}/late-watch")
+def pg_late_watch(
+    session_id: str,
+    enabled: str = Form("true"),
+):
+    session = _load_session(session_id)
+    if not session:
+        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+    if session.get("mode") != "assisted":
+        return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-Score With API."})
+    late_watch = session.get("late_watch") or {}
+    late_watch["enabled"] = str(enabled).lower() in {"1", "true", "yes", "on"}
+    if not late_watch["enabled"]:
+        late_watch["reason"] = late_watch.get("reason") or "Late catch-up is disabled for this session."
+    else:
+        if late_watch.get("supported"):
+            late_watch["reason"] = ""
+    session["late_watch"] = late_watch
+    _save_session(session)
+    return JSONResponse({"ok": True, "late_watch": late_watch})
+
+
+@router.post("/api/powergrader/session/{session_id}/late-preview")
+def pg_late_preview(session_id: str):
+    session = _load_session(session_id)
+    if not session:
+        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+    err = _late_watch_error(session)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+
+    subs, adata, fetch_err = canvas_fetch.fetch_submissions(
+        str(session.get("course_id") or ""),
+        str(session.get("assignment_id") or ""),
+    )
+    if fetch_err:
+        return JSONResponse({"ok": False, "error": fetch_err})
+
+    new_subs = late_catchup.find_new_submissions(session, subs or [])
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    late_catchup.update_late_watch_after_preview(session, len(new_subs), now_iso)
+    _save_session(session)
+    students = [
+        {
+            "user_id": str(sub.get("user_id", "")),
+            "name": (sub.get("user") or {}).get("name")
+                     or (sub.get("user") or {}).get("sortable_name")
+                     or str(sub.get("user_id", "")),
+            "submitted_at": sub.get("submitted_at") or "",
+        }
+        for sub in new_subs
+    ]
+    message = f"{len(new_subs)} new late submission(s) found."
+    return JSONResponse({
+        "ok": True,
+        "new_count": len(new_subs),
+        "students": students,
+        "message": message,
+    })
+
+
+@router.post("/api/powergrader/session/{session_id}/late-score")
+def pg_late_score(session_id: str):
+    session = _load_session(session_id)
+    if not session:
+        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+    result = _run_late_catchup_score(session)
+    if not result["ok"]:
+        return JSONResponse(result)
+    return JSONResponse({
+        "ok": True,
+        "appended": result["appended"],
+        "ai_scored": result["ai_scored"],
+        "batch_id": result["batch_id"],
+        "session_id": result["session_id"],
+    })
 
 
 @router.get("/api/powergrader/session/{session_id}/packet")

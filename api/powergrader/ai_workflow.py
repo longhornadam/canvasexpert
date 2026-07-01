@@ -29,6 +29,8 @@ def run_ai_workflow(
     source_files_json: str,
     source_uploads,
     has_openrouter_key: bool,
+    source_context_override: dict | None = None,
+    artifact_assignment_name: str | None = None,
 ) -> dict:
     """Run the AI/packet workflow for a PowerGrader session.
 
@@ -41,6 +43,8 @@ def run_ai_workflow(
     budget_result = None
     debug_path = None
     copilot_info = None
+    source_context: dict = {}
+    artifact_name = artifact_assignment_name or assignment_name
 
     if mode not in {"packet", "assisted"}:
         privacy_steps.append(privacy.privacy_step(
@@ -58,6 +62,7 @@ def run_ai_workflow(
             "budget": None,
             "debug_path": None,
             "copilot_packet": None,
+            "source_context": source_context,
         }
 
     if mode == "assisted" and not has_openrouter_key:
@@ -76,14 +81,18 @@ def run_ai_workflow(
             "budget": None,
             "debug_path": None,
             "copilot_packet": None,
+            "source_context": source_context,
         }
 
     # ---- Build source context ----
     workspace.ensure_workspace()
     try:
-        source_context = context.build_source_context(
-            source_text, source_files_json, source_uploads, strict=True
-        )
+        if source_context_override is not None:
+            source_context = source_context_override
+        else:
+            source_context = context.build_source_context(
+                source_text, source_files_json, source_uploads, strict=True
+            )
     except Exception as e:
         return {
             "ok": False,
@@ -95,6 +104,7 @@ def run_ai_workflow(
             "budget": None,
             "debug_path": None,
             "copilot_packet": None,
+            "source_context": source_context,
         }
 
     source_warning_text = "; ".join(source_materials.context_warnings(source_context))
@@ -109,7 +119,7 @@ def run_ai_workflow(
         ))
 
     vault = context.vault()
-    bundle = fp.pseudonymize_submissions(submitted, vault, assignment_name)
+    bundle = fp.pseudonymize_submissions(submitted, vault, artifact_name)
     bundle = context.apply_shared_context(bundle, assignment_description, source_context)
 
     if not bundle["students"]:
@@ -159,6 +169,7 @@ def run_ai_workflow(
                 "budget": None,
                 "debug_path": None,
                 "copilot_packet": None,
+                "source_context": source_context,
             }
 
         write_result = fp.write_safe_and_private(
@@ -189,6 +200,7 @@ def run_ai_workflow(
                 "budget": None,
                 "debug_path": None,
                 "copilot_packet": None,
+                "source_context": source_context,
             }
 
         privacy_artifacts = {
@@ -252,10 +264,11 @@ def run_ai_workflow(
                 "budget": None,
                 "debug_path": None,
                 "copilot_packet": None,
+                "source_context": source_context,
             }
 
         safe_students = len(llm_bundle.get("students") or [])
-        packet_info = packet.build_safe_ai_packet(assignment_name, safe_dir, write_result, llm_bundle, persona)
+        packet_info = packet.build_safe_ai_packet(artifact_name, safe_dir, write_result, llm_bundle, persona)
         privacy_artifacts.update(packet_info)
         privacy_steps.append(privacy.privacy_step(
             "safe_ai_packet", "Created Safe AI Packet", "ok",
@@ -345,6 +358,7 @@ def run_ai_workflow(
                     "budget": budget_result,
                     "debug_path": None,
                     "copilot_packet": copilot_info,
+                    "source_context": source_context,
                 }
 
             estimate = budget_result.get("estimated_cost")
@@ -383,7 +397,7 @@ def run_ai_workflow(
             except Exception as e:
                 debug_path = privacy.write_openrouter_debug_file(
                     private_dir,
-                    assignment_name,
+                    artifact_name,
                     session_id=session_id,
                     course_id=course_id,
                     assignment_id=assignment_id,
@@ -410,6 +424,7 @@ def run_ai_workflow(
                     "budget": budget_result,
                     "debug_path": debug_path,
                     "copilot_packet": copilot_info,
+                    "source_context": source_context,
                 }
 
     return {
@@ -423,4 +438,5 @@ def run_ai_workflow(
         "budget": budget_result,
         "debug_path": debug_path,
         "copilot_packet": copilot_info,
+        "source_context": source_context,
     }

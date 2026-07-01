@@ -447,6 +447,8 @@
         : 'Fetching submissions…'), false);
     syncSourceFilesJson();
     var fd = new FormData(form);
+    var watchLate = document.getElementById('pg-watch-late');
+    fd.set('watch_late', watchLate && watchLate.checked ? 'true' : 'false');
     // Ensure rubric_name comes from whichever picker is visible
     fetch('/api/powergrader/start', {method:'POST', body: fd})
       .then(function(r){ return r.json(); })

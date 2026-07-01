@@ -3,6 +3,8 @@
 import json
 from datetime import datetime
 
+from powergrader import late_catchup
+
 
 def save_grade(
     session_id: str,
@@ -83,6 +85,7 @@ def push_grades(
             payload["submission"] = {"posted_grade": str(score)}
         if feedback:
             payload.setdefault("comment", {})["text_comment"] = feedback
+        late_catchup.apply_lateness_to_submission_payload(payload, st)
         if not payload:
             errors.append(f"{st['real_name']}: nothing to push (no score or feedback).")
             continue

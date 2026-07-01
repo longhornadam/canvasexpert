@@ -56,6 +56,7 @@ def build_students(
             "is_monitored":  bool(mon),
             "monitored_note": (mon or {}).get("note", ""),
             "extra_time_days": extra_days,
+            **({"late_catchup": s.get("late_catchup")} if s.get("late_catchup") else {}),
         })
 
     students.sort(key=lambda x: x["real_name"].lower())
@@ -73,11 +74,14 @@ def build_session(
     rubric_name: str,
     persona_id: str,
     selected_model: str,
-    privacy_steps: list[dict],
-    privacy_artifacts: dict,
-    students: list[dict],
-    mode_label: str,
+    assignment_description: str = "",
+    response_kind: str = "",
+    privacy_steps: list[dict] | None = None,
+    privacy_artifacts: dict | None = None,
+    students: list[dict] | None = None,
+    mode_label: str = "",
     copilot_packet: dict | None = None,
+    late_watch: dict | None = None,
 ) -> dict:
     """Build the session dictionary ready to save."""
     return {
@@ -85,6 +89,7 @@ def build_session(
         "course_id":       course_id,
         "assignment_id":   assignment_id,
         "assignment_name": assignment_name,
+        "assignment_description": assignment_description,
         "points_possible": points_possible,
         "created":         datetime.now().isoformat(timespec="seconds"),
         "mode":            mode,
@@ -92,9 +97,11 @@ def build_session(
         "rubric_name":     rubric_name,
         "persona_id":      persona_id,
         "model_id":        selected_model if mode == "assisted" else "",
-        "privacy_steps":   privacy_steps,
-        "privacy_artifacts": privacy_artifacts,
+        "response_kind":   response_kind,
+        "privacy_steps":   privacy_steps or [],
+        "privacy_artifacts": privacy_artifacts or {},
         "copilot_packet":  copilot_packet,
-        "students":        students,
+        "late_watch":      late_watch,
+        "students":        students or [],
         "push_log":        [],
     }

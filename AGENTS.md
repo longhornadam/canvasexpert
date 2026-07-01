@@ -80,7 +80,8 @@ assignment. It is now modularized:
   `api/webui/static/powergrader_queue.js`, and matching CSS files
 - Tests: `api/tests/test_powergrader_packet.py`,
   `api/tests/test_powergrader_copilot_packet.py`,
-  `api/tests/test_powergrader_import_results.py`
+  `api/tests/test_powergrader_import_results.py`,
+  `api/tests/test_powergrader_late_catchup.py`
 
 PowerGrader modes:
 
@@ -95,7 +96,10 @@ PowerGrader modes:
   against the selected batch before updating AI suggestions.
 - **Auto-Score With API** - sends only the SAFE pseudonymized packet to the configured
   OpenRouter model after price/budget checks, then loads AI suggestions into the same
-  review queue.
+  review queue. Auto-Score sessions can optionally watch for late submissions; late
+  catch-up reuses the original session's pseudonymized SAFE/PRIVATE route and stored
+  scoring context, appends new AI drafts to the review queue, and still requires
+  teacher review before any Canvas grade/comment push.
 
 PowerGrader sessions are stored under `<workspace>/PowerGrader/`. They are PRIVATE:
 real names, submission content, grades, and teacher comments must never be committed.

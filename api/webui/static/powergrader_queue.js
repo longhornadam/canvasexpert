@@ -35,6 +35,12 @@
   var privacySummary = document.getElementById('pg-privacy-summary');
   var privacySteps = document.getElementById('pg-privacy-steps');
   var privacyActions = document.getElementById('pg-privacy-actions');
+  var lateStrip = document.getElementById('pg-late-strip');
+  var lateSummary = document.getElementById('pg-late-summary');
+  var lateActions = document.getElementById('pg-late-actions');
+  var lateDetail = document.getElementById('pg-late-detail');
+  var latePreviewBtn = document.getElementById('pg-late-preview');
+  var lateScoreBtn = document.getElementById('pg-late-score');
   var packetStrip = document.getElementById('pg-packet-strip');
   var packetActions = document.getElementById('pg-packet-actions');
   var copilotBatches = document.getElementById('pg-copilot-batches');
@@ -70,6 +76,7 @@
 
       updateProgress();
       renderPrivacyAudit(session);
+      renderLateWatch(session);
       renderPacketPanel(session);
       renderStudent(idx);
     })
@@ -109,6 +116,16 @@
       eb.className = 'pg-badge pg-badge--extra';
       eb.textContent = '⏱ +' + st.extra_time_days + 'd';
       badgesEl.appendChild(eb);
+    }
+    if (st.late_catchup && st.late_catchup.is_late_catchup) {
+      var lb = document.createElement('span');
+      lb.className = 'pg-badge pg-badge--late';
+      if (typeof st.late_catchup.school_days_late === 'number') {
+        lb.textContent = 'Late catch-up · ' + st.late_catchup.school_days_late + ' school day' + (st.late_catchup.school_days_late === 1 ? '' : 's') + ' late';
+      } else {
+        lb.textContent = 'Late catch-up';
+      }
+      badgesEl.appendChild(lb);
     }
     if (st.posted) {
       var pb = document.createElement('span');
@@ -266,6 +283,43 @@
     privacyActions.innerHTML = buttons.join('');
   }
 
+  function renderLateWatch(s) {
+    if (!lateStrip || !lateSummary || !lateActions || !lateDetail) return;
+    var late = (s && s.late_watch) || null;
+    if (!late) {
+      lateStrip.hidden = true;
+      lateDetail.innerHTML = '';
+      lateActions.innerHTML = '';
+      return;
+    }
+    lateStrip.hidden = false;
+    var enabled = !!late.enabled && !!late.supported;
+    var summaryBits = [];
+    if (late.reason && !enabled) {
+      summaryBits.push(late.reason);
+    } else if (enabled) {
+      summaryBits.push('Watching');
+    } else {
+      summaryBits.push('Not watching');
+    }
+    if (late.last_summary) summaryBits.push(late.last_summary);
+    lateSummary.textContent = summaryBits.join(' · ');
+    latePreviewBtn.disabled = !enabled;
+    lateScoreBtn.hidden = true;
+    lateScoreBtn.disabled = true;
+    var initialMissing = (late.initial_missing_user_ids || []).length;
+    var knownCount = (late.known_user_ids || []).length;
+    var scoredCount = (late.scored_user_ids || []).length;
+    var details = [
+      '<div class="pg-late-detail-row">Initial missing: ' + initialMissing + '</div>',
+      '<div class="pg-late-detail-row">Known in queue: ' + knownCount + '</div>',
+      '<div class="pg-late-detail-row">Already appended: ' + scoredCount + '</div>'
+    ];
+    if (late.last_checked) details.push('<div class="pg-late-detail-row">Last checked: ' + _esc(late.last_checked) + '</div>');
+    if (late.last_scored) details.push('<div class="pg-late-detail-row">Last scored: ' + _esc(late.last_scored) + '</div>');
+    lateDetail.innerHTML = details.join('');
+  }
+
   function renderPacketPanel(s) {
     var artifacts = (s && s.privacy_artifacts) || {};
     var copilot = (s && s.copilot_packet) || {};
@@ -295,6 +349,12 @@
         copilotBatches.innerHTML = '';
       }
     }
+  }
+
+  function showLateScoreButton(show) {
+    if (!lateScoreBtn) return;
+    lateScoreBtn.hidden = !show;
+    lateScoreBtn.disabled = !show;
   }
 
   function renderCopilotBatches(copilot, batches) {
@@ -391,6 +451,7 @@
               session = fresh.session;
               students = session.students || [];
               updateProgress();
+              renderLateWatch(session);
               renderPacketPanel(session);
               renderStudent(idx);
               if (importStatus) {
@@ -465,6 +526,7 @@
               session = fresh.session;
               students = session.students || [];
               updateProgress();
+              renderLateWatch(session);
               renderPacketPanel(session);
               renderStudent(idx);
               var batch = findBatch(batchId);
@@ -477,6 +539,75 @@
       })
       .catch(function(err){ if (status) status.textContent = String(err); })
       .finally(function(){ importBatchBtn.disabled = false; });
+  });
+
+  latePreviewBtn && latePreviewBtn.addEventListener('click', function(){
+    latePreviewBtn.disabled = true;
+    if (lateSummary) lateSummary.textContent = 'Checking for late submissions…';
+    fetch('/api/powergrader/session/' + SESSION_ID + '/late-preview', {method:'POST'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) {
+          if (lateSummary) lateSummary.textContent = d.error || 'Late preview failed.';
+          showStatus(d.error || 'Late preview failed.', true);
+          return;
+        }
+        if (lateSummary) lateSummary.textContent = d.message || (d.new_count + ' late submission(s) found.');
+        if (lateDetail) {
+          lateDetail.innerHTML = (d.students || []).map(function(st){
+            return '<div class="pg-late-detail-row">' + _esc(st.name || st.user_id || '') +
+              (st.submitted_at ? ' · ' + _esc(st.submitted_at) : '') + '</div>';
+          }).join('');
+        }
+        showLateScoreButton((d.new_count || 0) > 0);
+      })
+      .catch(function(e){
+        if (lateSummary) lateSummary.textContent = String(e);
+        showStatus(String(e), true);
+      })
+      .finally(function(){
+        latePreviewBtn.disabled = false;
+        if (session && session.late_watch && session.late_watch.enabled && session.late_watch.supported) {
+          latePreviewBtn.disabled = false;
+        }
+      });
+  });
+
+  lateScoreBtn && lateScoreBtn.addEventListener('click', function(){
+    lateScoreBtn.disabled = true;
+    if (lateSummary) lateSummary.textContent = 'Scoring new late submissions…';
+    fetch('/api/powergrader/session/' + SESSION_ID + '/late-score', {method:'POST'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok) {
+          if (lateSummary) lateSummary.textContent = d.error || 'Late scoring failed.';
+          showStatus(d.error || 'Late scoring failed.', true);
+          return;
+        }
+        return fetch('/api/powergrader/session/' + SESSION_ID)
+          .then(function(r){ return r.json(); })
+          .then(function(fresh){
+            if (fresh.ok) {
+              session = fresh.session;
+              students = session.students || [];
+              updateProgress();
+              renderPrivacyAudit(session);
+              renderLateWatch(session);
+              renderPacketPanel(session);
+              renderStudent(Math.min(idx, Math.max(0, students.length - 1)));
+              showStatus('Late catch-up added ' + d.appended + ' student(s) to review.', false);
+            }
+          });
+      })
+      .catch(function(e){
+        if (lateSummary) lateSummary.textContent = String(e);
+        showStatus(String(e), true);
+      })
+      .finally(function(){
+        if (session && session.late_watch && session.late_watch.enabled && session.late_watch.supported) {
+          lateScoreBtn.disabled = false;
+        }
+      });
   });
 
   function buildAiDraft(st) {
