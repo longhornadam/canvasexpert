@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from api.webui.routes import routines
+from api.webui.routes import routines_powergrader
 
 
 def _queue_job(**overrides):
@@ -52,7 +58,7 @@ def test_scheduled_autoscore_reschedules_when_due_date_moves_later(monkeypatch):
     monkeypatch.setattr(routines.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: ([], {
         "name": "Essay 1",
         "submission_types": ["online_text_entry"],
-        "due_at": "2026-07-02T23:59:00-05:00",
+        "due_at": "2099-07-02T23:59:00-05:00",
     }, None))
     monkeypatch.setattr(routines, "_canvas_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("scheduled autoscore must not write grades/comments")))
     monkeypatch.setattr(routines.ai_workflow, "run_ai_workflow", lambda **kwargs: (_ for _ in ()).throw(AssertionError("rescheduled jobs must not create a session")))
@@ -62,9 +68,37 @@ def test_scheduled_autoscore_reschedules_when_due_date_moves_later(monkeypatch):
 
     assert result["ok"] is True
     assert any("rescheduled" in line for line in result["lines"])
-    assert job["scheduled_at"] == "2026-07-03T05:59:00-05:00"
+    assert job["scheduled_at"] == "2099-07-03T05:59:00-05:00"
     assert job["status"] == "scheduled"
     assert job["reason"] == "text entry gives PowerGrader readable response text"
+
+
+def test_scheduled_autoscore_reschedules_when_no_submitted_work(monkeypatch):
+    queue = {"version": 1, "jobs": [_queue_job(
+        due_at="2026-06-28T23:59:00-05:00",
+        scheduled_at="2026-06-29T05:59:00-05:00",
+    )]}
+    job = queue["jobs"][0]
+
+    monkeypatch.setattr(routines.autoscore_queue, "load_queue", lambda: queue)
+    monkeypatch.setattr(routines.autoscore_queue, "due_jobs", lambda q, now=None: q["jobs"])
+    monkeypatch.setattr(routines.autoscore_queue, "save_queue", lambda q: None)
+    monkeypatch.setattr(routines.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: ([
+        {"user_id": "101", "workflow_state": "unsubmitted", "submission_type": None},
+    ], {
+        "name": "Essay 1",
+        "submission_types": ["online_text_entry"],
+        "due_at": "2026-06-28T23:59:00-05:00",
+    }, None))
+    monkeypatch.setattr(routines, "_canvas_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("scheduled autoscore must not write grades/comments")))
+    monkeypatch.setattr(routines.ai_workflow, "run_ai_workflow", lambda **kwargs: (_ for _ in ()).throw(AssertionError("jobs with no submitted work must not create a session")))
+
+    result = routines._run_routine_powergrader_scheduled_autoscore({"max_jobs": 10})
+
+    assert result["ok"] is True
+    assert any("no submitted work" in line for line in result["lines"])
+    assert job["status"] == "scheduled"
+    assert job["last_error"] == "No submitted work found yet."
 
 
 def test_scheduled_autoscore_creates_draft_session_without_canvas_writeback(monkeypatch):
@@ -324,3 +358,8 @@ def test_scheduled_autoscore_marks_missing_assignment_as_failed(monkeypatch):
     assert job["status"] == "failed"
     assert job["reason"] == "Canvas assignment is no longer available."
     assert job["last_error"] == "Canvas assignment is no longer available."
+
+
+def test_powergrader_routines_do_not_use_absolute_routines_bridge():
+    source = Path(routines_powergrader.__file__).read_text(encoding="utf-8")
+    assert "from api.webui.routes import routines" not in source

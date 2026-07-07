@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import requests
 
-from . import af, config
+from . import af, config, pf, rf
 try:
     from powergrader import autoscore_queue, autopush_policy
 except ModuleNotFoundError:  # pragma: no cover - package context
@@ -418,8 +418,55 @@ def _push_assignmentforge(cid, payload, notes):
     return result
 
 
+def _push_pageforge(cid, payload, notes):
+    path = payload.get("path") or ""
+    data, problems = pf.parse_file(path)
+    title = str((data or {}).get("title") or "Untitled page")
+    if data is None or problems:
+        return PushResult(False, title, None, "; ".join(problems or ["unreadable file"]))
+
+    body = str(data.get("body") or "")
+    placeholders = sorted({
+        f"{kind}:{value.strip()}"
+        for kind, value in pf.PLACEHOLDER_RE.findall(body)
+    })
+    if placeholders:
+        return PushResult(
+            False,
+            title,
+            None,
+            "PageForge placeholders are not wired through this push path yet: "
+            + ", ".join(placeholders),
+        )
+
+    page = {
+        "title": title,
+        "body": body,
+        "published": bool(payload.get("published")),
+    }
+    if payload.get("module_name"):
+        page["module_name"] = payload["module_name"]
+    return _push_page(cid, page, notes)
+
+
+def _push_rubricforge(cid, payload, notes):
+    path = payload.get("path") or ""
+    data, problems = rf.parse_file(path)
+    title = str((data or {}).get("title") or "Untitled rubric")
+    if data is None or problems:
+        return PushResult(False, title, None, "; ".join(problems or ["unreadable file"]))
+    return PushResult(
+        False,
+        title,
+        None,
+        "RubricForge live push is not wired through this push path yet.",
+    )
+
+
 _CONTENT_PUSHERS = {
     "af": _push_assignmentforge,
+    "pf": _push_pageforge,
+    "rf": _push_rubricforge,
     "quick": _push_quick,
     "printable": _push_printable_assignment,
 }

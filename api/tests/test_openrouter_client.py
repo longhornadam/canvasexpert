@@ -207,7 +207,7 @@ def test_teacher_budget_blocks_unverified_model_pricing():
 
 
 def test_legacy_auto_router_setting_resolves_to_default(monkeypatch):
-    monkeypatch.setattr(config, "_machine_load", lambda: {"openrouter_model": "openrouter/auto"})
+    monkeypatch.setattr(config._io, "_machine_load", lambda: {"openrouter_model": "openrouter/auto"})
     assert config.get_openrouter_model() == "deepseek/deepseek-v4-pro"
 
 

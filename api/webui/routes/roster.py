@@ -13,16 +13,27 @@ V3: Canvas groups are the source of truth for tier/group assignment.
 Does NOT write local tier_id.
 """
 import json
-import re as _re
 
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
 import feedback_scrub
 from .. import config
-from ..canvas_client import _canvas_get_all, _canvas_send
+from ..canvas_client import _canvas_get_all, _canvas_headers, _canvas_send
 from .courses import load_group_categories
 from .names import _fetch_students, _upsert_roster, _vault
+from . import roster_canvas
+from .roster_helpers import (
+    _annotate_group_labels,
+    _as_int,
+    _compute_canvas_group_display,
+    _compute_warnings,
+    _enrollment_section_ids,
+    _parse_group_names,
+    _resolve_tier_display,
+    _user_id_set_from_canvas_groups,
+    _value_name,
+)
 
 router = APIRouter(prefix="/api/roster", tags=["roster"])
 
@@ -43,155 +54,11 @@ WARNING_CODES = (
 
 
 def _fetch_sections(course_id: str) -> dict:
-    """Return {section_id: section_name} for a course."""
-    sections, err = _canvas_get_all(
-        f"/api/v1/courses/{course_id}/sections", {"per_page": 100})
-    if err or not sections:
-        return {}
-    return {str(s["id"]): s.get("name", f"Section {s['id']}") for s in sections}
-
-
-def _enrollment_section_ids(users: list[dict]) -> dict:
-    """Return {user_id_str: [section_id_str, ...]} from enrollments."""
-    result = {}
-    for u in (users or []):
-        uid = str(u["id"])
-        secs = set()
-        for enrollment in (u.get("enrollments") or []):
-            sec_id = enrollment.get("course_section_id")
-            if sec_id:
-                secs.add(str(sec_id))
-        if secs:
-            result[uid] = sorted(secs)
-    return result
-
-
-def _resolve_tier_display(course_id: str, tier_id: str | None,
-                           tier_scheme: list[dict] | None = None) -> dict:
-    """Return {tier_id, tier_label, tier_alias, tier_display} for a student."""
-    if tier_id:
-        tid = tier_id
-    else:
-        tid = ""
-    if tier_scheme is None:
-        tier_scheme = config.get_roster_tier_scheme(course_id)
-    label = ""
-    alias = ""
-    for t in tier_scheme:
-        if t["id"] == tid:
-            label = t.get("teacher_label", "")
-            alias = t.get("alias", "")
-            break
-    display = f"{label} / {alias}" if label and alias else (label or alias or "")
-    return {
-        "tier_id": tid,
-        "tier_label": label,
-        "tier_alias": alias,
-        "tier_display": display,
-    }
-
-
-def _compute_warnings(student: dict, vault_entries_by_id: dict,
-                       protected_names: set[str], collisions: dict,
-                       selected_category_id: str | None = None) -> list[str]:
-    """Return warning string codes for one student row."""
-    warnings: list[str] = []
-    cid = student["id"]
-
-    vault_entry = vault_entries_by_id.get(cid, {})
-    pseudo = vault_entry.get("pseudonym", "")
-    if not pseudo or pseudo.startswith("S0"):
-        warnings.append("missing_pseudonym")
-
-    et = student.get("extra_time", {})
-    if et.get("enabled") and not (et.get("days") and int(et.get("days", 0)) > 0):
-        warnings.append("extra_time_without_days")
-
-    # V3: Check for group_unset or multiple_groups_in_selected_set
-    canvas_group = student.get("canvas_group") or {}
-    if selected_category_id and not canvas_group.get("group_id"):
-        warnings.append("group_unset")
-
-    # Check if student is in multiple groups in the selected set
-    canvas_groups = student.get("canvas_groups", [])
-    if selected_category_id:
-        groups_in_selected = [g for g in canvas_groups if g.get("category_id") == selected_category_id]
-        if len(groups_in_selected) > 1:
-            warnings.append("multiple_groups_in_selected_set")
-
-    # Nickname collisions
-    nicknames = vault_entry.get("nicknames", [])
-    for nn in nicknames:
-        if nn.lower() in protected_names:
-            warnings.append("protected_name_collision")
-            break
-
-    # Check current-course vault entries for duplicate/common/protected collisions.
-    if vault_entry:
-        if collisions.get("literary"):
-            for lit in collisions["literary"]:
-                if vault_entry.get("real_name", "").lower() in lit.lower():
-                    warnings.append("protected_name_collision")
-                    break
-        for bucket in ("dup_first", "common_word"):
-            for item in collisions.get(bucket, []):
-                if vault_entry.get("real_name", "").lower() in item.lower():
-                    warnings.append("nickname_collision")
-                    break
-
-    return list(dict.fromkeys(warnings))
-
-
-def _as_int(value, field_name: str) -> tuple[int | None, str | None]:
-    """Best-effort int parsing for form JSON values."""
-    try:
-        return int(value), None
-    except (TypeError, ValueError):
-        return None, f"{field_name} must be an integer."
-
-
-def _value_name(value: dict | None, user_id: str) -> str:
-    """Return a per-user display name from a bulk value payload."""
-    if not isinstance(value, dict):
-        return ""
-    names = value.get("names")
-    if isinstance(names, dict):
-        return str(names.get(str(user_id), "") or "")
-    return str(value.get("name", "") or "")
-
-
-def _parse_group_names(raw: str) -> tuple[list[str], str | None]:
-    """Parse a JSON array or newline/comma separated group-name list."""
-    raw = (raw or "").strip()
-    if not raw:
-        return [], None
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        parsed = [part.strip() for part in _re.split(r"[\r\n,]+", raw)]
-    if not isinstance(parsed, list):
-        return [], "group_names must be a list or separated text."
-
-    names: list[str] = []
-    seen: set[str] = set()
-    for item in parsed:
-        name = str(item or "").strip()
-        if not name:
-            continue
-        key = name.lower()
-        if key in seen:
-            return [], f"Duplicate group name '{name}'."
-        seen.add(key)
-        names.append(name)
-    return names, None
+    return roster_canvas.fetch_sections(course_id, canvas_get_all=_canvas_get_all)
 
 
 def _create_canvas_group(category_id: str, name: str) -> tuple[dict | None, str | None]:
-    return _canvas_send(
-        "POST",
-        f"/api/v1/group_categories/{category_id}/groups",
-        {"name": name},
-    )
+    return roster_canvas.create_canvas_group(category_id, name, canvas_send=_canvas_send)
 
 
 # --------------------------------------------------------------------------
@@ -199,63 +66,18 @@ def _create_canvas_group(category_id: str, name: str) -> tuple[dict | None, str 
 # --------------------------------------------------------------------------
 
 def canvas_add_group_membership(group_id: str, user_id: str) -> tuple[bool, str | None]:
-    """Add a user to a Canvas group.
-
-    Returns (success, error_message).
-    Canvas endpoint: POST /api/v1/groups/{group_id}/memberships
-    """
-    try:
-        r = _canvas_send(
-            "POST",
-            f"/api/v1/groups/{group_id}/memberships",
-            {"user_id": user_id},
-        )
-        if r[1]:
-            return False, r[1]
-        return True, None
-    except Exception as e:
-        return False, str(e)
+    return roster_canvas.canvas_add_group_membership(
+        group_id, user_id, canvas_send=_canvas_send)
 
 
 def canvas_remove_group_membership(group_id: str, membership_id: str) -> tuple[bool, str | None]:
-    """Remove a user from a Canvas group by membership ID.
-
-    Returns (success, error_message).
-    Canvas endpoint: DELETE /api/v1/groups/{group_id}/memberships/{membership_id}
-    """
-    try:
-        r = _canvas_send(
-            "DELETE",
-            f"/api/v1/groups/{group_id}/memberships/{membership_id}",
-            {},
-        )
-        if r[1]:
-            return False, r[1]
-        return True, None
-    except Exception as e:
-        return False, str(e)
+    return roster_canvas.canvas_remove_group_membership(
+        group_id, membership_id, canvas_send=_canvas_send)
 
 
 def _get_group_memberships(course_id: str, group_id: str) -> tuple[list[dict], str | None]:
-    """Get all memberships for a Canvas group."""
-    hdrs, base = _canvas_get_all.__wrapped__.__self__._canvas_headers() if hasattr(_canvas_get_all, '__wrapped__') else (None, None)
-    import requests
-    from ..canvas_client import _canvas_headers
-    hdrs, base = _canvas_headers()
-    if not hdrs:
-        return [], "No Canvas token saved"
-    try:
-        r = requests.get(
-            f"{base}/api/v1/groups/{group_id}/memberships",
-            headers=hdrs,
-            params={"per_page": 200},
-            timeout=20,
-        )
-        if r.status_code != 200:
-            return [], f"HTTP {r.status_code}: {r.text[:200]}"
-        return r.json() or [], None
-    except Exception as e:
-        return [], str(e)
+    return roster_canvas.get_group_memberships(
+        course_id, group_id, canvas_headers=_canvas_headers)
 
 
 def _validate_canvas_group_target(
@@ -263,21 +85,12 @@ def _validate_canvas_group_target(
     category_id: str,
     target_group_id: str | None,
 ) -> tuple[list[dict], dict | None, str | None]:
-    """Validate a Canvas group category and optional target group for a course."""
-    categories, group_err, _ = load_group_categories(course_id)
-    if group_err:
-        return categories, None, group_err
-
-    category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
-    if not category:
-        return categories, None, f"Invalid category_id '{category_id}'."
-
-    if target_group_id:
-        group_ids = {str(g.get("id")) for g in category.get("groups", [])}
-        if str(target_group_id) not in group_ids:
-            return categories, category, f"Invalid group_id '{target_group_id}' for category {category_id}."
-
-    return categories, category, None
+    return roster_canvas.validate_canvas_group_target(
+        course_id,
+        category_id,
+        target_group_id,
+        load_group_categories=load_group_categories,
+    )
 
 
 def _update_student_canvas_group(
@@ -287,123 +100,16 @@ def _update_student_canvas_group(
     target_group_id: str | None,
     categories: list[dict] | None = None,
 ) -> tuple[bool, str | None]:
-    """Update a student's Canvas group membership.
-
-    1. Remove from all groups in the category.
-    2. Add to target group if specified.
-    Returns (success, error_message).
-    """
-    # Get all groups in the category and validate the target before mutating.
-    if categories is None:
-        categories, _, err = _validate_canvas_group_target(course_id, category_id, target_group_id)
-        if err:
-            return False, err
-    else:
-        category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
-        if not category:
-            return False, f"Invalid category_id '{category_id}'."
-        if target_group_id:
-            group_ids = {str(g.get("id")) for g in category.get("groups", [])}
-            if str(target_group_id) not in group_ids:
-                return False, f"Invalid group_id '{target_group_id}' for category {category_id}."
-
-    # Get current memberships for this user in this category
-    user_groups = _user_id_set_from_canvas_groups(categories).get(str(user_id), [])
-    groups_in_category = [g for g in user_groups if g.get("category_id") == str(category_id)]
-
-    # Remove from all groups in the category
-    for g in groups_in_category:
-        gid = g.get("group_id")
-        mem_id = g.get("membership_id")
-        if mem_id:
-            ok, err = canvas_remove_group_membership(gid, mem_id)
-            if not ok:
-                return False, f"Failed to remove from group {gid}: {err}"
-
-    # Add to target group if specified
-    if target_group_id:
-        ok, err = canvas_add_group_membership(str(target_group_id), str(user_id))
-        if not ok:
-            return False, f"Failed to add to group {target_group_id}: {err}"
-
-    return True, None
-
-
-def _user_id_set_from_canvas_groups(categories: list[dict]) -> dict:
-    """Return {user_id_str: [group_info, ...]} from categories.
-
-    Each group_info includes: category_id, category_name, group_id, group_name,
-    and optionally membership_id (from Canvas membership response).
-    """
-    result: dict[str, list[dict]] = {}
-    for cat in categories:
-        cat_id = cat.get("category_id", "")
-        cat_name = cat.get("category_name", "")
-        for grp in cat.get("groups", []):
-            gid = grp.get("id", "")
-            gname = grp.get("name", "")
-            # Include membership_id if present (for Canvas writes)
-            memberships = grp.get("memberships", [])
-            for sid in grp.get("student_ids", []):
-                sid_str = str(sid)
-                result.setdefault(sid_str, []).append({
-                    "category_id": cat_id,
-                    "category_name": cat_name,
-                    "group_id": gid,
-                    "group_name": gname,
-                    "membership_id": None,  # Will be populated if Canvas returns it
-                })
-            # Also index by membership if available
-            for mem in memberships:
-                mem_user_id = str(mem.get("user_id", ""))
-                if mem_user_id:
-                    for gi in result.get(mem_user_id, []):
-                        if gi["group_id"] == gid:
-                            gi["membership_id"] = mem.get("id")
-    return result
-
-
-def _compute_canvas_group_display(course_id: str, group_id: str | None, group_name: str | None) -> dict:
-    """Compute Canvas group display info for a student row."""
-    if not group_id or not group_name:
-        return {
-            "category_id": None,
-            "category_name": None,
-            "group_id": None,
-            "group_name": None,
-            "teacher_label": None,
-            "display": None,
-        }
-    group_label = config.get_group_label(course_id, group_id)
-    teacher_label = group_label.get("teacher_label") if group_label else None
-    display = config.compute_group_display(teacher_label, group_name)
-    return {
-        "category_id": None,  # Will be filled by caller
-        "category_name": None,
-        "group_id": group_id,
-        "group_name": group_name,
-        "teacher_label": teacher_label,
-        "display": display,
-    }
-
-
-def _annotate_group_labels(course_id: str, categories: list[dict]) -> None:
-    """Attach teacher labels/display text to Canvas group objects in-place."""
-    for cat in categories:
-        for group in cat.get("groups", []):
-            group_id = str(group.get("id", ""))
-            group_name = group.get("name", "")
-            saved = config.get_group_label(course_id, group_id) or {}
-            teacher_label = saved.get("teacher_label") or config.default_group_label(group_name)
-            meaning = saved.get("meaning", "")
-            if teacher_label:
-                group["teacher_label"] = teacher_label
-                group["display"] = config.compute_group_display(teacher_label, group_name)
-            else:
-                group["teacher_label"] = None
-                group["display"] = group_name
-            if meaning:
-                group["meaning"] = meaning
+    return roster_canvas.update_student_canvas_group(
+        course_id,
+        user_id,
+        category_id,
+        target_group_id,
+        categories=categories,
+        validate_canvas_group_target=_validate_canvas_group_target,
+        canvas_add_group_membership=canvas_add_group_membership,
+        canvas_remove_group_membership=canvas_remove_group_membership,
+    )
 
 
 @router.get("")
@@ -510,21 +216,13 @@ def roster_get(course_id: str = Query("")):
         # Build canvas_group field for the row
         canvas_group = None
         if canvas_group_info:
-            canvas_group = {
-                "category_id": canvas_group_info.get("category_id"),
-                "category_name": canvas_group_info.get("category_name"),
-                "group_id": canvas_group_info.get("group_id"),
-                "group_name": canvas_group_info.get("group_name"),
-                "teacher_label": None,
-                "display": None,
-            }
-            if canvas_group_info.get("group_id"):
-                label = config.get_group_label(course_id, canvas_group_info["group_id"])
-                teacher_label = (label.get("teacher_label") if label else None) or config.default_group_label(
-                    canvas_group_info.get("group_name", ""))
-                canvas_group["teacher_label"] = teacher_label
-                canvas_group["display"] = config.compute_group_display(
-                    teacher_label, canvas_group_info.get("group_name", ""))
+            canvas_group = _compute_canvas_group_display(
+                course_id,
+                canvas_group_info.get("group_id"),
+                canvas_group_info.get("group_name"),
+            )
+            canvas_group["category_id"] = canvas_group_info.get("category_id")
+            canvas_group["category_name"] = canvas_group_info.get("category_name")
 
         # Nicknames from vault
         nicknames = ve.get("nicknames", [])

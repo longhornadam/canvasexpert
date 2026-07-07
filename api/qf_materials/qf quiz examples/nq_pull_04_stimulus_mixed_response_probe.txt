@@ -1,0 +1,94 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "NQ Pull Test 04 - Stimulus Mixed Response Probe",
+  "instructions": "<p>This sandbox quiz checks how embedded stimulus content affects New Quizzes report headers and typed responses.</p>",
+  "metadata": {
+    "subject": "CanvasExpert sandbox",
+    "grade": 8,
+    "standard": "Synthetic stimulus and response-pull fixture",
+    "variant_group": "nq_pull_stimulus_mixed",
+    "variant_label": "Whole class",
+    "privacy": "Synthetic fixture; no student data in authored file."
+  },
+  "items": [
+    {
+      "id": "stim_observation_log",
+      "type": "STIMULUS",
+      "format": "markdown",
+      "layout": "below",
+      "prompt": "<div style='border:1px solid #d6dde8;border-radius:6px;padding:12px;background:#f8fbff'><p><strong>Sandbox Observation Log</strong></p><p>A teacher tests two fictional stations. The counts below are synthetic and do not describe real students.</p><table style='border-collapse:collapse;width:100%'><thead><tr><th style='border:1px solid #c8d2e0;padding:6px'>Station</th><th style='border:1px solid #c8d2e0;padding:6px'>Start count</th><th style='border:1px solid #c8d2e0;padding:6px'>Final count</th></tr></thead><tbody><tr><td style='border:1px solid #c8d2e0;padding:6px'>Red station</td><td style='border:1px solid #c8d2e0;padding:6px'>8</td><td style='border:1px solid #c8d2e0;padding:6px'>12</td></tr><tr><td style='border:1px solid #c8d2e0;padding:6px'>Blue station</td><td style='border:1px solid #c8d2e0;padding:6px'>10</td><td style='border:1px solid #c8d2e0;padding:6px'>18</td></tr></tbody></table></div>"
+    },
+    {
+      "id": "stim_q01_mc",
+      "type": "MC",
+      "stimulus_id": "stim_observation_log",
+      "prompt": "<p>Which station had the higher final count?</p>",
+      "choices": [
+        { "id": "A", "text": "Blue station with a final count of 18", "correct": true },
+        { "id": "B", "text": "Red station with a final count of 12", "correct": false },
+        { "id": "C", "text": "Both stations had equal final counts", "correct": false },
+        { "id": "D", "text": "The table does not list final counts", "correct": false }
+      ]
+    },
+    {
+      "id": "stim_q02_ma",
+      "type": "MA",
+      "stimulus_id": "stim_observation_log",
+      "prompt": "<p>Which statements are supported by the observation log? Select all that apply.</p>",
+      "choices": [
+        { "id": "A", "text": "The Blue station ended with more tokens than the Red station.", "correct": true },
+        { "id": "B", "text": "The Red station increased by four tokens from start to final.", "correct": true },
+        { "id": "C", "text": "The Red station started with more tokens than the Blue station.", "correct": false },
+        { "id": "D", "text": "The Blue station finished with exactly twelve tokens.", "correct": false }
+      ]
+    },
+    {
+      "id": "stim_q03_fitb",
+      "type": "FITB",
+      "stimulus_id": "stim_observation_log",
+      "prompt": "<p>The final count for the Blue station was [blank].</p>",
+      "accept": ["18"],
+      "answer_mode": "open_entry",
+      "case_sensitive": false
+    },
+    {
+      "id": "stim_q04_evidence_essay",
+      "type": "ESSAY",
+      "stimulus_id": "stim_observation_log",
+      "prompt": "<p>Write 2-3 sentences starting with <code>STIM-EVIDENCE:</code>. Use one detail from the table and explain whether your response should be recoverable from the New Quizzes report.</p>",
+      "length_guidance": "2-3 sentences",
+      "rubric_hint": "The response should begin with STIM-EVIDENCE and cite one table detail."
+    },
+    {
+      "id": "stim_observation_log_end",
+      "type": "STIMULUS_END",
+      "prompt": ""
+    }
+  ],
+  "rationales": [
+    {
+      "item_id": "stim_q01_mc",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "The Blue station final count is 18, which is higher than the Red station final count of 12." },
+        { "id": "B", "correct": false, "rationale": "The Red station final count is listed, but it is lower than the Blue station's final count." },
+        { "id": "C", "correct": false, "rationale": "The final counts are not equal; the table lists 12 for Red and 18 for Blue." },
+        { "id": "D", "correct": false, "rationale": "The table includes a Final count column for both stations." }
+      ]
+    },
+    {
+      "item_id": "stim_q02_ma",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "Blue ended at 18 while Red ended at 12, so Blue ended with more tokens." },
+        { "id": "B", "correct": true, "rationale": "Red increased from 8 to 12, which is a gain of four tokens." },
+        { "id": "C", "correct": false, "rationale": "Red started with 8 and Blue started with 10, so Red did not start higher." },
+        { "id": "D", "correct": false, "rationale": "Blue finished with 18 tokens, not twelve." }
+      ]
+    },
+    {
+      "item_id": "stim_q03_fitb",
+      "rationale": "The table shows the Blue station final count as 18."
+    }
+  ]
+}
+</QUIZFORGE_JSON>

@@ -4,6 +4,16 @@ This directory holds project-local tool manifests, templates, and future helper 
 The initial framework is documentation-only; planned tools may not have implementations
 yet.
 
+## Available Helpers
+
+```powershell
+py tools/size_report.py
+```
+
+Reports `.py` and `.js` files at or above 300 lines, marking 500+ line files as
+large. The report is advisory and exits successfully; it is meant to guide small
+refactor slices, not block urgent fixes.
+
 ## Lifecycle
 
 1. Add a manifest under `tools/manifests/`.

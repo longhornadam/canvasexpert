@@ -22,37 +22,18 @@
   var bulkExtraDays = document.getElementById("roster-bulk-extra-days");
   var safetyCard = document.getElementById("roster-safety-card");
   var groupLabelsEditor = document.getElementById("roster-group-labels-editor");
-  var groupLabelsRows = document.getElementById("roster-group-labels-rows");
-  var groupLabelsSaveBtn = document.getElementById("roster-group-labels-save");
-  var groupLabelsStatus = document.getElementById("roster-group-labels-status");
-  var newGroupSetName = document.getElementById("roster-new-group-set-name");
-  var newGroupNames = document.getElementById("roster-new-group-names");
-  var createGroupSetBtn = document.getElementById("roster-create-group-set");
-  var addGroupsBtn = document.getElementById("roster-add-groups");
-  var groupBuilderStatus = document.getElementById("roster-group-builder-status");
-
-  // Protected names
-  var protectedPacksEl = document.getElementById("roster-protected-packs");
-  var customProtectedInput = document.getElementById("roster-custom-protected");
-  var saveProtectedBtn = document.getElementById("roster-save-protected");
-  var scrubText = document.getElementById("roster-scrub-text");
-  var scrubRun = document.getElementById("roster-scrub-run");
-  var scrubResult = document.getElementById("roster-scrub-result");
-  var exportWhoBtn = document.getElementById("roster-export-who");
-  var backupVaultBtn = document.getElementById("roster-backup-vault");
-
-  // Group set picker
-  var groupSetPicker = document.getElementById("roster-group-set-picker");
 
   // State
   var students = [];
   var groups = [];
   var selectedGroupCategoryId = null;
   var groupLabelScheme = {};
+  var currentCategoryGroups = [];
   var selectedStudentId = null;
   var filteredStudents = [];
   var currentCourseId = "";
-  var protectedData = { packs: [], custom: [], active: [] };
+  var courseLoaded = false;
+  var courseLoadHooks = [];
   var saveTimeouts = {}; // row id -> timeout for debounced save
 
   // ── Helper ─────────────────────────────────────────────────────────
@@ -68,11 +49,6 @@
     statusEl.className = "hint" + (isOk ? " ok" : " error");
   }
 
-  function setGroupBuilderStatus(msg, isOk) {
-    groupBuilderStatus.textContent = msg;
-    groupBuilderStatus.className = "hint" + (isOk ? " ok" : " error");
-  }
-
   function toast(msg, isError) {
     var el = document.getElementById("ce-toast");
     if (!el) return;
@@ -80,6 +56,59 @@
     el.className = "ce-toast" + (isError ? " ce-toast--error" : " ce-toast--ok");
     el.hidden = false;
     setTimeout(function () { el.hidden = true; }, 3000);
+  }
+
+  function notifyCourseLoaded() {
+    for (var i = 0; i < courseLoadHooks.length; i++) {
+      try {
+        courseLoadHooks[i]();
+      } catch (err) {
+        // Ignore hook failures so roster loading still completes.
+      }
+    }
+  }
+
+  window.CE_ROSTER = {
+    toast: toast,
+    getCurrentCourseId: function () { return currentCourseId; },
+    hasLoadedCourse: function () { return courseLoaded; },
+    reloadCourse: loadCourse,
+    getGroupState: function () {
+      return {
+        groups: groups,
+        selectedGroupCategoryId: selectedGroupCategoryId,
+        groupLabelScheme: groupLabelScheme,
+        currentCategoryGroups: currentCategoryGroups
+      };
+    },
+    setSelectedGroupCategoryId: function (value) {
+      selectedGroupCategoryId = value == null ? null : String(value);
+      refreshCurrentCategoryGroups();
+      populateCanvasGroupSelects();
+      renderTable();
+    },
+    onCourseLoaded: function (fn) {
+      if (typeof fn !== "function") return function () {};
+      courseLoadHooks.push(fn);
+      return function () {
+        for (var i = courseLoadHooks.length - 1; i >= 0; i--) {
+          if (courseLoadHooks[i] === fn) {
+            courseLoadHooks.splice(i, 1);
+          }
+        }
+      };
+    }
+  };
+
+  function refreshCurrentCategoryGroups() {
+    currentCategoryGroups = [];
+    if (!selectedGroupCategoryId) return;
+    for (var i = 0; i < groups.length; i++) {
+      if (String(groups[i].category_id) === String(selectedGroupCategoryId)) {
+        currentCategoryGroups = groups[i].groups || [];
+        return;
+      }
+    }
   }
 
   function setRowStatus(rowId, msg, cls) {
@@ -168,32 +197,25 @@
         }
         students = data.students || [];
         groups = data.groups || [];
-        selectedGroupCategoryId = data.selected_group_category_id;
+        selectedGroupCategoryId = data.selected_group_category_id == null ? null : String(data.selected_group_category_id);
         groupLabelScheme = data.group_label_scheme || {};
+        refreshCurrentCategoryGroups();
         renderSummary(data.counts);
-        populateGroupSetPicker();
         populateCanvasGroupSelects();
         renderTable();
         tableCard.hidden = false;
         groupLabelsEditor.hidden = false;
         safetyCard.hidden = false;
-        renderGroupLabelsEditor();
+        courseLoaded = true;
+        notifyCourseLoaded();
         setStatus("Loaded " + students.length + " students" + (data.note ? " — " + data.note : ""), true);
         if (data.legacy_tier_count) {
           toast("This course has old local tier assignments. Canvas groups are now the source of truth.", true);
         }
-        if (scrubText.value) scrubRun.click();
       })
       .catch(function (e) {
         setStatus("Network error: " + e.message, false);
       });
-  }
-
-  function parseGroupNameText() {
-    return (newGroupNames.value || "")
-      .split(/\r?\n|,/)
-      .map(function (name) { return name.trim(); })
-      .filter(Boolean);
   }
 
   function renderSummary(counts) {
@@ -205,26 +227,10 @@
     document.getElementById("roster-summary-warnings").textContent = "Issues " + counts.warnings;
   }
 
-  function populateGroupSetPicker() {
-    groupSetPicker.innerHTML = "";
-    if (!groups.length) {
-      groupSetPicker.innerHTML = '<option value="">— no group sets —</option>';
-      return;
-    }
-    for (var i = 0; i < groups.length; i++) {
-      var g = groups[i];
-      var sel = g.category_id === selectedGroupCategoryId ? " selected" : "";
-      groupSetPicker.innerHTML += '<option value="' + esc(g.category_id) + '"' + sel + '>' + esc(g.category_name) + '</option>';
-    }
-  }
 
   function populateCanvasGroupSelects() {
     // Build the list of groups in the selected category
-    var category = groups.find(function(g) { return g.category_id === selectedGroupCategoryId; });
-    var categoryGroups = category ? category.groups : [];
-
-    // Store for use in row rendering
-    window._currentCategoryGroups = categoryGroups;
+    var categoryGroups = currentCategoryGroups;
 
     bulkGroup.innerHTML = '<option value="">Choose group...</option>';
     for (var i = 0; i < categoryGroups.length; i++) {
@@ -250,7 +256,7 @@
   }
 
   function findCurrentCategoryGroup(targetGroupId) {
-    var categoryGroups = window._currentCategoryGroups || [];
+    var categoryGroups = currentCategoryGroups || [];
     var target = String(targetGroupId || "");
     for (var i = 0; i < categoryGroups.length; i++) {
       if (groupId(categoryGroups[i]) === target) return categoryGroups[i];
@@ -265,7 +271,7 @@
     var activeFilter = document.querySelector(".roster-filter-btn.active");
     var filter = activeFilter ? activeFilter.dataset.filter : "all";
 
-    var categoryGroups = window._currentCategoryGroups || [];
+    var categoryGroups = currentCategoryGroups || [];
 
     filteredStudents = students.filter(function (s) {
       if (q) {
@@ -502,91 +508,6 @@
     }
   }
 
-  // ── Group set picker change ─────────────────────────────────────────
-
-  groupSetPicker.addEventListener("change", function () {
-    selectedGroupCategoryId = this.value;
-    saveGroupSetPreference();
-    populateCanvasGroupSelects();
-    renderTable();
-  });
-
-  createGroupSetBtn.addEventListener("click", function () {
-    var cid = courseSelect.value;
-    var setName = newGroupSetName.value.trim();
-    var names = parseGroupNameText();
-    if (!cid) { setGroupBuilderStatus("Select a course first.", false); return; }
-    if (!setName) { setGroupBuilderStatus("Name the group set first.", false); return; }
-
-    createGroupSetBtn.disabled = true;
-    addGroupsBtn.disabled = true;
-    setGroupBuilderStatus("Creating in Canvas...", true);
-    var body = new URLSearchParams();
-    body.append("course_id", cid);
-    body.append("name", setName);
-    body.append("group_names", JSON.stringify(names));
-
-    fetch("/api/roster/group-set", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data.ok) {
-          setGroupBuilderStatus(data.error || "Create failed.", false);
-          return;
-        }
-        newGroupSetName.value = "";
-        newGroupNames.value = "";
-        setGroupBuilderStatus("Created group set" + (data.created_groups && data.created_groups.length ? " and " + data.created_groups.length + " group(s)." : "."), true);
-        loadCourse();
-      })
-      .catch(function (e) { setGroupBuilderStatus("Error: " + e.message, false); })
-      .finally(function () {
-        createGroupSetBtn.disabled = false;
-        addGroupsBtn.disabled = false;
-      });
-  });
-
-  addGroupsBtn.addEventListener("click", function () {
-    var cid = courseSelect.value;
-    var categoryId = groupSetPicker.value;
-    var names = parseGroupNameText();
-    if (!cid) { setGroupBuilderStatus("Select a course first.", false); return; }
-    if (!categoryId) { setGroupBuilderStatus("Select a group set first.", false); return; }
-    if (!names.length) { setGroupBuilderStatus("Enter at least one group name.", false); return; }
-
-    createGroupSetBtn.disabled = true;
-    addGroupsBtn.disabled = true;
-    setGroupBuilderStatus("Creating groups in Canvas...", true);
-    var body = new URLSearchParams();
-    body.append("course_id", cid);
-    body.append("category_id", categoryId);
-    body.append("group_names", JSON.stringify(names));
-
-    fetch("/api/roster/groups", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data.ok) {
-          setGroupBuilderStatus(data.error || "Create failed.", false);
-          return;
-        }
-        newGroupNames.value = "";
-        setGroupBuilderStatus("Created " + (data.created_groups || []).length + " group(s).", true);
-        loadCourse();
-      })
-      .catch(function (e) { setGroupBuilderStatus("Error: " + e.message, false); })
-      .finally(function () {
-        createGroupSetBtn.disabled = false;
-        addGroupsBtn.disabled = false;
-      });
-  });
-
-  function saveGroupSetPreference() {
-    var body = new URLSearchParams();
-    body.append("course_id", currentCourseId);
-    body.append("category_id", selectedGroupCategoryId || "");
-    fetch("/api/roster/group-set-preference", { method: "POST", body: body })
-      .catch(function (e) { /* silent fail */ });
-  }
-
   // ── Filters ─────────────────────────────────────────────────────────
 
   searchInput.addEventListener("input", renderTable);
@@ -694,189 +615,6 @@
       .catch(function (e) { toast("Error: " + e.message, true); });
   }
 
-  // ── Group labels editor ─────────────────────────────────────────────
-
-  function renderGroupLabelsEditor() {
-    groupLabelsRows.innerHTML = "";
-    var categoryGroups = window._currentCategoryGroups || [];
-    for (var i = 0; i < categoryGroups.length; i++) {
-      var g = categoryGroups[i];
-      var gid = groupId(g);
-      var label = groupLabelScheme[gid] || {};
-      var teacherLabel = label.teacher_label || "";
-      var meaning = label.meaning || "";
-
-      var row = document.createElement("div");
-      row.className = "roster-v2-tier-row";
-      row.dataset.groupId = gid;
-
-      var nameSpan = document.createElement("span");
-      nameSpan.className = "roster-v2-group-name";
-      nameSpan.textContent = g.name;
-
-      var teacherLabelInput = document.createElement("input");
-      teacherLabelInput.type = "text";
-      teacherLabelInput.className = "roster-v2-tier-label";
-      teacherLabelInput.value = teacherLabel;
-      teacherLabelInput.title = "Teacher label";
-      teacherLabelInput.placeholder = "Label";
-
-      var meaningInput = document.createElement("input");
-      meaningInput.type = "text";
-      meaningInput.className = "roster-v2-tier-meaning";
-      meaningInput.value = meaning;
-      meaningInput.title = "Meaning";
-      meaningInput.placeholder = "Meaning";
-
-      row.appendChild(nameSpan);
-      row.appendChild(document.createTextNode(" → "));
-      row.appendChild(teacherLabelInput);
-      row.appendChild(meaningInput);
-      groupLabelsRows.appendChild(row);
-    }
-  }
-
-  groupLabelsSaveBtn.addEventListener("click", function () {
-    var rows = groupLabelsRows.querySelectorAll(".roster-v2-tier-row");
-    var labels = {};
-    for (var i = 0; i < rows.length; i++) {
-      var r = rows[i];
-      var gid = r.dataset.groupId;
-      var label = r.querySelector(".roster-v2-tier-label").value.trim();
-      var meaning = r.querySelector(".roster-v2-tier-meaning").value.trim();
-      if (label) {
-        labels[gid] = { teacher_label: label, meaning: meaning };
-      }
-    }
-
-    groupLabelsStatus.textContent = "Saving...";
-    var body = new URLSearchParams();
-    body.append("course_id", currentCourseId);
-    body.append("labels", JSON.stringify(labels));
-
-    fetch("/api/roster/group-labels", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) {
-          groupLabelsStatus.textContent = "Saved.";
-          groupLabelScheme = data.group_labels || {};
-          renderGroupLabelsEditor();
-          loadCourse(); // refresh roster with new labels
-        } else {
-          groupLabelsStatus.textContent = data.error || "Save failed.";
-        }
-      })
-      .catch(function (e) { groupLabelsStatus.textContent = "Error: " + e.message; });
-  });
-
-  // ── Protected names ─────────────────────────────────────────────────
-
-  function loadProtected() {
-    fetch("/api/names/protected")
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        protectedData = data;
-        renderProtectedPacks(data);
-        customProtectedInput.value = (data.custom || []).join(", ");
-      })
-      .catch(function () {});
-  }
-
-  function renderProtectedPacks(data) {
-    protectedPacksEl.innerHTML = "";
-    var packs = data.packs || [];
-    for (var i = 0; i < packs.length; i++) {
-      var label = document.createElement("label");
-      label.className = "roster-protected-pack";
-      var cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = packs[i].enabled;
-      cb.dataset.packId = packs[i].id;
-      label.appendChild(cb);
-      label.appendChild(document.createTextNode(" " + packs[i].title));
-      protectedPacksEl.appendChild(label);
-    }
-  }
-
-  saveProtectedBtn.addEventListener("click", function () {
-    var packStates = {};
-    var cbs = protectedPacksEl.querySelectorAll("input[type=checkbox]");
-    for (var i = 0; i < cbs.length; i++) {
-      packStates[cbs[i].dataset.packId] = cbs[i].checked;
-    }
-    var custom = customProtectedInput.value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
-
-    var body = new URLSearchParams();
-    body.append("data", JSON.stringify({ packs: packStates, custom: custom }));
-
-    fetch("/api/names/protected", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) {
-          toast("Protected names saved.", false);
-          loadProtected();
-        } else {
-          toast(data.error || "Save failed.", true);
-        }
-      })
-      .catch(function (e) { toast("Error: " + e.message, true); });
-  });
-
-  // ── Scrub test ──────────────────────────────────────────────────────
-
-  scrubRun.addEventListener("click", function () {
-    var txt = scrubText.value;
-    if (!txt) { scrubResult.hidden = true; return; }
-    var body = new URLSearchParams();
-    body.append("text", txt);
-    body.append("course_id", currentCourseId);
-
-    fetch("/api/names/scrub-test", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) {
-          scrubResult.textContent = data.scrubbed;
-          scrubResult.hidden = false;
-        } else {
-          scrubResult.textContent = data.error || "Scrub test failed.";
-          scrubResult.hidden = false;
-        }
-      })
-      .catch(function (e) { toast("Error: " + e.message, true); });
-  });
-
-  // ── Export / backup ─────────────────────────────────────────────────
-
-  exportWhoBtn.addEventListener("click", function () {
-    if (!currentCourseId) return;
-    var body = new URLSearchParams();
-    body.append("course_id", currentCourseId);
-
-    fetch("/api/names/who-is-who", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) {
-          toast("Exported to " + data.path, false);
-        } else {
-          toast(data.error || "Export failed.", true);
-        }
-      })
-      .catch(function (e) { toast("Error: " + e.message, true); });
-  });
-
-  backupVaultBtn.addEventListener("click", function () {
-    fetch("/api/names/backup-vault", { method: "POST" })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) {
-          toast("Backed up (" + data.entries + " entries).", false);
-        } else {
-          toast(data.error || "Backup failed.", true);
-        }
-      })
-      .catch(function (e) { toast("Error: " + e.message, true); });
-  });
-
   // ── Init ────────────────────────────────────────────────────────────
 
   window.CANVAS_BASE = document.querySelector('meta[name="canvas-base"]')
@@ -892,8 +630,6 @@
 
   courseSelect.addEventListener("change", loadCourse);
   refreshBtn.addEventListener("click", loadCourse);
-
-  loadProtected();
 
   if (courseSelect.value) {
     loadCourse();

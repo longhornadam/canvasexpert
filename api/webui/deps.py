@@ -98,7 +98,10 @@ if _workspace_folder("Rubrics"):
     RUBRIC_FOLDERS.append(_workspace_folder("Rubrics"))
 RUBRIC_FOLDERS.append(os.path.join(API_DIR, "rubrics"))
 
-ASSIGNMENT_FOLDERS = [os.path.join(API_DIR, "qf_materials", "qf quiz examples")]
+ASSIGNMENT_FOLDERS = [
+    os.path.join(API_DIR, "qf_materials", "assignment examples"),
+    os.path.join(API_DIR, "qf_materials", "qf quiz examples"),
+]
 if _workspace_folder("Assignments"):
     ASSIGNMENT_FOLDERS.append(_workspace_folder("Assignments"))
 

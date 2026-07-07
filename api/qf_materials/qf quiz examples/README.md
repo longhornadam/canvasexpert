@@ -15,6 +15,12 @@ validates with `py validate_qf.py` (run from the project root).
 | `ela7_lantern_formA.txt` | `ela7_lantern` | Form A | Differentiation set: **same passage, two parallel forms** (anti-copying / A-B grouping). |
 | `ela7_lantern_formB.txt` | `ela7_lantern` | Form B | |
 | `all_types_sampler.txt` | `all_types_sampler` | Coverage fixture | One of **every** QF type — the transformer smoke test. |
+| `nq_pull_01_constructed_response_basics.txt` | `nq_pull_basics` | Whole class | New Quizzes Student Analysis response-pull probe for essays, line breaks, punctuation, and a simple FITB anchor. |
+| `nq_pull_02_red_group_text_probe.txt` | `nq_pull_group_text_probe` | Red | Red group-only variant for visibility and constructed-response pull testing. |
+| `nq_pull_02_blue_group_text_probe.txt` | `nq_pull_group_text_probe` | Blue | Blue group-only variant for visibility and constructed-response pull testing. |
+| `nq_pull_03_auto_graded_item_encoding.txt` | `nq_pull_auto_graded_encoding` | Whole class | Response encoding probe for MC, MA, TF, FITB open entry, FITB dropdown, numerical, matching, ordering, and categorization. |
+| `nq_pull_04_stimulus_mixed_response_probe.txt` | `nq_pull_stimulus_mixed` | Whole class | Stimulus-inlining probe with MC, MA, FITB, and essay responses. |
+| `nq_pull_05_file_upload_and_essay_probe.txt` | `nq_pull_upload_probe` | Whole class optional | Optional New Quizzes file-upload plus essay confirmation probe. |
 
 **Differentiation convention:** files that share a `metadata.variant_group` are
 alternatives for the *same* learning target. The pipeline assigns each variant to

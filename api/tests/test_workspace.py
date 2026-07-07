@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from api.webui import config, workspace
+from api.webui.config import _io as config_io
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -57,7 +58,7 @@ def test_config_split_writes_workspace_settings_when_available(tmp_path, monkeyp
     machine_config = tmp_path / "config.json"
     workspace_root = tmp_path / "OneDrive" / "CanvasExpert"
     workspace_root.mkdir(parents=True)
-    monkeypatch.setattr(config, "CONFIG_PATH", str(machine_config))
+    monkeypatch.setattr(config_io, "CONFIG_PATH", str(machine_config))
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(workspace_root))
 
     _write_json(machine_config, {"canvas_base": config.CANVAS_BASE_DEFAULT, "saved_courses": []})
@@ -74,7 +75,7 @@ def test_config_split_writes_workspace_settings_when_available(tmp_path, monkeyp
 
 def test_config_split_stays_machine_local_without_workspace(tmp_path, monkeypatch):
     machine_config = tmp_path / "config.json"
-    monkeypatch.setattr(config, "CONFIG_PATH", str(machine_config))
+    monkeypatch.setattr(config_io, "CONFIG_PATH", str(machine_config))
     monkeypatch.setattr(workspace, "workspace_root", lambda: None)
 
     _write_json(machine_config, {"canvas_base": config.CANVAS_BASE_DEFAULT, "saved_courses": []})
@@ -90,7 +91,7 @@ def test_personas_seed_once_then_follow_folder_changes(tmp_path, monkeypatch):
     root = tmp_path / "CanvasExpert"
     root.mkdir()
     monkeypatch.setattr(workspace, "folder", lambda name: str(root / name))
-    monkeypatch.setattr(config, "_synced_state", lambda: {})
+    monkeypatch.setattr(config._io, "_synced_state", lambda: {})
 
     first = config.list_personas()
     persona_dir = root / "AI-TA" / "Personas"
@@ -112,7 +113,7 @@ def test_workspace_migration_is_idempotent(tmp_path, monkeypatch):
     machine_config = tmp_path / "config.json"
     workspace_root = tmp_path / "OneDrive" / "CanvasExpert"
     workspace_root.mkdir(parents=True)
-    monkeypatch.setattr(config, "CONFIG_PATH", str(machine_config))
+    monkeypatch.setattr(config_io, "CONFIG_PATH", str(machine_config))
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(workspace_root))
 
     _write_json(

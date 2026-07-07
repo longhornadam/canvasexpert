@@ -84,6 +84,33 @@ Expected output:
 - Behavioral risk notes
 - Suggested tests or checks
 
+## size-report
+
+Status: `available`
+
+Use when:
+
+- Picking the next refactor target by file size
+- Checking whether a split reduced large `.py` or `.js` files
+- Producing a compact line-count report without reading file contents into LLM context
+
+Avoid when:
+
+- You need complexity, ownership, or call graph analysis rather than line counts
+- You are scanning private output folders; the script skips common output/private dirs by default
+
+Command:
+
+```powershell
+py tools/size_report.py
+```
+
+Expected output:
+
+- Files at or above 300 lines by default
+- `warn` for 300+ lines and `large` for 500+ lines
+- Relative source paths and line counts
+
 ## canvas-docs-scraper
 
 Status: `planned`

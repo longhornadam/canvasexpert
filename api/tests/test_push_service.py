@@ -42,6 +42,123 @@ def test_push_quick_returns_assignment_id(monkeypatch):
     assert result.assignment_id == "24680"
 
 
+def test_content_pushers_cover_frontend_kinds():
+    assert {"af", "pf", "rf", "quick", "printable"}.issubset(
+        push_service._CONTENT_PUSHERS
+    )
+
+
+def test_pageforge_content_push_uses_pf_pusher_and_returns_page_url(monkeypatch, tmp_path):
+    page_path = tmp_path / "handout.pageforge.json"
+    page_path.write_text(
+        """
+<PAGEFORGE_JSON>
+{"version":"1.0-json","type":"PAGE","title":"Handout","body":"<p>Read this.</p>"}
+</PAGEFORGE_JSON>
+""".strip(),
+        encoding="utf-8",
+    )
+    calls = []
+
+    monkeypatch.setattr(push_service, "_find_or_create_module_id", lambda cid, name, notes: None)
+
+    def fake_canvas_send(method, path, payload, timeout=30):
+        calls.append((method, path, payload))
+        return {
+            "title": payload["wiki_page"]["title"],
+            "url": "handout",
+            "html_url": "https://canvas.invalid/courses/42/pages/handout",
+        }, None
+
+    monkeypatch.setattr(push_service, "_canvas_send", fake_canvas_send)
+
+    response = push_routes.api_content_push(
+        kind="pf",
+        courses=json.dumps([{ "id": "42", "name": "Period 1" }]),
+        payload=json.dumps({
+            "path": str(page_path),
+            "published": True,
+            "module_name": "Unit 1",
+        }),
+    )
+    data = json.loads(response.body)
+
+    assert data["ok"] is True
+    assert data["results"][0]["title"] == "Handout"
+    assert calls[0][1] == "/api/v1/courses/42/pages"
+    assert calls[0][2]["wiki_page"] == {
+        "title": "Handout",
+        "body": "<p>Read this.</p>",
+        "published": True,
+    }
+
+
+def test_pageforge_content_push_fails_closed_on_placeholder(monkeypatch, tmp_path):
+    page_path = tmp_path / "placeholder.pageforge.json"
+    page_path.write_text(
+        """
+<PAGEFORGE_JSON>
+{"version":"1.0-json","type":"PAGE","title":"Handout","body":"<p>{{file:Handout.pdf}}</p>"}
+</PAGEFORGE_JSON>
+""".strip(),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_canvas_send(method, path, payload, timeout=30):
+        calls.append((method, path, payload))
+        return {}, None
+
+    monkeypatch.setattr(push_service, "_canvas_send", fake_canvas_send)
+
+    response = push_routes.api_content_push(
+        kind="pf",
+        courses=json.dumps([{ "id": "42", "name": "Period 1" }]),
+        payload=json.dumps({
+            "path": str(page_path),
+            "published": True,
+            "module_name": "Unit 1",
+        }),
+    )
+    data = json.loads(response.body)
+
+    assert data["ok"] is False
+    assert "placeholders" in data["results"][0]["error"].lower()
+    assert calls == []
+
+
+def test_rubricforge_content_push_fails_closed_until_wired(monkeypatch):
+    fake_rubric = {
+        "version": "1.0-json",
+        "type": "RUBRIC",
+        "title": "Classroom Rubric",
+        "student_page": {"title": "Classroom Rubric Guide"},
+        "criteria": [],
+        "total_points": 0,
+    }
+    calls = []
+
+    monkeypatch.setattr(push_service.rf, "parse_file", lambda path: (fake_rubric, []))
+
+    def fake_canvas_send(method, path, payload, timeout=30):
+        calls.append((method, path, payload))
+        return {}, None
+
+    monkeypatch.setattr(push_service, "_canvas_send", fake_canvas_send)
+
+    response = push_routes.api_content_push(
+        kind="rf",
+        courses=json.dumps([{ "id": "42", "name": "Period 1" }]),
+        payload=json.dumps({"path": "fake.rubricforge.json"}),
+    )
+    data = json.loads(response.body)
+
+    assert data["ok"] is False
+    assert data["results"][0]["title"] == "Classroom Rubric"
+    assert "not wired" in data["results"][0]["error"]
+    assert calls == []
+
+
 def test_assignmentforge_content_push_uses_af_pusher_and_returns_assignment_id(monkeypatch):
     fake_assignment = {
         "version": "1.0-json",

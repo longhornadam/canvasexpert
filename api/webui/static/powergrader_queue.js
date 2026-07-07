@@ -8,6 +8,7 @@
   var students     = [];
   var idx          = 0;    // current student index
   var rubricText   = '';
+  var queue        = window.CE_POWERGRADER_QUEUE || (window.CE_POWERGRADER_QUEUE = {});
 
   // ── DOM refs ────────────────────────────────────────────────────────
   var subPane      = document.getElementById('pg-submission-pane');
@@ -31,27 +32,35 @@
   var navCounter   = document.getElementById('pg-nav-counter');
   var progressFill = document.getElementById('pg-progress-fill');
   var progressLbl  = document.getElementById('pg-progress-label');
-  var privacyStrip = document.getElementById('pg-privacy-strip');
-  var privacySummary = document.getElementById('pg-privacy-summary');
-  var privacySteps = document.getElementById('pg-privacy-steps');
-  var privacyActions = document.getElementById('pg-privacy-actions');
-  var lateStrip = document.getElementById('pg-late-strip');
-  var lateSummary = document.getElementById('pg-late-summary');
-  var lateActions = document.getElementById('pg-late-actions');
-  var lateDetail = document.getElementById('pg-late-detail');
-  var latePreviewBtn = document.getElementById('pg-late-preview');
-  var lateScoreBtn = document.getElementById('pg-late-score');
   var packetStrip = document.getElementById('pg-packet-strip');
   var packetActions = document.getElementById('pg-packet-actions');
-  var copilotBatches = document.getElementById('pg-copilot-batches');
-  var legacyImportBox = document.getElementById('pg-legacy-import-box');
-  var importJson = document.getElementById('pg-import-json');
-  var importBtn = document.getElementById('pg-import-results');
-  var importStatus = document.getElementById('pg-import-status');
   var statusBar    = document.getElementById('pg-status-bar');
   var rubricPanel  = document.getElementById('pg-rubric-details');
   var rubricPre    = document.getElementById('pg-rubric-text');
   var kbdAHint     = document.getElementById('pg-kbd-a-hint');
+
+  queue.getSession = function(){ return session; };
+  queue.setSession = function(nextSession){
+    session = nextSession || null;
+    queue.session = session;
+  };
+  queue.getStudents = function(){ return students; };
+  queue.setStudents = function(nextStudents){
+    students = Array.isArray(nextStudents) ? nextStudents : [];
+    queue.students = students;
+  };
+  queue.getIndex = function(){ return idx; };
+  queue.setIndex = function(nextIndex){
+    idx = Math.max(0, Number(nextIndex) || 0);
+    queue.index = idx;
+  };
+  queue.getSessionId = function(){ return SESSION_ID; };
+  queue.showStatus = showStatus;
+  queue.updateProgress = updateProgress;
+  queue.renderStudent = renderStudent;
+  queue.session = session;
+  queue.students = students;
+  queue.index = idx;
 
   function isAiMode() {
     return MODE === 'assisted' || MODE === 'packet';
@@ -63,8 +72,8 @@
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d.ok) { showStatus('Failed to load session: ' + (d.error || 'unknown'), true); return; }
-      session  = d.session;
-      students = session.students || [];
+      queue.setSession(d.session);
+      queue.setStudents(session.students || []);
       rubricText = session.rubric_name || '';
 
       // Try to show rubric text if we have a rubric name
@@ -75,9 +84,9 @@
       }
 
       updateProgress();
-      renderPrivacyAudit(session);
-      renderLateWatch(session);
-      renderPacketPanel(session);
+      if (queue.renderPrivacyAudit) queue.renderPrivacyAudit(session);
+      if (queue.renderLateWatch) queue.renderLateWatch(session);
+      if (queue.renderPacketPanel) queue.renderPacketPanel(session);
       renderStudent(idx);
     })
     .catch(function(e){ showStatus('Load error: ' + e, true); });
@@ -86,6 +95,7 @@
   function renderStudent(i) {
     if (!students.length) { subPane.innerHTML = '<p class="pg-no-text">No students in session.</p>'; return; }
     idx = Math.max(0, Math.min(i, students.length - 1));
+    queue.setIndex(idx);
     var st = students[idx];
 
     // Progress
@@ -254,361 +264,6 @@
       'table{border-collapse:collapse;}td,th{border:1px solid ' + (dark?'#444':'#ddd') + ';padding:4px 8px;}' +
       '</style></head><body>' + bodyHtml + '</body></html>';
   }
-
-  function renderPrivacyAudit(s) {
-    var steps = (s && s.privacy_steps) || [];
-    if (!steps.length || !privacyStrip || !privacySteps) return;
-    privacyStrip.hidden = false;
-    var ok = steps.filter(function(st){ return st.status === 'ok'; }).length;
-    var warn = steps.filter(function(st){ return st.status === 'warn'; }).length;
-    var fail = steps.filter(function(st){ return st.status === 'failed'; }).length;
-    privacySummary.textContent = ok + ' green' + (warn ? ', ' + warn + ' yellow' : '') + (fail ? ', ' + fail + ' red' : '');
-    privacySteps.innerHTML = steps.map(function(step){
-      var status = step.status || '';
-      var light = status === 'ok' ? 'ok' : (status === 'warn' ? 'warn' : (status === 'failed' ? 'failed' : ''));
-      var pathButton = step.path
-        ? '<div class="pg-privacy-actions-inline"><button type="button" class="small" data-open-path="' + _esc(step.path) + '">' + _esc(step.action_label || 'Open file') + '</button></div>'
-        : '';
-      return '<div class="pg-privacy-step">' +
-        '<span class="pg-light ' + light + '"></span>' +
-        '<div><div class="pg-privacy-label" title="' + _esc(step.label || '') + '">' + _esc(step.label || step.id || 'Step') + '</div>' +
-        (step.detail ? '<div class="pg-privacy-detail">' + _esc(step.detail) + '</div>' : '') +
-        pathButton +
-        '</div></div>';
-    }).join('');
-    var artifacts = s.privacy_artifacts || {};
-    var buttons = [];
-    if (artifacts.safe_folder) buttons.push('<button type="button" class="small" data-open-path="' + _esc(artifacts.safe_folder) + '">Open Safe AI Packet folder</button>');
-    if (artifacts.private_folder) buttons.push('<button type="button" class="small" data-open-path="' + _esc(artifacts.private_folder) + '">Open Private decoder folder</button>');
-    privacyActions.innerHTML = buttons.join('');
-  }
-
-  function renderLateWatch(s) {
-    if (!lateStrip || !lateSummary || !lateActions || !lateDetail) return;
-    var late = (s && s.late_watch) || null;
-    if (!late) {
-      lateStrip.hidden = true;
-      lateDetail.innerHTML = '';
-      lateActions.innerHTML = '';
-      return;
-    }
-    lateStrip.hidden = false;
-    var enabled = !!late.enabled && !!late.supported;
-    var summaryBits = [];
-    if (late.reason && !enabled) {
-      summaryBits.push(late.reason);
-    } else if (enabled) {
-      summaryBits.push('Watching');
-    } else {
-      summaryBits.push('Not watching');
-    }
-    if (late.last_summary) summaryBits.push(late.last_summary);
-    lateSummary.textContent = summaryBits.join(' · ');
-    latePreviewBtn.disabled = !enabled;
-    lateScoreBtn.hidden = true;
-    lateScoreBtn.disabled = true;
-    var initialMissing = (late.initial_missing_user_ids || []).length;
-    var knownCount = (late.known_user_ids || []).length;
-    var scoredCount = (late.scored_user_ids || []).length;
-    var details = [
-      '<div class="pg-late-detail-row">Initial missing: ' + initialMissing + '</div>',
-      '<div class="pg-late-detail-row">Known in queue: ' + knownCount + '</div>',
-      '<div class="pg-late-detail-row">Already appended: ' + scoredCount + '</div>'
-    ];
-    if (late.last_checked) details.push('<div class="pg-late-detail-row">Last checked: ' + _esc(late.last_checked) + '</div>');
-    if (late.last_scored) details.push('<div class="pg-late-detail-row">Last scored: ' + _esc(late.last_scored) + '</div>');
-    lateDetail.innerHTML = details.join('');
-  }
-
-  function renderPacketPanel(s) {
-    var artifacts = (s && s.privacy_artifacts) || {};
-    var copilot = (s && s.copilot_packet) || {};
-    var batches = Array.isArray(copilot.batches) ? copilot.batches : [];
-    if (!packetStrip || !packetActions) return;
-    if (!artifacts.packet_zip && !batches.length) return;
-    packetStrip.hidden = false;
-    var buttons = [];
-    if (artifacts.packet_folder) {
-      buttons.push('<button type="button" class="small" data-open-path="' + _esc(artifacts.packet_folder) + '">Open packet folder</button>');
-    }
-    if (copilot.packet_folder) {
-      buttons.push('<button type="button" class="small" data-open-path="' + _esc(copilot.packet_folder) + '">Open Copilot batch folder</button>');
-    }
-    buttons.push('<a class="small" href="/api/powergrader/session/' + encodeURIComponent(SESSION_ID) + '/packet" style="padding:4px 10px;border:1px solid var(--line);border-radius:var(--r-sm);text-decoration:none;background:var(--card);color:var(--ink)">Download packet ZIP</a>');
-    packetActions.innerHTML = buttons.join('');
-    if (batches.length) {
-      if (legacyImportBox) legacyImportBox.hidden = true;
-      if (copilotBatches) {
-        copilotBatches.hidden = false;
-        copilotBatches.innerHTML = renderCopilotBatches(copilot, batches);
-      }
-    } else {
-      if (legacyImportBox) legacyImportBox.hidden = false;
-      if (copilotBatches) {
-        copilotBatches.hidden = true;
-        copilotBatches.innerHTML = '';
-      }
-    }
-  }
-
-  function showLateScoreButton(show) {
-    if (!lateScoreBtn) return;
-    lateScoreBtn.hidden = !show;
-    lateScoreBtn.disabled = !show;
-  }
-
-  function renderCopilotBatches(copilot, batches) {
-    var imported = batches.filter(function(batch){ return batch.status === 'imported'; }).length;
-    var loaded = students.filter(function(st){
-      return st.ai_score !== null && st.ai_score !== undefined || !!(st.ai_feedback || '').trim();
-    }).length;
-    var total = copilot.student_count || students.length || 0;
-    return '<div class="pg-copilot-note">' +
-      'This is one PowerGrader session. Do not start a new PowerGrader session for later batches.<br>' +
-      'For each batch, start a new Copilot chat, upload files 01, 02, and 03, paste the batch prompt, then paste Copilot&apos;s JSON back here.<br>' +
-      '<span>These files use pseudonyms and remove obvious student identifiers before you upload them. Review the files before sending them to Copilot.</span>' +
-      '</div>' +
-      '<div class="pg-copilot-summary">Imported ' + imported + ' of ' + batches.length + ' batches. AI suggestions loaded for ' + loaded + ' of ' + total + ' students.</div>' +
-      batches.map(renderCopilotBatch).join('');
-  }
-
-  function renderCopilotBatch(batch) {
-    var status = batch.status || 'pending';
-    var label = batch.label || batch.batch_id || 'Batch';
-    var warningHtml = (batch.warnings || []).map(function(w){
-      return '<div class="pg-copilot-warning">' + _esc(w) + '</div>';
-    }).join('');
-    var meta = (batch.student_count || 0) + ' students';
-    if (batch.token_estimate) meta += ' · ~' + Number(batch.token_estimate).toLocaleString() + ' tokens';
-    return '<div class="pg-copilot-batch" data-batch-id="' + _esc(batch.batch_id || '') + '">' +
-      '<div class="pg-copilot-batch-head">' +
-        '<strong>' + _esc(label) + '</strong>' +
-        '<span class="pg-batch-status ' + _esc(status) + '">' + _esc(titleCase(status)) + '</span>' +
-      '</div>' +
-      '<div class="pg-copilot-batch-meta">' + _esc(meta) + '</div>' +
-      '<div class="pg-copilot-batch-meta">Start a new Copilot chat for this batch. Upload files 01, 02, and 03 from this folder.</div>' +
-      warningHtml +
-      '<div class="pg-copilot-batch-actions">' +
-        '<button type="button" class="small" data-open-path="' + _esc(batch.folder || '') + '">Open batch folder</button>' +
-        '<button type="button" class="small" data-copy-batch-prompt="' + _esc(batch.batch_id || '') + '">Copy Copilot prompt</button>' +
-      '</div>' +
-      '<details class="pg-import-box">' +
-        '<summary>Paste JSON for ' + _esc(label) + '</summary>' +
-        '<textarea data-batch-results="' + _esc(batch.batch_id || '') + '" rows="5"></textarea>' +
-        '<div class="pg-import-actions">' +
-          '<button type="button" class="primary small" data-import-batch="' + _esc(batch.batch_id || '') + '">Import this batch</button>' +
-          '<span class="hint" data-batch-status-text="' + _esc(batch.batch_id || '') + '"></span>' +
-        '</div>' +
-      '</details>' +
-    '</div>';
-  }
-
-  function titleCase(text) {
-    text = String(text || 'pending');
-    return text.charAt(0).toUpperCase() + text.slice(1);
-  }
-
-  function findBatch(batchId) {
-    var batches = session && session.copilot_packet && Array.isArray(session.copilot_packet.batches)
-      ? session.copilot_packet.batches
-      : [];
-    return batches.find(function(batch){ return batch.batch_id === batchId; });
-  }
-
-  function batchStatusEl(batchId) {
-    return document.querySelector('[data-batch-status-text="' + cssEscape(batchId) + '"]');
-  }
-
-  function cssEscape(value) {
-    if (window.CSS && CSS.escape) return CSS.escape(value);
-    return String(value || '').replace(/"/g, '\\"');
-  }
-
-  importBtn && importBtn.addEventListener('click', function(){
-    var text = importJson ? importJson.value.trim() : '';
-    if (!text) {
-      if (importStatus) importStatus.textContent = 'Paste AI JSON first.';
-      return;
-    }
-    importBtn.disabled = true;
-    if (importStatus) importStatus.textContent = 'Validating and importing...';
-    var fd = new FormData();
-    fd.append('results', text);
-    fetch('/api/powergrader/session/' + SESSION_ID + '/import-results', {method:'POST', body:fd})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (!d.ok) {
-          if (importStatus) {
-            var details = d.validation && d.validation.errors ? ' ' + d.validation.errors.slice(0, 2).join(' ') : '';
-            importStatus.textContent = (d.error || 'Import failed.') + details;
-          }
-          return;
-        }
-        return fetch('/api/powergrader/session/' + SESSION_ID)
-          .then(function(r){ return r.json(); })
-          .then(function(fresh){
-            if (fresh.ok) {
-              session = fresh.session;
-              students = session.students || [];
-              updateProgress();
-              renderLateWatch(session);
-              renderPacketPanel(session);
-              renderStudent(idx);
-              if (importStatus) {
-                var warnings = d.validation && d.validation.warnings ? d.validation.warnings.length : 0;
-                importStatus.textContent = 'Imported ' + d.updated + ' AI suggestion(s)' + (warnings ? ' with ' + warnings + ' warning(s).' : '.');
-              }
-              showStatus('AI suggestions imported for review.', false);
-            }
-          });
-      })
-      .catch(function(e){ if (importStatus) importStatus.textContent = String(e); })
-      .finally(function(){ importBtn.disabled = false; });
-  });
-
-  document.addEventListener('click', function(e) {
-    var copyBtn = e.target.closest('[data-copy-batch-prompt]');
-    if (!copyBtn) return;
-    var batchId = copyBtn.getAttribute('data-copy-batch-prompt') || '';
-    var batch = findBatch(batchId);
-    var status = batchStatusEl(batchId);
-    if (!batch || !batch.prompt) {
-      if (status) status.textContent = 'Prompt not found for this batch.';
-      return;
-    }
-    navigator.clipboard.writeText(batch.prompt)
-      .then(function(){
-        if (status) status.textContent = 'Prompt copied.';
-      })
-      .catch(function(){
-        var card = copyBtn.closest('.pg-copilot-batch');
-        if (card && !card.querySelector('.pg-batch-prompt-fallback')) {
-          var fallback = document.createElement('textarea');
-          fallback.className = 'pg-batch-prompt-fallback';
-          fallback.rows = 4;
-          fallback.value = batch.prompt;
-          card.appendChild(fallback);
-          fallback.focus();
-          fallback.select();
-        }
-        if (status) status.textContent = 'Clipboard failed. Copy the prompt text shown below.';
-      });
-  });
-
-  document.addEventListener('click', function(e) {
-    var importBatchBtn = e.target.closest('[data-import-batch]');
-    if (!importBatchBtn) return;
-    var batchId = importBatchBtn.getAttribute('data-import-batch') || '';
-    var textarea = document.querySelector('[data-batch-results="' + cssEscape(batchId) + '"]');
-    var status = batchStatusEl(batchId);
-    var text = textarea ? textarea.value.trim() : '';
-    if (!text) {
-      if (status) status.textContent = 'Paste Copilot JSON first.';
-      return;
-    }
-    importBatchBtn.disabled = true;
-    if (status) status.textContent = 'Validating and importing...';
-    var fd = new FormData();
-    fd.append('results', text);
-    fd.append('batch_id', batchId);
-    fetch('/api/powergrader/session/' + SESSION_ID + '/import-results', {method:'POST', body:fd})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (!d.ok) {
-          var details = d.validation && d.validation.errors ? ' ' + d.validation.errors.slice(0, 2).join(' ') : '';
-          if (status) status.textContent = (d.error || 'Import failed.') + details;
-          return;
-        }
-        return fetch('/api/powergrader/session/' + SESSION_ID)
-          .then(function(r){ return r.json(); })
-          .then(function(fresh){
-            if (fresh.ok) {
-              session = fresh.session;
-              students = session.students || [];
-              updateProgress();
-              renderLateWatch(session);
-              renderPacketPanel(session);
-              renderStudent(idx);
-              var batch = findBatch(batchId);
-              var label = batch && batch.label ? batch.label : batchId;
-              var freshStatus = batchStatusEl(batchId);
-              if (freshStatus) freshStatus.textContent = label + ' imported: ' + d.updated + ' AI suggestion(s).';
-              showStatus(label + ' imported for review.', false);
-            }
-          });
-      })
-      .catch(function(err){ if (status) status.textContent = String(err); })
-      .finally(function(){ importBatchBtn.disabled = false; });
-  });
-
-  latePreviewBtn && latePreviewBtn.addEventListener('click', function(){
-    latePreviewBtn.disabled = true;
-    if (lateSummary) lateSummary.textContent = 'Checking for late submissions…';
-    fetch('/api/powergrader/session/' + SESSION_ID + '/late-preview', {method:'POST'})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (!d.ok) {
-          if (lateSummary) lateSummary.textContent = d.error || 'Late preview failed.';
-          showStatus(d.error || 'Late preview failed.', true);
-          return;
-        }
-        if (lateSummary) lateSummary.textContent = d.message || (d.new_count + ' late submission(s) found.');
-        if (lateDetail) {
-          lateDetail.innerHTML = (d.students || []).map(function(st){
-            return '<div class="pg-late-detail-row">' + _esc(st.name || st.user_id || '') +
-              (st.submitted_at ? ' · ' + _esc(st.submitted_at) : '') + '</div>';
-          }).join('');
-        }
-        showLateScoreButton((d.new_count || 0) > 0);
-      })
-      .catch(function(e){
-        if (lateSummary) lateSummary.textContent = String(e);
-        showStatus(String(e), true);
-      })
-      .finally(function(){
-        latePreviewBtn.disabled = false;
-        if (session && session.late_watch && session.late_watch.enabled && session.late_watch.supported) {
-          latePreviewBtn.disabled = false;
-        }
-      });
-  });
-
-  lateScoreBtn && lateScoreBtn.addEventListener('click', function(){
-    lateScoreBtn.disabled = true;
-    if (lateSummary) lateSummary.textContent = 'Scoring new late submissions…';
-    fetch('/api/powergrader/session/' + SESSION_ID + '/late-score', {method:'POST'})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (!d.ok) {
-          if (lateSummary) lateSummary.textContent = d.error || 'Late scoring failed.';
-          showStatus(d.error || 'Late scoring failed.', true);
-          return;
-        }
-        return fetch('/api/powergrader/session/' + SESSION_ID)
-          .then(function(r){ return r.json(); })
-          .then(function(fresh){
-            if (fresh.ok) {
-              session = fresh.session;
-              students = session.students || [];
-              updateProgress();
-              renderPrivacyAudit(session);
-              renderLateWatch(session);
-              renderPacketPanel(session);
-              renderStudent(Math.min(idx, Math.max(0, students.length - 1)));
-              showStatus('Late catch-up added ' + d.appended + ' student(s) to review.', false);
-            }
-          });
-      })
-      .catch(function(e){
-        if (lateSummary) lateSummary.textContent = String(e);
-        showStatus(String(e), true);
-      })
-      .finally(function(){
-        if (session && session.late_watch && session.late_watch.enabled && session.late_watch.supported) {
-          lateScoreBtn.disabled = false;
-        }
-      });
-  });
 
   function buildAiDraft(st) {
     var parts = [];

@@ -3,7 +3,8 @@
 **Audience:** teachers using the local web UI; developers building or extending UI features.
 **Entry point:** `cd api && py qf_ui.py` → opens `http://127.0.0.1:8765`.
 **Implementation:** `api/webui/server.py` (FastAPI), `api/webui/templates/` (Jinja2),
-`api/webui/static/` (`push.js`, `gradebook.js`, `course_info.js`, `settings.js`, `style.css`).
+`api/webui/static/` (`push.js` + `push/*.js`, `gradebook.js`, `course_info.js`,
+`settings.js`, `style.css`).
 
 For backend overview, setup, files table, and confirmed Canvas API facts, see `api/README.md`.
 
@@ -14,7 +15,7 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | Route | Page | JS |
 |---|---|---|
 | `/` | Dashboard (welcome, status strip, Expert + Forge launch cards) | — |
-| `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js` |
+| `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js`, `push/*.js` |
 | `/gradebook` | **Gradebook Expert** — single-course grade operations | `gradebook.js` |
 | `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js`, `powergrader_queue.js` |
 | `/ai-expert` | **AI Expert** — paste-ready LLM skill files | inline |
@@ -343,6 +344,11 @@ Assignment / page / rubric / quick-assignment creation and all gradebook +
 course-info reads are direct Canvas REST calls inside `webui/server.py`
 (`/api/content/push`, `/api/gradebook`, `/api/course-detail`). The push logic itself
 (`qf_pusher.py` / `push_tiers.py`) is never modified by the UI.
+
+Push routes are split by role: `routes/push.py` keeps the shared router, Canvas
+module/group lookup, and generic content push; `routes/push_validation.py` owns
+file validation and physical render endpoints; `routes/push_streaming.py` owns
+QuizForge preview and streaming push endpoints.
 
 Printable physical outputs use sync render routes. Keep those routes synchronous
 because Playwright's sync API cannot run inside an active asyncio event loop. The
