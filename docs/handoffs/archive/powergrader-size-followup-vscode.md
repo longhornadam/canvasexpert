@@ -5,15 +5,32 @@
 Continue the completed PowerGrader modularization by reducing the remaining large
 route and browser files without changing the teacher workflow.
 
-Current size report highlights:
+Current size snapshot after the implemented splits:
 
-- `api/webui/static/powergrader_queue.js` - about 493 lines after import,
-  late-catchup, and privacy extraction
-- `api/webui/routes/powergrader.py` - about 577 lines after late-catchup extraction
-- `api/webui/static/powergrader_setup.js` - about 503 lines
-- Supporting backend modules such as `api/powergrader/autoscore_queue.py` and
-  `api/powergrader/autopush_policy.py` are also sizeable but less urgent than the UI
-  route/script split.
+- `api/webui/routes/powergrader.py` - 479 lines
+- `api/webui/static/powergrader_setup.js` - 4 lines (thin shim)
+- `api/webui/static/powergrader_queue.js` - 4 lines (thin shim)
+- `api/webui/static/powergrader/setup_core.js` - 184 lines
+- `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
+- `api/webui/static/powergrader/queue_core.js` - 332 lines
+- `api/webui/static/powergrader/queue_review.js` - 173 lines
+- `api/webui/static/powergrader/queue_import.js` - 262 lines
+- `api/webui/static/powergrader/queue_late_catchup.js` - 160 lines
+- `api/webui/static/powergrader/queue_privacy.js` - 64 lines
+- `api/powergrader/ai_workflow.py` - 395 lines
+- `api/powergrader/ai_workflow_support.py` - 61 lines
+- `api/powergrader/autoscore_queue.py` - 428 lines
+- `api/powergrader/autoscore_claims.py` - 202 lines
+- `api/powergrader/autopush_policy.py` - 309 lines
+- `api/powergrader/autopush_policy_result.py` - 63 lines
+- `api/powergrader/start_workflow.py` - 88 lines
+- `api/powergrader/copilot_packet.py` - 222 lines
+- `api/powergrader/copilot_packet_support.py` - 137 lines
+- `api/webui/routes/routines_powergrader.py` - 362 lines
+- `api/powergrader/scheduled_autoscore_support.py` - 127 lines
+
+There are no remaining PowerGrader Python or browser files above the 500-line
+threshold in this slice.
 
 ## Guardrails
 
@@ -120,13 +137,29 @@ Completed frontend slices:
 - `api/webui/static/powergrader/queue_import.js` owns Copilot/legacy import behavior.
 - `api/webui/static/powergrader/queue_late_catchup.js` owns late-watch preview/score UI.
 - `api/webui/static/powergrader/queue_privacy.js` owns privacy audit strip rendering.
+- `api/webui/static/powergrader/queue_review.js` owns save/push/AI-apply/keyboard behavior.
+- `api/webui/static/powergrader/queue_core.js` owns queue bootstrap, student rendering,
+  shared state, progress/status helpers, and session reload.
+- `api/webui/static/powergrader/setup_core.js` owns shared setup flow.
+- `api/webui/static/powergrader/setup_autoscore.js` owns model picker / estimate / autoscore setup flow.
 
-Remaining suggested frontend slices:
+Completed backend slices:
 
-1. Decide whether packet strip rendering should stay in `queue_import.js` or move to a
-   later `queue_packet.js`. Do not churn it just to rename modules.
-2. Leave `renderStudent`, grade save/push, keyboard handling, and emoji insertion for
-   later because they share the most live state.
+- `api/webui/routes/powergrader_late.py` owns late-catchup route support.
+- `api/webui/routes/powergrader_helpers.py` owns pure payload/response helpers.
+- `api/webui/routes/powergrader_setup_support.py` owns setup/queue page context and estimate payload shaping.
+- `api/powergrader/start_workflow.py` owns reusable start-session support helpers.
+- `api/powergrader/ai_workflow_support.py` owns reusable AI-workflow result and artifact shaping helpers.
+- `api/powergrader/autoscore_claims.py` owns scheduled auto-score claim/lease lifecycle helpers.
+- `api/powergrader/autopush_policy_result.py` owns canonical auto-push decision payload builders.
+- `api/powergrader/copilot_packet_support.py` owns Copilot packet text/layout shaping helpers.
+- `api/powergrader/scheduled_autoscore_support.py` owns scheduled autoscore summary/state helpers used by `routines_powergrader.py`.
+
+Remaining suggested follow-up work:
+
+1. Optional cleanup only: decide whether packet strip rendering should stay in
+  `queue_import.js` or move to a later `queue_packet.js`. Do not churn it just to rename modules.
+2. Favor durable routing docs and broader validation over further fragmentation unless a new slice grows materially again.
 
 ## Required Verification After Each Slice
 

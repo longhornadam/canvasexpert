@@ -56,6 +56,14 @@ uploads, and the authoring contracts above.
 **Gradebook Expert** (`/gradebook`) handles single-course gradebook operations:
 late policy and school-day sweep, extra-time roster, due-date extensions, curves, and
 grade snapshots. Roster context and monitored-student state are private student data.
+The browser side is modularized under `api/webui/static/gradebook/`; for low-token
+debugging and file ownership, start with `docs/reference/gradebook-module-map.md`.
+
+**Roster** (`/roster`) is the student-level Canvas-group and local-settings console.
+It currently has helper splits on the backend (`roster_canvas.py`,
+`roster_helpers.py`) but still has two primary hotspots: `api/webui/routes/roster.py`
+and `api/webui/static/roster.js`. For low-token debugging and the next refactor
+targets, start with `docs/reference/roster-module-map.md`.
 
 **Routines** (`/routines`) are local automations, not cloud jobs. Built-ins include
 late-work sweep, download, curve, grading-debt report, and monitored-student report
@@ -76,12 +84,16 @@ assignment. It is now modularized:
 
 - Thin routes: `api/webui/routes/powergrader.py`
 - Backend helpers: `api/powergrader/`
-- Frontend assets: `api/webui/static/powergrader_setup.js`,
-  `api/webui/static/powergrader_queue.js`, and matching CSS files
+- Frontend assets: thin shims `api/webui/static/powergrader_setup.js` and
+  `api/webui/static/powergrader_queue.js`, with feature files under
+  `api/webui/static/powergrader/`
 - Tests: `api/tests/test_powergrader_packet.py`,
   `api/tests/test_powergrader_copilot_packet.py`,
   `api/tests/test_powergrader_import_results.py`,
   `api/tests/test_powergrader_late_catchup.py`
+
+For low-token debugging and current file ownership, start with
+`docs/reference/powergrader-module-map.md`.
 
 PowerGrader modes:
 

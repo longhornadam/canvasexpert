@@ -3,8 +3,9 @@
 **Audience:** teachers using the local web UI; developers building or extending UI features.
 **Entry point:** `cd api && py qf_ui.py` → opens `http://127.0.0.1:8765`.
 **Implementation:** `api/webui/server.py` (FastAPI), `api/webui/templates/` (Jinja2),
-`api/webui/static/` (`push.js` + `push/*.js`, `gradebook.js`, `course_info.js`,
-`settings.js`, `style.css`).
+`api/webui/static/` (`push.js` + `push/*.js`, `gradebook.js` + `gradebook/*.js`,
+`powergrader_setup.js` + `powergrader/*.js`, `powergrader_queue.js` + `powergrader/*.js`,
+`course_info.js`, `settings.js`, `style.css`).
 
 For backend overview, setup, files table, and confirmed Canvas API facts, see `api/README.md`.
 
@@ -16,15 +17,48 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 |---|---|---|
 | `/` | Dashboard (welcome, status strip, Expert + Forge launch cards) | — |
 | `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js`, `push/*.js` |
-| `/gradebook` | **Gradebook Expert** — single-course grade operations | `gradebook.js` |
-| `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js`, `powergrader_queue.js` |
+| `/gradebook` | **Gradebook Expert** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
+| `/roster` | **Roster** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
+| `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
 | `/ai-expert` | **AI Expert** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
+| `/routines` | **Routines** — local automation control surface | inline / route-driven |
 | `/about` | What-is-Canvas-Expert explainer | — |
 | `/forge/quizforge/` | Embedded QuizForge zero-auth compiler (separate Pyodide app) | its own |
 
 `/assessment` is a legacy route that redirects to `/course-expert`.
+
+### PowerGrader module routing
+
+PowerGrader is now intentionally split for low-token debugging.
+
+- Route owner: `api/webui/routes/powergrader.py`
+- Setup page modules: `powergrader_setup.js` (thin shim), `powergrader/setup_core.js`, `powergrader/setup_autoscore.js`
+- Queue page modules: `powergrader_queue.js` (thin shim), `powergrader/queue_core.js`, `powergrader/queue_review.js`, `powergrader/queue_privacy.js`, `powergrader/queue_late_catchup.js`, `powergrader/queue_import.js`
+- Backend workflow package: `api/powergrader/`
+
+For the full ownership map and current line-count snapshot, see `docs/reference/powergrader-module-map.md`.
+
+### Gradebook module routing
+
+Gradebook is also intentionally split for low-token debugging.
+
+- Route owner: `api/webui/routes/gradebook.py`
+- Shared browser bootstrap: `gradebook.js`
+- Feature files: `gradebook/policy.js`, `gradebook/extra_time.js`, `gradebook/extensions.js`, `gradebook/sweep.js`, `gradebook/curves.js`, `gradebook/snapshot.js`
+
+For the full ownership map and current size snapshot, see `docs/reference/gradebook-module-map.md`.
+
+### Roster module routing
+
+Roster has backend helper splits but still has two large primary owner files.
+
+- Route owner: `api/webui/routes/roster.py`
+- Browser owner: `api/webui/static/roster.js`
+- Helper modules: `api/webui/routes/roster_canvas.py`, `api/webui/routes/roster_helpers.py`
+
+For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
 
 ---
 

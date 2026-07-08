@@ -9,7 +9,7 @@ import feedback_pipeline as fp
 import feedback_safety as safety
 import openrouter_client as orc
 from webui import config, source_materials, workspace
-from powergrader import context, copilot_packet, packet, privacy
+from powergrader import ai_workflow_support, context, copilot_packet, packet, privacy
 
 
 def run_ai_workflow(
@@ -51,38 +51,26 @@ def run_ai_workflow(
             "fast_mode", "Grade Myself selected", "warn",
             "Grade Myself selected. No AI packet or API call was requested.",
         ))
-        return {
-            "ok": True,
-            "error": "",
-            "status_code": 200,
-            "privacy_steps": privacy_steps,
-            "privacy_artifacts": privacy_artifacts,
-            "ai_by_uid": ai_by_uid,
-            "packet_zip": None,
-            "budget": None,
-            "debug_path": None,
-            "copilot_packet": None,
-            "source_context": source_context,
-        }
+        return ai_workflow_support.workflow_result(
+            ok=True,
+            privacy_steps=privacy_steps,
+            privacy_artifacts=privacy_artifacts,
+            ai_by_uid=ai_by_uid,
+            source_context=source_context,
+        )
 
     if mode == "assisted" and not has_openrouter_key:
         privacy_steps.append(privacy.privacy_step(
             "llm_send", "Sent Safe AI Packet to selected LLM", "warn",
             "No OpenRouter key is saved, so PowerGrader stayed local and did not send anything.",
         ))
-        return {
-            "ok": True,
-            "error": "",
-            "status_code": 200,
-            "privacy_steps": privacy_steps,
-            "privacy_artifacts": privacy_artifacts,
-            "ai_by_uid": ai_by_uid,
-            "packet_zip": None,
-            "budget": None,
-            "debug_path": None,
-            "copilot_packet": None,
-            "source_context": source_context,
-        }
+        return ai_workflow_support.workflow_result(
+            ok=True,
+            privacy_steps=privacy_steps,
+            privacy_artifacts=privacy_artifacts,
+            ai_by_uid=ai_by_uid,
+            source_context=source_context,
+        )
 
     # ---- Build source context ----
     workspace.ensure_workspace()
@@ -94,29 +82,22 @@ def run_ai_workflow(
                 source_text, source_files_json, source_uploads, strict=True
             )
     except Exception as e:
-        return {
-            "ok": False,
-            "error": f"Could not read selected source material: {e}",
-            "status_code": 200,
-            "privacy_steps": privacy_steps,
-            "privacy_artifacts": privacy_artifacts,
-            "ai_by_uid": ai_by_uid,
-            "budget": None,
-            "debug_path": None,
-            "copilot_packet": None,
-            "source_context": source_context,
-        }
+        return ai_workflow_support.workflow_result(
+            ok=False,
+            error=f"Could not read selected source material: {e}",
+            privacy_steps=privacy_steps,
+            privacy_artifacts=privacy_artifacts,
+            ai_by_uid=ai_by_uid,
+            source_context=source_context,
+        )
 
     source_warning_text = "; ".join(source_materials.context_warnings(source_context))
-    if source_context.get("materials"):
-        privacy_steps.append(privacy.privacy_step(
-            "source_context", "Loaded shared source material", "warn" if source_warning_text else "ok",
-            (
-                f"{len(source_context['materials'])} source item(s), "
-                f"~{source_context.get('tokens_est', 0):,} input token(s)."
-                + (f" {source_warning_text}" if source_warning_text else "")
-            ),
-        ))
+    ai_workflow_support.append_source_context_step(
+        privacy_steps,
+        privacy.privacy_step,
+        source_context,
+        source_warning_text,
+    )
 
     vault = context.vault()
     bundle = fp.pseudonymize_submissions(submitted, vault, artifact_name)
@@ -159,18 +140,14 @@ def run_ai_workflow(
                 "safe_private", "Wrote Safe AI Packet and Private decoder artifacts", "failed",
                 "Workspace folders were unavailable. Nothing was sent to the LLM.",
             ))
-            return {
-                "ok": False,
-                "error": "Could not resolve Safe AI Packet / Private decoder folders — finish workspace setup first.",
-                "status_code": 200,
-                "privacy_steps": privacy_steps,
-                "privacy_artifacts": privacy_artifacts,
-                "ai_by_uid": ai_by_uid,
-                "budget": None,
-                "debug_path": None,
-                "copilot_packet": None,
-                "source_context": source_context,
-            }
+            return ai_workflow_support.workflow_result(
+                ok=False,
+                error="Could not resolve Safe AI Packet / Private decoder folders — finish workspace setup first.",
+                privacy_steps=privacy_steps,
+                privacy_artifacts=privacy_artifacts,
+                ai_by_uid=ai_by_uid,
+                source_context=source_context,
+            )
 
         write_result = fp.write_safe_and_private(
             bundle,
@@ -190,32 +167,16 @@ def run_ai_workflow(
                 "The deeper scrub found hard violations. Nothing was sent to the LLM.",
                 log=write_result.get("log", []),
             ))
-            return {
-                "ok": False,
-                "error": "Safe AI Packet write failed — privacy gate blocked this batch.",
-                "status_code": 200,
-                "privacy_steps": privacy_steps,
-                "privacy_artifacts": privacy_artifacts,
-                "ai_by_uid": ai_by_uid,
-                "budget": None,
-                "debug_path": None,
-                "copilot_packet": None,
-                "source_context": source_context,
-            }
+            return ai_workflow_support.workflow_result(
+                ok=False,
+                error="Safe AI Packet write failed — privacy gate blocked this batch.",
+                privacy_steps=privacy_steps,
+                privacy_artifacts=privacy_artifacts,
+                ai_by_uid=ai_by_uid,
+                source_context=source_context,
+            )
 
-        privacy_artifacts = {
-            "safe_folder": safe_dir,
-            "private_folder": private_dir,
-            "safe_bundle": write_result.get("safe_bundle"),
-            "private_bundle": write_result.get("private_bundle"),
-            "who_is_who": write_result.get("who_is_who"),
-            "how_to_score": write_result.get("how_to_score"),
-            "shared_context": write_result.get("shared_context"),
-            "shared_context_excluded": write_result.get("shared_context_excluded"),
-            "student_txt_count": len(write_result.get("student_txts") or []),
-            "attachment_only_count": len(write_result.get("attachment_only") or []),
-            "excluded_count": len(write_result.get("excluded") or []),
-        }
+        privacy_artifacts = ai_workflow_support.build_privacy_artifacts(write_result, safe_dir, private_dir)
 
         privacy_steps.append(privacy.privacy_step(
             "safe_private", "Wrote inspectable Safe AI Packet and Private decoder files", "ok",
@@ -254,18 +215,14 @@ def run_ai_workflow(
                 "safe_payload", "Loaded Safe AI Packet for LLM scoring", "failed",
                 f"Could not reload the Safe AI Packet: {e}. Nothing was sent.",
             ))
-            return {
-                "ok": False,
-                "error": f"Could not load Safe AI Packet: {e}",
-                "status_code": 200,
-                "privacy_steps": privacy_steps,
-                "privacy_artifacts": privacy_artifacts,
-                "ai_by_uid": ai_by_uid,
-                "budget": None,
-                "debug_path": None,
-                "copilot_packet": None,
-                "source_context": source_context,
-            }
+            return ai_workflow_support.workflow_result(
+                ok=False,
+                error=f"Could not load Safe AI Packet: {e}",
+                privacy_steps=privacy_steps,
+                privacy_artifacts=privacy_artifacts,
+                ai_by_uid=ai_by_uid,
+                source_context=source_context,
+            )
 
         safe_students = len(llm_bundle.get("students") or [])
         packet_info = packet.build_safe_ai_packet(artifact_name, safe_dir, write_result, llm_bundle, persona)
@@ -344,22 +301,20 @@ def run_ai_workflow(
                     "price_check", "Verified model price before sending", "failed",
                     "; ".join(budget_result.get("reasons") or ["cost could not be verified"]) + estimate_text,
                 ))
-                return {
-                    "ok": False,
-                    "error": (
+                return ai_workflow_support.workflow_result(
+                    ok=False,
+                    error=(
                         f"OpenRouter model '{model}' cannot be used for teacher auto-scoring. "
                         + "; ".join(budget_result.get("reasons") or ["cost could not be verified"])
                         + estimate_text
                     ),
-                    "status_code": 200,
-                    "privacy_steps": privacy_steps,
-                    "privacy_artifacts": privacy_artifacts,
-                    "ai_by_uid": ai_by_uid,
-                    "budget": budget_result,
-                    "debug_path": None,
-                    "copilot_packet": copilot_info,
-                    "source_context": source_context,
-                }
+                    privacy_steps=privacy_steps,
+                    privacy_artifacts=privacy_artifacts,
+                    ai_by_uid=ai_by_uid,
+                    budget=budget_result,
+                    copilot_packet=copilot_info,
+                    source_context=source_context,
+                )
 
             estimate = budget_result.get("estimated_cost")
             warning = "; ".join(budget_result.get("warnings") or [])
@@ -414,29 +369,26 @@ def run_ai_workflow(
                     path=debug_path,
                     action_label="Open OpenRouter debug file",
                 ))
-                return {
-                    "ok": False,
-                    "error": f"OpenRouter error: {e}",
-                    "status_code": 200,
-                    "privacy_steps": privacy_steps,
-                    "privacy_artifacts": privacy_artifacts,
-                    "ai_by_uid": ai_by_uid,
-                    "budget": budget_result,
-                    "debug_path": debug_path,
-                    "copilot_packet": copilot_info,
-                    "source_context": source_context,
-                }
+                return ai_workflow_support.workflow_result(
+                    ok=False,
+                    error=f"OpenRouter error: {e}",
+                    privacy_steps=privacy_steps,
+                    privacy_artifacts=privacy_artifacts,
+                    ai_by_uid=ai_by_uid,
+                    budget=budget_result,
+                    debug_path=debug_path,
+                    copilot_packet=copilot_info,
+                    source_context=source_context,
+                )
 
-    return {
-        "ok": True,
-        "error": "",
-        "status_code": 200,
-        "privacy_steps": privacy_steps,
-        "privacy_artifacts": privacy_artifacts,
-        "ai_by_uid": ai_by_uid,
-        "packet_zip": privacy_artifacts.get("packet_zip"),
-        "budget": budget_result,
-        "debug_path": debug_path,
-        "copilot_packet": copilot_info,
-        "source_context": source_context,
-    }
+    return ai_workflow_support.workflow_result(
+        ok=True,
+        privacy_steps=privacy_steps,
+        privacy_artifacts=privacy_artifacts,
+        ai_by_uid=ai_by_uid,
+        packet_zip=privacy_artifacts.get("packet_zip"),
+        budget=budget_result,
+        debug_path=debug_path,
+        copilot_packet=copilot_info,
+        source_context=source_context,
+    )

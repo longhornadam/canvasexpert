@@ -1,6 +1,8 @@
 (function(){
+  "use strict";
+
   var queue = window.CE_POWERGRADER_QUEUE || (window.CE_POWERGRADER_QUEUE = {});
-  var SESSION_ID = queue.getSessionId ? queue.getSessionId() : document.querySelector('meta[name="session-id"]').content;
+  var sessionId = queue.getSessionId ? queue.getSessionId() : document.querySelector('meta[name="session-id"]').content;
 
   var lateStrip = document.getElementById('pg-late-strip');
   var lateSummary = document.getElementById('pg-late-summary');
@@ -10,6 +12,7 @@
   var lateScoreBtn = document.getElementById('pg-late-score');
 
   function esc(s) {
+    if (queue.esc) return queue.esc(s);
     var d = document.createElement('div');
     d.textContent = String(s || '');
     return d.innerHTML;
@@ -65,7 +68,17 @@
   function refreshAfterLateScore(appendedCount) {
     appendedCount = Number(appendedCount) || 0;
     var currentIndex = queue.getIndex ? queue.getIndex() : 0;
-    return fetch('/api/powergrader/session/' + SESSION_ID)
+    if (queue.reloadSession) {
+      return queue.reloadSession({
+        indexOverride: currentIndex,
+        onSuccess: function() {
+          if (queue.showStatus) {
+            queue.showStatus('Late catch-up added ' + appendedCount + ' student(s) to review.', false);
+          }
+        },
+      });
+    }
+    return fetch('/api/powergrader/session/' + sessionId)
       .then(function(r){ return r.json(); })
       .then(function(fresh){
         if (!fresh.ok) return false;
@@ -93,7 +106,7 @@
   latePreviewBtn && latePreviewBtn.addEventListener('click', function(){
     latePreviewBtn.disabled = true;
     if (lateSummary) lateSummary.textContent = 'Checking for late submissions…';
-    fetch('/api/powergrader/session/' + SESSION_ID + '/late-preview', {method:'POST'})
+    fetch('/api/powergrader/session/' + sessionId + '/late-preview', {method:'POST'})
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d.ok) {
@@ -122,7 +135,7 @@
   lateScoreBtn && lateScoreBtn.addEventListener('click', function(){
     lateScoreBtn.disabled = true;
     if (lateSummary) lateSummary.textContent = 'Scoring new late submissions…';
-    fetch('/api/powergrader/session/' + SESSION_ID + '/late-score', {method:'POST'})
+    fetch('/api/powergrader/session/' + sessionId + '/late-score', {method:'POST'})
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d.ok) {

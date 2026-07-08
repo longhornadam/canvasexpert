@@ -1,4 +1,6 @@
 (function(){
+  "use strict";
+
   var queue = window.CE_POWERGRADER_QUEUE || (window.CE_POWERGRADER_QUEUE = {});
 
   var privacyStrip = document.getElementById('pg-privacy-strip');
@@ -7,6 +9,7 @@
   var privacyActions = document.getElementById('pg-privacy-actions');
 
   function esc(s) {
+    if (queue.esc) return queue.esc(s);
     var d = document.createElement('div');
     d.textContent = String(s || '');
     return d.innerHTML;

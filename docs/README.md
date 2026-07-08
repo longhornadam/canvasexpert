@@ -11,6 +11,12 @@ For canonical AI-agent guidance and safety rules, read `../AGENTS.md` first.
 - `docs/handoffs/archive/` - completed or historical handoffs retained for reference.
 - `docs/reference/` - stable reference notes and extracted facts.
 
+Useful starting reference for new PowerGrader debugging sessions:
+
+- `docs/reference/powergrader-module-map.md` - module ownership map, script load order, backend package routing, and current size snapshot.
+- `docs/reference/gradebook-module-map.md` - Gradebook route/script ownership and feature routing map.
+- `docs/reference/roster-module-map.md` - Roster route/script ownership and current hotspot map.
+
 ## Handoff Convention
 
 New active handoffs belong in `docs/handoffs/`. After implementation, move historical

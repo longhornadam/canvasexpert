@@ -1,20 +1,4 @@
-"""PowerGrader routes — keyboard-driven grading with optional AI assistance.
-
-Modes:
-  fast      Download → queue → keyboard-grade → bulk push
-  assisted  Same + OpenRouter pre-fills score/feedback per student
-
-Page routes:
-  GET /powergrader                     Setup screen
-  GET /powergrader/session/<id>        Queue screen
-
-API routes:
-  GET  /api/powergrader/sessions           List workspace sessions
-  POST /api/powergrader/start              Create session (fetch + optional AI)
-  GET  /api/powergrader/session/<id>       Get session JSON
-  POST /api/powergrader/session/<id>/grade Save one student's grade
-  POST /api/powergrader/session/<id>/push  Push approved to Canvas
-"""
+"""PowerGrader route orchestration."""
 import json
 import os
 import uuid
@@ -29,9 +13,21 @@ from ..canvas_client import _canvas_get, _canvas_send
 from ..deps import list_rubric_files, templates
 from powergrader import (ai_workflow, canvas_fetch, context, estimates,
                          import_results, late_catchup, packet, privacy,
-                         session_actions, session_builder, session_store)
+                         session_actions, session_builder, session_store,
+                         start_workflow)
+from .powergrader_helpers import (
+    build_late_preview_payload,
+    build_late_watch_state,
+    build_start_error_payload,
+    build_start_success_payload,
+    normalize_mode,
+)
+from .powergrader_setup_support import (
+    build_estimate_payload,
+    build_queue_page_context,
+    build_setup_page_context,
+)
 from .powergrader_late import (
-    _build_late_catchup_students as _build_late_catchup_students_impl,
     _late_watch_error as _late_watch_error_impl,
     _run_late_catchup_score as _run_late_catchup_score_impl,
 )
@@ -44,23 +40,16 @@ except ModuleNotFoundError:
 router = APIRouter(tags=["powergrader"])
 
 # Compatibility aliases so existing tests continue to work
-_pg_dir = session_store.pg_dir
-_session_path = session_store.session_path
-_safe_session_id = session_store.safe_session_id
 _mode_label = session_store.mode_label
 _load_session = session_store.load_session
 _save_session = session_store.save_session
 
 _privacy_step = privacy.privacy_step
-_feedback_artifact_dirs = privacy.feedback_artifact_dirs
 _write_privacy_audit_file = privacy.write_privacy_audit_file
 _write_openrouter_debug_file = privacy.write_openrouter_debug_file
 
 _build_safe_ai_packet = packet.build_safe_ai_packet
 _vault = context.vault
-
-_CODE_EXTS = {".py", ".html", ".htm", ".css", ".js", ".txt", ".md", ".json", ".csv"}
-AI_MODES = {"packet", "assisted"}
 
 
 def _late_watch_error(session: dict, *, require_key: bool = False, require_source_context: bool = False) -> str | None:
@@ -71,52 +60,33 @@ def _late_watch_error(session: dict, *, require_key: bool = False, require_sourc
     )
 
 
-def _build_late_catchup_students(
-    *,
-    course_id: str,
-    assignment: dict,
-    submitted: list[dict],
-    ai_by_uid: dict,
-    batch_id: str,
-) -> list[dict]:
-    return _build_late_catchup_students_impl(
-        course_id=course_id,
-        assignment=assignment,
-        submitted=submitted,
-        ai_by_uid=ai_by_uid,
-        batch_id=batch_id,
-    )
-
-
 def _run_late_catchup_score(session: dict) -> dict:
     return _run_late_catchup_score_impl(session, save_session=_save_session)
-
-
-# --------------------------------------------------------------------------
-# Page routes
-# --------------------------------------------------------------------------
 
 @router.get("/powergrader", response_class=HTMLResponse)
 def powergrader_setup(request: Request):
     source_dir = source_materials.ensure_source_folder()
     persona_dir = config.get_persona_folder()
-    return templates.TemplateResponse(request, "powergrader_setup.html", {
-        "nav_section":    "feedback",
-        "saved_courses":  config.active_courses(),
-        "rubrics":        [r["label"] for r in list_rubric_files()],
-        "personas":       config.list_personas(),
-        "has_openrouter": config.has_openrouter_key(),
-        "openrouter_model": config.get_openrouter_model(),
-        "default_openrouter_model": config.DEFAULT_OPENROUTER_MODEL,
-        "openrouter_model_presets": config.openrouter_model_presets(),
-        "has_workspace":  bool(workspace.workspace_root()),
-        "rubrics_folder": workspace.folder("Rubrics"),
-        "ai_ta_folder": workspace.folder("AI-TA"),
-        "persona_folder": persona_dir,
-        "source_materials_folder": source_dir,
-        "source_material_files": source_materials.list_source_files(),
-        "source_response_presets": source_materials.RESPONSE_PRESETS,
-    })
+    return templates.TemplateResponse(
+        request,
+        "powergrader_setup.html",
+        build_setup_page_context(
+            saved_courses=config.active_courses(),
+            rubrics=[r["label"] for r in list_rubric_files()],
+            personas=config.list_personas(),
+            has_openrouter=config.has_openrouter_key(),
+            openrouter_model=config.get_openrouter_model(),
+            default_openrouter_model=config.DEFAULT_OPENROUTER_MODEL,
+            openrouter_model_presets=config.openrouter_model_presets(),
+            has_workspace=bool(workspace.workspace_root()),
+            rubrics_folder=workspace.folder("Rubrics"),
+            ai_ta_folder=workspace.folder("AI-TA"),
+            persona_folder=persona_dir,
+            source_materials_folder=source_dir,
+            source_material_files=source_materials.list_source_files(),
+            source_response_presets=source_materials.RESPONSE_PRESETS,
+        ),
+    )
 
 
 @router.get("/powergrader/session/{session_id}", response_class=HTMLResponse)
@@ -124,21 +94,16 @@ def powergrader_queue(request: Request, session_id: str):
     session = _load_session(session_id)
     if not session:
         return HTMLResponse("<h2>Session not found.</h2>", status_code=404)
-    return templates.TemplateResponse(request, "powergrader_queue.html", {
-        "nav_section":      "feedback",
-        "session_id":       session_id,
-        "assignment_name":  session.get("assignment_name", ""),
-        "course_id":        session.get("course_id", ""),
-        "mode":             session.get("mode", "fast"),
-        "mode_label":       session.get("mode_label") or _mode_label(session.get("mode", "fast")),
-        "student_count":    len(session.get("students", [])),
-        "canvas_base":      config.get_canvas_base(),
-    })
-
-
-# --------------------------------------------------------------------------
-# API routes
-# --------------------------------------------------------------------------
+    return templates.TemplateResponse(
+        request,
+        "powergrader_queue.html",
+        build_queue_page_context(
+            session_id=session_id,
+            session=session,
+            canvas_base=config.get_canvas_base(),
+            mode_label=_mode_label(session.get("mode", "fast")),
+        ),
+    )
 
 @router.get("/api/powergrader/sessions")
 def list_sessions():
@@ -211,38 +176,21 @@ def pg_estimate(
     if budget.get("reasons"):
         warnings.extend(budget.get("reasons") or [])
 
-    return JSONResponse({
-        "ok": True,
-        "assignment_name": assignment_name,
-        "student_count": student_count,
-        "count_basis": count_basis,
-        "response_kind": response_kind,
-        "response_label": preset["label"],
-        "tokens": {
-            "source_materials": source_tokens,
-            "assignment_context": assignment_tokens,
-            "rubric": rubric_tokens,
-            "student_response_each": response_tokens_each,
-            "estimated_input": budget.get("input_tokens"),
-            "estimated_output": budget.get("estimated_output_tokens"),
-        },
-        "materials": [
-            {
-                "title": m.get("title"),
-                "source": m.get("source"),
-                "tokens_est": m.get("tokens_est"),
-                "chars": m.get("chars"),
-            }
-            for m in source_context.get("materials", [])
-        ],
-        "budget": budget,
-        "estimated_cost_label": estimates.cost_label(budget.get("estimated_cost")),
-        "warnings": warnings,
-        "caching_note": (
-            "Estimate assumes fresh input. Some OpenRouter providers may discount "
-            "cached prompt reads, but Canvas Expert does not count on that."
-        ),
-    })
+    return JSONResponse(build_estimate_payload(
+        assignment_name=assignment_name,
+        student_count=student_count,
+        count_basis=count_basis,
+        response_kind=response_kind,
+        response_label=preset["label"],
+        source_tokens=source_tokens,
+        assignment_tokens=assignment_tokens,
+        rubric_tokens=rubric_tokens,
+        response_tokens_each=response_tokens_each,
+        budget=budget,
+        materials=source_context.get("materials", []),
+        estimated_cost_label=estimates.cost_label(budget.get("estimated_cost")),
+        warnings=warnings,
+    ))
 
 
 @router.post("/api/powergrader/start")
@@ -263,8 +211,7 @@ def pg_start(
         return JSONResponse({"ok": False, "error": "course_id and assignment_id are required."})
     if not workspace.workspace_root():
         return JSONResponse({"ok": False, "error": "No workspace configured — finish setup first."})
-    if mode not in {"fast", "packet", "assisted"}:
-        mode = "fast"
+    mode = normalize_mode(mode)
     session_id = str(uuid.uuid4())
 
     # Fetch submissions
@@ -293,31 +240,14 @@ def pg_start(
     canvas_fetch.enrich_with_code_files(submitted)
 
     selected_model = (model_id or "").strip() or config.get_openrouter_model()
-    watch_late_enabled = str(watch_late).lower() in {"1", "true", "yes", "on"}
-    late_supported = mode == "assisted" and config.has_openrouter_key()
-    late_reason = ""
-    if not watch_late_enabled:
-        late_reason = "Late catch-up is disabled for this session."
-    elif mode != "assisted":
-        late_reason = "Late catch-up requires Auto-Score With API."
-        watch_late_enabled = False
-    elif not late_supported:
-        late_reason = "Late catch-up requires Auto-Score With API and a saved OpenRouter key."
-        watch_late_enabled = False
-
-    late_watch = {
-        "enabled": watch_late_enabled,
-        "supported": late_supported,
-        "reason": late_reason,
-        "initial_missing_user_ids": initial_missing_user_ids,
-        "known_user_ids": submitted_user_ids,
-        "scored_user_ids": [],
-        "last_checked": None,
-        "last_scored": None,
-        "last_summary": "",
-        "source_context": {},
-        "response_kind": response_kind,
-    }
+    late_watch = build_late_watch_state(
+        mode=mode,
+        watch_late=watch_late,
+        has_openrouter_key=config.has_openrouter_key(),
+        initial_missing_user_ids=initial_missing_user_ids,
+        submitted_user_ids=submitted_user_ids,
+        response_kind=response_kind,
+    )
 
     # AI workflow
     ai_result = ai_workflow.run_ai_workflow(
@@ -338,13 +268,12 @@ def pg_start(
         has_openrouter_key=config.has_openrouter_key(),
     )
     if not ai_result["ok"]:
-        return JSONResponse({
-            "ok": False,
-            "error": ai_result["error"],
-            "privacy_steps": ai_result["privacy_steps"],
-            **({"budget": ai_result["budget"]} if ai_result.get("budget") else {}),
-            **({"debug_path": ai_result["debug_path"]} if ai_result.get("debug_path") else {}),
-        })
+        return JSONResponse(build_start_error_payload(
+            ai_result["error"],
+            privacy_steps=ai_result["privacy_steps"],
+            budget=ai_result.get("budget"),
+            debug_path=ai_result.get("debug_path"),
+        ))
     privacy_steps = ai_result["privacy_steps"]
     privacy_artifacts = ai_result["privacy_artifacts"]
     ai_by_uid = ai_result["ai_by_uid"]
@@ -355,7 +284,7 @@ def pg_start(
     tier_map = config.roster_tier_by_id(course_id)
     monitored = config.get_monitored_students()
     extra_time_list = config.get_extra_time(course_id)
-    extra_time_map = {str(et["id"]): et.get("days", 0) for et in extra_time_list}
+    extra_time_map = start_workflow.build_extra_time_map(extra_time_list)
 
     students = session_builder.build_students(
         submitted=submitted,
@@ -366,31 +295,21 @@ def pg_start(
         extra_time_map=extra_time_map,
     )
 
-    if privacy_artifacts.get("private_folder"):
-        audit_path = _write_privacy_audit_file(
-            privacy_artifacts["private_folder"],
-            assignment_name,
-            session_id,
-            course_id,
-            assignment_id,
-            selected_model if mode == "assisted" else "",
-            privacy_steps,
-            privacy_artifacts,
-        )
-        if audit_path:
-            privacy_artifacts["privacy_audit"] = audit_path
-            privacy_steps.append(_privacy_step(
-                "privacy_audit", "Saved PowerGrader privacy audit", "ok",
-                "Private decoder folder includes a JSON record of these privacy steps.",
-                path=audit_path,
-            ))
-        else:
-            privacy_steps.append(_privacy_step(
-                "privacy_audit", "Saved PowerGrader privacy audit", "warn",
-                "Could not write the optional privacy audit JSON; session still records these steps.",
-            ))
+    privacy_artifacts, privacy_steps = start_workflow.append_privacy_audit_step(
+        privacy_artifacts=privacy_artifacts,
+        assignment_name=assignment_name,
+        session_id=session_id,
+        course_id=course_id,
+        assignment_id=assignment_id,
+        mode=mode,
+        selected_model=selected_model,
+        privacy_steps=privacy_steps,
+        write_privacy_audit_file=_write_privacy_audit_file,
+        privacy_step=_privacy_step,
+    )
 
-    session = session_builder.build_session(
+    session = start_workflow.build_start_session(
+        build_session=session_builder.build_session,
         session_id=session_id,
         course_id=course_id,
         assignment_id=assignment_id,
@@ -411,19 +330,17 @@ def pg_start(
     )
     _save_session(session)
 
-    return JSONResponse({
-        "ok":             True,
-        "session_id":     session_id,
-        "student_count":  len(students),
-        "assignment_name": assignment_name,
-        "mode":           mode,
-        "mode_label":     _mode_label(mode),
-        "ai_scored":      len(ai_by_uid),
-        "privacy_steps":   privacy_steps,
-        "packet_zip":      privacy_artifacts.get("packet_zip"),
-        "copilot_batch_count": (ai_result.get("copilot_packet") or {}).get("batch_count", 0),
-        "copilot_packet_folder": (ai_result.get("copilot_packet") or {}).get("packet_folder"),
-    })
+    return JSONResponse(build_start_success_payload(
+        session_id=session_id,
+        students=students,
+        assignment_name=assignment_name,
+        mode=mode,
+        mode_label=_mode_label(mode),
+        ai_by_uid=ai_by_uid,
+        privacy_steps=privacy_steps,
+        privacy_artifacts=privacy_artifacts,
+        copilot_packet=ai_result.get("copilot_packet"),
+    ))
 
 
 @router.get("/api/powergrader/session/{session_id}")
@@ -476,23 +393,7 @@ def pg_late_preview(session_id: str):
     now_iso = datetime.now().isoformat(timespec="seconds")
     late_catchup.update_late_watch_after_preview(session, len(new_subs), now_iso)
     _save_session(session)
-    students = [
-        {
-            "user_id": str(sub.get("user_id", "")),
-            "name": (sub.get("user") or {}).get("name")
-                     or (sub.get("user") or {}).get("sortable_name")
-                     or str(sub.get("user_id", "")),
-            "submitted_at": sub.get("submitted_at") or "",
-        }
-        for sub in new_subs
-    ]
-    message = f"{len(new_subs)} new late submission(s) found."
-    return JSONResponse({
-        "ok": True,
-        "new_count": len(new_subs),
-        "students": students,
-        "message": message,
-    })
+    return JSONResponse(build_late_preview_payload(new_subs))
 
 
 @router.post("/api/powergrader/session/{session_id}/late-score")

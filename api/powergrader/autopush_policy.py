@@ -9,6 +9,7 @@ import hashlib
 from decimal import Decimal, InvalidOperation
 
 from .autoscore_queue import classify_assignment_for_autoscore
+from . import autopush_policy_result as policy_result
 
 POLICY_VERSION = 1
 ALLOWED_DECISIONS = {"auto_push_allowed", "needs_review", "blocked"}
@@ -199,37 +200,14 @@ def evaluate_student_for_autopush(
     canvas_map = _mapping(canvas_state)
     policy = _effective_job_policy(job_map)
 
-    decision = "blocked"
-    review_reason = ""
-    blocked_reason = ""
-    policy_checks = {
-        "teacher_opt_in": False,
-        "policy_enabled": False,
-        "job_status_allowed": False,
-        "assignment_supported": False,
-        "submission_present": False,
-        "score_present": False,
-        "score_in_range": False,
-        "grade_push_allowed": False,
-        "comments_allowed": False,
-        "feedback_present": False,
-        "idempotency_clear": False,
-        "canvas_state_clear": False,
-    }
+    policy_checks = policy_result.empty_policy_checks()
 
     job_auto_push = job_map.get("auto_push") is True
     policy_enabled = policy.get("enabled") is True
     policy_checks["teacher_opt_in"] = job_auto_push
     policy_checks["policy_enabled"] = policy_enabled
     if not job_auto_push or not policy_enabled:
-        blocked_reason = "auto_push_not_opted_in"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="auto_push_not_opted_in")
 
     allow_grade_push = policy.get("allow_grade_push")
     if allow_grade_push is None:
@@ -242,133 +220,55 @@ def evaluate_student_for_autopush(
 
     job_status = _text(job_map.get("status"))
     if job_status and job_status not in READY_JOB_STATUSES:
-        blocked_reason = "job_not_ready_for_push"
         policy_checks["job_status_allowed"] = False
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="job_not_ready_for_push")
     policy_checks["job_status_allowed"] = True
 
     eligibility_source = assignment_map if assignment_map else _mapping(job_map.get("assignment"))
     eligibility, eligibility_reason = classify_assignment_for_autoscore(eligibility_source)
     if eligibility == "unsupported":
-        blocked_reason = "assignment_unsupported"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="assignment_unsupported")
     if eligibility != "eligible":
-        decision = "needs_review"
-        review_reason = "mixed_submission_type"
         policy_checks["assignment_supported"] = False
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="mixed_submission_type")
     policy_checks["assignment_supported"] = True
 
     user_id, submission_id = _student_identity(student_map, ai_map if ai_result is not None else None, canvas_map)
     if not user_id and not submission_id:
-        blocked_reason = "missing_student_identity"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_student_identity")
 
     if not _submission_has_work(student_map):
-        blocked_reason = "missing_submitted_work"
         policy_checks["submission_present"] = False
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_submitted_work")
     policy_checks["submission_present"] = True
 
     if _has_error_blob(student_map) or _has_error_blob(ai_map) or _has_error_blob(canvas_map):
-        blocked_reason = "privacy_or_scoring_error"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="privacy_or_scoring_error")
 
     score_value, feedback_value = _effective_score_feedback(student_map, ai_result)
     score = _as_decimal(score_value)
     if score is None:
-        blocked_reason = "missing_ai_score"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_ai_score")
     policy_checks["score_present"] = True
 
     points_possible = _effective_points_possible(job_map, assignment_map, ai_result, student_map)
     if points_possible is None:
-        blocked_reason = "missing_points_possible"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_points_possible")
 
     if score < Decimal("0") or score > points_possible:
-        blocked_reason = "score_out_of_bounds"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="score_out_of_bounds")
     policy_checks["score_in_range"] = True
 
     feedback_required = bool(allow_comment_push)
     feedback_text = _text(feedback_value)
     if feedback_required and not feedback_text:
-        blocked_reason = "missing_ai_feedback"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_ai_feedback")
     policy_checks["feedback_present"] = bool(feedback_text)
 
     course_id = _first_present(job_map.get("course_id"), assignment_map.get("course_id"))
     assignment_id = _first_present(job_map.get("assignment_id"), assignment_map.get("id"))
     if course_id in (None, "") or assignment_id in (None, ""):
-        blocked_reason = "missing_job_identity"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": "",
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_job_identity")
 
     score_key = _normalize_decimal(score)
     idempotency_key = make_idempotency_key(
@@ -383,78 +283,26 @@ def evaluate_student_for_autopush(
 
     last_receipt_key = _canvas_last_receipt_key(canvas_map)
     if canvas_map.get("idempotency_conflict") is True:
-        blocked_reason = "idempotency_conflict"
         policy_checks["idempotency_clear"] = False
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": idempotency_key,
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="idempotency_conflict", idempotency_key=idempotency_key)
     if last_receipt_key and last_receipt_key == idempotency_key:
-        blocked_reason = "already_pushed"
         policy_checks["idempotency_clear"] = False
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": idempotency_key,
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="already_pushed", idempotency_key=idempotency_key)
 
     if canvas_map.get("submission_changed") is True:
-        decision = "needs_review"
-        review_reason = "submission_changed"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": idempotency_key,
-        }
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="submission_changed", idempotency_key=idempotency_key)
 
     warning_reason = _policy_warning_reason(canvas_map)
     if warning_reason:
-        decision = "needs_review"
-        review_reason = warning_reason
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": idempotency_key,
-        }
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason=warning_reason, idempotency_key=idempotency_key)
 
     if _has_existing_canvas_work(canvas_map):
-        decision = "needs_review"
-        review_reason = "existing_canvas_work_detected"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": idempotency_key,
-        }
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="existing_canvas_work_detected", idempotency_key=idempotency_key)
 
     policy_checks["idempotency_clear"] = True
     policy_checks["canvas_state_clear"] = True
 
     if allow_grade_push is False and allow_comment_push is False:
-        blocked_reason = "push_policy_disabled"
-        return {
-            "decision": decision,
-            "review_needed_reason": review_reason,
-            "blocked_reason": blocked_reason,
-            "policy_checks": policy_checks,
-            "idempotency_key": idempotency_key,
-        }
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="push_policy_disabled", idempotency_key=idempotency_key)
 
-    decision = "auto_push_allowed"
-    return {
-        "decision": decision,
-        "review_needed_reason": "",
-        "blocked_reason": "",
-        "policy_checks": policy_checks,
-        "idempotency_key": idempotency_key,
-    }
+    return policy_result.auto_push_allowed(policy_checks=policy_checks, idempotency_key=idempotency_key)

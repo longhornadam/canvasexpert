@@ -140,8 +140,8 @@ Gradebook Expert, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `validate_qf.py` | QuizForge compliance checker |
 | `qf_ui.py` | Launches the local web UI (see "Web UI" above) |
 | `../engine/rendering/physical/` | Local printable DOCX/PDF render stack (Edge via Playwright for PDF, Pandoc for DOCX) |
-| `powergrader/` | PowerGrader backend helpers: Canvas fetch, privacy artifacts, Safe AI Packet ZIP, Copilot batch folders, import validation, session mutations |
-| `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, subprocess/SSE runner |
+| `powergrader/` | PowerGrader backend helpers: Canvas fetch, privacy artifacts, Safe AI Packet ZIP, Copilot batch folders, import validation, session mutations, start-workflow assembly, autoscore claim/queue helpers, auto-push policy helpers |
+| `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, split feature scripts, subprocess/SSE runner |
 | `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `../LLM_Modules/QuizForge_Base.md`) |
 
 ## Setup

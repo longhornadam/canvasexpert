@@ -1,6 +1,8 @@
 (function(){
+  "use strict";
+
   var queue = window.CE_POWERGRADER_QUEUE || (window.CE_POWERGRADER_QUEUE = {});
-  var SESSION_ID = queue.getSessionId ? queue.getSessionId() : document.querySelector('meta[name="session-id"]').content;
+  var sessionId = queue.getSessionId ? queue.getSessionId() : document.querySelector('meta[name="session-id"]').content;
 
   var packetStrip = document.getElementById('pg-packet-strip');
   var packetActions = document.getElementById('pg-packet-actions');
@@ -11,6 +13,7 @@
   var importStatus = document.getElementById('pg-import-status');
 
   function esc(s) {
+    if (queue.esc) return queue.esc(s);
     var d = document.createElement('div');
     d.textContent = String(s || '');
     return d.innerHTML;
@@ -128,7 +131,13 @@
   }
 
   function refreshSessionAfterImport(onSuccess) {
-    return fetch('/api/powergrader/session/' + SESSION_ID)
+    if (queue.reloadSession) {
+      return queue.reloadSession({
+        indexOverride: getCurrentIndex(),
+        onSuccess: onSuccess,
+      });
+    }
+    return fetch('/api/powergrader/session/' + sessionId)
       .then(function(r){ return r.json(); })
       .then(function(fresh){
         if (!fresh.ok) return false;
@@ -153,7 +162,7 @@
     if (importStatus) importStatus.textContent = 'Validating and importing...';
     var fd = new FormData();
     fd.append('results', text);
-    fetch('/api/powergrader/session/' + SESSION_ID + '/import-results', {method:'POST', body:fd})
+    fetch('/api/powergrader/session/' + sessionId + '/import-results', {method:'POST', body:fd})
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d.ok) {
@@ -230,7 +239,7 @@
     var fd = new FormData();
     fd.append('results', text);
     fd.append('batch_id', batchId);
-    fetch('/api/powergrader/session/' + SESSION_ID + '/import-results', {method:'POST', body:fd})
+    fetch('/api/powergrader/session/' + sessionId + '/import-results', {method:'POST', body:fd})
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d.ok) {
