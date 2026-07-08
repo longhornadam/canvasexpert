@@ -3,9 +3,11 @@
 **Audience:** teachers using the local web UI; developers building or extending UI features.
 **Entry point:** `cd api && py qf_ui.py` → opens `http://127.0.0.1:8765`.
 **Implementation:** `api/webui/server.py` (FastAPI), `api/webui/templates/` (Jinja2),
-`api/webui/static/` (`push.js` + `push/*.js`, `gradebook.js` + `gradebook/*.js`,
-`powergrader_setup.js` + `powergrader/*.js`, `powergrader_queue.js` + `powergrader/*.js`,
-`course_info.js`, `settings.js`, `style.css`).
+`api/webui/static/` (`push.js` + `push/*.js`, `course_expert/*.js`,
+`gradebook.js` + `gradebook/*.js`, `roster.js` + `roster/*.js`,
+`feedback/*.js`, `powergrader_setup.js` + `powergrader/*.js`,
+`powergrader_queue.js` + `powergrader/*.js`, `course_info.js`,
+`settings.js`, `style.css`).
 
 For backend overview, setup, files table, and confirmed Canvas API facts, see `api/README.md`.
 
@@ -16,7 +18,7 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | Route | Page | JS |
 |---|---|---|
 | `/` | Dashboard (welcome, status strip, Expert + Forge launch cards) | — |
-| `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js` + `push/*.js` |
+| `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js` + `push/*.js`, `course_expert/*.js` |
 | `/gradebook` | **Gradebook Expert** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
 | `/roster` | **Roster** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
 | `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
@@ -36,6 +38,7 @@ Course Expert is split for low-token debugging.
 - Page/template owner: `course_expert.html`
 - Shared browser files: `push/core.js`, `push/file_sources.js`, `push/delivery.js`, `push/rubrics.js`, `push/course_picker.js`, `push.js`
 - Feature files: `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `push/download.js`
+- Course Expert page files: `course_expert/tabs.js`, `course_expert/student_reports.js`, `course_expert/portfolio.js`, `course_expert/quick_assignment.js`
 - Backend push routes: `routes/push.py`, `routes/push_validation.py`, `routes/push_streaming.py`
 - Service helpers: `push_service.py`, `source_materials.py`
 
@@ -67,7 +70,8 @@ For the full ownership map and current line-count snapshot, see `docs/reference/
 
 Gradebook is also intentionally split for low-token debugging.
 
-- Route owner: `api/webui/routes/gradebook.py`
+- Route facade: `api/webui/routes/gradebook.py`
+- Route feature files: `routes/gradebook_policy.py`, `routes/gradebook_sweep.py`, `routes/gradebook_extra_time.py`, `routes/gradebook_extensions.py`, `routes/gradebook_curves.py`, `routes/gradebook_snapshot.py`
 - Shared browser bootstrap: `gradebook.js`
 - Feature files: `gradebook/policy.js`, `gradebook/extra_time.js`, `gradebook/extensions.js`, `gradebook/sweep.js`, `gradebook/curves.js`, `gradebook/snapshot.js`
 
@@ -78,8 +82,8 @@ For the full ownership map and current size snapshot, see `docs/reference/gradeb
 Roster has backend helper splits and browser feature files.
 
 - Route owner: `api/webui/routes/roster.py`
-- Browser owner: `api/webui/static/roster.js`
-- Browser feature files: `api/webui/static/roster/bulk.js`, `api/webui/static/roster/groups.js`, `api/webui/static/roster/safety.js`
+- Browser bootstrap: `api/webui/static/roster.js`
+- Browser feature files: `api/webui/static/roster/table.js`, `api/webui/static/roster/filters.js`, `api/webui/static/roster/inline_edit.js`, `api/webui/static/roster/group_state.js`, `api/webui/static/roster/bulk.js`, `api/webui/static/roster/groups.js`, `api/webui/static/roster/safety.js`
 - Helper modules: `api/webui/routes/roster_canvas.py`, `api/webui/routes/roster_helpers.py`, `api/webui/routes/roster_groups.py`
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
@@ -87,13 +91,14 @@ For the full ownership map and current hotspot snapshot, see `docs/reference/ros
 ### FeedbackExpert module routing
 
 FeedbackExpert is privacy-sensitive and split across route, pipeline, vault, scrub,
-and safety helpers, with inline browser behavior in the templates.
+and safety helpers, plus browser feature scripts.
 
 - Route owner: `api/webui/routes/feedback.py`
 - Route feature files: `routes/feedback_manual.py`, `routes/feedback_library.py`, `routes/feedback_run.py`, `routes/feedback_push.py`
 - Pipeline facade: `api/feedback_pipeline.py`
 - Pipeline feature files: `api/feedback_artifacts.py`, `api/feedback_contract.py`, `api/feedback_results.py`
 - Privacy helpers: `api/feedback_vault.py`, `api/feedback_scrub.py`, `api/feedback_safety.py`
+- Browser feature files: `static/feedback/core.js`, `static/feedback/folders.js`, `static/feedback/personas.js`, `static/feedback/guided_run.js`, `static/feedback/manual.js`, `static/feedback/openrouter.js`, `static/feedback/push.js`
 - Main templates: `feedback_expert.html`, `name_manager.html`
 
 For the full ownership map and privacy-sensitive routing notes, see `docs/reference/feedbackexpert-module-map.md`.
@@ -406,8 +411,8 @@ modules, assignments, Canvas quick-links, download folder path.
 Quiz pushes delegate to the existing CLI scripts as subprocesses with credentials
 injected via environment variables (`QF_PUSH_SETTINGS` carries assignment settings as
 JSON) and stream progress over SSE. Downloads run in-process via `downloader.py`.
-Assignment / page / rubric / quick-assignment creation and all gradebook +
-course-info reads are direct Canvas REST calls inside `webui/server.py`
+Assignment / page / rubric / quick-assignment creation plus gradebook and
+course-info reads are direct Canvas REST calls through split Web UI routes
 (`/api/content/push`, `/api/gradebook`, `/api/course-detail`). The push logic itself
 (`qf_pusher.py` / `push_tiers.py`) is never modified by the UI.
 

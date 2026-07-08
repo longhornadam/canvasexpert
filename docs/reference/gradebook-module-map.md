@@ -1,20 +1,53 @@
 # Gradebook Module Map
 
 Purpose: give future debugging sessions a low-token routing map for Gradebook so
- they can jump directly to the owning module instead of re-mapping the screen.
+they can jump directly to the owning module instead of re-mapping the screen.
 
-As of 2026-07-07, Gradebook is already split into a thin shared bootstrap file
- plus feature files under `api/webui/static/gradebook/`.
+As of 2026-07-08, Gradebook is split on both sides:
+
+- backend routes are behind a thin facade in `api/webui/routes/gradebook.py`
+- browser behavior stays split under `api/webui/static/gradebook/`
 
 ## Ownership
 
-- Route owner: `api/webui/routes/gradebook.py`
+- Backend route facade: `api/webui/routes/gradebook.py`
+- Backend shared Canvas helpers: `api/webui/routes/gradebook_common.py`
+- Backend feature routers:
+  - `api/webui/routes/gradebook_policy.py`
+  - `api/webui/routes/gradebook_sweep.py`
+  - `api/webui/routes/gradebook_extra_time.py`
+  - `api/webui/routes/gradebook_extensions.py`
+  - `api/webui/routes/gradebook_curves.py`
+  - `api/webui/routes/gradebook_snapshot.py`
+- Shared grade math and event storage: `api/webui/gradebook_service.py`
 - Main browser bootstrap: `api/webui/static/gradebook.js`
-- Feature scripts: `api/webui/static/gradebook/*.js`
+- Browser feature scripts: `api/webui/static/gradebook/*.js`
+
+Facade include order:
+
+1. `gradebook_snapshot.py`
+2. `gradebook_policy.py`
+3. `gradebook_extra_time.py`
+4. `gradebook_extensions.py`
+5. `gradebook_sweep.py`
+6. `gradebook_curves.py`
 
 ## Current size snapshot
 
-- `api/webui/routes/gradebook.py` - 521 lines
+Backend:
+
+- `api/webui/gradebook_service.py` - 189 lines
+- `api/webui/routes/gradebook_curves.py` - 161 lines
+- `api/webui/routes/gradebook_snapshot.py` - 90 lines
+- `api/webui/routes/gradebook.py` - 87 lines
+- `api/webui/routes/gradebook_extensions.py` - 45 lines
+- `api/webui/routes/gradebook_sweep.py` - 45 lines
+- `api/webui/routes/gradebook_extra_time.py` - 39 lines
+- `api/webui/routes/gradebook_policy.py` - 38 lines
+- `api/webui/routes/gradebook_common.py` - 25 lines
+
+Browser:
+
 - `api/webui/static/gradebook.js` - 357 lines
 - `api/webui/static/gradebook/curves.js` - 271 lines
 - `api/webui/static/gradebook/sweep.js` - 140 lines
@@ -22,6 +55,25 @@ As of 2026-07-07, Gradebook is already split into a thin shared bootstrap file
 - `api/webui/static/gradebook/policy.js` - 96 lines
 - `api/webui/static/gradebook/extra_time.js` - 93 lines
 - `api/webui/static/gradebook/snapshot.js` - 80 lines
+
+## Backend route routing
+
+`gradebook.py` owns the route facade only:
+
+- imports and re-exports the legacy helper names
+- includes the feature routers
+- keeps the `/api/*` surface stable for `server.py` and existing tests
+
+Feature ownership:
+
+- `gradebook_policy.py` - late-policy load/apply flow
+- `gradebook_sweep.py` - late-work sweep preview/apply flow
+- `gradebook_extra_time.py` - extra-time roster, student list, tier tags
+- `gradebook_extensions.py` - due-date extension tools
+- `gradebook_curves.py` - curve preview/apply/history/revert
+- `gradebook_snapshot.py` - whole-course grading snapshot
+- `gradebook_common.py` - shared Canvas fetch helpers used by the route modules
+- `gradebook_service.py` - shared sweep math, curve math, and curve event storage
 
 ## Browser routing
 
@@ -42,37 +94,44 @@ Feature ownership:
 - `curves.js` - curve preview/apply/history/revert
 - `snapshot.js` - whole-course grading snapshot
 
-Namespace seam:
+Namespace seams:
 
-- `window.CE_GRADEBOOK`
+- backend import seam: `api.webui.routes.gradebook`
+- browser shared namespace: `window.CE_GRADEBOOK`
   - shared helpers such as `postForm`, `showBanner`, `showLog`, `gbCourseId`
   - mutable accessors for `sweepEntries` and `curveResults`
 
 ## First places to look by symptom
 
 - late policy problems:
-  - `policy.js`
-  - `gradebook.py` late-policy routes
+  - `gradebook_policy.py`
+  - `gradebook.py` route registration if the endpoint is missing entirely
 - extra-time problems:
-  - `extra_time.js`
-  - `gradebook.py` extra-time routes
+  - `gradebook_extra_time.py`
+  - `gradebook_common.py` if student list fetches are failing
 - extension problems:
-  - `extensions.js`
-  - `gradebook.py` extend-due route
+  - `gradebook_extensions.py`
+  - `gradebook_common.py` for assignment fetch helpers
 - sweep problems:
-  - `sweep.js`
-  - `gradebook.py` sweep routes
-  - `api/webui/gradebook_service.py`
+  - `gradebook_sweep.py`
+  - `gradebook_service.py`
+  - `gradebook_common.py` if Canvas fetches are failing
 - curve problems:
-  - `curves.js`
-  - `gradebook.py` curve routes
-  - `api/webui/gradebook_service.py`
+  - `gradebook_curves.py`
+  - `gradebook_service.py`
+  - `gradebook_common.py`
 - summary snapshot problems:
-  - `snapshot.js`
-  - `gradebook.py::api_gradebook`
+  - `gradebook_snapshot.py`
+  - `gradebook_common.py`
+- route import / registration problems:
+  - `gradebook.py`
 
 ## Rule of thumb
 
-- keep `gradebook.py` as the route orchestration owner
-- put new browser behavior into `gradebook/*.js` feature files instead of growing `gradebook.js`
-- use `window.CE_GRADEBOOK` for shared helpers instead of copying fetch/render helpers
+- keep `gradebook.py` as the route orchestration facade
+- put new backend behavior into `gradebook_*.py` feature files instead of growing
+  the facade
+- use `gradebook_common.py` only for shared Canvas fetch helpers
+- use `gradebook_service.py` for sweep math, curve math, and curve event storage
+- keep `window.CE_GRADEBOOK` for browser shared helpers instead of copying fetch
+  helpers across tabs

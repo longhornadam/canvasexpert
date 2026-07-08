@@ -1,8 +1,7 @@
 /**
- * Roster Console V3 — Canvas groups are the source of truth.
+ * Roster bootstrap and shared state owner.
  *
- * Canvas group column shows real Canvas groups from a selected group set.
- * Status: "synced to Canvas" or actual Canvas error.
+ * Feature modules attach later under window.CE_ROSTER.
  */
 (function () {
   "use strict";
@@ -12,33 +11,20 @@
   var openCanvas = document.getElementById("roster-open-canvas");
   var statusEl = document.getElementById("roster-status");
   var tableCard = document.getElementById("roster-table-card");
-  var tableBody = document.getElementById("roster-table-body");
-  var searchInput = document.getElementById("roster-search");
-  var filterBtns = document.querySelectorAll(".roster-filter-btn");
   var safetyCard = document.getElementById("roster-safety-card");
   var groupLabelsEditor = document.getElementById("roster-group-labels-editor");
 
-  // State
   var students = [];
   var groups = [];
   var selectedGroupCategoryId = null;
   var groupLabelScheme = {};
   var currentCategoryGroups = [];
-  var selectedStudentId = null;
   var filteredStudents = [];
+  var selectedNameMap = {};
   var currentCourseId = "";
   var courseLoaded = false;
   var courseLoadHooks = [];
   var tableRenderHooks = [];
-  var saveTimeouts = {}; // row id -> timeout for debounced save
-
-  // ── Helper ─────────────────────────────────────────────────────────
-
-  function esc(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  }
 
   function setStatus(msg, isOk) {
     statusEl.textContent = msg;
@@ -79,12 +65,85 @@
     }
   }
 
+  function refreshCurrentCategoryGroups() {
+    currentCategoryGroups = [];
+    if (!selectedGroupCategoryId) return;
+    for (var i = 0; i < groups.length; i++) {
+      if (String(groups[i].category_id) === String(selectedGroupCategoryId)) {
+        currentCategoryGroups = groups[i].groups || [];
+        return;
+      }
+    }
+  }
+
+  function renderSummary(counts) {
+    if (!counts) return;
+    document.getElementById("roster-summary-total").textContent = counts.total + " students";
+    document.getElementById("roster-summary-extra").textContent = "Extra " + counts.extra_time;
+    document.getElementById("roster-summary-monitored").textContent = "Monitored " + counts.monitored;
+    document.getElementById("roster-summary-group-unset").textContent = "Unset " + counts.group_unset;
+    document.getElementById("roster-summary-warnings").textContent = "Issues " + counts.warnings;
+  }
+
+  function loadCourse() {
+    var cid = courseSelect.value;
+    if (!cid) {
+      tableCard.hidden = true;
+      groupLabelsEditor.hidden = true;
+      safetyCard.hidden = true;
+      return;
+    }
+
+    currentCourseId = cid;
+    setStatus("Loading...", true);
+    openCanvas.href = window.CANVAS_BASE
+      ? window.CANVAS_BASE + "/courses/" + cid + "/users"
+      : "#";
+
+    fetch("/api/roster?course_id=" + encodeURIComponent(cid))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.ok) {
+          setStatus(data.error || "Failed to load roster.", false);
+          return;
+        }
+
+        students = data.students || [];
+        groups = data.groups || [];
+        selectedGroupCategoryId = data.selected_group_category_id == null ? null : String(data.selected_group_category_id);
+        groupLabelScheme = data.group_label_scheme || {};
+        selectedNameMap = {};
+        refreshCurrentCategoryGroups();
+        renderSummary(data.counts);
+        tableCard.hidden = false;
+        groupLabelsEditor.hidden = false;
+        safetyCard.hidden = false;
+        courseLoaded = true;
+
+        if (window.CE_ROSTER && typeof window.CE_ROSTER.applyFilters === "function") {
+          window.CE_ROSTER.applyFilters();
+        } else if (window.CE_ROSTER && typeof window.CE_ROSTER.renderTable === "function") {
+          window.CE_ROSTER.renderTable();
+        }
+
+        notifyCourseLoaded();
+        setStatus("Loaded " + students.length + " students" + (data.note ? " — " + data.note : ""), true);
+        if (data.legacy_tier_count) {
+          toast("This course has old local tier assignments. Canvas groups are now the source of truth.", true);
+        }
+      })
+      .catch(function (e) {
+        setStatus("Network error: " + e.message, false);
+      });
+  }
+
   window.CE_ROSTER = {
     toast: toast,
+    postForm: postForm,
     getCurrentCourseId: function () { return currentCourseId; },
     hasLoadedCourse: function () { return courseLoaded; },
     reloadCourse: loadCourse,
-    postForm: postForm,
+    getStudents: function () { return students; },
     getGroupState: function () {
       return {
         groups: groups,
@@ -96,20 +155,23 @@
     getFilteredStudents: function () {
       return filteredStudents;
     },
+    setFilteredStudents: function (value) {
+      filteredStudents = value || [];
+    },
     getSelectedNameMap: function () {
-      var names = {};
-      var checks = tableBody.querySelectorAll(".roster-row-check:checked");
-      for (var i = 0; i < checks.length; i++) {
-        var id = checks[i].dataset.id;
-        var s = findStudent(id);
-        names[id] = s ? (s.display_name || s.name) : id;
-      }
-      return names;
+      return selectedNameMap;
+    },
+    setSelectedNameMap: function (value) {
+      selectedNameMap = value || {};
     },
     setSelectedGroupCategoryId: function (value) {
-      selectedGroupCategoryId = value == null ? null : String(value);
+      selectedGroupCategoryId = value == null || value === "" ? null : String(value);
       refreshCurrentCategoryGroups();
-      renderTable();
+      if (window.CE_ROSTER && typeof window.CE_ROSTER.applyFilters === "function") {
+        window.CE_ROSTER.applyFilters();
+      } else if (window.CE_ROSTER && typeof window.CE_ROSTER.renderTable === "function") {
+        window.CE_ROSTER.renderTable();
+      }
     },
     onCourseLoaded: function (fn) {
       if (typeof fn !== "function") return function () {};
@@ -132,417 +194,16 @@
           }
         }
       };
-    }
+    },
+    applyFilters: function () {
+      if (window.CE_ROSTER && typeof window.CE_ROSTER.renderTable === "function") {
+        window.CE_ROSTER.renderTable();
+      }
+    },
+    renderTable: function () {},
+    setRowStatus: function () {},
+    notifyTableRendered: notifyTableRendered
   };
-
-  function refreshCurrentCategoryGroups() {
-    currentCategoryGroups = [];
-    if (!selectedGroupCategoryId) return;
-    for (var i = 0; i < groups.length; i++) {
-      if (String(groups[i].category_id) === String(selectedGroupCategoryId)) {
-        currentCategoryGroups = groups[i].groups || [];
-        return;
-      }
-    }
-  }
-
-  function setRowStatus(rowId, msg, cls) {
-    var row = tableBody.querySelector('tr[data-id="' + rowId + '"]');
-    if (!row) return;
-    var el = row.querySelector(".roster-v2-status");
-    if (!el) return;
-    el.textContent = msg;
-    el.title = msg;
-    el.className = "roster-v2-status " + (cls || "");
-  }
-
-  function warningLabel(code) {
-    var labels = {
-      missing_pseudonym: "Missing pseudonym",
-      extra_time_without_days: "Extra time needs days",
-      group_unset: "Group unset",
-      multiple_groups_in_selected_set: "Multiple groups",
-      protected_name_collision: "Protected name collision",
-      nickname_collision: "Nickname collision"
-    };
-    return labels[code] || String(code || "Issue").replace(/_/g, " ");
-  }
-
-  function rowStatus(warnings, canvasGroup) {
-    var issues = (warnings || []).map(warningLabel);
-    if (canvasGroup && canvasGroup.group_id) {
-      // Canvas-backed field
-      if (issues.length > 0) {
-        return {
-          text: issues[0] + (issues.length > 1 ? " +" + (issues.length - 1) : ""),
-          title: issues.join("; "),
-          cls: "roster-v2-status-warning"
-        };
-      }
-      return {
-        text: "synced to Canvas",
-        title: "Synced to Canvas",
-        cls: "roster-v2-status-ok"
-      };
-    }
-    // No group assigned
-    if (issues.length > 0) {
-      return {
-        text: issues[0] + (issues.length > 1 ? " +" + (issues.length - 1) : ""),
-        title: issues.join("; "),
-        cls: "roster-v2-status-warning"
-      };
-    }
-    return {
-      text: "not in group",
-      title: "Not assigned to a group in the selected set",
-      cls: "roster-v2-status-none"
-    };
-  }
-
-  function findStudent(id) {
-    for (var i = 0; i < students.length; i++) {
-      if (students[i].id === id) return students[i];
-    }
-    return null;
-  }
-
-  // ── Course load ─────────────────────────────────────────────────────
-
-  function loadCourse() {
-    var cid = courseSelect.value;
-    if (!cid) {
-      tableCard.hidden = true;
-      groupLabelsEditor.hidden = true;
-      safetyCard.hidden = true;
-      return;
-    }
-    currentCourseId = cid;
-    setStatus("Loading...", true);
-    openCanvas.href = window.CANVAS_BASE
-      ? window.CANVAS_BASE + "/courses/" + cid + "/users"
-      : "#";
-
-    fetch("/api/roster?course_id=" + encodeURIComponent(cid))
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data.ok) {
-          setStatus(data.error || "Failed to load roster.", false);
-          return;
-        }
-        students = data.students || [];
-        groups = data.groups || [];
-        selectedGroupCategoryId = data.selected_group_category_id == null ? null : String(data.selected_group_category_id);
-        groupLabelScheme = data.group_label_scheme || {};
-        refreshCurrentCategoryGroups();
-        renderSummary(data.counts);
-        renderTable();
-        tableCard.hidden = false;
-        groupLabelsEditor.hidden = false;
-        safetyCard.hidden = false;
-        courseLoaded = true;
-        notifyCourseLoaded();
-        setStatus("Loaded " + students.length + " students" + (data.note ? " — " + data.note : ""), true);
-        if (data.legacy_tier_count) {
-          toast("This course has old local tier assignments. Canvas groups are now the source of truth.", true);
-        }
-      })
-      .catch(function (e) {
-        setStatus("Network error: " + e.message, false);
-      });
-  }
-
-  function renderSummary(counts) {
-    if (!counts) return;
-    document.getElementById("roster-summary-total").textContent = counts.total + " students";
-    document.getElementById("roster-summary-extra").textContent = "Extra " + counts.extra_time;
-    document.getElementById("roster-summary-monitored").textContent = "Monitored " + counts.monitored;
-    document.getElementById("roster-summary-group-unset").textContent = "Unset " + counts.group_unset;
-    document.getElementById("roster-summary-warnings").textContent = "Issues " + counts.warnings;
-  }
-  function groupId(group) {
-    return String((group && (group.id || group.group_id)) || "");
-  }
-
-  function groupLabel(group) {
-    var gid = groupId(group);
-    return (groupLabelScheme && groupLabelScheme[gid]) || {};
-  }
-
-  function groupDisplay(group) {
-    var label = groupLabel(group).teacher_label || group.teacher_label || "";
-    return label && label !== group.name ? label + " / " + group.name : group.name;
-  }
-
-  function findCurrentCategoryGroup(targetGroupId) {
-    var categoryGroups = currentCategoryGroups || [];
-    var target = String(targetGroupId || "");
-    for (var i = 0; i < categoryGroups.length; i++) {
-      if (groupId(categoryGroups[i]) === target) return categoryGroups[i];
-    }
-    return null;
-  }
-
-  // ── Render table ───────────────────────────────────────────────────
-
-  function renderTable() {
-    var q = (searchInput.value || "").toLowerCase().trim();
-    var activeFilter = document.querySelector(".roster-filter-btn.active");
-    var filter = activeFilter ? activeFilter.dataset.filter : "all";
-
-    var categoryGroups = currentCategoryGroups || [];
-
-    filteredStudents = students.filter(function (s) {
-      if (q) {
-        var haystack = (s.name + " " + s.display_name + " " + s.short_name + " " +
-          (s.nicknames || []).join(" ") + " " + (s.pseudonym || "") + " " +
-          ((s.monitored && s.monitored.note) || "")).toLowerCase();
-        if (haystack.indexOf(q) === -1) return false;
-      }
-      if (filter === "extra_time" && !s.extra_time.enabled) return false;
-      if (filter === "monitored" && !s.monitored.enabled) return false;
-      if (filter === "group_unset" && s.canvas_group && s.canvas_group.group_id) return false;
-      if (filter === "warnings" && (!s.warnings || s.warnings.length === 0)) return false;
-      return true;
-    });
-
-    if (filteredStudents.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="9" class="roster-empty">No students.</td></tr>';
-      notifyTableRendered();
-      return;
-    }
-
-    // Build canvas group select HTML
-    function canvasGroupOptions(selected) {
-      var h = '<option value="">— no group —</option>';
-      for (var i = 0; i < categoryGroups.length; i++) {
-        var g = categoryGroups[i];
-        var gid = groupId(g);
-        var label = groupDisplay(g);
-        var sel = gid === String(selected || "") ? " selected" : "";
-        h += '<option value="' + esc(gid) + '"' + sel + '>' + esc(label) + "</option>";
-      }
-      return h;
-    }
-
-    var html = "";
-    for (var i = 0; i < filteredStudents.length; i++) {
-      var s = filteredStudents[i];
-      var sel = selectedStudentId === s.id ? ' class="roster-v2-row-selected"' : "";
-
-      var canvasGroup = s.canvas_group || {};
-      var nnVal = esc((s.nicknames || []).join(", "));
-      var pseudoVal = esc(s.pseudonym || "");
-      var noteVal = esc((s.monitored && s.monitored.note) || "");
-      var status = rowStatus(s.warnings, canvasGroup);
-
-      html += "<tr" + sel + ' data-id="' + esc(s.id) + '">' +
-        '<td class="roster-col-check"><input type="checkbox" class="roster-row-check" data-id="' + esc(s.id) + '"></td>' +
-        '<td class="roster-col-name"><span class="roster-v2-name">' + esc(s.display_name || s.name) + "</span></td>" +
-        '<td class="roster-col-nicknames"><input type="text" class="roster-v2-input roster-v2-nicknames" value="' + nnVal + '" placeholder="nicknames" data-id="' + esc(s.id) + '"></td>' +
-        '<td class="roster-col-pseudo"><span class="roster-v2-pseudo-row"><input type="text" class="roster-v2-input roster-v2-pseudo" value="' + pseudoVal + '" placeholder="pseudonym" data-id="' + esc(s.id) + '" data-field="pseudo"><button type="button" class="roster-v2-regen" data-id="' + esc(s.id) + '" title="Regenerate">&#x21bb;</button></span></td>' +
-        '<td class="roster-col-extratime"><label class="roster-v2-et"><input type="checkbox" class="roster-v2-et-cb" data-id="' + esc(s.id) + '"' + (s.extra_time.enabled ? " checked" : "") + ">" +
-        (s.extra_time.enabled ? ('<input type="number" class="roster-v2-et-days" value="' + (s.extra_time.days || 0) + '" min="0" max="30" data-id="' + esc(s.id) + '">') : '<input type="number" class="roster-v2-et-days" value="0" min="0" max="30" data-id="' + esc(s.id) + '" hidden>') +
-        "</label></td>" +
-        '<td class="roster-col-group"><select class="roster-v2-canvas-group" data-id="' + esc(s.id) + '" data-category="' + esc(selectedGroupCategoryId || "") + '">' + canvasGroupOptions(canvasGroup.group_id) + "</select></td>" +
-        '<td class="roster-col-monitor"><input type="checkbox" class="roster-v2-monitor" data-id="' + esc(s.id) + '"' + (s.monitored.enabled ? " checked" : "") + "></td>" +
-        '<td class="roster-col-note"><input type="text" class="roster-v2-input roster-v2-note" value="' + noteVal + '" data-id="' + esc(s.id) + '"></td>' +
-        '<td class="roster-col-status"><span class="roster-v2-status ' + status.cls + '" title="' + esc(status.title) + '">' + esc(status.text) + '</span></td>' +
-        "</tr>";
-    }
-    tableBody.innerHTML = html;
-    attachInlineEvents();
-    notifyTableRendered();
-  }
-
-  // ── Inline editing with autosave ───────────────────────────────────
-
-  function attachInlineEvents() {
-    // Nicknames: save on Enter or blur
-    tableBody.querySelectorAll(".roster-v2-nicknames").forEach(function (el) {
-      el.addEventListener("change", function () {
-        var id = el.dataset.id;
-        var val = el.value.split(",").map(function (n) { return n.trim(); }).filter(Boolean);
-        saveField(id, "nicknames", val);
-      });
-    });
-
-    // Pseudonym: save on blur (full pseudo as first/last split)
-    tableBody.querySelectorAll(".roster-v2-pseudo").forEach(function (el) {
-      el.addEventListener("change", function () {
-        var id = el.dataset.id;
-        var parts = el.value.trim().split(/\s+/);
-        var first = parts[0] || "";
-        var last = parts.slice(1).join(" ") || "";
-        saveField(id, "pseudonym", { first: first, last: last });
-      });
-    });
-
-    // Regenerate
-    tableBody.querySelectorAll(".roster-v2-regen").forEach(function (el) {
-      el.addEventListener("click", function () {
-        var id = el.dataset.id;
-        setRowStatus(id, "saving...", "roster-v2-status-saving");
-        saveField(id, "regenerate_pseudonym", true);
-      });
-    });
-
-    // Extra time checkbox
-    tableBody.querySelectorAll(".roster-v2-et-cb").forEach(function (el) {
-      el.addEventListener("change", function () {
-        var id = el.dataset.id;
-        var s = findStudent(id);
-        var daysInput = el.closest("label").querySelector(".roster-v2-et-days");
-        var enabled = el.checked;
-        daysInput.hidden = !enabled;
-        if (enabled) daysInput.value = daysInput.value || "2";
-        saveField(id, "extra_time", {
-          enabled: enabled,
-          days: enabled ? parseInt(daysInput.value, 10) || 2 : 0,
-          name: s ? (s.display_name || s.name) : ""
-        });
-      });
-    });
-
-    // Extra time days
-    tableBody.querySelectorAll(".roster-v2-et-days").forEach(function (el) {
-      el.addEventListener("change", function () {
-        var id = el.dataset.id;
-        var s = findStudent(id);
-        var cb = el.closest("label").querySelector(".roster-v2-et-cb");
-        saveField(id, "extra_time", {
-          enabled: cb.checked,
-          days: parseInt(el.value, 10) || 0,
-          name: s ? (s.display_name || s.name) : ""
-        });
-      });
-    });
-
-    // Canvas group select: writes real Canvas group membership.
-    tableBody.querySelectorAll(".roster-v2-canvas-group").forEach(function (el) {
-      el.addEventListener("change", function () {
-        var id = el.dataset.id;
-        saveField(id, "canvas_group", {
-          category_id: el.dataset.category || selectedGroupCategoryId,
-          group_id: el.value || null
-        });
-      });
-    });
-
-    // Monitor checkbox
-    tableBody.querySelectorAll(".roster-v2-monitor").forEach(function (el) {
-      el.addEventListener("change", function () {
-        var id = el.dataset.id;
-        var s = findStudent(id);
-        var noteInput = el.closest("tr").querySelector(".roster-v2-note");
-        saveField(id, "monitored", {
-          enabled: el.checked,
-          name: s ? (s.display_name || s.name) : "",
-          note: noteInput ? noteInput.value : (s ? (s.monitored.note || "") : "")
-        });
-      });
-    });
-
-    // Private note: stored with the monitored-student metadata.
-    tableBody.querySelectorAll(".roster-v2-note").forEach(function (el) {
-      el.addEventListener("change", function () {
-        var id = el.dataset.id;
-        var s = findStudent(id);
-        if (!s) return;
-        var note = el.value.trim();
-        saveField(id, "monitored", {
-          enabled: s.monitored.enabled || !!note,
-          name: s.display_name || s.name,
-          note: note
-        });
-      });
-    });
-  }
-
-  // ── Autosave ───────────────────────────────────────────────────────
-
-  function saveField(userId, key, value) {
-    var isCanvasGroup = key === "canvas_group";
-    setRowStatus(userId, isCanvasGroup ? "syncing to Canvas..." : "saving locally...", "roster-v2-status-saving");
-
-    if (saveTimeouts[userId]) {
-      clearTimeout(saveTimeouts[userId]);
-    }
-
-    // Debounce: wait 300ms then send
-    saveTimeouts[userId] = setTimeout(function () {
-      var patch = {};
-      patch[key] = value;
-
-      var body = new URLSearchParams();
-      body.append("course_id", currentCourseId);
-      body.append("user_id", userId);
-      body.append("patch", JSON.stringify(patch));
-
-      fetch("/api/roster/student", { method: "POST", body: body })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (data.ok) {
-            updateLocalStudent(userId, key, value);
-            setRowStatus(userId, isCanvasGroup ? "synced to Canvas" : "saved locally", "roster-v2-status-ok");
-          } else {
-            var apiMsg = data.error || "Save failed.";
-            setRowStatus(userId, "Error: " + apiMsg, "roster-v2-status-error");
-            toast(apiMsg, true);
-          }
-        })
-        .catch(function (e) {
-          var netMsg = "Network error: " + e.message;
-          setRowStatus(userId, netMsg, "roster-v2-status-error");
-          toast(netMsg, true);
-        });
-    }, 300);
-  }
-
-  function updateLocalStudent(userId, key, value) {
-    var s = findStudent(userId);
-    if (!s) return;
-    if (key === "nicknames") {
-      s.nicknames = value;
-    } else if (key === "pseudonym") {
-      s.pseudonym = [value.first, value.last].filter(Boolean).join(" ");
-    } else if (key === "extra_time") {
-      s.extra_time = { enabled: !!value.enabled, days: value.days || 0 };
-    } else if (key === "canvas_group") {
-      var group = findCurrentCategoryGroup(value.group_id);
-      if (group && value.group_id) {
-        var label = groupLabel(group).teacher_label || group.teacher_label || "";
-        s.canvas_group = {
-          category_id: value.category_id,
-          category_name: (groups.find(function (g) { return g.category_id === value.category_id; }) || {}).category_name || "",
-          group_id: groupId(group),
-          group_name: group.name,
-          teacher_label: label || null,
-          display: groupDisplay(group)
-        };
-      } else {
-        s.canvas_group = null;
-      }
-    } else if (key === "monitored") {
-      s.monitored = { enabled: !!value.enabled, note: value.note || "" };
-    }
-  }
-
-  // ── Filters ─────────────────────────────────────────────────────────
-
-  searchInput.addEventListener("input", renderTable);
-
-  for (var fi = 0; fi < filterBtns.length; fi++) {
-    filterBtns[fi].addEventListener("click", function () {
-      for (var fj = 0; fj < filterBtns.length; fj++) {
-        filterBtns[fj].classList.remove("active");
-      }
-      this.classList.add("active");
-      renderTable();
-    });
-  }
-
-  // ── Init ────────────────────────────────────────────────────────────
 
   window.CANVAS_BASE = document.querySelector('meta[name="canvas-base"]')
     ? document.querySelector('meta[name="canvas-base"]').content
@@ -559,6 +220,6 @@
   refreshBtn.addEventListener("click", loadCourse);
 
   if (courseSelect.value) {
-    loadCourse();
+    setTimeout(loadCourse, 0);
   }
 })();

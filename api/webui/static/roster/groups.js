@@ -7,7 +7,6 @@
     "hasLoadedCourse",
     "onCourseLoaded",
     "getGroupState",
-    "setSelectedGroupCategoryId",
     "reloadCourse"
   ].every(function (name) { return typeof roster[name] === "function"; });
 
@@ -16,7 +15,6 @@
     return;
   }
 
-  var groupSetPicker = document.getElementById("roster-group-set-picker");
   var newGroupSetName = document.getElementById("roster-new-group-set-name");
   var newGroupNames = document.getElementById("roster-new-group-names");
   var createGroupSetBtn = document.getElementById("roster-create-group-set");
@@ -27,7 +25,7 @@
   var groupLabelsSaveBtn = document.getElementById("roster-group-labels-save");
   var groupLabelsStatus = document.getElementById("roster-group-labels-status");
 
-  if (!groupSetPicker || !newGroupSetName || !newGroupNames || !createGroupSetBtn || !addGroupsBtn ||
+  if (!newGroupSetName || !newGroupNames || !createGroupSetBtn || !addGroupsBtn ||
       !groupBuilderStatus || !groupLabelsEditor || !groupLabelsRows || !groupLabelsSaveBtn || !groupLabelsStatus) {
     return;
   }
@@ -63,24 +61,6 @@
     groupState.currentCategoryGroups = state.currentCategoryGroups || [];
   }
 
-  function populateGroupSetPicker() {
-    groupSetPicker.innerHTML = "";
-    if (!groupState.groups.length) {
-      groupSetPicker.innerHTML = '<option value="">— no group sets —</option>';
-      return;
-    }
-    for (var i = 0; i < groupState.groups.length; i++) {
-      var g = groupState.groups[i];
-      var option = document.createElement("option");
-      option.value = String(g.category_id);
-      option.textContent = g.category_name;
-      if (String(g.category_id) === String(groupState.selectedGroupCategoryId || "")) {
-        option.selected = true;
-      }
-      groupSetPicker.appendChild(option);
-    }
-  }
-
   function renderGroupLabelsEditor() {
     groupLabelsRows.innerHTML = "";
     var categoryGroups = groupState.currentCategoryGroups || [];
@@ -114,19 +94,11 @@
       meaningInput.placeholder = "Meaning";
 
       row.appendChild(nameSpan);
-      row.appendChild(document.createTextNode(" → "));
+      row.appendChild(document.createTextNode(" -> "));
       row.appendChild(teacherLabelInput);
       row.appendChild(meaningInput);
       groupLabelsRows.appendChild(row);
     }
-  }
-
-  function saveGroupSetPreference() {
-    var body = new URLSearchParams();
-    body.append("course_id", roster.getCurrentCourseId());
-    body.append("category_id", groupState.selectedGroupCategoryId || "");
-    fetch("/api/roster/group-set-preference", { method: "POST", body: body })
-      .catch(function () { /* silent fail */ });
   }
 
   function createGroupSet() {
@@ -166,7 +138,8 @@
 
   function addGroups() {
     var cid = roster.getCurrentCourseId();
-    var categoryId = groupSetPicker.value;
+    var state = roster.getGroupState() || {};
+    var categoryId = state.selectedGroupCategoryId;
     var names = parseGroupNameText();
     if (!cid) { setGroupBuilderStatus("Select a course first.", false); return; }
     if (!categoryId) { setGroupBuilderStatus("Select a group set first.", false); return; }
@@ -234,21 +207,17 @@
 
   function refreshGroupUi() {
     syncGroupState();
-    populateGroupSetPicker();
     renderGroupLabelsEditor();
   }
-
-  groupSetPicker.addEventListener("change", function () {
-    roster.setSelectedGroupCategoryId(this.value);
-    syncGroupState();
-    saveGroupSetPreference();
-  });
 
   createGroupSetBtn.addEventListener("click", createGroupSet);
   addGroupsBtn.addEventListener("click", addGroups);
   groupLabelsSaveBtn.addEventListener("click", saveGroupLabels);
 
   roster.onCourseLoaded(refreshGroupUi);
+  if (typeof roster.onGroupCategoryChanged === "function") {
+    roster.onGroupCategoryChanged(refreshGroupUi);
+  }
   syncGroupState();
   if (roster.hasLoadedCourse()) {
     refreshGroupUi();

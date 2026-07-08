@@ -3,23 +3,50 @@
 Purpose: give debugging sessions a low-token routing map for Roster without
 reading the route, browser script, and helper modules from scratch.
 
-As of 2026-07-07, Roster is partly modular on the backend and the browser side is
- split across a shared bootstrap plus feature files.
+As of 2026-07-08, Roster is split across a shared bootstrap plus focused browser
+feature files.
 
 ## Ownership
 
 - Route owner: `api/webui/routes/roster.py`
-- Browser owner: `api/webui/static/roster.js`
+- Browser bootstrap and shared state owner: `api/webui/static/roster.js`
+- Table rendering and row-selection name-map updates: `api/webui/static/roster/table.js`
+- Search and filter controls: `api/webui/static/roster/filters.js`
+- Inline edit and debounced save behavior: `api/webui/static/roster/inline_edit.js`
+- Selected Canvas group set state and picker coordination: `api/webui/static/roster/group_state.js`
 - Bulk action handlers: `api/webui/static/roster/bulk.js`
+- Canvas group builder and group label editor: `api/webui/static/roster/groups.js`
+- AI safety tools: `api/webui/static/roster/safety.js`
 - Canvas group helpers: `api/webui/routes/roster_canvas.py`
 - Pure normalization helpers: `api/webui/routes/roster_helpers.py`
 - Student/bulk update helpers: `api/webui/routes/roster_updates.py`
 
+## Load order
+
+`api/webui/templates/roster.html` loads roster browser scripts in this order:
+
+1. `api/webui/static/roster.js`
+2. `api/webui/static/roster/table.js`
+3. `api/webui/static/roster/filters.js`
+4. `api/webui/static/roster/inline_edit.js`
+5. `api/webui/static/roster/group_state.js`
+6. `api/webui/static/roster/bulk.js`
+7. `api/webui/static/roster/groups.js`
+8. `api/webui/static/roster/safety.js`
+
+`window.CE_ROSTER` is defined in `roster.js` before the feature scripts load.
+
 ## Current size snapshot
 
 - `api/webui/routes/roster.py` - 467 lines
-- `api/webui/static/roster.js` - 564 lines
-- `api/webui/static/roster/bulk.js` - 155 lines
+- `api/webui/static/roster.js` - 205 lines
+- `api/webui/static/roster/table.js` - 169 lines
+- `api/webui/static/roster/filters.js` - 77 lines
+- `api/webui/static/roster/inline_edit.js` - 202 lines
+- `api/webui/static/roster/group_state.js` - 73 lines
+- `api/webui/static/roster/bulk.js` - 136 lines
+- `api/webui/static/roster/groups.js` - 196 lines
+- `api/webui/static/roster/safety.js` - 129 lines
 - `api/webui/routes/roster_updates.py` - 267 lines
 - `api/webui/routes/roster_helpers.py` - 211 lines
 - `api/webui/routes/roster_canvas.py` - 165 lines
@@ -61,12 +88,39 @@ Helper ownership:
 
 `roster.js` currently owns:
 
-- course load and roster fetch
-- table rendering and filters
-- inline editing and debounced save
-- selected Canvas group category flow
-- status/toast helpers
-- shared roster state and hooks for feature files
+- course selection wiring and initial load
+- shared toast and form-post helpers
+- roster state and hook registration
+- roster reload wiring
+- shared course/group/filter state facades
+
+`roster/table.js` currently owns:
+
+- roster row HTML construction
+- row status cell updates
+- row-selection name-map updates for bulk actions
+
+`roster/filters.js` currently owns:
+
+- search box changes
+- filter button changes
+- filtered student list recomputation
+- triggering table re-renders after filter changes
+
+`roster/inline_edit.js` currently owns:
+
+- nickname editing
+- pseudonym editing and regenerate
+- extra-time checkbox and day edits
+- Canvas group selection per row
+- monitored-student toggle and note edits
+- debounced save requests
+
+`roster/group_state.js` currently owns:
+
+- selected Canvas group set picker
+- group-set preference persistence
+- coordination between the picker and shared roster group state
 
 `roster/bulk.js` currently owns:
 
@@ -76,15 +130,33 @@ Helper ownership:
 - bulk action dispatch for extra time, monitoring, and Canvas groups
 - refreshes after table render hooks
 
+`roster/groups.js` currently owns:
+
+- Canvas group-set creation
+- adding groups to an existing set
+- group label editor rendering and save flow
+
+`roster/safety.js` currently owns:
+
+- protected-name pack loading and save
+- scrub test
+- who-is-who export
+- vault backup
+
 Namespace seam:
 
 - `window.CE_ROSTER`
-  - course state
-  - group state
-  - reload hook registration
+  - course state getters
+  - group state getters
+  - filtered-student list setter/getter
+  - selected-name-map getter used by bulk actions
   - shared toast and form-post helper
-  - row-selection name map for bulk actions
+  - course-load hook registration
   - table-render hook registration
+  - row-status updates for inline save feedback
+  - table-render entry point
+  - filter entry point
+  - Canvas group selection setter
 
 ## First places to look by symptom
 
@@ -99,11 +171,20 @@ Namespace seam:
 - Canvas group mutation problems:
   - `roster_canvas.py`
   - `roster.py::_update_student_canvas_group`
-- inline save / UI state problems:
-  - `roster.js`
+- row markup, status, or name-map problems:
+  - `roster/table.js`
+- search or filter problems:
+  - `roster/filters.js`
+- inline save or row edit problems:
+  - `roster/inline_edit.js`
+- selected Canvas group set / picker coordination problems:
+  - `roster/group_state.js`
 - group label rendering problems:
-  - `roster_helpers.py::_annotate_group_labels`
-  - `roster.js`
+  - `roster/groups.js`
+- bulk bar or bulk action problems:
+  - `roster/bulk.js`
+- safety tools problems:
+  - `roster/safety.js`
 
 ## Stability note
 

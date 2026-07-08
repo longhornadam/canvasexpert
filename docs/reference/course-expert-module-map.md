@@ -1,17 +1,18 @@
 # Course Expert Module Map
 
-Purpose: route Course Expert debugging without re-reading the large template,
-shared browser modules, and push backend.
+Purpose: route Course Expert debugging without re-reading the page template,
+shared push modules, and the feature scripts that own the remaining browser
+workflows.
 
 As of 2026-07-08, Course Expert browser behavior is split into small shared
-modules plus feature scripts. The large template remains mapped here because it is
-mostly markup and inline Student Reports/portfolio behavior.
+push modules plus page-specific feature scripts. `course_expert.html` is now
+mostly markup, data injection, and script includes.
 
 ## Ownership
 
 - Page template: `api/webui/templates/course_expert.html`
 - Shared browser modules: `api/webui/static/push.js`, `api/webui/static/push/*.js`
-- Feature browser scripts: `api/webui/static/push/*.js`
+- Course Expert feature scripts: `api/webui/static/course_expert/*.js`
 - Route owner: `api/webui/routes/push.py`
 - Validation/physical routes: `api/webui/routes/push_validation.py`
 - Streaming QuizForge routes: `api/webui/routes/push_streaming.py`
@@ -20,7 +21,11 @@ mostly markup and inline Student Reports/portfolio behavior.
 
 ## Current Size Snapshot
 
-- `api/webui/templates/course_expert.html` - 1044 lines
+- `api/webui/templates/course_expert.html` - 699 lines
+- `api/webui/static/course_expert/tabs.js` - 114 lines
+- `api/webui/static/course_expert/student_reports.js` - 111 lines
+- `api/webui/static/course_expert/portfolio.js` - 110 lines
+- `api/webui/static/course_expert/quick_assignment.js` - 34 lines
 - `api/webui/push_service.py` - 472 lines
 - `api/webui/source_materials.py` - 420 lines
 - `api/webui/static/push/quiz.js` - 294 lines
@@ -31,11 +36,11 @@ mostly markup and inline Student Reports/portfolio behavior.
 - `api/webui/static/push/file_sources.js` - 160 lines
 - `api/webui/routes/push_validation.py` - 160 lines
 - `api/webui/routes/push_streaming.py` - 147 lines
-- `api/webui/static/push/assignment.js` - 126 lines
+- `api/webui/static/push/assignment.js` - 136 lines
 - `api/webui/routes/push.py` - 88 lines
+- `api/webui/static/push/page.js` - 57 lines
 - `api/webui/static/push/rubrics.js` - 54 lines
-- `api/webui/static/push/page.js` - 51 lines
-- `api/webui/static/push/rubric.js` - 41 lines
+- `api/webui/static/push/rubric.js` - 47 lines
 - `api/webui/static/push.js` - 8 lines
 
 ## Browser Routing
@@ -44,15 +49,29 @@ Shared modules own:
 
 - `push/core.js` - shared escaping, form POST, log/banner, busy-state, SSE,
   printable generation, generic content push, and the `window.CE_PUSH` namespace
-- `push/file_sources.js` - library/paste/upload staging and skill-copy helper
+- `push/file_sources.js` - library/paste/upload staging and skill-copy helper;
+  still provides the legacy `initFileSource` and `copySkill` globals
 - `push/delivery.js` - datetime conversion, QuizForge delivery settings, module
-  selection, module loading, and assignment group loading
+  selection, module loading, and assignment group loading; still provides
+  `localToISO`
 - `push/rubrics.js` - RubricForge file list loading and assignment rubric controls
 - `push/course_picker.js` - target-course multi-select, focused course, course
-  folder lookup, and all-courses expansion
+  folder lookup, and all-courses expansion; still provides `targetCourses`
 - `push.js` - tiny compatibility bootstrap that runs shared initialization
 
-Feature scripts own:
+Course Expert feature scripts own:
+
+- `course_expert/tabs.js` - tab activation, query/hash deep-linking, delivery
+  option toggles, whole/differentiated quiz mode switching, file-source bootstrap,
+  copy-skill wiring, and course-picker dismiss behavior; the shared seam is
+  `window.CE_COURSE_EXPERT`
+- `course_expert/student_reports.js` - roster load, monitor toggle, and student
+  packet SSE
+- `course_expert/portfolio.js` - New Quizzes CSV portfolio and merged portfolio
+  forms
+- `course_expert/quick_assignment.js` - quick gradebook-column push
+
+Shared push scripts still own the core push cards:
 
 - `push/quiz.js` - QuizForge validation, preview, whole-class push, differentiated
   push, and group manifest behavior
@@ -61,10 +80,10 @@ Feature scripts own:
 - `push/rubric.js` - RubricForge validation/prompt/push card behavior
 - `push/download.js` - Download Work assignment selection/download behavior
 
-`course_expert.html` contains markup and inline JavaScript for tab switching,
-delivery-option toggles, quick assignment, student reports, and combined portfolio
-workflows. Standalone legacy push pages load `_push_common_scripts.html` before
-their feature script.
+`course_expert.html` now contains markup plus script includes. Standalone legacy
+push pages load `_push_common_scripts.html` before their feature script; Course
+Expert loads that bundle first, then the shared push cards, then the page-specific
+`course_expert/*.js` files.
 
 ## Backend Routing
 
@@ -92,8 +111,13 @@ through CLI subprocess/streaming routes.
 
 ## First Places To Look By Symptom
 
+- Course Expert tab deep-linking / shell glue: `course_expert/tabs.js`
+- Course Expert Student Reports: `course_expert/student_reports.js`
+- Course Expert NQ / merged portfolio forms: `course_expert/portfolio.js`
+- Course Expert quick assignment: `course_expert/quick_assignment.js`
 - target course picker: `push/course_picker.js`
-- module/category dropdowns or delivery settings: `push/delivery.js`
+- module/category dropdowns or delivery settings: `push/delivery.js`,
+  `course_expert/tabs.js`
 - QuizForge validate/preview/live stream: `push/quiz.js`, `routes/push_streaming.py`,
   `qf_pusher.py`
 - Assignment/Page/Rubric card behavior: matching `push/*.js`,
@@ -103,8 +127,8 @@ through CLI subprocess/streaming routes.
   `engine/rendering/physical/`
 - Download Work behavior: `push/download.js`, `api/downloader.py`,
   download-related routes
-- Student Reports/portfolio inline behavior: `course_expert.html`,
-  report/portfolio routes
+- Student Reports/portfolio inline behavior: `course_expert/student_reports.js`,
+  `course_expert/portfolio.js`, report/portfolio routes
 
 ## Guardrails
 

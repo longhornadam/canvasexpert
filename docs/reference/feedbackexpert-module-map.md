@@ -10,6 +10,13 @@ older imports. Refactor only with focused tests and privacy review.
 ## Ownership
 
 - Main page template: `api/webui/templates/feedback_expert.html`
+- Browser bootstrap/shared helpers: `api/webui/static/feedback/core.js`
+- Folder open actions: `api/webui/static/feedback/folders.js`
+- Persona library + save flow: `api/webui/static/feedback/personas.js`
+- Guided scoring prepare/stream: `api/webui/static/feedback/guided_run.js`
+- Inbox process + re-identify: `api/webui/static/feedback/manual.js`
+- OpenRouter config + CSV lane: `api/webui/static/feedback/openrouter.js`
+- Push preview/apply review table: `api/webui/static/feedback/push.js`
 - Name/vault page template: `api/webui/templates/name_manager.html`
 - Route registration owner: `api/webui/routes/feedback.py`
 - Manual workflow routes: `api/webui/routes/feedback_manual.py`
@@ -28,7 +35,14 @@ older imports. Refactor only with focused tests and privacy review.
 
 ## Current Size Snapshot
 
-- `api/webui/templates/feedback_expert.html` - 722 lines
+- `api/webui/templates/feedback_expert.html` - 267 lines
+- `api/webui/static/feedback/core.js` - 114 lines
+- `api/webui/static/feedback/folders.js` - 13 lines
+- `api/webui/static/feedback/personas.js` - 57 lines
+- `api/webui/static/feedback/guided_run.js` - 204 lines
+- `api/webui/static/feedback/manual.js` - 21 lines
+- `api/webui/static/feedback/openrouter.js` - 139 lines
+- `api/webui/static/feedback/push.js` - 176 lines
 - `api/feedback_artifacts.py` - 425 lines
 - `api/webui/templates/name_manager.html` - 441 lines
 - `api/feedback_vault.py` - 297 lines
@@ -97,28 +111,41 @@ The split implementation lives in:
 
 ## Browser Routing
 
-`feedback_expert.html` contains inline JavaScript for:
+`feedback_expert.html` is now mostly markup plus script includes.
 
-- persona/pattern loading and saving
-- status and bundle list rendering
-- guided prepare/stream scoring
-- manual inbox/reidentify buttons
-- OpenRouter config/scoring
-- push-preview and push-apply review table
+Browser load order:
 
-If browser behavior is split later, use plain browser scripts under
-`api/webui/static/feedback/` and a small `window.CE_FEEDBACK` namespace. Do not
-add a framework or build step.
+1. `static/feedback/core.js`
+2. `static/feedback/folders.js`
+3. `static/feedback/personas.js`
+4. `static/feedback/guided_run.js`
+5. `static/feedback/manual.js`
+6. `static/feedback/openrouter.js`
+7. `static/feedback/push.js`
+
+Shared namespace seam: `window.CE_FEEDBACK`
+
+Keep the browser split in plain scripts under `api/webui/static/feedback/`.
+Do not add a framework or build step.
 
 ## First Places To Look By Symptom
 
+- shared escape/status/folder bootstrap: `static/feedback/core.js`
+- SAFE / PRIVATE / Inbox / FromLLM / ToEnter button wiring:
+  `static/feedback/folders.js`
+- persona dropdown or save behavior: `static/feedback/personas.js`
 - SAFE/PRIVATE artifact shape: `feedback_artifacts.py`, `feedback_pipeline.py`,
   `feedback_scrub.py`,
   `feedback_safety.py`
 - pseudonym/name mismatch: `feedback_vault.py`, `feedback_artifacts.py`
-- guided scoring errors: `routes/feedback_run.py`, `feedback_pipeline.py`,
-  `api/openrouter_client.py`
-- push preview/apply errors: `routes/feedback_push.py`, `docs/contracts/feedback-scoring-contract.md`
+- guided scoring errors: `static/feedback/guided_run.js`, `routes/feedback_run.py`,
+  `feedback_pipeline.py`, `api/openrouter_client.py`
+- inbox / re-identify / manual CSV lane: `static/feedback/manual.js`,
+  `routes/feedback_manual.py`, `feedback_pipeline.py`
+- OpenRouter config / bundle scoring lane: `static/feedback/openrouter.js`,
+  `routes/feedback_manual.py`, `api/openrouter_client.py`
+- push preview/apply errors: `static/feedback/push.js`, `routes/feedback_push.py`,
+  `docs/contracts/feedback-scoring-contract.md`
 - persona/pattern issues: `routes/feedback_library.py`, `api/webui/config/feedback.py`
 - Name Manager behavior: `name_manager.html`, `feedback_vault.py`,
   `feedback_scrub.py`
