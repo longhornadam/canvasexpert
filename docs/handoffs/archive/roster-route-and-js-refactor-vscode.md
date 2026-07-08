@@ -1,5 +1,25 @@
 # Handoff: Roster Route And JS Refactor For VSCode Agent
 
+Status: implemented and archived 2026-07-08.
+
+Final result:
+
+- Backend route helpers added: `roster_canvas.py`, `roster_helpers.py`,
+  `roster_groups.py`, and `roster_updates.py`.
+- Browser feature files added: `roster/bulk.js`, `roster/groups.js`, and
+  `roster/safety.js`.
+- `roster.py` remains the APIRouter owner and route dependency-injection seam.
+- `roster.js` remains the shared browser bootstrap/table owner.
+- Current durable ownership map: `docs/reference/roster-module-map.md`.
+
+Deferred deliberately:
+
+- Further splitting table rendering and inline row saves. That code is still coupled
+  to optimistic local state and is better handled after live-fire testing or a
+  focused browser regression pass.
+- Splitting `api/tests/test_roster_routes.py`. The test file is large but useful as
+  one route-contract regression suite during live-fire prep.
+
 ## Goal
 
 Reduce the next largest local UI surface after the completed routines/config/gradebook
@@ -208,11 +228,12 @@ Completed frontend slices:
   who-is-who export, and vault backup.
 - `api/webui/static/roster/groups.js` now owns group-set picker, group creation,
   group-set preference save, and group-label editor rendering/saving.
+- `api/webui/static/roster/bulk.js` now owns selected-row bulk actions and bulk
+  group dropdown refresh behavior.
 
 Remaining suggested frontend slices:
 
-1. Extract bulk actions to `static/roster/bulk.js`.
-2. Leave table rendering/inline saves for last because it owns most shared state.
+1. Leave table rendering/inline saves for last because it owns most shared state.
 
 ## Required Verification After Each Slice
 

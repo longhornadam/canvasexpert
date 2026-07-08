@@ -738,7 +738,7 @@ class TextOutlineParser:
         """
         # CRITICAL: These bounds must match Canvas QTI's grading logic exactly.
         # If bounds are too loose or strict, Canvas will mark correct answers as wrong.
-        # See DEVELOPMENT.md for test cases and Canvas quirks.
+        # See engine/tests/unit/test_text_parser.py and api/README.md for Canvas quirks.
         if mode == "exact":
             if answer is None:
                 raise ValueError("Numerical question requires an Answer value.")

@@ -1,24 +1,7 @@
 """Push and validation routes for Canvas Expert.
 
-One APIRouter; 14 routes for file validation, content push, and streaming push output.
-
-Routes: POST /api/temp-upload
-        POST /api/validate
-        POST /api/physical/quiz
-        POST /api/nf/validate
-        POST /api/physical/note
-        POST /api/af/validate
-        POST /api/pf/validate
-        POST /api/rf/validate
-        GET  /api/rf/scoring-prompt
-        GET  /api/modules
-        GET  /api/assignment-groups
-        POST /api/push/preview
-        GET  /api/push/stream
-        GET  /api/push-multi-whole/stream
-        GET  /api/push-variants/stream
-        GET  /api/push-multi/stream
-        POST /api/content/push
+One APIRouter for file validation, physical quiz output, content push, and
+streaming push output.
 """
 import json
 import os

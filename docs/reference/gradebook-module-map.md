@@ -14,14 +14,14 @@ As of 2026-07-07, Gradebook is already split into a thin shared bootstrap file
 
 ## Current size snapshot
 
-- `api/webui/routes/gradebook.py` - 452 lines
-- `api/webui/static/gradebook.js` - 316 lines
-- `api/webui/static/gradebook/curves.js` - 257 lines
-- `api/webui/static/gradebook/sweep.js` - 130 lines
-- `api/webui/static/gradebook/extensions.js` - 105 lines
-- `api/webui/static/gradebook/policy.js` - 90 lines
-- `api/webui/static/gradebook/extra_time.js` - 86 lines
-- `api/webui/static/gradebook/snapshot.js` - 72 lines
+- `api/webui/routes/gradebook.py` - 521 lines
+- `api/webui/static/gradebook.js` - 357 lines
+- `api/webui/static/gradebook/curves.js` - 271 lines
+- `api/webui/static/gradebook/sweep.js` - 140 lines
+- `api/webui/static/gradebook/extensions.js` - 112 lines
+- `api/webui/static/gradebook/policy.js` - 96 lines
+- `api/webui/static/gradebook/extra_time.js` - 93 lines
+- `api/webui/static/gradebook/snapshot.js` - 80 lines
 
 ## Browser routing
 

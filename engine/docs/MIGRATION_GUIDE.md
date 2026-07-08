@@ -2,7 +2,7 @@
 
 > **Historical record.** Documents the **completed** Nov 2025 restructure from a
 > nested `Packager/quizforge/` layout to the flat `engine/` layout. The current
-> structure and design are in [`../../dev/ARCHITECTURE.md`](../../dev/ARCHITECTURE.md).
+> structure and design are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 > Since this migration, a third backend — **QuizForge-API** (`api/`) — was added;
 > it is not covered here (see the root `AGENTS.md`).
 
@@ -97,6 +97,6 @@ If you were importing from `Packager/quizforge/`, update your imports as shown a
 ## Questions?
 
 See:
-- [`../../dev/ARCHITECTURE.md`](../../dev/ARCHITECTURE.md) — current system design
-- [`../../dev/AGENT_MAP.md`](../../dev/AGENT_MAP.md) — navigation guide for LLM agents
-- root `AGENTS.md` — project orientation (three backends)
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) - current engine design
+- [`AGENT_MAP.md`](AGENT_MAP.md) - navigation guide for LLM agents
+- root `AGENTS.md` - project orientation and guardrails

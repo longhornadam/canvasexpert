@@ -16,7 +16,7 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | Route | Page | JS |
 |---|---|---|
 | `/` | Dashboard (welcome, status strip, Expert + Forge launch cards) | — |
-| `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js`, `push/*.js` |
+| `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js` + `push/*.js` |
 | `/gradebook` | **Gradebook Expert** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
 | `/roster` | **Roster** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
 | `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
@@ -28,6 +28,29 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | `/forge/quizforge/` | Embedded QuizForge zero-auth compiler (separate Pyodide app) | its own |
 
 `/assessment` is a legacy route that redirects to `/course-expert`.
+
+### Course Expert module routing
+
+Course Expert is split for low-token debugging.
+
+- Page/template owner: `course_expert.html`
+- Shared browser files: `push/core.js`, `push/file_sources.js`, `push/delivery.js`, `push/rubrics.js`, `push/course_picker.js`, `push.js`
+- Feature files: `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `push/download.js`
+- Backend push routes: `routes/push.py`, `routes/push_validation.py`, `routes/push_streaming.py`
+- Service helpers: `push_service.py`, `source_materials.py`
+
+For the full ownership map and current hotspot snapshot, see `docs/reference/course-expert-module-map.md`.
+
+### Settings module routing
+
+Settings is stable but still browser-heavy.
+
+- Page/template owner: `settings.html`
+- Browser owner: `settings.js`
+- Route owner: `routes/settings.py`
+- Persistence facade: `config/__init__.py` with split modules under `config/`
+
+For the full ownership map, see `docs/reference/settings-module-map.md`.
 
 ### PowerGrader module routing
 
@@ -52,13 +75,28 @@ For the full ownership map and current size snapshot, see `docs/reference/gradeb
 
 ### Roster module routing
 
-Roster has backend helper splits but still has two large primary owner files.
+Roster has backend helper splits and browser feature files.
 
 - Route owner: `api/webui/routes/roster.py`
 - Browser owner: `api/webui/static/roster.js`
-- Helper modules: `api/webui/routes/roster_canvas.py`, `api/webui/routes/roster_helpers.py`
+- Browser feature files: `api/webui/static/roster/bulk.js`, `api/webui/static/roster/groups.js`, `api/webui/static/roster/safety.js`
+- Helper modules: `api/webui/routes/roster_canvas.py`, `api/webui/routes/roster_helpers.py`, `api/webui/routes/roster_groups.py`
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
+
+### FeedbackExpert module routing
+
+FeedbackExpert is privacy-sensitive and split across route, pipeline, vault, scrub,
+and safety helpers, with inline browser behavior in the templates.
+
+- Route owner: `api/webui/routes/feedback.py`
+- Route feature files: `routes/feedback_manual.py`, `routes/feedback_library.py`, `routes/feedback_run.py`, `routes/feedback_push.py`
+- Pipeline facade: `api/feedback_pipeline.py`
+- Pipeline feature files: `api/feedback_artifacts.py`, `api/feedback_contract.py`, `api/feedback_results.py`
+- Privacy helpers: `api/feedback_vault.py`, `api/feedback_scrub.py`, `api/feedback_safety.py`
+- Main templates: `feedback_expert.html`, `name_manager.html`
+
+For the full ownership map and privacy-sensitive routing notes, see `docs/reference/feedbackexpert-module-map.md`.
 
 ---
 
@@ -237,12 +275,6 @@ to a local folder tree: `by_assignment/<Asgn>/...`, `by_student/<Student>/...`,
 **Fast gradebook column**: name, points, submission type (on-paper / none / text
 entry), grading category, due date, publish — created in every checked course.
 No Forge file involved; for authored instructions use the Assignment tab.
-
-### NoteForge printable output
-`POST /api/physical/note` compiles `<NOTEFORGE_JSON>` files into tiered Support,
-Core, Accelerate, Extend, and KEY artifacts. Each artifact can include an editable
-DOCX and a locked PDF, subject to the same Edge/Pandoc availability as printable
-quizzes.
 
 ### Student Reports tab
 On-demand per-student packet: pick a course → load the roster → pick a student →

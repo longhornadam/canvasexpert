@@ -11,8 +11,11 @@ For canonical AI-agent guidance and safety rules, read `../AGENTS.md` first.
 - `docs/handoffs/archive/` - completed or historical handoffs retained for reference.
 - `docs/reference/` - stable reference notes and extracted facts.
 
-Useful starting reference for new PowerGrader debugging sessions:
+Useful starting references for new debugging and refactor sessions:
 
+- `docs/reference/course-expert-module-map.md` - Course Expert push/download route, script, and template ownership map.
+- `docs/reference/settings-module-map.md` - Settings route/script/config ownership map.
+- `docs/reference/feedbackexpert-module-map.md` - FeedbackExpert route/pipeline/template ownership and privacy-sensitive routing map.
 - `docs/reference/powergrader-module-map.md` - module ownership map, script load order, backend package routing, and current size snapshot.
 - `docs/reference/gradebook-module-map.md` - Gradebook route/script ownership and feature routing map.
 - `docs/reference/roster-module-map.md` - Roster route/script ownership and current hotspot map.

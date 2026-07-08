@@ -7,7 +7,7 @@ pushes content to live courses via the REST and New Quizzes APIs:
 - **Push Assignments** (AssignmentForge JSON → live assignments, with tier overrides)
 - **Push Pages** (PageForge JSON → live pages)
 - **Push Rubrics** (RubricForge JSON → live rubrics + student explainer pages)
-- **Printable outputs** (QuizForge / NoteForge JSON → local DOCX + PDF files)
+- **Printable outputs** (QuizForge JSON → local DOCX + PDF files)
 - **Gradebook Expert** — late policy sweep, student extensions, curves
 - **PowerGrader** — keyboard grading queue, Safe AI Packet export, Copilot batch
   import, optional API scoring
@@ -45,9 +45,9 @@ automation/headless use.
 5. **Configure delivery** (due dates, grading category, module, publish state)
 6. **Push** — one button, multi-course in one shot. Log shows per-course notes.
 
-Printable QuizForge and NoteForge outputs are generated locally from the same
-Forge contracts. PDFs use the installed Microsoft Edge through Playwright; editable
-DOCX files use bundled Pandoc through `pypandoc-binary`.
+Printable QuizForge outputs are generated locally from the same Forge contract.
+PDFs use the installed Microsoft Edge through Playwright; editable DOCX files use
+bundled Pandoc through `pypandoc-binary`.
 
 ### CLI (for automation)
 

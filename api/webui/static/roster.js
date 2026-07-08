@@ -15,11 +15,6 @@
   var tableBody = document.getElementById("roster-table-body");
   var searchInput = document.getElementById("roster-search");
   var filterBtns = document.querySelectorAll(".roster-filter-btn");
-  var selectAll = document.getElementById("roster-select-all");
-  var bulkBar = document.getElementById("roster-bulk-bar");
-  var bulkCount = document.getElementById("roster-bulk-count");
-  var bulkGroup = document.getElementById("roster-bulk-group");
-  var bulkExtraDays = document.getElementById("roster-bulk-extra-days");
   var safetyCard = document.getElementById("roster-safety-card");
   var groupLabelsEditor = document.getElementById("roster-group-labels-editor");
 
@@ -34,6 +29,7 @@
   var currentCourseId = "";
   var courseLoaded = false;
   var courseLoadHooks = [];
+  var tableRenderHooks = [];
   var saveTimeouts = {}; // row id -> timeout for debounced save
 
   // ── Helper ─────────────────────────────────────────────────────────
@@ -58,6 +54,11 @@
     setTimeout(function () { el.hidden = true; }, 3000);
   }
 
+  function postForm(url, fields) {
+    return fetch(url, { method: "POST", body: new URLSearchParams(fields) })
+      .then(function (r) { return r.json(); });
+  }
+
   function notifyCourseLoaded() {
     for (var i = 0; i < courseLoadHooks.length; i++) {
       try {
@@ -68,11 +69,22 @@
     }
   }
 
+  function notifyTableRendered() {
+    for (var i = 0; i < tableRenderHooks.length; i++) {
+      try {
+        tableRenderHooks[i]();
+      } catch (err) {
+        // Ignore hook failures so roster rendering still completes.
+      }
+    }
+  }
+
   window.CE_ROSTER = {
     toast: toast,
     getCurrentCourseId: function () { return currentCourseId; },
     hasLoadedCourse: function () { return courseLoaded; },
     reloadCourse: loadCourse,
+    postForm: postForm,
     getGroupState: function () {
       return {
         groups: groups,
@@ -81,10 +93,22 @@
         currentCategoryGroups: currentCategoryGroups
       };
     },
+    getFilteredStudents: function () {
+      return filteredStudents;
+    },
+    getSelectedNameMap: function () {
+      var names = {};
+      var checks = tableBody.querySelectorAll(".roster-row-check:checked");
+      for (var i = 0; i < checks.length; i++) {
+        var id = checks[i].dataset.id;
+        var s = findStudent(id);
+        names[id] = s ? (s.display_name || s.name) : id;
+      }
+      return names;
+    },
     setSelectedGroupCategoryId: function (value) {
       selectedGroupCategoryId = value == null ? null : String(value);
       refreshCurrentCategoryGroups();
-      populateCanvasGroupSelects();
       renderTable();
     },
     onCourseLoaded: function (fn) {
@@ -94,6 +118,17 @@
         for (var i = courseLoadHooks.length - 1; i >= 0; i--) {
           if (courseLoadHooks[i] === fn) {
             courseLoadHooks.splice(i, 1);
+          }
+        }
+      };
+    },
+    onTableRendered: function (fn) {
+      if (typeof fn !== "function") return function () {};
+      tableRenderHooks.push(fn);
+      return function () {
+        for (var i = tableRenderHooks.length - 1; i >= 0; i--) {
+          if (tableRenderHooks[i] === fn) {
+            tableRenderHooks.splice(i, 1);
           }
         }
       };
@@ -201,7 +236,6 @@
         groupLabelScheme = data.group_label_scheme || {};
         refreshCurrentCategoryGroups();
         renderSummary(data.counts);
-        populateCanvasGroupSelects();
         renderTable();
         tableCard.hidden = false;
         groupLabelsEditor.hidden = false;
@@ -226,21 +260,6 @@
     document.getElementById("roster-summary-group-unset").textContent = "Unset " + counts.group_unset;
     document.getElementById("roster-summary-warnings").textContent = "Issues " + counts.warnings;
   }
-
-
-  function populateCanvasGroupSelects() {
-    // Build the list of groups in the selected category
-    var categoryGroups = currentCategoryGroups;
-
-    bulkGroup.innerHTML = '<option value="">Choose group...</option>';
-    for (var i = 0; i < categoryGroups.length; i++) {
-      var g = categoryGroups[i];
-      var gid = groupId(g);
-      var label = groupDisplay(g);
-      bulkGroup.innerHTML += '<option value="' + esc(gid) + '">' + esc(label) + '</option>';
-    }
-  }
-
   function groupId(group) {
     return String((group && (group.id || group.group_id)) || "");
   }
@@ -289,6 +308,7 @@
 
     if (filteredStudents.length === 0) {
       tableBody.innerHTML = '<tr><td colspan="9" class="roster-empty">No students.</td></tr>';
+      notifyTableRendered();
       return;
     }
 
@@ -332,7 +352,7 @@
     }
     tableBody.innerHTML = html;
     attachInlineEvents();
-    updateBulkBar();
+    notifyTableRendered();
   }
 
   // ── Inline editing with autosave ───────────────────────────────────
@@ -520,99 +540,6 @@
       this.classList.add("active");
       renderTable();
     });
-  }
-
-  // ── Select all / bulk ───────────────────────────────────────────────
-
-  selectAll.addEventListener("change", function () {
-    var checked = selectAll.checked;
-    var checkboxes = tableBody.querySelectorAll(".roster-row-check");
-    for (var i = 0; i < checkboxes.length; i++) {
-      checkboxes[i].checked = checked;
-    }
-    updateBulkBar();
-  });
-
-  tableBody.addEventListener("change", function (e) {
-    if (e.target.classList.contains("roster-row-check")) {
-      updateBulkBar();
-    }
-  });
-
-  function getSelectedIds() {
-    var ids = [];
-    var checks = tableBody.querySelectorAll(".roster-row-check:checked");
-    for (var i = 0; i < checks.length; i++) {
-      ids.push(checks[i].dataset.id);
-    }
-    return ids;
-  }
-
-  function updateBulkBar() {
-    var ids = getSelectedIds();
-    bulkBar.hidden = ids.length === 0;
-    if (ids.length > 0) bulkCount.textContent = "Bulk edit: " + ids.length + " selected";
-  }
-
-  // ── Bulk actions ────────────────────────────────────────────────────
-
-  document.querySelector(".roster-bulk-actions").addEventListener("click", function (e) {
-    var btn = e.target.closest("[data-bulk]");
-    if (!btn) return;
-    var action = btn.dataset.bulk;
-    var ids = getSelectedIds();
-    if (ids.length === 0) return;
-
-    var value = {};
-    if (action === "set_extra_time") {
-      value = { days: parseInt(bulkExtraDays.value, 10) || 2, names: getSelectedNameMap() };
-    } else if (action === "set_monitored") {
-      value = { names: getSelectedNameMap() };
-    } else if (action === "set_canvas_group") {
-      var gid = bulkGroup.value;
-      if (!gid) { toast("Select a group first.", true); return; }
-      value = { category_id: selectedGroupCategoryId, group_id: gid };
-      action = "set_canvas_group";
-    } else if (action === "clear_canvas_group") {
-      if (!selectedGroupCategoryId) { toast("Select a group set first.", true); return; }
-      value = { category_id: selectedGroupCategoryId };
-    }
-
-    doBulkAction(action, ids, value);
-  });
-
-  function getSelectedNameMap() {
-    var names = {};
-    var ids = getSelectedIds();
-    for (var i = 0; i < ids.length; i++) {
-      var s = findStudent(ids[i]);
-      names[ids[i]] = s ? (s.display_name || s.name) : ids[i];
-    }
-    return names;
-  }
-
-  function doBulkAction(action, ids, value) {
-    var body = new URLSearchParams();
-    body.append("course_id", currentCourseId);
-    body.append("user_ids", JSON.stringify(ids));
-    body.append("action", action);
-    body.append("value", JSON.stringify(value));
-
-    fetch("/api/roster/bulk", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.ok) {
-          var msg = "Updated " + data.updated + " students.";
-          if (data.failed && data.failed > 0) {
-            msg = "Updated " + data.updated + "; failed " + data.failed + ": " + (data.errors || []).join("; ");
-          }
-          toast(msg, data.failed > 0);
-          loadCourse();
-        } else {
-          toast(data.error || "Bulk action failed.", true);
-        }
-      })
-      .catch(function (e) { toast("Error: " + e.message, true); });
   }
 
   // ── Init ────────────────────────────────────────────────────────────

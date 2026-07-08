@@ -87,7 +87,7 @@ def api_activity(limit: int = 50, action: str = "", course: str = ""):
 def api_download_contract(name: str):
     """Download a Forge contract file (e.g. AssignmentForge_Base, PageForge_Base)."""
     valid_names = {"AssignmentForge_Base", "PageForge_Base", "QuizForge_Base",
-                   "RubricForge_Base", "NoteForge_Base"}
+                   "RubricForge_Base"}
     if name not in valid_names:
         return JSONResponse({"error": "unknown contract"}, status_code=400)
     path = os.path.join(REPO_ROOT, "LLM_Modules", f"{name}.md")

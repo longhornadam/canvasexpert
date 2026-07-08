@@ -22,15 +22,15 @@ from .. import config
 from ..canvas_client import _canvas_get_all, _canvas_headers, _canvas_send
 from .courses import load_group_categories
 from .names import _fetch_students, _upsert_roster, _vault
+from . import roster_groups
 from . import roster_canvas
+from . import roster_updates
 from .roster_helpers import (
     _annotate_group_labels,
     _as_int,
     _compute_canvas_group_display,
     _compute_warnings,
     _enrollment_section_ids,
-    _parse_group_names,
-    _resolve_tier_display,
     _user_id_set_from_canvas_groups,
     _value_name,
 )
@@ -305,108 +305,21 @@ def roster_student_update(
 
     Obsolete fields (rejected with clear error): tier_id, tier, planned_group.
     """
-    if not course_id or not user_id:
-        return JSONResponse({"ok": False, "error": "course_id and user_id required."})
-
-    try:
-        data = json.loads(patch)
-    except json.JSONDecodeError as e:
-        return JSONResponse({"ok": False, "error": f"Invalid patch JSON: {e}"})
-    if not isinstance(data, dict):
-        return JSONResponse({"ok": False, "error": "patch must be a JSON object."})
-
-    # Reject obsolete keys
-    obsolete = set(data.keys()) & OBSOLETE_PATCH_KEYS
-    if obsolete:
-        return JSONResponse({
-            "ok": False,
-            "error": f"Local tier/group assignment is obsolete; update canvas_group instead. "
-                     f"Rejected keys: {sorted(obsolete)}"
-        })
-
-    # Validate keys
-    unknown = set(data.keys()) - ALLOWED_STUDENT_PATCH_KEYS
-    if unknown:
-        return JSONResponse({"ok": False, "error": f"Unknown patch keys: {sorted(unknown)}"})
-
-    vault = _vault()
-
-    # --- Nicknames ---
-    if "nicknames" in data:
-        nns = data["nicknames"]
-        if not isinstance(nns, list):
-            return JSONResponse({"ok": False, "error": "nicknames must be a list."})
-        vault.set_nicknames(user_id, nns)
-        vault.save()
-
-    # --- Pseudonym ---
-    if "pseudonym" in data:
-        p = data["pseudonym"]
-        if not isinstance(p, dict) or "first" not in p or "last" not in p:
-            return JSONResponse({"ok": False, "error": "pseudonym must be {first, last}."})
-        vault.set_pseudonym(user_id, p["first"], p["last"])
-        vault.save()
-
-    if data.get("regenerate_pseudonym"):
-        vault.regenerate_pseudonym(user_id)
-        vault.save()
-
-    # --- Extra time ---
-    if "extra_time" in data:
-        et = data["extra_time"]
-        if not isinstance(et, dict):
-            return JSONResponse({"ok": False, "error": "extra_time must be an object."})
-        et_list = config.get_extra_time(course_id)
-        et_list = [e for e in et_list if e.get("id") != user_id]
-        if et.get("enabled"):
-            days, err = _as_int(et.get("days", 0), "extra_time.days")
-            if err:
-                return JSONResponse({"ok": False, "error": err})
-            et_list.append({
-                "id": user_id,
-                "name": et.get("name", ""),
-                "days": days,
-            })
-        config.set_extra_time(course_id, et_list)
-
-    # --- Monitored ---
-    if "monitored" in data:
-        m = data["monitored"]
-        if not isinstance(m, dict):
-            return JSONResponse({"ok": False, "error": "monitored must be an object."})
-        if m.get("enabled"):
-            config.set_monitored_student(
-                user_id,
-                name=m.get("name", ""),
-                note=m.get("note", ""),
-            )
-        else:
-            config.remove_monitored_student(user_id)
-
-    # --- Canvas Group (V3: writes to Canvas) ---
-    if "canvas_group" in data:
-        cg = data["canvas_group"]
-        if not isinstance(cg, dict):
-            return JSONResponse({"ok": False, "error": "canvas_group must be an object."})
-
-        category_id = cg.get("category_id")
-        group_id = cg.get("group_id")  # None or empty string means clear
-
-        if not category_id:
-            return JSONResponse({"ok": False, "error": "canvas_group.category_id required."})
-
-        # If clearing or setting a group, update Canvas
-        target_group_id = None if not group_id else str(group_id)
-
-        categories, _, validation_err = _validate_canvas_group_target(course_id, category_id, target_group_id)
-        if validation_err:
-            return JSONResponse({"ok": False, "error": validation_err})
-
-        ok, err = _update_student_canvas_group(course_id, user_id, category_id, target_group_id, categories)
-        if not ok:
-            return JSONResponse({"ok": False, "error": err})
-
-    return JSONResponse({"ok": True})
+    return JSONResponse(roster_updates.update_student(
+        course_id,
+        user_id,
+        patch,
+        vault_factory=_vault,
+        get_extra_time=config.get_extra_time,
+        set_extra_time=config.set_extra_time,
+        set_monitored_student=config.set_monitored_student,
+        remove_monitored_student=config.remove_monitored_student,
+        as_int=_as_int,
+        validate_canvas_group_target=_validate_canvas_group_target,
+        update_student_canvas_group=_update_student_canvas_group,
+        allowed_keys=ALLOWED_STUDENT_PATCH_KEYS,
+        obsolete_keys=OBSOLETE_PATCH_KEYS,
+    ))
 
 
 @router.post("/bulk")
@@ -423,123 +336,20 @@ def roster_bulk_update(
 
     Legacy actions (rejected): set_tier, clear_tier, set_planned_group, clear_planned_group.
     """
-    if not course_id or not user_ids or not action:
-        return JSONResponse({"ok": False, "error": "course_id, user_ids, and action required."})
-
-    try:
-        ids = json.loads(user_ids)
-    except json.JSONDecodeError as e:
-        return JSONResponse({"ok": False, "error": f"Invalid user_ids JSON: {e}"})
-
-    if not isinstance(ids, list) or not ids:
-        return JSONResponse({"ok": False, "error": "user_ids must be a non-empty list."})
-
-    try:
-        val = json.loads(value) if value.strip() else None
-    except json.JSONDecodeError as e:
-        return JSONResponse({"ok": False, "error": f"Invalid value JSON: {e}"})
-
-    updated = 0
-    failed = 0
-    errors = []
-
-    if action == "set_extra_time":
-        if not isinstance(val, dict):
-            return JSONResponse({"ok": False, "error": "set_extra_time requires value object."})
-        days, err = _as_int(val.get("days", 0), "days")
-        if err:
-            return JSONResponse({"ok": False, "error": err})
-        et_list = config.get_extra_time(course_id)
-        existing_ids = {str(e["id"]) for e in et_list}
-        for uid in ids:
-            uid_str = str(uid)
-            if uid_str not in existing_ids:
-                et_list.append({"id": uid_str, "name": _value_name(val, uid_str), "days": days})
-            else:
-                for e in et_list:
-                    if str(e["id"]) == uid_str:
-                        e["days"] = days
-                        name = _value_name(val, uid_str)
-                        if name:
-                            e["name"] = name
-            updated += 1
-        config.set_extra_time(course_id, et_list)
-
-    elif action == "clear_extra_time":
-        et_list = config.get_extra_time(course_id)
-        id_set = {str(uid) for uid in ids}
-        et_list = [e for e in et_list if str(e.get("id", "")) not in id_set]
-        config.set_extra_time(course_id, et_list)
-        updated = len(ids)
-
-    elif action == "set_canvas_group":
-        if not isinstance(val, dict):
-            return JSONResponse({"ok": False, "error": "set_canvas_group requires value object."})
-        category_id = val.get("category_id")
-        group_id = val.get("group_id")
-        if not category_id:
-            return JSONResponse({"ok": False, "error": "set_canvas_group requires category_id."})
-        categories, _, validation_err = _validate_canvas_group_target(
-            course_id, category_id, str(group_id) if group_id else None)
-        if validation_err:
-            return JSONResponse({"ok": False, "error": validation_err})
-        for uid in ids:
-            ok, err = _update_student_canvas_group(
-                course_id, str(uid), category_id, str(group_id) if group_id else None, categories)
-            if ok:
-                updated += 1
-            else:
-                failed += 1
-                errors.append(f"User {uid}: {err}")
-
-    elif action == "clear_canvas_group":
-        if not isinstance(val, dict):
-            return JSONResponse({"ok": False, "error": "clear_canvas_group requires value object."})
-        category_id = val.get("category_id")
-        if not category_id:
-            return JSONResponse({"ok": False, "error": "clear_canvas_group requires category_id."})
-        categories, _, validation_err = _validate_canvas_group_target(course_id, category_id, None)
-        if validation_err:
-            return JSONResponse({"ok": False, "error": validation_err})
-        for uid in ids:
-            ok, err = _update_student_canvas_group(course_id, str(uid), category_id, None, categories)
-            if ok:
-                updated += 1
-            else:
-                failed += 1
-                errors.append(f"User {uid}: {err}")
-
-    elif action in ("set_tier", "clear_tier", "set_planned_group", "clear_planned_group"):
-        return JSONResponse({
-            "ok": False,
-            "error": f"'{action}' is obsolete in V3; use set_canvas_group or clear_canvas_group."
-        })
-
-    elif action in ("set_monitored", "clear_monitored"):
-        is_set = action == "set_monitored"
-        for uid in ids:
-            uid_str = str(uid)
-            if is_set:
-                config.set_monitored_student(uid_str, name=_value_name(val, uid_str) or uid_str, note="")
-            else:
-                config.remove_monitored_student(uid_str)
-            updated += 1
-
-    else:
-        return JSONResponse({"ok": False, "error": f"Unknown action '{action}'."})
-
-    # Build response
-    result = {"ok": True, "updated": updated}
-    if failed > 0:
-        result["failed"] = failed
-        result["errors"] = errors[:5]  # Limit error details
-        if updated > 0:
-            result["message"] = f"Updated {updated}; failed {failed}."
-        else:
-            result["ok"] = False
-            result["error"] = f"All {failed} updates failed: " + "; ".join(errors[:3])
-
-    return JSONResponse(result)
+    return JSONResponse(roster_updates.update_bulk(
+        course_id,
+        user_ids,
+        action,
+        value,
+        get_extra_time=config.get_extra_time,
+        set_extra_time=config.set_extra_time,
+        set_monitored_student=config.set_monitored_student,
+        remove_monitored_student=config.remove_monitored_student,
+        as_int=_as_int,
+        value_name=_value_name,
+        validate_canvas_group_target=_validate_canvas_group_target,
+        update_student_canvas_group=_update_student_canvas_group,
+    ))
 
 
 # --------------------------------------------------------------------------
@@ -585,8 +395,11 @@ def save_group_set_preference(
     """Save the preferred group set for a course."""
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
-    config.set_selected_group_category_id(course_id, category_id or None)
-    return JSONResponse({"ok": True})
+    return JSONResponse(roster_groups.save_group_set_preference(
+        course_id,
+        category_id,
+        set_selected_group_category_id=config.set_selected_group_category_id,
+    ))
 
 
 @router.post("/group-set")
@@ -598,42 +411,14 @@ def create_group_set(
     """Create a Canvas group set, then optionally create groups inside it."""
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
-    set_name = (name or "").strip()
-    if not set_name:
-        return JSONResponse({"ok": False, "error": "Group set name required."})
-    names, parse_err = _parse_group_names(group_names)
-    if parse_err:
-        return JSONResponse({"ok": False, "error": parse_err})
-
-    category, err = _canvas_send(
-        "POST",
-        f"/api/v1/courses/{course_id}/group_categories",
-        {"name": set_name},
-    )
-    if err:
-        return JSONResponse({"ok": False, "error": err})
-    category_id = str(category.get("id", "") if isinstance(category, dict) else "")
-    if not category_id:
-        return JSONResponse({"ok": False, "error": "Canvas did not return a group set id."})
-
-    created_groups = []
-    for group_name in names:
-        group, group_err = _create_canvas_group(category_id, group_name)
-        if group_err:
-            return JSONResponse({
-                "ok": False,
-                "error": f"Created group set, but failed to create '{group_name}': {group_err}",
-                "group_category": category,
-                "created_groups": created_groups,
-            })
-        created_groups.append(group)
-
-    config.set_selected_group_category_id(course_id, category_id)
-    return JSONResponse({
-        "ok": True,
-        "group_category": category,
-        "created_groups": created_groups,
-    })
+    return JSONResponse(roster_groups.create_group_set(
+        course_id,
+        name,
+        group_names,
+        canvas_send=_canvas_send,
+        create_canvas_group=_create_canvas_group,
+        set_selected_group_category_id=config.set_selected_group_category_id,
+    ))
 
 
 @router.post("/groups")
@@ -647,34 +432,13 @@ def create_groups(
         return JSONResponse({"ok": False, "error": "course_id required."})
     if not category_id:
         return JSONResponse({"ok": False, "error": "group set required."})
-    names, parse_err = _parse_group_names(group_names)
-    if parse_err:
-        return JSONResponse({"ok": False, "error": parse_err})
-    if not names:
-        return JSONResponse({"ok": False, "error": "At least one group name required."})
-
-    categories, _, validation_err = _validate_canvas_group_target(course_id, category_id, None)
-    if validation_err:
-        return JSONResponse({"ok": False, "error": validation_err})
-    category = next((c for c in categories if c.get("category_id") == str(category_id)), None)
-    existing = {str(g.get("name", "")).strip().lower()
-                for g in (category or {}).get("groups", [])}
-    for group_name in names:
-        if group_name.lower() in existing:
-            return JSONResponse({"ok": False, "error": f"Group '{group_name}' already exists."})
-
-    created_groups = []
-    for group_name in names:
-        group, group_err = _create_canvas_group(str(category_id), group_name)
-        if group_err:
-            return JSONResponse({
-                "ok": False,
-                "error": f"Failed to create '{group_name}': {group_err}",
-                "created_groups": created_groups,
-            })
-        created_groups.append(group)
-
-    return JSONResponse({"ok": True, "created_groups": created_groups})
+    return JSONResponse(roster_groups.create_groups(
+        course_id,
+        category_id,
+        group_names,
+        validate_canvas_group_target=_validate_canvas_group_target,
+        create_canvas_group=_create_canvas_group,
+    ))
 
 
 @router.get("/group-labels")
@@ -682,7 +446,10 @@ def get_group_labels(course_id: str = Query("")):
     """Get group labels for a course."""
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
-    return JSONResponse({"ok": True, "group_labels": config.get_roster_group_scheme(course_id).get("group_labels", {})})
+    return JSONResponse(roster_groups.get_group_labels(
+        course_id,
+        get_roster_group_scheme=config.get_roster_group_scheme,
+    ))
 
 
 @router.post("/group-labels")
@@ -693,19 +460,8 @@ def save_group_labels(
     """Save group labels for a course."""
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
-    try:
-        parsed = json.loads(labels)
-    except json.JSONDecodeError as e:
-        return JSONResponse({"ok": False, "error": f"Invalid labels JSON: {e}"})
-    if not isinstance(parsed, dict):
-        return JSONResponse({"ok": False, "error": "labels must be an object."})
-    clean = {}
-    for group_id, label_info in parsed.items():
-        if not isinstance(label_info, dict):
-            continue
-        teacher_label = str(label_info.get("teacher_label", "") or "").strip()
-        meaning = str(label_info.get("meaning", "") or "").strip()
-        if teacher_label or meaning:
-            clean[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
-    config.set_group_labels(course_id, clean)
-    return JSONResponse({"ok": True, "group_labels": clean})
+    return JSONResponse(roster_groups.save_group_labels(
+        course_id,
+        labels,
+        set_group_labels=config.set_group_labels,
+    ))

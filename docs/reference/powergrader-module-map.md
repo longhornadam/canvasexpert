@@ -19,26 +19,26 @@ into nearby helper modules or the backend package when it becomes reusable.
 
 ## Current size snapshot
 
-- `api/webui/routes/powergrader.py` - 479 lines
+- `api/webui/routes/powergrader.py` - 478 lines
 - `api/webui/static/powergrader/setup_core.js` - 184 lines
 - `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
 - `api/webui/static/powergrader/queue_core.js` - 332 lines
 - `api/webui/static/powergrader/queue_review.js` - 173 lines
-- `api/webui/static/powergrader/queue_import.js` - 262 lines
-- `api/webui/static/powergrader/queue_late_catchup.js` - 160 lines
-- `api/webui/static/powergrader/queue_privacy.js` - 64 lines
+- `api/webui/static/powergrader/queue_import.js` - 261 lines
+- `api/webui/static/powergrader/queue_late_catchup.js` - 159 lines
+- `api/webui/static/powergrader/queue_privacy.js` - 63 lines
 - `api/webui/static/powergrader_setup.js` - 4 lines
 - `api/webui/static/powergrader_queue.js` - 4 lines
 - `api/powergrader/start_workflow.py` - 88 lines
-- `api/powergrader/ai_workflow.py` - 395 lines
+- `api/powergrader/ai_workflow.py` - 394 lines
 - `api/powergrader/ai_workflow_support.py` - 61 lines
-- `api/powergrader/autoscore_queue.py` - 428 lines
+- `api/powergrader/autoscore_queue.py` - 427 lines
 - `api/powergrader/autoscore_claims.py` - 202 lines
-- `api/powergrader/autopush_policy.py` - 309 lines
+- `api/powergrader/autopush_policy.py` - 308 lines
 - `api/powergrader/autopush_policy_result.py` - 63 lines
 - `api/powergrader/copilot_packet.py` - 222 lines
 - `api/powergrader/copilot_packet_support.py` - 137 lines
-- `api/webui/routes/routines_powergrader.py` - 362 lines
+- `api/webui/routes/routines_powergrader.py` - 361 lines
 - `api/powergrader/scheduled_autoscore_support.py` - 127 lines
 
 ## Setup screen routing
@@ -207,7 +207,7 @@ Ownership:
   - `scheduled_autoscore_support.py`
   - `autoscore_queue.py`
 
-## Rule of thumb for future refactors
+## Rule of thumb for changes
 
 - Keep route files as orchestration owners.
 - Put reusable workflow logic in `api/powergrader/`.

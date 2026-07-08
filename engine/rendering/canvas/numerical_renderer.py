@@ -130,7 +130,7 @@ def _format_decimal(value: Decimal) -> str:
 
     # CRITICAL: Canvas New Quizzes REQUIRES all numeric values in QTI to include a decimal point.
     # Even integers must be "4.0" not "4". This is non-standard but Canvas is strict.
-    # See: DEVELOPMENT.md debugging section for more context.
+    # See engine/tests/unit/test_qti_builder_fitb.py and api/README.md for Canvas quirks.
 
     # Handle scientific notation
     if "E" in text or "e" in text:

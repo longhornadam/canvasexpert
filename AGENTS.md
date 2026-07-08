@@ -52,6 +52,15 @@ Agents must respect this two-branch model:
 Assignment, Page, Rubric, Download Work, Student Reports, and Quick assignment tabs.
 It uses bookmarked courses from Settings, multi-course push selection, local temp
 uploads, and the authoring contracts above.
+For low-token debugging and file ownership, start with
+`docs/reference/course-expert-module-map.md`.
+For low-token debugging and file ownership, start with
+`docs/reference/course-expert-module-map.md`.
+
+**Settings** (`/settings`) handles Canvas token/base URL, OpenRouter settings,
+bookmarked courses, workspace/download paths, AI-TA library rebuilds, and academic
+calendar activation. Token handling remains credential-store only. For low-token
+debugging and file ownership, start with `docs/reference/settings-module-map.md`.
 
 **Gradebook Expert** (`/gradebook`) handles single-course gradebook operations:
 late policy and school-day sweep, extra-time roster, due-date extensions, curves, and
@@ -60,10 +69,10 @@ The browser side is modularized under `api/webui/static/gradebook/`; for low-tok
 debugging and file ownership, start with `docs/reference/gradebook-module-map.md`.
 
 **Roster** (`/roster`) is the student-level Canvas-group and local-settings console.
-It currently has helper splits on the backend (`roster_canvas.py`,
-`roster_helpers.py`) but still has two primary hotspots: `api/webui/routes/roster.py`
-and `api/webui/static/roster.js`. For low-token debugging and the next refactor
-targets, start with `docs/reference/roster-module-map.md`.
+It has helper splits on the backend (`roster_canvas.py`, `roster_helpers.py`,
+`roster_groups.py`) and feature splits on the browser side (`roster/bulk.js`,
+`roster/groups.js`, `roster/safety.js`). For low-token debugging and the next
+refactor targets, start with `docs/reference/roster-module-map.md`.
 
 **Routines** (`/routines`) are local automations, not cloud jobs. Built-ins include
 late-work sweep, download, curve, grading-debt report, and monitored-student report
@@ -71,13 +80,17 @@ refresh. Custom routines can be added under `api/custom_routines/`; see
 `api/custom_routines/AUTHORING.md`.
 
 **FeedbackExpert** is the pseudonymized scoring/feedback pipeline behind
-`/feedback-expert`, `/name-manager`, and Push feedback to Canvas. It is built around
+`/feedback-expert`, `/name-manager`, and Push feedback to Canvas. The route layer
+is split under `api/webui/routes/feedback_*.py`; the pipeline facade
+`api/feedback_pipeline.py` re-exports focused helper modules. It is built around
 the **Feedback Scoring Contract** (`docs/contracts/feedback-scoring-contract.md`):
 any scoring tool emits LLM-agnostic JSON, Canvas Expert validates it, re-identifies
 through the local vault, and lets the teacher review before `PUT` grade/comment calls.
 Workspace layout is under `<workspace>/FeedbackExpert/` with SAFE, PRIVATE, and
 system/vault zones. New Quizzes item-level write-back remains blocked by Canvas PAT
 limitations; scores can still be read where the normal Submissions API exposes them.
+For low-token debugging and file ownership, start with
+`docs/reference/feedbackexpert-module-map.md`.
 
 **PowerGrader** (`/powergrader`) is the keyboard-first grading queue for one Canvas
 assignment. It is now modularized:

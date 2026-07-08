@@ -7,8 +7,6 @@ content model.
 
 - Quiz student DOCX and PDF
 - Quiz answer-key DOCX and PDF
-- NoteForge tiered notes for Support, Core, Accelerate, and Extend
-- NoteForge answer keys
 - Rationale sheets and physical render logs
 
 ## Pipeline
@@ -40,7 +38,6 @@ browser.
 ## Entry Points
 
 - `engine.packagers.physical_handler.generate_physical_outputs(quiz, output_folder)`
-- `engine.packagers.note_handler.generate_note_outputs(note, output_folder)`
 - `engine.rendering.physical.html_renderer.render_html(printdoc, variant=...)`
 - `engine.rendering.physical.emit_pdf.html_to_pdf(html, css_path, out_path)`
 - `engine.rendering.physical.emit_docx.html_to_docx(html, reference_docx, out_path)`

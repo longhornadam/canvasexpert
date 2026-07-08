@@ -20,7 +20,7 @@ from .. import config, workspace
 from ..deps import (
     AI_TA_DIR, API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
     list_ai_ta_files, list_assignment_files, list_calendar_files,
-    list_note_files, list_page_files, list_quiz_files,
+    list_page_files, list_quiz_files,
 )
 
 router = APIRouter(tags=["pages"])
@@ -71,12 +71,24 @@ def dashboard(request: Request):
 
 @router.get("/assessment", response_class=HTMLResponse)
 def assessment_page(request: Request):
-    return RedirectResponse(url="/", status_code=302)
+    return RedirectResponse(url="/course-expert", status_code=302)
 
 
 @router.get("/course-expert", response_class=HTMLResponse)
 def course_expert_page(request: Request):
-    return RedirectResponse(url="/", status_code=302)
+    skills = list_ai_ta_files()
+    return templates.TemplateResponse(request, "course_expert.html", {
+        **_push_base_ctx(request),
+        "quiz_files":       list_quiz_files(),
+        "assignment_files": list_assignment_files(),
+        "page_files":       list_page_files(),
+        "authoring_skills": {
+            "quiz":       _authoring_skill(skills, "Author a Quiz"),
+            "assignment": _authoring_skill(skills, "Author an Assignment"),
+            "page":       _authoring_skill(skills, "Author a Page"),
+            "rubric":     _authoring_skill(skills, "Author a Rubric"),
+        },
+    })
 
 
 def _authoring_skill(skills: list, prefix: str) -> str:
@@ -121,16 +133,6 @@ def push_page_page(request: Request):
     return templates.TemplateResponse(request, "push_page.html", {
         **_push_base_ctx(request),
         "page_files":      list_page_files(),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/note", response_class=HTMLResponse)
-def push_note_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author Notes")
-    return templates.TemplateResponse(request, "push_note.html", {
-        **_push_base_ctx(request),
-        "note_files":      list_note_files(),
         "authoring_skill": skill,
     })
 
