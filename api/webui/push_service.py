@@ -133,6 +133,67 @@ def _push_page(cid, p, notes):
     return True, resp.get("title", title), resp.get("html_url"), None
 
 
+def _first_exact_match(items, target, fields):
+    wanted = str(target or "").strip().lower()
+    if not wanted:
+        return None
+    for item in items or []:
+        for field in fields:
+            if str(item.get(field) or "").strip().lower() == wanted:
+                return item
+    return None
+
+
+def _course_file_link(course_id, name):
+    files, err = _canvas_get_all(
+        f"/api/v1/courses/{course_id}/files",
+        {"per_page": 100, "search_term": name},
+    )
+    if err:
+        return None, err
+    found = _first_exact_match(files, name, ("display_name", "filename"))
+    if not found:
+        return None, f"file not found: {name}"
+    url = found.get("url") or found.get("html_url")
+    if not url and found.get("id"):
+        base = (config.get_canvas_base() or "").rstrip("/")
+        url = f"{base}/courses/{course_id}/files/{found['id']}/download"
+    return url, None
+
+
+def _course_page_link(course_id, title):
+    pages, err = _canvas_get_all(
+        f"/api/v1/courses/{course_id}/pages",
+        {"per_page": 100, "search_term": title},
+    )
+    if err:
+        return None, err
+    found = _first_exact_match(pages, title, ("title",))
+    if not found:
+        return None, f"page not found: {title}"
+    url = found.get("html_url")
+    if not url and found.get("url"):
+        base = (config.get_canvas_base() or "").rstrip("/")
+        url = f"{base}/courses/{course_id}/pages/{found['url']}"
+    return url, None
+
+
+def _resolve_course_placeholders(course_id, body, notes):
+    def replace(match):
+        kind = match.group(1)
+        value = match.group(2).strip()
+        if kind == "file":
+            url, err = _course_file_link(course_id, value)
+        else:
+            url, err = _course_page_link(course_id, value)
+        if err or not url:
+            notes.append(f"placeholder {{{{{kind}:{value}}}}} could not be resolved ({err or 'no URL'})")
+            return match.group(0)
+        return f'<a href="{html.escape(str(url), quote=True)}">{html.escape(value)}</a>'
+
+    return af.PLACEHOLDER_RE.sub(replace, body)
+
+
 def _push_quick(cid, p, notes):
     """Minimal assignment push."""
     name = (p.get("name") or "").strip() or "Untitled"
@@ -425,19 +486,7 @@ def _push_pageforge(cid, payload, notes):
     if data is None or problems:
         return PushResult(False, title, None, "; ".join(problems or ["unreadable file"]))
 
-    body = str(data.get("body") or "")
-    placeholders = sorted({
-        f"{kind}:{value.strip()}"
-        for kind, value in pf.PLACEHOLDER_RE.findall(body)
-    })
-    if placeholders:
-        return PushResult(
-            False,
-            title,
-            None,
-            "PageForge placeholders are not wired through this push path yet: "
-            + ", ".join(placeholders),
-        )
+    body = _resolve_course_placeholders(cid, str(data.get("body") or ""), notes)
 
     page = {
         "title": title,

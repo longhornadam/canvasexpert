@@ -3,6 +3,7 @@
 
   var push = window.CE_PUSH || {};
   var checklist = document.getElementById("course-checklist");
+  var STORAGE_KEY = "canvasExpert.push.coursePicker.v1";
 
   function focusedRow() {
     return checklist?.querySelector(".cc-row.focused");
@@ -21,6 +22,31 @@
       .map(function (cb) {
         return { id: cb.value, name: cb.dataset.name };
       });
+  }
+
+  function readSavedState() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (!parsed || !Array.isArray(parsed.selectedIds)) return null;
+      return {
+        selectedIds: parsed.selectedIds.map(String),
+        focusedId: parsed.focusedId ? String(parsed.focusedId) : "",
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveState() {
+    if (!checklist) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        selectedIds: targetCourses().map(function (c) { return String(c.id); }),
+        focusedId: currentCourseId(),
+      }));
+    } catch (e) {
+      // Selection memory is a convenience; pushing should still work without it.
+    }
   }
 
   function renderTargets() {
@@ -67,8 +93,9 @@
       .catch(function () {});
   }
 
-  function setFocus(id) {
+  function setFocus(id, options) {
     if (!checklist || !id) return;
+    options = options || {};
     checklist.querySelectorAll(".cc-row").forEach(function (r) {
       r.classList.toggle("focused", r.dataset.id === id);
     });
@@ -80,6 +107,44 @@
     var ciLink = document.getElementById("course-info-link");
     if (ciLink) ciLink.href = "/course?course_id=" + encodeURIComponent(id);
     renderTargets();
+    if (!options.skipSave) saveState();
+  }
+
+  function clearFocus() {
+    if (!checklist) return;
+    checklist.querySelectorAll(".cc-row.focused").forEach(function (r) {
+      r.classList.remove("focused");
+    });
+    renderTargets();
+    saveState();
+  }
+
+  function applySavedState() {
+    if (!checklist) return false;
+    var state = readSavedState();
+    if (!state) {
+      renderTargets();
+      return false;
+    }
+    var selected = new Set(state.selectedIds);
+    checklist.querySelectorAll(".cc-cb").forEach(function (cb) {
+      cb.checked = selected.has(String(cb.value));
+    });
+    var focusId = state.focusedId && selected.has(state.focusedId)
+      ? state.focusedId
+      : state.selectedIds.find(function (id) { return selected.has(id); });
+    var focusExists = Array.from(checklist.querySelectorAll(".cc-row")).some(function (r) {
+      return String(r.dataset.id) === String(focusId);
+    });
+    if (focusId && focusExists) {
+      setFocus(focusId, { skipSave: true });
+    } else {
+      checklist.querySelectorAll(".cc-row.focused").forEach(function (r) {
+        r.classList.remove("focused");
+      });
+      renderTargets();
+    }
+    return true;
   }
 
   async function renameCourse(btn) {
@@ -122,17 +187,13 @@
       if (!focusedChecked) {
         var firstChecked = checklist.querySelector(".cc-cb:checked");
         if (firstChecked) setFocus(firstChecked.value);
-        else renderTargets();
+        else clearFocus();
       } else {
         renderTargets();
+        saveState();
       }
     });
-    var first = checklist.querySelector(".cc-row");
-    if (first) {
-      var cb = first.querySelector(".cc-cb");
-      if (cb) cb.checked = true;
-      setFocus(first.dataset.id);
-    }
+    applySavedState();
   }
 
   async function loadAllCoursesIntoChecklist() {
@@ -161,6 +222,7 @@
           push.esc(c.name) + "</button>";
         checklist.appendChild(row);
       });
+      applySavedState();
     } catch (e) {
       // Keep bookmarks only when offline or unauthenticated.
     }
