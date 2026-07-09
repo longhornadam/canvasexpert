@@ -83,119 +83,141 @@
 
   <section class="dash-section dash-section--primary">
     <div class="dash-section-head">
-      <h2>Most common jobs</h2>
-      <p>Fast entry points for work you are likely to do during a planning period.</p>
+      <h2>Start a job</h2>
+      <p>Pick the task you need to do today.</p>
     </div>
-    <div class="dash-job-grid">
-      <a class="dash-job dash-job--primary" href="/push/quick">
-        <span class="dash-job-verb">Create</span>
+
+    <h3 class="dash-lane-heading">Create</h3>
+    <div class="dash-lane-grid">
+      <a class="dash-lane dash-lane--card" href="/push/quick">
         <strong>Quick assignment</strong>
         <span>Make a gradebook column across checked courses.</span>
       </a>
-
-      <a class="dash-job dash-job--primary" href="/push/assignment">
-        <span class="dash-job-verb">Create</span>
+      <a class="dash-lane dash-lane--card" href="/push/assignment">
         <strong>Push assignment</strong>
         <span>Publish instructions, submission settings, rubrics, and tiers.</span>
       </a>
-
-      <a class="dash-job dash-job--primary" href="/push/quiz">
-        <span class="dash-job-verb">Create</span>
+      <a class="dash-lane dash-lane--card" href="/push/quiz">
         <strong>Push quiz</strong>
         <span>Validate and push a QuizForge assessment.</span>
       </a>
+    </div>
 
-      <a class="dash-job dash-job--primary" href="/download-work">
-        <span class="dash-job-verb">Manage</span>
-        <strong>Download student work</strong>
-        <span>Collect submissions by assignment and by student.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/gradebook">
-        <span class="dash-job-verb">Manage</span>
-        <strong>Gradebook sweep</strong>
-        <span>Preview and correct school-day lateness.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/gradebook#extensions">
-        <span class="dash-job-verb">Manage</span>
-        <strong>Grant extension</strong>
-        <span>Move due dates for selected students.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/powergrader">
-        <span class="dash-job-verb">Grade</span>
+    <h3 class="dash-lane-heading">Grade</h3>
+    <div class="dash-lane-grid">
+      <a class="dash-lane dash-lane--card" href="/powergrader">
         <strong>PowerGrader</strong>
-        <span>Fast keyboard-driven grading with optional AI scoring and Roster context.</span>
+        <span>Fast keyboard-driven grading with optional AI scoring.</span>
       </a>
-
-      <a class="dash-job dash-job--primary" href="/feedback-expert">
-        <span class="dash-job-verb">Assess</span>
+      <a class="dash-lane dash-lane--card" href="/feedback-expert">
         <strong>Score writing with AI</strong>
         <span>Pseudonymize submissions, draft feedback, and review before posting.</span>
       </a>
+      <a class="dash-lane dash-lane--card" href="/gradebook">
+        <strong>Gradebook sweep</strong>
+        <span>Preview and correct school-day lateness.</span>
+      </a>
+    </div>
 
-      <a class="dash-job dash-job--primary" href="/roster">
-        <span class="dash-job-verb">Manage</span>
+    <h3 class="dash-lane-heading">Manage</h3>
+    <div class="dash-lane-grid">
+      <a class="dash-lane dash-lane--card" href="/roster">
         <strong>Rosters</strong>
         <span>Set extra time, monitored students, Canvas groups, nicknames, and pseudonyms.</span>
+      </a>
+      <a class="dash-lane dash-lane--card" href="/download-work">
+        <strong>Download student work</strong>
+        <span>Collect submissions by assignment and by student.</span>
+      </a>
+      <a class="dash-lane dash-lane--card" href="/gradebook#extensions">
+        <strong>Grant extension</strong>
+        <span>Move due dates for selected students.</span>
+      </a>
+    </div>
+
+    <h3 class="dash-lane-heading">Automate</h3>
+    <div class="dash-lane-grid">
+      <a class="dash-lane dash-lane--card" href="/routines">
+        <strong>Routines</strong>
+        <span>Local automations for late-work sweep, download, grading reports, and more.</span>
+      </a>
+      <a class="dash-lane dash-lane--card" href="/student-reports">
+        <strong>Student reports</strong>
+        <span>View assignment and grade summaries by student.</span>
       </a>
     </div>
   </section>
 
-  <section class="dash-tools">
+  <section class="dash-section">
     <div class="dash-section-head">
-      <h2>More tools by job</h2>
-      <p>Less frequent work stays available without competing with the daily tasks.</p>
+      <h2>Continue working</h2>
+      <p>Recent activity from your last session.</p>
     </div>
-    <div class="dash-lane-grid">
-      <div class="dash-lane">
-        <h3>PowerGrader</h3>
-        <a href="/powergrader">Open PowerGrader</a>
-        <a href="/feedback-expert">Score writing with AI</a>
-        <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Work</h3>
-        <a href="/course-expert">Work home</a>
-        <a href="/push/quiz">Push quiz</a>
-        <a href="/push/assignment">Push assignment</a>
-        <a href="/push/page">Push page</a>
-        <a href="/push/rubric">Push rubric</a>
-        <a href="/push/quick">Quick assignment</a>
-        <a href="/download-work">Download student work</a>
-        <a href="/student-reports">Student reports</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Rosters</h3>
-        <a href="/roster">Student settings</a>
-        <a href="/roster?focus=extra-time">Extra-time settings</a>
-        <a href="/roster?focus=groups">Course roster &amp; groups</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Gradebooks</h3>
-        <a href="/gradebook?tab=policy">Late policy &amp; sweep</a>
-        <a href="/gradebook?tab=extensions">Extensions</a>
-        <a href="/gradebook?tab=curves">Curves</a>
-        <a href="/gradebook?tab=snapshot">Gradebook snapshot</a>
-        <a href="/gradebook?tab=routines">Routines</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Settings / Extras</h3>
-        <a href="/settings">Settings</a>
-        <a href="/about">About</a>
-        <a href="/ai-expert">Authoring helper files</a>
-        <a href="/forge/quizforge/" target="_blank" rel="noopener">Open QuizForge compiler</a>
-        <a href="/api/download-contract?name=QuizForge_Base" download>QuizForge</a>
-        <a href="/api/download-contract?name=AssignmentForge_Base" download>AssignmentForge</a>
-        <a href="/api/download-contract?name=PageForge_Base" download>PageForge</a>
-        <a href="/api/download-contract?name=RubricForge_Base" download>RubricForge</a>
+    <div id="dash-recent" class="dash-activity-list">
+      <div class="dash-activity-row">
+        <span class="dash-activity-check">✓</span>
+        <span class="dash-activity-title">Last session activity will appear here.</span>
+        <span class="dash-activity-time"></span>
       </div>
     </div>
+  </section>
+
+  <section class="dash-tools">
+    <details>
+      <summary class="dash-section-head" style="cursor:pointer">
+        <h2>All tools</h2>
+        <p>Complete directory of every tool by job category.</p>
+      </summary>
+      <div style="margin-top:12px">
+        <div class="dash-lane-grid">
+          <div class="dash-lane">
+            <h3>Create</h3>
+            <a href="/course-expert">Work home</a>
+            <a href="/push/quiz">Push quiz</a>
+            <a href="/push/assignment">Push assignment</a>
+            <a href="/push/page">Push page</a>
+            <a href="/push/rubric">Push rubric</a>
+            <a href="/push/quick">Quick assignment</a>
+          </div>
+          <div class="dash-lane">
+            <h3>Grade</h3>
+            <a href="/powergrader">PowerGrader</a>
+            <a href="/feedback-expert">Score writing with AI</a>
+            <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
+            <a href="/gradebook">Gradebooks home</a>
+            <a href="/gradebook?tab=policy">Policy &amp; sweep</a>
+            <a href="/gradebook?tab=extensions">Extensions</a>
+            <a href="/gradebook?tab=curves">Curves</a>
+            <a href="/gradebook?tab=snapshot">Snapshot</a>
+            <a href="/gradebook?tab=routines">Routines</a>
+          </div>
+          <div class="dash-lane">
+            <h3>Manage</h3>
+            <a href="/roster">Rosters</a>
+            <a href="/download-work">Download student work</a>
+            <a href="/student-reports">Student reports</a>
+            <a href="/course">Course info</a>
+          </div>
+          <div class="dash-lane">
+            <h3>Automate</h3>
+            <a href="/routines">Routines</a>
+          </div>
+        </div>
+        <div class="dash-lane-grid" style="margin-top:10px">
+          <div class="dash-lane">
+            <h3>Settings / Help</h3>
+            <a href="/settings">Settings</a>
+            <a href="/about">About</a>
+            <a href="/ai-expert">Authoring helper files</a>
+            <a href="/forge/quizforge/" target="_blank" rel="noopener">QuizForge compiler</a>
+            <a href="/api/download-contract?name=QuizForge_Base" download>QuizForge contract</a>
+            <a href="/api/download-contract?name=AssignmentForge_Base" download>AssignmentForge contract</a>
+            <a href="/api/download-contract?name=PageForge_Base" download>PageForge contract</a>
+            <a href="/api/download-contract?name=RubricForge_Base" download>RubricForge contract</a>
+          </div>
+        </div>
+      </div>
+    </details>
   </section>
 
   <section class="dash-section dash-section--activity">

@@ -92,7 +92,6 @@
       </label>
       <div class="actions" style="margin:0">
         <button type="button" id="gf-or-send" class="primary" disabled>Send SAFE batch to OpenRouter</button>
-        <span id="gf-or-status" class="hint"></span>
       </div>
     </div>
   </div>
@@ -122,6 +121,7 @@
       <span id="persona-status" class="hint"></span>
     </div>
   </form>
+</section>
 
 <!-- ====================================================================== -->
 <!-- Section 1b: Push to Canvas (Phase C) — paste LLM scores, review, post   -->
@@ -156,6 +156,11 @@
   <div class="actions" style="margin-top:10px">
     <button type="button" id="pc-preview" class="primary" disabled>Preview</button>
     <span id="pc-status" class="hint"></span>
+  </div>
+
+  <!-- Action scope block -->
+  <div id="fb-action-scope" class="ce-action-scope" aria-live="polite" style="margin-top:10px">
+    Select a course and assignment to preview scored results.
   </div>
 
   <div id="pc-validation" class="hint" hidden></div>

@@ -56,13 +56,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 body.nav-section-dashboard { --active-tool-accent: #1d4ed8; }
-body.nav-section-work { --active-tool-accent: #7e22ce; }
-body.nav-section-course { --active-tool-accent: #7e22ce; }
-body.nav-section-gradebook { --active-tool-accent: #c2410c; }
-body.nav-section-ai { --active-tool-accent: #2f8132; }
-body.nav-section-feedback { --active-tool-accent: #0d9488; }
+body.nav-section-create { --active-tool-accent: #7e22ce; }
+body.nav-section-grade { --active-tool-accent: #c2410c; }
+body.nav-section-manage { --active-tool-accent: #0d9488; }
+body.nav-section-automate { --active-tool-accent: #2f8132; }
 body.nav-section-settings { --active-tool-accent: #1d4ed8; }
-body.nav-section-about { --active-tool-accent: #1d4ed8; }
+body.nav-section-help { --active-tool-accent: #1d4ed8; }
 
 /* ── Topbar ──────────────────────────────────────────────────────────────── */
 .topbar {
@@ -584,6 +583,48 @@ body.dash-screen .dash-section,
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
+}
+
+/* ── Dashboard lane heading ─────────────────────────────────────────── */
+.dash-lane-heading {
+  margin: 18px 0 6px;
+  font: 700 13px var(--font);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dash-lane-heading:first-of-type {
+  margin-top: 6px;
+}
+
+/* ── Dashboard lane-as-card ─────────────────────────────────────────── */
+.dash-lane--card {
+  display: block;
+  padding: 12px;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-xs);
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+.dash-lane--card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.dash-lane--card strong {
+  display: block;
+  font: 800 15px/1.25 var(--display);
+  letter-spacing: -.01em;
+  margin-bottom: 4px;
+}
+.dash-lane--card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 .dash-lane {
   padding: 13px;
@@ -1232,6 +1273,23 @@ details[open] > .delivery-summary::before { transform: rotate(90deg); }
   font-weight: 700;
   color: var(--ink-2);
 }
+
+/* ── Action scope block (shared) ────────────────────────────────────── */
+.ce-action-scope {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.ce-action-scope strong {
+  color: var(--ink-2);
+  font-weight: 700;
+}
 .context-panel .info-grid { gap: 8px; margin: 10px 0 4px; }
 .context-panel .info-tile { padding: 8px 10px; }
 .context-panel .tile-val { font-size: 22px; }
@@ -1431,12 +1489,8 @@ html[data-theme="dark"] .gb-tab:hover  { color: #fb923c; }
   box-shadow: 0 5px 10px rgba(15, 23, 42, .12);
 }
 .topbar nav > a.nav-active:hover { color: white; background: var(--nav-accent); }
-.topbar nav > a.nav-active.nav-course { --nav-accent: #7e22ce; }
-.topbar nav > a.nav-active.nav-powergrader { --nav-accent: #0d9488; }
+.topbar nav > a.nav-active.nav-automate { --nav-accent: #2f8132; }
 .topbar nav > a.nav-active.nav-roster { --nav-accent: #1d4ed8; }
-.topbar nav > a.nav-active.nav-gradebook { --nav-accent: #c2410c; }
-.topbar nav > a.nav-active.nav-ai { --nav-accent: #2f8132; }
-.topbar nav > a.nav-active.nav-feedback { --nav-accent: #0d9488; }
 .topbar nav > a.nav-active.nav-settings { --nav-accent: #1d4ed8; }
 
 @media (max-width: 980px) {

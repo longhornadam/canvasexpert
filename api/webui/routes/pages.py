@@ -100,7 +100,7 @@ def _authoring_skill(skills: list, prefix: str) -> str:
 
 def _push_base_ctx(request: Request) -> dict:
     return {
-        "nav_section":   "work",
+        "nav_section":   "create",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
         "saved_courses": config.active_courses(),
@@ -175,7 +175,7 @@ def ai_expert_page(request: Request):
             for p in glob.glob(os.path.join(toolkit_dir, "*.txt"))
         )
     return templates.TemplateResponse(request, "ai_expert.html", {
-        "nav_section":    "ai",
+        "nav_section":    "help",
         "token_is_set":   config.token_is_set(),
         "ai_ta_files":    ai_ta_files,
         "ai_ta_dir":      AI_TA_DIR,
@@ -194,7 +194,7 @@ def feedback_expert_page(request: Request):
             "fromllm": "3_FromLLM", "toenter": "4_ToEnter",
             "safe": "SAFE", "private": "PRIVATE", "system": "_system"}.items()}
     return templates.TemplateResponse(request, "feedback_expert.html", {
-        "nav_section":   "feedback",
+        "nav_section":   "grade",
         "persona":       config.get_ai_ta_persona(),
         "feedback_root": fb,
         "folders":       folders,
@@ -209,7 +209,7 @@ def feedback_expert_page(request: Request):
 def roster_page(request: Request):
     """Roster Console — unified student settings surface."""
     return templates.TemplateResponse(request, "roster.html", {
-        "nav_section":   "roster",
+        "nav_section":   "manage",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
         "saved_courses": config.active_courses(),
@@ -224,14 +224,14 @@ def name_manager_page(request: Request):
 
 @router.get("/about", response_class=HTMLResponse)
 def about(request: Request):
-    return templates.TemplateResponse(request, "about.html", {"nav_section": "about"})
+    return templates.TemplateResponse(request, "about.html", {"nav_section": "help"})
 
 
 @router.get("/course", response_class=HTMLResponse)
 def course_page(request: Request, course_id: str = ""):
     """Detailed Course Info page — roster, groups, modules, assignments."""
     return templates.TemplateResponse(request, "course.html", {
-        "nav_section":    "course",
+        "nav_section":    "manage",
         "token_is_set":   config.token_is_set(),
         "canvas_base":    config.get_canvas_base(),
         "saved_courses":  config.active_courses(),
@@ -252,7 +252,7 @@ def gradebook_page(request: Request):
             all_gp.append({**gp, "year": year})
     all_gp.sort(key=lambda g: g["start"])
     return templates.TemplateResponse(request, "gradebook.html", {
-        "nav_section":          "gradebook",
+        "nav_section":          "grade",
         "token_is_set":         config.token_is_set(),
         "canvas_base":          config.get_canvas_base(),
         "saved_courses":        config.active_courses(),
@@ -271,7 +271,7 @@ def routines_page(request: Request):
     Scans the custom_routines folder so the page can show the real path and the
     files it found (active vs. _-prefixed templates)."""
     return templates.TemplateResponse(request, "routines.html", {
-        "nav_section":      "gradebook",
+        "nav_section":      "automate",
         "token_is_set":     config.token_is_set(),
         **_routines_template_context(),
     })

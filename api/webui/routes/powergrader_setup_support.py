@@ -19,7 +19,7 @@ def build_setup_page_context(
     source_response_presets: dict,
 ) -> dict:
     return {
-        "nav_section": "feedback",
+        "nav_section": "grade",
         "saved_courses": saved_courses,
         "rubrics": rubrics,
         "personas": personas,
@@ -39,7 +39,7 @@ def build_setup_page_context(
 
 def build_queue_page_context(*, session_id: str, session: dict, canvas_base: str, mode_label: str) -> dict:
     return {
-        "nav_section": "feedback",
+        "nav_section": "grade",
         "session_id": session_id,
         "assignment_name": session.get("assignment_name", ""),
         "course_id": session.get("course_id", ""),

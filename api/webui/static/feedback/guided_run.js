@@ -63,7 +63,6 @@
 
   // ── Stores the last prepare response for staged OR send ────────────
   var _lastPrepareData = null;
-  var _orStreamActive = false;
 
   function renderPrepareStatus(d, logEl, fill, resultActions, status, btn) {
     if (fill) fill.style.width = "100%";
@@ -95,63 +94,32 @@
   }
 
   function startOpenRouterStream(d, logEl, fill, status, btn) {
-    var personaEl = document.getElementById("gf-persona");
-    var rubricEl = document.getElementById("gf-rubric");
-    var patternEl = document.getElementById("gf-pattern");
-
     var estimate = d.budget && d.budget.estimated_cost != null
-      ? ("\nEstimated total cost: $" + Number(d.budget.estimated_cost).toFixed(2))
-      : "\nEstimated total cost: unavailable";
+      ? "$" + Number(d.budget.estimated_cost).toFixed(2)
+      : "unavailable";
 
-    // Use the review dialog adapted for external AI request
-    var backdrop = document.createElement("div");
-    backdrop.className = "ce-review-backdrop";
-    var titleId = "or-review-title-" + Math.random().toString(36).slice(2);
-    backdrop.innerHTML =
-      '<div class="ce-review-dialog" role="dialog" aria-modal="true" aria-labelledby="' + titleId + '">' +
-        '<h3 id="' + titleId + '">Review external AI request</h3>' +
-        '<p class="ce-review-action">This sends the pseudonymized SAFE batch to OpenRouter for draft scoring. It may still contain identifying context.</p>' +
-        '<div class="ce-review-section"><strong>Batch details</strong>' +
-          '<ul class="ce-review-list">' +
-            '<li>Assignment: ' + esc(d.assignment_name || "unknown") + '</li>' +
-            '<li>Students: ' + (d.students || 0) + '</li>' +
-            '<li>Model: ' + esc(d.model || "unknown") + '</li>' +
-            '<li>Estimated cost: ' + (d.budget && d.budget.estimated_cost != null ? "$" + Number(d.budget.estimated_cost).toFixed(2) : "unavailable") + '</li>' +
-          '</ul>' +
-        '</div>' +
-        '<div class="ce-review-section"><strong>Data boundary</strong>' +
-          '<ul class="ce-review-list">' +
-            '<li>The pseudonymized SAFE batch is sent to OpenRouter. It may still contain identifying context.</li>' +
-            '<li>Real names stay in the private vault on this computer.</li>' +
-          '</ul>' +
-        '</div>' +
-        '<div class="ce-review-actions">' +
-          '<button type="button" class="secondary ce-review-cancel">Cancel</button>' +
-          '<button type="button" class="danger ce-review-confirm">Send SAFE batch to OpenRouter</button>' +
-        '</div>' +
-      '</div>';
-
-    function close(ok) {
-      document.removeEventListener("keydown", onKey);
-      backdrop.remove();
+    window.CE_WRITE_REVIEW.confirm({
+      title: "Review external AI request",
+      action: "This sends the pseudonymized SAFE batch to OpenRouter for draft scoring. It may still contain identifying context.",
+      targets: [{ name: d.assignment_name || "unknown" }],
+      details: [
+        "Students: " + (d.students || 0),
+        "Model: " + esc(d.model || "unknown"),
+        "Estimated cost: " + estimate,
+      ],
+      warnings: [
+        "The pseudonymized SAFE batch is sent to OpenRouter. It may still contain identifying context.",
+        "Real names stay in the private vault on this computer.",
+      ],
+      confirmText: "Send SAFE batch to OpenRouter",
+    }).then(function (ok) {
       if (ok) {
         _doStream(d, logEl, fill, status, btn);
       } else {
         if (status) status.textContent = "Cancelled — SAFE bundle is saved; open the SAFE folder to use it manually.";
         btn.disabled = false;
       }
-    }
-    function onKey(event) {
-      if (event.key === "Escape") close(false);
-    }
-    backdrop.addEventListener("click", function (event) {
-      if (event.target === backdrop) close(false);
     });
-    backdrop.querySelector(".ce-review-cancel").addEventListener("click", function () { close(false); });
-    backdrop.querySelector(".ce-review-confirm").addEventListener("click", function () { close(true); });
-    document.addEventListener("keydown", onKey);
-    document.body.appendChild(backdrop);
-    backdrop.querySelector(".ce-review-confirm").focus();
   }
 
   function _doStream(d, logEl, fill, status, btn) {
@@ -164,7 +132,6 @@
       rubric_name: rubricEl ? rubricEl.value : "",
       pattern_id: patternEl ? patternEl.value : "basic",
     });
-    _orStreamActive = true;
     var evtSource = new EventSource("/api/feedback/run/stream?" + params.toString());
     var lines = [];
     evtSource.onmessage = function (ev) {
@@ -179,7 +146,6 @@
       if (line.indexOf("[exit 0]") !== -1 || line.indexOf("[exit 1]") !== -1) {
         if (fill) fill.style.width = "100%";
         evtSource.close();
-        _orStreamActive = false;
         if (line.indexOf("[exit 0]") !== -1) {
           if (status) status.textContent = "✓ Done — review in ToEnter before posting.";
         } else if (status) {
@@ -195,7 +161,6 @@
     };
     evtSource.onerror = function () {
       evtSource.close();
-      _orStreamActive = false;
       if (status) status.textContent = "Connection lost.";
       btn.disabled = false;
     };

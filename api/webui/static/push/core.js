@@ -37,62 +37,6 @@
     el.innerHTML = html;
   }
 
-  function canvasWriteReview(options) {
-    options = options || {};
-    return new Promise(function (resolve) {
-      var previousFocus = document.activeElement;
-      var backdrop = document.createElement("div");
-      backdrop.className = "ce-review-backdrop";
-      var titleId = "ce-review-title-" + Math.random().toString(36).slice(2);
-      var details = options.details || [];
-      var targets = options.targets || [];
-      var warnings = options.warnings || [];
-      var targetHtml = targets.length
-        ? '<ul class="ce-review-list">' + targets.map(function (t) {
-          var label = t.name || t.label || "Course";
-          var id = t.id ? " (#" + t.id + ")" : "";
-          return "<li>" + esc(label) + esc(id) + "</li>";
-        }).join("") + "</ul>"
-        : '<p class="hint">No target selected.</p>';
-      var detailsHtml = details.length
-        ? '<ul class="ce-review-list">' + details.map(function (d) { return "<li>" + esc(d) + "</li>"; }).join("") + "</ul>"
-        : "";
-      var warningsHtml = warnings.length
-        ? '<div class="ce-review-warning"><strong>Canvas effects</strong><ul>' +
-          warnings.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul></div>"
-        : "";
-      backdrop.innerHTML =
-        '<div class="ce-review-dialog" role="dialog" aria-modal="true" aria-labelledby="' + titleId + '">' +
-          '<h3 id="' + titleId + '">' + esc(options.title || "Review Canvas write") + "</h3>" +
-          '<p class="ce-review-action">' + esc(options.action || "Review this Canvas change before continuing.") + "</p>" +
-          '<div class="ce-review-section"><strong>Target</strong>' + targetHtml + "</div>" +
-          (detailsHtml ? '<div class="ce-review-section"><strong>Change</strong>' + detailsHtml + "</div>" : "") +
-          warningsHtml +
-          '<div class="ce-review-actions">' +
-            '<button type="button" class="secondary ce-review-cancel">' + esc(options.cancelText || "Cancel") + "</button>" +
-            '<button type="button" class="danger ce-review-confirm">' + esc(options.confirmText || "Write to Canvas") + "</button>" +
-          "</div>" +
-        "</div>";
-      function close(ok) {
-        document.removeEventListener("keydown", onKey);
-        backdrop.remove();
-        if (previousFocus && typeof previousFocus.focus === "function") previousFocus.focus();
-        resolve(ok);
-      }
-      function onKey(event) {
-        if (event.key === "Escape") close(false);
-      }
-      backdrop.addEventListener("click", function (event) {
-        if (event.target === backdrop) close(false);
-      });
-      backdrop.querySelector(".ce-review-cancel").addEventListener("click", function () { close(false); });
-      backdrop.querySelector(".ce-review-confirm").addEventListener("click", function () { close(true); });
-      document.addEventListener("keydown", onKey);
-      document.body.appendChild(backdrop);
-      backdrop.querySelector(".ce-review-confirm").focus();
-    });
-  }
-
   function describeContentEffects(payload) {
     payload = payload || {};
     var details = [];
@@ -227,7 +171,7 @@
     var targets = typeof push.targetCourses === "function" ? push.targetCourses() : [];
     if (!targets.length) return alert("Check at least one course on the right.");
     var effects = describeContentEffects(payload);
-    var ok = await canvasWriteReview({
+    var ok = await window.CE_WRITE_REVIEW.confirm({
       title: "Review Canvas content push",
       action: confirmLabel,
       targets: targets,
@@ -275,7 +219,7 @@
     showLog: showLog,
     hideBanner: hideBanner,
     pushContent: pushContent,
-    canvasWriteReview: canvasWriteReview,
+    canvasWriteReview: window.CE_WRITE_REVIEW.confirm,
     describeContentEffects: describeContentEffects,
     generatePhysical: generatePhysical,
     esc: esc,

@@ -59,6 +59,9 @@
     var ackBox = document.getElementById('pg-ai-check');
     if (ackWrap) ackWrap.style.display = isAi ? '' : 'none';
     if (ackBox && !isAi) ackBox.checked = false;
+    // Programmatically expand safety details for AI routes
+    var safetyPopout = document.getElementById('pg-safety-popout');
+    if (safetyPopout) safetyPopout.open = isAi;
     syncStartEnabled();
   }
 
@@ -69,7 +72,7 @@
     var isAi = mode === 'packet' || mode === 'assisted';
     var ackBox = document.getElementById('pg-ai-check');
     var ackOk = !isAi || (ackBox && ackBox.checked);
-    startBtn.disabled = !(cid && aid && ackOk);
+    startBtn.disabled = !(setupConfig.hasWorkspace && cid && aid && ackOk);
   }
 
   function setStatus(msg, err){

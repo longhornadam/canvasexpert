@@ -15,10 +15,8 @@
     <a class="brand" href="/">{% include "_ce_logo.svg" %} CanvasExpert</a>
     {% set current_path = request.url.path %}
     <nav>
-      <a class="nav-link nav-powergrader{% if nav_section == 'powergrader' or current_path.startswith('/powergrader') %} nav-active{% endif %}" href="/powergrader">PowerGrader</a>
-
-      <details class="nav-dd{% if nav_section in ['work', 'course'] %} nav-dd--active{% endif %}">
-        <summary>Work ▾</summary>
+      <details class="nav-dd{% if nav_section == 'create' %} nav-dd--active{% endif %}">
+        <summary>Create ▾</summary>
         <div class="dd-menu">
           <a href="/course-expert">Work home</a>
           <div class="dd-sep"></div>
@@ -27,19 +25,17 @@
           <a href="/push/page">Push page</a>
           <a href="/push/rubric">Push rubric</a>
           <a href="/push/quick">Quick assignment</a>
-          <div class="dd-sep"></div>
-          <a href="/download-work">Download student work</a>
-          <a href="/student-reports">Student reports</a>
         </div>
       </details>
 
-      <a class="nav-link nav-roster{% if nav_section == 'roster' %} nav-active{% endif %}" href="/roster">Rosters</a>
-
-      <details class="nav-dd{% if nav_section == 'gradebook' %} nav-dd--active{% endif %}">
-        <summary>Gradebooks ▾</summary>
+      <details class="nav-dd{% if nav_section == 'grade' %} nav-dd--active{% endif %}">
+        <summary>Grade ▾</summary>
         <div class="dd-menu">
-          <a href="/gradebook">Gradebooks home</a>
+          <a href="/powergrader">PowerGrader</a>
+          <a href="/feedback-expert">Score writing with AI</a>
+          <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
           <div class="dd-sep"></div>
+          <a href="/gradebook">Gradebooks home</a>
           <a href="/gradebook?tab=policy">Policy &amp; sweep</a>
           <a href="/gradebook?tab=extra-time">Extra-time</a>
           <a href="/gradebook?tab=extensions">Extensions</a>
@@ -49,17 +45,26 @@
         </div>
       </details>
 
+      <details class="nav-dd{% if nav_section == 'manage' %} nav-dd--active{% endif %}">
+        <summary>Manage ▾</summary>
+        <div class="dd-menu">
+          <a href="/roster">Rosters</a>
+          <a href="/download-work">Download student work</a>
+          <a href="/student-reports">Student reports</a>
+          <a href="/course">Course info</a>
+        </div>
+      </details>
+
+      <a class="nav-link nav-automate{% if nav_section == 'automate' %} nav-active{% endif %}" href="/routines">Automate</a>
+
       <a class="nav-link nav-settings{% if nav_section == 'settings' %} nav-active{% endif %}" href="/settings">Settings</a>
 
-      <details class="nav-dd{% if nav_section in ['feedback', 'ai', 'about'] and not current_path.startswith('/powergrader') %} nav-dd--active{% endif %}">
-        <summary>Extras ▾</summary>
+      <details class="nav-dd{% if nav_section == 'help' %} nav-dd--active{% endif %}">
+        <summary>Help &amp; tools ▾</summary>
         <div class="dd-menu">
           <a href="/about">About</a>
           <a href="/ai-expert">Authoring helper files</a>
           <a href="/forge/quizforge/" target="_blank" rel="noopener">QuizForge compiler</a>
-          <div class="dd-sep"></div>
-          <a href="/feedback-expert">Score with AI</a>
-          <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
           <div class="dd-sep"></div>
           <a href="/api/download-contract?name=QuizForge_Base" download>Download QuizForge contract</a>
           <a href="/api/download-contract?name=AssignmentForge_Base" download>Download AssignmentForge contract</a>
@@ -145,5 +150,6 @@
     });
   })();
   </script>
+  <script src="/static/write_review.js?v={{ asset_v }}"></script>
 </body>
 </html>

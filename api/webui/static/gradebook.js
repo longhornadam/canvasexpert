@@ -51,62 +51,6 @@
     el.innerHTML = html;
   }
 
-  function canvasWriteReview(options) {
-    options = options || {};
-    return new Promise(function (resolve) {
-      const previousFocus = document.activeElement;
-      const backdrop = document.createElement("div");
-      const titleId = "gb-review-title-" + Math.random().toString(36).slice(2);
-      const targets = options.targets || [];
-      const details = options.details || [];
-      const warnings = options.warnings || [];
-      backdrop.className = "ce-review-backdrop";
-      const targetHtml = targets.length
-        ? '<ul class="ce-review-list">' + targets.map(t => {
-          const label = t.name || t.label || "Course";
-          const id = t.id ? " (#" + t.id + ")" : "";
-          return "<li>" + esc(label) + esc(id) + "</li>";
-        }).join("") + "</ul>"
-        : '<p class="hint">No target selected.</p>';
-      const detailsHtml = details.length
-        ? '<ul class="ce-review-list">' + details.map(d => "<li>" + esc(d) + "</li>").join("") + "</ul>"
-        : "";
-      const warningsHtml = warnings.length
-        ? '<div class="ce-review-warning"><strong>Canvas effects</strong><ul>' +
-          warnings.map(w => "<li>" + esc(w) + "</li>").join("") + "</ul></div>"
-        : "";
-      backdrop.innerHTML =
-        '<div class="ce-review-dialog" role="dialog" aria-modal="true" aria-labelledby="' + titleId + '">' +
-          '<h3 id="' + titleId + '">' + esc(options.title || "Review Canvas write") + "</h3>" +
-          '<p class="ce-review-action">' + esc(options.action || "Review this Canvas change before continuing.") + "</p>" +
-          '<div class="ce-review-section"><strong>Target</strong>' + targetHtml + "</div>" +
-          (detailsHtml ? '<div class="ce-review-section"><strong>Change</strong>' + detailsHtml + "</div>" : "") +
-          warningsHtml +
-          '<div class="ce-review-actions">' +
-            '<button type="button" class="secondary ce-review-cancel">' + esc(options.cancelText || "Cancel") + "</button>" +
-            '<button type="button" class="danger ce-review-confirm">' + esc(options.confirmText || "Write to Canvas") + "</button>" +
-          "</div>" +
-        "</div>";
-      function close(ok) {
-        document.removeEventListener("keydown", onKey);
-        backdrop.remove();
-        if (previousFocus && typeof previousFocus.focus === "function") previousFocus.focus();
-        resolve(ok);
-      }
-      function onKey(event) {
-        if (event.key === "Escape") close(false);
-      }
-      backdrop.addEventListener("click", event => {
-        if (event.target === backdrop) close(false);
-      });
-      backdrop.querySelector(".ce-review-cancel").addEventListener("click", () => close(false));
-      backdrop.querySelector(".ce-review-confirm").addEventListener("click", () => close(true));
-      document.addEventListener("keydown", onKey);
-      document.body.appendChild(backdrop);
-      backdrop.querySelector(".ce-review-confirm").focus();
-    });
-  }
-
   async function postForm(url, fields) {
     return fetch(url, { method: "POST", body: new URLSearchParams(fields) })
       .then(r => r.json());
@@ -141,6 +85,7 @@
 
   function syncGradebookReadiness() {
     var hasCourse = !!gbCourseId();
+    var courseName = gbCourseName();
     var msg = document.getElementById("gb-readiness-msg");
     var policyBtn = document.getElementById("btn-apply-policy");
     var sweepBtn = document.getElementById("btn-sweep-preview");
@@ -150,11 +95,17 @@
       if (policyBtn) policyBtn.disabled = true;
       if (sweepBtn) sweepBtn.disabled = true;
       if (sweepApply) { sweepApply.hidden = true; sweepApply.disabled = true; }
-      if (msg) msg.hidden = false;
+      if (msg) {
+        msg.hidden = false;
+        msg.innerHTML = '<p class="hint" style="margin:0">No course selected. Gradebook changes are unavailable.</p>';
+      }
     } else {
       if (policyBtn) policyBtn.disabled = false;
       if (sweepBtn) sweepBtn.disabled = false;
-      if (msg) msg.hidden = true;
+      if (msg) {
+        msg.hidden = false;
+        msg.innerHTML = '<strong>Working in:</strong> ' + esc(courseName) + '. Changes on this page affect this course only.';
+      }
     }
   }
 
@@ -182,7 +133,7 @@
     showLog:       showLog,
     hideBanner:    hideBanner,
     showBanner:    showBanner,
-    canvasWriteReview: canvasWriteReview,
+    canvasWriteReview: window.CE_WRITE_REVIEW.confirm,
     postForm:      postForm,
     collectHolidays: collectHolidays,
     // Mutable state for feature files
