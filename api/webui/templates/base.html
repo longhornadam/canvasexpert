@@ -9,6 +9,7 @@
   <!-- Local fonts (vendored from Google Fonts) -->
   <link rel="stylesheet" href="/static/fonts/fonts.css">
   <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
+  <script src="/static/write_review.js?v={{ asset_v }}"></script>
 </head>
 <body class="{% if nav_section %}nav-section-{{ nav_section }} {% endif %}{% block body_class %}{% endblock %}">
   <header class="topbar">
@@ -150,6 +151,5 @@
     });
   })();
   </script>
-  <script src="/static/write_review.js?v={{ asset_v }}"></script>
 </body>
 </html>

@@ -5,13 +5,13 @@ directly — no live Canvas, no server, no student data.
 """
 
 import re
+from pathlib import Path
 
-ROOT = "d:/Development Projects/CanvasExpert"
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _slurp(rel: str) -> str:
-    with open(f"{ROOT}/{rel}", encoding="utf-8") as f:
-        return f.read()
+    return (ROOT / rel).read_text(encoding="utf-8")
 
 
 # ── feedback_expert.html ──────────────────────────────────────────────
@@ -58,12 +58,30 @@ def test_sync_start_enabled_uses_workspace_flag():
 # ── base.html ─────────────────────────────────────────────────────────
 
 def test_write_review_loaded_before_page_scripts():
-    """base.html must load write_review.js before page-specific scripts."""
+    """base.html must load write_review.js synchronously in <head> before content."""
     html = _slurp("api/webui/templates/base.html")
     wr_idx = html.index("/static/write_review.js")
-    # There should be no other .js script src after write_review within base.html
-    # (page-specific scripts are loaded by child templates via {% block content %})
-    assert wr_idx > 0, "write_review.js not found in base.html"
+    content_idx = html.index("{% block content %}")
+    head_close_idx = html.index("</head>")
+
+    # Must occur exactly once
+    assert html.count("/static/write_review.js") == 1, (
+        "write_review.js must appear exactly once in base.html"
+    )
+    # Must be before {% block content %}
+    assert wr_idx < content_idx, (
+        "write_review.js must load before {% block content %}"
+    )
+    # Must be before </head>
+    assert wr_idx < head_close_idx, (
+        "write_review.js must be inside <head>"
+    )
+    # The containing tag must not have defer or async
+    tag_start = html.rindex("<script", 0, wr_idx)
+    tag_end = html.index(">", tag_start)
+    tag = html[tag_start:tag_end]
+    assert "defer" not in tag, "write_review.js script tag must not use defer"
+    assert "async" not in tag, "write_review.js script tag must not use async"
 
 
 # ── No legacy canvasWriteReview function definitions ──────────────────
@@ -72,7 +90,7 @@ def test_no_local_canvas_write_review_function():
     """No file in api/webui/static may define function canvasWriteReview."""
     import glob
     found = []
-    for f in glob.glob(f"{ROOT}/api/webui/static/**/*.js", recursive=True):
+    for f in glob.glob(str(ROOT / "api/webui/static/**/*.js"), recursive=True):
         with open(f, encoding="utf-8") as fh:
             for i, line in enumerate(fh, 1):
                 if "function canvasWriteReview" in line:
