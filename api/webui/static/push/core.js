@@ -37,6 +37,84 @@
     el.innerHTML = html;
   }
 
+  function canvasWriteReview(options) {
+    options = options || {};
+    return new Promise(function (resolve) {
+      var previousFocus = document.activeElement;
+      var backdrop = document.createElement("div");
+      backdrop.className = "ce-review-backdrop";
+      var titleId = "ce-review-title-" + Math.random().toString(36).slice(2);
+      var details = options.details || [];
+      var targets = options.targets || [];
+      var warnings = options.warnings || [];
+      var targetHtml = targets.length
+        ? '<ul class="ce-review-list">' + targets.map(function (t) {
+          var label = t.name || t.label || "Course";
+          var id = t.id ? " (#" + t.id + ")" : "";
+          return "<li>" + esc(label) + esc(id) + "</li>";
+        }).join("") + "</ul>"
+        : '<p class="hint">No target selected.</p>';
+      var detailsHtml = details.length
+        ? '<ul class="ce-review-list">' + details.map(function (d) { return "<li>" + esc(d) + "</li>"; }).join("") + "</ul>"
+        : "";
+      var warningsHtml = warnings.length
+        ? '<div class="ce-review-warning"><strong>Canvas effects</strong><ul>' +
+          warnings.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul></div>"
+        : "";
+      backdrop.innerHTML =
+        '<div class="ce-review-dialog" role="dialog" aria-modal="true" aria-labelledby="' + titleId + '">' +
+          '<h3 id="' + titleId + '">' + esc(options.title || "Review Canvas write") + "</h3>" +
+          '<p class="ce-review-action">' + esc(options.action || "Review this Canvas change before continuing.") + "</p>" +
+          '<div class="ce-review-section"><strong>Target</strong>' + targetHtml + "</div>" +
+          (detailsHtml ? '<div class="ce-review-section"><strong>Change</strong>' + detailsHtml + "</div>" : "") +
+          warningsHtml +
+          '<div class="ce-review-actions">' +
+            '<button type="button" class="secondary ce-review-cancel">' + esc(options.cancelText || "Cancel") + "</button>" +
+            '<button type="button" class="danger ce-review-confirm">' + esc(options.confirmText || "Write to Canvas") + "</button>" +
+          "</div>" +
+        "</div>";
+      function close(ok) {
+        document.removeEventListener("keydown", onKey);
+        backdrop.remove();
+        if (previousFocus && typeof previousFocus.focus === "function") previousFocus.focus();
+        resolve(ok);
+      }
+      function onKey(event) {
+        if (event.key === "Escape") close(false);
+      }
+      backdrop.addEventListener("click", function (event) {
+        if (event.target === backdrop) close(false);
+      });
+      backdrop.querySelector(".ce-review-cancel").addEventListener("click", function () { close(false); });
+      backdrop.querySelector(".ce-review-confirm").addEventListener("click", function () { close(true); });
+      document.addEventListener("keydown", onKey);
+      document.body.appendChild(backdrop);
+      backdrop.querySelector(".ce-review-confirm").focus();
+    });
+  }
+
+  function describeContentEffects(payload) {
+    payload = payload || {};
+    var details = [];
+    var warnings = [];
+    if (payload.path) details.push("Source file: " + payload.path.split(/[\\/]/).pop());
+    if (payload.module_name) details.push("Add to module: " + payload.module_name);
+    if (payload.assignment_group_name) details.push("Assignment group: " + payload.assignment_group_name);
+    if (payload.due_at) details.push("Due: " + payload.due_at);
+    if (payload.unlock_at) details.push("Unlock: " + payload.unlock_at);
+    if (payload.lock_at) details.push("Lock: " + payload.lock_at);
+    if (payload.rubric_path) details.push("Rubric: " + payload.rubric_path.split(/[\\/]/).pop() + " (" + (payload.rubric_mode || "grading") + ")");
+    warnings.push(payload.published ? "Item will be published for students." : "Item will be created unpublished.");
+    if (payload.post_to_sis) warnings.push("Post to SIS is enabled where Canvas supports it.");
+    if (payload.autoscore_schedule) {
+      warnings.push("Scheduled Auto-Score is enabled for this assignment and creates draft AI suggestions after the due date.");
+    }
+    if (payload.autoscore_auto_push) {
+      warnings.push("Scheduled auto-push is enabled only for eligible reviewed cases for this assignment.");
+    }
+    return { details: details, warnings: warnings };
+  }
+
   var allBusyBtns = "#btn-validate,#btn-preview,#btn-push,#btn-push-variants,#btn-add-variant";
 
   function setBusy(v) {
@@ -144,17 +222,20 @@
     }
   }
 
-  function pushContent(kind, payload, logEl, bannerEl, btn, confirmLabel) {
+  async function pushContent(kind, payload, logEl, bannerEl, btn, confirmLabel) {
     var push = window.CE_PUSH || {};
     var targets = typeof push.targetCourses === "function" ? push.targetCourses() : [];
     if (!targets.length) return alert("Check at least one course on the right.");
-    var list = targets.map(function (t) {
-      return "  • " + t.name + " (#" + t.id + ")";
-    }).join("\n");
-    if (!confirm(
-      confirmLabel + "\n\nin " + targets.length + " course(s):\n" + list + "\n\n" +
-      "Canvas: " + window.QF_CANVAS_BASE + "\n\nContinue?"
-    )) return;
+    var effects = describeContentEffects(payload);
+    var ok = await canvasWriteReview({
+      title: "Review Canvas content push",
+      action: confirmLabel,
+      targets: targets,
+      details: effects.details.concat(["Canvas instance: " + (window.QF_CANVAS_BASE || "(configured Canvas)")]),
+      warnings: effects.warnings,
+      confirmText: "Push to Canvas",
+    });
+    if (!ok) return;
     var log = showLog(logEl);
     hideBanner(bannerEl);
     btn.disabled = true;
@@ -194,6 +275,8 @@
     showLog: showLog,
     hideBanner: hideBanner,
     pushContent: pushContent,
+    canvasWriteReview: canvasWriteReview,
+    describeContentEffects: describeContentEffects,
     generatePhysical: generatePhysical,
     esc: esc,
     showBanner: showBanner,

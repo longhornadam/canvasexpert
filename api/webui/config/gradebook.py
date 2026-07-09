@@ -1,4 +1,4 @@
-"""Gradebook Expert configuration — extra-time, sweep, tier tags.
+"""Gradebook tools configuration — extra-time, sweep, tier tags.
 
 Uses lazy module-reference so monkeypatches to config._io propagate correctly.
 """

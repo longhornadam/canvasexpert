@@ -36,9 +36,9 @@ Live-fire failures should route cleanly:
   browser module instead of the entire `roster.js` file.
 - Gradebook route bugs should land in policy, sweep, extra-time, extension,
   curve, or snapshot route modules instead of one large route file.
-- FeedbackExpert browser bugs should land in static feature scripts instead of
+- Feedback tools browser bugs should land in static feature scripts instead of
   the privacy-sensitive template.
-- Course Expert's remaining inline browser workflows should be split enough
+- Work tools' remaining inline browser workflows should be split enough
   that Student Reports, portfolio tools, quick assignment, and tab/delivery
   glue are independently debuggable.
 
@@ -146,7 +146,7 @@ Implementation requirements:
 
 - Keep URL paths, HTTP methods, form/query fields, and response JSON stable.
 - Prefer `gradebook.py` as a router aggregation facade, similar to the
-  FeedbackExpert route split.
+  feedback tools route split.
 - If current tests import helper functions from `gradebook.py`, preserve
   compatibility re-exports unless the import is clearly private and tests are
   updated in the same slice.
@@ -207,7 +207,7 @@ Manual smoke if feasible:
 - For write flows, use preview or mocked/local-safe paths unless the user is
   explicitly doing live Canvas testing.
 
-## Slice 3 - FeedbackExpert Inline Browser Split
+## Slice 3 - Feedback Tools Inline Browser Split
 
 Priority: high, privacy-sensitive.
 
@@ -257,7 +257,7 @@ Suggested ownership:
 Acceptance criteria:
 
 - `feedback_expert.html` is mostly markup plus script includes.
-- The FeedbackExpert module map lists browser feature ownership.
+- The feedback tools module map lists browser feature ownership.
 - Existing route and pipeline tests still pass.
 
 Tests:
@@ -273,13 +273,13 @@ Manual smoke if feasible:
   and push preview controls still respond.
 - Avoid live push unless the user explicitly asks for live Canvas testing.
 
-## Slice 4 - Course Expert Remaining Inline Workflow Split
+## Slice 4 - Work Tools Remaining Inline Workflow Split
 
-Priority: high after FeedbackExpert.
+Priority: high after feedback tools.
 
 Why this is painful:
 
-Course Expert push modules are mostly split, but
+Work tools push modules are mostly split, but
 `api/webui/templates/course_expert.html` still has inline browser workflows for
 Student Reports, portfolio/New Quizzes CSV helpers, merged portfolio, tab
 activation, delivery-option toggles, quick assignment, file-source compatibility
@@ -317,7 +317,7 @@ Implementation requirements:
 
 Suggested ownership:
 
-- `tabs.js`: Course Expert tab activation and query/hash deep-link routing.
+- `tabs.js`: Work tools tab activation and query/hash deep-link routing.
 - `student_reports.js`: roster load, monitor toggle, student packet SSE.
 - `portfolio.js`: New Quizzes CSV portfolio and merged portfolio forms.
 - `quick_assignment.js`: quick gradebook-column push.
@@ -328,8 +328,8 @@ Acceptance criteria:
 
 - `course_expert.html` is mostly markup and script includes.
 - Student Reports/portfolio/quick-assignment symptoms route to their own files.
-- Module map explicitly distinguishes Course Expert push modules from non-push
-  Course Expert workflows.
+- Module map explicitly distinguishes Work tools push modules from non-push
+  Work tools workflows.
 
 Tests:
 
@@ -356,7 +356,7 @@ Why this is painful:
 `api/webui/push_service.py` and `api/webui/source_materials.py` are not the
 worst line-count offenders, but they sit directly on live push and source
 context behavior. Refactor only when there is active debugging pressure or when
-the earlier Course Expert split exposes a clear ownership boundary.
+the earlier Work tools split exposes a clear ownership boundary.
 
 Possible split for `push_service.py`:
 
@@ -398,8 +398,8 @@ At the end of each completed slice:
 
 1. Roster browser split.
 2. Gradebook route split.
-3. FeedbackExpert inline browser split.
-4. Course Expert remaining inline workflow split.
+3. Feedback tools inline browser split.
+4. Work tools remaining inline workflow split.
 5. Push service/source materials only if live-fire pain remains.
 
 This order attacks the files most likely to waste LLM context during real Canvas

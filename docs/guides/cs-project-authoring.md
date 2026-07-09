@@ -1,7 +1,7 @@
 # Authoring CS project assignments for LLM scoring
 
 A practical guide for writing AssignmentForge assignments so they score and give good
-feedback through FeedbackExpert. Tuned for the intro CS course (8th graders, first time
+feedback through the feedback tools. Tuned for the intro CS course (8th graders, first time
 with HTML/Python, project-based).
 
 ## Why this matters
@@ -65,7 +65,7 @@ for upload).
 
 Tell students **not to put their real name in the code** (no `# Name: Jose` headers) — the
 scrub will replace it with their fake name anyway, but a clean habit avoids odd-looking SAFE
-output. Their Canvas identity is what FeedbackExpert anchors on; the header name is noise.
+output. Their Canvas identity is what the feedback tools anchor on; the header name is noise.
 
 ## Quick checklist before you push
 

@@ -3,7 +3,8 @@
 
   var gb = window.CE_GRADEBOOK || {};
   var ready = ["postForm", "showLog", "showBanner", "hideBanner", "esc",
-               "gbCourseId", "gbCourseName", "collectHolidays", "sweepEntries"]
+               "gbCourseId", "gbCourseName", "gbTargets", "collectHolidays", "sweepEntries",
+               "canvasWriteReview"]
     .every(function (name) {
       if (name === "sweepEntries") return typeof Object.getOwnPropertyDescriptor(gb, "sweepEntries") !== "undefined";
       return typeof gb[name] === "function";
@@ -108,11 +109,23 @@
       .map(function (cb) { return gb.sweepEntries[+cb.dataset.i]; })
       .filter(Boolean);
     if (!rows.length) return;
-    if (!confirm(
-      "Set lateness overrides for " + rows.length + " submission(s) in " + gb.gbCourseName() + "?\n\n" +
-      "Canvas will recalculate each student's late penalty using the corrected school-day " +
-      "count. No grades are written directly \u2014 Canvas applies its own late policy.\n\nContinue?"
-    )) return;
+    var ok = await gb.canvasWriteReview({
+      title: "Review lateness override write",
+      action: "Set lateness overrides for " + rows.length + " selected submission(s).",
+      targets: typeof gb.gbTargets === "function" ? gb.gbTargets() : [{ id: id, name: gb.gbCourseName() }],
+      details: [
+        rows.length + " selected submission(s)",
+        "Date range: " + (document.getElementById("sw-from")?.value || "course start") + " to " +
+          (document.getElementById("sw-to")?.value || "now"),
+      ],
+      warnings: [
+        "This writes lateness overrides to Canvas.",
+        "Canvas recalculates each student's late penalty using the course late policy.",
+        "No direct score values are written by this action.",
+      ],
+      confirmText: "Set lateness overrides",
+    });
+    if (!ok) return;
     var log = gb.showLog(document.getElementById("sw-log"));
     gb.hideBanner(document.getElementById("sw-banner"));
     this.disabled = true;

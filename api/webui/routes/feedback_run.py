@@ -1,4 +1,4 @@
-"""FeedbackExpert assignment-driven prepare and OpenRouter scoring stream."""
+"""Feedback tools assignment-driven prepare and OpenRouter scoring stream."""
 import json
 import os
 

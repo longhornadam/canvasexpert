@@ -8,7 +8,7 @@ pushes content to live courses via the REST and New Quizzes APIs:
 - **Push Pages** (PageForge JSON → live pages)
 - **Push Rubrics** (RubricForge JSON → live rubrics + student explainer pages)
 - **Printable outputs** (QuizForge JSON → local DOCX + PDF files)
-- **Gradebook Expert** — late policy sweep, student extensions, curves
+- **Gradebook tools** — late policy sweep, student extensions, curves
 - **PowerGrader** — keyboard grading queue, Safe AI Packet export, Copilot batch
   import, optional API scoring
 - **Download** — submission bundles by assignment or by student
@@ -41,7 +41,7 @@ automation/headless use.
    push box has an inline "Forge one with your LLM" helper, or use the embedded
    QuizForge web editor.
 3. **Validate** the file in the Web UI (summarizes what will push, spots errors)
-4. **Select target courses** (multi-select dropdown in the Course Expert header)
+4. **Select target courses** (multi-select dropdown in the Work tools header)
 5. **Configure delivery** (due dates, grading category, module, publish state)
 6. **Push** — one button, multi-course in one shot. Log shows per-course notes.
 
@@ -82,7 +82,7 @@ OneDrive; conflict copies like `settings-<PC>.json` are ignored by the app. If
 OneDrive is absent, the app falls back to the local folders exactly as before.
 
 **Full feature reference** (Settings, Dashboard, Push Quiz/Assignment/Page/Module,
-Gradebook Expert, Download Assignments, Course Info): **`api/webui/README.md`**.
+Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 
 ## What each push does automatically
 

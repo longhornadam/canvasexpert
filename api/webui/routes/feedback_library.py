@@ -1,4 +1,4 @@
-"""FeedbackExpert persona and feedback-pattern routes."""
+"""Feedback tools persona and feedback-pattern routes."""
 import json
 
 from fastapi import APIRouter, Form

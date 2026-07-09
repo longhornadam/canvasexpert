@@ -20,7 +20,8 @@ WORKSPACE_SUBFOLDERS = [
     "Calendars", "Source Materials",
 ]
 
-# FeedbackExpert zone folders (nested under the workspace).
+# Feedback tools zone folders (nested under the workspace).
+# Keep the existing folder name for compatibility with current teacher workspaces.
 FEEDBACK_NAME = "FeedbackExpert"
 FEEDBACK_SUBFOLDERS = ["SAFE", "PRIVATE", "_system"]
 
@@ -115,20 +116,20 @@ def ensure_workspace():
             continue
         shutil.copy2(source, target)
 
-    # FeedbackExpert zone folders.
+    # Feedback tools zone folders.
     fb_root = os.path.join(root, FEEDBACK_NAME)
     for sub in FEEDBACK_SUBFOLDERS:
         os.makedirs(os.path.join(fb_root, sub), exist_ok=True)
     _ensure_system_subfolders(fb_root)
     _migrate_old_layout(fb_root)
 
-    # Seed a READ-ME file at the FeedbackExpert root.
+    # Seed a READ-ME file at the feedback tools root.
     readme_path = os.path.join(fb_root, "READ-ME (what's safe to share).txt")
     if not os.path.exists(readme_path):
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(
-                "Canvas Expert — FeedbackExpert Folder Zones\n"
-                "=============================================\n\n"
+                "Canvas Expert - Feedback Tools Folder Zones\n"
+                "===========================================\n\n"
                 "SAFE/       = pseudonymized (fake-name) copies of student work.\n"
                 "              Safe to paste into ChatGPT, Claude, MagicSchool, etc.\n\n"
                 "PRIVATE/    = real-name originals, who-is-who decoders, raw\n"
@@ -153,7 +154,7 @@ def feedback_root():
 
 
 def feedback_folder(sub):
-    """Resolve a FeedbackExpert sub-folder path. Translates legacy names to new zones.
+    """Resolve a feedback tools sub-folder path. Translates legacy names to new zones.
     Legacy: 1_Inbox, 2_ForLLM, 3_FromLLM, 4_ToEnter, _vault, _archive, _audit.
     New:    SAFE, PRIVATE, _system/vault, _system/archive, _system/audit.
     """

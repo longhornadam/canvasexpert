@@ -1,4 +1,4 @@
-"""Shared helpers for FeedbackExpert route modules."""
+"""Shared helpers for feedback tools route modules."""
 import glob
 import json
 import os

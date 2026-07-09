@@ -1,4 +1,4 @@
-"""FeedbackExpert route registration.
+"""Feedback tools route registration.
 
 The privacy-sensitive implementation is split by workflow. Keep this module as
 the stable import path used by server registration and older tests.

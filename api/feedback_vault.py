@@ -1,8 +1,8 @@
-"""Pseudonym vault v2 — the real<->pseudonym map for FeedbackExpert.
+"""Pseudonym vault v2 — the real<->pseudonym map for feedback tools.
 
 The single most sensitive artifact in the app: it is the only thing that can
 re-identify pseudonymized work. It lives in the synced workspace
-(FeedbackExpert/_system/vault/), NEVER in the repo, and is NEVER transmitted
+(the existing FeedbackExpert/_system/vault/ workspace path), NEVER in the repo, and is NEVER transmitted
 anywhere.
 
 Keyed on the Canvas user id (stable, present in the Student Analysis CSV `ID`

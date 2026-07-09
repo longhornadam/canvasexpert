@@ -44,6 +44,7 @@
         : "⬇ Download selected";
     }
     if (row) row.style.display = sel.length ? "" : "none";
+    push.renderCourseScopeSummaries?.();
   }
 
   function applyDlFilter() {

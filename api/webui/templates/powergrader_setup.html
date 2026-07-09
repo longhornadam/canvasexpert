@@ -5,7 +5,7 @@
 <section class="card" style="max-width:680px;margin:0 auto">
   <h2>PowerGrader</h2>
   <p class="hint" style="margin-top:0">
-    SpeedGrader, upgraded. Grade entirely yourself or choose between 2 levels of safe, FERPA-conscious AI assistance.
+    Keyboard-first grading for one Canvas assignment. Grade entirely yourself, export a pseudonymized packet for your own AI chat, or estimate cost before API-assisted draft scoring.
   </p>
 
   {% if not has_workspace %}
@@ -39,28 +39,29 @@
         </label>
         <label class="pg-route-card">
           <input type="radio" name="pg-mode-choice" value="packet">
-          <span><strong>Use My AI Chat</strong><small>Download a Safe AI Packet for CoPilot M365, ChatGPT, Claude, Gemini, or another chat tool.</small></span>
+          <span><strong>Use My AI Chat</strong><small>Download a pseudonymized SAFE packet for Copilot M365, ChatGPT, Claude, Gemini, or another chat tool.</small></span>
         </label>
         <label class="pg-route-card {% if not has_openrouter %}is-disabled{% endif %}">
           <input type="radio" name="pg-mode-choice" value="assisted" {% if not has_openrouter %}disabled{% endif %}>
-          <span><strong>Auto-Score With API</strong><small>{% if has_openrouter %}Advanced mode with true automation. Costs a little money and a little effort, but provides astonishing results.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
+          <span><strong>Auto-Score With API</strong><small>{% if has_openrouter %}Creates draft scores and feedback through OpenRouter after a token and cost estimate; teacher review is still required before posting.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
         </label>
       </div>
       <details class="pg-safety-popout">
-        <summary>How it keeps data safe</summary>
+        <summary>Privacy and review steps</summary>
         <div class="pg-safety-body">
           <p>
-            PowerGrader is designed to be FERPA-conscious: student names and obvious PII are separated locally
-            before any AI packet is created.
+            PowerGrader is designed to be FERPA-conscious: real names stay local/private, and obvious
+            identifiers are separated before any AI packet is created.
           </p>
           <ul>
             <li><strong>Grade Myself</strong> keeps grading local and does not send an AI packet.</li>
-            <li><strong>Use My AI Chat</strong> creates a Safe AI Packet with pseudonyms and a private decoder that stays on this computer.</li>
-            <li><strong>Auto-Score With API</strong> sends the same anonymized packet through OpenRouter, then reattaches real identities locally.</li>
+            <li><strong>Use My AI Chat</strong> creates a pseudonymized SAFE packet and a private decoder that stays on this computer.</li>
+            <li><strong>Auto-Score With API</strong> sends the pseudonymized SAFE packet through OpenRouter, then reattaches real identities locally.</li>
           </ul>
           <p>
-            Rubrics, AI persona instructions, and source excerpts may be included as grading context. Review source
-            material before sending, and avoid pasting unnecessary student identifiers or full copyrighted books.
+            Pseudonymization reduces exposure but does not guarantee anonymity. Review SAFE files, rubrics,
+            persona instructions, and source excerpts before sending, and avoid unnecessary student identifiers
+            or full copyrighted books.
           </p>
         </div>
       </details>

@@ -32,7 +32,7 @@ from .courses import (
     set_course_active, bookmark_course, remove_course,
 )
 
-# --- Gradebook Expert ---
+# --- Gradebook tools ---
 from .gradebook import (
     SWEEP_DEFAULTS, TIER_NAMES,
     get_extra_time, set_extra_time,
@@ -40,7 +40,7 @@ from .gradebook import (
     get_sweep_settings, set_sweep_settings,
 )
 
-# --- FeedbackExpert personas and patterns ---
+# --- Feedback tools personas and patterns ---
 from .feedback import (
     AI_TA_PERSONA_DEFAULT, DEFAULT_AI_DISCLOSURE_SIGNOFF,
     BUILTIN_PERSONAS, BUILTIN_PERSONAS_BY_ID,

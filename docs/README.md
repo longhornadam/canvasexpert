@@ -13,9 +13,9 @@ For canonical AI-agent guidance and safety rules, read `../AGENTS.md` first.
 
 Useful starting references for new debugging and refactor sessions:
 
-- `docs/reference/course-expert-module-map.md` - Course Expert push/download route, script, and template ownership map.
+- `docs/reference/course-expert-module-map.md` - Work tools push/download route, script, and template ownership map.
 - `docs/reference/settings-module-map.md` - Settings route/script/config ownership map.
-- `docs/reference/feedbackexpert-module-map.md` - FeedbackExpert route/pipeline/template ownership and privacy-sensitive routing map.
+- `docs/reference/feedbackexpert-module-map.md` - Feedback tools route/pipeline/template ownership and privacy-sensitive routing map.
 - `docs/reference/powergrader-module-map.md` - module ownership map, script load order, backend package routing, and current size snapshot.
 - `docs/reference/gradebook-module-map.md` - Gradebook route/script ownership and feature routing map.
 - `docs/reference/roster-module-map.md` - Roster route/script ownership and current hotspot map.

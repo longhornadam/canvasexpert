@@ -4,7 +4,7 @@
   var gb = window.CE_GRADEBOOK || {};
   var ready = ["postForm", "showLog", "showBanner", "hideBanner", "esc",
                "gbCourseId", "gbCourseName", "_markLoaded", "_clearLoaded",
-               "_clearStatus", "curveResults"]
+               "_clearStatus", "gbTargets", "canvasWriteReview", "curveResults"]
     .every(function (name) {
       if (name === "curveResults") return typeof Object.getOwnPropertyDescriptor(gb, "curveResults") !== "undefined";
       return typeof gb[name] === "function";
@@ -174,11 +174,24 @@
     var model   = document.getElementById("cv-model")?.value || "flat_bump";
     var helped  = rows.filter(function (r) { return r.curved_score > r.original_score; }).length;
     var lowered = rows.filter(function (r) { return r.curved_score < r.original_score; }).length;
-    if (!confirm(
-      "Apply curve to " + rows.length + " student(s) in " + gb.gbCourseName() + "?\n\n" +
-      helped + " score(s) will go up" + (lowered ? ", " + lowered + " will go down" : "") + " (" + model.replace(/_/g, " ") + ").\n" +
-      "A local revert event is saved \u2014 you can undo this.\n\nThis writes REAL scores to Canvas.\n\nContinue?"
-    )) return;
+    var aText = document.getElementById("cv-assignment")?.selectedOptions[0]?.text || "Selected assignment";
+    var ok = await gb.canvasWriteReview({
+      title: "Review curve score write",
+      action: "Apply a " + model.replace(/_/g, " ") + " curve to selected submissions.",
+      targets: typeof gb.gbTargets === "function" ? gb.gbTargets() : [{ id: id, name: gb.gbCourseName() }],
+      details: [
+        "Assignment: " + aText,
+        rows.length + " selected student score(s)",
+        helped + " score(s) will go up" + (lowered ? "; " + lowered + " will go down" : "; none will go down"),
+      ],
+      warnings: [
+        "This writes real scores to Canvas.",
+        "Canvas may notify students of grade changes depending on course settings.",
+        "A local revert event is saved for this curve apply.",
+      ],
+      confirmText: "Apply curve scores",
+    });
+    if (!ok) return;
     var log = gb.showLog(document.getElementById("cv-log"));
     gb.hideBanner(document.getElementById("cv-banner"));
     this.disabled = true;
@@ -251,7 +264,23 @@
     if (!btn) return;
     var eventId  = btn.dataset.eventId;
     var courseId = btn.dataset.course;
-    if (!confirm("Revert this curve event for ALL students?\n\nThis writes original scores back to Canvas.\n\nContinue?")) return;
+    var label = btn.closest("div")?.querySelector("strong")?.textContent || "Selected curve event";
+    var ok = await gb.canvasWriteReview({
+      title: "Review curve revert",
+      action: "Revert this curve event for all students included in the event.",
+      targets: [{ id: courseId, name: gb.gbCourseName() || "Selected course" }],
+      details: [
+        "Assignment/event: " + label,
+        "Event ID: " + eventId,
+      ],
+      warnings: [
+        "This writes original scores back to Canvas.",
+        "Scores changed since the curve may be flagged after the write and should be checked manually.",
+        "Canvas may notify students of grade changes depending on course settings.",
+      ],
+      confirmText: "Revert Canvas scores",
+    });
+    if (!ok) return;
     btn.disabled = true;
     var es = document.getElementById("cv-events-status");
     es.className = "status hint";

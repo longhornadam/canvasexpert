@@ -1,4 +1,4 @@
-"""FeedbackExpert bundle and artifact writing helpers."""
+"""Feedback tools bundle and artifact writing helpers."""
 import csv
 import json
 import os
@@ -422,4 +422,3 @@ def reidentify_dir(fromllm_dir, toenter_dir, vault):
         except Exception as e:
             yield f"!! {stem}: {e}"
     yield f"FOLDER: {toenter_dir}"
-

@@ -100,7 +100,7 @@ def _authoring_skill(skills: list, prefix: str) -> str:
 
 def _push_base_ctx(request: Request) -> dict:
     return {
-        "nav_section":   "assignments",
+        "nav_section":   "work",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
         "saved_courses": config.active_courses(),
@@ -160,7 +160,7 @@ def download_work_page(request: Request):
 def student_reports_page(request: Request):
     return templates.TemplateResponse(
         request, "student_reports.html",
-        {**_push_base_ctx(request), "nav_section": "feedback"},
+        _push_base_ctx(request),
     )
 
 
@@ -281,7 +281,7 @@ def routines_page(request: Request):
 def settings_page(request: Request):
     root = workspace.workspace_root()
     return templates.TemplateResponse(request, "settings.html", {
-        "nav_section":   "",
+        "nav_section":   "settings",
         "canvas_base":   config.get_canvas_base(),
         "token_is_set":  config.token_is_set(),
         "openrouter_is_set": config.has_openrouter_key(),

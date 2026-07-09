@@ -1,4 +1,4 @@
-"""Offline tests for the FeedbackExpert scrub engine.
+"""Offline tests for the feedback tools scrub engine.
 
 Tests replacement-map building, text scrubbing, collision detection, and
 verify-clean. All synthetic data, no PII.

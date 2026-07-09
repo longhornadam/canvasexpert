@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Course Expert — Canvas Expert{% endblock %}
+{% block title %}Work Tools — Canvas Expert{% endblock %}
 {% block body_class %}ce-screen{% endblock %}
 {% block main_class %}ce-page{% endblock %}
 {% block content %}
@@ -12,16 +12,16 @@
 
 <div class="expert-shell expert-shell--course">
   <!-- ── Sidebar navigation ───────────────────────────────────────────── -->
-  <aside class="expert-sidebar expert-sidebar--course" aria-label="Course Expert sections">
-    <div class="expert-sidebar-kicker">Course Expert</div>
+  <aside class="expert-sidebar expert-sidebar--course" aria-label="Work tool sections">
+    <div class="expert-sidebar-kicker">Work tools</div>
     <div class="ce-tabs expert-side-tabs" role="tablist" aria-orientation="vertical">
-      <button type="button" class="ce-tab active" data-tab="quiz">Quiz</button>
-      <button type="button" class="ce-tab" data-tab="assignment">Assignment</button>
-      <button type="button" class="ce-tab" data-tab="page">Page</button>
-      <button type="button" class="ce-tab" data-tab="rubric">Rubric</button>
-      <button type="button" class="ce-tab" data-tab="download">Download Work</button>
-      <button type="button" class="ce-tab" data-tab="students">Student Reports</button>
-      <button type="button" class="ce-tab ce-tab--alt" data-tab="quick"><em>Quick Assignment</em></button>
+      <button type="button" id="ce-tab-button-quiz" class="ce-tab active" data-tab="quiz" role="tab" aria-selected="true" aria-controls="ce-tab-quiz" tabindex="0">Quiz</button>
+      <button type="button" id="ce-tab-button-assignment" class="ce-tab" data-tab="assignment" role="tab" aria-selected="false" aria-controls="ce-tab-assignment" tabindex="-1">Assignment</button>
+      <button type="button" id="ce-tab-button-page" class="ce-tab" data-tab="page" role="tab" aria-selected="false" aria-controls="ce-tab-page" tabindex="-1">Page</button>
+      <button type="button" id="ce-tab-button-rubric" class="ce-tab" data-tab="rubric" role="tab" aria-selected="false" aria-controls="ce-tab-rubric" tabindex="-1">Rubric</button>
+      <button type="button" id="ce-tab-button-download" class="ce-tab" data-tab="download" role="tab" aria-selected="false" aria-controls="ce-tab-download" tabindex="-1">Download Work</button>
+      <button type="button" id="ce-tab-button-students" class="ce-tab" data-tab="students" role="tab" aria-selected="false" aria-controls="ce-tab-students" tabindex="-1">Student Reports</button>
+      <button type="button" id="ce-tab-button-quick" class="ce-tab ce-tab--alt" data-tab="quick" role="tab" aria-selected="false" aria-controls="ce-tab-quick" tabindex="-1"><em>Quick Assignment</em></button>
     </div>
   </aside>
 
@@ -69,7 +69,7 @@
   </section>
 
   <!-- ── Quiz tab ──────────────────────────────────────────────────────── -->
-  <div id="ce-tab-quiz" class="ce-panel active">
+  <div id="ce-tab-quiz" class="ce-panel active" role="tabpanel" aria-labelledby="ce-tab-button-quiz">
 
     <!-- Whole-class picker (top) -->
     <div class="card ce-quiz-card" id="quiz-whole">
@@ -106,8 +106,9 @@
         </ol>
         <p class="hint" style="margin:0">Need a QTI-ZIP for manual import instead?
           <a href="/forge/quizforge/" target="_blank" rel="noopener">Open the QuizForge app ↗</a>
-          · More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+          · More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
+      <div class="course-scope-summary" data-course-scope="quiz-whole" aria-live="polite"></div>
       <div class="actions">
         <button id="btn-validate">Validate</button>
         <button id="btn-preview">Dry-run preview</button>
@@ -128,6 +129,7 @@
         Tiers push to <strong>every checked course</strong> in the Targets list.
         Groups are matched by name across courses.
       </p>
+      <div class="course-scope-summary" data-course-scope="quiz-diff" aria-live="polite"></div>
       <div class="actions" style="margin-top:10px">
         <button id="btn-push-variants" class="primary">Push tiers to checked course(s)…</button>
       </div>
@@ -235,7 +237,7 @@
   </div><!-- /#ce-tab-quiz -->
 
   <!-- ── Assignment tab ──────────────────────────────────────────────────── -->
-  <div id="ce-tab-assignment" class="ce-panel">
+  <div id="ce-tab-assignment" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-assignment" hidden>
 
     <div id="assignment">
       <h2 class="section-heading">Push Assignment</h2>
@@ -254,7 +256,7 @@
           </li>
           <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
         </ol>
-        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
         <label>AssignmentForge file</label>
         <div class="file-source">
@@ -323,17 +325,41 @@
         <div class="opt-checks">
           <label class="opt-check"><input type="checkbox" id="af-sis"> Sync to SIS</label>
           <label class="opt-check"><input type="checkbox" id="af-publish"> Publish immediately</label>
-          <label class="opt-check"><input type="checkbox" id="af-autoscore"> Schedule Auto-Score after due date</label>
-          <label class="opt-check" style="margin-left:20px">
-            <input type="checkbox" id="af-autoscore-push">
-            Automatically post eligible AI scores/feedback to Canvas
-          </label>
-          <small class="lbl-hint" id="af-autoscore-hint">(needs a due date)</small>
         </div>
+        <section class="scheduled-grading-block is-disabled" id="af-scheduled-grading" aria-labelledby="af-scheduled-grading-title">
+          <div class="scheduled-grading-head">
+            <div>
+              <h3 id="af-scheduled-grading-title">Scheduled grading</h3>
+              <p id="af-autoscore-hint">Requires a due date. Add one above to enable these per-assignment opt-ins.</p>
+            </div>
+            <span class="scheduled-grading-badge">Opt-in only</span>
+          </div>
+          <div class="scheduled-grading-options">
+            <label class="scheduled-grading-option">
+              <input type="checkbox" id="af-autoscore" disabled>
+              <span>
+                <strong>Schedule Auto-Score after due date</strong>
+                <small>After the due date, create draft AI suggestions and a teacher review queue.</small>
+              </span>
+            </label>
+            <label class="scheduled-grading-option scheduled-grading-option--nested">
+              <input type="checkbox" id="af-autoscore-push" disabled>
+              <span>
+                <strong>Automatically post eligible AI scores/feedback to Canvas</strong>
+                <small>Writes only eligible scores/comments that pass policy checks; review-needed cases stay out of auto-post.</small>
+              </span>
+            </label>
+          </div>
+          <p class="scheduled-grading-policy">
+            Teacher-controlled per-assignment opt-in only. Never global or default. Auto-post requires eligibility checks,
+            idempotency protection, and audit receipts.
+          </p>
+        </section>
         <div class="actions">
           <button id="btn-af-validate">Validate</button>
           <button id="btn-af-push" class="primary">Push assignment…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="assignment" aria-live="polite"></div>
         <pre id="af-log" class="log" hidden></pre>
         <div id="af-banner" class="push-banner" hidden></div>
       </div>
@@ -342,7 +368,7 @@
     </div><!-- /#ce-tab-assignment -->
 
   <!-- ── Page tab ──────────────────────────────────────────────────────── -->
-  <div id="ce-tab-page" class="ce-panel">
+  <div id="ce-tab-page" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-page" hidden>
 
     <div id="page">
       <h2 class="section-heading">Push Page</h2>
@@ -362,7 +388,7 @@
           </li>
           <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
         </ol>
-        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
         <label>PageForge file</label>
         <div class="file-source">
@@ -397,6 +423,7 @@
           <button id="btn-pf-validate">Validate</button>
           <button id="btn-pf-push" class="primary">Push page…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="page" aria-live="polite"></div>
         <pre id="pf-log" class="log" hidden></pre>
         <div id="pf-banner" class="push-banner" hidden></div>
       </div>
@@ -405,7 +432,7 @@
   </div><!-- /#ce-tab-page -->
 
   <!-- ── Rubric tab ─────────────────────────────────────────────────────── -->
-  <div id="ce-tab-rubric" class="ce-panel">
+  <div id="ce-tab-rubric" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-rubric" hidden>
 
     <div id="rubric">
       <h2 class="section-heading">Push Rubric</h2>
@@ -424,7 +451,7 @@
           </li>
           <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
         </ol>
-        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
         <label>RubricForge file</label>
         <div class="file-source">
@@ -444,6 +471,7 @@
           <button id="btn-rf-validate">Validate</button>
           <button id="btn-rf-push" class="primary">Push rubric…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="rubric" aria-live="polite"></div>
         <pre id="rf-log" class="log" hidden></pre>
         <div id="rf-banner" class="push-banner" hidden></div>
       </div>
@@ -452,7 +480,7 @@
   </div><!-- /#ce-tab-rubric -->
 
   <!-- ── Download Work tab ─────────────────────────────────────────────── -->
-  <div id="ce-tab-download" class="ce-panel">
+  <div id="ce-tab-download" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-download" hidden>
 
     <div id="download">
       <h2 class="section-heading">Download student work</h2>
@@ -495,7 +523,8 @@
           <button id="btn-download-selected" class="primary">⬇ Download selected</button>
           <span id="dl-selected-count" class="hint"></span>
         </div>
-        <div id="dl-assignment-table" hidden>
+        <div class="course-scope-summary" data-course-scope="download" aria-live="polite"></div>
+        <div id="dl-assignment-table" class="table-scroll" hidden>
           <table class="dl-table">
             <thead>
               <tr>
@@ -526,7 +555,7 @@
   </div><!-- /#ce-tab-download -->
 
   <!-- ── Student Reports tab ───────────────────────────────────────────── -->
-  <div id="ce-tab-students" class="ce-panel">
+  <div id="ce-tab-students" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-students" hidden>
     <div class="card">
       <h2 style="margin-bottom:12px">Student Reports</h2>
       <p class="hint" style="margin-top:0">
@@ -626,7 +655,7 @@
   </div><!-- /#ce-tab-students -->
 
   <!-- ── Quick tab ─────────────────────────────────────────────────────── -->
-  <div id="ce-tab-quick" class="ce-panel">
+  <div id="ce-tab-quick" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-quick" hidden>
     <div id="quick">
       <h2 class="section-heading">Quick assignment</h2>
       <div class="card">
@@ -666,6 +695,7 @@
         <div class="actions">
           <button id="btn-qa-push" class="primary">Create assignment…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="quick" aria-live="polite"></div>
         <pre id="qa-log" class="log" hidden></pre>
         <div id="qa-banner" class="push-banner" hidden></div>
       </div>

@@ -1,4 +1,4 @@
-"""FeedbackExpert manual folder workflow, status, and OpenRouter scoring."""
+"""Feedback tools manual folder workflow, status, and OpenRouter scoring."""
 import json
 import os
 

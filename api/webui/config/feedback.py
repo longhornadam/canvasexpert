@@ -1,4 +1,4 @@
-"""FeedbackExpert configuration — AI-TA persona library and feedback patterns (synced).
+"""Feedback tools configuration — AI-TA persona library and feedback patterns (synced).
 
 Uses lazy module-reference so monkeypatches to config._io propagate correctly.
 """

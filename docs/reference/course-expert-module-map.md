@@ -1,10 +1,10 @@
-# Course Expert Module Map
+# Work Tools Module Map
 
-Purpose: route Course Expert debugging without re-reading the page template,
+Purpose: route Work tools debugging without re-reading the page template,
 shared push modules, and the feature scripts that own the remaining browser
 workflows.
 
-As of 2026-07-08, Course Expert browser behavior is split into small shared
+As of 2026-07-08, Work tools browser behavior is split into small shared
 push modules plus page-specific feature scripts. `course_expert.html` is now
 mostly markup, data injection, and script includes.
 
@@ -12,7 +12,7 @@ mostly markup, data injection, and script includes.
 
 - Page template: `api/webui/templates/course_expert.html`
 - Shared browser modules: `api/webui/static/push.js`, `api/webui/static/push/*.js`
-- Course Expert feature scripts: `api/webui/static/course_expert/*.js`
+- Work tools feature scripts: `api/webui/static/course_expert/*.js`
 - Route owner: `api/webui/routes/push.py`
 - Validation/physical routes: `api/webui/routes/push_validation.py`
 - Streaming QuizForge routes: `api/webui/routes/push_streaming.py`
@@ -59,7 +59,7 @@ Shared modules own:
   folder lookup, and all-courses expansion; still provides `targetCourses`
 - `push.js` - tiny compatibility bootstrap that runs shared initialization
 
-Course Expert feature scripts own:
+Work tools feature scripts own:
 
 - `course_expert/tabs.js` - tab activation, query/hash deep-linking, delivery
   option toggles, whole/differentiated quiz mode switching, file-source bootstrap,
@@ -111,10 +111,10 @@ through CLI subprocess/streaming routes.
 
 ## First Places To Look By Symptom
 
-- Course Expert tab deep-linking / shell glue: `course_expert/tabs.js`
-- Course Expert Student Reports: `course_expert/student_reports.js`
-- Course Expert NQ / merged portfolio forms: `course_expert/portfolio.js`
-- Course Expert quick assignment: `course_expert/quick_assignment.js`
+- Work tools tab deep-linking / shell glue: `course_expert/tabs.js`
+- Work tools Student Reports: `course_expert/student_reports.js`
+- Work tools NQ / merged portfolio forms: `course_expert/portfolio.js`
+- Work tools quick assignment: `course_expert/quick_assignment.js`
 - target course picker: `push/course_picker.js`
 - module/category dropdowns or delivery settings: `push/delivery.js`,
   `course_expert/tabs.js`

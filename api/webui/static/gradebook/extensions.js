@@ -4,7 +4,7 @@
   var gb = window.CE_GRADEBOOK || {};
   var ready = ["postForm", "showBanner", "hideBanner", "esc", "gbCourseId",
                "gbCourseName", "_markLoaded", "_needsLoad", "_clearLoaded",
-               "_clearStatus", "collectHolidays"]
+               "_clearStatus", "collectHolidays", "gbTargets", "canvasWriteReview"]
     .every(function (name) { return typeof gb[name] === "function"; });
 
   function requireReady() {
@@ -82,11 +82,23 @@
     var sids = Array.from(document.querySelectorAll(".ext-cb:checked")).map(function (cb) { return cb.value; });
     if (!sids.length) return alert("Select at least one student.");
     var days = parseInt(document.getElementById("ext-days").value, 10) || 1;
-    if (!confirm(
-      "Give " + sids.length + " student(s) +" + days + " school day(s) on:\n" +
-      '  "' + aSel.selectedOptions[0].text + '"\n\nCourse: ' + gb.gbCourseName() + "\n\n" +
-      "This creates a Canvas assignment override \u2014 their due date actually moves.\n\nContinue?"
-    )) return;
+    var ok = await gb.canvasWriteReview({
+      title: "Review due-date extension",
+      action: "Grant extra time for selected students.",
+      targets: typeof gb.gbTargets === "function" ? gb.gbTargets() : [{ id: id, name: gb.gbCourseName() }],
+      details: [
+        "Assignment: " + aSel.selectedOptions[0].text,
+        sids.length + " selected student(s)",
+        "+" + days + " school day(s)",
+      ],
+      warnings: [
+        "This creates or updates a Canvas assignment override.",
+        "The selected students' actual due date moves in Canvas.",
+        "Student notifications may be sent by Canvas depending on course settings.",
+      ],
+      confirmText: "Apply extension",
+    });
+    if (!ok) return;
     var banner = document.getElementById("ext-banner");
     gb.hideBanner(banner);
     this.disabled = true;

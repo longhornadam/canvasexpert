@@ -61,7 +61,7 @@ def save_canvas_account(base_url: str, token: str | None = None):
 
 
 # --------------------------------------------------------------------------
-# OpenRouter (FeedbackExpert LLM) — key in keyring, model machine-local
+# OpenRouter (feedback tools LLM) — key in keyring, model machine-local
 # --------------------------------------------------------------------------
 
 def get_openrouter_key() -> str | None:

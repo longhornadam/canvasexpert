@@ -195,7 +195,7 @@ async def portfolio_from_nq_csv(file: UploadFile = File(...),
     portfolio DOCX per student into the synced Student Reports folder.
 
     The CSV is parsed in memory and never written to disk; only the per-student
-    DOCX outputs land in the (FERPA-safe, gitignored/synced) reports root.
+    DOCX outputs land in the (FERPA-conscious, gitignored/synced) reports root.
     """
     title = (quiz_title or "").strip() or os.path.splitext(file.filename or "")[0] or "New Quiz"
     try:
@@ -301,7 +301,7 @@ def open_folder(path: str = Form(...)):
 @router.post("/open-file")
 def open_file(path: str = Form(...)):
     """Open a local file with its default app (local server only) — used by the
-    FeedbackExpert manual lane to open a pseudonymized bundle for MagicSchool/Copilot."""
+    Feedback tools manual lane to open a pseudonymized bundle for MagicSchool/Copilot."""
     path = os.path.normpath(path)
     if not os.path.isfile(path):
         return JSONResponse({"ok": False, "error": "File not found."})

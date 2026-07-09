@@ -1,4 +1,4 @@
-"""Offline tests for FeedbackExpert Phase A: pseudonym vault + pipeline.
+"""Offline tests for feedback tools Phase A: pseudonym vault + pipeline.
 
 No live Canvas, no LLM key, no PII (synthetic NQ fixture + temp dirs). Validates
 stable pseudonyms, lossless real->pseudo->real round-trips, that no identity leaks

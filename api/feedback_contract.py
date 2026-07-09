@@ -1,7 +1,7 @@
-"""FeedbackExpert contract and prompt helpers.
+"""Feedback tools contract and prompt helpers.
 
 These helpers define the teacher-facing scoring instructions and persona signoff
-behavior used by the FeedbackExpert pipeline and PowerGrader packet builders.
+behavior used by the feedback tools pipeline and PowerGrader packet builders.
 """
 import json
 import os
@@ -95,4 +95,3 @@ Rules:
 - Do not invent a separate signature or disclosure beyond the selected persona.
 {disclosure_rule}
 - Use the full score range; `possible` gives each item's maximum.{signoff_clause}{rubric_block}"""
-

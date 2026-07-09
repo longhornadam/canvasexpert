@@ -1,4 +1,4 @@
-"""Minimal OpenRouter client for FeedbackExpert scoring.
+"""Minimal OpenRouter client for feedback tools scoring.
 
 Split into pure builders/parsers (offline-testable) and one thin live call. The
 caller MUST run feedback_safety.scan_payload() and confirm GREEN before invoking

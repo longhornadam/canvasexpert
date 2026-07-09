@@ -17,12 +17,12 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 
 | Route | Page | JS |
 |---|---|---|
-| `/` | Dashboard (welcome, status strip, Expert + Forge launch cards) | — |
-| `/course-expert` | **Course Expert** — all push tools + downloads, in tabs | `push.js` + `push/*.js`, `course_expert/*.js` |
-| `/gradebook` | **Gradebook Expert** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
-| `/roster` | **Roster** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
+| `/` | Dashboard (welcome, status strip, common jobs, Work/Rosters/Gradebooks/Settings + Extras lanes) | — |
+| `/course-expert` | **Work tools** — all push tools + downloads, in tabs | `push.js` + `push/*.js`, `course_expert/*.js` |
+| `/gradebook` | **Gradebook tools** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
+| `/roster` | **Rosters** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
 | `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
-| `/ai-expert` | **AI Expert** — paste-ready LLM skill files | inline |
+| `/ai-expert` | **AI helper files** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
@@ -31,14 +31,14 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 
 `/assessment` is a legacy route that redirects to `/course-expert`.
 
-### Course Expert module routing
+### Work tools module routing
 
-Course Expert is split for low-token debugging.
+Work tools are split for low-token debugging.
 
 - Page/template owner: `course_expert.html`
 - Shared browser files: `push/core.js`, `push/file_sources.js`, `push/delivery.js`, `push/rubrics.js`, `push/course_picker.js`, `push.js`
 - Feature files: `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `push/download.js`
-- Course Expert page files: `course_expert/tabs.js`, `course_expert/student_reports.js`, `course_expert/portfolio.js`, `course_expert/quick_assignment.js`
+- Work tools page files: `course_expert/tabs.js`, `course_expert/student_reports.js`, `course_expert/portfolio.js`, `course_expert/quick_assignment.js`
 - Backend push routes: `routes/push.py`, `routes/push_validation.py`, `routes/push_streaming.py`
 - Service helpers: `push_service.py`, `source_materials.py`
 
@@ -88,9 +88,9 @@ Roster has backend helper splits and browser feature files.
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
 
-### FeedbackExpert module routing
+### Feedback tools module routing
 
-FeedbackExpert is privacy-sensitive and split across route, pipeline, vault, scrub,
+Feedback tools are privacy-sensitive and split across route, pipeline, vault, scrub,
 and safety helpers, plus browser feature scripts.
 
 - Route owner: `api/webui/routes/feedback.py`
@@ -142,10 +142,11 @@ Root folder for submission downloads. Each course gets its own subfolder.
 
 ## Dashboard (`/`)
 
-Landing page: a status strip (Canvas base, token state, workspace) plus launch-card
-grids — one row of **Experts** (Course / Gradebook / AI, deep links into each tab)
-and one row of **Forges** (QuizForge opens the zero-auth app; the others deep-link
-to their Course Expert tab + AI Expert authoring skill).
+Landing page: a status strip (Canvas base, token state, workspace), a common-jobs
+grid, and secondary lanes that mirror the top navigation: **PowerGrader**, **Work**,
+**Rosters**, **Gradebooks**, and **Settings / Extras**. Extras contains less-frequent
+helpers such as About, authoring helper files, the QuizForge compiler, and contract
+downloads.
 
 ### Routines
 
@@ -174,11 +175,11 @@ Routine state is stored **machine-locally** (`api/webui/config.json`, `routines`
 — NOT synced via the workspace. The synced workspace must not make one machine think
 another machine's run satisfied it.
 
-Routines have their own top-level **Routines** tab (`/routines`): a "how it works"
-strip, a card per routine with inline-editable params, and a "Build your own" panel that
-shows the `custom_routines/` folder path and the files found in it. Each routine's params
-are editable inline on its card. Every run lands in the Activity Log under action
-`routine`.
+Routines are available at `/routines` and from the **Gradebooks** navigation menu:
+a "how it works" strip, a card per routine with inline-editable params, and a "Build
+your own" panel that shows the `custom_routines/` folder path and the files found in
+it. Each routine's params are editable inline on its card. Every run lands in the
+Activity Log under action `routine`.
 
 **Auto-curve idempotency:** the curve routine skips any assignment that already has a
 non-reverted curve event, so weekly runs don't re-lift grades as new scores come in.
@@ -218,7 +219,7 @@ running their own copy who are comfortable writing Python (or having their LLM w
 
 ---
 
-## Course Expert (`/course-expert`)
+## Work Tools (`/course-expert`)
 
 One page, six tabs: **Quiz · Assignment · Page · Rubric · Download Work · Student Reports · *Quick***.
 
@@ -303,7 +304,7 @@ dates**, **Adjustments**, **Comments**.
 
 **Monitored toggle:** each student has a ☆ Monitor / ★ Monitored button on their row.
 Monitored students form a private cohort. Because the names and notes are student PII,
-they are synced to the OneDrive workspace (`settings.json`, in-tenant/FERPA-safe), not
+they are synced to the OneDrive workspace (`settings.json`, in-tenant/FERPA-conscious), not
 left in machine-local `config.json`. The **`student_reports`** routine (see Routines below) auto-refreshes
 packets for just this cohort, skipping courses whose data hasn't changed (dedupe via
 `_manifest.json`). The private note attached to a monitored student is never rendered
@@ -315,7 +316,7 @@ reported in the Info document; only the downloadable item-level work is unavaila
 
 ---
 
-## Gradebook Expert (`/gradebook`)
+## Gradebook Tools (`/gradebook`)
 
 Standalone page (burnt-orange header). Manipulates the gradebook for a single
 selected course via five tabs.
@@ -326,16 +327,17 @@ Auto-loads when a course is selected. Writes via Canvas native late-policy API.
 
 **Late-work sweep**: user picks a date range (grading-period chips default to
 current/next period). The sweep counts *school days* late — weekends + district
-holidays from the active academic calendar(s) + extra-time roster — then sets
-Canvas's `seconds_late_override`. No grade math here; Canvas applies its own policy.
-Re-running is safe; preview before writing.
+holidays from the active academic calendar(s) + Rosters extra-time settings — then
+sets Canvas's `seconds_late_override`. No grade math here; Canvas applies its own
+policy. Re-running is safe; preview before writing.
 
 Grading-period chips are labeled by `code` from the calendar (P1–P8 progress,
 T1–T4 terms for PISD) with year suffix when multi-year (e.g. `T1 (25-26)`).
 
 ### Tab 2 — Extra-time
-Per-student accommodation roster stored locally (never sent to Canvas). Sweep and
-extensions reference it automatically.
+Compatibility view for standing extra-time settings. The primary management home is
+**Rosters** (`/roster?focus=extra-time`); sweep and extensions reference those settings
+automatically.
 
 ### Tab 3 — Extensions
 Give selected students +N school days on one assignment via a Canvas assignment
@@ -382,14 +384,14 @@ files before sending them to any external chat tool.
 
 ---
 
-## AI Expert (`/ai-expert`)
+## AI Helper Files (`/ai-expert`)
 
 Equips the teacher's LLM (MagicSchool, Copilot, …) with paste-ready plain-text
 skill files, served from the AI-TA library (`/api/ai-ta/file?name=…`):
 
 - **Start here** — orients any LLM to Canvas Expert.
 - **Authoring skills** — Author a Quiz / Assignment / Page / Rubric (the Forge
-  contracts as skills). These same files power the Course Expert's inline
+  contracts as skills). These same files power the Work tools inline
   "Forge one with your LLM" copy buttons.
 - **Scoring skills** — one per rubric in the Rubrics folder; paste a skill, then
   paste essays one at a time.

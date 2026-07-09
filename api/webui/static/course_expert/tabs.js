@@ -1,19 +1,49 @@
 (function () {
   "use strict";
 
-  function activateTab(tabName) {
+  function tabButtons() {
+    return Array.prototype.slice.call(document.querySelectorAll(".ce-tab[role='tab']"));
+  }
+
+  function activateTab(tabName, options) {
+    var shouldFocus = options && options.focus;
+    var activated = false;
     document.querySelectorAll(".ce-tab").forEach(function (tab) {
-      tab.classList.toggle("active", tab.dataset.tab === tabName);
+      var isActive = tab.dataset.tab === tabName;
+      tab.classList.toggle("active", isActive);
+      tab.setAttribute("aria-selected", isActive ? "true" : "false");
+      tab.tabIndex = isActive ? 0 : -1;
+      if (isActive) {
+        activated = true;
+        if (shouldFocus) tab.focus();
+      }
     });
     document.querySelectorAll(".ce-panel").forEach(function (panel) {
-      panel.classList.toggle("active", panel.id === "ce-tab-" + tabName);
+      var isActive = panel.id === "ce-tab-" + tabName;
+      panel.classList.toggle("active", isActive);
+      panel.hidden = !isActive;
+      panel.inert = !isActive;
     });
+    return activated;
   }
 
   function bindTabButtons() {
-    document.querySelectorAll(".ce-tab").forEach(function (tab) {
+    var tabs = tabButtons();
+    tabs.forEach(function (tab) {
       tab.addEventListener("click", function () {
         activateTab(tab.dataset.tab);
+      });
+      tab.addEventListener("keydown", function (event) {
+        var keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+        if (keys.indexOf(event.key) === -1) return;
+        event.preventDefault();
+        var currentIndex = tabs.indexOf(tab);
+        var nextIndex = currentIndex;
+        if (event.key === "Home") nextIndex = 0;
+        if (event.key === "End") nextIndex = tabs.length - 1;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (currentIndex + 1) % tabs.length;
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+        activateTab(tabs[nextIndex].dataset.tab, { focus: true });
       });
     });
   }

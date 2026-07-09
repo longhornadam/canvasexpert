@@ -1,4 +1,4 @@
-"""Compatibility facade for the FeedbackExpert pipeline.
+"""Compatibility facade for the feedback tools pipeline.
 
 This module keeps the historical `feedback_pipeline` import path stable while the
 implementation lives in smaller helper modules.

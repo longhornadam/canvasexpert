@@ -1,9 +1,9 @@
-# FeedbackExpert Module Map
+# Feedback Tools Module Map
 
 Purpose: give future agents a compact map for the pseudonymized feedback/scoring
 surface without reading privacy-sensitive workflow code first.
 
-As of 2026-07-08, FeedbackExpert has solid privacy guardrails. The route layer and
+As of 2026-07-08, feedback tools have solid privacy guardrails. The route layer and
 pipeline layer are split into focused modules, with compatibility facades kept for
 older imports. Refactor only with focused tests and privacy review.
 

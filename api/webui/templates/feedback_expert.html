@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Feedback Expert — Canvas Expert{% endblock %}
+{% block title %}Feedback Tools — Canvas Expert{% endblock %}
 {% block content %}
 
 <section class="card">
-  <h2>Feedback Expert</h2>
+  <h2>Feedback tools</h2>
   <p class="hint" style="margin-top:0">
-    Use an LLM to help score student writing and draft feedback — <strong>safely and
-    honestly</strong>. Student work is <strong>pseudonymized</strong> before it ever leaves this
-    machine (real names stay in a private vault here), and any AI-drafted feedback
-    <strong>identifies itself</strong> so students always know an assistant helped.
+    Use an LLM route to draft scores and feedback for teacher review. Student work is
+    <strong>pseudonymized</strong> before it leaves this machine (real names stay in a
+    private vault here), but pseudonymized files can still contain identifying context. Review
+    SAFE files before sending and review every draft before posting to Canvas.
   </p>
   {% if not feedback_root %}
   <div class="callout warn" style="margin-top:10px">
-    No workspace configured yet — finish setup (Settings) so Feedback Expert has a place to work.
+    No workspace configured yet — finish setup (Settings) so feedback tools have a place to work.
   </div>
   {% endif %}
 </section>
@@ -47,11 +47,12 @@
 <!-- Section 1: Assignment-driven guided flow (HEADLINE)                     -->
 <!-- ====================================================================== -->
 <section class="card" style="border-left:4px solid var(--ce-blue)">
-  <h2 style="color:var(--ce-blue)">✨ Guided scoring — pick a course assignment</h2>
+  <h2 style="color:var(--ce-blue)">Guided scoring — pick a course assignment</h2>
   <p class="hint" style="margin-top:0">
     Select a course and assignment below. Canvas Expert will download the submissions,
-    pseudonymize them (safely, internally), send them to OpenRouter for scoring, and
-    produce a re-identified ToEnter CSV — all in one guided flow.
+    create pseudonymized SAFE files with real names kept in the private vault, send the
+    SAFE content to OpenRouter for draft scoring, and produce a re-identified ToEnter
+    CSV for teacher review.
   </p>
 
   <div class="guided-pickers">
@@ -94,7 +95,7 @@
   <div class="actions" style="margin-top:6px">
     <button type="button" class="small fx-open" data-folder="safe" {% if not feedback_root %}disabled{% endif %}>📁 Open SAFE folder</button>
     <button type="button" class="small fx-open" data-folder="private" {% if not feedback_root %}disabled{% endif %}>🔒 Open PRIVATE folder</button>
-    <span class="hint">SAFE = fake-name copies to paste into any LLM. PRIVATE = real names, stays on this PC.</span>
+    <span class="hint">SAFE = pseudonymized copies to review before any LLM upload. PRIVATE = real names, stays on this PC.</span>
   </div>
   <div id="gf-progress-wrap" hidden>
     <div class="progress-bar"><div class="progress-fill" id="gf-progress-fill"></div></div>
@@ -204,7 +205,7 @@
     <div class="delivery-inner">
       <p class="hint" style="margin-top:0">
         Drop each New Quiz's <em>Student Analysis</em> CSV into the Inbox, then Process. This strips
-        names/IDs into LLM-safe bundles (real identities stay in the private vault). Both the manual
+        names/IDs into pseudonymized bundles for teacher review (real identities stay in the private vault). Both the manual
         (own-tool) and OpenRouter lanes start here for NQ content.
       </p>
       <div class="actions">
@@ -223,11 +224,11 @@
       <!-- Manual lane -->
       <div class="fx-lane" id="lane-manual">
         <p class="hint" style="margin:8px 0">
-          For MagicSchool, in-tenant M365 Copilot, ChatGPT, etc. Open a pseudonymized bundle, paste it
+          For MagicSchool, in-tenant M365 Copilot, ChatGPT, etc. Review a pseudonymized bundle, paste it
           (with its <em>HOW-TO-SCORE</em> file and your rubric) into your tool, then save the tool's JSON
-          output into the FromLLM folder and re-identify.
+          output into the FromLLM folder and re-identify for review.
         </p>
-        <strong style="font-size:13px">Pseudonymized bundles — open &amp; paste into your tool</strong>
+        <strong style="font-size:13px">Pseudonymized bundles — review &amp; paste into your tool</strong>
         <div id="manual-bundles" style="margin:8px 0 14px"></div>
         <ol class="fx-steps">
           <li><strong>Paste &amp; score</strong> in your tool, then save its JSON result into FromLLM.
@@ -249,9 +250,9 @@
       <!-- OpenRouter lane (bundles from CSV) -->
       <div class="fx-lane" id="lane-openrouter" hidden>
         <p class="hint" style="margin:8px 0">
-          One click: send 🟢 pseudonymized bundles to an LLM and get scored feedback back. A bundle is
+          Send reviewed, green-status pseudonymized bundles to OpenRouter for draft scored feedback. A bundle is
           <strong>only sendable when it shows 🟢 green</strong> — Send stays locked otherwise. Calls a
-          paid API; you'll confirm the cost first.
+          paid API; you'll confirm the cost first, and drafts still require teacher review before posting.
         </p>
 
         <label>Rubric to score by

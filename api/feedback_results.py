@@ -1,4 +1,4 @@
-"""FeedbackExpert result parsing, validation, and re-identification helpers."""
+"""Feedback tools result parsing, validation, and re-identification helpers."""
 import csv
 import io
 import json
@@ -193,4 +193,3 @@ def reidentified_csv(rows: list) -> str:
         w.writerow([r["real_name"], r["canvas_id"], r["sis_id"], r["item_id"],
                     "" if r["score"] is None else r["score"], r["feedback"], r["disclosure"]])
     return buf.getvalue()
-

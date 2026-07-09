@@ -1,6 +1,6 @@
 # Feedback Scoring Contract - v1
 
-The data contract between **any** scoring LLM and FeedbackExpert. It is deliberately
+The data contract between **any** scoring LLM and Canvas Expert feedback tools. It is deliberately
 LLM-agnostic: OpenRouter, a teacher's own ChatGPT/Claude/MagicSchool session, or a
 script can all produce conforming output. Phase C (Push to Canvas) consumes exactly
 this output as its input, so this contract is the seam that decouples scoring from
@@ -93,7 +93,7 @@ Rules enforced by `validate_results`:
 ## How Phase C (Push to Canvas) consumes this - built
 
 Implemented in `api/webui/routes/feedback.py` (`/api/feedback/push/preview` and
-`/push/apply`) and surfaced as the **Push to Canvas** panel on the Feedback Expert page.
+`/push/apply`) and surfaced as the **Push to Canvas** panel on the feedback tools page.
 
 1. Teacher pastes the conforming results JSON into the Push panel.
 2. `validate_results(results, bundle, vault)` must be `ok` (hard errors block; warnings shown).
@@ -111,7 +111,7 @@ Implemented in `api/webui/routes/feedback.py` (`/api/feedback/push/preview` and
    ```
 
    Works on Assignments today (PAT in active courses). New Quizzes write-back stays parked
-   (same PAT/403 limit as the report pull). Late penalties stay in Gradebook Expert's
+   (same PAT/403 limit as the report pull). Late penalties stay in gradebook tools'
    late-sweep, by design.
 6. An audit line per push lands in `_audit/` - content-free (counts only), never names/scores.
 

@@ -13,6 +13,7 @@
     "targetCourses",
     "collectSettings",
     "generatePhysical",
+    "canvasWriteReview",
   ].every(function (name) { return typeof push[name] === "function"; });
 
   var fileSel = document.getElementById("quizfile");
@@ -188,19 +189,39 @@
     }
   });
 
-  document.getElementById("btn-push")?.addEventListener("click", function () {
+  document.getElementById("btn-push")?.addEventListener("click", async function () {
     if (!requireReady()) return;
     var targets = push.targetCourses();
     var path = fileSel?.value;
     if (!targets.length) return alert("Check at least one course on the right.");
     if (!path) return alert("Pick a quiz file first.");
     var fname = path.split(/[\\/]/).pop();
-    var list = targets.map(function (t) { return "  • " + t.name + " (#" + t.id + ")"; }).join("\n");
-    if (!confirm(
-      'Create a LIVE, UNPUBLISHED quiz from:\n  "' + fname + '"\n\n' +
-      "in " + targets.length + " course(s):\n" + list + "\n\n" +
-      "Canvas: " + window.QF_CANVAS_BASE + "\n\nContinue?"
-    )) return;
+    var settingsObj = {};
+    try { settingsObj = JSON.parse(push.collectSettings() || "{}"); } catch (e) { settingsObj = {}; }
+    var details = [
+      "Source file: " + fname,
+      "Canvas instance: " + (window.QF_CANVAS_BASE || "(configured Canvas)"),
+    ];
+    if (settingsObj.due_at) details.push("Due: " + settingsObj.due_at);
+    if (settingsObj.unlock_at) details.push("Unlock: " + settingsObj.unlock_at);
+    if (settingsObj.lock_at) details.push("Lock: " + settingsObj.lock_at);
+    if (settingsObj.module_name) details.push("Add to module: " + settingsObj.module_name);
+    if (settingsObj.assignment_group_name) details.push("Assignment group: " + settingsObj.assignment_group_name);
+    var warnings = [
+      settingsObj.published ? "Quiz will be published for students." : "Quiz will be created unpublished.",
+    ];
+    if (settingsObj.post_to_sis) warnings.push("Post to SIS is enabled where Canvas supports it.");
+    if (settingsObj.shuffle_questions || settingsObj.shuffle_answers) warnings.push("Shuffle settings will affect student attempts.");
+    if (settingsObj.hide_results) warnings.push("Student result visibility will be restricted.");
+    var ok = await push.canvasWriteReview({
+      title: "Review live quiz push",
+      action: "Create a live Canvas quiz from \"" + fname + "\".",
+      targets: targets,
+      details: details,
+      warnings: warnings,
+      confirmText: "Create quiz in Canvas",
+    });
+    if (!ok) return;
     var log = push.showLog(result);
     push.hideBanner(document.getElementById("push-banner"));
     push.setBusy(true);
@@ -227,7 +248,7 @@
     addVariantRow("", "");
   });
 
-  document.getElementById("btn-push-variants")?.addEventListener("click", function () {
+  document.getElementById("btn-push-variants")?.addEventListener("click", async function () {
     if (!requireReady()) return;
     var targets = push.targetCourses();
     if (!targets.length) return alert("Check at least one course on the right.");
@@ -242,18 +263,25 @@
     }).filter(function (v) { return v.path; });
     if (variants.length < 2) return alert("Add at least 2 tier rows with files selected.");
 
+    var ok = await push.canvasWriteReview({
+      title: "Review tiered quiz push",
+      action: "Create " + variants.length + " tiered quiz variant(s) in Canvas.",
+      targets: targets,
+      details: variants.map(function (v) {
+        return (v.groupName || "Canvas group") + ": " + v.path.split(/[\\/]/).pop() +
+          " (" + v.studentIds.length + " student" + (v.studentIds.length === 1 ? "" : "s") + ")";
+      }),
+      warnings: [
+        "Each tier is assigned to the selected Canvas group membership.",
+        "Review publish and notification settings in Canvas after creation if needed.",
+      ],
+      confirmText: "Push tiered quizzes",
+    });
+    if (!ok) return;
+
     var log = push.showLog(document.getElementById("variants-result"));
     push.hideBanner(document.getElementById("variants-banner"));
     push.setBusy(true);
-
-    var list = targets.map(function (t) { return "  • " + t.name + " (#" + t.id + ")"; }).join("\n");
-    var varList = variants.map(function (v) {
-      return "  • " + v.groupName + ": " + v.path.split(/[\\/]/).pop();
-    }).join("\n");
-    if (!confirm(
-      "Push " + variants.length + " tier variants to " + targets.length + " course(s):\n" +
-      list + "\n\nVariants:\n" + varList + "\n\nContinue?"
-    )) { push.setBusy(false); return; }
 
     if (targets.length === 1) {
       var t = targets[0];

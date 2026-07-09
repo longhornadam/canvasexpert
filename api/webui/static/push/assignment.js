@@ -19,6 +19,7 @@
   var afAutoScore = document.getElementById("af-autoscore");
   var afAutoPush = document.getElementById("af-autoscore-push");
   var afAutoScoreHint = document.getElementById("af-autoscore-hint");
+  var afScheduledGrading = document.getElementById("af-scheduled-grading");
 
   function requireReady() {
     if (ready) return true;
@@ -44,8 +45,17 @@
       afAutoPush.disabled = !canAutoPush;
       if (!canAutoPush) afAutoPush.checked = false;
     }
+    if (afScheduledGrading) {
+      afScheduledGrading.classList.toggle("is-disabled", !hasDue);
+    }
     if (afAutoScoreHint) {
-      afAutoScoreHint.textContent = hasDue ? "(optional)" : "(needs a due date)";
+      if (!hasDue) {
+        afAutoScoreHint.textContent = "Requires a due date. Add one above to enable these per-assignment opt-ins.";
+      } else if (afAutoScore.checked) {
+        afAutoScoreHint.textContent = "Scheduled Auto-Score will create draft AI suggestions after the due date. Auto-post remains limited to eligible cases only.";
+      } else {
+        afAutoScoreHint.textContent = "Optional per-assignment controls. They are never enabled globally or by default.";
+      }
     }
   }
 

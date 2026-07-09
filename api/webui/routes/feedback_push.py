@@ -1,4 +1,4 @@
-"""FeedbackExpert push-preview and Canvas write routes."""
+"""Feedback tools push-preview and Canvas write routes."""
 import json
 import os
 

@@ -4,7 +4,7 @@
   var gb = window.CE_GRADEBOOK || {};
   var ready = ["postForm", "_renderBanner", "esc", "gbCourseId", "gbCourseName",
                "gbTargets", "_markLoaded", "_needsLoad", "hideBanner", "showBanner",
-               "_clearStatus"]
+               "_clearStatus", "canvasWriteReview"]
     .every(function (name) { return typeof gb[name] === "function"; });
 
   function requireReady() {
@@ -69,10 +69,18 @@
       lateOn ? "late work: \u2212" + pct + "% per " + intv + ", floor " + floor + "%" : "late deduction: OFF",
       missOn ? "missing work scored at " + missAt + "%" : "missing deduction: OFF",
     ].join("\n  ");
-    if (!confirm(
-      "Apply this late policy:\n  " + desc + "\n\nto: " + gb.gbCourseName() + "\n\n" +
-      "Canvas will recalculate late grades automatically.\n\nContinue?"
-    )) return;
+    var ok = await gb.canvasWriteReview({
+      title: "Review Canvas late policy",
+      action: "Apply this Canvas late policy to the selected course.",
+      targets: targets,
+      details: desc.split("\n  "),
+      warnings: [
+        "Future submissions and grades are affected by Canvas late policy.",
+        "Canvas may recalculate late and missing penalties automatically.",
+      ],
+      confirmText: "Apply late policy",
+    });
+    if (!ok) return;
     var banner = document.getElementById("lp-banner");
     gb.hideBanner(banner);
     this.disabled = true;

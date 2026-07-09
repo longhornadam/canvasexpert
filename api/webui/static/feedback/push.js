@@ -17,6 +17,62 @@
   var pcRows = document.getElementById("pc-rows");
   var pcVal = document.getElementById("pc-validation");
 
+  function canvasWriteReview(options) {
+    options = options || {};
+    return new Promise(function (resolve) {
+      var previousFocus = document.activeElement;
+      var backdrop = document.createElement("div");
+      var titleId = "fb-review-title-" + Math.random().toString(36).slice(2);
+      var targets = options.targets || [];
+      var details = options.details || [];
+      var warnings = options.warnings || [];
+      backdrop.className = "ce-review-backdrop";
+      var targetHtml = targets.length
+        ? '<ul class="ce-review-list">' + targets.map(function (t) {
+          var label = t.name || t.label || "Target";
+          var id = t.id ? " (#" + t.id + ")" : "";
+          return "<li>" + esc(label) + esc(id) + "</li>";
+        }).join("") + "</ul>"
+        : '<p class="hint">No target selected.</p>';
+      var detailsHtml = details.length
+        ? '<ul class="ce-review-list">' + details.map(function (d) { return "<li>" + esc(d) + "</li>"; }).join("") + "</ul>"
+        : "";
+      var warningsHtml = warnings.length
+        ? '<div class="ce-review-warning"><strong>Canvas effects</strong><ul>' +
+          warnings.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("") + "</ul></div>"
+        : "";
+      backdrop.innerHTML =
+        '<div class="ce-review-dialog" role="dialog" aria-modal="true" aria-labelledby="' + titleId + '">' +
+          '<h3 id="' + titleId + '">' + esc(options.title || "Review Canvas write") + "</h3>" +
+          '<p class="ce-review-action">' + esc(options.action || "Review this Canvas change before continuing.") + "</p>" +
+          '<div class="ce-review-section"><strong>Target</strong>' + targetHtml + "</div>" +
+          (detailsHtml ? '<div class="ce-review-section"><strong>Change</strong>' + detailsHtml + "</div>" : "") +
+          warningsHtml +
+          '<div class="ce-review-actions">' +
+            '<button type="button" class="secondary ce-review-cancel">' + esc(options.cancelText || "Cancel") + "</button>" +
+            '<button type="button" class="danger ce-review-confirm">' + esc(options.confirmText || "Write to Canvas") + "</button>" +
+          "</div>" +
+        "</div>";
+      function close(ok) {
+        document.removeEventListener("keydown", onKey);
+        backdrop.remove();
+        if (previousFocus && typeof previousFocus.focus === "function") previousFocus.focus();
+        resolve(ok);
+      }
+      function onKey(event) {
+        if (event.key === "Escape") close(false);
+      }
+      backdrop.addEventListener("click", function (event) {
+        if (event.target === backdrop) close(false);
+      });
+      backdrop.querySelector(".ce-review-cancel").addEventListener("click", function () { close(false); });
+      backdrop.querySelector(".ce-review-confirm").addEventListener("click", function () { close(true); });
+      document.addEventListener("keydown", onKey);
+      document.body.appendChild(backdrop);
+      backdrop.querySelector(".ce-review-confirm").focus();
+    });
+  }
+
   function refreshBtn() {
     if (pcPreview) {
       pcPreview.disabled = !(pcCourse && pcAssign && pcCourse.value && pcAssign.value && pcJson && pcJson.value.trim());
@@ -132,15 +188,19 @@
 
   var applyBtn = document.getElementById("pc-apply");
   if (applyBtn && pcRows && pcCourse && pcAssign) {
-    applyBtn.addEventListener("click", function () {
+    applyBtn.addEventListener("click", async function () {
       var rows = pcRows._rows || [];
       var selected = [];
+      var scoreCount = 0;
+      var commentCount = 0;
       pcRows.querySelectorAll("tr").forEach(function (tr) {
         var cb = tr.querySelector(".pc-pick");
         if (cb && cb.checked) {
           var r = rows[parseInt(tr.dataset.i, 10)];
           if (r) {
             selected.push({ canvas_id: r.canvas_id, score: r.score, feedback: r.feedback });
+            if (r.score != null) scoreCount += 1;
+            if (r.feedback) commentCount += 1;
           }
         }
       });
@@ -149,7 +209,26 @@
         if (st) st.textContent = "Nothing selected.";
         return;
       }
-      if (!confirm("Post " + selected.length + " grade(s) + comment(s) to Canvas?\n\nThis changes real grades and notifies students.")) return;
+      var courseText = pcCourse.selectedOptions[0]?.text || "Selected course";
+      var assignmentText = pcAssign.selectedOptions[0]?.text || "Selected assignment";
+      var ok = await canvasWriteReview({
+        title: "Review feedback posting",
+        action: "Post reviewed feedback results to Canvas.",
+        targets: [{ id: pcCourse.value, name: courseText }],
+        details: [
+          "Assignment: " + assignmentText,
+          selected.length + " selected submission(s)",
+          scoreCount + " grade update(s)",
+          commentCount + " comment update(s)",
+        ],
+        warnings: [
+          "This writes real grades and comments to Canvas.",
+          "Canvas may notify students about posted grades/comments.",
+          "Only checked, resolved preview rows will be posted.",
+        ],
+        confirmText: "Post grades/comments",
+      });
+      if (!ok) return;
       var btn = this;
       btn.disabled = true;
       if (st) st.textContent = "Posting…";

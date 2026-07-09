@@ -24,6 +24,49 @@
       });
   }
 
+  function courseListSummary(courses) {
+    var shown = courses.slice(0, 3).map(function (c) { return push.esc(c.name || "Untitled course"); });
+    var more = courses.length > shown.length ? " <span class=\"course-scope-more\">+" + (courses.length - shown.length) + " more</span>" : "";
+    return shown.join(", ") + more;
+  }
+
+  function selectedDownloadCount() {
+    return document.querySelectorAll(".dl-cb:checked:not(:disabled)").length;
+  }
+
+  function renderCourseScopeSummaries() {
+    var targets = targetCourses();
+    var focusName = currentCourseName();
+    document.querySelectorAll("[data-course-scope]").forEach(function (el) {
+      var mode = el.dataset.courseScope || "push";
+      if (mode === "download") {
+        var count = selectedDownloadCount();
+        var html = focusName
+          ? "<strong>Downloads from focused course only:</strong> " + push.esc(focusName)
+          : "<strong>Downloads from focused course only:</strong> choose a focused course.";
+        if (count) {
+          html += ' <span class="course-scope-detail">Selected assignments: ' + count + "</span>";
+        }
+        el.innerHTML = html;
+        return;
+      }
+
+      var actionLabel = mode === "quiz-diff" ? "Will push tiers to" : "Will push to";
+      var html;
+      if (targets.length) {
+        html = "<strong>" + actionLabel + " " + targets.length + " course" +
+          (targets.length === 1 ? "" : "s") + ":</strong> " + courseListSummary(targets);
+      } else {
+        html = "<strong>No target courses selected.</strong> Check one or more courses before pushing.";
+      }
+      if (focusName) {
+        html += ' <span class="course-scope-detail">Focused: ' + push.esc(focusName) +
+          " for modules/categories.</span>";
+      }
+      el.innerHTML = html;
+    });
+  }
+
   function readSavedState() {
     try {
       var parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
@@ -74,6 +117,7 @@
       else if (checked.length === 1) label.textContent = fn || "1 selected";
       else label.textContent = (fn ? fn + " " : "") + "· " + checked.length + " selected";
     }
+    renderCourseScopeSummaries();
   }
 
   function loadCourseFolder(courseName) {
@@ -234,9 +278,11 @@
     targetCourses: targetCourses,
     loadCourseFolder: loadCourseFolder,
     setFocus: setFocus,
+    renderCourseScopeSummaries: renderCourseScopeSummaries,
   });
   window.targetCourses = targetCourses;
 
   bindChecklist();
   loadAllCoursesIntoChecklist();
+  renderCourseScopeSummaries();
 })();
