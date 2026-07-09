@@ -199,21 +199,106 @@ We split planning from implementation to save tokens, compute, and cost:
 - **Toyota = lower-cost implementation agent.** Use for well-scoped implementation
   where the plan is already clear.
 
-**A plan handed off to a Toyota implementer must be self-contained** so the cheap agent
-never has to round-trip back to the planner. A good handoff states:
+The boundary is decision authority, not merely coding difficulty. If two competent
+engineers could make different choices that produce materially different behavior,
+architecture, safety, persistence, or user experience, Ferrari must make and document
+that choice before implementation is delegated.
 
-- Exact files to change (paths) and the function/class signatures involved
-- The behavior change, with edge cases called out
-- The test that must pass (or the new test to write) and how to run it
-- Acceptance criteria + any guardrail that applies (token/FERPA/district/local-only)
-- What **not** to touch (e.g. the `LLM_Modules` contracts)
+### Ferrari decision authority
 
-If a change is security-sensitive or guardrail-adjacent, keep it in the Ferrari lane.
+Ferrari must decide and specify:
+
+- Product behavior, workflow sequence, user-visible semantics, and navigation
+- Architecture, module ownership, dependency placement, initialization/load order,
+  and public interfaces
+- Cross-cutting abstractions, compatibility requirements, and migration/removal order
+- State ownership, persistence, enablement predicates, and invariants
+- Security, privacy, FERPA, external transmission, credentials, and live Canvas-write
+  behavior
+- Contracts, schemas, error behavior, scope exclusions, and rollback boundaries
+- Verification strategy, including which positive, negative, integration, and runtime
+  evidence actually proves the change
+- Commit sequencing and whether work may be grouped
+
+If any of those decisions remain open, the task is not Toyota-ready. Ferrari must also
+inspect the actual integration points before writing the handoff; naming a file without
+resolving load order, ownership, or caller behavior is not sufficient architecture.
+
+Security-sensitive, guardrail-adjacent, external-transmission, live-write, shared
+cross-page initialization, and public-contract changes stay in the Ferrari lane unless
+the remaining implementation is purely mechanical after Ferrari has fully specified and
+reviewed the design.
+
+### Toyota implementation authority
+
+Toyota may decide only local implementation details that cannot alter the specified
+behavior or architecture, such as:
+
+- Private helper decomposition and local variable names
+- Equivalent syntax behind a specified interface
+- Mechanical call-site migration
+- Styling values within explicit constraints
+- Fixture organization for already-specified assertions
+- Direct cleanup required to complete the specified change
+
+Toyota must not invent or replace abstractions, reinterpret product or safety wording,
+choose a persistence model, broaden scope, weaken the verification oracle, or make an
+unresolved product/architecture/safety decision.
+
+### Mandatory Toyota escalation
+
+Toyota must stop and report the issue instead of guessing when:
+
+- A named insertion point, symbol, interface, or assumption does not exist
+- Existing behavior contradicts the handoff
+- Multiple materially different implementations satisfy the prose
+- Satisfying the handoff requires changing another subsystem or public contract
+- A prescribed test cannot prove the claimed behavior
+- A guardrail or external side effect is involved but not completely specified
+- It discovers a regression outside the authorized repair scope
+
+### Toyota-ready handoff standard
+
+**A plan handed to Toyota must be self-contained.** It must include:
+
+- One bounded objective and, by default, one commit
+- Exact files, symbols, interfaces, and insertion/load order
+- Exact behavior, state transitions or pseudocode, edge cases, and invariants
+- Exact forbidden changes and out-of-scope systems
+- Exact positive and negative tests, portable test requirements, and commands
+- Required integration/runtime checks when templates, JavaScript, CSS, initialization,
+  or cross-module wiring are involved
+- Expected evidence in the implementer's reply
+- Explicit escalation/stop conditions
+
+A handoff is not self-contained if Toyota must choose among materially different
+user-visible, architectural, safety, persistence, or verification outcomes.
+
+Source-text tests do not establish WebUI correctness. Changes to shared browser scripts,
+templates, navigation, initialization, or safety controls require loading every affected
+route in the rendered local app, checking the required globals/state, and confirming zero
+new browser-console errors. Backend pytest results cannot substitute for this check.
+
+Tests and tools must be worktree-independent: derive repository paths from the executing
+file or current workspace and never commit a developer-specific absolute path.
+
+### Acceptance authority and sequencing
+
+- Toyota implements one accepted handoff at a time, reports evidence, and stops.
+- Toyota does not declare architectural acceptance, archive its own handoff, or begin a
+  dependent handoff.
+- Ferrari reviews the diff, tests, runtime behavior, and required evidence before accepting
+  the slice or issuing the next one.
+- Only Ferrari or the user may move an accepted handoff to `docs/handoffs/archive/`.
+- A passing test suite is evidence, not completion; unmet acceptance criteria keep the
+  handoff active.
 
 ## Handoffs and docs
 
 - New active implementation handoffs belong in `docs/handoffs/`.
 - Completed or historical handoffs belong in `docs/handoffs/archive/`.
+- Toyota implementers must leave active handoffs in place. Only Ferrari or the user may
+  archive a handoff after reviewing its diff and acceptance evidence.
 - Do not leave stale active specs at the top level after implementation.
 - Handoffs are implementation instructions, not canonical architecture. Once a handoff
   is implemented, update this file, `api/README.md`, or `api/webui/README.md` if the
