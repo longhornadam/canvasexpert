@@ -38,7 +38,7 @@ def get_download_root():
 @router.get("/assignments-full")
 def list_assignments_full(course_id: str):
     """All assignments for a course — used by the download picker.
-    Returns id, name, submission_types, due_at, points_possible.
+    Returns id, name, submission_types, due_at, points_possible, is_quiz, quiz_kind.
     """
     hdrs, base = _canvas_headers()
     if not hdrs:
@@ -59,13 +59,62 @@ def list_assignments_full(course_id: str):
             if 'rel="next"' in part:
                 url = part.split(";")[0].strip().strip("<>")
                 break
+    # Pre-build a lookup for assignment group names from the full Canvas
+    # response. The list endpoint often includes inline group name data.
+    group_names: dict[str, str] = {}
+    for a in results:
+        gid = a.get("assignment_group_id")
+        if gid is not None:
+            gid_str = str(gid)
+            # Canvas sometimes embeds a mini assignment_group object
+            inline = a.get("assignment_group") or {}
+            if isinstance(inline, dict) and inline.get("name"):
+                group_names[gid_str] = inline["name"]
+            elif gid_str not in group_names:
+                group_names[gid_str] = ""  # will be resolved later
+
+    def _is_quiz(a: dict) -> bool:
+        st = a.get("submission_types") or []
+        return bool(
+            "online_quiz" in st
+            or a.get("quiz_id") is not None
+            or a.get("quiz_type") is not None
+            or a.get("is_quiz_lti_assignment") is True  # New Quizzes
+        )
+
+    def _quiz_kind(a: dict) -> str:
+        st = a.get("submission_types") or []
+        qt = a.get("quiz_type") or ""
+        if a.get("is_quiz_lti_assignment") is True:
+            return "new_quiz"
+        if "online_quiz" in st:
+            if "new_quiz" in qt.lower() or qt.lower() == "quizzes.next":
+                return "new_quiz"
+            # external_tool with a quiz-like URL can hint new quiz
+            ext = a.get("external_tool_tag_attributes") or {}
+            if isinstance(ext, dict):
+                url = (ext.get("url") or "").lower()
+                content_type = (ext.get("content_type") or "").lower()
+                if "quiz" in url or "quiz" in content_type or "new_quiz" in content_type:
+                    return "new_quiz"
+            return "classic_quiz"
+        if a.get("quiz_id") is not None or a.get("quiz_type") is not None:
+            return "quiz"
+        return ""
+
     assignments = [
         {
-            "id":               str(a["id"]),
-            "name":             a.get("name", ""),
-            "submission_types": a.get("submission_types") or [],
-            "due_at":           (a.get("due_at") or "")[:10],
-            "points_possible":  a.get("points_possible"),
+            "id":                   str(a["id"]),
+            "name":                 a.get("name", ""),
+            "submission_types":     a.get("submission_types") or [],
+            "due_at":               (a.get("due_at") or "")[:10],
+            "points_possible":      a.get("points_possible"),
+            "assignment_group_id":  str(a.get("assignment_group_id") or ""),
+            "assignment_group_name":
+                group_names.get(str(a["assignment_group_id"]), "")
+                if a.get("assignment_group_id") is not None else "",
+            "is_quiz":              _is_quiz(a),
+            "quiz_kind":            _quiz_kind(a),
         }
         for a in results
     ]

@@ -8,6 +8,11 @@
   var form = document.getElementById('pg-start-form');
   var courseEl = document.getElementById('pg-course');
   var asnEl = document.getElementById('pg-assignment');
+  var asnSearchEl = document.getElementById('pg-assignment-search');
+  var asnGroupByEl = document.getElementById('pg-assignment-group-by');
+  var asnToolsEl = document.getElementById('pg-assignment-tools');
+  var loadedAssignments = [];
+  var unsupportedQuizAssignments = [];
   var modeInput = document.getElementById('pg-mode');
   var modeChoices = Array.from(document.querySelectorAll('input[name="pg-mode-choice"]'));
   var routeCards = Array.from(document.querySelectorAll('.pg-route-card'));
@@ -18,6 +23,7 @@
   var startBtn = document.getElementById('pg-start-btn');
   var status = document.getElementById('pg-start-status');
   var aiLabel = document.getElementById('pg-ai-label');
+  var unsupportedHintEl = document.getElementById('pg-assignment-unsupported-hint');
 
   function modeLabel(mode) {
     if (mode === 'packet') return 'Use My AI Chat';
@@ -57,6 +63,162 @@
 
   function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
+  /* ── Assignment picker helpers ────────────────────────────────────── */
+  var SUBMISSION_TYPE_LABELS = {
+    online_text_entry: "Text entry",
+    online_upload: "File upload",
+    online_url: "Website URL",
+    media_recording: "Media",
+    student_annotation: "Student annotation",
+    online_quiz: "Quiz"
+  };
+
+  function isPowerGraderStartable(a) {
+    var t = a.submission_types || [];
+    return t.some(function(x){ return ['online_text_entry','online_upload','online_url','media_recording','student_annotation'].indexOf(x) > -1; });
+  }
+
+  function isQuizAssignment(a) {
+    if (a.is_quiz) return true;
+    // Client-side fallback
+    var t = a.submission_types || [];
+    return t.indexOf('online_quiz') > -1 || a.quiz_id || a.quiz_type || a.is_quiz_lti_assignment;
+  }
+
+  function unsupportedQuizLabel(a) {
+    var kind = a.quiz_kind || "";
+    if (kind === "new_quiz") return "New Quiz";
+    if (kind === "classic_quiz") return "Classic Quiz";
+    return "Quiz";
+  }
+
+  function assignmentDueLabel(a) {
+    return a.due_at ? " (due " + a.due_at + ")" : "";
+  }
+
+  function submissionTypeLabel(a) {
+    var types = a.submission_types || [];
+    var gradeable = types.filter(function(t){ return SUBMISSION_TYPE_LABELS[t]; });
+    if (gradeable.length === 0) return "Unknown";
+    if (gradeable.length === 1) return SUBMISSION_TYPE_LABELS[gradeable[0]];
+    return "Mixed";
+  }
+
+  function assignmentGroupLabel(a) {
+    return (a.assignment_group_name || "").trim() || ("Assignment group " + (a.assignment_group_id || "?"));
+  }
+
+  function assignmentMatchesSearch(a, query) {
+    if (!query) return true;
+    return a.name.toLowerCase().indexOf(query.toLowerCase()) > -1;
+  }
+
+  function renderAssignmentOptions() {
+    if (!asnEl) return;
+    var query = asnSearchEl ? asnSearchEl.value : "";
+    var groupBy = asnGroupByEl ? asnGroupByEl.value : "recent";
+    var selectedVal = asnEl.value;
+
+    var visible = loadedAssignments.filter(function(a){ return assignmentMatchesSearch(a, query); });
+    var visibleQuizzes = unsupportedQuizAssignments.filter(function(a){ return assignmentMatchesSearch(a, query); });
+    var hasVisibleQuizzes = visibleQuizzes.length > 0;
+
+    // Show/hide hint about unsupported quizzes
+    if (unsupportedHintEl) {
+      unsupportedHintEl.hidden = !hasVisibleQuizzes;
+    }
+
+    if (visible.length === 0 && !hasVisibleQuizzes) {
+      asnEl.innerHTML = '<option value="">' + (loadedAssignments.length === 0 && unsupportedQuizAssignments.length === 0
+        ? 'No gradeable assignments found'
+        : 'No matching gradeable assignments') + '</option>';
+      asnEl.disabled = false;
+      return;
+    }
+
+    var html = '<option value="">— select an assignment —</option>';
+    if (groupBy === "recent") {
+      html += visible.map(function(a){
+        var sel = a.id === selectedVal ? ' selected' : '';
+        return '<option value="' + esc(a.id) + '"' + sel + '>' + esc(a.name) + esc(assignmentDueLabel(a)) + '</option>';
+      }).join('');
+      // Append unsupported quizzes as a single optgroup
+      if (hasVisibleQuizzes) {
+        html += '<optgroup label="Quizzes - not supported yet">';
+        html += visibleQuizzes.map(function(a){
+          return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported yet)' + '</option>';
+        }).join('');
+        html += '</optgroup>';
+      }
+    } else if (groupBy === "assignment_group") {
+      var groups = {};
+      visible.forEach(function(a){
+        var g = assignmentGroupLabel(a);
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(a);
+      });
+      Object.keys(groups).sort().forEach(function(g){
+        html += '<optgroup label="' + esc(g) + '">';
+        html += groups[g].map(function(a){
+          var sel = a.id === selectedVal ? ' selected' : '';
+          return '<option value="' + esc(a.id) + '"' + sel + '>' + esc(a.name) + esc(assignmentDueLabel(a)) + '</option>';
+        }).join('');
+        html += '</optgroup>';
+      });
+      // Append unsupported quizzes at the end
+      if (hasVisibleQuizzes) {
+        html += '<optgroup label="Quizzes - not supported yet">';
+        html += visibleQuizzes.map(function(a){
+          return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported yet)' + '</option>';
+        }).join('');
+        html += '</optgroup>';
+      }
+    } else if (groupBy === "submission_type") {
+      var stGroups = {};
+      visible.forEach(function(a){
+        var st = submissionTypeLabel(a);
+        if (!stGroups[st]) stGroups[st] = [];
+        stGroups[st].push(a);
+      });
+      var typeOrder = ["Text entry", "File upload", "Website URL", "Media", "Student annotation", "Mixed", "Unknown"];
+      typeOrder.forEach(function(st){
+        if (!stGroups[st]) return;
+        html += '<optgroup label="' + esc(st) + '">';
+        html += stGroups[st].map(function(a){
+          var sel = a.id === selectedVal ? ' selected' : '';
+          return '<option value="' + esc(a.id) + '"' + sel + '>' + esc(a.name) + esc(assignmentDueLabel(a)) + '</option>';
+        }).join('');
+        html += '</optgroup>';
+      });
+      // Any leftover types not in the order list
+      Object.keys(stGroups).forEach(function(st){
+        if (typeOrder.indexOf(st) > -1) return;
+        html += '<optgroup label="' + esc(st) + '">';
+        html += stGroups[st].map(function(a){
+          var sel = a.id === selectedVal ? ' selected' : '';
+          return '<option value="' + esc(a.id) + '"' + sel + '>' + esc(a.name) + esc(assignmentDueLabel(a)) + '</option>';
+        }).join('');
+        html += '</optgroup>';
+      });
+      // Append unsupported quizzes at the end
+      if (hasVisibleQuizzes) {
+        html += '<optgroup label="Quizzes - not supported yet">';
+        html += visibleQuizzes.map(function(a){
+          return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported yet)' + '</option>';
+        }).join('');
+        html += '</optgroup>';
+      }
+    }
+
+    asnEl.innerHTML = html;
+    asnEl.disabled = false;
+
+    // If the previously selected value no longer appears, clear it
+    if (selectedVal && !Array.from(asnEl.options).some(function(o){ return o.value === selectedVal; })) {
+      asnEl.value = "";
+    }
+  }
+
   function renderStartError(d) {
     if (d.privacy_steps && typeof pg.renderPrivacySteps === 'function') {
       pg.renderPrivacySteps(d.privacy_steps);
@@ -70,11 +232,20 @@
     if (!cid) {
       asnEl.disabled = true;
       asnEl.innerHTML = '<option value="">— select course first —</option>';
+      loadedAssignments = [];
+      unsupportedQuizAssignments = [];
+      if (asnToolsEl) asnToolsEl.hidden = true;
+      if (asnSearchEl) asnSearchEl.value = "";
+      if (unsupportedHintEl) unsupportedHintEl.hidden = true;
       loadSessions();
       return;
     }
     asnEl.disabled = true;
     asnEl.innerHTML = '<option value="">Loading…</option>';
+    if (asnToolsEl) asnToolsEl.hidden = true;
+    if (unsupportedHintEl) unsupportedHintEl.hidden = true;
+    loadedAssignments = [];
+    unsupportedQuizAssignments = [];
     fetch('/api/assignments-full?course_id=' + encodeURIComponent(cid))
       .then(function(r){ return r.json(); })
       .then(function(d){
@@ -82,13 +253,15 @@
           asnEl.innerHTML = '<option value="">— failed to load —</option>';
           return;
         }
-        var gradeable = d.assignments.filter(function(a){
-          var t = a.submission_types || [];
-          return t.some(function(x){ return ['online_text_entry','online_upload','online_url','media_recording','student_annotation'].indexOf(x) > -1; });
-        });
-        asnEl.innerHTML = '<option value="">— select an assignment —</option>' +
-          gradeable.map(function(a){ return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join('');
-        asnEl.disabled = false;
+        var loaded = d.assignments || [];
+
+        var gradeable = loaded.filter(isPowerGraderStartable);
+        var quizzes = loaded.filter(function(a){ return isQuizAssignment(a) && !isPowerGraderStartable(a); });
+        loadedAssignments = gradeable;
+        unsupportedQuizAssignments = quizzes;
+        if (asnSearchEl) asnSearchEl.value = "";
+        renderAssignmentOptions();
+        if (asnToolsEl && gradeable.length > 0) asnToolsEl.hidden = false;
         loadSessions(cid);
       })
       .catch(function(){ asnEl.innerHTML = '<option value="">Error loading assignments</option>'; });
@@ -178,6 +351,8 @@
   modeChoices.forEach(function(el){ el.addEventListener('change', updateRouteMode); });
   updateRouteMode();
   courseEl && courseEl.addEventListener('change', function(){ loadAssignments(courseEl.value); });
+  asnSearchEl && asnSearchEl.addEventListener('input', renderAssignmentOptions);
+  asnGroupByEl && asnGroupByEl.addEventListener('change', renderAssignmentOptions);
   bindRubricSync();
   bindStartSession();
   loadSessions('');

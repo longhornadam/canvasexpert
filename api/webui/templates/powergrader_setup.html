@@ -24,9 +24,23 @@
     </label>
 
     <label>Assignment
+      <div class="pg-assignment-tools" id="pg-assignment-tools" hidden>
+        <input type="search" id="pg-assignment-search" placeholder="Search assignments..." autocomplete="off">
+        <label class="pg-assignment-group-control">
+          <span>Group by</span>
+          <select id="pg-assignment-group-by">
+            <option value="recent">Recent due date</option>
+            <option value="assignment_group">Assignment group</option>
+            <option value="submission_type">Submission type</option>
+          </select>
+        </label>
+      </div>
       <select id="pg-assignment" name="assignment_id" required disabled>
         <option value="">— select course first —</option>
       </select>
+      <small id="pg-assignment-unsupported-hint" class="lbl-hint" hidden>
+        Quizzes appear here for visibility, but PowerGrader cannot grade quiz item responses yet. Use Canvas SpeedGrader or the New Quizzes Student Analysis CSV workflow.
+      </small>
     </label>
 
     <!-- ── Grading route ──────────────────────────────────────────────── -->
