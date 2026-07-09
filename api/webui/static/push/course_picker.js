@@ -51,17 +51,17 @@
         return;
       }
 
-      var actionLabel = mode === "quiz-diff" ? "Will push tiers to" : "Will push to";
       var html;
-      if (targets.length) {
-        html = "<strong>" + actionLabel + " " + targets.length + " course" +
-          (targets.length === 1 ? "" : "s") + ":</strong> " + courseListSummary(targets);
+      if (!targets.length) {
+        html = "<strong>Choose one or more target courses to continue.</strong>";
+      } else if (targets.length === 1) {
+        html = "<strong>Ready to push to:</strong> " + push.esc(targets[0].name) + ".";
       } else {
-        html = "<strong>No target courses selected.</strong> Check one or more courses before pushing.";
+        html = "<strong>Ready to push to " + targets.length + " courses:</strong> " + courseListSummary(targets) + ".";
       }
       if (focusName) {
-        html += ' <span class="course-scope-detail">Focused: ' + push.esc(focusName) +
-          " for modules/categories.</span>";
+        html += ' <span class="course-scope-detail">Focused course for modules and categories: ' +
+          push.esc(focusName) + ".</span>";
       }
       el.innerHTML = html;
     });
@@ -103,8 +103,8 @@
           return cb.closest(".cc-row").querySelector(".cc-focus").textContent;
         });
         sum.hidden = false;
-        sum.innerHTML = "<strong>Pushing to " + checked.length + " courses:</strong> " +
-          names.map(push.esc).join(", ");
+        sum.innerHTML = "<strong>Ready to push to " + checked.length + " courses:</strong> " +
+          names.map(push.esc).join(", ") + ".";
       } else {
         sum.hidden = true;
         sum.textContent = "";

@@ -5,7 +5,7 @@
 <section class="card" style="max-width:680px;margin:0 auto">
   <h2>PowerGrader</h2>
   <p class="hint" style="margin-top:0">
-    Keyboard-first grading for one Canvas assignment. Grade entirely yourself, export a pseudonymized packet for your own AI chat, or estimate cost before API-assisted draft scoring.
+    <strong>Grade one assignment.</strong> Grade entirely yourself, prepare a pseudonymized packet for your own AI chat, or draft-score with OpenRouter.
   </p>
 
   {% if not has_workspace %}
@@ -45,38 +45,27 @@
 
     <!-- ── Grading route ──────────────────────────────────────────────── -->
     <div class="pg-route-box">
-      <strong style="font-size:14px">Grading route</strong>
+      <strong style="font-size:14px">Choose how to grade</strong>
       <div class="pg-route-grid">
         <label class="pg-route-card is-selected">
           <input type="radio" name="pg-mode-choice" value="fast" checked>
-          <span><strong>Grade Myself</strong><small>No AI packet and no API call. Like SpeedGrader, but faster.</small></span>
+          <span><strong>Grade myself</strong><small>Grade entirely locally — no AI packet, no external call.</small></span>
         </label>
         <label class="pg-route-card">
           <input type="radio" name="pg-mode-choice" value="packet">
-          <span><strong>Use My AI Chat</strong><small>Download a pseudonymized SAFE packet for Copilot M365, ChatGPT, Claude, Gemini, or another chat tool.</small></span>
+          <span><strong>Prepare for my AI chat</strong><small>Creates a pseudonymized SAFE packet. Pseudonymization reduces exposure but can retain identifying context. You paste results back into PowerGrader.</small></span>
         </label>
         <label class="pg-route-card {% if not has_openrouter %}is-disabled{% endif %}">
           <input type="radio" name="pg-mode-choice" value="assisted" {% if not has_openrouter %}disabled{% endif %}>
-          <span><strong>Auto-Score With API</strong><small>{% if has_openrouter %}Creates draft scores and feedback through OpenRouter after a token and cost estimate; teacher review is still required before posting.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
+          <span><strong>Draft-score with OpenRouter</strong><small>{% if has_openrouter %}Sends the pseudonymized SAFE packet through OpenRouter after a token and cost estimate. Pseudonymization reduces exposure but can retain identifying context. Teacher review is still required before posting.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
         </label>
       </div>
-      <details class="pg-safety-popout">
-        <summary>Privacy and review steps</summary>
+      <details class="pg-safety-popout" id="pg-safety-popout">
+        <summary>Privacy and review details</summary>
         <div class="pg-safety-body">
-          <p>
-            PowerGrader is designed to be FERPA-conscious: real names stay local/private, and obvious
-            identifiers are separated before any AI packet is created.
-          </p>
-          <ul>
-            <li><strong>Grade Myself</strong> keeps grading local and does not send an AI packet.</li>
-            <li><strong>Use My AI Chat</strong> creates a pseudonymized SAFE packet and a private decoder that stays on this computer.</li>
-            <li><strong>Auto-Score With API</strong> sends the pseudonymized SAFE packet through OpenRouter, then reattaches real identities locally.</li>
-          </ul>
-          <p>
-            Pseudonymization reduces exposure but does not guarantee anonymity. Review SAFE files, rubrics,
-            persona instructions, and source excerpts before sending, and avoid unnecessary student identifiers
-            or full copyrighted books.
-          </p>
+          <p><strong>Grade myself</strong> — All grading stays local. No AI packet is created.</p>
+          <p><strong>Prepare for my AI chat</strong> — A pseudonymized SAFE packet is created. Real names stay in a private decoder on this computer. After the session starts, review the SAFE files before uploading them to any external chat. Pseudonymization reduces exposure but does not guarantee anonymity.</p>
+          <p><strong>Draft-score with OpenRouter</strong> — The same pseudonymized SAFE packet is sent through OpenRouter after you confirm a cost estimate. Drafts still require teacher review before any grades or comments are posted to Canvas. Pseudonymization reduces exposure but does not guarantee anonymity.</p>
         </div>
       </details>
     </div>
@@ -198,6 +187,11 @@
     </div>
 
     <div class="actions" style="margin-top:16px">
+      <!-- AI acknowledgement (route-dependent, shown for packet/assisted only) -->
+      <label class="pg-ai-check" id="pg-ai-check-wrap" style="display:none;margin-bottom:12px">
+        <input type="checkbox" id="pg-ai-check">
+        <span>I understand that AI routes use a pseudonymized SAFE packet which may retain identifying context.</span>
+      </label>
       <button type="submit" class="primary" id="pg-start-btn" {% if not has_workspace %}disabled{% endif %}>
         Start grading session
       </button>

@@ -21,7 +21,7 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | `/course-expert` | **Work tools** — all push tools + downloads, in tabs | `push.js` + `push/*.js`, `course_expert/*.js` |
 | `/gradebook` | **Gradebook tools** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
 | `/roster` | **Rosters** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
-| `/powergrader` | **PowerGrader** — keyboard grading queue with optional AI suggestions | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
+| `/powergrader` | **PowerGrader** — grade one assignment with three routes: Grade myself, Prepare for my AI chat, or Draft-score with OpenRouter | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
 | `/ai-expert` | **AI helper files** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
@@ -88,9 +88,9 @@ Roster has backend helper splits and browser feature files.
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
 
-### Feedback tools module routing
+### Feedback tools module routing — Batch feedback & import results
 
-Feedback tools are privacy-sensitive and split across route, pipeline, vault, scrub,
+Feedback Expert is the **batch scoring** workflow (not assignment-by-assignment grading — use PowerGrader for that). It supports New Quiz CSV workflows, manual tool imports, and OpenRouter draft scoring. Privacy-sensitive and split across route, pipeline, vault, scrub,
 and safety helpers, plus browser feature scripts.
 
 - Route owner: `api/webui/routes/feedback.py`

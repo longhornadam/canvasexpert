@@ -139,6 +139,25 @@
 
   // ── Shared state for feature files ─────────────────────────────────────
 
+  function syncGradebookReadiness() {
+    var hasCourse = !!gbCourseId();
+    var msg = document.getElementById("gb-readiness-msg");
+    var policyBtn = document.getElementById("btn-apply-policy");
+    var sweepBtn = document.getElementById("btn-sweep-preview");
+    var sweepApply = document.getElementById("btn-sweep-apply");
+
+    if (!hasCourse) {
+      if (policyBtn) policyBtn.disabled = true;
+      if (sweepBtn) sweepBtn.disabled = true;
+      if (sweepApply) { sweepApply.hidden = true; sweepApply.disabled = true; }
+      if (msg) msg.hidden = false;
+    } else {
+      if (policyBtn) policyBtn.disabled = false;
+      if (sweepBtn) sweepBtn.disabled = false;
+      if (msg) msg.hidden = true;
+    }
+  }
+
   var sweepEntries = [];
   var curveResults = [];
 
@@ -171,6 +190,7 @@
     set sweepEntries(v) { sweepEntries = v; },
     get curveResults() { return curveResults; },
     set curveResults(v) { curveResults = v; },
+    syncReadiness: syncGradebookReadiness,
   };
 
   // ── Sweep date-range presets ───────────────────────────────────────────
@@ -369,6 +389,7 @@
   });
 
   function _resetGradebookState() {
+    syncGradebookReadiness();
     // Snapshot
     const sum = document.getElementById("gb-summary");
     const tbl = document.getElementById("gb-tables");
@@ -423,6 +444,7 @@
     if (cva) { cva.innerHTML = '<option value="">— loading —</option>'; cva.disabled = true; }
     const cvh = document.getElementById("cv-assign-hint");
     if (cvh) cvh.textContent = "(loading…)";
+    syncGradebookReadiness();
   }
 
   // ── Init ───────────────────────────────────────────────────────────────
@@ -435,5 +457,6 @@
     const active = document.querySelector(".gb-tab.active")?.dataset.tab;
     if (active) _autoloadTab(active);
   }
+  syncGradebookReadiness();
 
 })();

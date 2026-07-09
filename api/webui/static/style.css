@@ -538,7 +538,7 @@ body.dash-screen .dash-section,
 }
 .dash-job-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 12px;
 }
 .dash-job {
@@ -582,7 +582,7 @@ body.dash-screen .dash-section,
 }
 .dash-lane-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
 }
 .dash-lane {
@@ -647,10 +647,6 @@ body.dash-screen .dash-section,
   color: var(--muted);
   font-weight: 800;
   white-space: nowrap;
-}
-@media (max-width: 1100px) {
-  .dash-job-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dash-lane-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   body.dash-screen .dash-page {

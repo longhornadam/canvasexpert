@@ -26,9 +26,9 @@
   var unsupportedHintEl = document.getElementById('pg-assignment-unsupported-hint');
 
   function modeLabel(mode) {
-    if (mode === 'packet') return 'Use My AI Chat';
-    if (mode === 'assisted') return 'Auto-Score With API';
-    return 'Grade Myself';
+    if (mode === 'packet') return 'Prepare for my AI chat';
+    if (mode === 'assisted') return 'Draft-score with OpenRouter';
+    return 'Grade myself';
   }
 
   function currentMode() {
@@ -48,12 +48,28 @@
     rubricFast.style.display = isAi ? 'none' : '';
     apiOnly.forEach(function(el){ el.style.display = mode === 'assisted' ? '' : 'none'; });
     if (mode === 'packet') {
-      if (aiLabel) aiLabel.textContent = 'Use My AI Chat — create a Safe AI Packet, then paste AI JSON back into PowerGrader.';
+      if (aiLabel) aiLabel.textContent = 'Prepare for my AI chat — create a pseudonymized SAFE packet, then paste AI JSON back into PowerGrader.';
     } else if (mode === 'assisted') {
-      if (aiLabel) aiLabel.textContent = 'Auto-Score With API — OpenRouter · ' + ((modelEl && modelEl.value) || defaultModel);
+      if (aiLabel) aiLabel.textContent = 'Draft-score with OpenRouter — ' + ((modelEl && modelEl.value) || defaultModel);
     } else {
-      if (aiLabel) aiLabel.textContent = 'Grade Myself — no AI packet or API call.';
+      if (aiLabel) aiLabel.textContent = 'Grade myself — no AI packet or API call.';
     }
+    // Show/hide AI acknowledgement checkbox
+    var ackWrap = document.getElementById('pg-ai-check-wrap');
+    var ackBox = document.getElementById('pg-ai-check');
+    if (ackWrap) ackWrap.style.display = isAi ? '' : 'none';
+    if (ackBox && !isAi) ackBox.checked = false;
+    syncStartEnabled();
+  }
+
+  function syncStartEnabled() {
+    var cid = courseEl ? courseEl.value : '';
+    var aid = asnEl ? asnEl.value : '';
+    var mode = currentMode();
+    var isAi = mode === 'packet' || mode === 'assisted';
+    var ackBox = document.getElementById('pg-ai-check');
+    var ackOk = !isAi || (ackBox && ackBox.checked);
+    startBtn.disabled = !(cid && aid && ackOk);
   }
 
   function setStatus(msg, err){
@@ -347,12 +363,16 @@
   pg.loadSessions = loadSessions;
   pg.setStatus = setStatus;
   pg.setAiLabelText = updateRouteMode;
+  pg.syncStartEnabled = syncStartEnabled;
 
   modeChoices.forEach(function(el){ el.addEventListener('change', updateRouteMode); });
   updateRouteMode();
-  courseEl && courseEl.addEventListener('change', function(){ loadAssignments(courseEl.value); });
+  courseEl && courseEl.addEventListener('change', function(){ loadAssignments(courseEl.value); syncStartEnabled(); });
+  asnEl && asnEl.addEventListener('change', syncStartEnabled);
   asnSearchEl && asnSearchEl.addEventListener('input', renderAssignmentOptions);
   asnGroupByEl && asnGroupByEl.addEventListener('change', renderAssignmentOptions);
+  var ackBox = document.getElementById('pg-ai-check');
+  if (ackBox) ackBox.addEventListener('change', syncStartEnabled);
   bindRubricSync();
   bindStartSession();
   loadSessions('');

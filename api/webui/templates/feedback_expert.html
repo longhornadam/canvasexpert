@@ -3,12 +3,12 @@
 {% block content %}
 
 <section class="card">
-  <h2>Feedback tools</h2>
+  <h2>Batch feedback &amp; import results</h2>
   <p class="hint" style="margin-top:0">
-    Use an LLM route to draft scores and feedback for teacher review. Student work is
-    <strong>pseudonymized</strong> before it leaves this machine (real names stay in a
-    private vault here), but pseudonymized files can still contain identifying context. Review
-    SAFE files before sending and review every draft before posting to Canvas.
+    For batch scoring, New Quiz CSV workflows, and importing results from a teacher-chosen tool.
+    This is <strong>not</strong> the assignment-by-assignment grading queue — use PowerGrader for that.
+    Student work is <strong>pseudonymized</strong> before it leaves this machine (real names stay in a
+    private vault here), but pseudonymized files can still contain identifying context.
   </p>
   {% if not feedback_root %}
   <div class="callout warn" style="margin-top:10px">
@@ -17,42 +17,16 @@
   {% endif %}
 </section>
 
-<!-- ── Shared: AI teaching assistant (persona library + custom) ──────────── -->
-<section class="card" id="persona-card">
-  <h2>Your AI teaching assistant</h2>
-  <p class="hint" style="margin-top:0">
-    Pick an assistant persona or create your own. Its tone and any student-visible signoff come from the selected persona.
-  </p>
-  <form id="persona-form">
-    <label>Persona
-      <select id="ta-persona-select">
-        <option value="">— loading personas —</option>
-      </select>
-    </label>
-    <label>Custom name <small class="lbl-hint">(overrides persona name)</small>
-      <input type="text" id="ta-name" value="{{ persona.name }}" placeholder="e.g. Sage" autocomplete="off">
-    </label>
-    <label>Custom personality / tone <small class="lbl-hint">(overrides persona personality)</small>
-      <textarea id="ta-personality" rows="2"
-        placeholder="e.g. Warm, specific, encouraging; focuses on one next step.">{{ persona.personality }}</textarea>
-    </label>
-    <div class="actions">
-      <button type="submit" class="primary">Save assistant</button>
-      <span id="persona-status" class="hint"></span>
-    </div>
-  </form>
-</section>
-
 <!-- ====================================================================== -->
-<!-- Section 1: Assignment-driven guided flow (HEADLINE)                     -->
+<!-- Section 1: Assignment-driven batch preparation (HEADLINE)                -->
 <!-- ====================================================================== -->
 <section class="card" style="border-left:4px solid var(--ce-blue)">
-  <h2 style="color:var(--ce-blue)">Guided scoring — pick a course assignment</h2>
+  <h2 style="color:var(--ce-blue)">Prepare a feedback batch</h2>
   <p class="hint" style="margin-top:0">
     Select a course and assignment below. Canvas Expert will download the submissions,
-    create pseudonymized SAFE files with real names kept in the private vault, send the
-    SAFE content to OpenRouter for draft scoring, and produce a re-identified ToEnter
-    CSV for teacher review.
+    create pseudonymized SAFE files with real names kept in the private vault,
+    and show you a summary. From there you can open the SAFE folder for manual scoring
+    or, if OpenRouter is configured, request draft scoring.
   </p>
 
   <div class="guided-pickers">
@@ -89,7 +63,7 @@
   </div>
 
   <div class="actions" style="margin-top:12px">
-    <button type="button" id="gf-go" class="primary" disabled>▶ Run guided scoring</button>
+    <button type="button" id="gf-go" class="primary" disabled>▶ Prepare SAFE batch</button>
     <span id="gf-status" class="hint"></span>
   </div>
   <div class="actions" style="margin-top:6px">
@@ -105,8 +79,49 @@
       <button type="button" class="small" id="gf-open-private">🔒 Open PRIVATE folder</button>
       <button type="button" class="small primary" id="gf-push" title="Jump to Push to Canvas">⬆ Push to Canvas</button>
     </div>
+    <!-- Staged OpenRouter request (hidden until prepare completes + OR configured) -->
+    <div id="gf-or-stage" class="gf-or-stage" hidden style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)">
+      <strong style="font-size:14px">Request draft scoring from OpenRouter</strong>
+      <p class="hint" style="margin:6px 0 10px;font-size:12.5px">
+        This sends the pseudonymized SAFE batch to OpenRouter. It may still contain identifying context.
+        Open and review SAFE files before uploading them to any external AI tool.
+      </p>
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-weight:400;font-size:13px">
+        <input type="checkbox" id="gf-or-ack" style="margin-top:2px">
+        <span>I understand that this sends the pseudonymized SAFE batch to OpenRouter. It may still contain identifying context.</span>
+      </label>
+      <div class="actions" style="margin:0">
+        <button type="button" id="gf-or-send" class="primary" disabled>Send SAFE batch to OpenRouter</button>
+        <span id="gf-or-status" class="hint"></span>
+      </div>
+    </div>
   </div>
 </section>
+
+<!-- ── Shared: AI teaching assistant (persona library + custom) ──────────── -->
+<section class="card" id="persona-card">
+  <h2>Your AI teaching assistant</h2>
+  <p class="hint" style="margin-top:0">
+    Pick an assistant persona or create your own. Its tone and any student-visible signoff come from the selected persona.
+  </p>
+  <form id="persona-form">
+    <label>Persona
+      <select id="ta-persona-select">
+        <option value="">— loading personas —</option>
+      </select>
+    </label>
+    <label>Custom name <small class="lbl-hint">(overrides persona name)</small>
+      <input type="text" id="ta-name" value="{{ persona.name }}" placeholder="e.g. Sage" autocomplete="off">
+    </label>
+    <label>Custom personality / tone <small class="lbl-hint">(overrides persona personality)</small>
+      <textarea id="ta-personality" rows="2"
+        placeholder="e.g. Warm, specific, encouraging; focuses on one next step.">{{ persona.personality }}</textarea>
+    </label>
+    <div class="actions">
+      <button type="submit" class="primary">Save assistant</button>
+      <span id="persona-status" class="hint"></span>
+    </div>
+  </form>
 
 <!-- ====================================================================== -->
 <!-- Section 1b: Push to Canvas (Phase C) — paste LLM scores, review, post   -->
