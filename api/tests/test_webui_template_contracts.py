@@ -213,3 +213,109 @@ def test_powergrader_opens_safety_for_ai():
     assert "safetyPopout.open = isAi" in js, (
         "setup_core.js does not open safety popout for AI routes"
     )
+
+
+# ── PowerGrader visibility-state contract (slice 1) ──────────────────
+
+def test_pg_assignment_tools_starts_hidden():
+    """#pg-assignment-tools must have the boolean hidden attribute."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    assert 'id="pg-assignment-tools" hidden' in html or 'id="pg-assignment-tools"  hidden' in html, (
+        "#pg-assignment-tools missing hidden attribute in template"
+    )
+
+
+def test_pg_ai_options_starts_hidden():
+    """#pg-ai-options must use hidden, not inline display:none."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    assert 'id="pg-ai-options" hidden' in html, (
+        "#pg-ai-options must use hidden attribute, not style='display:none'"
+    )
+    assert 'style="display:none"' not in html[html.index('id="pg-ai-options"'):html.index('id="pg-ai-options"') + 200], (
+        "#pg-ai-options must not have inline display:none"
+    )
+
+
+def test_pg_ai_check_wrap_starts_hidden():
+    """#pg-ai-check-wrap must use hidden, not inline display:none."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    assert 'id="pg-ai-check-wrap" hidden' in html, (
+        "#pg-ai-check-wrap must use hidden attribute, not style='display:none'"
+    )
+
+
+def test_pg_api_only_containers_start_hidden():
+    """Every .pg-api-only element must have the hidden attribute."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    import re
+    api_only_tags = re.findall(r'<([a-zA-Z0-9_-]+)[^>]*class="[^"]*\bpg-api-only\b[^"]*"[^>]*>', html)
+    assert len(api_only_tags) >= 3, (
+        f"Expected at least 3 .pg-api-only elements, found {len(api_only_tags)}"
+    )
+    for tag in api_only_tags:
+        count = html.count(f'class="pg-api-only" hidden')
+        count2 = html.count(f'class="pg-api-only pg-api-only" hidden')  # unlikely but check
+        count3 = html.count('pg-api-only" hidden')  # any class ending with pg-api-only
+        # Better: just check each occurrence
+    # Count properly
+    occurrences = [m for m in re.finditer(r'<[^>]*\bpg-api-only\b[^>]*>', html)]
+    hidden_occurrences = [m for m in occurrences if 'hidden' in m.group()]
+    assert len(hidden_occurrences) == len(occurrences), (
+        f"Expected all {len(occurrences)} .pg-api-only elements to have hidden, "
+        f"found {len(hidden_occurrences)} with hidden"
+    )
+
+
+def test_setup_core_uses_hidden_property():
+    """updateRouteMode must use the .hidden property, not style.display."""
+    js = _slurp("api/webui/static/powergrader/setup_core.js")
+    # Check hidden property assignments for route-dependent elements
+    assert "aiOptions.hidden = !isAi" in js, (
+        "updateRouteMode must set aiOptions.hidden = !isAi"
+    )
+    assert "rubricFast.hidden = isAi" in js, (
+        "updateRouteMode must set rubricFast.hidden = isAi"
+    )
+    assert "el.hidden = mode !== 'assisted'" in js, (
+        "updateRouteMode must set apiOnly el.hidden by mode"
+    )
+    assert "ackWrap.hidden = !isAi" in js, (
+        "updateRouteMode must set ackWrap.hidden = !isAi"
+    )
+
+
+def test_setup_core_no_style_display_for_route_elements():
+    """updateRouteMode must not use style.display for route-dependent elements."""
+    js = _slurp("api/webui/static/powergrader/setup_core.js")
+    # Isolate the updateRouteMode function body
+    start = js.index("function updateRouteMode")
+    end = js.index("function syncStartEnabled")
+    body = js[start:end]
+    forbidden = ['style.display']
+    for pattern in forbidden:
+        n = body.count(pattern)
+        # Expected: style.display might still appear for non-route elements (e.g., mode label),
+        # but not for aiOptions, rubricFast, apiOnly, ackWrap
+        assert 'aiOptions.style.display' not in body, (
+            "updateRouteMode must not use aiOptions.style.display"
+        )
+        assert 'rubricFast.style.display' not in body, (
+            "updateRouteMode must not use rubricFast.style.display"
+        )
+        assert 'apiOnly' not in body or 'apiOnly.forEach' not in body or '.style.display' not in body[body.index('apiOnly'):body.index('apiOnly')+200], (
+            "updateRouteMode must not use apiOnly el.style.display"
+        )
+    assert 'ackWrap.style.display' not in body, (
+        "updateRouteMode must not use ackWrap.style.display"
+    )
+
+
+def test_powergrader_css_has_form_scoped_hidden_rule():
+    """powergrader_setup.css must have #pg-start-form [hidden] { display: none !important; }."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    assert "#pg-start-form [hidden]" in css, (
+        "powergrader_setup.css missing #pg-start-form [hidden] rule"
+    )
+    assert "display: none !important" in css, (
+        "powergrader_setup.css #pg-start-form [hidden] missing !important"
+    )

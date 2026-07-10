@@ -69,7 +69,7 @@
     </div>
     <input type="hidden" name="mode" id="pg-mode" value="fast">
 
-    <div id="pg-ai-options" style="display:none">
+    <div id="pg-ai-options" hidden>
       <label>Rubric <small class="lbl-hint">(included in AI packets and API scoring)</small>
         {% if rubrics_folder %}
         <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
@@ -93,7 +93,7 @@
           {% endfor %}
         </select>
       </label>
-      <label class="pg-api-only">AI model <small class="lbl-hint">(OpenRouter; searchable; default is DeepSeek V4 Pro)</small>
+      <label class="pg-api-only" hidden>AI model <small class="lbl-hint">(OpenRouter; searchable; default is DeepSeek V4 Pro)</small>
         <div class="pg-model-picker" id="pg-model-picker">
           <div class="pg-model-input-wrap">
             <input type="text" name="model_id" id="pg-model"
@@ -109,13 +109,13 @@
         </div>
         <small id="pg-model-cost" class="lbl-hint"></small>
       </label>
-      <div class="pg-model-actions pg-api-only">
+      <div class="pg-model-actions pg-api-only" hidden>
         <button type="button" id="pg-model-default" class="small">Use DeepSeek V4 Pro</button>
         <button type="button" id="pg-load-models" class="small">Load latest model list</button>
         <span id="pg-model-status" class="hint"></span>
       </div>
 
-      <div class="pg-api-only" id="pg-late-watch-wrap" style="margin-top:6px">
+      <div class="pg-api-only" id="pg-late-watch-wrap" hidden style="margin-top:6px">
         <label style="display:flex;align-items:center;gap:8px">
           <input type="checkbox" name="watch_late" id="pg-watch-late" checked>
           <span>Watch for late submissions</span>
@@ -186,7 +186,7 @@
 
     <div class="actions" style="margin-top:16px">
       <!-- AI acknowledgement (route-dependent, shown for packet/assisted only) -->
-      <label class="pg-ai-check" id="pg-ai-check-wrap" style="display:none;margin-bottom:12px">
+      <label class="pg-ai-check" id="pg-ai-check-wrap" hidden>
         <input type="checkbox" id="pg-ai-check">
         <span>I understand that AI routes use a pseudonymized SAFE packet which may retain identifying context.</span>
       </label>

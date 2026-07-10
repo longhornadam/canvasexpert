@@ -50,9 +50,9 @@
       card.classList.toggle('is-selected', !!input && input.checked);
     });
     var isAi = mode === 'packet' || mode === 'assisted';
-    aiOptions.style.display = isAi ? '' : 'none';
-    rubricFast.style.display = isAi ? 'none' : '';
-    apiOnly.forEach(function(el){ el.style.display = mode === 'assisted' ? '' : 'none'; });
+    aiOptions.hidden = !isAi;
+    rubricFast.hidden = isAi;
+    apiOnly.forEach(function(el){ el.hidden = mode !== 'assisted'; });
     if (mode === 'packet') {
       if (aiLabel) aiLabel.textContent = 'Prepare for my AI chat — create a pseudonymized SAFE packet, then paste AI JSON back into PowerGrader.';
     } else if (mode === 'assisted') {
@@ -63,7 +63,7 @@
     // Show/hide AI acknowledgement checkbox
     var ackWrap = document.getElementById('pg-ai-check-wrap');
     var ackBox = document.getElementById('pg-ai-check');
-    if (ackWrap) ackWrap.style.display = isAi ? '' : 'none';
+    if (ackWrap) ackWrap.hidden = !isAi;
     if (ackBox && !isAi) ackBox.checked = false;
     // Programmatically expand safety details for AI routes
     var safetyPopout = document.getElementById('pg-safety-popout');
