@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 import openrouter_client as orc
 
 from .. import config, source_materials, workspace
-from ..canvas_client import _canvas_get, _canvas_send
+from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
 from powergrader import (ai_workflow, canvas_fetch, context, estimates,
                          import_results, late_catchup, packet, privacy,
@@ -26,6 +26,7 @@ from .powergrader_setup_support import (
     build_estimate_payload,
     build_queue_page_context,
     build_setup_page_context,
+    load_module_picker,
 )
 from .powergrader_late import (
     _late_watch_error as _late_watch_error_impl,
@@ -108,6 +109,15 @@ def powergrader_queue(request: Request, session_id: str):
 @router.get("/api/powergrader/sessions")
 def list_sessions():
     return JSONResponse({"sessions": session_store.list_session_summaries()})
+
+
+@router.get("/api/powergrader/modules")
+def pg_modules(course_id: str, module_id: str = ""):
+    return JSONResponse(load_module_picker(
+        course_id,
+        module_id,
+        canvas_get_all=_canvas_get_all,
+    ))
 
 
 @router.post("/api/powergrader/estimate")

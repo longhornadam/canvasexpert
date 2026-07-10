@@ -1,6 +1,65 @@
 """Setup-focused support helpers for PowerGrader routes."""
 
 
+def load_module_picker(course_id: str, module_id: str, *, canvas_get_all) -> dict:
+    """Load course modules and the assignment references for the active selection."""
+    rows, error = canvas_get_all(
+        f"/api/v1/courses/{course_id}/modules",
+        {"per_page": 100},
+    )
+    if error:
+        return {"ok": False, "error": error}
+
+    modules = [
+        {
+            "id": str(row["id"]),
+            "name": str(row.get("name") or "Untitled module"),
+        }
+        for row in (rows or [])
+        if isinstance(row, dict) and row.get("id") is not None
+    ]
+
+    if module_id:
+        selected = [module for module in modules if module["id"] == str(module_id)]
+        if not selected:
+            return {"ok": False, "error": "Selected module is no longer available."}
+    else:
+        selected = modules[-3:]
+
+    selected_modules = []
+    for module in selected:
+        items, error = canvas_get_all(
+            f"/api/v1/courses/{course_id}/modules/{module['id']}/items",
+            {"per_page": 100},
+        )
+        if error:
+            return {"ok": False, "error": error}
+
+        assignment_ids = []
+        quiz_ids = []
+        for item in items or []:
+            if not isinstance(item, dict) or item.get("content_id") is None:
+                continue
+            content_id = str(item["content_id"])
+            item_type = str(item.get("type") or "").lower()
+            if item_type == "assignment":
+                assignment_ids.append(content_id)
+            elif item_type == "quiz":
+                quiz_ids.append(content_id)
+
+        selected_modules.append({
+            **module,
+            "assignment_ids": assignment_ids,
+            "quiz_ids": quiz_ids,
+        })
+
+    return {
+        "ok": True,
+        "modules": modules,
+        "selected_modules": selected_modules,
+    }
+
+
 def build_setup_page_context(
     *,
     saved_courses: list[dict],

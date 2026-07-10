@@ -19,8 +19,8 @@ into nearby helper modules or the backend package when it becomes reusable.
 
 ## Current size snapshot
 
-- `api/webui/routes/powergrader.py` - 478 lines
-- `api/webui/static/powergrader/setup_core.js` - 184 lines
+- `api/webui/routes/powergrader.py` - 488 lines
+- `api/webui/static/powergrader/setup_core.js` - 413 lines
 - `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
 - `api/webui/static/powergrader/queue_core.js` - 332 lines
 - `api/webui/static/powergrader/queue_review.js` - 173 lines
@@ -53,7 +53,9 @@ Ownership:
 
 - `setup_core.js`
   - mode switching
-  - course -> assignment loading
+  - course -> module -> assignment loading
+  - module picker defaults to the last three modules in Canvas course order
+  - assignment search spans the full course regardless of the active module selection
   - rubric picker sync
   - session start submit flow
   - resume-session list rendering
@@ -167,6 +169,7 @@ Ownership:
   - pure response/payload helpers
 - `api/webui/routes/powergrader_setup_support.py`
   - setup page context, queue page context, estimate payload shaping
+  - course-module picker loading and module-item reference shaping
 - `api/webui/routes/routines_powergrader.py`
   - scheduled autoscore and late-catchup routine runners
   - imports pure autoscore helper logic from the backend package

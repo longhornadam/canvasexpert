@@ -358,6 +358,11 @@ Keyboard-first grading queue for one Canvas assignment. A teacher starts one
 session, reviews submissions student by student, approves or edits feedback, and
 pushes approved grades/comments back to Canvas.
 
+After a course is selected, the assignment picker groups work by Canvas course
+module and immediately shows the final three modules in course order. The Modules
+control can switch to any other module in the course. Assignment search always scans
+the whole course, including assignments and quizzes outside the selected module view.
+
 Modes:
 
 - **Grade Myself** — fetches submitted work and opens the queue with no AI packet

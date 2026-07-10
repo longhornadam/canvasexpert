@@ -109,6 +109,7 @@ def list_assignments_full(course_id: str):
             "submission_types":     a.get("submission_types") or [],
             "due_at":               (a.get("due_at") or "")[:10],
             "points_possible":      a.get("points_possible"),
+            "quiz_id":              str(a.get("quiz_id") or ""),
             "assignment_group_id":  str(a.get("assignment_group_id") or ""),
             "assignment_group_name":
                 group_names.get(str(a["assignment_group_id"]), "")
