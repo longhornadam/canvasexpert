@@ -228,7 +228,18 @@ def test_pg_assignment_tools_starts_hidden():
 def test_pg_ai_options_starts_hidden():
     """#pg-ai-options must use hidden, not inline display:none."""
     html = _slurp("api/webui/templates/powergrader_setup.html")
-    assert 'id="pg-ai-options" hidden' in html, (
+    assert 'id="pg-ai-options"' in html, (
+        "#pg-ai-options must exist in template"
+    )
+    # Find the <section> containing id="pg-ai-options" and check it has hidden
+    ai_start = html.index('id="pg-ai-options"')
+    # Go back to the < to capture the full opening tag (may span multiple lines)
+    line_start = html.rindex('<', 0, ai_start)
+    ai_tag = html[line_start:ai_start + 200]
+    assert 'hidden' in ai_tag, (
+        "#pg-ai-options must use hidden attribute, not style='display:none'"
+    )
+    assert 'hidden' in ai_tag, (
         "#pg-ai-options must use hidden attribute, not style='display:none'"
     )
     assert 'style="display:none"' not in html[html.index('id="pg-ai-options"'):html.index('id="pg-ai-options"') + 200], (
@@ -318,4 +329,102 @@ def test_powergrader_css_has_form_scoped_hidden_rule():
     )
     assert "display: none !important" in css, (
         "powergrader_setup.css #pg-start-form [hidden] missing !important"
+    )
+
+
+# ── PowerGrader responsive layout contract (slice 2) ─────────────────
+
+def test_powergrader_uses_page_wide_block():
+    """powergrader_setup.html must override main_class with page-wide pg-page."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    assert '{% block main_class %}page-wide pg-page{% endblock %}' in html, (
+        "Template must set main_class to 'page-wide pg-page'"
+    )
+
+
+def test_powergrader_no_680px_inline_width():
+    """Setup and session cards must not contain the 680px inline max-width."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    assert 'max-width:680px' not in html, (
+        "Template must not contain inline max-width:680px on cards"
+    )
+
+
+def test_powergrader_critical_ids_exist_once():
+    """Critical DOM IDs must each appear exactly once."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    for id_attr in ['pg-course', 'pg-assignment', 'pg-assignment-search',
+                    'pg-assignment-group-by', 'pg-ai-options', 'pg-rubric-fast',
+                    'pg-start-btn', 'pg-sessions-tbody']:
+        pattern = f'id="{id_attr}"'
+        count = html.count(pattern)
+        assert count == 1, (
+            f"Expected exactly 1 occurrence of id={id_attr!r}, found {count}"
+        )
+
+
+def test_powergrader_radio_values_exist():
+    """All three mode radio values must be present."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    for val in ['fast', 'packet', 'assisted']:
+        assert f'value="{val}"' in html, (
+            f"Missing radio value '{val}' in template"
+        )
+
+
+def test_powergrader_labels_use_for():
+    """Course, Assignment, and Modules must use explicit <label for>."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    assert '<label for="pg-course">' in html, (
+        "Course label must use for=pg-course"
+    )
+    assert '<label for="pg-assignment">' in html, (
+        "Assignment label must use for=pg-assignment"
+    )
+    assert '<label for="pg-assignment-group-by">' in html, (
+        "Modules label must use for=pg-assignment-group-by"
+    )
+
+
+def test_powergrader_ack_before_start_button():
+    """AI acknowledgment must appear after configuration sections and before start button."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    ack_idx = html.index('id="pg-ai-check"')
+    btn_idx = html.index('id="pg-start-btn"')
+    assert ack_idx < btn_idx, (
+        "AI acknowledgment checkbox must appear before the start button"
+    )
+
+
+def test_powergrader_css_has_1180px_cap():
+    """CSS must contain the 1180px page cap."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    assert '1180px' in css, (
+        "powergrader_setup.css missing 1180px page width cap"
+    )
+
+
+def test_powergrader_css_desktop_grids():
+    """CSS must have desktop work-grid and AI-grid at 981px+ breakpoint."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    assert '@media (min-width: 981px)' in css, (
+        "CSS missing 981px+ desktop breakpoint"
+    )
+    assert '.pg-work-grid' in css, "CSS missing .pg-work-grid"
+    assert '.pg-ai-grid' in css, "CSS missing .pg-ai-grid"
+
+
+def test_powergrader_css_mobile_breakpoint():
+    """CSS must have the 760px mobile breakpoint."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    assert '@media (max-width: 760px)' in css, (
+        "CSS missing 760px mobile breakpoint"
+    )
+
+
+def test_powergrader_css_intermediate_breakpoint():
+    """CSS must have the 980px intermediate breakpoint."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    assert '@media (max-width: 980px)' in css, (
+        "CSS missing 980px intermediate breakpoint"
     )

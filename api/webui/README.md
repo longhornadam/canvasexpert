@@ -358,6 +358,16 @@ Keyboard-first grading queue for one Canvas assignment. A teacher starts one
 session, reviews submissions student by student, approves or edits feedback, and
 pushes approved grades/comments back to Canvas.
 
+The setup page uses a wide responsive workspace with:
+
+- **Side-by-side course/assignment selection** on desktop — Course takes about 35%
+  of the available width and Assignment takes about 65%, with course-wide search
+  and module filtering unchanged.
+- **Mode-aware fast versus AI configuration** — Grade myself shows a compact
+  rubric-only panel; AI modes show a two-column AI setup/source material layout.
+- **Course-wide search** that scans all assignments regardless of the selected
+  module view, and module filtering that defaults to the last three modules.
+
 After a course is selected, the assignment picker groups work by Canvas course
 module and immediately shows the final three modules in course order. The Modules
 control can switch to any other module in the course. Assignment search always scans

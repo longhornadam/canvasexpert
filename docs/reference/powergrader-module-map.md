@@ -22,6 +22,8 @@ into nearby helper modules or the backend package when it becomes reusable.
 - `api/webui/routes/powergrader.py` - 488 lines
 - `api/webui/static/powergrader/setup_core.js` - 413 lines
 - `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
+- `api/webui/static/powergrader_setup.css` - ~350 lines
+- `api/webui/templates/powergrader_setup.html` - ~200 lines
 - `api/webui/static/powergrader/queue_core.js` - 332 lines
 - `api/webui/static/powergrader/queue_review.js` - 173 lines
 - `api/webui/static/powergrader/queue_import.js` - 261 lines
@@ -66,6 +68,9 @@ Ownership:
   - estimate request/rendering
   - source-files JSON sync
   - privacy pipeline strip rendering
+- `powergrader_setup.html` + `powergrader_setup.css`
+  - responsive setup layout (1180px max, sectioned workspace)
+  - action footer with AI acknowledgment and start button
 
 ## Queue screen routing
 
