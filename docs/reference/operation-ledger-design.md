@@ -212,7 +212,8 @@ class OperationAdapter(Protocol):
         """Read current Canvas/local state for drift detection.
         Called at review time and again at apply time."""
 
-    def execute(self, payload: dict, target: dict, baseline: dict, claim: dict) -> dict:
+    def execute(self, payload: dict, target: dict, baseline: dict, claim: dict,
+                context) -> dict:
         """Perform the Canvas call(s) for one target.
         Returns {state, returned_object_id, returned_object_url, error_code, private_diagnostic, steps}.
         May perform multiple sequential steps (e.g. create_page then attach_module).
@@ -241,29 +242,44 @@ Before any Canvas call, the executor:
 
 1. Generates a new `attempt_id` (UUID4).
 2. Computes `payload_digest` = SHA-256 over the normalized outbound payload.
-3. Acquires the claim: writes to `claims.v1.json` with `state: "claimed"`,
+3. Acquires the claim under the claims interprocess lock: writes to
+   `claims.v1.json` with `state: "claimed"`,
    `owner_pid`, `owner_started_at` (process start time), `acquired_at`, and
    `lease_expires_at` = `acquired_at + 5 minutes`.
 4. Persists the target as `claimed` with `attempt_id`, `payload_digest`, and
-   `baseline` to `operations.v1.json`.
+   additive `apply_baseline` to `operations.v1.json`. The review-time `baseline`
+   remains immutable.
 5. **Flushes both writes (fsync + atomic replace) before making the Canvas call.**
+
+Before each individual Canvas mutation, the adapter calls the executor-owned execution
+context to persist the named step as `claimed` with `outbound_started_at`. A successful
+response and every returned object ID are checkpointed and flushed before the next Canvas
+call. The context verifies the current claim before every checkpoint so a superseded
+worker cannot overwrite recovered state.
 
 ### 4.2 Lease expiry
 
 - Lease duration: **5 minutes** (sufficient for a single Canvas POST + module item POST).
 - On restart, any claim with `lease_expires_at < now` is marked `expired` and the
   target is reconciled via `adapter.reconcile()`.
-- A claim with `lease_expires_at >= now` and a different `owner_pid` (or same PID but
-  different `owner_started_at`) is also expired — the process that held it is gone.
+- A claim with `lease_expires_at >= now` remains active regardless of PID. PID inequality
+  is not evidence that a process died.
+- Expiry permits reconciliation, never blind takeover or resend. An expired but
+  unreconciled claim still blocks a new claim.
+- Claims and operations read-modify-write transactions use one shared adjacent OS-locked
+  ledger lock file in addition to the in-process lock. The shared lock makes claim
+  validation plus target checkpointing one fenced transaction; separate per-document
+  locks are forbidden. Atomic JSON replacement alone is not a cross-process mutex.
 
 ### 4.3 Recovery on restart
 
 For every target in `claimed` or `sent_unknown` state:
 
-1. Check the claim. If expired or owned by a dead process, mark it `expired`.
+1. Skip an unexpired active claim. If its lease expired, atomically mark it `expired`.
 2. Call `adapter.reconcile(payload, target, baseline)`.
 3. If reconcile proves `applied`: persist returned IDs, set target `applied`.
-4. If reconcile proves the effect is absent: set target back to `pending` (eligible for retry).
+4. Reset to `pending` only when no mutation step has an outbound marker. Absence after a
+   possibly-sent create is not proof of absence and remains `sent_unknown`.
 5. If reconcile cannot prove either: target stays `sent_unknown` (Attention).
 
 ### 4.4 Retry

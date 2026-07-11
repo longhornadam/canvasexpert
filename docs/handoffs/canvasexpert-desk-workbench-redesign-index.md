@@ -53,25 +53,26 @@ Before any redesign implementation:
 | 08 | `canvasexpert-redesign-08-creation-workbench.md` | 07 |
 | 09 | `canvasexpert-redesign-09-creation-instrument.md` | 08 |
 | 10 | `canvasexpert-redesign-10-operation-ledger-pilot.md` | 05a, 08 |
-| 11a | `canvasexpert-redesign-11a-quick-operation.md` | 10 |
-| 11b1 | `canvasexpert-redesign-11b1-assignment-core-operation.md` | 10 |
+| 10r | `canvasexpert-redesign-10r-operation-ledger-acceptance-repair.md` | 10 |
+| 11a | `canvasexpert-redesign-11a-quick-operation.md` | 10r |
+| 11b1 | `canvasexpert-redesign-11b1-assignment-core-operation.md` | 10r |
 | 11b2 | `canvasexpert-redesign-11b2-assignment-dependencies.md` | 11b1 |
 | 11b3 | `canvasexpert-redesign-11b3-assignment-differentiation-autoscore.md` | 11b2 |
-| 11c0 | `canvasexpert-redesign-11c0-rubric-path-audit.md` | 10 |
+| 11c0 | `canvasexpert-redesign-11c0-rubric-path-audit.md` | 10r |
 | 11c1 | `canvasexpert-redesign-11c1-rubric-operation.md` | 11c0 |
-| 11d | `canvasexpert-redesign-11d-quiz-operation.md` | 10 |
-| 12a | `canvasexpert-redesign-12a-powergrader-workbench.md` | 06a, 10 |
+| 11d | `canvasexpert-redesign-11d-quiz-operation.md` | 10r |
+| 12a | `canvasexpert-redesign-12a-powergrader-workbench.md` | 06a, 10r |
 | 12b0 | `canvasexpert-redesign-12b0-feedback-parity-matrix.md` | 12a |
 | 12b1 | `canvasexpert-redesign-12b1-feedback-import-lane.md` | 12b0 |
 | 12b2 | `canvasexpert-redesign-12b2-feedback-batch-lane.md` | 12b1 |
-| 12b3 | `canvasexpert-redesign-12b3-feedback-push-safety.md` | 12b2, 10 |
+| 12b3 | `canvasexpert-redesign-12b3-feedback-push-safety.md` | 12b2, 10r |
 | 12b4 | `canvasexpert-redesign-12b4-feedback-persona-folders.md` | 12b2 |
 | 12b5 | `canvasexpert-redesign-12b5-feedback-parity-acceptance.md` | 12b3, 12b4 |
-| 13a | `canvasexpert-redesign-13a-late-policy-operation.md` | 05a, 10 |
-| 13b1 | `canvasexpert-redesign-13b1-sweep-operation.md` | 05a, 10 |
-| 13b2 | `canvasexpert-redesign-13b2-extension-operation.md` | 05a, 10 |
-| 13c | `canvasexpert-redesign-13c-curve-operation.md` | 05b, 10 |
-| 13d1 | `canvasexpert-redesign-13d1-roster-group-create.md` | 05a, 10 |
+| 13a | `canvasexpert-redesign-13a-late-policy-operation.md` | 05a, 10r |
+| 13b1 | `canvasexpert-redesign-13b1-sweep-operation.md` | 05a, 10r |
+| 13b2 | `canvasexpert-redesign-13b2-extension-operation.md` | 05a, 10r |
+| 13c | `canvasexpert-redesign-13c-curve-operation.md` | 05b, 10r |
+| 13d1 | `canvasexpert-redesign-13d1-roster-group-create.md` | 05a, 10r |
 | 13d2 | `canvasexpert-redesign-13d2-roster-membership.md` | 13d1 |
 | 13d3 | `canvasexpert-redesign-13d3-roster-workbench.md` | 13d2 |
 | 13e | `canvasexpert-redesign-13e-routines-integration.md` | 05a, 06a |
