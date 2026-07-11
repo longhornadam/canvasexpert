@@ -117,6 +117,24 @@ html[data-theme="dark"] .ce-operation-panel {
   background: var(--ce-attention);
 }
 
+.ce-status-strip .ce-readiness-refresh,
+.ce-status-strip .ce-readiness-details {
+  margin-left: auto;
+}
+
+.ce-status-strip .ce-readiness-refresh[hidden],
+.ce-status-strip .ce-readiness-details[hidden] {
+  display: none;
+}
+
+.ce-status-strip[data-status="degraded"] {
+  border-bottom: 2px solid var(--ce-attention);
+}
+
+.ce-status-strip .ce-readiness-details {
+  color: var(--ce-ink-muted);
+}
+
 .ce-workbench-shell .ce-work-rail {
   border-right: 1px solid var(--ce-rule-strong);
   min-width: 0;

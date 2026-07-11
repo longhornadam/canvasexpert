@@ -56,6 +56,7 @@ from .routes.routines import router as _routines_router, _load_custom_routines, 
 from .routes.roster import router as _roster_router
 from .routes.settings import router as _settings_router
 from .routes.powergrader import router as _powergrader_router
+from .routes.readiness import router as _readiness_router
 
 
 @asynccontextmanager
@@ -111,6 +112,6 @@ app.include_router(_routines_router)
 app.include_router(_roster_router)
 app.include_router(_settings_router)
 app.include_router(_powergrader_router)
-
+app.include_router(_readiness_router)
 
 

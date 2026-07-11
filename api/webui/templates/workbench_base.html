@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block status_strip %}{% include "_readiness_strip.html" %}{% endblock %}
+{% block scripts_extra %}<script src="/static/readiness.js?v={{ asset_v }}"></script>{% endblock %}

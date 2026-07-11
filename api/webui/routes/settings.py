@@ -24,14 +24,14 @@ SCENARIO_INPUT_TOKENS = 50_000
 SCENARIO_OUTPUT_TOKENS = 10_000
 
 
-def _probe_openrouter_key(api_key: str | None) -> dict:
+def _probe_openrouter_key(api_key: str | None, timeout: int = 15) -> dict:
     if not api_key:
         return {"valid": False, "error": "No OpenRouter API key saved."}
     try:
         r = requests.get(
             "https://openrouter.ai/api/v1/auth/key",
             headers={"Authorization": f"Bearer {api_key}"},
-            timeout=15,
+            timeout=timeout,
         )
     except requests.RequestException as e:
         return {"valid": False, "error": str(e)}

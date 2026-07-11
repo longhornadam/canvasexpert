@@ -150,6 +150,15 @@ def test_course_picker_uses_shared_context_without_dual_writes():
     assert "canvasExpert.push.coursePicker.v1" not in js
 
 
+def test_workbench_base_owns_readiness_strip_and_script():
+    """Only the Workbench base opts into readiness markup and behavior."""
+    base = _slurp("api/webui/templates/base.html")
+    workbench = _slurp("api/webui/templates/workbench_base.html")
+    assert "_readiness_strip.html" not in base
+    assert "_readiness_strip.html" in workbench
+    assert '/static/readiness.js?v={{ asset_v }}' in workbench
+
+
 # ── No legacy canvasWriteReview function definitions ──────────────────
 
 def test_no_local_canvas_write_review_function():
