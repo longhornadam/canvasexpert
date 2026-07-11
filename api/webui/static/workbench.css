@@ -1,0 +1,189 @@
+/* Shared Desk / Workbench / Instrument vocabulary.
+   These selectors are inert until a migrated surface opts in. */
+
+.ce-desk-shell,
+.ce-workbench-shell,
+.ce-instrument-shell,
+.ce-status-strip,
+.ce-operation-panel {
+  --ce-paper: #f4efe6;
+  --ce-paper-raised: #fbf8f1;
+  --ce-graphite: #20252a;
+  --ce-graphite-soft: #323940;
+  --ce-ink: #29251f;
+  --ce-ink-muted: #6f6a61;
+  --ce-rule: rgba(61, 55, 46, 0.2);
+  --ce-rule-strong: rgba(61, 55, 46, 0.38);
+  --ce-canvas: #2f7d77;
+  --ce-model: #8f6b32;
+  --ce-privacy: #4d7759;
+  --ce-attention: #b85e36;
+  --ce-prepared: #527a8c;
+  --ce-create: #aa633f;
+  --ce-grade: #5c718e;
+  --ce-ledger-rule: rgba(61, 55, 46, 0.16);
+  --ce-grid-line: rgba(61, 55, 46, 0.08);
+  --ce-focus: #d9893f;
+  box-sizing: border-box;
+}
+
+html[data-theme="dark"] .ce-desk-shell,
+html[data-theme="dark"] .ce-workbench-shell,
+html[data-theme="dark"] .ce-instrument-shell,
+html[data-theme="dark"] .ce-status-strip,
+html[data-theme="dark"] .ce-operation-panel {
+  --ce-paper: #20252a;
+  --ce-paper-raised: #282e34;
+  --ce-graphite: #171a1d;
+  --ce-graphite-soft: #343b42;
+  --ce-ink: #f2eee6;
+  --ce-ink-muted: #b5afa5;
+  --ce-rule: rgba(240, 234, 222, 0.2);
+  --ce-rule-strong: rgba(240, 234, 222, 0.38);
+  --ce-ledger-rule: rgba(240, 234, 222, 0.16);
+  --ce-grid-line: rgba(240, 234, 222, 0.08);
+}
+
+.ce-desk-shell,
+.ce-workbench-shell,
+.ce-instrument-shell {
+  color: var(--ce-ink);
+  background: var(--ce-paper);
+  width: 100%;
+  min-width: 1600px;
+  min-height: 100%;
+}
+
+.ce-desk-shell .ce-desk-grid,
+.ce-workbench-shell .ce-workbench-grid,
+.ce-instrument-shell .ce-instrument-grid {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+}
+
+.ce-desk-shell .ce-desk-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.ce-workbench-shell .ce-workbench-grid {
+  grid-template-columns: minmax(260px, 0.28fr) minmax(0, 0.72fr);
+}
+
+.ce-instrument-shell .ce-instrument-grid {
+  grid-template-columns: minmax(320px, 0.42fr) minmax(0, 0.58fr);
+}
+
+.ce-desk-shell .ce-desk-panel,
+.ce-workbench-shell .ce-work-panel,
+.ce-workbench-shell .ce-operation-panel,
+.ce-instrument-shell .ce-instrument-panel {
+  background: var(--ce-paper-raised);
+  border: 1px solid var(--ce-rule);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(22, 25, 28, 0.08);
+  padding: 20px;
+}
+
+.ce-status-strip {
+  align-items: center;
+  background: var(--ce-graphite);
+  color: #f4efe6;
+  display: flex;
+  gap: 14px;
+  min-height: 36px;
+  padding: 6px 24px;
+}
+
+.ce-status-strip .ce-status-item {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.ce-status-strip .ce-status-dot {
+  background: var(--ce-ink-muted);
+  border-radius: 50%;
+  height: 8px;
+  width: 8px;
+}
+
+.ce-status-strip .ce-status-dot[data-state="ready"] {
+  background: var(--ce-privacy);
+}
+
+.ce-status-strip .ce-status-dot[data-state="attention"] {
+  background: var(--ce-attention);
+}
+
+.ce-workbench-shell .ce-work-rail {
+  border-right: 1px solid var(--ce-rule-strong);
+  min-width: 0;
+  padding-right: 20px;
+}
+
+.ce-workbench-shell .ce-work-rail .ce-work-rail-item {
+  border-bottom: 1px solid var(--ce-ledger-rule);
+  padding: 10px 0;
+}
+
+.ce-operation-panel .ce-operation-row {
+  border-bottom: 1px solid var(--ce-ledger-rule);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(120px, 0.32fr) minmax(0, 0.68fr);
+  padding: 10px 0;
+}
+
+.ce-operation-panel .ce-operation-row:last-child {
+  border-bottom: 0;
+}
+
+.ce-workbench-shell .ce-drafting-grid,
+.ce-instrument-shell .ce-drafting-grid {
+  background-image: linear-gradient(var(--ce-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ce-grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.ce-desk-shell .ce-attention-mark,
+.ce-workbench-shell .ce-attention-mark,
+.ce-instrument-shell .ce-attention-mark {
+  color: var(--ce-attention);
+}
+
+.ce-desk-shell .ce-prepared-mark,
+.ce-workbench-shell .ce-prepared-mark,
+.ce-instrument-shell .ce-prepared-mark {
+  color: var(--ce-prepared);
+}
+
+.ce-desk-shell .ce-create-mark,
+.ce-workbench-shell .ce-create-mark,
+.ce-instrument-shell .ce-create-mark {
+  color: var(--ce-create);
+}
+
+.ce-desk-shell .ce-grade-mark,
+.ce-workbench-shell .ce-grade-mark,
+.ce-instrument-shell .ce-grade-mark {
+  color: var(--ce-grade);
+}
+
+.ce-desk-shell :focus-visible,
+.ce-workbench-shell :focus-visible,
+.ce-instrument-shell :focus-visible,
+.ce-status-strip :focus-visible,
+.ce-operation-panel :focus-visible {
+  outline: 2px solid var(--ce-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1599px) {
+  .ce-desk-shell,
+  .ce-workbench-shell,
+  .ce-instrument-shell {
+    min-width: 0;
+  }
+}

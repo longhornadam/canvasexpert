@@ -84,6 +84,52 @@ def test_write_review_loaded_before_page_scripts():
     assert "async" not in tag, "write_review.js script tag must not use async"
 
 
+# ── scoped Workbench visual foundation (slice 1) ─────────────────────
+
+def test_base_loads_workbench_css_once_after_legacy_css():
+    """The inert foundation stylesheet must load once between style and scripts."""
+    html = _slurp("api/webui/templates/base.html")
+    workbench = html.index('/static/workbench.css?v={{ asset_v }}')
+    legacy = html.index('/static/style.css?v={{ asset_v }}')
+    review = html.index('/static/write_review.js?v={{ asset_v }}')
+    assert html.count('/static/workbench.css?v={{ asset_v }}') == 1
+    assert legacy < workbench < review, (
+        "workbench.css must load after style.css and before write_review.js"
+    )
+
+
+def test_base_exposes_slice_one_extension_blocks_once_in_order():
+    """Base extension points must remain stable for later shell migrations."""
+    html = _slurp("api/webui/templates/base.html")
+    blocks = [
+        "{% block head_extra %}",
+        "{% block app_header %}",
+        "{% block status_strip %}",
+        "{% block scripts_extra %}",
+    ]
+    for block in blocks:
+        assert html.count(block) == 1, f"Expected one {block} block"
+    assert html.index(blocks[0]) < html.index("</head>")
+    assert html.index(blocks[1]) < html.index(blocks[2]) < html.index("<main ")
+    assert html.index(blocks[3]) < html.index("</body>")
+
+
+def test_workbench_css_is_namespaced_and_has_required_tokens():
+    """Foundation CSS must not leak generic page rules into legacy routes."""
+    css = _slurp("api/webui/static/workbench.css")
+    assert ".ce-desk-shell" in css
+    assert ".ce-workbench-shell" in css
+    assert ".ce-instrument-shell" in css
+    for forbidden in [".card", ".page", "button", "input", "select"]:
+        assert re.search(rf"(?m)^\s*{re.escape(forbidden)}(?:\s|,|\{{)", css) is None, (
+            f"workbench.css must not define generic selector {forbidden!r}"
+        )
+    for token in ["--ce-paper", "--ce-graphite", "--ce-canvas", "--ce-privacy",
+                  "--ce-attention", "--ce-prepared", "--ce-create", "--ce-grade",
+                  "--ce-ledger-rule", "--ce-grid-line", "--ce-focus"]:
+        assert token in css, f"Missing scoped foundation token {token}"
+
+
 # ── No legacy canvasWriteReview function definitions ──────────────────
 
 def test_no_local_canvas_write_review_function():
