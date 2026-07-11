@@ -601,7 +601,7 @@ html[data-theme="dark"] .ce-operation-panel {
   margin: 0;
 }
 
-/* Summary panel (right, placeholder until slice 10) */
+/* Summary panel (right) — operation ledger */
 .ce-summary-panel {
   padding: 16px;
   font-size: 13px;
@@ -618,6 +618,51 @@ html[data-theme="dark"] .ce-operation-panel {
 .ce-summary-panel p {
   color: var(--ce-ink-muted);
   margin: 0;
+}
+
+.ce-operations-list .ce-operation-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--ce-rule);
+  font-size: 12px;
+}
+
+.ce-operations-list .ce-operation-item:last-child {
+  border-bottom: none;
+}
+
+.ce-operations-list .ce-op-kind {
+  font: 600 11px/1.2 var(--mono);
+  color: var(--ce-ink);
+}
+
+.ce-operations-list .ce-op-status {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: var(--ce-rule-strong);
+  color: var(--ce-ink-muted);
+}
+
+.ce-operations-list .ce-op-status-applied { background: #2d8; color: #fff; }
+.ce-operations-list .ce-op-status-attention { background: #d92; color: #fff; }
+.ce-operations-list .ce-op-status-failed { background: #d44; color: #fff; }
+.ce-operations-list .ce-op-status-partial { background: #e90; color: #fff; }
+
+.ce-operations-list .ce-op-targets {
+  color: var(--ce-ink-muted);
+  margin-left: auto;
+}
+
+.ce-operations-list button {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  cursor: pointer;
 }
 
 /* ── Instrument view ────────────────────────────────────────────────── */

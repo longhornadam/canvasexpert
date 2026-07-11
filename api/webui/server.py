@@ -62,6 +62,7 @@ from .routes.powergrader import router as _powergrader_router
 from .routes.readiness import router as _readiness_router
 from .routes.receipts import router as _receipts_router
 from .routes.work import router as _work_router
+from .routes.operations import router as _operations_router
 
 
 @asynccontextmanager
@@ -120,3 +121,4 @@ app.include_router(_powergrader_router)
 app.include_router(_readiness_router)
 app.include_router(_receipts_router)
 app.include_router(_work_router)
+app.include_router(_operations_router)

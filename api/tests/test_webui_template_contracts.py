@@ -330,7 +330,8 @@ def test_course_expert_preserves_all_critical_ids():
         "af-rubric-controls", "af-rubric-mode", "af-rubric-link",
         "btn-af-copy-prompt", "af-rubric-status", "btn-af-validate", "btn-af-push",
         "af-log", "af-banner",
-        "ce-tab-page", "page", "pf-file", "btn-pf-validate", "btn-pf-push",
+        "ce-tab-page", "page", "pf-file", "btn-pf-validate", "btn-pf-prepare",
+        "btn-pf-push",
         "pf-log", "pf-banner",
         "ce-tab-rubric", "rubric", "rf-file", "btn-rf-validate", "btn-rf-push",
         "rf-log", "rf-banner",
@@ -378,11 +379,11 @@ def test_course_expert_preserves_globals():
 
 
 def test_course_expert_has_summary_panel():
-    """course_expert.html must have a summary panel placeholder."""
+    """course_expert.html must have a summary panel with operations list container."""
     html = _slurp("api/webui/templates/course_expert.html")
-    assert "Canvas unchanged." in html
     assert "Summary" in html
-    assert "/api/operations" not in html
+    assert 'id="ce-operations-list"' in html
+    assert "Canvas unchanged." in html  # empty-state placeholder text
 
 
 def test_work_rail_js_passes_syntax_check():

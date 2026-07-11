@@ -148,3 +148,173 @@ def find_receipt(receipt_id: str) -> dict | None:
             if receipt.get("receipt_id") == receipt_id:
                 return copy.deepcopy(receipt)
         return None
+
+
+# ── Operations document ─────────────────────────────────────────────────
+
+class OperationsSchemaError(ValueError):
+    """Raised when an operations document does not match the supported schema."""
+
+
+def _empty_operations() -> dict:
+    return {"version": 1, "operations": []}
+
+
+def _validate_operations_document(document: dict) -> None:
+    if not isinstance(document, dict) or document.get("version") != 1:
+        raise OperationsSchemaError("unsupported operations document version")
+    if not isinstance(document.get("operations"), list):
+        raise OperationsSchemaError("operations document must contain a list")
+
+
+def _read_operations_unlocked() -> dict:
+    path = paths.operations_file()
+    if not path.exists():
+        return _empty_operations()
+    try:
+        with path.open(encoding="utf-8") as handle:
+            document = json.load(handle)
+        _validate_operations_document(document)
+        return document
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, OperationsSchemaError):
+        _quarantine(path)
+        return _empty_operations()
+
+
+def _atomic_write_operations_unlocked(document: dict) -> None:
+    _validate_operations_document(document)
+    atomic_write_json(paths.operations_file(), document)
+
+
+def read_operations_document() -> dict:
+    with _LOCK:
+        return copy.deepcopy(_read_operations_unlocked())
+
+
+def write_operations_document(document: dict) -> None:
+    with _LOCK:
+        _atomic_write_operations_unlocked(document)
+
+
+def find_operation(operation_id: str) -> dict | None:
+    with _LOCK:
+        document = _read_operations_unlocked()
+        for op in document["operations"]:
+            if op.get("operation_id") == operation_id:
+                return copy.deepcopy(op)
+        return None
+
+
+def upsert_operation(operation: dict) -> dict:
+    """Insert or replace an operation by operation_id. Returns a deep copy."""
+    with _LOCK:
+        document = _read_operations_unlocked()
+        found = False
+        for i, op in enumerate(document["operations"]):
+            if op.get("operation_id") == operation["operation_id"]:
+                document["operations"][i] = copy.deepcopy(operation)
+                found = True
+                break
+        if not found:
+            document["operations"].append(copy.deepcopy(operation))
+        _atomic_write_operations_unlocked(document)
+        return copy.deepcopy(operation)
+
+
+# ── Claims document ─────────────────────────────────────────────────────
+
+class ClaimsSchemaError(ValueError):
+    """Raised when a claims document does not match the supported schema."""
+
+
+def _empty_claims() -> dict:
+    return {"version": 1, "claims": []}
+
+
+def _validate_claims_document(document: dict) -> None:
+    if not isinstance(document, dict) or document.get("version") != 1:
+        raise ClaimsSchemaError("unsupported claims document version")
+    if not isinstance(document.get("claims"), list):
+        raise ClaimsSchemaError("claims document must contain a list")
+
+
+def _read_claims_unlocked() -> dict:
+    path = paths.claims_file()
+    if not path.exists():
+        return _empty_claims()
+    try:
+        with path.open(encoding="utf-8") as handle:
+            document = json.load(handle)
+        _validate_claims_document(document)
+        return document
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, ClaimsSchemaError):
+        _quarantine(path)
+        return _empty_claims()
+
+
+def _atomic_write_claims_unlocked(document: dict) -> None:
+    _validate_claims_document(document)
+    atomic_write_json(paths.claims_file(), document)
+
+
+def read_claims_document() -> dict:
+    with _LOCK:
+        return copy.deepcopy(_read_claims_unlocked())
+
+
+def write_claims_document(document: dict) -> None:
+    with _LOCK:
+        _atomic_write_claims_unlocked(document)
+
+
+def upsert_claim(claim: dict) -> dict:
+    """Insert or replace a claim by claim_id. Returns a deep copy."""
+    with _LOCK:
+        document = _read_claims_unlocked()
+        found = False
+        for i, c in enumerate(document["claims"]):
+            if c.get("claim_id") == claim["claim_id"]:
+                document["claims"][i] = copy.deepcopy(claim)
+                found = True
+                break
+        if not found:
+            document["claims"].append(copy.deepcopy(claim))
+        _atomic_write_claims_unlocked(document)
+        return copy.deepcopy(claim)
+
+
+def modify_claims(mutator) -> dict:
+    """Atomically read-modify-write the claims document.
+
+    ``mutator`` receives a deep copy of the claims document and must return
+    the (possibly modified) document. The lock is held across the entire
+    operation, so concurrent callers are serialized.
+    """
+    with _LOCK:
+        document = _read_claims_unlocked()
+        result = mutator(document)
+        _atomic_write_claims_unlocked(document)
+        return result
+
+
+def modify_operations(mutator) -> dict:
+    """Atomically read-modify-write the operations document.
+
+    ``mutator`` receives a deep copy of the operations document and must return
+    the (possibly modified) document. The lock is held across the entire
+    operation.
+    """
+    with _LOCK:
+        document = _read_operations_unlocked()
+        result = mutator(document)
+        _atomic_write_operations_unlocked(document)
+        return result
+
+
+def find_claim(claim_id: str) -> dict | None:
+    with _LOCK:
+        document = _read_claims_unlocked()
+        for c in document["claims"]:
+            if c.get("claim_id") == claim_id:
+                return copy.deepcopy(c)
+        return None

@@ -445,6 +445,7 @@
         </div>
         <div class="actions">
           <button id="btn-pf-validate">Validate</button>
+          <button id="btn-pf-prepare" class="secondary">Prepare publication</button>
           <button id="btn-pf-push" class="primary">Push page…</button>
         </div>
         <div class="course-scope-summary" data-course-scope="page" aria-live="polite"></div>
@@ -732,7 +733,9 @@
   <!-- ── Summary panel (right) ────────────────────────────────────────── -->
   <div class="ce-summary-panel" aria-label="Operation summary">
     <h3>Summary</h3>
-    <p>Canvas unchanged.</p>
+    <div id="ce-operations-list" class="ce-operations-list">
+      <p class="ce-operations-empty">Canvas unchanged.</p>
+    </div>
   </div>
 
   </div><!-- /.ce-workbench-grid -->
