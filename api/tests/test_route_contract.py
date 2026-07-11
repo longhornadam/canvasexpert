@@ -167,6 +167,10 @@ EXPECTED = [
     ('/api/readiness/probe', ('POST',)),
     ('/api/receipts', ('GET',)),
     ('/api/receipts/{receipt_id}', ('GET',)),
+    ('/api/work', ('GET',)),
+    ('/api/work/{job_id}/complete', ('POST',)),
+    ('/api/work/{job_id}/ignore', ('POST',)),
+    ('/api/work/{job_id}/snooze', ('POST',)),
     ('/student-reports', ('GET',)),
 ]
 
