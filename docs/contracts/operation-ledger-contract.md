@@ -1,6 +1,7 @@
 # Operation Ledger Contract
 
-Status: proposed durable safety contract. Accept before slice 10.
+Status: accepted. Ferrari design pass complete in
+`docs/reference/operation-ledger-design.md`. Slice 10 implements from both.
 
 ## Boundary and storage
 

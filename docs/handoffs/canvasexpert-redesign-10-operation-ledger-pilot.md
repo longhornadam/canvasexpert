@@ -1,5 +1,10 @@
 # Toyota handoff 10: prepared-operation engine with PageForge pilot
 
+> **Ferrari design accepted.** The authoritative design is
+> `docs/reference/operation-ledger-design.md`. The contract remains
+> `docs/contracts/operation-ledger-contract.md`. Implement from the design
+> document; any deviation requires Ferrari escalation.
+
 ## Objective
 
 Implement the Operation Ledger Contract and migrate one lower-risk creation kind—PageForge
