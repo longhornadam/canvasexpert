@@ -6,7 +6,7 @@ pushes content to live courses via the REST and New Quizzes APIs:
 - **Push Quizzes** (QuizForge JSON → live New Quizzes)
 - **Push Assignments** (AssignmentForge JSON → live assignments, with tier overrides)
 - **Push Pages** (PageForge JSON → live pages)
-- **Push Rubrics** (RubricForge JSON → live rubrics + student explainer pages)
+- **Push Rubrics** (RubricForge JSON → prepare-only: parse, validate, scoring prompts, student page preview — live Canvas push not yet wired)
 - **Printable outputs** (QuizForge JSON → local DOCX + PDF files)
 - **Gradebook tools** — late policy sweep, student extensions, curves
 - **PowerGrader** — keyboard grading queue, Safe AI Packet export, Copilot batch
@@ -22,7 +22,7 @@ Local-only, never served. See `AGENTS.md` Guardrails.
 | **QuizForge** | `../LLM_Modules/QuizForge_Base.md` (v3.0-json) | Quiz authoring: 12 question types, rationales, tiers |
 | **AssignmentForge** | `../LLM_Modules/AssignmentForge_Base.md` (v1.0-json) | Assignment authoring: submissions, scaffolding tiers |
 | **PageForge** | `../LLM_Modules/PageForge_Base.md` (v1.0-json) | Page authoring: unit hubs, placeholders |
-| **RubricForge** | `../LLM_Modules/RubricForge_Base.md` (v1.0-json) | Rubric authoring: analytics criteria, explainer page, scoring prompt |
+| **RubricForge** | `../LLM_Modules/RubricForge_Base.md` (v1.0-json) | Rubric authoring: criteria, explainer page, scoring prompt (live push not yet wired) |
 
 Each contract is canonical in `../LLM_Modules/` — this backend consumes, never forks.
 Token security: the repo is **private**; a `pre-commit` hook blocks the token pattern;
