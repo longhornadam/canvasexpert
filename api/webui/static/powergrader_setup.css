@@ -128,7 +128,30 @@
 /* ── Model picker ──────────────────────────────────────────────────── */
 .pg-model-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:-4px; }
 
-.pg-inline-open { float:right; margin-top:-2px; }
+.pg-inline-open { margin: 0; flex: 0 0 auto; }
+
+.pg-control-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.pg-control-head label {
+  margin: 0;
+  min-width: 0;
+}
+
+.pg-control-group,
+.pg-fast-field {
+  min-width: 0;
+}
+
+.pg-control-group > select,
+.pg-fast-field > select {
+  margin-top: 0;
+}
 
 .pg-model-picker { position:relative; }
 
@@ -268,11 +291,15 @@
 }
 
 .pg-assignment-tools input[type="search"] {
-  flex:1 1 180px; min-width:120px;
+  flex: 1 1 0;
+  min-width: 180px;
 }
 
 .pg-assignment-group-control {
   display:flex; align-items:center; gap:6px;
+  flex: 0 1 300px;
+  min-width: 220px;
+  max-width: 300px;
   margin:0; font-weight:400; font-size:13px; white-space:nowrap;
 }
 
@@ -281,7 +308,10 @@
 }
 
 .pg-assignment-group-control select {
-  width:auto; min-width:130px;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 130px;
+  max-width: 100%;
 }
 
 /* ── Fast-mode configuration ───────────────────────────────────────── */
@@ -291,9 +321,8 @@
   gap: 10px;
 }
 
-.pg-fast-row > label {
+.pg-fast-field {
   flex: 1;
-  min-width: 0;
 }
 
 /* ── AI configuration panels ───────────────────────────────────────── */
@@ -331,6 +360,7 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 .pg-start-primary .hint {
@@ -395,10 +425,15 @@
 
   .pg-assignment-tools input[type="search"] {
     width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
   }
 
   .pg-assignment-group-control {
     width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 0 0 auto;
     display: grid;
     grid-template-columns: auto 1fr;
     gap: 6px;
@@ -413,12 +448,18 @@
     flex-direction: column;
   }
 
+  .pg-control-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   .pg-start-actions {
     flex-direction: column;
   }
 
   .pg-start-primary {
     width: 100%;
+    margin-left: 0;
     flex-direction: column;
     align-items: stretch;
   }

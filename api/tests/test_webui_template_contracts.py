@@ -239,9 +239,6 @@ def test_pg_ai_options_starts_hidden():
     assert 'hidden' in ai_tag, (
         "#pg-ai-options must use hidden attribute, not style='display:none'"
     )
-    assert 'hidden' in ai_tag, (
-        "#pg-ai-options must use hidden attribute, not style='display:none'"
-    )
     assert 'style="display:none"' not in html[html.index('id="pg-ai-options"'):html.index('id="pg-ai-options"') + 200], (
         "#pg-ai-options must not have inline display:none"
     )
@@ -263,14 +260,8 @@ def test_pg_api_only_containers_start_hidden():
     assert len(api_only_tags) >= 3, (
         f"Expected at least 3 .pg-api-only elements, found {len(api_only_tags)}"
     )
-    for tag in api_only_tags:
-        count = html.count(f'class="pg-api-only" hidden')
-        count2 = html.count(f'class="pg-api-only pg-api-only" hidden')  # unlikely but check
-        count3 = html.count('pg-api-only" hidden')  # any class ending with pg-api-only
-        # Better: just check each occurrence
-    # Count properly
     occurrences = [m for m in re.finditer(r'<[^>]*\bpg-api-only\b[^>]*>', html)]
-    hidden_occurrences = [m for m in occurrences if 'hidden' in m.group()]
+    hidden_occurrences = [m for m in occurrences if re.search(r'\bhidden\b', m.group())]
     assert len(hidden_occurrences) == len(occurrences), (
         f"Expected all {len(occurrences)} .pg-api-only elements to have hidden, "
         f"found {len(hidden_occurrences)} with hidden"
@@ -427,4 +418,54 @@ def test_powergrader_css_intermediate_breakpoint():
     css = _slurp("api/webui/static/powergrader_setup.css")
     assert '@media (max-width: 980px)' in css, (
         "CSS missing 980px intermediate breakpoint"
+    )
+
+
+def test_powergrader_mobile_search_resets_column_flex_basis():
+    """The stacked mobile search control must retain normal input height."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    mobile = css[css.index('@media (max-width: 760px)'):]
+    match = re.search(
+        r'\.pg-assignment-tools input\[type="search"\]\s*\{([^}]*)\}',
+        mobile,
+        re.DOTALL,
+    )
+    assert match and re.search(r'flex:\s*0\s+0\s+auto', match.group(1)), (
+        "Mobile search must reset its desktop flex basis to avoid a 180px-tall input"
+    )
+
+
+def test_powergrader_fast_start_action_aligns_right():
+    """The fast-mode action remains right-aligned when acknowledgment is hidden."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    match = re.search(r'\.pg-start-primary\s*\{([^}]*)\}', css, re.DOTALL)
+    assert match and re.search(r'margin-left:\s*auto', match.group(1)), (
+        ".pg-start-primary must use automatic left margin on desktop"
+    )
+
+
+def test_powergrader_module_control_is_bounded_below_search_width():
+    """Desktop Modules must not consume more space than assignment search."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    search = re.search(
+        r'\.pg-assignment-tools input\[type="search"\]\s*\{([^}]*)\}',
+        css,
+        re.DOTALL,
+    )
+    match = re.search(r'\.pg-assignment-group-control\s*\{([^}]*)\}', css, re.DOTALL)
+    assert search and re.search(r'flex:\s*1\s+1\s+0', search.group(1)), (
+        "Desktop search needs a zero flex basis so Search and Modules stay on one row"
+    )
+    assert match and re.search(r'max-width:\s*300px', match.group(1)), (
+        "Desktop module control needs a bounded width so Search remains wider"
+    )
+
+
+def test_powergrader_folder_buttons_do_not_use_float_layout():
+    """Folder actions must participate in the responsive flex/grid layout."""
+    css = _slurp("api/webui/static/powergrader_setup.css")
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    assert 'float:' not in css, "PowerGrader folder actions must not use float layout"
+    assert 'class="pg-control-head"' in html, (
+        "PowerGrader template must group control labels and folder actions in flex headers"
     )

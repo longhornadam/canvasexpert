@@ -22,8 +22,8 @@ into nearby helper modules or the backend package when it becomes reusable.
 - `api/webui/routes/powergrader.py` - 488 lines
 - `api/webui/static/powergrader/setup_core.js` - 413 lines
 - `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
-- `api/webui/static/powergrader_setup.css` - ~350 lines
-- `api/webui/templates/powergrader_setup.html` - ~200 lines
+- `api/webui/static/powergrader_setup.css` - 483 lines
+- `api/webui/templates/powergrader_setup.html` - 271 lines
 - `api/webui/static/powergrader/queue_core.js` - 332 lines
 - `api/webui/static/powergrader/queue_review.js` - 173 lines
 - `api/webui/static/powergrader/queue_import.js` - 261 lines

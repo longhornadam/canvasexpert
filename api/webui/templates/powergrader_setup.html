@@ -88,17 +88,20 @@
              aria-labelledby="pg-fast-title">
       <h2 id="pg-fast-title" class="pg-step-title">3. Grading setup</h2>
       <div class="pg-fast-row">
-        <label>Rubric <small class="lbl-hint">(optional reference while grading yourself)</small>
-          {% if rubrics_folder %}
-          <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
-          {% endif %}
+        <div class="pg-fast-field">
+          <div class="pg-control-head">
+            <label for="pg-rubric-fast-sel">Rubric <small class="lbl-hint">(optional reference while grading yourself)</small></label>
+            {% if rubrics_folder %}
+            <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
+            {% endif %}
+          </div>
           <select name="rubric_name" id="pg-rubric-fast-sel">
             <option value="">— no rubric —</option>
             {% for r in rubrics %}
             <option value="{{ r }}">{{ r }}</option>
             {% endfor %}
           </select>
-        </label>
+        </div>
       </div>
     </section>
 
@@ -109,29 +112,35 @@
       <div class="pg-ai-grid">
         <div class="pg-ai-settings">
           <h3 class="pg-panel-title">AI setup</h3>
-          <label>Rubric <small class="lbl-hint">(included in AI packets and API scoring)</small>
-            {% if rubrics_folder %}
-            <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
-            {% endif %}
+          <div class="pg-control-group">
+            <div class="pg-control-head">
+              <label for="pg-rubric">Rubric <small class="lbl-hint">(included in AI packets and API scoring)</small></label>
+              {% if rubrics_folder %}
+              <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
+              {% endif %}
+            </div>
             <select name="rubric_name" id="pg-rubric">
               <option value="">— no rubric —</option>
               {% for r in rubrics %}
               <option value="{{ r }}">{{ r }}</option>
               {% endfor %}
             </select>
-          </label>
-          <label>AI persona
-            {% if persona_folder %}
-            <button type="button" class="small pg-inline-open" data-open-path="{{ persona_folder }}">Open Personas folder</button>
-            {% elif ai_ta_folder %}
-            <button type="button" class="small pg-inline-open" data-open-path="{{ ai_ta_folder }}">Open AI-TA folder</button>
-            {% endif %}
+          </div>
+          <div class="pg-control-group">
+            <div class="pg-control-head">
+              <label for="pg-persona">AI persona</label>
+              {% if persona_folder %}
+              <button type="button" class="small pg-inline-open" data-open-path="{{ persona_folder }}">Open Personas folder</button>
+              {% elif ai_ta_folder %}
+              <button type="button" class="small pg-inline-open" data-open-path="{{ ai_ta_folder }}">Open AI-TA folder</button>
+              {% endif %}
+            </div>
             <select name="persona_id" id="pg-persona">
               {% for p in personas %}
               <option value="{{ p.id }}">{{ p.name }}{% if p.builtin %} (built-in){% endif %}</option>
               {% endfor %}
             </select>
-          </label>
+          </div>
           <label class="pg-api-only" hidden>AI model <small class="lbl-hint">(OpenRouter; searchable; default is DeepSeek V4 Pro)</small>
             <div class="pg-model-picker" id="pg-model-picker">
               <div class="pg-model-input-wrap">

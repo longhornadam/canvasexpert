@@ -147,4 +147,3 @@ The implementer reply must contain:
 If the implementer cannot perform the rendered-app checks, it must stop and report that
 limitation. It must not claim completion, archive the handoff, or substitute source-text
 tests for runtime evidence.
-
