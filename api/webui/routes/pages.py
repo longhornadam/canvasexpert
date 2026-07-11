@@ -17,6 +17,9 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import config, workspace
+from ..local_request_guard import csrf_token
+from api.operation_ledger import receipts as receipt_store
+from . import work as work_routes
 from ..deps import (
     AI_TA_DIR, API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
     list_ai_ta_files, list_assignment_files, list_calendar_files,
@@ -53,6 +56,7 @@ def _routines_template_context() -> dict:
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     courses = config.active_courses()
+    initial_jobs = work_routes._section_jobs("all") or []
     workspace_root = workspace.workspace_root()
     workspace_status = "local folders"
     if workspace_root:
@@ -60,12 +64,15 @@ def dashboard(request: Request):
         folder = parts[-1] if parts else workspace_root
         workspace_status = f"OneDrive/{folder}" if any("OneDrive" in p for p in parts) else folder
     return templates.TemplateResponse(request, "dashboard.html", {
-        "nav_section":    "dashboard",
+        "nav_section":    "",
         "token_is_set":   config.token_is_set(),
         "canvas_base":    config.get_canvas_base(),
         "saved_courses":  courses,
         "active_count":   len(courses),
         "workspace_status": workspace_status,
+        "csrf_token": csrf_token(),
+        "initial_jobs": initial_jobs,
+        "initial_receipts": receipt_store.list_receipts(),
     })
 
 

@@ -232,12 +232,41 @@ def test_legacy_nav_labels_absent():
         )
 
 
-def test_dashboard_has_start_a_job():
-    """dashboard.html must contain 'Start a job' section heading."""
+def test_dashboard_has_desk_start_surface():
+    """The Desk must expose its explicit Start section and course field."""
     html = _slurp("api/webui/templates/dashboard.html")
-    assert "Start a job" in html, (
-        "Dashboard missing 'Start a job' section heading"
-    )
+    assert 'class="ce-desk-label ce-create-mark">Start</p>' in html
+    assert 'id="desk-course-field"' in html
+    for heading in ["Continue", "Attention", "Prepared", "Receipts"]:
+        assert f">{heading}<" in html or f">{heading} " in html
+
+
+def test_desk_contract_keeps_workbench_boundaries():
+    """Desk opts into the Workbench shell without leaking legacy concerns."""
+    html = _slurp("api/webui/templates/dashboard.html")
+    js = _slurp("api/webui/static/desk.js")
+    workbench = _slurp("api/webui/templates/workbench_base.html")
+    assert "Teacher Jobs" not in html
+    assert "/api/operations" not in html + js
+    assert "/api/work/scan" in js
+    assert "/api/work?section=all" in js
+    assert "/api/receipts" in js
+    assert "No prepared operations yet." in html
+    assert 'name="canvasexpert-csrf-token"' in workbench
+    assert "/static/workbench.css" not in workbench
+    assert js.count("X-CanvasExpert-CSRF") == 1
+
+
+def test_desk_start_links_preserve_existing_routes():
+    """Start cards stay plain links to the unchanged workflow routes."""
+    html = _slurp("api/webui/templates/dashboard.html")
+    expected = [
+        "/push/assignment", "/push/quiz", "/push/quick", "/push/page",
+        "/push/rubric", "/powergrader", "/gradebook", "/roster",
+        "/student-reports", "/download-work", "/routines",
+    ]
+    for route in expected:
+        assert f'href="{route}"' in html
 
 
 def test_route_nav_sections_updated():

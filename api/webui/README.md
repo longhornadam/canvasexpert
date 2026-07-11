@@ -17,7 +17,7 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 
 | Route | Page | JS |
 |---|---|---|
-| `/` | Dashboard (welcome, status strip, common jobs, Work/Rosters/Gradebooks/Settings + Extras lanes) | — |
+| `/` | **Desk** — the cross-course Start / Continue / Attention / Prepared / Receipts surface | `dashboard.html` + `desk.js` |
 | `/course-expert` | **Work tools** — all push tools + downloads, in tabs | `push.js` + `push/*.js`, `course_expert/*.js` |
 | `/gradebook` | **Gradebook tools** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
 | `/roster` | **Rosters** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
@@ -140,13 +140,22 @@ Root folder for submission downloads. Each course gets its own subfolder.
 
 ---
 
-## Dashboard (`/`)
+## Desk (`/`)
 
-Landing page: a status strip (Canvas base, token state, workspace), a common-jobs
-grid, and secondary lanes that mirror the top navigation: **PowerGrader**, **Work**,
-**Rosters**, **Gradebooks**, and **Settings / Extras**. Extras contains less-frequent
-helpers such as About, authoring helper files, the QuizForge compiler, and contract
-downloads.
+Desk is the full-width local landing surface for Start, Continue, Attention,
+Prepared, Receipts, and active-course context. Its initial view is rendered from
+local active-course configuration, the work registry, and real receipt
+projections. Readiness continues to come from `/api/readiness`; the Desk's
+asynchronous Scan uses the guarded `POST /api/work/scan` route and never scans
+Canvas during an ordinary `GET /api/work`.
+
+Start cards preserve the existing workflow routes and apply an explicitly chosen
+course scope through the shared `CE_CONTEXT` contract. Continue and Attention
+show local work-registry items; Ignore, Snooze, and Complete use the guarded
+local mutation routes. Prepared is intentionally honest until prepared-operation
+projections are available, and currently reports that there are no prepared
+operations. Desk reads `/api/work` and `/api/receipts`, does not call
+`/api/operations`, and does not alter the legacy `/api/activity` behavior.
 
 ### Routines
 

@@ -205,3 +205,335 @@ html[data-theme="dark"] .ce-operation-panel {
     min-width: 0;
   }
 }
+
+/* ── Desk launch surface ──────────────────────────────────────────────── */
+.ce-workbench-main {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ce-workbench-header nav {
+  gap: 2px;
+}
+
+.ce-workbench-header .ce-workbench-nav-link {
+  color: rgba(255, 255, 255, .9);
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ce-workbench-header .ce-workbench-nav-link:hover,
+.ce-workbench-header .ce-workbench-nav-link:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, .14);
+}
+
+.ce-desk-shell {
+  min-width: 0;
+  padding: clamp(24px, 3vw, 48px);
+  background: var(--ce-paper);
+}
+
+.ce-desk-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  margin: 0 auto 22px;
+  max-width: 1760px;
+}
+
+.ce-desk-kicker,
+.ce-desk-label {
+  margin: 0 0 6px;
+  color: var(--ce-ink-muted);
+  font: 700 11px/1.2 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.ce-desk-kicker {
+  color: var(--ce-canvas);
+}
+
+.ce-desk-intro h1,
+.ce-desk-panel h2 {
+  margin: 0;
+  color: var(--ce-ink);
+  font-family: var(--display);
+  letter-spacing: -.025em;
+}
+
+.ce-desk-intro h1 {
+  font-size: clamp(28px, 3vw, 46px);
+  line-height: 1.05;
+}
+
+.ce-desk-lede {
+  margin: 10px 0 0;
+  color: var(--ce-ink-muted);
+  font-size: 16px;
+}
+
+.ce-desk-scope {
+  display: grid;
+  flex: 0 1 360px;
+  gap: 6px;
+  min-width: 260px;
+}
+
+.ce-desk-scope label {
+  color: var(--ce-ink-muted);
+  font: 700 11px/1.2 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ce-desk-scope select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--ce-rule-strong);
+  border-radius: 6px;
+  background: var(--ce-paper-raised);
+  color: var(--ce-ink);
+  font: inherit;
+}
+
+.ce-desk-scope-note {
+  min-height: 22px;
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: 12px;
+}
+
+.ce-desk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1760px;
+  margin: 0 auto 22px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ce-rule-strong);
+  border-bottom: 1px solid var(--ce-rule);
+  color: var(--ce-ink-muted);
+  font-size: 12px;
+}
+
+.ce-desk-toolbar strong {
+  margin-right: 10px;
+  color: var(--ce-ink);
+  font: 700 11px/1.2 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ce-desk-button {
+  border: 1px solid var(--ce-rule-strong);
+  border-radius: 5px;
+  padding: 8px 12px;
+  background: var(--ce-paper-raised);
+  color: var(--ce-ink);
+  cursor: pointer;
+  font: 700 12px/1.2 var(--font);
+}
+
+.ce-desk-button--primary {
+  border-color: var(--ce-canvas);
+  background: var(--ce-canvas);
+  color: #fff;
+}
+
+.ce-desk-button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.ce-desk-grid {
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+.ce-desk-panel {
+  min-width: 0;
+}
+
+.ce-desk-panel--start {
+  grid-column: 1 / -1;
+}
+
+.ce-desk-panel--half {
+  grid-column: span 6;
+}
+
+.ce-desk-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.ce-desk-panel h2 {
+  font-size: 21px;
+}
+
+.ce-desk-panel-note {
+  color: var(--ce-ink-muted);
+  font: 11px/1.3 var(--mono);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.ce-desk-start-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ce-desk-start-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  min-width: 0;
+  min-height: 108px;
+  padding: 14px;
+  border: 1px solid var(--ce-rule);
+  border-top: 3px solid currentColor;
+  border-radius: 6px;
+  background: var(--ce-paper-raised);
+  color: var(--ce-ink);
+  text-decoration: none;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+
+.ce-desk-start-card:hover {
+  border-color: currentColor;
+  box-shadow: 0 8px 18px rgba(22, 25, 28, .12);
+  transform: translateY(-1px);
+}
+
+.ce-desk-start-card strong {
+  align-self: center;
+  color: var(--ce-ink);
+  font-family: var(--display);
+  font-size: 15px;
+}
+
+.ce-desk-start-card > span:last-child {
+  grid-column: 2;
+  color: var(--ce-ink-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ce-desk-card-index {
+  align-self: center;
+  color: currentColor;
+  font: 700 11px/1 var(--mono);
+  opacity: .8;
+}
+
+.ce-desk-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ce-desk-job,
+.ce-desk-receipt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ce-ledger-rule);
+}
+
+.ce-desk-job:last-child,
+.ce-desk-receipt:last-child {
+  border-bottom: 0;
+}
+
+.ce-desk-job strong,
+.ce-desk-receipt strong,
+.ce-desk-job span,
+.ce-desk-receipt span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ce-desk-job strong,
+.ce-desk-receipt strong {
+  color: var(--ce-ink);
+  font-size: 13px;
+}
+
+.ce-desk-job span,
+.ce-desk-receipt span {
+  color: var(--ce-ink-muted);
+  font-size: 12px;
+}
+
+.ce-desk-inline-link {
+  flex: none;
+  color: var(--ce-canvas);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ce-desk-inline-link:hover {
+  text-decoration: underline;
+}
+
+.ce-desk-job-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ce-desk-job-actions button {
+  border: 1px solid var(--ce-rule-strong);
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--ce-ink-muted);
+  cursor: pointer;
+  font: 11px/1.2 var(--font);
+}
+
+.ce-desk-job-actions button:hover {
+  border-color: var(--ce-canvas);
+  color: var(--ce-canvas);
+}
+
+.ce-desk-empty {
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .ce-desk-start-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .ce-desk-intro,
+  .ce-desk-toolbar { align-items: stretch; flex-direction: column; }
+  .ce-desk-scope { flex-basis: auto; }
+  .ce-desk-panel--half { grid-column: 1 / -1; }
+  .ce-desk-start-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 480px) {
+  .ce-desk-start-grid { grid-template-columns: 1fr; }
+}
