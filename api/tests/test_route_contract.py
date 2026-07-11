@@ -165,6 +165,8 @@ EXPECTED = [
     ('/api/powergrader/start', ('POST',)),
     ('/api/readiness', ('GET',)),
     ('/api/readiness/probe', ('POST',)),
+    ('/api/receipts', ('GET',)),
+    ('/api/receipts/{receipt_id}', ('GET',)),
     ('/student-reports', ('GET',)),
 ]
 

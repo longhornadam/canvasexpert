@@ -79,3 +79,15 @@ def recent(limit: int = 50, action: str | None = None,
         events = [e for e in events if any(lo in (c or "").lower()
                                            for c in e.get("courses", []))]
     return events[:limit]
+
+
+def receipt_projection(receipt: dict) -> dict:
+    """Return a content-free activity projection; receipt storage stays authoritative."""
+    return {
+        "action": "receipt",
+        "title": "Operation receipt",
+        "courses": [],
+        "ok": receipt.get("status") == "applied",
+        "url": f"/api/receipts/{receipt.get('receipt_id', '')}",
+        "detail": None,
+    }
