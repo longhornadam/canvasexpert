@@ -369,6 +369,7 @@ def pg_late_watch(
     session = _load_session(session_id)
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+    session_actions.invalidate_pending_review(session)
     if session.get("mode") != "assisted":
         return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-Score With API."})
     late_watch = session.get("late_watch") or {}
@@ -388,6 +389,7 @@ def pg_late_preview(session_id: str):
     session = _load_session(session_id)
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+    session_actions.invalidate_pending_review(session)
     err = _late_watch_error(session)
     if err:
         return JSONResponse({"ok": False, "error": err})
@@ -411,6 +413,7 @@ def pg_late_score(session_id: str):
     session = _load_session(session_id)
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+    session_actions.invalidate_pending_review(session)
     result = _run_late_catchup_score(session)
     if not result["ok"]:
         return JSONResponse(result)
@@ -442,6 +445,10 @@ def pg_import_results(
     results: str = Form(""),
     batch_id: str = Form(""),
 ):
+    session = _load_session(session_id)
+    if session:
+        session_actions.invalidate_pending_review(session)
+        _save_session(session)
     payload, status_code = import_results.import_results_into_session(
         session_id,
         results,
@@ -473,16 +480,34 @@ def pg_grade(
     return JSONResponse(payload, status_code=status_code)
 
 
-@router.post("/api/powergrader/session/{session_id}/push")
-def pg_push(
+@router.post("/api/powergrader/session/{session_id}/push-review")
+def pg_push_review(
     session_id: str,
     user_ids: str = Form(""),
 ):
-    payload, status_code = session_actions.push_grades(
+    payload, status_code = session_actions.review_push(
         session_id,
         user_ids=user_ids,
         load_session=_load_session,
         save_session=_save_session,
+        canvas_get=_canvas_get,
+    )
+    return JSONResponse(payload, status_code=status_code)
+
+
+@router.post("/api/powergrader/session/{session_id}/push")
+def pg_push(
+    session_id: str,
+    user_ids: str = Form(""),
+    review_token: str = Form(""),
+):
+    payload, status_code = session_actions.push_grades(
+        session_id,
+        user_ids=user_ids,
+        review_token=review_token,
+        load_session=_load_session,
+        save_session=_save_session,
         canvas_send=_canvas_send,
+        canvas_get=_canvas_get,
     )
     return JSONResponse(payload, status_code=status_code)

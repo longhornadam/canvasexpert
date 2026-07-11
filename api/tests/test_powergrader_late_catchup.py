@@ -267,7 +267,7 @@ def test_push_grades_includes_late_override_for_late_catchup_student():
     payloads = []
 
     def load_session(session_id):
-        return copy.deepcopy(session)
+        return copy.deepcopy(saved or session)
 
     def save_session(saved_session):
         saved.clear()
@@ -277,12 +277,25 @@ def test_push_grades_includes_late_override_for_late_catchup_student():
         payloads.append(payload)
         return None, None
 
+    def canvas_get(path, params=None, timeout=0):
+        return ({
+            "submission": {"score": 2, "grade": "2", "graded_at": None, "updated_at": "2026-01-01T00:00:00Z"},
+            "submission_comments": [],
+        }, None)
+
+    review, _ = session_actions.review_push(
+        "sid", user_ids="", load_session=load_session,
+        save_session=save_session, canvas_get=canvas_get,
+    )
+
     payload, status = session_actions.push_grades(
         "sid",
-        user_ids="",
+        user_ids=json.dumps(review["user_ids"]),
+        review_token=review["review_token"],
         load_session=load_session,
         save_session=save_session,
         canvas_send=canvas_send,
+        canvas_get=canvas_get,
     )
 
     assert status == 200

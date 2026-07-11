@@ -159,6 +159,16 @@ def test_workbench_base_owns_readiness_strip_and_script():
     assert '/static/readiness.js?v={{ asset_v }}' in workbench
 
 
+def test_powergrader_review_apply_contract():
+    """Manual pushes must review first and send the frozen token to apply."""
+    js = _slurp("api/webui/static/powergrader/queue_review.js")
+    assert "/push-review" in js
+    assert "review_token" in js
+    assert "CE_WRITE_REVIEW.confirm" in js
+    assert "Apply approved grades and feedback" in js
+    assert "status !== 'pushed' && result.status !== 'already_applied'" in js
+
+
 # ── No legacy canvasWriteReview function definitions ──────────────────
 
 def test_no_local_canvas_write_review_function():

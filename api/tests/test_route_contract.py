@@ -157,6 +157,7 @@ EXPECTED = [
     ('/api/powergrader/session/{session_id}/late-watch', ('POST',)),
     ('/api/powergrader/session/{session_id}/import-results', ('POST',)),
     ('/api/powergrader/session/{session_id}/packet', ('GET',)),
+    ('/api/powergrader/session/{session_id}/push-review', ('POST',)),
     ('/api/powergrader/session/{session_id}/push', ('POST',)),
     ('/api/powergrader/estimate', ('POST',)),
     ('/api/powergrader/modules', ('GET',)),

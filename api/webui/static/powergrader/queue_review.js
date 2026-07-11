@@ -56,27 +56,53 @@
       .catch(function(e){ if (queue.showStatus) queue.showStatus('Error: ' + e, true); if (after) after(false); });
   }
 
-  function pushSavedOne(userId) {
-    var fd = new FormData();
-    fd.append('user_ids', JSON.stringify([userId]));
-    fetch('/api/powergrader/session/' + sessionId + '/push', {method:'POST', body:fd})
+  function applyPushResults(data) {
+    (data.results || []).forEach(function(result){
+      if (result.status !== 'pushed' && result.status !== 'already_applied') return;
+      var student = getStudents().find(function(s){ return s.user_id === result.user_id; });
+      if (student) {
+        student.posted = true;
+        student.status = 'posted';
+      }
+    });
+    if (queue.updateProgress) queue.updateProgress();
+    if (queue.renderStudent) queue.renderStudent(getIndex());
+  }
+
+  function reviewAndApply(userIds, button) {
+    var review = new FormData();
+    review.append('user_ids', JSON.stringify(userIds));
+    fetch('/api/powergrader/session/' + sessionId + '/push-review', {method:'POST', body:review})
       .then(function(r){ return r.json(); })
-      .then(function(d){
-        var pushedStudent = getStudents().find(function(s){ return s.user_id === userId; });
-        if (d.pushed) {
-          if (pushedStudent) {
-            pushedStudent.posted = true;
-            pushedStudent.status = 'posted';
-          }
-          if (queue.showStatus) queue.showStatus('Pushed to Canvas.', false);
-          if (queue.updateProgress) queue.updateProgress();
-          if (queue.renderStudent) queue.renderStudent(getIndex());
-        } else {
-          if (queue.showStatus) queue.showStatus((d.errors && d.errors[0]) || 'Push failed.', true);
-        }
-        pushOneBtn.disabled = false;
+      .then(function(reviewData){
+        if (!reviewData.ok) throw new Error(reviewData.error || 'Push review failed.');
+        return window.CE_WRITE_REVIEW.confirm({
+          title: 'Review PowerGrader push',
+          action: 'Apply approved grades and feedback',
+          targets: reviewData.targets || [],
+          details: ['Frozen review for ' + reviewData.user_ids.length + ' submission(s).'],
+          warnings: ['Canvas is checked again before each write. Any drift blocks the apply.'],
+          confirmText: 'Apply to Canvas',
+        }).then(function(confirmed){
+          if (!confirmed) return null;
+          var apply = new FormData();
+          apply.append('user_ids', JSON.stringify(reviewData.user_ids));
+          apply.append('review_token', reviewData.review_token);
+          return fetch('/api/powergrader/session/' + sessionId + '/push', {method:'POST', body:apply})
+            .then(function(r){ return r.json(); });
+        });
       })
-      .catch(function(e){ if (queue.showStatus) queue.showStatus('Error: ' + e, true); pushOneBtn.disabled = false; });
+      .then(function(data){
+        if (!data) return;
+        if (!data.ok) {
+          if (queue.showStatus) queue.showStatus(data.error || 'Push blocked.', true);
+          return;
+        }
+        applyPushResults(data);
+        if (queue.showStatus) queue.showStatus('Push review applied.', false);
+      })
+      .catch(function(e){ if (queue.showStatus) queue.showStatus(String(e.message || e), true); })
+      .finally(function(){ if (button) button.disabled = false; });
   }
 
   function pushOne() {
@@ -86,24 +112,16 @@
     pushOneBtn.disabled = true;
     saveGrade('approved', false, function(ok){
       if (!ok) { pushOneBtn.disabled = false; return; }
-      pushSavedOne(userId);
+      reviewAndApply([userId], pushOneBtn);
     });
   }
 
   function bulkPush() {
     bulkPushBtn.disabled = true;
-    var fd = new FormData();
-    fetch('/api/powergrader/session/' + sessionId + '/push', {method:'POST', body:fd})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        getStudents().forEach(function(s){ if (d.pushed > 0 && s.status === 'approved') { s.posted = true; s.status = 'posted'; } });
-        var msg = 'Pushed ' + d.pushed + ' student(s).';
-        if (d.errors && d.errors.length) msg += ' ' + d.errors.length + ' error(s).';
-        if (queue.showStatus) queue.showStatus(msg, d.errors && d.errors.length > 0);
-        if (queue.updateProgress) queue.updateProgress();
-        if (queue.renderStudent) queue.renderStudent(getIndex());
-      })
-      .catch(function(e){ if (queue.showStatus) queue.showStatus('Error: ' + e, true); bulkPushBtn.disabled = false; });
+    var userIds = getStudents().filter(function(s){ return s.status === 'approved' && !s.posted; })
+      .map(function(s){ return s.user_id; });
+    if (!userIds.length) { bulkPushBtn.disabled = false; return; }
+    reviewAndApply(userIds, bulkPushBtn);
   }
 
   function applyAiScore(){
