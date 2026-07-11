@@ -29,7 +29,7 @@ def list_operations_route():
 
 
 @router.post("/api/operations/{kind}/prepare")
-def prepare_operation(kind: str, request: Request):
+async def prepare_operation(kind: str, request: Request):
     """Prepare an operation for later review and apply.
 
     Body: kind-specific prepare request (e.g. ``{path, published, module_name?}``
@@ -45,18 +45,27 @@ def prepare_operation(kind: str, request: Request):
             content={"ok": False, "error": f"unknown operation kind: {kind}"},
         )
 
-    import json
     try:
-        body = json.loads(request._body.decode("utf-8")) if request._body else {}
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
         return JSONResponse(
             status_code=400,
             content={"ok": False, "error": "invalid JSON body"},
         )
 
+    if not isinstance(body, dict):
+        return _bad_request("request body must be an object")
+    payload_in = body.get("payload")
+    targets_in = body.get("targets")
+    if not isinstance(payload_in, dict):
+        return _bad_request("payload must be an object")
+    target_error = _validate_target_envelope(targets_in)
+    if target_error:
+        return _bad_request(target_error)
+
     # Build payload (validates source)
     try:
-        payload = adapter.build_payload(body)
+        payload = adapter.build_payload(payload_in)
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
@@ -65,9 +74,6 @@ def prepare_operation(kind: str, request: Request):
 
     source_digest = adapter.source_digest(payload)
 
-    # Verify targets — use active courses as the target list
-    from api.webui import config
-    targets_in = [{"course_id": str(c["id"])} for c in config.active_courses()]
     try:
         targets = adapter.verify_targets(payload, targets_in)
     except ValueError as exc:
@@ -111,7 +117,7 @@ def prepare_operation(kind: str, request: Request):
 
 
 @router.post("/api/operation-batches/review")
-def review_batch(request: Request):
+async def review_batch(request: Request):
     """Freeze a review snapshot for a set of operations.
 
     Body: ``{operation_ids: ["op-...", ...]}``.
@@ -119,16 +125,15 @@ def review_batch(request: Request):
     """
     require_local_mutation(request)
 
-    import json
     try:
-        body = json.loads(request._body.decode("utf-8")) if request._body else {}
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
         return JSONResponse(
             status_code=400,
             content={"ok": False, "error": "invalid JSON body"},
         )
 
-    op_ids = body.get("operation_ids")
+    op_ids = body.get("operation_ids") if isinstance(body, dict) else None
     if not isinstance(op_ids, list) or not op_ids:
         return JSONResponse(
             status_code=400,
@@ -166,23 +171,22 @@ def review_batch(request: Request):
 
 
 @router.post("/api/operation-batches/{batch_id}/apply")
-def apply_batch(batch_id: str, request: Request):
+async def apply_batch(batch_id: str, request: Request):
     """Apply a reviewed batch to Canvas.
 
     Body: ``{review_digest: "..."}``.
     """
     require_local_mutation(request)
 
-    import json
     try:
-        body = json.loads(request._body.decode("utf-8")) if request._body else {}
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
         return JSONResponse(
             status_code=400,
             content={"ok": False, "error": "invalid JSON body"},
         )
 
-    review_digest = body.get("review_digest")
+    review_digest = body.get("review_digest") if isinstance(body, dict) else None
     if not review_digest:
         return JSONResponse(
             status_code=400,
@@ -233,6 +237,28 @@ def retry_operation(operation_id: str, request: Request):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
+
+def _bad_request(error: str) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"ok": False, "error": error})
+
+
+def _validate_target_envelope(targets) -> str | None:
+    if not isinstance(targets, list) or not targets:
+        return "targets must be a non-empty list"
+    seen = set()
+    for target in targets:
+        if not isinstance(target, dict):
+            return "each target must be an object"
+        course_id = target.get("course_id")
+        if course_id is None or not str(course_id).strip():
+            return "target course_id must be non-blank"
+        normalized = str(course_id).strip()
+        if normalized in seen:
+            return "target course_id values must be unique"
+        seen.add(normalized)
+        target.clear()
+        target["course_id"] = normalized
+    return None
 
 def _build_review_summary(adapter, payload: dict, targets: list[dict]) -> dict:
     """Build a PII-minimized review summary for the prepare response."""

@@ -19,7 +19,7 @@ OPERATION_STATUSES = (
 
 TARGET_STATES = (
     "pending", "claimed", "sent_unknown",
-    "applied", "failed", "blocked", "skipped",
+    "applied", "partial", "failed", "blocked", "skipped",
 )
 
 STEP_STATES = TARGET_STATES  # same vocabulary
@@ -29,9 +29,10 @@ CLAIM_STATES = ("claimed", "released", "expired")
 # Valid forward-only target transitions (plus attention→applying via retry).
 TARGET_TRANSITIONS = {
     "pending":     {"claimed"},
-    "claimed":     {"sent_unknown", "applied", "failed", "blocked", "skipped"},
+    "claimed":     {"sent_unknown", "applied", "partial", "failed", "blocked", "skipped"},
     "sent_unknown": {"applied", "failed", "pending"},  # recovery may resolve
     "applied":     set(),   # terminal
+    "partial":     {"pending"},  # retry may re-queue unfinished work
     "failed":      {"pending"},  # retry may re-queue
     "blocked":     {"pending"},  # retry after human review
     "skipped":     set(),   # terminal
@@ -196,7 +197,7 @@ def is_terminal_target_state(state: str) -> bool:
 
 
 def is_unresolved_target_state(state: str) -> bool:
-    return state in ("sent_unknown", "failed", "blocked")
+    return state in ("sent_unknown", "partial", "failed", "blocked")
 
 
 def compute_operation_status(targets: list[dict]) -> str:
@@ -206,10 +207,12 @@ def compute_operation_status(targets: list[dict]) -> str:
         return "failed"
     if all(s == "applied" or s == "skipped" for s in states):
         return "applied"
+    if all(s == "partial" for s in states):
+        return "partial"
     if all(s == "failed" for s in states):
         return "failed"
     if any(s in ("sent_unknown", "blocked") for s in states):
         return "attention"
-    if any(s == "applied" or s == "skipped" for s in states):
+    if any(s in ("applied", "skipped", "partial") for s in states):
         return "partial"
     return "failed"

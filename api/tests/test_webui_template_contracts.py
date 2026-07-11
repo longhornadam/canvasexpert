@@ -5,6 +5,7 @@ directly — no live Canvas, no server, no student data.
 """
 
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,6 +13,91 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _slurp(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
+
+
+def test_operation_gateway_aliases_and_no_direct_legacy_calls():
+    core = _slurp("api/webui/static/push/core.js")
+    for alias, kind in {
+        "quick": "content.quick_assignment",
+        "af": "content.assignment",
+        "pf": "content.page",
+        "rf": "content.rubric",
+    }.items():
+        assert f'{alias}: "{kind}"' in core
+    for rel in (
+        "api/webui/static/push/assignment.js",
+        "api/webui/static/push/page.js",
+        "api/webui/static/push/rubric.js",
+        "api/webui/static/course_expert/quick_assignment.js",
+        "api/webui/templates/push_quick.html",
+    ):
+        assert "/api/content/push" not in _slurp(rel)
+    assert '{ payload: payload, targets: targets }' in core
+
+
+def test_shared_csrf_meta_and_push_script_order():
+    base = _slurp("api/webui/templates/base.html")
+    workbench = _slurp("api/webui/templates/workbench_base.html")
+    assert base.count('name="canvasexpert-csrf-token"') == 1
+    assert 'content="{{ csrf_token }}"' in base
+    assert 'canvasexpert-csrf-token' not in workbench
+    common = _slurp("api/webui/templates/_push_common_scripts.html")
+    assert common.index("/static/push/core.js") < common.index("/static/push/course_picker.js")
+    for template, feature in (
+        ("push_assignment.html", "/static/push/assignment.js"),
+        ("push_page.html", "/static/push/page.js"),
+        ("push_rubric.html", "/static/push/rubric.js"),
+    ):
+        html = _slurp("api/webui/templates/" + template)
+        assert html.index('_push_common_scripts.html') < html.index(feature)
+
+
+def test_page_prepare_uses_shared_operation_helper():
+    page = _slurp("api/webui/static/push/page.js")
+    assert 'push.prepareOnly("content.page"' in page
+    assert "function postJson" not in page
+    assert "function renderOperationsList" not in page
+
+
+def test_operation_alias_runtime_cancellation_never_applies():
+    core_path = ROOT / "api/webui/static/push/core.js"
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+const calls = [];
+global.window = {
+  CE_WRITE_REVIEW: { confirm: async () => false },
+  CE_PUSH: { targetCourses: () => [{id: "101", name: "Fictional Course"}] }
+};
+global.document = {
+  querySelector: () => ({getAttribute: () => "csrf-test"}),
+  querySelectorAll: () => [],
+  getElementById: () => null,
+  addEventListener: () => {}
+};
+global.alert = () => {};
+global.fetch = async (url, options) => {
+  calls.push({url, body: options && options.body});
+  if (url.includes("/prepare")) return {ok: true, status: 200, json: async () => ({ok: true, operation_id: "op-test"})};
+  if (url.includes("/review")) return {ok: true, status: 200, json: async () => ({ok: true, batch_id: "batch-test", review_digest: "digest", frozen_reviews: [{course_name: "Fictional Course", assignment_name: "Test"}]})};
+  throw new Error("unexpected fetch " + url);
+};
+vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"));
+const log = {hidden: true, textContent: "", scrollTop: 0, scrollHeight: 0};
+for (const alias of ["quick", "af", "pf", "rf"]) {
+  await window.CE_PUSH.pushContent(alias, {name: "Test"}, log, null, {disabled: false}, "Review Test");
+}
+if (calls.some(c => c.url === "/api/content/push" || c.url.includes("/apply"))) process.exit(2);
+if (calls.filter(c => c.url.includes("/prepare")).length !== 4) process.exit(3);
+if (calls.filter(c => c.url.includes("/prepare")).some(c => JSON.parse(c.body).targets[0].course_id !== "101")) process.exit(4);
+'''
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(core_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 # ── feedback_expert.html ──────────────────────────────────────────────
@@ -252,7 +338,8 @@ def test_desk_contract_keeps_workbench_boundaries():
     assert "/api/work?section=all" in js
     assert "/api/receipts" in js
     assert "No prepared operations yet." in html
-    assert 'name="canvasexpert-csrf-token"' in workbench
+    assert 'name="canvasexpert-csrf-token"' in _slurp("api/webui/templates/base.html")
+    assert 'name="canvasexpert-csrf-token"' not in workbench
     assert "/static/workbench.css" not in workbench
     assert js.count("X-CanvasExpert-CSRF") == 1
 

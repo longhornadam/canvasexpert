@@ -1,7 +1,7 @@
 # Rubric Live-Write Path — Discovery Reference
 
-**Author:** Ferrari (11c0 discovery gate)  
-**Date:** 2026-07-11  
+**Author:** Ferrari (11c0 discovery gate)
+**Date:** 2026-07-11
 **Status:** Prepare-only — no live Canvas API write exists
 
 ## Executive Summary

@@ -98,6 +98,8 @@ class AssignmentAdapter:
 
         # Scheduled autoscore opt-in
         if _as_bool(prepare_request.get("autoscore_schedule")):
+            if not str(payload.get("due_at") or "").strip():
+                raise ValueError("due_at is required for scheduled Auto-Score")
             payload["autoscore_schedule"] = True
             if _as_bool(prepare_request.get("autoscore_auto_push")):
                 payload["autoscore_auto_push"] = True
@@ -403,13 +405,54 @@ class AssignmentAdapter:
 
         # ── Scheduled autoscore (local queue write, post-creation) ────
         if payload.get("autoscore_schedule") and assignment_id:
-            _schedule_autoscore(
-                course_id=course_id,
-                course_name=target.get("course_name", course_id),
-                assignment_id=assignment_id,
-                assignment_name=name,
-                payload=payload,
+            _aq = _autoscore_queue()
+            settings = _autoscore_settings(payload)
+            policy = _autoscore_push_policy(payload)
+            job_id = _aq.make_job_id(course_id, assignment_id)
+            schedule_digest = models.sha256_dict({
+                "assignment_id": assignment_id,
+                "due_at": payload.get("due_at"),
+                "settings": settings,
+                "auto_push": _as_bool(payload.get("autoscore_auto_push")),
+                "push_policy": policy,
+            })
+            schedule_step = context.before_send(
+                "schedule_autoscore", schedule_digest
             )
+            _replace_local_step(steps, schedule_step)
+            try:
+                job = _schedule_autoscore(
+                    course_id=course_id,
+                    course_name=_active_course_name(course_id),
+                    assignment_id=assignment_id,
+                    assignment_name=name,
+                    payload=payload,
+                    settings=settings,
+                    push_policy=policy,
+                    queue=_aq,
+                )
+                returned_job_id = str(job.get("job_id") or job_id)
+                if returned_job_id != job_id:
+                    raise ValueError("autoscore queue returned an unexpected job ID")
+                schedule_step["state"] = "applied"
+                schedule_step = context.checkpoint_step(
+                    schedule_step, returned_object_id=job_id
+                )
+                _replace_local_step(steps, schedule_step)
+            except Exception as exc:
+                schedule_step["state"] = "failed"
+                schedule_step["error_code"] = "autoscore_queue_failed"
+                schedule_step["private_diagnostic"] = type(exc).__name__
+                schedule_step = context.checkpoint_step(schedule_step)
+                _replace_local_step(steps, schedule_step)
+                return _build_result(
+                    "partial",
+                    steps=steps,
+                    returned_object_id=assignment_id,
+                    returned_object_url=assignment_url,
+                    error_code="autoscore_queue_failed",
+                    private_diagnostic=type(exc).__name__,
+                )
 
         return _build_result(
             "applied", steps=steps,
@@ -812,7 +855,10 @@ def _ordered_steps(target: dict) -> list[dict]:
         step.get("step_key"): step
         for step in target.get("steps", [])
     }
-    order = ("create_assignment", "create_module", "attach_module")
+    order = (
+        "create_assignment", "create_module", "attach_module",
+        "schedule_autoscore",
+    )
     return [existing[key] for key in order if key in existing]
 
 
@@ -949,27 +995,46 @@ def _schedule_autoscore(
     assignment_id: str,
     assignment_name: str,
     payload: dict,
-) -> None:
+    settings: dict,
+    push_policy: dict,
+    queue,
+) -> dict:
     """Schedule a PowerGrader autoscore job for this assignment.
 
-    This is a local queue write only — no Canvas API call.  Failure is
-    non-fatal (the assignment was already created successfully).  The queue
-    job ID is logged but does not affect the operation result.
+    This is a local queue write only — no Canvas API call.
     """
     due_at = str(payload.get("due_at") or "").strip()
     if not due_at:
-        return
-    # Lazy import to avoid circular dependency chain through powergrader
-    from api.powergrader import autoscore_queue as _aq
-    _aq.upsert_job(
+        raise ValueError("due_at is required for scheduled Auto-Score")
+    return queue.upsert_job(
         course_id=course_id,
         course_name=course_name,
         assignment_id=assignment_id,
         assignment_name=assignment_name,
         due_at=due_at,
         source="push",
-        settings=_autoscore_settings(payload),
-        assignment={"name": assignment_name, "due_at": due_at},
+        settings=settings,
+        assignment={
+            "name": assignment_name,
+            "due_at": due_at,
+            "submission_types": payload.get("submission_types", []),
+            "allowed_extensions": payload.get("allowed_extensions", []),
+        },
         auto_push=_as_bool(payload.get("autoscore_auto_push")),
-        push_policy=_autoscore_push_policy(payload),
+        push_policy=push_policy,
     )
+
+
+def _active_course_name(course_id: str) -> str:
+    for course in config.active_courses():
+        if str(course.get("id")) == str(course_id):
+            return str(
+                course.get("name") or course.get("nickname") or course_id
+            )
+    return str(course_id)
+
+
+def _autoscore_queue():
+    """Lazy queue import so adapter tests can replace the local-write boundary."""
+    from api.powergrader import autoscore_queue
+    return autoscore_queue

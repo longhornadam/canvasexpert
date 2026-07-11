@@ -111,6 +111,7 @@ def _push_base_ctx(request: Request) -> dict:
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
         "saved_courses": config.active_courses(),
+        "csrf_token":    csrf_token(),
     }
 
 

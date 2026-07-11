@@ -106,6 +106,7 @@ def test_valid_target_state_transitions():
     assert models.validate_target_state_transition("claimed", "applied")
     assert models.validate_target_state_transition("claimed", "sent_unknown")
     assert models.validate_target_state_transition("claimed", "failed")
+    assert models.validate_target_state_transition("claimed", "partial")
     assert models.validate_target_state_transition("sent_unknown", "applied")
     assert models.validate_target_state_transition("sent_unknown", "pending")
 
@@ -115,6 +116,8 @@ def test_invalid_target_state_transitions():
     assert not models.validate_target_state_transition("applied", "pending")
     assert not models.validate_target_state_transition("skipped", "pending")
     assert not models.validate_target_state_transition("applied", "failed")
+    assert models.is_unresolved_target_state("partial")
+    assert models.compute_operation_status([{"state": "partial"}]) == "partial"
 
 
 def test_operation_status_transitions():

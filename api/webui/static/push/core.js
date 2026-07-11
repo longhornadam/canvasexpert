@@ -166,10 +166,206 @@
     }
   }
 
+  var operationKinds = {
+    quick: "content.quick_assignment",
+    af: "content.assignment",
+    pf: "content.page",
+    rf: "content.rubric",
+  };
+
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="canvasexpert-csrf-token"]');
+    return meta ? meta.getAttribute("content") : "";
+  }
+
+  async function postJson(url, body) {
+    var response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CanvasExpert-CSRF": csrfToken(),
+      },
+      body: JSON.stringify(body),
+    });
+    var data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      data = { ok: false, error: "Server returned an unreadable response." };
+    }
+    if (!response.ok) {
+      throw new Error(data.error || data.detail || ("Request failed (HTTP " + response.status + ")"));
+    }
+    return data;
+  }
+
+  function operationTargets() {
+    var push = window.CE_PUSH || {};
+    var selected = typeof push.targetCourses === "function" ? push.targetCourses() : [];
+    return selected.map(function (target) {
+      return { course_id: String(target.id) };
+    });
+  }
+
+  function frozenReviewOptions(frozen, confirmLabel) {
+    var first = frozen[0] || {};
+    var details = [];
+    var warnings = [];
+    if (first.assignment_name) details.push("Assignment: " + first.assignment_name);
+    if (first.page_title) details.push("Page: " + first.page_title);
+    if (first.rubric_title) details.push("Rubric: " + first.rubric_title);
+    if (first.points != null) details.push("Points: " + first.points);
+    if (first.total_points != null) details.push("Rubric points: " + first.total_points);
+    if (first.criteria_count != null) details.push("Criteria: " + first.criteria_count);
+    if (first.due_at) details.push("Due: " + first.due_at);
+    if (first.module_name) details.push("Module: " + first.module_name);
+    if (first.student_page_title) details.push("Student page: " + first.student_page_title);
+    if (first.post_to_sis) details.push("Sync to SIS: yes");
+    if (first.published === true) warnings.push("The item will be published for students.");
+    if (first.published === false) warnings.push("The item will be created unpublished.");
+    if (first.autoscore && first.autoscore.scheduled) {
+      warnings.push("Scheduled Auto-Score will create draft AI suggestions after the due date.");
+      if (first.autoscore.auto_push) {
+        warnings.push("Per-assignment auto-push is enabled only for policy-eligible cases.");
+      }
+    }
+    return {
+      title: "Review Canvas content push",
+      action: confirmLabel || "Review this Canvas change before continuing.",
+      targets: frozen.map(function (review) { return { name: review.course_name }; }),
+      details: details,
+      warnings: warnings,
+      confirmText: "Apply to Canvas",
+      cancelText: "Cancel",
+    };
+  }
+
+  async function reviewAndApply(operationId, logFn, bannerEl, confirmLabel) {
+    var batch = await postJson("/api/operation-batches/review", {
+      operation_ids: [operationId],
+    });
+    var confirmed = await window.CE_WRITE_REVIEW.confirm(
+      frozenReviewOptions(batch.frozen_reviews || [], confirmLabel)
+    );
+    if (!confirmed) {
+      if (logFn) logFn("Canvas unchanged. The prepared operation remains available for later review.");
+      renderOperationsList();
+      return { cancelled: true };
+    }
+    var applied = await postJson(
+      "/api/operation-batches/" + encodeURIComponent(batch.batch_id) + "/apply",
+      { review_digest: batch.review_digest }
+    );
+    if (logFn) {
+      (applied.target_results || []).forEach(function (result, index) {
+        var review = (batch.frozen_reviews || [])[index] || {};
+        logFn((result.state === "applied" ? "✓ " : "⚠ ") +
+          (review.course_name || "Target") + ": " + result.state);
+      });
+    }
+    showBanner(
+      bannerEl,
+      applied.status === "applied" ? "ok" : "warn",
+      applied.status === "applied" ? "✓ Canvas changes applied." : "⚠ Operation needs attention."
+    );
+    renderOperationsList();
+    return applied;
+  }
+
+  async function prepareOperation(kind, payload, logFn) {
+    var targets = operationTargets();
+    if (!targets.length) throw new Error("Check at least one course on the right.");
+    var prepared = await postJson(
+      "/api/operations/" + encodeURIComponent(kind) + "/prepare",
+      { payload: payload, targets: targets }
+    );
+    if (logFn) logFn("✓ Prepared operation " + prepared.operation_id);
+    renderOperationsList();
+    return prepared;
+  }
+
+  async function prepareOnly(kind, payload, logEl, bannerEl, btn) {
+    var log = showLog(logEl);
+    hideBanner(bannerEl);
+    if (btn) btn.disabled = true;
+    try {
+      return await prepareOperation(kind, payload, log);
+    } catch (e) {
+      log("ERROR: " + e.message);
+      showBanner(bannerEl, "fail", "✗ " + esc(e.message));
+      return null;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function renderOperationsList() {
+    var container = document.getElementById("ce-operations-list");
+    if (!container) return;
+    fetch("/api/operations")
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        var ops = data.operations || [];
+        if (!ops.length) {
+          container.innerHTML = '<p class="ce-operations-empty">Canvas unchanged.</p>';
+          return;
+        }
+        container.innerHTML = ops.map(function (op) {
+          var buttons = "";
+          if (op.status === "prepared" || op.status === "reviewed") {
+            buttons += '<button class="ce-op-review primary" data-op-id="' + esc(op.operation_id) + '">Review &amp; Apply</button> ';
+          }
+          if (["attention", "partial", "failed"].indexOf(op.status) >= 0) {
+            buttons += '<button class="ce-op-retry secondary" data-op-id="' + esc(op.operation_id) + '">Retry</button>';
+          }
+          return '<div class="ce-operation-item ce-op-status-' + esc(op.status) + '">' +
+            '<span class="ce-op-kind">' + esc(op.kind) + '</span> ' +
+            '<span class="ce-op-status">' + esc(op.status) + '</span> ' +
+            '<span class="ce-op-targets">' + Number(op.target_count || 0) + ' target(s)</span> ' +
+            buttons + '</div>';
+        }).join("");
+      })
+      .catch(function () {});
+  }
+
+  document.addEventListener("click", function (event) {
+    var reviewBtn = event.target.closest(".ce-op-review");
+    if (reviewBtn) {
+      reviewBtn.disabled = true;
+      reviewAndApply(reviewBtn.dataset.opId, null, null)
+        .catch(function (e) { alert(e.message); })
+        .finally(function () { reviewBtn.disabled = false; });
+      return;
+    }
+    var retryBtn = event.target.closest(".ce-op-retry");
+    if (retryBtn) {
+      retryBtn.disabled = true;
+      postJson("/api/operations/" + encodeURIComponent(retryBtn.dataset.opId) + "/retry", {})
+        .catch(function (e) { alert(e.message); })
+        .finally(function () { retryBtn.disabled = false; renderOperationsList(); });
+    }
+  });
+
   async function pushContent(kind, payload, logEl, bannerEl, btn, confirmLabel) {
     var push = window.CE_PUSH || {};
     var targets = typeof push.targetCourses === "function" ? push.targetCourses() : [];
     if (!targets.length) return alert("Check at least one course on the right.");
+    var operationKind = operationKinds[kind];
+    if (operationKind) {
+      var log = showLog(logEl);
+      hideBanner(bannerEl);
+      btn.disabled = true;
+      try {
+        var prepared = await prepareOperation(operationKind, payload, log);
+        await reviewAndApply(prepared.operation_id, log, bannerEl, confirmLabel);
+      } catch (e) {
+        log("ERROR: " + e.message);
+        showBanner(bannerEl, "fail", "✗ " + esc(e.message));
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
     var effects = describeContentEffects(payload);
     var ok = await window.CE_WRITE_REVIEW.confirm({
       title: "Review Canvas content push",
@@ -216,9 +412,14 @@
 
   window.CE_PUSH = Object.assign(window.CE_PUSH || {}, {
     postForm: postForm,
+    postJson: postJson,
     showLog: showLog,
     hideBanner: hideBanner,
     pushContent: pushContent,
+    prepareOnly: prepareOnly,
+    reviewAndApply: reviewAndApply,
+    renderOperationsList: renderOperationsList,
+    operationKinds: operationKinds,
     canvasWriteReview: window.CE_WRITE_REVIEW.confirm,
     describeContentEffects: describeContentEffects,
     generatePhysical: generatePhysical,
@@ -231,4 +432,5 @@
   window.esc = esc;
   window.postForm = postForm;
   window.pushContent = pushContent;
+  renderOperationsList();
 })();

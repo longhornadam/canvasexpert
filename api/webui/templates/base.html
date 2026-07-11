@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% if csrf_token %}<meta name="canvasexpert-csrf-token" content="{{ csrf_token }}">{% endif %}
   <title>{% block title %}Canvas Expert{% endblock %}</title>
   <!-- Prevent flash of wrong theme -->
   <script>try{var t=localStorage.getItem('ce-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>

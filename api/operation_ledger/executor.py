@@ -297,10 +297,8 @@ def _update_target_result(operation_id: str, target_key: str, result: dict,
             target["returned_object_id"] = result["returned_object_id"]
         if result.get("returned_object_url"):
             target["returned_object_url"] = result["returned_object_url"]
-        if result.get("error_code"):
-            target["error_code"] = result["error_code"]
-        if result.get("private_diagnostic"):
-            target["private_diagnostic"] = result["private_diagnostic"]
+        target["error_code"] = result.get("error_code")
+        target["private_diagnostic"] = result.get("private_diagnostic")
         if result.get("steps"):
             target["steps"] = copy.deepcopy(result["steps"])
         target["updated_at"] = models.now_iso()

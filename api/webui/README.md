@@ -264,19 +264,19 @@ into student and answer-key DOCX/PDF files. PDFs are rendered with the installed
 Microsoft Edge through Playwright; DOCX files are rendered through bundled Pandoc.
 
 ### Assignment tab
-Pick an `<ASSIGNMENTFORGE_JSON>` file, optionally attach a **RubricForge file**
-(grade-with-rubric or feedback-only; can link the student explainer page and copy
-a scoring prompt), then **Validate** / **Push assignment…**. Delivery: dates,
-grading category, module, SIS, publish. **Tier scaffolding:** one file with tiers
-→ multiple assignments, each visible only to its Canvas group via an override.
+Pick a whole-class `<ASSIGNMENTFORGE_JSON>` file, then **Validate** / **Push
+assignment…**. Delivery: dates, grading category, module, SIS, publish, and an
+optional per-assignment scheduled Auto-Score job. Tier differentiation and rubric
+association are not part of this operation path.
 
 ### Page tab
 Pick a `<PAGEFORGE_JSON>` file, then **Validate** / **Push page…**. Module placement
 + publish. `{{file:…}}` / `{{page:…}}` placeholders resolve per course at push time.
 
 ### Rubric tab
-Pick a `<RUBRICFORGE_JSON>` file, then **Validate** / **Push rubric…**. Creates (or
-reuses by title) the course rubric and creates/updates the student explainer page.
+Pick a `<RUBRICFORGE_JSON>` file, then **Validate** / **Push rubric…**. After the
+teacher reviews the frozen operation, it creates the course rubric and, when the
+file requests one, a student explainer page.
 
 ### Download Work tab
 Downloads student work from the **focused** course. Load assignments, filter by
