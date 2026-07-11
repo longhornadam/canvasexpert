@@ -1,4 +1,4 @@
-"""Operation CRUD helpers — thin wrappers over storage.upsert_operation / find_operation."""
+"""Operation CRUD helpers — thin wrappers over the validated storage layer."""
 import copy
 
 from . import models, storage
@@ -44,12 +44,25 @@ def update_operation(operation_id: str, mutator) -> dict:
     ``mutator`` receives a deep copy and must return the (possibly modified)
     operation dict. The result is persisted and returned.
     """
-    op = storage.find_operation(operation_id)
-    if op is None:
-        raise KeyError(f"operation {operation_id} not found")
-    op = mutator(op)
-    op["updated_at"] = models.now_iso()
-    return storage.upsert_operation(op)
+    result = None
+
+    def _transaction(document):
+        nonlocal result
+        op = next((item for item in document["operations"]
+                   if item.get("operation_id") == operation_id), None)
+        if op is None:
+            raise KeyError(f"operation {operation_id} not found")
+        updated = mutator(copy.deepcopy(op))
+        updated["updated_at"] = models.now_iso()
+        for index, item in enumerate(document["operations"]):
+            if item.get("operation_id") == operation_id:
+                document["operations"][index] = updated
+                result = copy.deepcopy(updated)
+                break
+        return document
+
+    storage.modify_operations(_transaction)
+    return result
 
 
 def set_operation_status(operation_id: str, status: str) -> dict:

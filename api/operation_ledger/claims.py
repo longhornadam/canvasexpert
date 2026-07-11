@@ -29,8 +29,8 @@ _FALLBACK_STARTED_AT = datetime.now(timezone.utc).isoformat(timespec="seconds")
 def acquire_claim(*, target_key: str, operation_id: str, payload_digest: str) -> dict:
     """Atomically acquire a claim for a target.
 
-    Raises ``ClaimConflictError`` if the target is already actively claimed
-    by another process/attempt with a non-expired lease.
+    Raises ``ClaimConflictError`` if the target has any unreconciled claimed
+    record. Recovery must expire an expired lease before a new attempt starts.
     """
     attempt_id = models.new_attempt_id()
     claim_id = f"{target_key}:{attempt_id}"
@@ -49,13 +49,11 @@ def acquire_claim(*, target_key: str, operation_id: str, payload_digest: str) ->
         for existing in doc["claims"]:
             if existing.get("target_key") != target_key:
                 continue
-            if existing.get("state") != "claimed":
+            if existing.get("state") not in ("claimed", "expired"):
                 continue
-            if not _is_claim_expired(existing):
-                raise ClaimConflictError(
-                    f"target {target_key} is already actively claimed")
-            # Expired — mark it
-            existing["state"] = "expired"
+            if existing.get("state") == "expired" and existing.get("reconciled_at"):
+                continue
+            raise ClaimConflictError(f"target {target_key} is already claimed")
         doc["claims"].append(copy.deepcopy(claim))
         return doc
 
@@ -74,27 +72,41 @@ def release_claim(claim_id: str) -> None:
     storage.modify_claims(_mutator)
 
 
+def mark_reconciled(claim_id: str) -> None:
+    """Allow a recovered expired claim to be replaced after reconciliation."""
+    def _mutator(doc):
+        for item in doc["claims"]:
+            if item.get("claim_id") == claim_id and item.get("state") == "expired":
+                item["reconciled_at"] = models.now_iso()
+                break
+        return doc
+    storage.modify_claims(_mutator)
+
+
 def _is_claim_expired(claim: dict) -> bool:
-    """A claim is expired if its lease has passed, or if the owning process
-    is gone (different PID, or same PID but different start time)."""
+    """A claim is expired only when its elapsed lease is invalid or passed."""
     lease_str = claim.get("lease_expires_at")
-    if lease_str:
-        try:
-            lease_dt = datetime.fromisoformat(lease_str)
-            if datetime.now(timezone.utc) > lease_dt:
-                return True
-        except (ValueError, TypeError):
-            return True  # unparseable → treat as expired
-
-    # Different PID → the process that held it is gone
-    if claim.get("owner_pid") != os.getpid():
+    if not lease_str:
         return True
-
-    # Same PID but different start time → the PID was reused by a new process
-    if claim.get("owner_started_at") != _process_started_at():
+    try:
+        lease_dt = datetime.fromisoformat(lease_str)
+    except (ValueError, TypeError):
         return True
+    if lease_dt.tzinfo is None:
+        return True
+    return datetime.now(timezone.utc) > lease_dt
 
-    return False
+
+def is_current_claim(claim_id: str, target_key: str, operation_id: str) -> bool:
+    """Return whether the named claim is still the active claim for a target."""
+    claim = storage.find_claim(claim_id)
+    return bool(
+        claim
+        and claim.get("claim_id") == claim_id
+        and claim.get("target_key") == target_key
+        and claim.get("operation_id") == operation_id
+        and claim.get("state") == "claimed"
+    )
 
 
 def detect_expired_claims() -> list[dict]:

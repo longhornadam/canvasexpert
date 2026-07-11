@@ -21,6 +21,10 @@ def claims_file() -> Path:
     return private_root() / "claims.v1.json"
 
 
+def ledger_lock_file() -> Path:
+    return private_root() / "ledger.v1.lock"
+
+
 def quarantine_dir() -> Path:
     return private_root() / "quarantine"
 

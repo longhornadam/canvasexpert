@@ -1,15 +1,5 @@
-"""PageForge page adapter — the slice-10 pilot kind ``content.page``.
+"""PageForge adapter for the crash-safe ``content.page`` operation kind."""
 
-Implements the full OperationAdapter protocol:
-  build_payload → source_digest → verify_targets → freeze_review →
-  capture_baseline → check_drift → execute (create_page + attach_module) →
-  reconcile → retry_selector → reversal_descriptor.
-
-Canvas calls reuse the existing ``canvas_client`` wrappers. The adapter never
-trusts browser-supplied Canvas paths, endpoints, or method names.
-"""
-import copy
-import hashlib
 import json
 
 from .. import models
@@ -20,34 +10,21 @@ KIND = "content.page"
 
 
 class PageAdapter:
-    """Adapter for PageForge page creation (kind ``content.page``)."""
-
     kind = KIND
 
-    # ── Prepare ──────────────────────────────────────────────────────────
-
     def build_payload(self, prepare_request: dict) -> dict:
-        """Parse/validate the browser-submitted prepare request.
-
-        Input: ``{path, published, module_name?}``.
-        Returns the normalized private payload. Raises ValueError on invalid input.
-        Never trusts browser-supplied Canvas paths, endpoints, or method names.
-        """
         path = prepare_request.get("path")
         if not path:
             raise ValueError("path is required")
-
         data, problems = pf.parse_file(path)
         if data is None or problems:
             raise ValueError("; ".join(problems or ["unreadable file"]))
-
         title = str(data.get("title") or "").strip()
         body = str(data.get("body") or "")
         published = bool(prepare_request.get("published"))
         module_name = prepare_request.get("module_name") or None
         if module_name:
             module_name = str(module_name).strip() or None
-
         return {
             "title": title,
             "body": body,
@@ -57,71 +34,50 @@ class PageAdapter:
         }
 
     def source_digest(self, payload: dict) -> str:
-        """Deterministic SHA-256 over the normalized payload (not including targets)."""
-        digest_input = {
+        return models.sha256_dict({
             "title": payload.get("title"),
             "body": payload.get("body"),
             "published": payload.get("published"),
             "module_name": payload.get("module_name"),
-        }
-        return models.sha256_dict(digest_input)
+        })
 
     def verify_targets(self, payload: dict, targets: list[dict]) -> list[dict]:
-        """Verify each target against active/available courses.
-
-        Returns the verified target list with target_key and idempotency_key set.
-        Raises ValueError if any target is invalid.
-        """
-        active = config.active_courses()
-        active_ids = {str(c["id"]) for c in active}
-
+        active_ids = {str(course["id"]) for course in config.active_courses()}
         verified = []
-        for t in targets:
-            cid = str(t.get("course_id") or "")
-            if not cid:
+        for target in targets:
+            course_id = str(target.get("course_id") or "")
+            if not course_id:
                 raise ValueError("target missing course_id")
-            if cid not in active_ids:
-                raise ValueError(f"course {cid} is not in active courses")
+            if course_id not in active_ids:
+                raise ValueError(f"course {course_id} is not in active courses")
             verified.append({
-                "course_id": cid,
-                "target_key": self.target_key(payload, cid),
-                "idempotency_key": self.idempotency_key(payload, cid),
+                "course_id": course_id,
+                "target_key": self.target_key(payload, course_id),
+                "idempotency_key": self.idempotency_key(payload, course_id),
             })
         return verified
 
     def target_key(self, payload: dict, course_id: str) -> str:
-        """Deterministic target key for a course."""
-        digest = self.source_digest(payload)
-        return models.sha256_hex(f"{KIND}|{digest}|{course_id}")
+        return models.sha256_hex(f"{KIND}|{self.source_digest(payload)}|{course_id}")
 
     def idempotency_key(self, payload: dict, course_id: str) -> str:
-        """Deterministic idempotency key."""
-        digest = self.source_digest(payload)
-        normalized_title = _normalize_title(payload.get("title", ""))
-        return models.sha256_hex(f"{digest}|{course_id}|{normalized_title}")
-
-    # ── Review ───────────────────────────────────────────────────────────
+        return models.sha256_hex(
+            f"{self.source_digest(payload)}|{course_id}|{_normalize_title(payload.get('title'))}"
+        )
 
     def capture_baseline(self, payload: dict, target: dict) -> dict:
-        """Read current Canvas/local state for drift detection.
-
-        Called at review time and again at apply time.
-        """
-        cid = target["course_id"]
+        course_id = target["course_id"]
         title = payload.get("title", "")
         baseline = {"existing_page": None}
-
-        # Search for a page with the same title (for baseline display only)
-        pages, err = canvas_client._canvas_get(
-            f"/api/v1/courses/{cid}/pages",
+        pages, error = canvas_client._canvas_get(
+            f"/api/v1/courses/{course_id}/pages",
             params={"per_page": 100, "search_term": title},
         )
-        if err:
-            baseline["canvas_error"] = err
+        if error:
+            baseline["canvas_error"] = error
             return baseline
-
-        for page in (_as_list(pages)):
-            if str(page.get("title", "")).strip().lower() == title.strip().lower():
+        for page in _as_list(pages):
+            if _normalize_title(page.get("title")) == _normalize_title(title):
                 baseline["existing_page"] = {
                     "url": page.get("url"),
                     "title": page.get("title"),
@@ -129,19 +85,15 @@ class PageAdapter:
                     "published": page.get("published"),
                 }
                 break
-
         return baseline
 
     def freeze_review(self, payload: dict, target: dict, baseline: dict) -> dict:
-        """Capture the frozen review summary for a target."""
-        cid = target["course_id"]
-        # Look up course name from active courses (PRIVATE)
-        course_name = cid
-        for c in config.active_courses():
-            if str(c["id"]) == str(cid):
-                course_name = c.get("name") or c.get("nickname") or cid
+        course_id = target["course_id"]
+        course_name = course_id
+        for course in config.active_courses():
+            if str(course["id"]) == str(course_id):
+                course_name = course.get("name") or course.get("nickname") or course_id
                 break
-
         existing = baseline.get("existing_page")
         return {
             "course_name": course_name,
@@ -153,275 +105,373 @@ class PageAdapter:
         }
 
     def check_drift(self, payload: dict, target: dict, baseline: dict) -> bool:
-        """Return True if Canvas/local state has drifted since review.
-
-        Drift is detected if:
-        - The baseline page was deleted or its body/published state changed.
-        - A foreign page with the same title appeared that wasn't in the baseline.
-        - Canvas state can't be read.
-        """
         if baseline is None:
-            return False  # no baseline captured — can't detect drift
-
+            return False
         if "canvas_error" in baseline:
-            return True  # couldn't read Canvas state → treat as drift
-
+            return True
         existing = baseline.get("existing_page")
-        cid = target["course_id"]
         title = payload.get("title", "")
-
-        # Re-check the current Canvas state
-        pages, err = canvas_client._canvas_get(
-            f"/api/v1/courses/{cid}/pages",
+        pages, error = canvas_client._canvas_get(
+            f"/api/v1/courses/{target['course_id']}/pages",
             params={"per_page": 100, "search_term": title},
         )
-        if err:
-            return True  # can't verify → drift
-
-        current = None
-        for page in _as_list(pages):
-            if str(page.get("title", "")).strip().lower() == title.strip().lower():
-                current = page
-                break
-
+        if error:
+            return True
+        current = next((page for page in _as_list(pages)
+                        if _normalize_title(page.get("title")) == _normalize_title(title)), None)
         if existing is None:
-            # No baseline page — drift if a foreign page with the same title appeared
             return current is not None
-
         if current is None:
-            return True  # baseline page was deleted
-
-        # Check body and published state
-        if current.get("body") != existing.get("body"):
             return True
-        if bool(current.get("published")) != bool(existing.get("published")):
-            return True
+        return (current.get("body") != existing.get("body") or
+                bool(current.get("published")) != bool(existing.get("published")))
 
-        return False
-
-    # ── Execute ──────────────────────────────────────────────────────────
-
-    def execute(self, payload: dict, target: dict, baseline: dict, claim: dict) -> dict:
-        """Perform the Canvas call(s) for one target.
-
-        Two steps: create_page → attach_module (if module_name is set).
-        Returns ``{state, returned_object_id, returned_object_url, error_code,
-        private_diagnostic, steps}``.
-        """
-        cid = target["course_id"]
+    def execute(self, payload: dict, target: dict, baseline: dict, claim: dict, context) -> dict:
+        course_id = target["course_id"]
         title = payload.get("title", "Untitled page")
-        body = payload.get("body", "")
+        page_body = payload.get("body", "")
         published = bool(payload.get("published"))
         module_name = payload.get("module_name")
+        steps = _ordered_steps(target)
+        page_step = _step(steps, "create_page")
+        page_slug = target.get("returned_object_id") or page_step.get("returned_object_id")
+        page_url = target.get("returned_object_url") or page_step.get("returned_object_url")
 
-        steps = []
-        page_slug = target.get("returned_object_id")
-
-        # ── Step 1: create_page ──────────────────────────────────────────
-        step1 = models.new_step("create_page")
-
-        # Idempotency: if we have a returned_object_id from a previous attempt,
-        # check if the page still exists.
-        if page_slug:
-            existing_page, err = canvas_client._canvas_get(
-                f"/api/v1/courses/{cid}/pages/{page_slug}")
-            if not err and existing_page:
-                step1["state"] = "skipped"
-                step1["returned_object_id"] = page_slug
-                step1["updated_at"] = models.now_iso()
-                steps.append(step1)
+        if page_step.get("state") in ("applied", "skipped") and page_slug:
+            page, error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/pages/{page_slug}")
+            if not error and page:
+                page_step["state"] = "skipped"
+                page_url = page.get("html_url") or page_url
             else:
-                # Page not found — need to create
+                return _build_result("sent_unknown", steps=steps,
+                                     returned_object_id=page_slug,
+                                     returned_object_url=page_url,
+                                     error_code="page_exact_id_unverified")
+        elif page_slug:
+            page, error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/pages/{page_slug}")
+            if not error and page:
+                page_step["state"] = "skipped"
+                page_url = page.get("html_url") or page_url
+            elif page_step.get("outbound_started_at"):
+                return _build_result("sent_unknown", steps=steps,
+                                     returned_object_id=page_slug,
+                                     returned_object_url=page_url,
+                                     error_code="page_exact_id_unverified")
+            else:
                 page_slug = None
 
-        if step1["state"] == "pending":
-            wp = {"title": title, "body": body, "published": published}
-            resp, err = canvas_client._canvas_send(
-                "POST", f"/api/v1/courses/{cid}/pages", {"wiki_page": wp})
+        if not page_slug:
+            request = {"wiki_page": {
+                "title": title, "body": page_body, "published": published}}
+            path = f"/api/v1/courses/{course_id}/pages"
+            digest = models.sha256_dict({"method": "POST", "path": path,
+                                         "payload": request})
+            page_step = context.before_send("create_page", digest)
+            _replace_local_step(steps, page_step)
+            response, error = canvas_client._canvas_send("POST", path, request)
+            if error:
+                state = "sent_unknown" if _is_uncertain(error) else "failed"
+                page_step["state"] = state
+                page_step["error_code"] = (
+                    "timeout_or_disconnect" if state == "sent_unknown"
+                    else "canvas_rejected")
+                page_step["private_diagnostic"] = error
+                page_step = context.checkpoint_step(page_step)
+                _replace_local_step(steps, page_step)
+                return _build_result(state, steps=steps,
+                                     error_code=page_step["error_code"],
+                                     private_diagnostic=error)
+            page_slug = response.get("url") if isinstance(response, dict) else None
+            page_url = response.get("html_url") if isinstance(response, dict) else None
+            if not page_slug:
+                page_step["state"] = "sent_unknown"
+                page_step["error_code"] = "unparseable_response"
+                page_step["private_diagnostic"] = "missing page url"
+                page_step = context.checkpoint_step(page_step)
+                _replace_local_step(steps, page_step)
+                return _build_result("sent_unknown", steps=_ordered_steps({"steps": steps}),
+                                     error_code="unparseable_response")
+            page_step["state"] = "applied"
+            page_step = context.checkpoint_step(
+                page_step, returned_object_id=page_slug, returned_object_url=page_url)
+            _replace_local_step(steps, page_step)
 
-            if err:
-                if _is_uncertain(err):
-                    step1["state"] = "sent_unknown"
-                    step1["error_code"] = "timeout_or_disconnect"
-                    step1["private_diagnostic"] = err
-                else:
-                    step1["state"] = "failed"
-                    step1["error_code"] = "canvas_rejected"
-                    step1["private_diagnostic"] = err
-                step1["updated_at"] = models.now_iso()
-                steps.append(step1)
-                return _build_result(step1["state"], steps=steps,
-                                    private_diagnostic=step1.get("private_diagnostic"),
-                                    error_code=step1.get("error_code"))
-            else:
-                page_slug = resp.get("url")
-                page_url = resp.get("html_url")
-                step1["state"] = "applied"
-                step1["returned_object_id"] = page_slug
-                step1["updated_at"] = models.now_iso()
-                steps.append(step1)
+        if not module_name:
+            return _build_result("applied", steps=steps,
+                                 returned_object_id=page_slug,
+                                 returned_object_url=page_url)
 
-        # ── Step 2: attach_module (only if module_name is set) ────────────
-        if module_name and step1["state"] in ("applied", "skipped"):
-            step2 = models.new_step("attach_module")
-            mid = _find_or_create_module_id(cid, module_name)
-            if mid is None:
-                step2["state"] = "failed"
-                step2["error_code"] = "module_not_found"
-                step2["updated_at"] = models.now_iso()
-                steps.append(step2)
-                # Page was created but module attachment failed → partial
+        create_module_step = _find_step(steps, "create_module")
+        attach_step = _find_step(steps, "attach_module")
+        module_id = _module_id_from_steps(create_module_step, attach_step)
+
+        if not module_id:
+            modules, error = _read_modules(course_id)
+            if error:
                 return _build_result("sent_unknown", steps=steps,
-                                    returned_object_id=page_slug,
-                                    returned_object_url=page_url if step1["state"] == "applied" else None,
-                                    error_code="module_attach_failed")
-
-            item = {"title": title, "type": "Page", "page_url": page_slug}
-            _, err = canvas_client._canvas_send(
-                "POST", f"/api/v1/courses/{cid}/modules/{mid}/items",
-                {"module_item": item})
-
-            if err:
-                if _is_uncertain(err):
-                    step2["state"] = "sent_unknown"
-                    step2["error_code"] = "timeout_or_disconnect"
-                    step2["private_diagnostic"] = err
-                else:
-                    step2["state"] = "failed"
-                    step2["error_code"] = "module_item_rejected"
-                    step2["private_diagnostic"] = err
-                step2["updated_at"] = models.now_iso()
-                steps.append(step2)
-                return _build_result("sent_unknown", steps=steps,
-                                    returned_object_id=page_slug,
-                                    returned_object_url=page_url if step1["state"] == "applied" else None,
-                                    error_code=step2.get("error_code"))
+                                     returned_object_id=page_slug,
+                                     returned_object_url=page_url,
+                                     error_code="module_lookup_failed")
+            matches = [module for module in modules
+                       if _normalize_title(module.get("name")) == _normalize_title(module_name)]
+            if len(matches) > 1:
+                return _build_result("blocked", steps=steps,
+                                     returned_object_id=page_slug,
+                                     returned_object_url=page_url,
+                                     error_code="ambiguous_module")
+            if matches:
+                module_id = str(matches[0].get("id"))
+                attach_step = _ensure_step(steps, "attach_module")
+                attach_step["module_id"] = module_id
             else:
-                step2["state"] = "applied"
-                step2["updated_at"] = models.now_iso()
-                steps.append(step2)
+                create_module_step = _ensure_step(steps, "create_module")
+                if (create_module_step.get("state") == "sent_unknown" and
+                        create_module_step.get("outbound_started_at") and
+                        not create_module_step.get("returned_object_id")):
+                    return _build_result("sent_unknown", steps=steps,
+                                         returned_object_id=page_slug,
+                                         returned_object_url=page_url,
+                                         error_code="module_creation_unresolved")
+                module_path = f"/api/v1/courses/{course_id}/modules"
+                module_request = {"module": {"name": module_name}}
+                digest = models.sha256_dict({"method": "POST", "path": module_path,
+                                             "payload": module_request})
+                marked = context.before_send("create_module", digest)
+                _replace_local_step(steps, marked)
+                response, error = canvas_client._canvas_send(
+                    "POST", module_path, module_request)
+                if error:
+                    state = "sent_unknown" if _is_uncertain(error) else "failed"
+                    create_module_step["state"] = state
+                    create_module_step["error_code"] = (
+                        "timeout_or_disconnect" if state == "sent_unknown"
+                        else "module_rejected")
+                    create_module_step["private_diagnostic"] = error
+                    create_module_step = context.checkpoint_step(create_module_step)
+                    _replace_local_step(steps, create_module_step)
+                    return _build_result(state, steps=steps,
+                                         returned_object_id=page_slug,
+                                         returned_object_url=page_url,
+                                         error_code=create_module_step["error_code"])
+                module_id = str(response.get("id")) if isinstance(response, dict) and response.get("id") is not None else None
+                if not module_id:
+                    create_module_step["state"] = "sent_unknown"
+                    create_module_step["error_code"] = "unparseable_response"
+                    create_module_step["private_diagnostic"] = "missing module id"
+                    create_module_step = context.checkpoint_step(create_module_step)
+                    _replace_local_step(steps, create_module_step)
+                    return _build_result("sent_unknown", steps=steps,
+                                         returned_object_id=page_slug,
+                                         returned_object_url=page_url,
+                                         error_code="unparseable_response")
+                create_module_step["state"] = "applied"
+                create_module_step = context.checkpoint_step(
+                    create_module_step, returned_object_id=module_id)
+                _replace_local_step(steps, create_module_step)
 
-        # All steps applied → target applied
-        page_url = None
-        if step1["state"] == "applied":
-            # Re-fetch to get html_url if we created it
-            page_url = _get_page_html_url(cid, page_slug)
-        elif step1["state"] == "skipped" and target.get("returned_object_url"):
-            page_url = target.get("returned_object_url")
+        attach_step = _ensure_step(steps, "attach_module")
+        attach_step["module_id"] = str(module_id)
+        item_id = attach_step.get("returned_object_id")
+        if attach_step.get("state") in ("applied", "skipped") and item_id:
+            item, error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}")
+            if not error and item:
+                attach_step["state"] = "skipped"
+                return _build_result("applied", steps=steps,
+                                     returned_object_id=page_slug,
+                                     returned_object_url=page_url)
+            return _build_result("sent_unknown", steps=steps,
+                                 returned_object_id=page_slug,
+                                 returned_object_url=page_url,
+                                 error_code="module_item_exact_id_unverified")
+        if attach_step.get("state") == "applied" and not item_id:
+            return _build_result("applied", steps=steps,
+                                 returned_object_id=page_slug,
+                                 returned_object_url=page_url)
 
-        return _build_result("applied", steps=steps,
-                            returned_object_id=page_slug,
-                            returned_object_url=page_url)
-
-    # ── Reconcile ────────────────────────────────────────────────────────
+        item_path = f"/api/v1/courses/{course_id}/modules/{module_id}/items"
+        item_request = {"module_item": {
+            "title": title, "type": "Page", "page_url": page_slug}}
+        # Persist the exact selected module ID before the attachment mutation.
+        attach_step = context.checkpoint_step(attach_step)
+        _replace_local_step(steps, attach_step)
+        digest = models.sha256_dict({"method": "POST", "path": item_path,
+                                     "payload": item_request})
+        marked = context.before_send("attach_module", digest)
+        marked["module_id"] = str(module_id)
+        _replace_local_step(steps, marked)
+        attach_step = marked
+        response, error = canvas_client._canvas_send("POST", item_path, item_request)
+        if error:
+            state = "sent_unknown" if _is_uncertain(error) else "failed"
+            attach_step["state"] = state
+            attach_step["error_code"] = (
+                "timeout_or_disconnect" if state == "sent_unknown"
+                else "module_item_rejected")
+            attach_step["private_diagnostic"] = error
+            attach_step = context.checkpoint_step(attach_step)
+            _replace_local_step(steps, attach_step)
+            return _build_result(state, steps=steps,
+                                 returned_object_id=page_slug,
+                                 returned_object_url=page_url,
+                                 error_code=attach_step["error_code"])
+        item_id = str(response.get("id")) if isinstance(response, dict) and response.get("id") is not None else None
+        attach_step["state"] = "applied"
+        attach_step["module_id"] = str(module_id)
+        attach_step = context.checkpoint_step(attach_step, returned_object_id=item_id)
+        _replace_local_step(steps, attach_step)
+        return _build_result("applied", steps=_ordered_steps({"steps": steps}),
+                             returned_object_id=page_slug,
+                             returned_object_url=page_url)
 
     def reconcile(self, payload: dict, target: dict, baseline: dict) -> dict:
-        """On restart, prove whether a sent_unknown target was applied or not.
+        course_id = target["course_id"]
+        steps = _ordered_steps(target)
+        page_step = _find_step(steps, "create_page")
+        page_slug = target.get("returned_object_id") or page_step.get("returned_object_id")
+        has_marker = _has_outbound_marker(steps)
 
-        Same-title matching is never proof. Only exact ID or kind-specific
-        postcondition.
-        """
-        cid = target["course_id"]
-        page_slug = target.get("returned_object_id")
+        if not page_slug:
+            title = payload.get("title", "")
+            pages, error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/pages",
+                params={"per_page": 100, "search_term": title},
+            )
+            if error:
+                return {"state": "sent_unknown"}
+            if any(_normalize_title(page.get("title")) == _normalize_title(title)
+                   for page in _as_list(pages)):
+                return {"state": "sent_unknown"}
+            return {"state": "sent_unknown" if has_marker else "pending"}
 
-        if page_slug:
-            # We have a page slug from a previous attempt — verify by exact ID
-            page, err = canvas_client._canvas_get(
-                f"/api/v1/courses/{cid}/pages/{page_slug}")
-            if not err and page:
-                return {"state": "applied", "returned_object_id": page_slug,
-                        "returned_object_url": page.get("html_url")}
-            if err and "404" in str(err):
-                return {"state": "pending"}  # page was not created
-            # Can't verify → stays sent_unknown
+        page, error = canvas_client._canvas_get(
+            f"/api/v1/courses/{course_id}/pages/{page_slug}")
+        if error:
+            if "404" in str(error) and not page_step.get("outbound_started_at"):
+                return {"state": "pending"}
+            return {"state": "sent_unknown"}
+        if not page:
             return {"state": "sent_unknown"}
 
-        # No returned_object_id — search by title
-        title = payload.get("title", "")
-        pages, err = canvas_client._canvas_get(
-            f"/api/v1/courses/{cid}/pages",
-            params={"per_page": 100, "search_term": title})
+        result = {"state": "applied", "returned_object_id": page_slug,
+                  "returned_object_url": page.get("html_url")}
+        if not payload.get("module_name"):
+            return result
 
-        if err:
-            return {"state": "sent_unknown"}  # Canvas call failed
+        create_module_step = _find_step(steps, "create_module")
+        attach_step = _find_step(steps, "attach_module")
+        module_id = _module_id_from_steps(create_module_step, attach_step)
+        if not module_id:
+            return {"state": "sent_unknown" if has_marker else "pending",
+                    "returned_object_id": page_slug,
+                    "returned_object_url": page.get("html_url")}
 
-        # If no exact title match, the page was likely not created
-        for page in _as_list(pages):
-            if str(page.get("title", "")).strip().lower() == title.strip().lower():
-                # Same-title match exists — but same-title is NEVER proof.
-                # Target stays sent_unknown.
-                return {"state": "sent_unknown"}
+        item_id = attach_step.get("returned_object_id")
+        if item_id:
+            item, item_error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}")
+            if not item_error and item:
+                result["module_item_id"] = item_id
+                return result
 
-        # No exact title match → page was likely not created
-        return {"state": "pending"}
-
-    # ── Retry selector ───────────────────────────────────────────────────
+        items, item_error = canvas_client._canvas_get_all(
+            f"/api/v1/courses/{course_id}/modules/{module_id}/items",
+            {"per_page": 100},
+        )
+        if item_error:
+            return {"state": "sent_unknown", "returned_object_id": page_slug}
+        matches = [item for item in (items or [])
+                   if str(item.get("type", "")).lower() == "page"
+                   and item.get("page_url") == page_slug]
+        if len(matches) == 1 and matches[0].get("id") is not None:
+            result["module_item_id"] = str(matches[0]["id"])
+            return result
+        if attach_step.get("outbound_started_at") or has_marker:
+            return {"state": "sent_unknown", "returned_object_id": page_slug}
+        return {"state": "pending", "returned_object_id": page_slug}
 
     def retry_selector(self, operation: dict) -> list[dict]:
-        """Return only the targets that are unresolved."""
-        return [t for t in operation.get("targets", [])
-                if models.is_unresolved_target_state(t.get("state", "pending"))]
-
-    # ── Reversal ─────────────────────────────────────────────────────────
+        return [target for target in operation.get("targets", [])
+                if models.is_unresolved_target_state(target.get("state", "pending"))]
 
     def reversal_descriptor(self, payload: dict, target: dict) -> dict:
-        """Page deletion is possible but not validated in this slice → unsupported."""
         return {"supported": False, "method": None, "snapshot": None}
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────
+def _read_modules(course_id: str):
+    return canvas_client._canvas_get_all(
+        f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
+
+
+def _ordered_steps(target: dict) -> list[dict]:
+    existing = {step.get("step_key"): step for step in target.get("steps", [])}
+    order = ("create_page", "create_module", "attach_module")
+    return [existing[key] for key in order if key in existing]
+
+
+def _find_step(steps: list[dict], step_key: str) -> dict:
+    return next((step for step in steps if step.get("step_key") == step_key),
+                models.new_step(step_key))
+
+
+def _step(steps: list[dict], step_key: str) -> dict:
+    found = next((step for step in steps if step.get("step_key") == step_key), None)
+    if found is not None:
+        return found
+    step = models.new_step(step_key)
+    steps.insert(0, step)
+    return step
+
+
+def _ensure_step(steps: list[dict], step_key: str) -> dict:
+    found = next((step for step in steps if step.get("step_key") == step_key), None)
+    if found is not None:
+        return found
+    step = models.new_step(step_key)
+    steps.append(step)
+    return step
+
+
+def _replace_local_step(steps: list[dict], step: dict) -> None:
+    for index, existing in enumerate(steps):
+        if existing.get("step_key") == step.get("step_key"):
+            steps[index] = step
+            return
+    steps.append(step)
+
+
+def _module_id_from_steps(create_step: dict, attach_step: dict) -> str | None:
+    return (str(create_step.get("returned_object_id"))
+            if create_step.get("returned_object_id") is not None else
+            str(attach_step.get("module_id"))
+            if attach_step.get("module_id") is not None else None)
+
+
+def _has_outbound_marker(steps: list[dict]) -> bool:
+    return any(step.get("outbound_started_at") for step in steps)
+
 
 def _as_list(data) -> list:
-    """Coerce a Canvas API response into a list. Handles None, dict, and list."""
     if data is None:
         return []
-    if isinstance(data, list):
-        return data
-    return [data]
+    return data if isinstance(data, list) else [data]
 
 
-def _normalize_title(title: str) -> str:
-    return str(title or "").strip().lower()
+def _normalize_title(value) -> str:
+    return str(value or "").strip().lower()
 
 
 def _is_uncertain(error: str) -> bool:
-    """Heuristic: is this error a timeout/disconnect/unparseable response?"""
-    if not error:
-        return False
-    lower = error.lower()
-    return any(kw in lower for kw in (
-        "timeout", "timed out", "connection", "network",
-        "unparseable", "no response", "read timed out",
+    lower = str(error or "").lower()
+    return any(term in lower for term in (
+        "timeout", "timed out", "connection", "network", "unparseable",
+        "no response", "read timed out",
     ))
 
 
-def _find_or_create_module_id(course_id: str, name: str) -> str | None:
-    """Find or create a Canvas module by name. Returns module ID or None."""
-    data, err = canvas_client._canvas_get_all(
-        f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
-    if not err:
-        for m in (data or []):
-            if str(m.get("name", "")).strip().lower() == name.strip().lower():
-                return m.get("id")
-    created, cerr = canvas_client._canvas_send(
-        "POST", f"/api/v1/courses/{course_id}/modules", {"module": {"name": name}})
-    if cerr:
-        return None
-    return created.get("id")
-
-
-def _get_page_html_url(course_id: str, page_slug: str) -> str | None:
-    """Fetch the html_url for a page by slug."""
-    if not page_slug:
-        return None
-    page, err = canvas_client._canvas_get(
-        f"/api/v1/courses/{course_id}/pages/{page_slug}")
-    if err or not page:
-        return None
-    return page.get("html_url")
-
-
-def _build_result(state: str, *, steps: list[dict] | None = None,
+def _build_result(state: str, *, steps: list[dict],
                   returned_object_id: str | None = None,
                   returned_object_url: str | None = None,
                   error_code: str | None = None,
@@ -432,5 +482,5 @@ def _build_result(state: str, *, steps: list[dict] | None = None,
         "returned_object_url": returned_object_url,
         "error_code": error_code,
         "private_diagnostic": private_diagnostic,
-        "steps": steps or [],
+        "steps": steps,
     }

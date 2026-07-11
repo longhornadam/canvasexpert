@@ -116,7 +116,8 @@ def new_operation(*, operation_id: str, kind: str, source_ref: dict | None,
 
 
 def new_target(*, target_key: str, idempotency_key: str, course_id: str,
-               baseline: dict | None = None, steps: list[dict] | None = None) -> dict:
+               baseline: dict | None = None, steps: list[dict] | None = None,
+               apply_baseline: dict | None = None) -> dict:
     ts = now_iso()
     return {
         "target_key": target_key,
@@ -129,6 +130,7 @@ def new_target(*, target_key: str, idempotency_key: str, course_id: str,
         "claim_acquired_at": None,
         "claim_lease_expires_at": None,
         "baseline": baseline,
+        "apply_baseline": apply_baseline,
         "returned_object_id": None,
         "returned_object_url": None,
         "steps": steps or [],
@@ -146,6 +148,7 @@ def new_step(step_key: str) -> dict:
         "returned_object_id": None,
         "error_code": None,
         "private_diagnostic": None,
+        "outbound_started_at": None,
         "updated_at": now_iso(),
     }
 
@@ -174,6 +177,7 @@ def new_claim(*, claim_id: str, target_key: str, operation_id: str,
         "lease_expires_at": lease_expiry(acquired),
         "payload_digest": payload_digest,
         "state": "claimed",
+        "reconciled_at": None,
     }
 
 

@@ -6,12 +6,14 @@ lease expiry detection, and stale-claim recovery.
 """
 import copy
 import json
+import multiprocessing
+import os
 import threading
 import time
 
 import pytest
 
-from api.operation_ledger import claims, models, operations, paths, storage
+from api.operation_ledger import claims, executor, models, operations, paths, storage
 
 
 def _root(tmp_path, monkeypatch):
@@ -33,6 +35,22 @@ def _make_operation(operation_id="op-test1", targets=None):
         normalized_payload={"title": "Test", "body": "<p>Hi</p>", "published": False},
         targets=targets,
     )
+
+
+def _spawn_claim_worker(root, barrier, result_queue):
+    """Top-level worker for portable spawn-based claim contention evidence."""
+    os.environ["LOCALAPPDATA"] = root
+    from api.operation_ledger import claims
+    barrier.wait()
+    try:
+        claim = claims.acquire_claim(
+            target_key="spawn-target",
+            operation_id="op-spawn",
+            payload_digest="spawn-digest",
+        )
+        result_queue.put(("acquired", claim["claim_id"]))
+    except claims.ClaimConflictError:
+        result_queue.put(("conflicted", None))
 
 
 # ── Operation round-trip ────────────────────────────────────────────────
@@ -146,6 +164,24 @@ def test_concurrent_claim_acquisition(tmp_path, monkeypatch):
     assert len(results["conflicted"]) == 7
 
 
+def test_spawned_processes_race_for_one_claim(tmp_path, monkeypatch):
+    """The shared adjacent lock serializes claims across spawned processes."""
+    root = _root(tmp_path, monkeypatch)
+    ctx = multiprocessing.get_context("spawn")
+    barrier = ctx.Barrier(2)
+    result_queue = ctx.Queue()
+    processes = [ctx.Process(target=_spawn_claim_worker,
+                             args=(str(root), barrier, result_queue)) for _ in range(2)]
+    for process in processes:
+        process.start()
+    results = [result_queue.get(timeout=20) for _ in processes]
+    for process in processes:
+        process.join(timeout=20)
+        assert process.exitcode == 0
+    assert [result[0] for result in results].count("acquired") == 1
+    assert [result[0] for result in results].count("conflicted") == 1
+
+
 # ── Atomic failure preserves previous document ──────────────────────────
 
 def test_atomic_failure_preserves_previous_operations(tmp_path, monkeypatch):
@@ -220,10 +256,72 @@ def test_active_claim_not_expired(tmp_path, monkeypatch):
     storage.upsert_claim(claim)
 
     expired = claims.detect_expired_claims()
-    # The claim should NOT be expired because lease is in the future
-    # (but owner_pid is different, so it IS expired by the dead-process rule)
-    # Actually, different PID + different start time → expired
-    assert len(expired) == 1
+    # A different PID is not evidence of death while the lease is valid.
+    assert expired == []
+
+
+def test_expired_claim_requires_recovery_before_acquisition(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    claim = models.new_claim(
+        claim_id="tk-expired:attempt-old", target_key="tk-expired",
+        operation_id="op-expired", attempt_id="attempt-old", owner_pid=1,
+        owner_started_at="2020-01-01T00:00:00+00:00", payload_digest="digest")
+    claim["lease_expires_at"] = "2020-01-01T00:00:01+00:00"
+    storage.upsert_claim(claim)
+    with pytest.raises(claims.ClaimConflictError):
+        claims.acquire_claim(target_key="tk-expired", operation_id="op-expired",
+                             payload_digest="new-digest")
+    assert storage.find_claim(claim["claim_id"])["state"] == "claimed"
+    claims.detect_expired_claims()
+    with pytest.raises(claims.ClaimConflictError):
+        claims.acquire_claim(target_key="tk-expired", operation_id="op-expired",
+                             payload_digest="new-digest")
+    claims.mark_reconciled(claim["claim_id"])
+    replacement = claims.acquire_claim(target_key="tk-expired", operation_id="op-expired",
+                                       payload_digest="new-digest")
+    assert replacement["state"] == "claimed"
+
+
+def test_concurrent_operation_target_mutations_preserve_updates(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    targets = [models.new_target(target_key=f"tk-{i}", idempotency_key=f"ik-{i}",
+                                 course_id=str(i)) for i in range(2)]
+    operations.create_operation(_make_operation("op-mutations", targets))
+
+    def update(index):
+        operations.update_target("op-mutations", f"tk-{index}",
+                                 lambda target: {**target, "error_code": f"error-{index}"})
+
+    threads = [threading.Thread(target=update, args=(index,)) for index in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    stored = operations.get_operation("op-mutations")
+    assert {target["error_code"] for target in stored["targets"]} == {"error-0", "error-1"}
+
+
+def test_stale_worker_cannot_checkpoint_after_recovery_fencing(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    operation = _make_operation("op-fence")
+    operations.create_operation(operation)
+    target = operation["targets"][0]
+    claim = claims.acquire_claim(target_key=target["target_key"],
+                                 operation_id=operation["operation_id"],
+                                 payload_digest="digest")
+    executor._update_target_claimed(operation["operation_id"], target["target_key"],
+                                     claim, {"existing_page": None})
+    context = executor.ExecutionContext(operation_id=operation["operation_id"],
+                                        target_key=target["target_key"], claim=claim)
+    stored_claim = storage.find_claim(claim["claim_id"])
+    stored_claim["lease_expires_at"] = "2020-01-01T00:00:01+00:00"
+    storage.upsert_claim(stored_claim)
+    claims.detect_expired_claims()
+    before = operations.get_operation(operation["operation_id"])
+    with pytest.raises(executor.LostClaimError):
+        context.before_send("create_page", "digest")
+    after = operations.get_operation(operation["operation_id"])
+    assert after["targets"] == before["targets"]
 
 
 # ── Stale claim recovery ────────────────────────────────────────────────

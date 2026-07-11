@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import paths
+from .file_lock import interprocess_lock
 
 
 VERSION = 1
@@ -193,7 +194,8 @@ def read_operations_document() -> dict:
 
 def write_operations_document(document: dict) -> None:
     with _LOCK:
-        _atomic_write_operations_unlocked(document)
+        with interprocess_lock(paths.ledger_lock_file()):
+            _atomic_write_operations_unlocked(document)
 
 
 def find_operation(operation_id: str) -> dict | None:
@@ -207,8 +209,7 @@ def find_operation(operation_id: str) -> dict | None:
 
 def upsert_operation(operation: dict) -> dict:
     """Insert or replace an operation by operation_id. Returns a deep copy."""
-    with _LOCK:
-        document = _read_operations_unlocked()
+    def _mutator(document):
         found = False
         for i, op in enumerate(document["operations"]):
             if op.get("operation_id") == operation["operation_id"]:
@@ -217,8 +218,13 @@ def upsert_operation(operation: dict) -> dict:
                 break
         if not found:
             document["operations"].append(copy.deepcopy(operation))
-        _atomic_write_operations_unlocked(document)
-        return copy.deepcopy(operation)
+        return document
+
+    storage_doc = modify_operations(_mutator)
+    for op in storage_doc["operations"]:
+        if op.get("operation_id") == operation["operation_id"]:
+            return copy.deepcopy(op)
+    raise KeyError(f"operation {operation['operation_id']} was not persisted")
 
 
 # ── Claims document ─────────────────────────────────────────────────────
@@ -264,13 +270,13 @@ def read_claims_document() -> dict:
 
 def write_claims_document(document: dict) -> None:
     with _LOCK:
-        _atomic_write_claims_unlocked(document)
+        with interprocess_lock(paths.ledger_lock_file()):
+            _atomic_write_claims_unlocked(document)
 
 
 def upsert_claim(claim: dict) -> dict:
     """Insert or replace a claim by claim_id. Returns a deep copy."""
-    with _LOCK:
-        document = _read_claims_unlocked()
+    def _mutator(document):
         found = False
         for i, c in enumerate(document["claims"]):
             if c.get("claim_id") == claim["claim_id"]:
@@ -279,8 +285,13 @@ def upsert_claim(claim: dict) -> dict:
                 break
         if not found:
             document["claims"].append(copy.deepcopy(claim))
-        _atomic_write_claims_unlocked(document)
-        return copy.deepcopy(claim)
+        return document
+
+    claims_doc = modify_claims(_mutator)
+    for item in claims_doc["claims"]:
+        if item.get("claim_id") == claim["claim_id"]:
+            return copy.deepcopy(item)
+    raise KeyError(f"claim {claim['claim_id']} was not persisted")
 
 
 def modify_claims(mutator) -> dict:
@@ -291,10 +302,11 @@ def modify_claims(mutator) -> dict:
     operation, so concurrent callers are serialized.
     """
     with _LOCK:
-        document = _read_claims_unlocked()
-        result = mutator(document)
-        _atomic_write_claims_unlocked(document)
-        return result
+        with interprocess_lock(paths.ledger_lock_file()):
+            document = _read_claims_unlocked()
+            result = mutator(document)
+            _atomic_write_claims_unlocked(document)
+            return result
 
 
 def modify_operations(mutator) -> dict:
@@ -305,10 +317,23 @@ def modify_operations(mutator) -> dict:
     operation.
     """
     with _LOCK:
-        document = _read_operations_unlocked()
-        result = mutator(document)
-        _atomic_write_operations_unlocked(document)
-        return result
+        with interprocess_lock(paths.ledger_lock_file()):
+            document = _read_operations_unlocked()
+            result = mutator(document)
+            _atomic_write_operations_unlocked(document)
+            return result
+
+
+def modify_ledger(mutator) -> dict:
+    """Atomically read-modify-write operations and claims under one OS lock."""
+    with _LOCK:
+        with interprocess_lock(paths.ledger_lock_file()):
+            operations_doc = _read_operations_unlocked()
+            claims_doc = _read_claims_unlocked()
+            result = mutator(operations_doc, claims_doc)
+            _atomic_write_operations_unlocked(operations_doc)
+            _atomic_write_claims_unlocked(claims_doc)
+            return result
 
 
 def find_claim(claim_id: str) -> dict | None:

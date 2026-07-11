@@ -278,6 +278,11 @@ def test_apply_creates_pages(tmp_path, monkeypatch):
     assert len(send_calls) == 2
     assert "/api/v1/courses/101/pages" in send_calls[0]["path"]
     assert "/api/v1/courses/102/pages" in send_calls[1]["path"]
+    stored = operations.get_operation(op_id)
+    assert stored["targets"][0]["baseline"] == target_records[0]["baseline"]
+    assert stored["targets"][0]["apply_baseline"] == {"existing_page": None}
+    assert stored["targets"][0]["steps"][0]["state"] == "applied"
+    assert stored["targets"][0]["steps"][0]["returned_object_id"] == "test-page"
 
 
 def test_apply_with_drift_blocks(tmp_path, monkeypatch):
@@ -646,10 +651,15 @@ def test_module_attachment_after_page(tmp_path, monkeypatch):
     operations.set_operation_review(op_id, batch)
 
     # Mock: page creation, module list (find existing), module item POST
-    _mock_canvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
+    checkpoint_observations = []
+    def fake_get_all(path, params=None, timeout=30):
+        stored = operations.get_operation(op_id)
+        checkpoint_observations.append(stored["targets"][0]["steps"])
+        return ([{"id": 55, "name": "Unit 1"}], None)
+    monkeypatch.setattr(canvas_client, "_canvas_get_all", fake_get_all)
     send_calls = _mock_canvas_send(monkeypatch, [
         ({"url": "test-page", "html_url": "http://canvas/101/pages/test-page"}, None),  # create page
-        ({}, None),  # add module item
+        ({"id": 77}, None),  # add module item
     ])
 
     result = executor.apply_operation(op_id, batch["batch_id"], batch["review_digest"])
@@ -658,6 +668,10 @@ def test_module_attachment_after_page(tmp_path, monkeypatch):
     assert len(send_calls) == 2
     assert "/pages" in send_calls[0]["path"]
     assert "/modules/55/items" in send_calls[1]["path"]
+    assert checkpoint_observations[0][0]["step_key"] == "create_page"
+    assert checkpoint_observations[0][0]["returned_object_id"] == "test-page"
+    stored = operations.get_operation(op_id)
+    assert stored["targets"][0]["steps"][-1]["returned_object_id"] == "77"
 
 
 def test_retry_resumes_module_attachment(tmp_path, monkeypatch):
@@ -774,6 +788,83 @@ def test_receipt_written_per_apply(tmp_path, monkeypatch):
     assert receipt_list[0]["subject_id"] == op_id
     assert receipt_list[0]["kind"] == "content.page"
     assert receipt_list[0]["status"] == "applied"
+
+
+def test_adapter_exceptions_are_private_and_do_not_stop_later_targets(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    _mock_active_courses(monkeypatch)
+    adapter = PageAdapter()
+    targets = [
+        models.new_target(target_key="tk-101", idempotency_key="ik-101", course_id="101",
+                          baseline={"existing_page": None}),
+        models.new_target(target_key="tk-102", idempotency_key="ik-102", course_id="102",
+                          baseline={"existing_page": None}),
+    ]
+    payload = {"title": "Test Page", "body": "<p>Body</p>", "published": False,
+               "module_name": None, "source_path": "fixture.pageforge.json"}
+    op_id = models.new_operation_id()
+    operation = models.new_operation(
+        operation_id=op_id, kind="content.page",
+        source_ref={"type": "workspace_relative", "value": "fixture.pageforge.json"},
+        source_digest=adapter.source_digest(payload), normalized_payload=payload,
+        targets=targets)
+    operations.create_operation(operation)
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: adapter)
+    batch = batches.freeze_batch([op_id], {op_id: [
+        adapter.freeze_review(payload, target, target["baseline"]) for target in targets]})
+    operations.set_operation_review(op_id, batch)
+    monkeypatch.setattr(adapter, "capture_baseline", lambda payload, target: {"existing_page": None})
+    monkeypatch.setattr(adapter, "check_drift", lambda payload, target, baseline: False)
+
+    def execute(payload, target, baseline, claim, context):
+        if target["course_id"] == "101":
+            raise RuntimeError("private failure text")
+        return {"state": "applied", "steps": []}
+
+    monkeypatch.setattr(adapter, "execute", execute)
+    result = executor.apply_operation(op_id, batch["batch_id"], batch["review_digest"])
+    assert result["status"] == "partial"
+    stored = operations.get_operation(op_id)
+    assert stored["targets"][0]["error_code"] == "adapter_exception"
+    assert stored["targets"][0]["private_diagnostic"] == "RuntimeError"
+    assert stored["targets"][1]["state"] == "applied"
+    from api.operation_ledger import receipts
+    assert receipts.list_receipts()[0]["status"] == "partial"
+
+
+def test_adapter_exception_after_marker_is_attention(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    _mock_active_courses(monkeypatch, [{"id": "101", "name": "Course A", "active": True}])
+    adapter = PageAdapter()
+    payload = {"title": "Test Page", "body": "<p>Body</p>", "published": False,
+               "module_name": None, "source_path": "fixture.pageforge.json"}
+    target = models.new_target(target_key="tk-101", idempotency_key="ik-101", course_id="101",
+                               baseline={"existing_page": None})
+    op_id = models.new_operation_id()
+    operation = models.new_operation(
+        operation_id=op_id, kind="content.page",
+        source_ref={"type": "workspace_relative", "value": "fixture.pageforge.json"},
+        source_digest=adapter.source_digest(payload), normalized_payload=payload,
+        targets=[target])
+    operations.create_operation(operation)
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: adapter)
+    batch = batches.freeze_batch([op_id], {op_id: [
+        adapter.freeze_review(payload, target, target["baseline"]) ]})
+    operations.set_operation_review(op_id, batch)
+    monkeypatch.setattr(adapter, "capture_baseline", lambda payload, target: {"existing_page": None})
+    monkeypatch.setattr(adapter, "check_drift", lambda payload, target, baseline: False)
+
+    def execute(payload, target, baseline, claim, context):
+        context.before_send("create_page", "outbound-digest")
+        raise RuntimeError("must not be returned")
+
+    monkeypatch.setattr(adapter, "execute", execute)
+    result = executor.apply_operation(op_id, batch["batch_id"], batch["review_digest"])
+    assert result["status"] == "attention"
+    stored = operations.get_operation(op_id)
+    assert stored["targets"][0]["state"] == "sent_unknown"
+    assert stored["targets"][0]["error_code"] == "adapter_exception_after_send"
+    assert stored["targets"][0]["steps"][0]["outbound_started_at"]
 
 
 # ── PII minimization in GET /api/operations ─────────────────────────────
