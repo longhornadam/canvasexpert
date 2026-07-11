@@ -713,7 +713,7 @@ def test_retry_resumes_module_attachment(tmp_path, monkeypatch):
     ])
     _mock_canvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
     send_calls = _mock_canvas_send(monkeypatch, [
-        ({}, None),  # module item POST only — no page creation
+        ({"id": 77}, None),  # module item POST only — no page creation
     ])
 
     result = executor.retry_operation(op_id)
@@ -902,3 +902,116 @@ def test_pii_minimization_in_list_operations(tmp_path, monkeypatch):
     # No target details
     assert "target_key" not in text
     assert "idempotency_key" not in text
+
+
+# ── Missing module-item ID is not success ───────────────────────────────
+
+def test_attach_without_item_id_is_sent_unknown(tmp_path, monkeypatch):
+    """A POST response without an id must not be checkpointed as applied."""
+    _root(tmp_path, monkeypatch)
+    _mock_active_courses(monkeypatch)
+    # capture_baseline (1) + apply-time capture_baseline (1) + check_drift (1) +
+    # _get_page_html_url (1)
+    _mock_canvas_get(monkeypatch, [
+        ([], None),  # setup capture_baseline
+        ([], None),  # apply-time capture_baseline
+        ([], None),  # check_drift
+        ({"html_url": "http://canvas/101/pages/test-page"}, None),  # _get_page_html_url
+    ])
+    path = _write_pageforge(tmp_path)
+
+    adapter = PageAdapter()
+    payload = adapter.build_payload({"path": path, "published": True, "module_name": "Unit 1"})
+    targets_in = adapter.verify_targets(payload, [{"course_id": "101"}])
+
+    target_records = []
+    frozen = []
+    for t in targets_in:
+        baseline = adapter.capture_baseline(payload, t)
+        target_records.append(models.new_target(
+            target_key=t["target_key"], idempotency_key=t["idempotency_key"],
+            course_id=t["course_id"], baseline=baseline))
+        frozen.append(adapter.freeze_review(payload, t, baseline))
+
+    op_id = models.new_operation_id()
+    op = models.new_operation(
+        operation_id=op_id, kind="content.page",
+        source_ref={"type": "workspace_relative", "value": path},
+        source_digest=adapter.source_digest(payload),
+        normalized_payload=payload, targets=target_records)
+    operations.create_operation(op)
+
+    batch = batches.freeze_batch([op_id], {op_id: frozen})
+    operations.set_operation_review(op_id, batch)
+
+    # Page creation succeeds, module found, module item POST returns no id.
+    _mock_canvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
+    _mock_canvas_send(monkeypatch, [
+        ({"url": "test-page", "html_url": "http://canvas/101/pages/test-page"}, None),
+        ({}, None),  # module item POST — no id in response
+    ])
+
+    result = executor.apply_operation(op_id, batch["batch_id"], batch["review_digest"])
+
+    assert result["status"] == "attention"
+    assert result["target_results"][0]["state"] == "sent_unknown"
+    assert result["target_results"][0]["error_code"] == "unparseable_response"
+    stored = operations.get_operation(op_id)
+    attach = next(s for s in stored["targets"][0]["steps"]
+                  if s["step_key"] == "attach_module")
+    assert attach["state"] == "sent_unknown"
+
+
+def test_previously_applied_attach_without_item_id_is_sent_unknown(tmp_path, monkeypatch):
+    """A previously applied attachment with no item ID must not be treated
+    as applied on retry — it must be sent_unknown."""
+    _root(tmp_path, monkeypatch)
+    _mock_active_courses(monkeypatch)
+    path = _write_pageforge(tmp_path)
+
+    adapter = PageAdapter()
+    payload = adapter.build_payload({"path": path, "published": True, "module_name": "Unit 1"})
+    targets_in = adapter.verify_targets(payload, [{"course_id": "101"}])
+
+    # Target has page created and attach_module step marked applied but no item_id.
+    target = models.new_target(
+        target_key=targets_in[0]["target_key"],
+        idempotency_key=targets_in[0]["idempotency_key"],
+        course_id="101", baseline={"existing_page": None})
+    target["returned_object_id"] = "test-page"
+    target["state"] = "sent_unknown"
+    target["steps"] = [
+        {"step_key": "create_page", "state": "applied",
+         "returned_object_id": "test-page"},
+        {"step_key": "attach_module", "state": "applied",
+         "module_id": "55", "returned_object_id": None},
+    ]
+
+    op_id = models.new_operation_id()
+    op = models.new_operation(
+        operation_id=op_id, kind="content.page",
+        source_ref={"type": "workspace_relative", "value": path},
+        source_digest=adapter.source_digest(payload),
+        normalized_payload=payload, targets=[target])
+    operations.create_operation(op)
+
+    batch = batches.freeze_batch([op_id], {op_id: [
+        adapter.freeze_review(payload, target, {"existing_page": None})]})
+    operations.set_operation_review(op_id, batch)
+
+    # capture_baseline (1) + check_drift (1) + page exists by slug (1)
+    _mock_canvas_get(monkeypatch, [
+        ([], None),  # capture_baseline
+        ([], None),  # check_drift
+        ({"url": "test-page", "title": "Test Page"}, None),  # page exists
+    ])
+    _mock_canvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
+    send_calls = _mock_canvas_send(monkeypatch, [])
+
+    result = executor.retry_operation(op_id)
+    # The previously applied attachment without an item ID must not be
+    # treated as applied — it must be sent_unknown without re-sending.
+    assert result["status"] == "attention"
+    assert result["target_results"][0]["state"] == "sent_unknown"
+    assert result["target_results"][0]["error_code"] == "module_item_exact_id_unverified"
+    assert len(send_calls) == 0

@@ -62,10 +62,15 @@ def acquire_claim(*, target_key: str, operation_id: str, payload_digest: str) ->
 
 
 def release_claim(claim_id: str) -> None:
-    """Mark a claim as released (the Canvas call succeeded)."""
+    """Mark a claim as released (the Canvas call succeeded).
+
+    Only a currently ``claimed`` record may be released. An expired or
+    reconciled claim is left untouched so a fenced stale worker cannot
+    make the target reusable while recovery is still running.
+    """
     def _mutator(doc):
         for c in doc["claims"]:
-            if c.get("claim_id") == claim_id:
+            if c.get("claim_id") == claim_id and c.get("state") == "claimed":
                 c["state"] = "released"
                 break
         return doc

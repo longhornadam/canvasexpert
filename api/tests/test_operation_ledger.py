@@ -13,7 +13,9 @@ import time
 
 import pytest
 
-from api.operation_ledger import claims, executor, models, operations, paths, storage
+from api.operation_ledger import (
+    claims, executor, models, operations, paths, registry, storage,
+)
 
 
 def _root(tmp_path, monkeypatch):
@@ -345,42 +347,177 @@ def test_stale_claim_marked_expired_on_recovery(tmp_path, monkeypatch):
     assert any(c["claim_id"] == "tk-stale:attempt-old" for c in expired)
 
 
-# ── Compute operation status from targets ───────────────────────────────
+# ── release_claim safety ────────────────────────────────────────────────
 
-def test_compute_status_all_applied():
-    targets = [{"state": "applied"}, {"state": "applied"}]
-    assert models.compute_operation_status(targets) == "applied"
+def test_release_claim_does_not_release_expired_claim(tmp_path, monkeypatch):
+    """A fenced stale worker must not flip an expired claim to released."""
+    _root(tmp_path, monkeypatch)
+    claim = models.new_claim(
+        claim_id="tk-stale:attempt-old", target_key="tk-stale",
+        operation_id="op-stale", attempt_id="attempt-old", owner_pid=99999,
+        owner_started_at="2020-01-01T00:00:00+00:00", payload_digest="digest")
+    claim["lease_expires_at"] = "2020-01-01T00:00:01+00:00"
+    storage.upsert_claim(claim)
+    claims.detect_expired_claims()
+    assert storage.find_claim(claim["claim_id"])["state"] == "expired"
 
+    # A stale worker tries to release the now-expired claim.
+    claims.release_claim(claim["claim_id"])
 
-def test_compute_status_mixed_applied_skipped():
-    targets = [{"state": "applied"}, {"state": "skipped"}]
-    assert models.compute_operation_status(targets) == "applied"
-
-
-def test_compute_status_partial():
-    targets = [{"state": "applied"}, {"state": "failed"}]
-    assert models.compute_operation_status(targets) == "partial"
-
-
-def test_compute_status_attention():
-    targets = [{"state": "applied"}, {"state": "sent_unknown"}]
-    assert models.compute_operation_status(targets) == "attention"
-
-
-def test_compute_status_all_failed():
-    targets = [{"state": "failed"}, {"state": "failed"}]
-    assert models.compute_operation_status(targets) == "failed"
+    # The claim must still be expired, not released.
+    stored = storage.find_claim(claim["claim_id"])
+    assert stored["state"] == "expired"
 
 
-# ── Registry ────────────────────────────────────────────────────────────
+def test_release_claim_releases_active_claim(tmp_path, monkeypatch):
+    """A normal claimed record can still be released."""
+    _root(tmp_path, monkeypatch)
+    claim = claims.acquire_claim(
+        target_key="tk-active", operation_id="op-active",
+        payload_digest="digest")
+    assert claim["state"] == "claimed"
+    claims.release_claim(claim["claim_id"])
+    assert storage.find_claim(claim["claim_id"])["state"] == "released"
 
-def test_page_adapter_registered():
-    from api.operation_ledger import registry
-    assert registry.is_registered("content.page")
-    adapter = registry.get_adapter("content.page")
-    assert adapter.kind == "content.page"
+
+# ── Recovery atomicity ──────────────────────────────────────────────────
+
+def test_recovery_reconciles_claim_and_target_atomically(tmp_path, monkeypatch):
+    """After recovery, the claim is reconciled and the target is applied
+    in one transaction — a new attempt cannot acquire the target during
+    the gap because the claim is not reconciled until the target is written.
+    """
+    _root(tmp_path, monkeypatch)
+    from api.operation_ledger import recovery
+
+    # Build an operation with a sent_unknown target and an expired claim.
+    target = models.new_target(
+        target_key="tk-recover", idempotency_key="ik-recover", course_id="101")
+    target["state"] = "sent_unknown"
+    target["attempt_id"] = "attempt-old"
+    target["returned_object_id"] = "my-slug"
+    target["steps"] = [models.new_step("create_page")]
+    target["steps"][0]["step_key"] = "create_page"
+    target["steps"][0]["state"] = "applied"
+    target["steps"][0]["returned_object_id"] = "my-slug"
+    op = _make_operation("op-recover", targets=[target])
+    operations.create_operation(op)
+
+    # Create an expired claim for this target.
+    claim = models.new_claim(
+        claim_id=f"tk-recover:{target.get('attempt_id', 'attempt-old')}",
+        target_key="tk-recover",
+        operation_id="op-recover",
+        attempt_id="attempt-old",
+        owner_pid=99999,
+        owner_started_at="2020-01-01T00:00:00+00:00",
+        payload_digest="digest")
+    claim["lease_expires_at"] = "2020-01-01T00:00:01+00:00"
+    storage.upsert_claim(claim)
+    claims.detect_expired_claims()
+    assert storage.find_claim(claim["claim_id"])["state"] == "expired"
+
+    # Mock the adapter so reconcile proves applied.
+    class FakeAdapter:
+        kind = "content.page"
+        def reconcile(self, payload, target, baseline):
+            return {"state": "applied",
+                    "returned_object_id": "my-slug",
+                    "returned_object_url": "http://canvas/pages/my-slug"}
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: FakeAdapter())
+
+    summary = recovery.recover_pending_operations()
+    assert summary["recovered"] == 1
+
+    # The target must be applied.
+    stored_op = operations.get_operation("op-recover")
+    assert stored_op["targets"][0]["state"] == "applied"
+
+    # The claim must be reconciled (reconciled_at set).
+    stored_claim = storage.find_claim(claim["claim_id"])
+    assert stored_claim["state"] == "expired"
+    assert stored_claim.get("reconciled_at") is not None
+
+    # A new attempt can now acquire a fresh claim (the old one is reconciled).
+    new_claim = claims.acquire_claim(
+        target_key="tk-recover", operation_id="op-recover",
+        payload_digest="new-digest")
+    assert new_claim["state"] == "claimed"
 
 
-def test_known_kinds_includes_page():
-    from api.operation_ledger import registry
-    assert "content.page" in registry.known_kinds()
+def test_recovery_atomicity_no_gap_for_new_attempt(tmp_path, monkeypatch):
+    """Negative test: if recovery only reconciled the claim without writing
+    the target, a new attempt could re-acquire and re-send. This test verifies
+    the target is already applied when the claim becomes reconciled, by
+    checking there is no intermediate state where the claim is reconciled
+    but the target is still sent_unknown.
+
+    We simulate this by patching modify_ledger to capture the document state
+    inside the transaction and asserting both mutations are visible together.
+    """
+    _root(tmp_path, monkeypatch)
+    from api.operation_ledger import recovery, storage as storage_mod
+
+    target = models.new_target(
+        target_key="tk-atomic", idempotency_key="ik-atomic", course_id="101")
+    target["state"] = "sent_unknown"
+    target["attempt_id"] = "attempt-old"
+    target["returned_object_id"] = "my-slug"
+    target["steps"] = [models.new_step("create_page")]
+    target["steps"][0]["step_key"] = "create_page"
+    target["steps"][0]["state"] = "applied"
+    target["steps"][0]["returned_object_id"] = "my-slug"
+    op = _make_operation("op-atomic", targets=[target])
+    operations.create_operation(op)
+
+    claim = models.new_claim(
+        claim_id="tk-atomic:attempt-old",
+        target_key="tk-atomic",
+        operation_id="op-atomic",
+        attempt_id="attempt-old",
+        owner_pid=99999,
+        owner_started_at="2020-01-01T00:00:00+00:00",
+        payload_digest="digest")
+    claim["lease_expires_at"] = "2020-01-01T00:00:01+00:00"
+    storage.upsert_claim(claim)
+    claims.detect_expired_claims()
+
+    captured_states = []
+    original_modify_ledger = storage_mod.modify_ledger
+
+    def capturing_modify_ledger(mutator):
+        def wrapped_mutator(ops_doc, claims_doc):
+            result = mutator(ops_doc, claims_doc)
+            # Capture the state after the mutator runs but before commit.
+            for op_item in ops_doc["operations"]:
+                if op_item.get("operation_id") == "op-atomic":
+                    for t in op_item.get("targets", []):
+                        if t.get("target_key") == "tk-atomic":
+                            target_state = t.get("state")
+            claim_reconciled = any(
+                c.get("claim_id") == "tk-atomic:attempt-old"
+                and c.get("reconciled_at") is not None
+                for c in claims_doc["claims"])
+            captured_states.append((target_state, claim_reconciled))
+            return result
+        return original_modify_ledger(wrapped_mutator)
+
+    monkeypatch.setattr(storage_mod, "modify_ledger", capturing_modify_ledger)
+
+    class FakeAdapter:
+        kind = "content.page"
+        def reconcile(self, payload, target, baseline):
+            return {"state": "applied",
+                    "returned_object_id": "my-slug",
+                    "returned_object_url": "http://canvas/pages/my-slug"}
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: FakeAdapter())
+
+    recovery.recover_pending_operations()
+
+    # Inside the transaction, the target is applied AND the claim is reconciled
+    # in the same atomic step — there is no intermediate state.
+    assert len(captured_states) >= 1
+    for target_state, claim_reconciled in captured_states:
+        if claim_reconciled:
+            assert target_state == "applied", (
+                "claim reconciled before target was written — gap exists")

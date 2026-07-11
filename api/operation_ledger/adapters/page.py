@@ -287,9 +287,16 @@ class PageAdapter:
                                  returned_object_url=page_url,
                                  error_code="module_item_exact_id_unverified")
         if attach_step.get("state") == "applied" and not item_id:
-            return _build_result("applied", steps=steps,
+            # A previously applied attachment without an item ID cannot be
+            # proven to exist; it must not be treated as success.
+            attach_step["state"] = "sent_unknown"
+            attach_step["error_code"] = "module_item_exact_id_unverified"
+            attach_step = context.checkpoint_step(attach_step)
+            _replace_local_step(steps, attach_step)
+            return _build_result("sent_unknown", steps=steps,
                                  returned_object_id=page_slug,
-                                 returned_object_url=page_url)
+                                 returned_object_url=page_url,
+                                 error_code="module_item_exact_id_unverified")
 
         item_path = f"/api/v1/courses/{course_id}/modules/{module_id}/items"
         item_request = {"module_item": {
@@ -318,6 +325,20 @@ class PageAdapter:
                                  returned_object_url=page_url,
                                  error_code=attach_step["error_code"])
         item_id = str(response.get("id")) if isinstance(response, dict) and response.get("id") is not None else None
+        if not item_id:
+            # A successful POST without an ID cannot prove the attachment
+            # landed; checkpoint as sent_unknown so reconciliation must
+            # prove the exact Page/page_url relationship before applied.
+            attach_step["state"] = "sent_unknown"
+            attach_step["error_code"] = "unparseable_response"
+            attach_step["private_diagnostic"] = "missing module item id"
+            attach_step["module_id"] = str(module_id)
+            attach_step = context.checkpoint_step(attach_step)
+            _replace_local_step(steps, attach_step)
+            return _build_result("sent_unknown", steps=steps,
+                                 returned_object_id=page_slug,
+                                 returned_object_url=page_url,
+                                 error_code="unparseable_response")
         attach_step["state"] = "applied"
         attach_step["module_id"] = str(module_id)
         attach_step = context.checkpoint_step(attach_step, returned_object_id=item_id)
@@ -373,8 +394,13 @@ class PageAdapter:
             item, item_error = canvas_client._canvas_get(
                 f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}")
             if not item_error and item:
-                result["module_item_id"] = item_id
-                return result
+                # Prove the exact Page/page_url relationship before applied.
+                if (str(item.get("type", "")).lower() == "page"
+                        and item.get("page_url") == page_slug):
+                    result["module_item_id"] = item_id
+                    return result
+                # The stored item ID exists but does not identify this page;
+                # fall through to the exact-match search below.
 
         items, item_error = canvas_client._canvas_get_all(
             f"/api/v1/courses/{course_id}/modules/{module_id}/items",
