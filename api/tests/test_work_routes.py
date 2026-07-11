@@ -7,6 +7,7 @@ from api.webui.local_request_guard import csrf_token
 from api.webui.server import app
 from api.webui.routes import work
 from api.work_registry.models import material_version, stable_fingerprint
+from api.work_registry.providers import finding
 
 
 def _job(origin="intentional", status="attention"):
@@ -105,3 +106,51 @@ def test_complete_only_intentional_and_no_canvas_calls(monkeypatch, tmp_path):
     refreshed = client.get("/api/work?section=all")
     assert refreshed.status_code == 200
     assert refreshed.json()["jobs"][0]["status"] == "completed"
+
+
+def test_scan_is_guarded_merges_findings_and_get_stays_local(monkeypatch, tmp_path):
+    discovered = finding(
+        kind="grade.debt",
+        course_id="course-1",
+        assignment_id="assignment-1",
+        counts={"total": 1, "pending": 1, "affected": 1},
+        now="2026-07-11T12:00:00+00:00",
+        resumable_url="/powergrader",
+    )
+    result = {
+        "ok": True,
+        "partial": False,
+        "courses_scanned": 1,
+        "findings": 1,
+        "stale_course_ids": [],
+        "error_codes": [],
+        "courses": {
+            "course-1": {
+                "checked_at": "2026-07-11T12:00:00+00:00",
+                "findings": [discovered],
+                "stale": False,
+                "error_code": "",
+            }
+        },
+    }
+    monkeypatch.setattr(work.storage.workspace, "workspace_root", lambda: str(tmp_path / "workspace"))
+    monkeypatch.setattr(work.discovery, "scan_active_courses", lambda: result)
+    monkeypatch.setattr(work.adapters, "collect_local_jobs", lambda: [])
+    monkeypatch.setattr(work.adapters, "collect_start_sources", lambda: [])
+    client = _client()
+
+    assert client.post("/api/work/scan").status_code == 403
+    response = client.post(
+        "/api/work/scan",
+        headers={
+            "X-CanvasExpert-CSRF": csrf_token(),
+            "Origin": "http://127.0.0.1:8765",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["findings"] == 1
+
+    monkeypatch.setattr(work.discovery, "scan_active_courses", lambda: (_ for _ in ()).throw(AssertionError("GET scanned Canvas")))
+    get_response = client.get("/api/work?section=attention")
+    assert get_response.status_code == 200
+    assert get_response.json()["jobs"][0]["kind"] == "grade.debt"

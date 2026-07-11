@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from api.work_registry import adapters, storage, suppressions
+from api.work_registry import adapters, discovery, storage, suppressions
 from api.work_registry.models import public_job, validate_registry_document
 from api.webui.local_request_guard import require_local_mutation
 
@@ -80,12 +80,52 @@ def _write_result(result: dict):
     return JSONResponse(result, status_code=503)
 
 
+def _merge_discovery(result: dict) -> dict:
+    current = storage.read_registry()
+    scanned_courses = set((result.get("courses") or {}).keys())
+    current_jobs = []
+    for job in current.get("jobs", []):
+        source_ref = job.get("source_ref") if isinstance(job, dict) else {}
+        course_ids = set(job.get("course_ids") or []) if isinstance(job, dict) else set()
+        if source_ref.get("type") == "canvas_finding" and course_ids & scanned_courses:
+            continue
+        current_jobs.append(job)
+    for record in (result.get("courses") or {}).values():
+        current_jobs.extend(record.get("findings") or [])
+    current["jobs"] = current_jobs
+    current["updated_at"] = _now()
+    validate_registry_document(current)
+    return storage.write_registry(current)
+
+
 @router.get("/work")
 def get_work(section: str = "continue"):
     jobs = _section_jobs(section)
     if jobs is None:
         return JSONResponse({"ok": False, "error": "unknown section"}, status_code=400)
     return JSONResponse({"ok": True, "jobs": jobs, "start_sources": adapters.collect_start_sources()})
+
+
+@router.post("/work/scan")
+def scan_work(request: Request):
+    require_local_mutation(request)
+    if storage.workspace.workspace_root() is None:
+        return JSONResponse({"ok": False, "error": "workspace_not_configured"}, status_code=503)
+    result = discovery.scan_active_courses()
+    if not result.get("ok"):
+        return JSONResponse(result, status_code=503)
+    write_result = _merge_discovery(result)
+    error = _write_result(write_result)
+    if error:
+        return error
+    return JSONResponse({
+        "ok": True,
+        "partial": bool(result.get("partial")),
+        "courses_scanned": result.get("courses_scanned", 0),
+        "findings": result.get("findings", 0),
+        "stale_course_ids": result.get("stale_course_ids", []),
+        "error_codes": result.get("error_codes", []),
+    })
 
 
 @router.post("/work/{job_id}/ignore")

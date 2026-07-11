@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import ntpath
 import os
 import posixpath
 from copy import deepcopy
@@ -91,13 +90,13 @@ def _is_iso(value: str) -> bool:
 def _is_absolute_reference(value: str) -> bool:
     parsed = urlsplit(value)
     return bool(
-        parsed.scheme
-        or parsed.netloc
+        parsed.netloc
+        or (parsed.scheme and (value.casefold().startswith(("http:", "https:", "file:", "ftp:"))))
         or value.startswith("//")
         or value.startswith("\\\\")
         or posixpath.isabs(value)
-        or ntpath.isabs(value)
-        or (len(value) >= 2 and value[1] == ":")
+        or value.startswith("\\")
+        or (len(value) >= 2 and value[1] == ":" and (len(value) == 2 or value[2] in "\\/"))
         or os.path.isabs(value)
     )
 
