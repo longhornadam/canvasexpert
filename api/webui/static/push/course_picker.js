@@ -2,8 +2,8 @@
   "use strict";
 
   var push = window.CE_PUSH || {};
+  var context = window.CE_CONTEXT || null;
   var checklist = document.getElementById("course-checklist");
-  var STORAGE_KEY = "canvasExpert.push.coursePicker.v1";
 
   function focusedRow() {
     return checklist?.querySelector(".cc-row.focused");
@@ -22,6 +22,13 @@
       .map(function (cb) {
         return { id: cb.value, name: cb.dataset.name };
       });
+  }
+
+  function publishContext(source) {
+    if (!context) return;
+    var row = focusedRow();
+    context.setFocus(row ? { id: row.dataset.id, name: row.dataset.name } : null, source);
+    context.setTargets(targetCourses(), source);
   }
 
   function courseListSummary(courses) {
@@ -68,28 +75,18 @@
   }
 
   function readSavedState() {
-    try {
-      var parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (!parsed || !Array.isArray(parsed.selectedIds)) return null;
+    if (context) {
+      var saved = context.snapshot();
       return {
-        selectedIds: parsed.selectedIds.map(String),
-        focusedId: parsed.focusedId ? String(parsed.focusedId) : "",
+        selectedIds: saved.targetCourses.map(function (item) { return String(item.id); }),
+        focusedId: saved.focusedCourse ? String(saved.focusedCourse.id) : "",
       };
-    } catch (e) {
-      return null;
     }
+    return null;
   }
 
   function saveState() {
-    if (!checklist) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        selectedIds: targetCourses().map(function (c) { return String(c.id); }),
-        focusedId: currentCourseId(),
-      }));
-    } catch (e) {
-      // Selection memory is a convenience; pushing should still work without it.
-    }
+    publishContext("course_picker");
   }
 
   function renderTargets() {
@@ -151,7 +148,7 @@
     var ciLink = document.getElementById("course-info-link");
     if (ciLink) ciLink.href = "/course?course_id=" + encodeURIComponent(id);
     renderTargets();
-    if (!options.skipSave) saveState();
+    if (!options.skipSave) publishContext("course_picker");
   }
 
   function clearFocus() {
@@ -160,7 +157,7 @@
       r.classList.remove("focused");
     });
     renderTargets();
-    saveState();
+    publishContext("course_picker");
   }
 
   function applySavedState() {
@@ -174,9 +171,7 @@
     checklist.querySelectorAll(".cc-cb").forEach(function (cb) {
       cb.checked = selected.has(String(cb.value));
     });
-    var focusId = state.focusedId && selected.has(state.focusedId)
-      ? state.focusedId
-      : state.selectedIds.find(function (id) { return selected.has(id); });
+    var focusId = state.focusedId || state.selectedIds.find(function (id) { return selected.has(id); });
     var focusExists = Array.from(checklist.querySelectorAll(".cc-row")).some(function (r) {
       return String(r.dataset.id) === String(focusId);
     });
@@ -234,7 +229,7 @@
         else clearFocus();
       } else {
         renderTargets();
-        saveState();
+        publishContext("course_picker");
       }
     });
     applySavedState();
@@ -245,6 +240,7 @@
     try {
       var d = await fetch("/api/courses").then(function (r) { return r.json(); });
       if (!d.ok || !d.courses?.length) return;
+      context?.reconcile(d.courses, { source: "course_picker", authoritative: true });
       var have = new Set(Array.from(checklist.querySelectorAll(".cc-row")).map(function (r) {
         return r.dataset.id;
       }));

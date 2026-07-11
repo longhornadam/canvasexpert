@@ -114,6 +114,16 @@ def test_base_exposes_slice_one_extension_blocks_once_in_order():
     assert html.index(blocks[3]) < html.index("</body>")
 
 
+def test_base_loads_app_context_after_write_review_before_content():
+    """Shared context must be ready before child-page scripts execute."""
+    html = _slurp("api/webui/templates/base.html")
+    context = html.index('/static/app_context.js?v={{ asset_v }}')
+    review = html.index('/static/write_review.js?v={{ asset_v }}')
+    content = html.index('{% block content %}')
+    assert html.count('/static/app_context.js?v={{ asset_v }}') == 1
+    assert review < context < content
+
+
 def test_workbench_css_is_namespaced_and_has_required_tokens():
     """Foundation CSS must not leak generic page rules into legacy routes."""
     css = _slurp("api/webui/static/workbench.css")
@@ -128,6 +138,16 @@ def test_workbench_css_is_namespaced_and_has_required_tokens():
                   "--ce-attention", "--ce-prepared", "--ce-create", "--ce-grade",
                   "--ce-ledger-rule", "--ce-grid-line", "--ce-focus"]:
         assert token in css, f"Missing scoped foundation token {token}"
+
+
+def test_course_picker_uses_shared_context_without_dual_writes():
+    """CoursePicker must publish to CE_CONTEXT and stop writing its legacy key."""
+    js = _slurp("api/webui/static/push/course_picker.js")
+    assert "window.CE_CONTEXT" in js
+    assert "context.setFocus" in js
+    assert "context.setTargets" in js
+    assert "authoritative: true" in js
+    assert "canvasExpert.push.coursePicker.v1" not in js
 
 
 # ── No legacy canvasWriteReview function definitions ──────────────────
