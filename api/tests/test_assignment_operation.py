@@ -567,3 +567,95 @@ def test_execute_with_module(tmp_path, monkeypatch):
     result = adapter.execute(payload, target, baseline, claim, context)
     assert result["state"] == "applied"
     assert result["returned_object_id"] == "24680"
+# ── Autoscore scheduling ────────────────────────────────────────────────────
+
+def test_payload_build_with_autoscore(tmp_path, monkeypatch):
+    af_file = tmp_path / "poetry.assignmentforge.json"
+    af_file.write_text(SAMPLE_AF_JSON, encoding="utf-8")
+    adapter = AssignmentAdapter()
+    payload = adapter.build_payload({
+        "path": str(af_file),
+        "autoscore_schedule": True,
+        "autoscore_auto_push": False,
+        "due_at": "2026-08-01T23:59:00Z",
+    })
+    assert payload.get("autoscore_schedule") is True
+    assert "autoscore_auto_push" not in payload
+
+
+def test_freeze_review_shows_autoscore(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.assignment.config.active_courses",
+        _fake_courses,
+    )
+    af_file = tmp_path / "poetry.assignmentforge.json"
+    af_file.write_text(SAMPLE_AF_JSON, encoding="utf-8")
+    adapter = AssignmentAdapter()
+    payload = adapter.build_payload({
+        "path": str(af_file),
+        "autoscore_schedule": True,
+        "due_at": "2026-08-01T23:59:00Z",
+    })
+    review = adapter.freeze_review(payload, {"course_id": "101"}, {"existing_assignment": None})
+    ascore = review.get("autoscore", {})
+    assert ascore.get("scheduled") is True
+
+
+def test_execute_with_autoscore_schedule(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.assignment.canvas_client._canvas_send",
+        _fake_canvas_send,
+    )
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.assignment.canvas_client._canvas_get",
+        _fake_canvas_get,
+    )
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.assignment.config.active_courses",
+        _fake_courses,
+    )
+
+    adapter = AssignmentAdapter()
+    payload = {"name": "Found Poetry", "description": "<h2>Found Poetry</h2><p>Create a poem.</p>",
+               "points": 100, "submission_types": ["online_text_entry"],
+               "published": True, "post_to_sis": False,
+               "due_at": "2026-08-01T23:59:00Z",
+               "autoscore_schedule": True}
+
+    op = models.new_operation(
+        operation_id="op-af-autoscore",
+        kind="content.assignment",
+        source_ref=None,
+        source_digest=adapter.source_digest(payload),
+        normalized_payload=payload,
+        targets=[
+            models.new_target(
+                target_key=adapter.target_key(payload, "42"),
+                idempotency_key=adapter.idempotency_key(payload, "42"),
+                course_id="42",
+            )
+        ],
+    )
+    operations.create_operation(op)
+
+    target = op["targets"][0]
+    baseline = adapter.capture_baseline(payload, target)
+
+    from api.operation_ledger.executor import ExecutionContext
+    from api.operation_ledger import claims
+
+    claim = claims.acquire_claim(
+        target_key=target["target_key"],
+        operation_id=op["operation_id"],
+        payload_digest=models.sha256_dict(payload),
+    )
+    context = ExecutionContext(
+        operation_id=op["operation_id"],
+        target_key=target["target_key"],
+        claim=claim,
+    )
+
+    result = adapter.execute(payload, target, baseline, claim, context)
+    assert result["state"] == "applied"
+    assert result["returned_object_id"] == "24680"

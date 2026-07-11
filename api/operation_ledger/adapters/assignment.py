@@ -2,13 +2,12 @@
 
 Core assignment creation + dependencies: parse an ``<ASSIGNMENTFORGE_JSON>``
 file, validate canonical fields, create a single whole-class assignment per
-course, optionally upload a printable PDF and append its link to the
-description, and optionally attach the assignment to a Canvas module.
+course, optionally upload a printable PDF, optionally attach to a module,
+and optionally schedule PowerGrader auto-score.
 
 Excluded from this adapter:
 - Rubric association (slice 11c1).
 - Differentiation tiers (slice 11b3).
-- Scheduled scoring (slice 11b3).
 - Placeholder resolution.
 """
 import mimetypes
@@ -97,6 +96,12 @@ class AssignmentAdapter:
         if mod_name:
             payload["module_name"] = str(mod_name).strip()
 
+        # Scheduled autoscore opt-in
+        if _as_bool(prepare_request.get("autoscore_schedule")):
+            payload["autoscore_schedule"] = True
+            if _as_bool(prepare_request.get("autoscore_auto_push")):
+                payload["autoscore_auto_push"] = True
+
         return payload
 
     def source_digest(self, payload: dict) -> str:
@@ -113,6 +118,8 @@ class AssignmentAdapter:
             "assignment_group_name": payload.get("assignment_group_name"),
             "printable_path": payload.get("printable_path"),
             "module_name": payload.get("module_name"),
+            "autoscore_schedule": payload.get("autoscore_schedule"),
+            "autoscore_auto_push": payload.get("autoscore_auto_push"),
         }
         return models.sha256_dict(keys)
 
@@ -208,6 +215,10 @@ class AssignmentAdapter:
                 "type": "module",
                 "name": payload["module_name"],
             })
+        autoscore = {}
+        if payload.get("autoscore_schedule"):
+            autoscore["scheduled"] = True
+            autoscore["auto_push"] = bool(payload.get("autoscore_auto_push"))
         return {
             "course_name": course_name,
             "assignment_name": payload.get("name"),
@@ -221,6 +232,7 @@ class AssignmentAdapter:
             "baseline_existing_id": existing.get("id") if existing else None,
             "baseline_existing_url": existing.get("html_url") if existing else None,
             "dependencies": dependencies,
+            "autoscore": autoscore,
         }
 
     # ── Execute ──────────────────────────────────────────────────────────
@@ -388,6 +400,16 @@ class AssignmentAdapter:
             )
             if result.get("state") != "applied":
                 return result
+
+        # ── Scheduled autoscore (local queue write, post-creation) ────
+        if payload.get("autoscore_schedule") and assignment_id:
+            _schedule_autoscore(
+                course_id=course_id,
+                course_name=target.get("course_name", course_id),
+                assignment_id=assignment_id,
+                assignment_name=name,
+                payload=payload,
+            )
 
         return _build_result(
             "applied", steps=steps,
@@ -887,3 +909,67 @@ def _build_result(
         "private_diagnostic": private_diagnostic,
         "steps": steps,
     }
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _autoscore_settings(payload: dict) -> dict:
+    return {
+        "mode": "assisted",
+        "model_id": str(payload.get("autoscore_model_id") or "").strip()
+        or config.get_openrouter_model(),
+        "persona_id": str(payload.get("autoscore_persona_id") or "sage").strip() or "sage",
+        "response_kind": str(payload.get("autoscore_response_kind") or "scr").strip() or "scr",
+        "rubric_name": str(payload.get("autoscore_rubric_name") or "").strip(),
+        "watch_late": True if payload.get("autoscore_watch_late") is None
+        else _as_bool(payload.get("autoscore_watch_late")),
+    }
+
+
+def _autoscore_push_policy(payload: dict) -> dict:
+    auto_push = _as_bool(payload.get("autoscore_auto_push"))
+    return {
+        "enabled": auto_push,
+        "allow_grade_push": True,
+        "allow_comment_push": True,
+        "policy_version": "2.0",
+    }
+
+
+def _schedule_autoscore(
+    *,
+    course_id: str,
+    course_name: str,
+    assignment_id: str,
+    assignment_name: str,
+    payload: dict,
+) -> None:
+    """Schedule a PowerGrader autoscore job for this assignment.
+
+    This is a local queue write only — no Canvas API call.  Failure is
+    non-fatal (the assignment was already created successfully).  The queue
+    job ID is logged but does not affect the operation result.
+    """
+    due_at = str(payload.get("due_at") or "").strip()
+    if not due_at:
+        return
+    # Lazy import to avoid circular dependency chain through powergrader
+    from api.powergrader import autoscore_queue as _aq
+    _aq.upsert_job(
+        course_id=course_id,
+        course_name=course_name,
+        assignment_id=assignment_id,
+        assignment_name=assignment_name,
+        due_at=due_at,
+        source="push",
+        settings=_autoscore_settings(payload),
+        assignment={"name": assignment_name, "due_at": due_at},
+        auto_push=_as_bool(payload.get("autoscore_auto_push")),
+        push_policy=_autoscore_push_policy(payload),
+    )
