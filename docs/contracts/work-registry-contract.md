@@ -1,7 +1,8 @@
 # Work Registry Contract
 
-Status: proposed durable contract for the Desk / Workbench / Instrument redesign.
-This contract must be accepted before implementation slice 06a begins.
+Status: accepted durable contract for implementation slice 06a (Ferrari review,
+2026-07-11). Slice 10 and later operation-ledger integration remain separately
+gated by `docs/contracts/operation-ledger-contract.md`.
 
 ## Purpose
 
