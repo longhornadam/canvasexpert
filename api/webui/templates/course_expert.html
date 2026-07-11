@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "workbench_base.html" %}
 {% block title %}Work Tools — Canvas Expert{% endblock %}
-{% block body_class %}ce-screen{% endblock %}
-{% block main_class %}ce-page{% endblock %}
+{% block body_class %}ce-workbench-page ce-screen{% endblock %}
+{% block main_class %}ce-workbench-main ce-page{% endblock %}
 {% block content %}
 
 {% if not token_is_set %}
@@ -10,10 +10,34 @@
 </div>
 {% else %}
 
-<div class="expert-shell expert-shell--course">
-  <!-- ── Sidebar navigation ───────────────────────────────────────────── -->
-  <aside class="expert-sidebar expert-sidebar--course" aria-label="Work tool sections">
-    <div class="expert-sidebar-kicker">Work tools</div>
+<div class="ce-workbench-shell">
+  <div class="ce-workbench-grid ce-course-expert-grid">
+
+    <!-- ── Work rail (left) ─────────────────────────────────────────────── -->
+    <div class="ce-work-rail" aria-label="Work tools">
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">Start</p>
+        <button type="button" class="ce-work-rail-item" data-rail-tab="quiz">Quiz<span class="ce-work-rail-item-desc">Create and deliver a QuizForge assessment</span></button>
+        <button type="button" class="ce-work-rail-item" data-rail-tab="assignment">Assignment<span class="ce-work-rail-item-desc">Create and push an AssignmentForge file</span></button>
+        <button type="button" class="ce-work-rail-item" data-rail-tab="page">Page<span class="ce-work-rail-item-desc">Create and place a Canvas page</span></button>
+        <button type="button" class="ce-work-rail-item" data-rail-tab="rubric">Rubric<span class="ce-work-rail-item-desc">Create or update a course rubric</span></button>
+        <button type="button" class="ce-work-rail-item" data-rail-tab="quick">Quick column<span class="ce-work-rail-item-desc">Add a fast gradebook column</span></button>
+        <button type="button" class="ce-work-rail-item" data-rail-tab="download">Download Work<span class="ce-work-rail-item-desc">Collect student work locally</span></button>
+        <button type="button" class="ce-work-rail-item" data-rail-tab="students">Student Reports<span class="ce-work-rail-item-desc">Build a student report packet</span></button>
+      </div>
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">Continue</p>
+        <div id="ce-rail-continue"><p class="ce-work-rail-empty">No local work to continue.</p></div>
+      </div>
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">Attention</p>
+        <div id="ce-rail-attention"><p class="ce-work-rail-empty">No current attention items.</p></div>
+      </div>
+    </div>
+
+    <!-- ── Center: creation workspace ──────────────────────────────────── -->
+    <div class="ce-course-expert-center">
+      <aside class="expert-sidebar expert-sidebar--course" aria-label="Work tool sections" style="display:none">
     <div class="ce-tabs expert-side-tabs" role="tablist" aria-orientation="vertical">
       <button type="button" id="ce-tab-button-quiz" class="ce-tab active" data-tab="quiz" role="tab" aria-selected="true" aria-controls="ce-tab-quiz" tabindex="0">Quiz</button>
       <button type="button" id="ce-tab-button-assignment" class="ce-tab" data-tab="assignment" role="tab" aria-selected="false" aria-controls="ce-tab-assignment" tabindex="-1">Assignment</button>
@@ -703,7 +727,16 @@
   </div><!-- /#ce-tab-quick -->
 
   </div><!-- /.ce-panels-wrap -->
-</div><!-- /.expert-shell -->
+  </div><!-- /.ce-course-expert-center -->
+
+  <!-- ── Summary panel (right) ────────────────────────────────────────── -->
+  <div class="ce-summary-panel" aria-label="Operation summary">
+    <h3>Summary</h3>
+    <p>Canvas unchanged.</p>
+  </div>
+
+  </div><!-- /.ce-workbench-grid -->
+</div><!-- /.ce-workbench-shell -->
 
 <script>
   window.QF_FILES            = {{ quiz_files | tojson }};
@@ -724,6 +757,8 @@
 <script src="/static/course_expert/student_reports.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/portfolio.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/quick_assignment.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/instrument.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/work_rail.js?v={{ asset_v }}"></script>
 
 {% endif %}
 {% endblock %}

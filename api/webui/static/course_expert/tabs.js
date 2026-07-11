@@ -134,6 +134,90 @@
     activateTab: activateTab,
   });
 
+  /* ── Instrument view (slice 09) ────────────────────────────────────── */
+
+  function currentView() {
+    var params = new URLSearchParams(location.search);
+    var view = params.get("view");
+    return view === "instrument" ? "instrument" : "workbench";
+  }
+
+  function setView(view, options) {
+    var params = new URLSearchParams(location.search);
+    var tab = params.get("tab") || "";
+    var shell = document.querySelector(".ce-workbench-shell");
+    var grid = shell && shell.querySelector(".ce-workbench-grid");
+    var rail = shell && shell.querySelector(".ce-work-rail");
+    var summary = shell && shell.querySelector(".ce-summary-panel");
+    var center = shell && shell.querySelector(".ce-course-expert-center");
+
+    if (view === "instrument") {
+      if (shell) shell.classList.add("ce-instrument-shell");
+      if (grid) grid.classList.add("ce-instrument-grid");
+      if (rail) rail.style.display = "none";
+      if (summary) summary.style.display = "none";
+      if (center) center.style.flex = "1";
+    } else {
+      if (shell) shell.classList.remove("ce-instrument-shell");
+      if (grid) grid.classList.remove("ce-instrument-grid");
+      if (rail) rail.style.display = "";
+      if (summary) summary.style.display = "";
+      if (center) center.style.flex = "";
+    }
+
+    if (options && options.replace) {
+      var newParams = new URLSearchParams();
+      if (tab) newParams.set("tab", tab);
+      if (view !== "workbench") newParams.set("view", view);
+      var qs = newParams.toString();
+      var url = qs ? location.pathname + "?" + qs : location.pathname;
+      history.replaceState({ view: view, tab: tab }, "", url);
+    } else {
+      var newParams2 = new URLSearchParams(location.search);
+      if (view !== "workbench") newParams2.set("view", view);
+      else newParams2.delete("view");
+      var qs2 = newParams2.toString();
+      var url2 = qs2 ? location.pathname + "?" + qs2 : location.pathname;
+      history.pushState({ view: view, tab: tab }, "", url2);
+    }
+  }
+
+  function toggleInstrument() {
+    var view = currentView() === "instrument" ? "workbench" : "instrument";
+    setView(view);
+  }
+
+  /* Expose for instrument.js */
+  window.CE_COURSE_EXPERT.currentView = currentView;
+  window.CE_COURSE_EXPERT.setView = setView;
+  window.CE_COURSE_EXPERT.toggleInstrument = toggleInstrument;
+
+  /* Bind instrument toggle to any [data-instrument-toggle] */
+  document.addEventListener("click", function (event) {
+    var btn = event.target.closest("[data-instrument-toggle]");
+    if (btn) {
+      event.preventDefault();
+      toggleInstrument();
+    }
+  });
+
+  /* Apply view on load */
+  (function applyInitialView() {
+    var view = currentView();
+    if (view === "instrument") {
+      setView("instrument", { replace: true });
+    }
+  })();
+
+  /* popstate: reapply tab + view without adding history */
+  window.addEventListener("popstate", function (event) {
+    if (event.state && event.state.tab) {
+      activateTab(event.state.tab);
+    }
+    var view = event.state && event.state.view ? event.state.view : "workbench";
+    setView(view, { replace: true });
+  });
+
   bindTabButtons();
   bindDeepLink();
   bindDeliveryToggles();

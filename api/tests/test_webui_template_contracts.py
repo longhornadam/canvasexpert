@@ -286,6 +286,152 @@ def test_route_nav_sections_updated():
     )
 
 
+# ── CourseExpert workbench contract ───────────────────────────────────
+
+def test_course_expert_extends_workbench_base():
+    """course_expert.html must extend workbench_base.html."""
+    html = _slurp("api/webui/templates/course_expert.html")
+    assert '{% extends "workbench_base.html" %}' in html
+
+
+def test_course_expert_keeps_ce_screen_class():
+    """course_expert.html keeps ce-screen class for CSS scoping."""
+    html = _slurp("api/webui/templates/course_expert.html")
+    assert 'ce-screen' in html
+
+
+def test_course_expert_has_work_rail():
+    """course_expert.html must contain the work rail with Start sections."""
+    html = _slurp("api/webui/templates/course_expert.html")
+    assert 'class="ce-work-rail"' in html
+    assert 'data-rail-tab="quiz"' in html
+    assert 'data-rail-tab="assignment"' in html
+    assert 'data-rail-tab="page"' in html
+    assert 'data-rail-tab="rubric"' in html
+    assert 'data-rail-tab="download"' in html
+    assert 'data-rail-tab="students"' in html
+    assert 'data-rail-tab="quick"' in html
+
+
+def test_course_expert_preserves_all_critical_ids():
+    """Every critical DOM ID from the legacy template must still exist."""
+    html = _slurp("api/webui/templates/course_expert.html")
+    critical_ids = [
+        "ce-tab-button-quiz", "ce-tab-button-assignment", "ce-tab-button-page",
+        "ce-tab-button-rubric", "ce-tab-button-download", "ce-tab-button-students",
+        "ce-tab-button-quick", "ce-course-picker", "ce-picker-label", "target-count",
+        "course-checklist", "ce-tab-quiz", "quiz-whole", "quizfile",
+        "btn-validate", "btn-preview", "btn-push", "result", "push-banner",
+        "quiz-diff", "groups-status", "variant-rows", "btn-add-variant",
+        "btn-push-variants", "variants-result", "variants-banner",
+        "due-at", "unlock-at", "lock-at",
+        "assignment-group-select", "module-select", "new-module-name",
+        "ce-tab-assignment", "assignment", "af-file", "af-rubric",
+        "af-rubric-controls", "af-rubric-mode", "af-rubric-link",
+        "btn-af-copy-prompt", "af-rubric-status", "btn-af-validate", "btn-af-push",
+        "af-log", "af-banner",
+        "ce-tab-page", "page", "pf-file", "btn-pf-validate", "btn-pf-push",
+        "pf-log", "pf-banner",
+        "ce-tab-rubric", "rubric", "rf-file", "btn-rf-validate", "btn-rf-push",
+        "rf-log", "rf-banner",
+        "ce-tab-download", "download", "btn-load-assignments",
+        "btn-download-selected", "dl-check-all", "dl-tbody", "dl-log", "dl-banner",
+        "folder-path", "btn-open-folder", "btn-change-folder",
+        "ce-tab-students", "sr-course", "sr-student", "sr-generate", "sr-log",
+        "ce-tab-quick", "quick", "qa-name", "qa-points", "qa-subtype",
+        "qa-aggroup", "qa-due", "qa-publish", "btn-qa-push", "qa-log", "qa-banner",
+    ]
+    for id_ in critical_ids:
+        assert f'id="{id_}"' in html, f"Missing critical ID: {id_}"
+
+
+def test_course_expert_preserves_script_order():
+    """course_expert.html must include all push scripts in order."""
+    html = _slurp("api/webui/templates/course_expert.html")
+    expected_scripts = [
+        "/static/push/quiz.js",
+        "/static/push/page.js",
+        "/static/push/rubric.js",
+        "/static/push/assignment.js",
+        "/static/push/download.js",
+        "/static/course_expert/tabs.js",
+        "/static/course_expert/student_reports.js",
+        "/static/course_expert/portfolio.js",
+        "/static/course_expert/quick_assignment.js",
+        "/static/course_expert/instrument.js",
+        "/static/course_expert/work_rail.js",
+    ]
+    for script in expected_scripts:
+        assert script in html, f"Missing script include: {script}"
+
+
+def test_course_expert_preserves_globals():
+    """course_expert.html must set all required window globals."""
+    html = _slurp("api/webui/templates/course_expert.html")
+    required_globals = [
+        "window.QF_FILES", "window.QF_QUIZ_FILES", "window.QF_ASSIGNMENT_FILES",
+        "window.QF_PAGE_FILES", "window.QF_CANVAS_BASE", "window.QF_HISTORY",
+        "window.QF_SAVED",
+    ]
+    for g in required_globals:
+        assert g in html, f"Missing global: {g}"
+
+
+def test_course_expert_has_summary_panel():
+    """course_expert.html must have a summary panel placeholder."""
+    html = _slurp("api/webui/templates/course_expert.html")
+    assert "Canvas unchanged." in html
+    assert "Summary" in html
+    assert "/api/operations" not in html
+
+
+def test_work_rail_js_passes_syntax_check():
+    """work_rail.js must pass Node syntax check."""
+    import subprocess
+    result = subprocess.run(
+        ["node", "--check", "api/webui/static/course_expert/work_rail.js"],
+        capture_output=True, text=True, shell=True,
+    )
+    assert result.returncode == 0, f"work_rail.js syntax error: {result.stderr}"
+
+
+def test_instrument_js_passes_syntax_check():
+    """instrument.js must pass Node syntax check."""
+    import subprocess
+    result = subprocess.run(
+        ["node", "--check", "api/webui/static/course_expert/instrument.js"],
+        capture_output=True, text=True, shell=True,
+    )
+    assert result.returncode == 0, f"instrument.js syntax error: {result.stderr}"
+
+
+def test_tabs_js_exposes_instrument_api():
+    """tabs.js must expose CE_COURSE_EXPERT instrument methods."""
+    js = _slurp("api/webui/static/course_expert/tabs.js")
+    assert "CE_COURSE_EXPERT.currentView" in js
+    assert "CE_COURSE_EXPERT.setView" in js
+    assert "CE_COURSE_EXPERT.toggleInstrument" in js
+    assert "data-instrument-toggle" in js
+    assert "popstate" in js
+    assert 'params.get("view")' in js
+
+
+def test_tabs_js_deep_link_tab_overrides_hash():
+    """tabs.js must read ?tab= before #hash."""
+    js = _slurp("api/webui/static/course_expert/tabs.js")
+    assert "params.get(\"tab\") || location.hash" in js
+    assert "view" in js
+
+
+def test_standalone_push_templates_stay_on_base():
+    """Standalone push templates must still extend base.html, not workbench_base."""
+    for tpl in ["push_quiz", "push_assignment", "push_page", "push_rubric", "push_quick"]:
+        html = _slurp(f"api/webui/templates/{tpl}.html")
+        assert '{% extends "base.html" %}' in html, (
+            f"{tpl}.html changed from base.html"
+        )
+
+
 # ── AI safety: guided_run.js ─────────────────────────────────────────
 
 def test_guided_run_uses_write_review_confirm():

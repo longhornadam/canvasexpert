@@ -537,3 +537,107 @@ html[data-theme="dark"] .ce-operation-panel {
 @media (max-width: 480px) {
   .ce-desk-start-grid { grid-template-columns: 1fr; }
 }
+
+/* ── CourseExpert Workbench grid overrides ──────────────────────────── */
+.ce-workbench-grid.ce-course-expert-grid {
+  grid-template-columns: minmax(200px, 0.22fr) minmax(0, 0.56fr) minmax(180px, 0.22fr);
+  gap: 16px;
+  padding: 16px 20px;
+  width: 100%;
+}
+
+.ce-course-expert-center {
+  min-width: 0;
+}
+
+/* Hide legacy sidebar — superseded by Work rail */
+.ce-workbench-page .expert-sidebar--course {
+  display: none;
+}
+
+/* Work rail items */
+.ce-work-rail-item {
+  display: block;
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: var(--ce-ink);
+  text-decoration: none;
+  font-size: 13px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+}
+
+.ce-work-rail-item:hover,
+.ce-work-rail-item:focus-visible {
+  background: var(--ce-rule);
+  color: var(--ce-ink);
+}
+
+.ce-work-rail-item.ce-work-rail-item--active {
+  background: var(--ce-rule-strong);
+  font-weight: 600;
+}
+
+.ce-work-rail-item .ce-work-rail-item-desc {
+  display: block;
+  font-size: 11px;
+  color: var(--ce-ink-muted);
+  margin-top: 1px;
+}
+
+.ce-work-rail-continue,
+.ce-work-rail-attention {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.ce-work-rail-empty {
+  font-size: 12px;
+  color: var(--ce-ink-muted);
+  padding: 4px 12px;
+  margin: 0;
+}
+
+/* Summary panel (right, placeholder until slice 10) */
+.ce-summary-panel {
+  padding: 16px;
+  font-size: 13px;
+}
+
+.ce-summary-panel h3 {
+  font: 700 11px/1.2 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ce-ink-muted);
+  margin: 0 0 8px;
+}
+
+.ce-summary-panel p {
+  color: var(--ce-ink-muted);
+  margin: 0;
+}
+
+/* ── Instrument view ────────────────────────────────────────────────── */
+.ce-instrument-toggle {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--ce-rule-strong);
+  border-radius: 5px;
+  background: var(--ce-paper-raised);
+  color: var(--ce-ink);
+  cursor: pointer;
+  font: 600 12px/1.2 var(--font);
+}
+
+.ce-instrument-toggle:hover,
+.ce-instrument-toggle:focus-visible {
+  background: var(--ce-rule);
+}
+
+.ce-instrument-grid .ce-course-expert-center {
+  flex: 1;
+}

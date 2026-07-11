@@ -26,6 +26,7 @@ mostly markup, data injection, and script includes.
 - `api/webui/static/course_expert/student_reports.js` - 111 lines
 - `api/webui/static/course_expert/portfolio.js` - 110 lines
 - `api/webui/static/course_expert/quick_assignment.js` - 34 lines
+- `api/webui/static/course_expert/work_rail.js` - new Work rail sidebar (replaces legacy sidebar navigation)
 - `api/webui/push_service.py` - 472 lines
 - `api/webui/source_materials.py` - 420 lines
 - `api/webui/static/push/quiz.js` - 294 lines
