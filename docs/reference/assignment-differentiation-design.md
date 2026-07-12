@@ -1,8 +1,8 @@
 # AssignmentForge differentiation design
 
-**Owner:** Ferrari 11b4 discovery gate
+**Origin:** Historical 11b4 discovery
 **Decision date:** 2026-07-12
-**Status:** Accepted design; implementation authority lives in the active 11b4 handoff.
+**Status:** Implemented design reference; the former 11b4 handoff is archived.
 
 ## Existing path and product constraint
 
@@ -26,7 +26,7 @@ documents it for group assignments/differentiation-tag configurations. Sources:
 - <https://developerdocs.instructure.com/services/canvas/resources/assignments>
 - <https://developerdocs.instructure.com/services/canvas/resources/groups>
 
-## Ferrari decisions
+## Locked decisions
 
 ### State and target ownership
 

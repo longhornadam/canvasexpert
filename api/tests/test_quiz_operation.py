@@ -182,7 +182,7 @@ def test_prepare_rejects_differentiated_mode(tmp_path, monkeypatch):
     _mock_plan_subprocess(monkeypatch)
 
     adapter = QuizAdapter()
-    with pytest.raises(ValueError, match="mode='differentiated' is not supported"):
+    with pytest.raises(ValueError, match="at least two variants"):
         adapter.build_payload({"path": "/tmp/algebra.txt", "mode": "differentiated"})
 
 

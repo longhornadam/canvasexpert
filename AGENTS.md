@@ -54,8 +54,6 @@ It uses bookmarked courses from Settings, multi-course push selection, local tem
 uploads, and the authoring contracts above.
 For low-token debugging and file ownership, start with
 `docs/reference/course-expert-module-map.md`.
-For low-token debugging and file ownership, start with
-`docs/reference/course-expert-module-map.md`.
 
 **Settings** (`/settings`) handles Canvas token/base URL, OpenRouter settings,
 bookmarked courses, workspace/download paths, AI-TA library rebuilds, and academic
@@ -189,70 +187,78 @@ a nonstandard location, `CANVAS_EXPERT_EDGE_PATH` can point to `msedge.exe`.
    model is "FERPA safe", "guaranteed anonymous", or unable to infer identity. Tell
    teachers to review SAFE files before uploading them.
 
-## Agent workflow: two-track model
+## Execution model: senior design, one executor
 
-We use model switching to save tokens and cost, but the old Ferrari/Toyota handoff
-ceremony was the dominant token sink. The new model is simpler: **two tracks**,
-decided by whether the work involves an open architecture decision or is pure
-pattern replication.
+Canvas Expert uses a deliberately small execution hierarchy. The senior/orchestrator
+owns architecture, scope, and acceptance. One implementation agent executes a durable
+handoff. This may be a Codex subagent or an agent the user runs in VS Code; the brief is
+the same either way.
 
-### Track 1: Direct implementation (smaller model)
+When model tiers are available, use these roles:
 
-Use when the work follows an established pattern in the codebase. The existing
-adapter, route, or test file **is** the spec. No handoff document is written.
+- **Sol (senior/orchestrator):** understands the product, resolves technical decisions,
+  writes the handoff, chooses the executor, and accepts or redirects the result.
+- **Luna (default executor):** implements bounded work that follows established patterns.
+- **Terra (senior executor):** implements cross-cutting, architecture-heavy, or
+  guardrail-adjacent work. Terra is an alternative to Luna, not an automatic reviewer.
 
-Criteria — all must be true:
+The user may always choose an external executor instead. Do not spawn agents merely to
+write, restate, review, or independently rediscover a handoff. Unless the user explicitly
+authorizes more, **at most one implementation subagent may be active for a task**.
 
-- An existing implementation demonstrates the exact pattern (e.g., a registered
-  operation-ledger adapter, a gradebook route, a test file using the same mocks).
-- No new public contract, persistence model, or external-transmission path.
-- No guardrail-adjacent decision (credentials, FERPA, live Canvas writes, scheduled
-  auto-push, browser security).
-- Two competent engineers would produce materially the same code by pattern-matching.
+### Senior/orchestrator responsibilities
 
-Direct-track work:
+Before delegation, the senior must:
 
-- Read the reference implementation and the test pattern.
-- Implement in one commit (or one batch commit for grouped slices).
-- Self-review against the reference pattern.
-- Run focused tests + the full API test suite.
-- Report: commit hash, files changed, test counts, and the reference pattern used.
-- No handoff file. No archive ceremony. The commit message + diff is the record.
+1. Understand the relevant product path and make the hard technical decisions.
+2. Discuss any product choice that materially changes the user's requested direction.
+3. Write one execution brief in `docs/handoffs/` using `HANDOFF_TEMPLATE.md`.
+4. Make the brief large enough to deliver a meaningful vertical improvement, normally
+   half a day to two days of implementation work. Do not manufacture numbered micro-slices.
+5. Name exact boundaries, insertion points, reference patterns, risk level, verification,
+   and stop conditions so the executor is not asked to perform architecture discovery.
 
-### Track 2: Design-then-implement (frontier model)
+The senior does not implement in parallel with the executor, commission a second planner,
+or send the completed work through an automatic reviewer. For ordinary green work, inspect
+the returned summary and relevant risk seams rather than rereading the whole repository or
+rerunning successful checks.
 
-Use when the work involves an architecture decision, a guardrail-adjacent change,
-or cross-cutting verification that two engineers might resolve differently.
+### Executor responsibilities
 
-Criteria — any one triggers Track 2:
+The executor must:
 
-- New infrastructure (SSE, recovery, threading, persistence format).
-- Guardrail-adjacent: credentials, FERPA, live Canvas writes, scheduled auto-push.
-- Cross-cutting: touches multiple subsystems, public contracts, or migration order.
-- Verification strategy is not obvious from an existing pattern.
+- Read `AGENTS.md`, the active handoff, and only the references routed by that handoff.
+- Preserve unrelated worktree changes and remain inside the authorized scope.
+- Implement the whole brief, self-review against its locked decisions, and run only the
+  required verification.
+- Reuse the same working context for corrections. A yellow result goes back to the same
+  executor when possible; do not spawn a fresh agent for each repair.
+- Return a compact report with traffic light, commit hash if committed, files changed,
+  commands and counts, deviations, and any unresolved decision.
+- Record that same compact report in the active handoff's `Execution result` section before
+  handback. Execution state and test evidence must not live only in chat.
 
-Track-2 work:
+Traffic lights mean:
 
-- Write a **brief design note** (3-10 lines, not a 5-page handoff) in the commit
-  message or a `docs/reference/` note. State the decision and why.
-- Implement directly. No separate planning agent pass.
-- Self-review against the design note.
-- Run focused tests + the full API test suite.
-- For guardrail-adjacent changes, the user reviews the diff before merge.
+- **GREEN:** the brief is complete, required checks passed, and there are no undeclared
+  deviations. The senior may accept without duplicating the test run.
+- **YELLOW:** implementation is partly complete, a required check is unavailable, or one
+  bounded decision is needed. Continue with the same executor after direction.
+- **RED:** the repository contradicts the brief, a guardrail is underspecified, or a public
+  contract/architecture expansion is required. Stop implementation and return to the senior.
 
-### What replaced the old handoff system
+### Durable context rules
 
-- **No handoff documents.** The index entry + reference pattern is the spec for
-  Track 1. The design note in the commit message is the spec for Track 2.
-- **No archive ceremony.** Implemented slices are marked done in the index.
-  The commit history is the archive.
-- **No separate review pass.** The implementing agent self-reviews against the
-  reference pattern (Track 1) or the design note (Track 2). The user reviews
-  guardrail-adjacent changes.
-- **Batching encouraged.** Group related Track-1 slices into one commit when
-  context carries over (e.g., all gradebook adapters in one pass).
+No important decision may exist only in chat or a subagent's memory. The active handoff is
+the durable context checkpoint and must contain the objective, locked decisions, scope,
+references, verification, and stop conditions before implementation begins.
 
-### Escalation (both tracks)
+If an executor is replaced or work resumes after context compaction, the new executor reads
+the handoff (including its latest execution result), current diff/commit, and any narrow
+follow-up direction. It does not repeat broad discovery. Durable product decisions belong
+in `docs/contracts/` or `docs/reference/`; the handoff links to them instead of copying them.
+
+### Escalation
 
 Stop and report instead of guessing when:
 
@@ -263,28 +269,86 @@ Stop and report instead of guessing when:
 - A guardrail or external side effect is involved but not completely specified.
 - A regression is discovered outside the authorized scope.
 
-### Tests and worktree independence
+## Lean engineering framework
 
-Tests must be worktree-independent: derive repository paths from the executing
-file or current workspace and never commit a developer-specific absolute path.
+Canvas Expert is a local teacher-time-saving application, not public critical
+infrastructure. Engineer rigor in proportion to the harm of failure.
 
-Source-text tests do not establish WebUI correctness. Changes to shared browser
-scripts, templates, navigation, initialization, or safety controls require loading
-every affected route in the rendered local app, checking the required globals/state,
-and confirming zero new browser-console errors. Backend pytest results cannot
-substitute for this check.
+### Product and architecture defaults
+
+- Start from the teacher-visible outcome. Prefer one vertical batch from action to result
+  over a sequence of infrastructure-only slices.
+- Do not add infrastructure, registries, adapters, persistence formats, or durable contracts
+  without an immediate consumer in the same agreed body of work.
+- One implementation does not justify an abstraction. Extract shared machinery only after
+  real repetition makes it simpler than the concrete code.
+- Do not implement features for symmetry. An adapter or workflow for one content type does
+  not require equivalents for every other type.
+- Internal dictionaries and private helper seams do not need durable public contracts unless
+  they cross independent consumers or version/persistence boundaries.
+- Prefer reversible local behavior and the smallest change that satisfies the outcome.
+- Completed infrastructure may remain stable without being expanded into every subsystem.
+  Actual teacher use, defects, or measured friction should pull future integration.
+- Batch related pattern-following work when context and verification carry over. Avoid
+  acceptance, repair, and archive slices created only by the process itself.
+
+### Risk levels and proportional evidence
+
+Classify the handoff before choosing verification:
+
+| Risk | Typical work | Default evidence |
+|---|---|---|
+| **Low** | Copy/layout, local UI state, offline parsing, narrow internal refactor | Focused tests if useful; render only affected browser routes |
+| **Medium** | Reversible Canvas content operations, settings behavior, shared browser utilities | Focused tests plus affected subsystem tests; render affected routes |
+| **High** | Grades/comments, credentials, FERPA boundaries, external AI transmission, scheduled writes | Focused happy/failure/idempotency checks, relevant broader suite, and user diff review |
+
+Do not raise a task's risk merely because it lives in `api/`. Conversely, anything that can
+leak a secret/student record or create an unintended Canvas write is high risk even if the
+code change is small.
+
+### Testing policy
+
+- During implementation, run the smallest focused tests that exercise the changed behavior.
+- At handoff completion, run the affected subsystem suite only when shared behavior changed.
+- Run the full API suite at an integration/release boundary, after a genuinely cross-cutting
+  API change, or when focused failures reveal unexpected coupling—not after every ordinary
+  edit or micro-step.
+- Run the engine suite when engine/shared rendering behavior changed or at a release boundary;
+  API-only work does not automatically require it.
+- Do not rerun a successful executor test matrix merely because work changed hands. Re-run
+  only when evidence is missing, the environment differs materially, or the relevant diff
+  changed afterward.
+- Test counts are not a product metric. Prefer a happy path, meaningful validation boundaries,
+  dangerous failure modes, and regressions for bugs that have occurred. Avoid duplicate
+  assertions at route/service/adapter/source-text layers unless each catches a distinct risk.
+- Prune redundant or brittle tests opportunistically when touching their area; do not create
+  a standalone test-cleanup mega-project without a concrete payoff.
+
+Tests must be worktree-independent: derive repository paths from the executing file or
+current workspace and never commit a developer-specific absolute path.
+
+Source-text tests do not establish WebUI correctness. Changes to shared browser scripts,
+templates, navigation, initialization, or safety controls require loading every affected
+route in the rendered local app, checking the required globals/state, and confirming zero
+new browser-console errors. Backend pytest results cannot substitute for this check.
 
 ## Handoffs and docs
 
-- The old per-slice handoff system is retired. See "Agent workflow" above.
-- `docs/handoffs/archive/` contains historical handoffs from the old Ferrari/Toyota
-  system. They are reference material, not active specs.
-- New design notes for Track-2 work go in the commit message or a brief
-  `docs/reference/` note. No new files in `docs/handoffs/`.
+- Active execution briefs live directly in `docs/handoffs/`. Keep one active brief by
+  default; use a small number only when the user intentionally has independent work in flight.
+- Use `docs/handoffs/HANDOFF_TEMPLATE.md`. A handoff is an executable brief, not a transcript,
+  exhaustive tutorial, test novel, or separate design ceremony.
+- Completed historical handoffs may live in `docs/handoffs/archive/`, but archiving must be
+  part of the implementation/closure batch, never a separate agent pass or acceptance slice.
+  If a completed handoff has no durable reference value, it may be deleted; Git retains it.
+- The implementation commit, diff, and traffic-light report are the execution record. Move
+  lasting architecture or safety decisions into contracts/reference docs instead of relying
+  on an old handoff.
+- Historical Ferrari/Toyota documents are reference material only. They do not override this
+  execution model or authorize unfinished work.
 - `docs/contracts/` contains durable data contracts.
 - `docs/guides/` contains durable usage/authoring guidance.
-- `docs/reference/` contains stable reference notes, including the redesign index
-  that tracks slice status.
+- `docs/reference/` contains stable architecture, module maps, and verified facts.
 
 Project-local tool routing lives in `TOOLS.md` and `tools/manifests/`. Do not invent
 tool conventions in scattered docs.
@@ -323,6 +387,8 @@ CanvasExpert routing rules:
 ## Build / test / run
 
 Windows + PowerShell. Current local test runs use Python 3.14 via the `py` launcher.
+These are available commands, not a requirement to run every suite for every change;
+select verification using the risk-based testing policy above.
 
 ```powershell
 # Run the Web UI (from repo root: "Open Canvas Expert.bat", or:)

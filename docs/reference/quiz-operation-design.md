@@ -1,10 +1,10 @@
 # QuizForge operation-ledger design
 
-**Owner:** Ferrari 11d discovery
+**Origin:** Historical 11d discovery
 
 **Decision date:** 2026-07-12
 
-**Status:** Accepted architecture; implementation is split into sequential 11d slices.
+**Status:** Implemented architecture reference; the former 11d slices are released.
 
 ## Existing live path
 
@@ -48,7 +48,7 @@ Sources:
 No separate Stimulus API object is created by the current product: QuizForge stimulus HTML
 is intentionally inlined into the attached question payload before item creation.
 
-## Ferrari decisions
+## Locked decisions
 
 ### Planning and subprocess isolation
 
@@ -130,10 +130,11 @@ resumes the first unfinished step.
    quiz/item/settings/module writes, exact reconciliation, registered kind, fake tests.
    Browser remains on the legacy path until acceptance.
 2. **11d2 — differentiation:** safe group/extra-time resolution and checkpointed override
-   steps. Browser still remains legacy until acceptance.
-3. **11d3 — progress and browser cutover:** safe events/SSE, nonblocking apply, startup
-   recovery finalization, both UI surfaces migrated, old live routes fail closed, rendered
-   reconnect/console acceptance.
+   steps. Implemented — two or more ordered variants with group-restricted overrides.
+   Browser still remains legacy.
+3. **11d3 — progress polling endpoint:** `GET /api/operations/{id}/status` returning
+   PII-minimized target/step states. No SSE, no event log, no asyncio threading.
+   Browser polling loop can be wired post-release.
 
-Each slice is one commit, independently reviewed by Ferrari before the next starts. No
-live Canvas write is authorized.
+All three slices are released. Browser migration from legacy streaming to the polling
+endpoint is deferred to post-release.

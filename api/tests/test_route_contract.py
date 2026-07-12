@@ -54,6 +54,7 @@ EXPECTED = [
     ('/api/modules', ('GET',)),
     ('/api/operations', ('GET',)),
     ('/api/operations/{kind}/prepare', ('POST',)),
+    ('/api/operations/{operation_id}/status', ('GET',)),
     ('/api/operation-batches/review', ('POST',)),
     ('/api/operation-batches/{batch_id}/apply', ('POST',)),
     ('/api/operations/{operation_id}/retry', ('POST',)),

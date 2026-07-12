@@ -30,6 +30,43 @@ def list_operations_route():
     return {"ok": True, "operations": operations.list_operations_pii_minimized()}
 
 
+@router.get("/api/operations/{operation_id}/status")
+def operation_status_route(operation_id: str):
+    """PII-minimized status snapshot for one operation.
+
+    Returns current target/step states from the durable ledger.
+    No course IDs, no returned object IDs, no URLs, no diagnostics, no payloads.
+    """
+    op = operations.get_operation(operation_id)
+    if op is None:
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": f"operation {operation_id} not found"},
+        )
+
+    targets_out = []
+    for target in (op.get("targets") or []):
+        step_out = []
+        for step in (target.get("steps") or []):
+            step_out.append({
+                "step_key": step.get("step_key"),
+                "state": step.get("state"),
+            })
+        targets_out.append({
+            "target_key": target.get("target_key"),
+            "state": target.get("state"),
+            "steps": step_out,
+        })
+
+    return {
+        "ok": True,
+        "operation_id": op.get("operation_id"),
+        "kind": op.get("kind"),
+        "status": op.get("status"),
+        "targets": targets_out,
+    }
+
+
 @router.post("/api/operations/{kind}/prepare")
 async def prepare_operation(kind: str, request: Request):
     """Prepare an operation for later review and apply.

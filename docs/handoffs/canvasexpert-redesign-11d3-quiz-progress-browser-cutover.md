@@ -1,5 +1,7 @@
 # 11d3: Operation polling endpoint
 
+Status: **completed; reference only.** This file does not authorize new work.
+
 ## Objective
 
 Add a single GET endpoint that returns the current target/step states from the

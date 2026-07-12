@@ -1,5 +1,7 @@
 # 11d2: QuizForge differentiated operation
 
+Status: **completed; reference only.** This file does not authorize new work.
+
 ## Objective
 
 Extend `content.quiz` with server-owned differentiated variants and extra-time

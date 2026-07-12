@@ -1,15 +1,17 @@
 # Rubric Live-Write Path — Discovery Reference
 
-**Author:** Ferrari (11c0 discovery gate)
+**Origin:** Historical 11c0 discovery
 **Date:** 2026-07-11
-**Status:** Prepare-only — no live Canvas API write exists
+**Status:** Legacy browser path remains prepare-only; the `content.rubric`
+operation-ledger adapter implements a server-owned live Canvas write path.
 
 ## Executive Summary
 
-The product has **no live Canvas API write path for rubrics**.  Every entry point —
-standalone rubric push, assignment push with rubric attachment — is blocked with
-"not wired through this push path yet."  The `rf.py` parser contains an **unused**
-`canvas_rubric_payload()` that builds the correct payload shape, but it is never
+The legacy browser entry points for standalone rubric push and assignment rubric
+attachment remain blocked with "not wired through this push path yet." The newer
+`content.rubric` operation-ledger adapter uses `rf.py::canvas_rubric_payload()` for a
+server-owned course-level rubric write. Assignment-level association remains a separate
+assignment-operation responsibility. Historically, the helper was unused and never
 called from any push route.
 
 Claims in `api/README.md` ("Push Rubrics … → live rubrics + student explainer pages")
@@ -204,4 +206,5 @@ Before a live push exists, these documents make false claims:
 1. **`api/README.md` lines 9, 40** — Remove or reword rubric push claims to "Prepare-only (scoring prompts, student page preview)"
 2. **`api/webui/templates/push_rubric.html` line 22** — Change "creates (or reuses) the course rubric" → "validates and generates a scoring prompt"
 
-These corrections are deferred until 11c1 implementation actually wires the path.
+These corrections were incorporated into the `content.rubric` adapter. Legacy browser
+cutover remains separate and requires a current execution brief.

@@ -1,10 +1,10 @@
-# Operation Ledger — Ferrari design for slice 10
+# Operation Ledger — accepted design
 
-Status: accepted Ferrari design. The contract in `docs/contracts/operation-ledger-contract.md`
-remains canonical; this document resolves its intentional gaps and specifies the exact
-storage schema, state machine, adapter interface, claim/lease/recovery rules, and
-PageForge pilot adapter. Toyota implements from this document; any deviation requires
-Ferrari escalation.
+Status: implemented historical design reference. The contract in
+`docs/contracts/operation-ledger-contract.md` remains canonical; this document records the
+storage schema, state machine, adapter interface, claim/lease/recovery rules, and PageForge
+pilot decisions used by the implementation. New changes require a current execution brief
+under `AGENTS.md`, not authority inferred from this document.
 
 ## 1. Storage layout
 
@@ -497,7 +497,7 @@ Reuse the existing `CE_WRITE_REVIEW.confirm`. The frozen review provides:
 ('/api/operations/{operation_id}/retry', ('POST',)),
 ```
 
-## 9. Forbidden behavior (Toyota stop conditions)
+## 9. Forbidden behavior
 
 - Do not accept browser-supplied Canvas paths, endpoints, or method names.
 - Do not use same-title or approximate-content matching as idempotency proof.

@@ -1,7 +1,7 @@
 # Operation Ledger Contract
 
-Status: accepted. Ferrari design pass complete in
-`docs/reference/operation-ledger-design.md`. Slice 10 implements from both.
+Status: implemented durable contract. Design rationale is recorded in
+`docs/reference/operation-ledger-design.md`.
 
 ## Boundary and storage
 

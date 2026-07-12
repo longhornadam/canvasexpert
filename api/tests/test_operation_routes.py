@@ -163,3 +163,75 @@ def test_course_expert_and_standalone_push_pages_render_csrf(route_env, monkeypa
         marker = f'name="canvasexpert-csrf-token" content="{csrf_token()}"'
         assert response.text.count(marker) == 1, path
         assert response.text.index(marker) < response.text.index("/static/push/core.js"), path
+
+
+# ── Operation status polling ─────────────────────────────────────────────
+
+def test_status_unknown_operation_returns_404(route_env):
+    client, _ = route_env
+    response = client.get("/api/operations/op-nonexistent/status")
+    assert response.status_code == 404
+
+
+def test_status_returns_target_and_step_states(route_env):
+    client, _ = route_env
+    # Create an operation
+    prepared = client.post(
+        "/api/operations/content.quick_assignment/prepare",
+        json={"payload": {"name": "Practice", "points": 10},
+              "targets": [{"course_id": "101"}]},
+        headers=_headers(),
+    ).json()
+    op_id = prepared["operation_id"]
+
+    # Check status before review
+    status = client.get(f"/api/operations/{op_id}/status").json()
+    assert status["operation_id"] == op_id
+    assert status["kind"] == "content.quick_assignment"
+    assert status["status"] == "prepared"
+    assert len(status["targets"]) == 1
+    assert "target_key" in status["targets"][0]
+    assert "state" in status["targets"][0]
+    assert isinstance(status["targets"][0]["steps"], list)
+
+    # Review and apply
+    reviewed = client.post(
+        "/api/operation-batches/review",
+        json={"operation_ids": [op_id]},
+        headers=_headers(),
+    ).json()
+    applied = client.post(
+        f"/api/operation-batches/{reviewed['batch_id']}/apply",
+        json={"review_digest": reviewed["review_digest"]},
+        headers=_headers(),
+    )
+    assert applied.status_code == 200
+
+    # Check status after apply
+    status2 = client.get(f"/api/operations/{op_id}/status").json()
+    assert status2["status"] in ("applied", "applying")
+    assert len(status2["targets"]) == 1
+
+
+def test_status_contains_no_pii(route_env):
+    """Verify the status endpoint returns no course IDs, object IDs, URLs, or diagnostics."""
+    client, _ = route_env
+    prepared = client.post(
+        "/api/operations/content.quick_assignment/prepare",
+        json={"payload": {"name": "Test", "points": 5},
+              "targets": [{"course_id": "101"}]},
+        headers=_headers(),
+    ).json()
+    op_id = prepared["operation_id"]
+    status = client.get(f"/api/operations/{op_id}/status").json()
+
+    body = client.get(f"/api/operations/{op_id}/status").content.decode()
+    # No course IDs
+    assert "101" not in body
+    assert "8000" not in body  # no returned object IDs
+    assert "canvas.invalid" not in body  # no URLs
+    assert "diagnostic" not in body.lower()  # no diagnostics
+    assert "canvas_error" not in body.lower()
+    # No payload fields
+    assert "Practice" not in body
+    assert "payload" not in body.lower()

@@ -1,5 +1,7 @@
 # 15: Release acceptance
 
+Status: **completed; reference only.** This file does not authorize new work.
+
 ## Objective
 
 Verify the operation ledger is complete and crash-safe, then declare the redesign

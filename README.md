@@ -11,8 +11,8 @@ pipelines, and an offline content rendering engine.
   rules, major workflows, or tool-routing conventions change.
 - `TOOLS.md` is the project-local tool registry for deciding when to use tooling before
   spending LLM context on large raw inputs.
-- `docs/README.md` indexes durable documentation, active handoffs, archived handoffs,
-  contracts, guides, and reference notes.
+- `docs/README.md` indexes execution briefs, archived handoffs, contracts, guides,
+  and durable reference notes.
 
 ## Repo Map
 
@@ -21,15 +21,22 @@ pipelines, and an offline content rendering engine.
 - `engine/` - offline quiz/content rendering library with no Canvas token and no student
   data.
 - `LLM_Modules/` - canonical authoring contracts consumed by the app.
-- `docs/` - contracts, guides, references, and implementation handoffs.
+- `docs/` - contracts, guides, references, and senior-authored execution briefs.
 - `tools/` - lightweight tool manifests, templates, and future helper tools for agent
   routing.
 - `out/` - generated/local output area; do not treat as source.
 
 ## Handoffs
 
-Active or newly prepared implementation handoffs belong in `docs/handoffs/`. Completed
-or historical handoffs belong in `docs/handoffs/archive/`.
+Canvas Expert uses a senior-design -> one-executor model. The senior makes architecture
+decisions and writes one substantial execution brief in `docs/handoffs/`; one Codex or
+external VS Code agent implements it and returns a GREEN/YELLOW/RED report. Active briefs
+use `docs/handoffs/HANDOFF_TEMPLATE.md`. Historical handoffs live in
+`docs/handoffs/archive/` and do not authorize new work.
+
+Testing and review are proportional to risk. Focused checks are the default; full suites
+are integration/release gates or evidence for genuinely cross-cutting/high-risk changes,
+not a mandatory ritual after every edit. `AGENTS.md` is authoritative.
 
 ## Tool Manifests
 

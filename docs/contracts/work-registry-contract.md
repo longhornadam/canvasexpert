@@ -1,8 +1,7 @@
 # Work Registry Contract
 
-Status: accepted durable contract for implementation slice 06a (Ferrari review,
-2026-07-11). Slice 10 and later operation-ledger integration remain separately
-gated by `docs/contracts/operation-ledger-contract.md`.
+Status: implemented durable contract, accepted 2026-07-11. Operation-ledger integration
+is governed by `docs/contracts/operation-ledger-contract.md`.
 
 ## Purpose
 

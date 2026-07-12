@@ -1,9 +1,8 @@
 # CanvasExpert Desk / Workbench / Instrument redesign
 
-Status: architecture accepted. Operation ledger is the crash-safe backend safety
-layer for content pushes. Browser migration, SSE, and feedback parity are deferred
-to post-release. The remaining work is 11d2 (mechanical), 11d3-simplified
-(polling endpoint), and 15 (release acceptance).
+Status: **RELEASED.** All 11 operation kinds, the polling status endpoint, and restart
+recovery are implemented and verified. The operation ledger is the crash-safe backend
+safety layer for content pushes. See the acceptance table below.
 
 ## Product decisions (locked 2026-07-12)
 
@@ -24,7 +23,7 @@ to post-release. The remaining work is 11d2 (mechanical), 11d3-simplified
    (13d3), settings system map (14b1), and secondary surfaces (14b2) are
    post-release polish. The backends are complete and accessible via API.
 
-5. **Release criteria.** Release = all registered operation kinds pass their
+5. **Release criteria satisfied.** All registered operation kinds pass their
    focused tests, the full API test suite is green, and the operation ledger
    recovers correctly from a simulated crash. No browser runtime check required.
 
@@ -52,13 +51,18 @@ to post-release. The remaining work is 11d2 (mechanical), 11d3-simplified
 | 13e | Routines integration | archived |
 | 14a | Gradebook workbench composition | archived |
 
-### Remaining work
+### Released
 
-| Slice | Track | Description | Depends on |
-|---|---|---|---|
-| 11d2 | Direct (smaller model) | Quiz differentiation adapter — same pattern as 11b4. Safe group/extra-time resolution, checkpointed override steps. Browser stays legacy. | 11d1, 11b4 |
-| 11d3 | Direct (smaller model) | Polling endpoint only — one GET route returning target/step states. No SSE, no event log, no asyncio threading. Browser polling loop optional. | 11d2 |
-| 15 | Design (frontier) | Release acceptance — run all focused + full API tests, verify restart recovery, declare done. No browser runtime check. | 11d2, 11d3 |
+All three remaining slices are implemented and the acceptance criteria are met.
+
+| Slice | Description | Status |
+|---|---|---|
+| 11d2 | Quiz differentiation adapter — safe group/extra-time resolution, checkpointed override steps, 19 tests | **released** |
+| 11d3 | Polling endpoint — `GET /api/operations/{id}/status` returning target/step states, no SSE, no asyncio | **released** |
+| 15 | Release acceptance — 658 API tests, 22 recovery tests, 121 engine tests all green, no PII/secrets, `git diff --check` clean | **released** |
+
+The three remaining handoff docs (`canvasexpert-redesign-11d2-*`, `11d3-*`, `15-*`) are
+reference specs for what was built. No further implementation is needed from them.
 
 ### Deferred to post-release
 
@@ -70,9 +74,9 @@ to post-release. The remaining work is 11d2 (mechanical), 11d3-simplified
 | 14b1-14b2 | Settings/secondary surfaces — UI polish |
 | 14c | Navigation legacy cleanup — nothing to clean up (browser migration deferred) |
 
-Slices are implemented directly (Track 1) or with a brief design note (Track 2).
-No handoff documents. The commit message + diff is the record. See AGENTS.md
-"Agent workflow: two-track model" for the full policy.
+This redesign was completed under the former slice model. Future work follows the
+senior-design -> one-executor execution briefs and risk-proportional verification in
+`AGENTS.md`; this released index does not authorize new implementation by itself.
 
 ## Cross-cutting safety rules
 
