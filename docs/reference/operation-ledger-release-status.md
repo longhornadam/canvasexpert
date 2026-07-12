@@ -19,9 +19,10 @@ safety layer for content pushes. See the acceptance table below.
    own safety layer (SAFE/PRIVATE zones, pseudonymization, teacher review before
    push). Operation-ledger integration for feedback is deferred to post-release.
 
-4. **UI workbench slices deferred.** PowerGrader workbench (12a), roster workbench
-   (13d3), settings system map (14b1), and secondary surfaces (14b2) are
-   post-release polish. The backends are complete and accessible via API.
+4. **Frontend work is post-release and teacher-outcome driven.** PowerGrader is the
+   first active frontend batch under `docs/handoffs/powergrader-frontend-workbench.md`.
+   Roster, Settings, and secondary-surface polish remain deferred until selected from
+   actual teacher friction. The backends are complete enough to support this work.
 
 5. **Release criteria satisfied.** All registered operation kinds pass their
    focused tests, the full API test suite is green, and the operation ledger
@@ -61,14 +62,19 @@ All three remaining slices are implemented and the acceptance criteria are met.
 | 11d3 | Polling endpoint — `GET /api/operations/{id}/status` returning target/step states, no SSE, no asyncio | **released** |
 | 15 | Release acceptance — 658 API tests, 22 recovery tests, 121 engine tests all green, no PII/secrets, `git diff --check` clean | **released** |
 
-The three remaining handoff docs (`canvasexpert-redesign-11d2-*`, `11d3-*`, `15-*`) are
-reference specs for what was built. No further implementation is needed from them.
+The 11d2, 11d3, and 15 execution briefs are archived reference specs. No further
+implementation is authorized by them.
+
+### Active frontend work
+
+| Work | Authority | Status |
+|---|---|---|
+| PowerGrader session workbench and responsive grading instrument | `docs/handoffs/powergrader-frontend-workbench.md` | **ready for implementation** |
 
 ### Deferred to post-release
 
 | Slice | Reason |
 |---|---|
-| 12a | PowerGrader workbench — UI polish, backend complete |
 | 12b0-12b5 | Feedback parity — feedback stays on existing safe path |
 | 13d3 | Roster workbench — UI polish, backend complete |
 | 14b1-14b2 | Settings/secondary surfaces — UI polish |
@@ -93,7 +99,7 @@ Every implementation inherits these rules:
   sessions, autoscore queue, Feedback scoring contract, and workspace folder names stay
   compatible until their explicit removal slice.
 
-## Shared rendered-app oracle
+## Rendered verification reference
 
 Use a lifespan-disabled server for read-only browser verification so enabled routines
 cannot fire:
@@ -103,7 +109,8 @@ cd api
 py -m uvicorn webui.server:app --host 127.0.0.1 --port 8765 --lifespan off
 ```
 
-At 1920x1080 and 2560x1440 inspect every affected route, dark and light. Confirm:
+The active execution brief names the affected routes, useful viewports, themes, and
+interactions. Do not expand that matrix by ritual. For each named route, confirm:
 
 - `document.documentElement.scrollWidth === window.innerWidth` unless an explicitly
   documented data table owns horizontal scrolling.
