@@ -274,6 +274,51 @@ def test_workbench_base_owns_readiness_strip_and_script():
     assert '/static/readiness.js?v={{ asset_v }}' in workbench
 
 
+def test_workbench_header_stays_scoped_and_preserves_controls():
+    """The shared partial is Workbench-only and keeps its link/theme contracts."""
+    base = _slurp("api/webui/templates/base.html")
+    workbench = _slurp("api/webui/templates/workbench_base.html")
+    header = _slurp("api/webui/templates/_workbench_header.html")
+    assert "_workbench_header.html" not in base
+    assert '{% include "_workbench_header.html" %}' in workbench
+    assert 'class="topbar ce-workbench-header"' in header
+    for href, label in [
+        ('/', 'Desk'),
+        ('/course-expert', 'Create'),
+        ('/powergrader', 'Grade'),
+        ('/roster', 'Students'),
+        ('/routines', 'Automations'),
+        ('/settings', 'Settings'),
+    ]:
+        assert f'href="{href}"' in header
+        assert f'>{label}</a>' in header
+    assert 'class="theme-toggle"' in header
+    assert 'id="theme-toggle"' in header
+    assert 'aria-label="Toggle theme"' in header
+
+
+def test_workbench_header_has_server_derived_active_states():
+    """Every destination gets one truthful server-derived aria-current state."""
+    header = _slurp("api/webui/templates/_workbench_header.html")
+    assert "request.url.path == '/'" in header
+    for section in ["create", "grade", "manage", "automate", "settings"]:
+        assert f"workbench_section == '{section}'" in header
+    assert header.count("ce-workbench-nav-link--active") == 6
+    assert header.count('aria-current="page"') == 6
+
+
+def test_workbench_header_css_owns_scoped_narrow_composition():
+    """Workbench header styling remains scoped and owns its CSS-only narrow row."""
+    css = _slurp("api/webui/static/workbench.css")
+    assert ".ce-workbench-header.topbar" in css
+    assert 'html[data-theme="dark"] .ce-workbench-header.topbar' in css
+    narrow = css[css.index("@media (max-width: 760px)"):]
+    assert ".ce-workbench-header.topbar nav" in narrow
+    assert "order: 3" in narrow
+    assert "overflow-x: auto" in narrow
+    assert re.search(r"(?m)^\.topbar\s*\{", css) is None
+
+
 def test_powergrader_review_apply_contract():
     """Manual pushes must review first and send the frozen token to apply."""
     js = _slurp("api/webui/static/powergrader/queue_review.js")

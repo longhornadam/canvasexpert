@@ -73,12 +73,7 @@ implementation is authorized by them.
 | PowerGrader session workbench and responsive grading instrument | `docs/handoffs/archive/powergrader-frontend-workbench.md` | **completed** |
 | Roster Workbench lenses over one student dataset | `docs/handoffs/archive/roster-frontend-workbench.md` | **completed** |
 | Course Expert Quiz operation-ledger browser migration | `docs/handoffs/archive/course-expert-quiz-ledger-migration.md` | **completed** |
-
-### Active frontend work
-
-| Work | Authority | Status |
-|---|---|---|
-| Shared Workbench header visual integration | `docs/handoffs/workbench-header-integration.md` | **ready for implementation** |
+| Shared Workbench header visual integration | `docs/handoffs/archive/workbench-header-integration.md` | **completed** |
 
 ### Deferred to post-release
 

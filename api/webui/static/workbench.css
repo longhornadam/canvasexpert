@@ -214,21 +214,165 @@ html[data-theme="dark"] .ce-operation-panel {
   padding: 0;
 }
 
-.ce-workbench-header nav {
-  gap: 2px;
+.ce-workbench-header.topbar {
+  --ce-header-paper: #fbf8f1;
+  --ce-header-ink: #29251f;
+  --ce-header-muted: #6f6a61;
+  --ce-header-rule: rgba(61, 55, 46, .24);
+  --ce-header-accent: #2f7d77;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 16px;
+  min-height: 52px;
+  padding: 7px 24px;
+  border-bottom: 1px solid var(--ce-header-rule);
+  background: var(--ce-header-paper);
+  box-shadow: none;
+  color: var(--ce-header-ink);
 }
 
-.ce-workbench-header .ce-workbench-nav-link {
-  color: rgba(255, 255, 255, .9);
-  font-weight: 800;
+.ce-workbench-header.topbar .brand {
+  gap: 9px;
+  color: var(--ce-header-ink);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -.015em;
+}
+
+.ce-workbench-header .brand-logo {
+  width: 27px;
+  height: 27px;
+}
+
+.ce-workbench-header.topbar nav {
+  order: initial;
+  width: auto;
+  min-width: 0;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+
+.ce-workbench-header.topbar .ce-workbench-nav-link,
+.ce-workbench-header.topbar .topbar-settings-link {
+  position: relative;
+  padding: 7px 9px;
+  border-radius: 4px;
+  color: var(--ce-header-muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
   text-decoration: none;
   white-space: nowrap;
+  transition: background .12s, color .12s, box-shadow .12s;
 }
 
-.ce-workbench-header .ce-workbench-nav-link:hover,
-.ce-workbench-header .ce-workbench-nav-link:focus-visible {
-  color: #fff;
-  background: rgba(255, 255, 255, .14);
+.ce-workbench-header.topbar .ce-workbench-nav-link:hover,
+.ce-workbench-header.topbar .topbar-settings-link:hover {
+  background: rgba(47, 125, 119, .09);
+  color: var(--ce-header-ink);
+}
+
+.ce-workbench-header.topbar .ce-workbench-nav-link--active,
+.ce-workbench-header.topbar .ce-workbench-nav-link--active:hover {
+  background: rgba(47, 125, 119, .12);
+  box-shadow: inset 0 -2px 0 var(--ce-header-accent);
+  color: var(--ce-header-accent);
+}
+
+.ce-workbench-header.topbar .topbar-right {
+  gap: 9px;
+}
+
+.ce-workbench-header.topbar .theme-toggle {
+  border: 1px solid var(--ce-header-rule);
+  background: rgba(61, 55, 46, .08);
+  box-shadow: none;
+}
+
+.ce-workbench-header.topbar .theme-toggle:hover {
+  background: rgba(47, 125, 119, .12);
+}
+
+.ce-workbench-header .theme-toggle .toggle-thumb {
+  background: var(--ce-header-ink);
+  box-shadow: 0 1px 3px rgba(22, 25, 28, .2);
+}
+
+.ce-workbench-header .theme-toggle .toggle-icon--sun {
+  color: var(--ce-header-paper);
+}
+
+.ce-workbench-header .theme-toggle .toggle-icon--moon {
+  color: var(--ce-header-muted);
+}
+
+.ce-workbench-header.topbar :focus-visible {
+  outline: 2px solid #d9893f;
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] .ce-workbench-header.topbar {
+  --ce-header-paper: #20252a;
+  --ce-header-ink: #f2eee6;
+  --ce-header-muted: #b5afa5;
+  --ce-header-rule: rgba(240, 234, 222, .22);
+  --ce-header-accent: #75b8b1;
+  background: var(--ce-header-paper);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .ce-workbench-header.topbar .ce-workbench-nav-link:hover,
+html[data-theme="dark"] .ce-workbench-header.topbar .topbar-settings-link:hover {
+  background: rgba(117, 184, 177, .1);
+}
+
+html[data-theme="dark"] .ce-workbench-header.topbar .ce-workbench-nav-link--active,
+html[data-theme="dark"] .ce-workbench-header.topbar .ce-workbench-nav-link--active:hover {
+  background: rgba(117, 184, 177, .13);
+}
+
+html[data-theme="dark"] .ce-workbench-header.topbar .theme-toggle {
+  background: #171a1d;
+}
+
+html[data-theme="dark"] .ce-workbench-header .theme-toggle .toggle-thumb {
+  background: var(--ce-header-ink);
+}
+
+html[data-theme="dark"] .ce-workbench-header .theme-toggle .toggle-icon--sun {
+  color: var(--ce-header-muted);
+}
+
+html[data-theme="dark"] .ce-workbench-header .theme-toggle .toggle-icon--moon {
+  color: #20252a;
+}
+
+@media (max-width: 760px) {
+  .ce-workbench-header.topbar {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px 12px;
+    min-width: 0;
+    padding: 8px 14px 7px;
+  }
+
+  .ce-workbench-header.topbar .brand {
+    min-width: 0;
+  }
+
+  .ce-workbench-header.topbar .topbar-right {
+    margin-left: auto;
+  }
+
+  .ce-workbench-header.topbar nav {
+    order: 3;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 1px 0 3px;
+    scrollbar-width: thin;
+  }
 }
 
 .ce-desk-shell {

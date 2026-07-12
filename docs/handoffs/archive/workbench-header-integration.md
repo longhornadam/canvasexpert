@@ -123,10 +123,32 @@ the senior. Do not leave the only copy of execution state or test evidence in ch
 
 ### Execution result
 
-- Traffic light: **not started**
-- Changes are uncommitted
-- Files changed: none
-- Verification commands and pass/fail/skip counts: not run
-- Rendered routes checked: not run
+- Traffic light: **GREEN**
+- Implementation commit: this archived brief's enclosing implementation commit
+- Files changed: `api/webui/templates/_workbench_header.html`,
+  `api/webui/static/workbench.css`, `api/tests/test_webui_template_contracts.py`, and
+  this execution brief
+- Verification commands and pass/fail/skip counts:
+  - `py -m pytest api/tests/test_webui_template_contracts.py api/tests/test_route_contract.py`
+    - **75 passed, 0 failed, 0 skipped**
+  - Post-repair `py -m pytest api/tests/test_webui_template_contracts.py`
+    - **74 passed, 0 failed, 0 skipped**
+  - `git diff --check` - **passed** (line-ending conversion warnings only)
+- Rendered routes checked with a lifespan-disabled server:
+  - Desktop: `/` light -> Desk active; `/course-expert` dark -> Create active;
+    `/gradebook` light and `/powergrader` dark -> Grade active; `/roster` light ->
+    Students active. Every route had exactly one `aria-current="page"`, a `52px`
+    header, readiness seam/theme control/main content present, no document overflow,
+    and a combined console warning/error count of zero.
+  - Dark repair: the scoped header computed `rgb(32, 37, 42)` with no box shadow and
+    no legacy navy leakage.
+  - Narrow `760x900`: `/course-expert?tab=quiz` light and `/powergrader` dark used the
+    same two-row geometry (`86px` header; first-row brand/settings/toggle; second-row
+    navigation at `y=45`), kept every destination reachable, showed the correct active
+    link, and had no document overflow or console warnings/errors.
+  - Legacy control: `/about` retained its navy `.topbar`, had no
+    `.ce-workbench-header`, and proved the styling stayed scoped.
+  - No private PowerGrader queue session was created; shared inheritance/template
+    contracts cover that route as permitted by the brief.
 - Deviations from the brief: none
 - Remaining blocker or decision: none
