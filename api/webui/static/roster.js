@@ -85,37 +85,6 @@
     document.getElementById("roster-summary-warnings").textContent = "Issues " + counts.warnings;
   }
 
-  function focusTarget() {
-    var params = new URLSearchParams(window.location.search);
-    return params.get("focus") || "";
-  }
-
-  function scrollToRosterTarget() {
-    var focus = focusTarget();
-    var target = null;
-
-    if (focus === "extra-time") {
-      target = document.getElementById("roster-toolbar");
-    } else if (focus === "groups") {
-      target = document.getElementById("roster-group-builder") ||
-        document.getElementById("roster-group-set-picker");
-    }
-
-    if (target && typeof target.scrollIntoView === "function") {
-      target.scrollIntoView({ block: "start", behavior: "smooth" });
-    }
-  }
-
-  function applyFocusTarget() {
-    if (focusTarget() === "groups") {
-      var groupBuilder = document.getElementById("roster-group-builder");
-      if (groupBuilder) {
-        groupBuilder.open = true;
-      }
-    }
-    setTimeout(scrollToRosterTarget, 0);
-  }
-
   function loadCourse() {
     var cid = courseSelect.value;
     if (!cid) {
@@ -162,7 +131,6 @@
         if (data.legacy_tier_count) {
           toast("This course has old local tier assignments. Canvas groups are now the source of truth.", true);
         }
-        applyFocusTarget();
       })
       .catch(function (e) {
         setStatus("Network error: " + e.message, false);
@@ -240,8 +208,6 @@
   window.CANVAS_BASE = document.querySelector('meta[name="canvas-base"]')
     ? document.querySelector('meta[name="canvas-base"]').content
     : "";
-
-  applyFocusTarget();
 
   courseSelect.addEventListener("change", loadCourse);
   refreshBtn.addEventListener("click", loadCourse);

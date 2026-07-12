@@ -229,10 +229,22 @@ Before handback, record the result here as well as reporting it to the senior.
 
 ### Execution result
 
-- Traffic light: **not started**
-- Commit hash: **not started**
-- Files changed: **not started**
-- Verification commands and counts: **not started**
-- Rendered routes/viewports/lenses: **not started**
+- Traffic light: **GREEN** — implementation, focused verification, and Sol-supplied
+  read-only rendered verification are complete
+- Commit hash: **recorded in the executor handback after this brief is archived and committed**
+- Files changed: `api/webui/templates/roster.html`,
+  `api/webui/static/roster_workbench.css`, `api/webui/static/roster.js`,
+  `api/webui/static/roster/filters.js`,
+  `api/tests/test_webui_template_contracts.py`, and
+  `docs/reference/roster-module-map.md`
+- Verification commands and counts: all three requested `node --check` commands
+  passed; focused pytest collected and passed **105 tests**; `git diff --check`
+  passed
+- Rendered routes/viewports/lenses: `/roster` passed at `1366x768` light with a
+  configured course loaded read-only and at `760x900` dark. Header/readiness,
+  six lenses, one stylesheet, unique ordered scripts, active/ARIA/dataset state,
+  lens-specific columns/panels/bulk clusters, all five focus deep links, and zero
+  page overflow passed. The narrow 1320px table remained inside its 723px scrolling
+  wrapper. Browser console reported **0 warnings/errors**. No mutations were used.
 - Deviations from the brief: **none**
-- Remaining blocker or decision: **none**
+- Remaining blocker or decision: **none; no Terra escalation needed**

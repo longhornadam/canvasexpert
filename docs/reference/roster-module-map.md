@@ -3,15 +3,18 @@
 Purpose: give debugging sessions a low-token routing map for Roster without
 reading the route, browser script, and helper modules from scratch.
 
-As of 2026-07-08, Roster is split across a shared bootstrap plus focused browser
-feature files.
+As of 2026-07-12, Roster is a shared Workbench page split across a shared bootstrap
+plus focused browser feature files. The Workbench lenses are visual views over one
+loaded roster; they do not own a second dataset or mutation path.
 
 ## Ownership
 
 - Route owner: `api/webui/routes/roster.py`
 - Browser bootstrap and shared state owner: `api/webui/static/roster.js`
 - Table rendering and row-selection name-map updates: `api/webui/static/roster/table.js`
-- Search and filter controls: `api/webui/static/roster/filters.js`
+- Search, row filters, visual lenses, and Roster deep links:
+  `api/webui/static/roster/filters.js`
+- Workbench/lens/responsive composition: `api/webui/static/roster_workbench.css`
 - Inline edit and debounced save behavior: `api/webui/static/roster/inline_edit.js`
 - Selected Canvas group set state and picker coordination: `api/webui/static/roster/group_state.js`
 - Bulk action handlers: `api/webui/static/roster/bulk.js`
@@ -23,7 +26,9 @@ feature files.
 
 ## Load order
 
-`api/webui/templates/roster.html` loads roster browser scripts in this order:
+`api/webui/templates/roster.html` extends `workbench_base.html`, loads
+`roster_workbench.css` through `head_extra`, and loads browser scripts through
+`workbench_scripts` in this order:
 
 1. `api/webui/static/roster.js`
 2. `api/webui/static/roster/table.js`
@@ -39,9 +44,11 @@ feature files.
 ## Current size snapshot
 
 - `api/webui/routes/roster.py` - 467 lines
-- `api/webui/static/roster.js` - 205 lines
+- `api/webui/templates/roster.html` - 190 lines
+- `api/webui/static/roster_workbench.css` - 150 lines
+- `api/webui/static/roster.js` - 218 lines
 - `api/webui/static/roster/table.js` - 169 lines
-- `api/webui/static/roster/filters.js` - 77 lines
+- `api/webui/static/roster/filters.js` - 131 lines
 - `api/webui/static/roster/inline_edit.js` - 202 lines
 - `api/webui/static/roster/group_state.js` - 73 lines
 - `api/webui/static/roster/bulk.js` - 136 lines
@@ -103,7 +110,12 @@ Helper ownership:
 `roster/filters.js` currently owns:
 
 - search box changes
-- filter button changes
+- the Students, Accommodations, Groups, Monitoring, Issues, and Privacy lenses
+- the existing row-filter mapping used by those lenses
+- `data-roster-lens` presentation state and active rail state
+- query updates through `history.replaceState`
+- deep links: `extra-time`, `groups`, `monitoring`, `issues`, and `privacy`
+- post-course-load focus/open behavior for the existing Groups and Privacy details
 - filtered student list recomputation
 - triggering table re-renders after filter changes
 
@@ -173,7 +185,7 @@ Namespace seam:
   - `roster.py::_update_student_canvas_group`
 - row markup, status, or name-map problems:
   - `roster/table.js`
-- search or filter problems:
+- search, lens, filter, or Roster deep-link problems:
   - `roster/filters.js`
 - inline save or row edit problems:
   - `roster/inline_edit.js`
@@ -188,6 +200,6 @@ Namespace seam:
 
 ## Stability note
 
-Roster is mapped and covered by focused route tests. If a symptom lands in the
-remaining larger files, use the ownership sections above to inspect the narrow
-area first; there is no active roster handoff.
+Roster is mapped and covered by focused route/template tests. If a symptom lands
+in the remaining larger files, use the ownership sections above to inspect the
+narrow area first.

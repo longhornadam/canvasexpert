@@ -1,173 +1,184 @@
-{% extends "base.html" %}
-{% block title %}Roster Console — Canvas Expert{% endblock %}
-{% block main_class %}roster-page{% endblock %}
+{% extends "workbench_base.html" %}
+{% block title %}Roster Workbench — Canvas Expert{% endblock %}
+{% block body_class %}ce-workbench-page{% endblock %}
+{% block main_class %}ce-workbench-main roster-page{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/roster_workbench.css?v={{ asset_v }}">
+{% endblock %}
 {% block content %}
 
 <meta name="canvas-base" content="{{ canvas_base }}">
 
-<section class="roster-v2-intro" aria-labelledby="roster-title">
-  <div>
-    <p class="roster-v2-kicker">Rosters</p>
-    <h1 id="roster-title">Student settings for CanvasExpert</h1>
-    <p>
-      Manage the student-level details other tools rely on: extra-time status,
-      monitored students, Canvas groups, nicknames, and pseudonyms.
-    </p>
-  </div>
-  <div class="roster-v2-intro-links" aria-label="Roster shortcuts">
-    <a href="/roster?focus=extra-time">Extra-time settings</a>
-    <a href="/roster?focus=groups">Canvas groups</a>
-  </div>
-</section>
+<div class="ce-workbench-shell roster-workbench-shell" id="roster-workbench" data-roster-lens="students">
+  <aside class="roster-workbench-rail" aria-label="Roster lenses">
+    <p class="roster-workbench-rail-kicker">Roster lenses</p>
+    <nav class="roster-workbench-lenses">
+      <button type="button" class="roster-lens-btn roster-filter-btn active" data-lens="students" data-filter="all" aria-pressed="true">Students</button>
+      <button type="button" class="roster-lens-btn roster-filter-btn" data-lens="accommodations" data-filter="extra_time" aria-pressed="false">Accommodations</button>
+      <button type="button" class="roster-lens-btn roster-filter-btn" data-lens="groups" data-filter="group_unset" aria-pressed="false">Groups <span>Needs placement</span></button>
+      <button type="button" class="roster-lens-btn roster-filter-btn" data-lens="monitoring" data-filter="monitored" aria-pressed="false">Monitoring</button>
+      <button type="button" class="roster-lens-btn roster-filter-btn" data-lens="issues" data-filter="warnings" aria-pressed="false">Issues</button>
+      <button type="button" class="roster-lens-btn roster-privacy-btn" data-lens="privacy" aria-pressed="false">Privacy</button>
+    </nav>
+  </aside>
 
-<!-- ── Compact toolbar ──────────────────────────────────────────────── -->
-<div class="roster-v2-toolbar" id="roster-toolbar">
-  <div class="roster-v2-toolbar-row">
-    <label class="roster-v2-course-picker">
-      Course
-      <select id="roster-course">
-        <option value="">— select a course —</option>
-        {% for c in saved_courses %}
-        <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <button type="button" id="roster-refresh" class="primary small">Refresh</button>
-    <a href="#" id="roster-open-canvas" class="button small" target="_blank" rel="noopener">Canvas People</a>
-    <span id="roster-v2-summary" class="roster-v2-summary">
-      <span class="roster-v2-summary-item" id="roster-summary-total">0 students</span>
-      <span class="roster-v2-summary-item" id="roster-summary-extra">Extra 0</span>
-      <span class="roster-v2-summary-item" id="roster-summary-monitored">Monitored 0</span>
-      <span class="roster-v2-summary-item" id="roster-summary-group-unset">Unset 0</span>
-      <span class="roster-v2-summary-item" id="roster-summary-warnings">Issues 0</span>
-    </span>
-    <span id="roster-status" class="hint"></span>
-  </div>
-  <div class="roster-v2-toolbar-row">
-    <label class="roster-v2-group-set-picker">
-      Group set
-      <select id="roster-group-set-picker">
-        <option value="">— no group sets —</option>
-      </select>
-    </label>
-    <input type="text" id="roster-search" placeholder="Search students..." class="roster-search-input">
-    <div class="roster-filters">
-      <button type="button" class="roster-filter-btn active" data-filter="all">All</button>
-      <button type="button" class="roster-filter-btn" data-filter="extra_time">Extra time</button>
-      <button type="button" class="roster-filter-btn" data-filter="monitored">Monitored</button>
-      <button type="button" class="roster-filter-btn" data-filter="group_unset">Unset</button>
-      <button type="button" class="roster-filter-btn" data-filter="warnings">Issues</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── Canvas group builder ─────────────────────────────────────────── -->
-<details class="roster-v2-details roster-group-builder" id="roster-group-builder">
-  <summary><strong>Create Canvas groups</strong></summary>
-  <div class="roster-group-builder-body">
-    <div class="roster-group-builder-row">
-      <label>New group set
-        <input type="text" id="roster-new-group-set-name" placeholder="Group set name">
-      </label>
-      <button type="button" id="roster-create-group-set" class="primary small">Create group set</button>
-    </div>
-    <label>Groups
-      <textarea id="roster-new-group-names" rows="3" placeholder="One group name per line"></textarea>
-    </label>
-    <div class="actions">
-      <button type="button" id="roster-add-groups" class="small">Add to selected group set</button>
-      <span id="roster-group-builder-status" class="hint"></span>
-    </div>
-  </div>
-</details>
-
-<!-- ── Bulk action bar ──────────────────────────────────────────────── -->
-<div class="roster-bulk-bar" id="roster-bulk-bar" hidden>
-  <span id="roster-bulk-count" class="roster-bulk-title">Bulk edit: 0 selected</span>
-  <span class="roster-bulk-actions">
-    <label>Canvas group
-      <select id="roster-bulk-group" class="roster-bulk-select">
-        <option value="">Choose group...</option>
-      </select>
-    </label>
-    <button type="button" class="small" data-bulk="set_canvas_group">Apply group</button>
-    <button type="button" class="small" data-bulk="clear_canvas_group">Clear group</button>
-    <label>Extra days
-      <input type="number" id="roster-bulk-extra-days" class="roster-bulk-days" min="0" max="30" value="2" placeholder="days">
-    </label>
-    <button type="button" class="small" data-bulk="set_extra_time">Set extra time</button>
-    <button type="button" class="small" data-bulk="clear_extra_time">Clear ET</button>
-    <button type="button" class="small" data-bulk="set_monitored">Monitor</button>
-    <button type="button" class="small" data-bulk="clear_monitored">Unmonitor</button>
-  </span>
-</div>
-
-<!-- ── Roster table ─────────────────────────────────────────────────── -->
-<div class="roster-v2-table-wrap" id="roster-table-card" hidden>
-  <table class="roster-v2-table" id="roster-table">
-    <thead>
-      <tr>
-        <th class="roster-col-check"><input type="checkbox" id="roster-select-all"></th>
-        <th class="roster-col-name">Student</th>
-        <th class="roster-col-nicknames">Nicknames</th>
-        <th class="roster-col-pseudo">Pseudonym</th>
-        <th class="roster-col-extratime">Extra time</th>
-        <th class="roster-col-group">Canvas group</th>
-        <th class="roster-col-monitor">M</th>
-        <th class="roster-col-note">Note</th>
-        <th class="roster-col-status">Status</th>
-      </tr>
-    </thead>
-    <tbody id="roster-table-body">
-      <tr><td colspan="9" class="roster-empty">Select a course and click Refresh.</td></tr>
-    </tbody>
-  </table>
-</div>
-
-<!-- ── Group labels editor ───────────────────────────────────────────── -->
-<details class="roster-v2-details" id="roster-group-labels-editor" hidden>
-  <summary><strong>Group labels</strong></summary>
-  <div class="roster-v2-tier-editor" id="roster-group-labels-body">
-    <div class="roster-v2-tier-rows" id="roster-group-labels-rows">
-      <!-- populated by JS -->
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button type="button" id="roster-group-labels-save" class="primary small">Save labels</button>
-      <span id="roster-group-labels-status" class="hint"></span>
-    </div>
-  </div>
-</details>
-
-<!-- ── AI safety card ───────────────────────────────────────────────── -->
-<details class="roster-v2-details" id="roster-safety-card">
-  <summary><strong>AI safety tools</strong></summary>
-  <div class="guided-pickers" style="margin-top:12px; padding:4px 0">
-    <div class="roster-safety-row">
-      <label>Protected name packs</label>
-      <div id="roster-protected-packs"></div>
-    </div>
-    <div class="roster-safety-row">
-      <label>Custom protected names</label>
-      <input type="text" id="roster-custom-protected" placeholder="Comma-separated" style="width:300px">
-    </div>
-    <div class="actions">
-      <button type="button" id="roster-save-protected" class="small">Save protected names</button>
-    </div>
-    <div class="roster-safety-row">
-      <label>Scrub test</label>
-      <textarea id="roster-scrub-text" rows="3" placeholder="Paste text to test name scrubbing..." style="width:100%"></textarea>
-      <div class="actions">
-        <button type="button" id="roster-scrub-run" class="small">Test scrub</button>
+  <div class="roster-workbench-main">
+    <section class="roster-v2-intro" aria-labelledby="roster-title">
+      <div>
+        <p class="roster-v2-kicker">Rosters</p>
+        <h1 id="roster-title">Student settings for CanvasExpert</h1>
+        <p>
+          Select one course, then use a focused lens for student settings,
+          accommodations, Canvas groups, monitoring, issues, or privacy tools.
+        </p>
       </div>
-      <pre id="roster-scrub-result" class="roster-scrub-result" hidden></pre>
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button type="button" id="roster-export-who" class="small">Export who-is-who</button>
-      <button type="button" id="roster-backup-vault" class="small">Back up vault</button>
-    </div>
-  </div>
-</details>
+    </section>
 
+    <div class="roster-v2-toolbar" id="roster-toolbar">
+      <div class="roster-v2-toolbar-row roster-course-row">
+        <label class="roster-v2-course-picker">
+          Course
+          <select id="roster-course">
+            <option value="">— select a course —</option>
+            {% for c in saved_courses %}
+            <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="button" id="roster-refresh" class="primary small">Refresh</button>
+        <a href="#" id="roster-open-canvas" class="button small" target="_blank" rel="noopener">Canvas People</a>
+        <span id="roster-status" class="hint"></span>
+      </div>
+      <div class="roster-v2-toolbar-row roster-summary-row">
+        <span id="roster-v2-summary" class="roster-v2-summary">
+          <span class="roster-v2-summary-item" id="roster-summary-total">0 students</span>
+          <span class="roster-v2-summary-item" id="roster-summary-extra">Extra 0</span>
+          <span class="roster-v2-summary-item" id="roster-summary-monitored">Monitored 0</span>
+          <span class="roster-v2-summary-item" id="roster-summary-group-unset">Unset 0</span>
+          <span class="roster-v2-summary-item" id="roster-summary-warnings">Issues 0</span>
+        </span>
+      </div>
+      <div class="roster-v2-toolbar-row roster-search-row">
+        <label class="roster-v2-group-set-picker">
+          Group set
+          <select id="roster-group-set-picker">
+            <option value="">— no group sets —</option>
+          </select>
+        </label>
+        <input type="search" id="roster-search" placeholder="Search students..." class="roster-search-input" aria-label="Search students">
+      </div>
+    </div>
+
+    <details class="roster-v2-details roster-group-builder" id="roster-group-builder">
+      <summary><strong>Create Canvas groups</strong></summary>
+      <div class="roster-group-builder-body">
+        <div class="roster-group-builder-row">
+          <label>New group set
+            <input type="text" id="roster-new-group-set-name" placeholder="Group set name">
+          </label>
+          <button type="button" id="roster-create-group-set" class="primary small">Create group set</button>
+        </div>
+        <label>Groups
+          <textarea id="roster-new-group-names" rows="3" placeholder="One group name per line"></textarea>
+        </label>
+        <div class="actions">
+          <button type="button" id="roster-add-groups" class="small">Add to selected group set</button>
+          <span id="roster-group-builder-status" class="hint"></span>
+        </div>
+      </div>
+    </details>
+
+    <div class="roster-bulk-bar" id="roster-bulk-bar" hidden>
+      <span id="roster-bulk-count" class="roster-bulk-title">Bulk edit: 0 selected</span>
+      <span class="roster-bulk-actions">
+        <span class="roster-bulk-cluster roster-bulk-cluster--groups">
+          <label>Canvas group
+            <select id="roster-bulk-group" class="roster-bulk-select">
+              <option value="">Choose group...</option>
+            </select>
+          </label>
+          <button type="button" class="small" data-bulk="set_canvas_group">Apply group</button>
+          <button type="button" class="small" data-bulk="clear_canvas_group">Clear group</button>
+        </span>
+        <span class="roster-bulk-cluster roster-bulk-cluster--accommodations">
+          <label>Extra days
+            <input type="number" id="roster-bulk-extra-days" class="roster-bulk-days" min="0" max="30" value="2" placeholder="days">
+          </label>
+          <button type="button" class="small" data-bulk="set_extra_time">Set extra time</button>
+          <button type="button" class="small" data-bulk="clear_extra_time">Clear ET</button>
+        </span>
+        <span class="roster-bulk-cluster roster-bulk-cluster--monitoring">
+          <button type="button" class="small" data-bulk="set_monitored">Monitor</button>
+          <button type="button" class="small" data-bulk="clear_monitored">Unmonitor</button>
+        </span>
+      </span>
+    </div>
+
+    <div class="roster-v2-table-wrap" id="roster-table-card" hidden>
+      <table class="roster-v2-table" id="roster-table">
+        <thead>
+          <tr>
+            <th class="roster-col-check"><input type="checkbox" id="roster-select-all" aria-label="Select all visible students"></th>
+            <th class="roster-col-name">Student</th>
+            <th class="roster-col-nicknames">Nicknames</th>
+            <th class="roster-col-pseudo">Pseudonym</th>
+            <th class="roster-col-extratime">Extra time</th>
+            <th class="roster-col-group">Canvas group</th>
+            <th class="roster-col-monitor">M</th>
+            <th class="roster-col-note">Note</th>
+            <th class="roster-col-status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="roster-table-body">
+          <tr><td colspan="9" class="roster-empty">Select a course and click Refresh.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <details class="roster-v2-details" id="roster-group-labels-editor" hidden>
+      <summary><strong>Group labels</strong></summary>
+      <div class="roster-v2-tier-editor" id="roster-group-labels-body">
+        <div class="roster-v2-tier-rows" id="roster-group-labels-rows"></div>
+        <div class="actions" style="margin-top:8px">
+          <button type="button" id="roster-group-labels-save" class="primary small">Save labels</button>
+          <span id="roster-group-labels-status" class="hint"></span>
+        </div>
+      </div>
+    </details>
+
+    <details class="roster-v2-details" id="roster-safety-card">
+      <summary><strong>AI safety tools</strong></summary>
+      <div class="guided-pickers" style="margin-top:12px; padding:4px 0">
+        <div class="roster-safety-row">
+          <label>Protected name packs</label>
+          <div id="roster-protected-packs"></div>
+        </div>
+        <div class="roster-safety-row">
+          <label>Custom protected names</label>
+          <input type="text" id="roster-custom-protected" placeholder="Comma-separated" style="width:300px">
+        </div>
+        <div class="actions">
+          <button type="button" id="roster-save-protected" class="small">Save protected names</button>
+        </div>
+        <div class="roster-safety-row">
+          <label>Scrub test</label>
+          <textarea id="roster-scrub-text" rows="3" placeholder="Paste text to test name scrubbing..." style="width:100%"></textarea>
+          <div class="actions">
+            <button type="button" id="roster-scrub-run" class="small">Test scrub</button>
+          </div>
+          <pre id="roster-scrub-result" class="roster-scrub-result" hidden></pre>
+        </div>
+        <div class="actions" style="margin-top:8px">
+          <button type="button" id="roster-export-who" class="small">Export who-is-who</button>
+          <button type="button" id="roster-backup-vault" class="small">Back up vault</button>
+        </div>
+      </div>
+    </details>
+  </div>
+</div>
+{% endblock %}
+
+{% block workbench_scripts %}
 <script src="/static/roster.js?v={{ asset_v }}"></script>
 <script src="/static/roster/table.js?v={{ asset_v }}"></script>
 <script src="/static/roster/filters.js?v={{ asset_v }}"></script>

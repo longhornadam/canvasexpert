@@ -19,9 +19,9 @@ safety layer for content pushes. See the acceptance table below.
    own safety layer (SAFE/PRIVATE zones, pseudonymization, teacher review before
    push). Operation-ledger integration for feedback is deferred to post-release.
 
-4. **Frontend work is post-release and teacher-outcome driven.** The first frontend
-   batch, PowerGrader's session workbench and responsive grading instrument, is
-   complete and archived. Roster, Settings, and secondary-surface polish remain
+4. **Frontend work is post-release and teacher-outcome driven.** PowerGrader's
+   session workbench/responsive grading instrument and Roster's focused Workbench
+   lenses are complete and archived. Settings and secondary-surface polish remain
    deferred until selected from actual teacher friction. The backends are complete
    enough to support this work.
 
@@ -71,12 +71,7 @@ implementation is authorized by them.
 | Work | Authority | Status |
 |---|---|---|
 | PowerGrader session workbench and responsive grading instrument | `docs/handoffs/archive/powergrader-frontend-workbench.md` | **completed** |
-
-### Active frontend work
-
-| Work | Authority | Status |
-|---|---|---|
-| Roster Workbench lenses | `docs/handoffs/roster-frontend-workbench.md` | **ready for implementation** |
+| Roster Workbench lenses over one student dataset | `docs/handoffs/archive/roster-frontend-workbench.md` | **completed** |
 
 ### Deferred to post-release
 

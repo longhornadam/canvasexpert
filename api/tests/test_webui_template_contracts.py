@@ -869,3 +869,61 @@ def test_powergrader_folder_buttons_do_not_use_float_layout():
     assert 'class="pg-control-head"' in html, (
         "PowerGrader template must group control labels and folder actions in flex headers"
     )
+
+
+# ── Roster Workbench contract ────────────────────────────────────────
+
+def test_roster_extends_workbench_and_loads_page_css_in_head():
+    html = _slurp("api/webui/templates/roster.html")
+    assert '{% extends "workbench_base.html" %}' in html
+    assert '{% block main_class %}ce-workbench-main roster-page{% endblock %}' in html
+    assert 'class="ce-workbench-shell roster-workbench-shell"' in html
+    assert html.count('/static/roster_workbench.css?v={{ asset_v }}') == 1
+    assert html.index('{% block head_extra %}') < html.index('/static/roster_workbench.css')
+
+
+def test_roster_lenses_and_critical_controls_are_unique():
+    html = _slurp("api/webui/templates/roster.html")
+    for lens in ["students", "accommodations", "groups", "monitoring", "issues", "privacy"]:
+        assert html.count(f'data-lens="{lens}"') == 1
+    assert html.count('class="roster-lens-btn roster-filter-btn') == 5
+    for critical_id in [
+        "roster-course", "roster-refresh", "roster-open-canvas", "roster-search",
+        "roster-group-set-picker", "roster-group-builder", "roster-bulk-bar",
+        "roster-bulk-group", "roster-bulk-extra-days", "roster-table-card",
+        "roster-table", "roster-table-body", "roster-select-all",
+        "roster-group-labels-editor", "roster-safety-card", "roster-scrub-run",
+        "roster-export-who", "roster-backup-vault",
+    ]:
+        assert html.count(f'id="{critical_id}"') == 1
+
+
+def test_roster_scripts_load_once_in_feature_order():
+    html = _slurp("api/webui/templates/roster.html")
+    scripts = [
+        "/static/roster.js",
+        "/static/roster/table.js",
+        "/static/roster/filters.js",
+        "/static/roster/inline_edit.js",
+        "/static/roster/group_state.js",
+        "/static/roster/bulk.js",
+        "/static/roster/groups.js",
+        "/static/roster/safety.js",
+    ]
+    positions = []
+    for script in scripts:
+        assert html.count(script) == 1
+        positions.append(html.index(script))
+    assert positions == sorted(positions)
+
+
+def test_roster_filters_owns_focus_query_and_lens_mapping():
+    bootstrap = _slurp("api/webui/static/roster.js")
+    filters = _slurp("api/webui/static/roster/filters.js")
+    assert "focusTarget" not in bootstrap
+    assert "applyFocusTarget" not in bootstrap
+    assert "URLSearchParams(window.location.search)" not in bootstrap
+    for focus in ['"extra-time"', 'groups: "groups"', 'monitoring: "monitoring"', 'issues: "issues"', 'privacy: "privacy"']:
+        assert focus in filters
+    assert "history.replaceState" in filters
+    assert "shell.dataset.rosterLens" in filters
