@@ -3,7 +3,7 @@
 One APIRouter; all 9 GET page routes + the /api/open-path utility POST.
 Imported by server.py via app.include_router(router).
 
-Routes: GET /, /about, /ai-expert, /assessment, /course, /course-expert,
+Routes: GET /, /about, /ai-expert, /course, /course-expert,
         /gradebook, /routines, /settings
         POST /api/open-path
 """
@@ -76,11 +76,6 @@ def dashboard(request: Request):
     })
 
 
-@router.get("/assessment", response_class=HTMLResponse)
-def assessment_page(request: Request):
-    return RedirectResponse(url="/course-expert", status_code=302)
-
-
 @router.get("/course-expert", response_class=HTMLResponse)
 def course_expert_page(request: Request):
     skills = list_ai_ta_files()
@@ -113,63 +108,6 @@ def _push_base_ctx(request: Request) -> dict:
         "saved_courses": config.active_courses(),
         "csrf_token":    csrf_token(),
     }
-
-
-@router.get("/push/quiz", response_class=HTMLResponse)
-def push_quiz_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author a Quiz")
-    return templates.TemplateResponse(request, "push_quiz.html", {
-        **_push_base_ctx(request),
-        "quiz_files":    list_quiz_files(),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/assignment", response_class=HTMLResponse)
-def push_assignment_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author an Assignment")
-    return templates.TemplateResponse(request, "push_assignment.html", {
-        **_push_base_ctx(request),
-        "assignment_files": list_assignment_files(),
-        "authoring_skill":  skill,
-    })
-
-
-@router.get("/push/page", response_class=HTMLResponse)
-def push_page_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author a Page")
-    return templates.TemplateResponse(request, "push_page.html", {
-        **_push_base_ctx(request),
-        "page_files":      list_page_files(),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/rubric", response_class=HTMLResponse)
-def push_rubric_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author a Rubric")
-    return templates.TemplateResponse(request, "push_rubric.html", {
-        **_push_base_ctx(request),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/quick", response_class=HTMLResponse)
-def push_quick_page(request: Request):
-    return templates.TemplateResponse(request, "push_quick.html", _push_base_ctx(request))
-
-
-@router.get("/download-work", response_class=HTMLResponse)
-def download_work_page(request: Request):
-    return templates.TemplateResponse(request, "download_work.html", _push_base_ctx(request))
-
-
-@router.get("/student-reports", response_class=HTMLResponse)
-def student_reports_page(request: Request):
-    return templates.TemplateResponse(
-        request, "student_reports.html",
-        _push_base_ctx(request),
-    )
 
 
 @router.get("/ai-expert", response_class=HTMLResponse)

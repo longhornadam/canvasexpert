@@ -418,8 +418,8 @@ Add a "Prepare publication" button next to the existing "Push page…" button:
 </div>
 ```
 
-The existing immediate push button stays — legacy `/api/content/push` remains for
-compatibility. Both paths coexist.
+The Course Expert push gateway now uses typed operations exclusively. The legacy
+`/api/content/push` compatibility route has been removed in this surface.
 
 ### 7.2 page.js
 
@@ -507,7 +507,7 @@ Reuse the existing `CE_WRITE_REVIEW.confirm`. The frozen review provides:
 - Do not expose course IDs, student data, or payload in `GET /api/operations`.
 - Do not skip the write-ahead flush before the Canvas call.
 - Do not claim reversal is supported without a separately validated API path.
-- Do not change the existing immediate `/api/content/push` route.
+- Do not change the new typed operation routes.
 - Do not change the existing receipt store schema or behavior.
 
 ## 10. File ownership and load order
@@ -543,7 +543,7 @@ Reuse the existing `CE_WRITE_REVIEW.confirm`. The frozen review provides:
 
 ```powershell
 node --check api/webui/static/push/page.js
-py -m pytest api/tests/test_operation_ledger.py api/tests/test_page_operation.py api/tests/test_push_service.py api/tests/test_route_contract.py api/tests/test_webui_template_contracts.py
+py -m pytest api/tests/test_operation_ledger.py api/tests/test_page_operation.py api/tests/test_route_contract.py api/tests/test_webui_template_contracts.py
 git diff --check
 ```
 

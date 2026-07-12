@@ -22,7 +22,7 @@
     var agSel = document.getElementById("qa-aggroup");
     if (agSel && agSel.value) payload.assignment_group_name = agSel.selectedOptions[0].text;
 
-    pushContent(
+    window.CE_PUSH.pushContent(
       "quick",
       payload,
       document.getElementById("qa-log"),

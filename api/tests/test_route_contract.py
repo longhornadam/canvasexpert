@@ -32,7 +32,6 @@ EXPECTED = [
     ('/api/calendar/load-builtin', ('POST',)),
     ('/api/calendar/set', ('POST',)),
     ('/api/calendar/template', ('GET',)),
-    ('/api/content/push', ('POST',)),
     ('/api/course-detail', ('GET',)),
     ('/api/course-folder', ('GET',)),
     ('/api/courses', ('GET',)),
@@ -88,7 +87,6 @@ EXPECTED = [
     ('/api/tier-tags', ('GET',)),
     ('/api/tier-tags', ('POST',)),
     ('/api/validate', ('POST',)),
-    ('/assessment', ('GET',)),
     ('/course', ('GET',)),
     ('/course-expert', ('GET',)),
     ('/docs', ('GET',)),
@@ -148,12 +146,6 @@ EXPECTED = [
     ('/api/roster/tier-scheme', ('POST',)),
     ('/name-manager', ('GET',)),
     ('/roster', ('GET',)),
-    ('/push/quiz', ('GET',)),
-    ('/push/assignment', ('GET',)),
-    ('/push/page', ('GET',)),
-    ('/push/rubric', ('GET',)),
-    ('/push/quick', ('GET',)),
-    ('/download-work', ('GET',)),
     ('/powergrader', ('GET',)),
     ('/powergrader/session/{session_id}', ('GET',)),
     ('/api/powergrader/session/{session_id}', ('GET',)),
@@ -178,7 +170,6 @@ EXPECTED = [
     ('/api/work/{job_id}/complete', ('POST',)),
     ('/api/work/{job_id}/ignore', ('POST',)),
     ('/api/work/{job_id}/snooze', ('POST',)),
-    ('/student-reports', ('GET',)),
 ]
 
 

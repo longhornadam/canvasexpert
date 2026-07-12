@@ -29,8 +29,6 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | `/about` | What-is-Canvas-Expert explainer | — |
 | `/forge/quizforge/` | Embedded QuizForge zero-auth compiler (separate Pyodide app) | its own |
 
-`/assessment` is a legacy route that redirects to `/course-expert`.
-
 ### Work tools module routing
 
 Work tools are split for low-token debugging.
@@ -40,7 +38,7 @@ Work tools are split for low-token debugging.
 - Feature files: `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `push/download.js`
 - Work tools page files: `course_expert/tabs.js`, `course_expert/student_reports.js`, `course_expert/portfolio.js`, `course_expert/quick_assignment.js`
 - Backend push routes: `routes/push.py`, `routes/push_validation.py`, `routes/push_streaming.py`
-- Service helpers: `push_service.py`, `source_materials.py`
+- Service helpers: `source_materials.py`
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/course-expert-module-map.md`.
 
@@ -440,7 +438,7 @@ injected via environment variables (`QF_PUSH_SETTINGS` carries assignment settin
 JSON) and stream progress over SSE. Downloads run in-process via `downloader.py`.
 Assignment / page / rubric / quick-assignment creation plus gradebook and
 course-info reads are direct Canvas REST calls through split Web UI routes
-(`/api/content/push`, `/api/gradebook`, `/api/course-detail`). The push logic itself
+(`/api/gradebook`, `/api/course-detail`). The push logic itself
 (`qf_pusher.py` / `push_tiers.py`) is never modified by the UI.
 
 Push routes are split by role: `routes/push.py` keeps the shared router, Canvas

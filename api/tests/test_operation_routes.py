@@ -143,7 +143,7 @@ def test_malformed_json_and_invalid_csrf_are_rejected(route_env):
     assert created == []
 
 
-def test_course_expert_and_standalone_push_pages_render_csrf(route_env, monkeypatch):
+def test_course_expert_page_renders_csrf(route_env, monkeypatch):
     client, _ = route_env
     monkeypatch.setattr("api.webui.server.config.token_is_set", lambda: True)
     monkeypatch.setattr("api.webui.server.config.get_canvas_base", lambda: "https://canvas.invalid")
@@ -155,8 +155,7 @@ def test_course_expert_and_standalone_push_pages_render_csrf(route_env, monkeypa
     monkeypatch.setattr("api.webui.routes.pages.list_page_files", lambda: [])
     monkeypatch.setattr("api.webui.routes.pages.list_quiz_files", lambda: [])
     for path in (
-        "/course-expert", "/push/quick", "/push/assignment",
-        "/push/page", "/push/rubric",
+        "/course-expert",
     ):
         response = client.get(path, headers={"Accept": "text/html"})
         assert response.status_code == 200, path

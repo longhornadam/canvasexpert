@@ -31,10 +31,10 @@ def test_desk_empty_render_is_local_and_honest(monkeypatch):
     assert response.status_code == 200
     assert 'class="ce-desk-shell"' in response.text
     assert 'id="desk-course-field"' in response.text
-    assert "No local work to continue." in response.text
-    assert "No current attention items." in response.text
-    assert "No prepared operations yet." in response.text
-    assert "No receipts recorded yet." in response.text
+    assert "No open work." in response.text
+    assert "No items need review." in response.text
+    assert "No prepared operations." in response.text
+    assert "No receipts." in response.text
     assert "/api/operations" not in response.text
     assert 'name="canvasexpert-csrf-token"' in response.text
 

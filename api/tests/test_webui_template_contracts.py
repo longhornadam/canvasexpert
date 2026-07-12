@@ -30,7 +30,6 @@ def test_operation_gateway_aliases_and_no_direct_legacy_calls():
         "api/webui/static/push/page.js",
         "api/webui/static/push/rubric.js",
         "api/webui/static/course_expert/quick_assignment.js",
-        "api/webui/templates/push_quick.html",
     ):
         assert "/api/content/push" not in _slurp(rel)
     assert '{ payload: payload, targets: targets }' in core
@@ -72,13 +71,8 @@ def test_shared_csrf_meta_and_push_script_order():
     assert 'canvasexpert-csrf-token' not in workbench
     common = _slurp("api/webui/templates/_push_common_scripts.html")
     assert common.index("/static/push/core.js") < common.index("/static/push/course_picker.js")
-    for template, feature in (
-        ("push_assignment.html", "/static/push/assignment.js"),
-        ("push_page.html", "/static/push/page.js"),
-        ("push_rubric.html", "/static/push/rubric.js"),
-    ):
-        html = _slurp("api/webui/templates/" + template)
-        assert html.index('_push_common_scripts.html') < html.index(feature)
+    course_expert_html = _slurp("api/webui/templates/course_expert.html")
+    assert course_expert_html.index('_push_common_scripts.html') < course_expert_html.index("/static/push/quiz.js")
 
 
 def test_page_prepare_uses_shared_operation_helper():
@@ -554,12 +548,12 @@ def test_workbench_instrument_language_and_drafting_grid_contract():
 
 
 def test_desk_start_links_preserve_existing_routes():
-    """Start cards stay plain links to the unchanged workflow routes."""
+    """Start cards now link into Course Expert canonical tabs."""
     html = _slurp("api/webui/templates/dashboard.html")
     expected = [
-        "/push/assignment", "/push/quiz", "/push/quick", "/push/page",
-        "/push/rubric", "/powergrader", "/gradebook", "/roster",
-        "/student-reports", "/download-work", "/routines",
+        "/course-expert?tab=assignment", "/course-expert?tab=quiz", "/course-expert?tab=quick", "/course-expert?tab=page",
+        "/course-expert?tab=rubric", "/powergrader", "/gradebook", "/roster",
+        "/course-expert?tab=students", "/course-expert?tab=download", "/routines",
     ]
     for route in expected:
         assert f'href="{route}"' in html
@@ -737,12 +731,11 @@ def test_tabs_js_deep_link_tab_overrides_hash():
     assert "view" in js
 
 
-def test_standalone_push_templates_stay_on_base():
-    """Standalone push templates must still extend base.html, not workbench_base."""
+def test_standalone_push_templates_are_removed():
+    """Standalone push templates are removed in the canonical Course Expert surface."""
     for tpl in ["push_quiz", "push_assignment", "push_page", "push_rubric", "push_quick"]:
-        html = _slurp(f"api/webui/templates/{tpl}.html")
-        assert '{% extends "base.html" %}' in html, (
-            f"{tpl}.html changed from base.html"
+        assert not (ROOT / f"api/webui/templates/{tpl}.html").exists(), (
+            f"{tpl}.html should be removed when Course Expert is canonical"
         )
 
 

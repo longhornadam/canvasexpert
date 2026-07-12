@@ -16,7 +16,6 @@ mostly markup, data injection, and script includes.
 - Route owner: `api/webui/routes/push.py`
 - Validation/physical routes: `api/webui/routes/push_validation.py`
 - Streaming QuizForge routes: `api/webui/routes/push_streaming.py`
-- In-process content push service: `api/webui/push_service.py`
 - Source-material extraction: `api/webui/source_materials.py`
 
 ## Current Size Snapshot
@@ -27,7 +26,6 @@ mostly markup, data injection, and script includes.
 - `api/webui/static/course_expert/portfolio.js` - 110 lines
 - `api/webui/static/course_expert/quick_assignment.js` - 34 lines
 - `api/webui/static/course_expert/work_rail.js` - new Work rail sidebar (replaces legacy sidebar navigation)
-- `api/webui/push_service.py` - 472 lines
 - `api/webui/source_materials.py` - 420 lines
 - `api/webui/static/push/quiz.js` - 294 lines
 - `api/webui/static/push/download.js` - 246 lines
@@ -90,8 +88,7 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 
 ## Backend Routing
 
-`routes/push.py` owns the router, Canvas module/assignment group lookup, and generic
-`/api/content/push` fan-out.
+`routes/push.py` owns the router and Canvas module/assignment group lookup.
 
 `routes/push_validation.py` owns:
 
@@ -112,10 +109,8 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 - typed prepare, frozen review, digest-gated apply, and retry routes
 - the PII-minimized operation list and bounded polling status endpoint
 
-`push_service.py` owns in-process assignment/page/quick/printable pushes and the
-AssignmentForge/PageForge/RubricForge service path. Course Expert QuizForge live
-pushes use the `content.quiz` operation adapter; legacy CLI/subprocess streaming
-routes remain only for compatibility.
+- Course Expert now uses typed operation preparation and review for live content pushes.
+- Assignment/Page/Rubric printable path ownership lives in `api/operation_ledger/adapters/assignment.py`.
 
 ## First Places To Look By Symptom
 
@@ -130,7 +125,7 @@ routes remain only for compatibility.
 - QuizForge prepare/review/apply/progress: `push/quiz.js`, `push/core.js`,
   `routes/operations.py`, `operation_ledger/adapters/quiz.py`
 - Assignment/Page/Rubric card behavior: matching `push/*.js`,
-  `routes/push_validation.py`, `push_service.py`
+  `routes/push_validation.py`
 - file paste/upload issues: `push/file_sources.js`, `routes/push_validation.py`
 - printable output failures: `push/core.js`, `routes/push_validation.py`,
   `engine/rendering/physical/`

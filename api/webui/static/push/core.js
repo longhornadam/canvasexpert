@@ -37,27 +37,6 @@
     el.innerHTML = html;
   }
 
-  function describeContentEffects(payload) {
-    payload = payload || {};
-    var details = [];
-    var warnings = [];
-    if (payload.path) details.push("Source file: " + payload.path.split(/[\\/]/).pop());
-    if (payload.module_name) details.push("Add to module: " + payload.module_name);
-    if (payload.assignment_group_name) details.push("Assignment group: " + payload.assignment_group_name);
-    if (payload.due_at) details.push("Due: " + payload.due_at);
-    if (payload.unlock_at) details.push("Unlock: " + payload.unlock_at);
-    if (payload.lock_at) details.push("Lock: " + payload.lock_at);
-    if (payload.rubric_path) details.push("Rubric: " + payload.rubric_path.split(/[\\/]/).pop() + " (" + (payload.rubric_mode || "grading") + ")");
-    warnings.push(payload.published ? "Item will be published for students." : "Item will be created unpublished.");
-    if (payload.post_to_sis) warnings.push("Post to SIS is enabled where Canvas supports it.");
-    if (payload.autoscore_schedule) {
-      warnings.push("Scheduled Auto-Score is enabled for this assignment and creates draft AI suggestions after the due date.");
-    }
-    if (payload.autoscore_auto_push) {
-      warnings.push("Scheduled auto-push is enabled only for eligible reviewed cases for this assignment.");
-    }
-    return { details: details, warnings: warnings };
-  }
 
   var allBusyBtns = "#btn-validate,#btn-preview,#btn-push,#btn-push-variants,#btn-add-variant";
 
@@ -501,67 +480,25 @@
     var targets = typeof push.targetCourses === "function" ? push.targetCourses() : [];
     if (!targets.length) return alert("Check at least one course on the right.");
     var operationKind = operationKinds[kind];
-    if (operationKind) {
-      var log = showLog(logEl);
-      hideBanner(bannerEl);
-      btn.disabled = true;
-      try {
-        var prepared = await prepareOperation(operationKind, payload, log);
-        return await reviewAndApply(prepared.operation_id, log, bannerEl, confirmLabel);
-      } catch (e) {
-        log("ERROR: " + e.message);
-        showBanner(bannerEl, "fail", "✗ " + esc(e.message));
-        return null;
-      } finally {
-        btn.disabled = false;
-      }
+    if (!operationKind) {
+      throw new Error("Unsupported push kind: " + kind);
     }
-    var effects = describeContentEffects(payload);
-    var ok = await window.CE_WRITE_REVIEW.confirm({
-      title: "Review Canvas content push",
-      action: confirmLabel,
-      targets: targets,
-      details: effects.details.concat(["Canvas instance: " + (window.QF_CANVAS_BASE || "(configured Canvas)")]),
-      warnings: effects.warnings,
-      confirmText: "Push to Canvas",
-    });
-    if (!ok) return;
     var log = showLog(logEl);
     hideBanner(bannerEl);
-    btn.disabled = true;
-    log("Pushing…\n");
-    postForm("/api/content/push", {
-      kind: kind,
-      courses: JSON.stringify(targets),
-      payload: JSON.stringify(payload),
-    }).then(function (d) {
-      if (d.error) {
-        log("ERROR: " + d.error);
-        showBanner(bannerEl, "fail", "✗ " + esc(d.error));
-        return;
-      }
-      var results = d.results || [];
-      results.forEach(function (r) {
-        log((r.ok ? "✓" : "✗") + " " + r.course_name + ": " + (r.ok ? r.title : (r.error || "failed")));
-        (r.notes || []).forEach(function (n) { log("    · " + n); });
-      });
-      renderBanner(bannerEl, results.map(function (r) {
-        return {
-          ok: r.ok,
-          title: r.course_name + " — " + (r.ok ? r.title : (r.error || "failed")),
-          url: r.url,
-        };
-      }), d.ok);
-    }).catch(function (e) {
-      log("ERROR: " + e);
-      showBanner(bannerEl, "fail", "✗ " + esc(String(e)));
-    }).finally(function () {
-      btn.disabled = false;
-    });
+    if (btn) btn.disabled = true;
+    try {
+      var prepared = await prepareOperation(operationKind, payload, log);
+      return await reviewAndApply(prepared.operation_id, log, bannerEl, confirmLabel);
+    } catch (e) {
+      log("ERROR: " + e.message);
+      showBanner(bannerEl, "fail", "✗ " + esc(e.message));
+      return null;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   window.CE_PUSH = Object.assign(window.CE_PUSH || {}, {
-    postForm: postForm,
     postJson: postJson,
     showLog: showLog,
     hideBanner: hideBanner,
@@ -571,16 +508,11 @@
     renderOperationsList: renderOperationsList,
     operationKinds: operationKinds,
     canvasWriteReview: window.CE_WRITE_REVIEW.confirm,
-    describeContentEffects: describeContentEffects,
     generatePhysical: generatePhysical,
-    esc: esc,
     showBanner: showBanner,
     setBusy: setBusy,
     streamSSE: streamSSE,
   });
 
-  window.esc = esc;
-  window.postForm = postForm;
-  window.pushContent = pushContent;
   renderOperationsList();
 })();
