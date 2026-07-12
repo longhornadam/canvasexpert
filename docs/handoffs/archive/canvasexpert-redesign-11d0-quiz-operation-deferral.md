@@ -72,3 +72,9 @@ after returned-ID/postcondition idempotency is proved; otherwise stop rather tha
 ambiguous prepare-only mode. Persist before send, record the returned quiz ID, and make
 timeout/disconnect `sent_unknown` Attention. Same-title matching never proves success or
 authorizes retry.
+
+## Superseded
+
+Ferrari completed discovery on 2026-07-12. This combined handoff is archived and replaced
+by accepted architecture `docs/reference/quiz-operation-design.md` plus sequential slices
+11d1, 11d2, and 11d3. No implementation was accepted from this superseded text.
