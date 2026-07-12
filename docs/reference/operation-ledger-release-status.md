@@ -74,6 +74,12 @@ implementation is authorized by them.
 | Roster Workbench lenses over one student dataset | `docs/handoffs/archive/roster-frontend-workbench.md` | **completed** |
 | Course Expert Quiz operation-ledger browser migration | `docs/handoffs/archive/course-expert-quiz-ledger-migration.md` | **completed** |
 
+### Active frontend work
+
+| Work | Authority | Status |
+|---|---|---|
+| Shared Workbench header visual integration | `docs/handoffs/workbench-header-integration.md` | **ready for implementation** |
+
 ### Deferred to post-release
 
 | Slice | Reason |
