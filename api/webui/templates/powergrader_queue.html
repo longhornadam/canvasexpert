@@ -1,7 +1,10 @@
-{% extends "base.html" %}
+{% extends "workbench_base.html" %}
 {% block title %}PowerGrader — {{ assignment_name }}{% endblock %}
-{% block body_class %}pg-queue-body{% endblock %}
-{% block main_class %}pg-queue-shell{% endblock %}
+{% block body_class %}ce-workbench-page pg-queue-body{% endblock %}
+{% block main_class %}ce-workbench-main pg-queue-shell{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/powergrader_queue.css?v={{ asset_v }}">
+{% endblock %}
 {% block content %}
 
 <meta name="session-id"      content="{{ session_id }}">
@@ -9,6 +12,8 @@
 <meta name="grading-mode"    content="{{ mode }}">
 <meta name="mode-label"      content="{{ mode_label }}">
 <meta name="canvas-base"     content="{{ canvas_base }}">
+
+<div class="ce-instrument-shell pg-queue-instrument">
 
 <!-- ── Top bar ──────────────────────────────────────────────────────── -->
 <div class="pg-topbar">
@@ -145,8 +150,10 @@
 <!-- ── Status toast ───────────────────────────────────────────────────── -->
 <div id="pg-status-bar" class="pg-status-bar" hidden></div>
 
-<link rel="stylesheet" href="/static/powergrader_queue.css?v={{ asset_v }}">
+</div>
 
+{% endblock %}
+{% block workbench_scripts %}
 <script src="/static/powergrader_queue.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_core.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_review.js?v={{ asset_v }}"></script>

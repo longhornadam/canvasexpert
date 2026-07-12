@@ -55,7 +55,7 @@
     if (copilot.packet_folder) {
       buttons.push('<button type="button" class="small" data-open-path="' + esc(copilot.packet_folder) + '">Open Copilot batch folder</button>');
     }
-    buttons.push('<a class="small" href="/api/powergrader/session/' + encodeURIComponent(SESSION_ID) + '/packet" style="padding:4px 10px;border:1px solid var(--line);border-radius:var(--r-sm);text-decoration:none;background:var(--card);color:var(--ink)">Download packet ZIP</a>');
+    buttons.push('<a class="small" href="/api/powergrader/session/' + encodeURIComponent(sessionId) + '/packet" style="padding:4px 10px;border:1px solid var(--line);border-radius:var(--r-sm);text-decoration:none;background:var(--card);color:var(--ink)">Download packet ZIP</a>');
     packetActions.innerHTML = buttons.join('');
     if (batches.length) {
       if (legacyImportBox) legacyImportBox.hidden = true;

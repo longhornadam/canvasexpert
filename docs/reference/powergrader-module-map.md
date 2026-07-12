@@ -3,15 +3,17 @@
 Purpose: give future debugging sessions a low-token routing map so they can jump
 straight to the owning file instead of re-mapping PowerGrader from scratch.
 
-As of 2026-07-07, the old browser entry files are thin shims and no current
+As of 2026-07-12, the old browser entry files are thin shims and no current
 PowerGrader Python or JS implementation file is above the 500-line threshold.
 Use this file as the first stop before reading code.
 
 ## Page / route ownership
 
 - Route owner: `api/webui/routes/powergrader.py`
-- Setup page template: `api/webui/templates/powergrader_setup.html`
-- Queue page template: `api/webui/templates/powergrader_queue.html`
+- Setup page template: `api/webui/templates/powergrader_setup.html` (extends
+  `workbench_base.html` and composes session triage plus the start form)
+- Queue page template: `api/webui/templates/powergrader_queue.html` (extends
+  `workbench_base.html` and composes the grading queue as a responsive Instrument)
 - Backend workflow package: `api/powergrader/`
 
 `powergrader.py` remains the APIRouter owner only. Route-local support should move
@@ -20,10 +22,13 @@ into nearby helper modules or the backend package when it becomes reusable.
 ## Current size snapshot
 
 - `api/webui/routes/powergrader.py` - 488 lines
-- `api/webui/static/powergrader/setup_core.js` - 413 lines
+- `api/webui/static/powergrader/setup_core.js` - 381 lines
+- `api/webui/static/powergrader/setup_sessions.js` - 115 lines
 - `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
-- `api/webui/static/powergrader_setup.css` - 483 lines
-- `api/webui/templates/powergrader_setup.html` - 271 lines
+- `api/webui/static/powergrader_setup.css` - 527 lines
+- `api/webui/static/powergrader_queue.css` - 230 lines
+- `api/webui/templates/powergrader_setup.html` - 304 lines
+- `api/webui/templates/powergrader_queue.html` - 163 lines
 - `api/webui/static/powergrader/queue_core.js` - 332 lines
 - `api/webui/static/powergrader/queue_review.js` - 173 lines
 - `api/webui/static/powergrader/queue_import.js` - 261 lines
@@ -48,8 +53,10 @@ into nearby helper modules or the backend package when it becomes reusable.
 Template load order:
 
 1. `api/webui/static/powergrader_setup.js` - thin namespace shim only
-2. `api/webui/static/powergrader/setup_core.js` - shared setup flow
-3. `api/webui/static/powergrader/setup_autoscore.js` - autoscore/model/estimate features
+2. `api/webui/static/powergrader/setup_sessions.js` - session fetch, filtering,
+   lane classification, counts, cards, and empty/error states
+3. `api/webui/static/powergrader/setup_core.js` - shared setup flow
+4. `api/webui/static/powergrader/setup_autoscore.js` - autoscore/model/estimate features
 
 Ownership:
 
@@ -60,8 +67,11 @@ Ownership:
   - assignment search spans the full course regardless of the active module selection
   - rubric picker sync
   - session start submit flow
-  - resume-session list rendering
   - shared `window.CE_POWERGRADER_SETUP` namespace
+- `setup_sessions.js`
+  - session summary fetch and course filtering
+  - exclusive Attention, Continue, and Completed classification
+  - responsive session cards, rail counts, and empty/error states
 - `setup_autoscore.js`
   - model picker
   - live OpenRouter model list loading

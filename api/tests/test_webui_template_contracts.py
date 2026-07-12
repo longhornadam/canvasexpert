@@ -255,6 +255,13 @@ def test_powergrader_review_apply_contract():
     assert "status !== 'pushed' && result.status !== 'already_applied'" in js
 
 
+def test_powergrader_import_uses_shared_session_id():
+    """Packet links must use the queue namespace session id, not an IIFE-local name."""
+    js = _slurp("api/webui/static/powergrader/queue_import.js")
+    assert "queue.getSessionId" in js
+    assert "SESSION_ID" not in js
+
+
 # ── No legacy canvasWriteReview function definitions ──────────────────
 
 def test_no_local_canvas_write_review_function():
@@ -673,12 +680,57 @@ def test_powergrader_css_has_form_scoped_hidden_rule():
 
 # ── PowerGrader responsive layout contract (slice 2) ─────────────────
 
-def test_powergrader_uses_page_wide_block():
-    """powergrader_setup.html must override main_class with page-wide pg-page."""
+def test_powergrader_setup_extends_workbench_base():
+    """PowerGrader setup must use the shared Workbench shell."""
     html = _slurp("api/webui/templates/powergrader_setup.html")
-    assert '{% block main_class %}page-wide pg-page{% endblock %}' in html, (
-        "Template must set main_class to 'page-wide pg-page'"
-    )
+    assert '{% extends "workbench_base.html" %}' in html
+    assert '{% block main_class %}ce-workbench-main pg-page{% endblock %}' in html
+    assert 'class="ce-workbench-shell pg-workbench-shell"' in html
+
+
+def test_powergrader_setup_session_module_load_order_and_uniqueness():
+    """The setup namespace, sessions, core, and autoscore scripts load once in order."""
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    scripts = [
+        "/static/powergrader_setup.js",
+        "/static/powergrader/setup_sessions.js",
+        "/static/powergrader/setup_core.js",
+        "/static/powergrader/setup_autoscore.js",
+    ]
+    positions = []
+    for script in scripts:
+        assert html.count(script) == 1, f"Expected one script include: {script}"
+        positions.append(html.index(script))
+    assert positions == sorted(positions)
+
+
+def test_powergrader_queue_extends_workbench_and_preserves_instrument_contract():
+    """The grading queue uses Workbench composition without losing critical controls."""
+    html = _slurp("api/webui/templates/powergrader_queue.html")
+    assert '{% extends "workbench_base.html" %}' in html
+    assert 'class="ce-instrument-shell pg-queue-instrument"' in html
+    for critical_id in [
+        "pg-bulk-push", "pg-privacy-strip", "pg-late-strip", "pg-packet-strip",
+        "pg-submission-pane", "pg-grade-pane", "pg-score", "pg-feedback",
+        "pg-save-next", "pg-push-one", "pg-kbd-a-hint", "pg-status-bar",
+    ]:
+        assert html.count(f'id="{critical_id}"') == 1, (
+            f"Expected one queue control id={critical_id!r}"
+        )
+
+    scripts = [
+        "/static/powergrader_queue.js",
+        "/static/powergrader/queue_core.js",
+        "/static/powergrader/queue_review.js",
+        "/static/powergrader/queue_privacy.js",
+        "/static/powergrader/queue_late_catchup.js",
+        "/static/powergrader/queue_import.js",
+    ]
+    positions = []
+    for script in scripts:
+        assert html.count(script) == 1, f"Expected one script include: {script}"
+        positions.append(html.index(script))
+    assert positions == sorted(positions)
 
 
 def test_powergrader_no_680px_inline_width():

@@ -1,7 +1,26 @@
-{% extends "base.html" %}
+{% extends "workbench_base.html" %}
 {% block title %}PowerGrader — Canvas Expert{% endblock %}
-{% block main_class %}page-wide pg-page{% endblock %}
+{% block body_class %}ce-workbench-page pg-setup-body{% endblock %}
+{% block main_class %}ce-workbench-main pg-page{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/powergrader_setup.css?v={{ asset_v }}">
+{% endblock %}
 {% block content %}
+
+<div class="ce-workbench-shell pg-workbench-shell">
+  <div class="ce-workbench-grid pg-workbench-grid">
+    <nav class="ce-work-rail pg-session-rail" aria-label="PowerGrader sessions">
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">PowerGrader</p>
+        <a class="ce-work-rail-item" href="#pg-start-new">Start new <span class="pg-rail-count" id="pg-start-count">+</span></a>
+      </div>
+      <div class="ce-work-rail-section">
+        <a class="ce-work-rail-item" href="#pg-attention">Attention <span class="pg-rail-count" id="pg-attention-count">0</span></a>
+        <a class="ce-work-rail-item" href="#pg-continue">Continue <span class="pg-rail-count" id="pg-continue-count">0</span></a>
+        <a class="ce-work-rail-item" href="#pg-completed">Completed <span class="pg-rail-count" id="pg-completed-count">0</span></a>
+      </div>
+    </nav>
+    <div class="pg-workbench-content">
 
 <section class="card pg-setup-card">
   <div class="pg-setup-header">
@@ -16,6 +35,29 @@
   {% endif %}
 
   <!-- ── New session ─────────────────────────────────────────────────── -->
+  <section class="pg-sessions-card" id="pg-sessions-card" aria-labelledby="pg-session-work-title">
+    <div class="pg-section-heading">
+      <div>
+        <h2 id="pg-session-work-title">Your grading work</h2>
+        <p class="hint">Resume local sessions before starting a duplicate.</p>
+      </div>
+      <span id="pg-sessions-status" class="hint" role="status" aria-live="polite">Loading sessions…</span>
+    </div>
+    <div id="pg-sessions-tbody">
+      <section class="pg-session-lane pg-session-lane--attention" id="pg-attention" aria-labelledby="pg-attention-title">
+        <h3 id="pg-attention-title">Attention</h3>
+        <p class="pg-lane-description">Approved work waiting for teacher-reviewed posting.</p>
+        <div class="pg-session-list" id="pg-attention-list"></div>
+      </section>
+      <section class="pg-session-lane" id="pg-continue" aria-labelledby="pg-continue-title">
+        <h3 id="pg-continue-title">Continue</h3>
+        <p class="pg-lane-description">Sessions still in progress.</p>
+        <div class="pg-session-list" id="pg-continue-list"></div>
+      </section>
+    </div>
+  </section>
+
+  <div id="pg-start-new" class="pg-start-anchor" aria-hidden="true"></div>
   <form id="pg-start-form" enctype="multipart/form-data">
 
     <!-- ═══ Section 1: Choose work ═══ -->
@@ -238,26 +280,16 @@
 </section>
 
 <!-- ── Resume existing sessions ──────────────────────────────────────── -->
-<section class="card pg-sessions-card" id="pg-sessions-card" style="display:none">
-  <h3>Resume a session</h3>
-  <div class="pg-sessions-scroll">
-    <table class="pg-sessions-table">
-      <thead>
-        <tr>
-          <th>Assignment</th>
-          <th>Mode</th>
-          <th class="pg-col-center">Progress</th>
-          <th>Created</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="pg-sessions-tbody"></tbody>
-    </table>
+<details class="pg-completed" id="pg-completed">
+  <summary>Completed sessions <span class="pg-summary-count" id="pg-completed-summary-count">0</span></summary>
+  <div class="pg-session-list" id="pg-completed-list"></div>
+</details>
+    </div>
   </div>
-</section>
+</div>
 
-<link rel="stylesheet" href="/static/powergrader_setup.css?v={{ asset_v }}">
-
+{% endblock %}
+{% block workbench_scripts %}
 <script>
 window.POWERGRADER_SETUP_CONFIG = {
   defaultModel: {{ default_openrouter_model | tojson }},
@@ -266,6 +298,7 @@ window.POWERGRADER_SETUP_CONFIG = {
 };
 </script>
 <script src="/static/powergrader_setup.js?v={{ asset_v }}"></script>
+<script src="/static/powergrader/setup_sessions.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/setup_core.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/setup_autoscore.js?v={{ asset_v }}"></script>
 {% endblock %}

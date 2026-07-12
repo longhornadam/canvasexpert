@@ -31,12 +31,6 @@
   var aiLabel = document.getElementById('pg-ai-label');
   var unsupportedHintEl = document.getElementById('pg-assignment-unsupported-hint');
 
-  function modeLabel(mode) {
-    if (mode === 'packet') return 'Prepare for my AI chat';
-    if (mode === 'assisted') return 'Draft-score with OpenRouter';
-    return 'Grade myself';
-  }
-
   function currentMode() {
     var checked = modeChoices.find(function(el){ return el.checked; });
     return checked ? checked.value : 'fast';
@@ -273,7 +267,7 @@
       if (asnToolsEl) asnToolsEl.hidden = true;
       if (asnSearchEl) asnSearchEl.value = "";
       if (unsupportedHintEl) unsupportedHintEl.hidden = true;
-      loadSessions();
+      if (typeof pg.loadSessions === 'function') pg.loadSessions('');
       return;
     }
     asnEl.disabled = true;
@@ -310,7 +304,7 @@
         if (asnSearchEl) asnSearchEl.value = "";
         renderAssignmentOptions();
         if (asnToolsEl && loadedModules.length > 0) asnToolsEl.hidden = false;
-        loadSessions(cid);
+        if (typeof pg.loadSessions === 'function') pg.loadSessions(cid);
       })
       .catch(function(){
         if (version === loadVersion) asnEl.innerHTML = '<option value="">Error loading assignments</option>';
@@ -364,37 +358,11 @@
     });
   }
 
-  function loadSessions(cid){
-    fetch('/api/powergrader/sessions')
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        var all = d.sessions || [];
-        var filtered = cid ? all.filter(function(s){ return s.course_id === cid; }) : all;
-        var card = document.getElementById('pg-sessions-card');
-        var tbody = document.getElementById('pg-sessions-tbody');
-        if (!filtered.length) { card.style.display = 'none'; return; }
-        card.style.display = '';
-        tbody.innerHTML = filtered.map(function(s){
-          var dt = s.created ? s.created.replace('T', ' ').slice(0,16) : '';
-          return '<tr>' +
-            '<td><strong>' + esc(s.assignment_name || '—') + '</strong></td>' +
-            '<td>' + esc(s.mode_label || modeLabel(s.mode)) + '</td>' +
-            '<td style="text-align:center">' + s.posted + ' / ' + s.total + ' posted</td>' +
-            '<td style="color:var(--ce-text-muted,#888)">' + dt + '</td>' +
-            '<td><a href="/powergrader/session/' + s.session_id + '" class="button small">Resume →</a></td>' +
-            '</tr>';
-        }).join('');
-      })
-      .catch(function(){});
-  }
-
   pg.esc = esc;
   pg.currentMode = currentMode;
   pg.defaultModel = function(){ return defaultModel; };
   pg.getForm = function(){ return form; };
   pg.getElement = function(id){ return document.getElementById(id); };
-  pg.modeLabel = modeLabel;
-  pg.loadSessions = loadSessions;
   pg.setStatus = setStatus;
   pg.setAiLabelText = updateRouteMode;
   pg.syncStartEnabled = syncStartEnabled;
@@ -409,5 +377,5 @@
   if (ackBox) ackBox.addEventListener('change', syncStartEnabled);
   bindRubricSync();
   bindStartSession();
-  loadSessions('');
+  if (typeof pg.loadSessions === 'function') pg.loadSessions('');
 })();

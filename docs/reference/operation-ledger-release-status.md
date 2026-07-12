@@ -19,10 +19,11 @@ safety layer for content pushes. See the acceptance table below.
    own safety layer (SAFE/PRIVATE zones, pseudonymization, teacher review before
    push). Operation-ledger integration for feedback is deferred to post-release.
 
-4. **Frontend work is post-release and teacher-outcome driven.** PowerGrader is the
-   first active frontend batch under `docs/handoffs/powergrader-frontend-workbench.md`.
-   Roster, Settings, and secondary-surface polish remain deferred until selected from
-   actual teacher friction. The backends are complete enough to support this work.
+4. **Frontend work is post-release and teacher-outcome driven.** The first frontend
+   batch, PowerGrader's session workbench and responsive grading instrument, is
+   complete and archived. Roster, Settings, and secondary-surface polish remain
+   deferred until selected from actual teacher friction. The backends are complete
+   enough to support this work.
 
 5. **Release criteria satisfied.** All registered operation kinds pass their
    focused tests, the full API test suite is green, and the operation ledger
@@ -65,11 +66,11 @@ All three remaining slices are implemented and the acceptance criteria are met.
 The 11d2, 11d3, and 15 execution briefs are archived reference specs. No further
 implementation is authorized by them.
 
-### Active frontend work
+### Completed frontend work
 
 | Work | Authority | Status |
 |---|---|---|
-| PowerGrader session workbench and responsive grading instrument | `docs/handoffs/powergrader-frontend-workbench.md` | **ready for implementation** |
+| PowerGrader session workbench and responsive grading instrument | `docs/handoffs/archive/powergrader-frontend-workbench.md` | **completed** |
 
 ### Deferred to post-release
 
