@@ -150,3 +150,19 @@ target envelope, and zero new console errors. Do not click Apply against real Ca
 Reply with commit hash/files, write-order matrix, PII-negative evidence, partial/retry/
 unknown-title evidence, focused/full counts, rendered console count, configured-workspace
 non-mutation, and explicit no-live-write confirmation.
+
+## Ferrari acceptance
+
+Accepted 2026-07-12 after independent review of commit `879d3cc`.
+
+- Focused acceptance suite: 174 passed.
+- Full API suite: 604 passed, 1 skipped.
+- Safe selected-group resolution, coverage/overlap blocks, ordered tier assignment and
+  override writes, module/Auto-Score dependencies, exact-ID retry, and unknown-title drift
+  passed with fake Canvas only.
+- Restart recovery exact-verifies tier assignments, overrides, module items, and queue jobs
+  without authorizing duplicate sends.
+- Durable ledger/review/result/receipt projections contain no raw student IDs or names.
+- Course Expert locally validated the four-tier fixture; standalone Assignment rendered the
+  shared operation path and tier warning. Both routes had zero browser-console errors.
+- No target was selected during rendered checks and no live Canvas write occurred.

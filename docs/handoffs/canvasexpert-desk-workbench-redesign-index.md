@@ -58,7 +58,7 @@ Before any redesign implementation:
 | 11b1 | `archive/canvasexpert-redesign-11b1-assignment-core-operation.md` | 10r |
 | 11b2 | `archive/canvasexpert-redesign-11b2-assignment-dependencies.md` | 11b1 |
 | 11b3 | `archive/canvasexpert-redesign-11b3-assignment-autoscore.md` | 11b2 |
-| 11b4 | `canvasexpert-redesign-11b4-assignment-differentiation.md` | 11b3, 11r |
+| 11b4 | `archive/canvasexpert-redesign-11b4-assignment-differentiation.md` | 11b3, 11r |
 | 11c0 | `archive/canvasexpert-redesign-11c0-rubric-path-audit.md` | 10r |
 | 11c1 | `archive/canvasexpert-redesign-11c1-rubric-operation.md` | 11c0 |
 | 11d (deferred) | `canvasexpert-redesign-11d-quiz-operation.md` | 11r |
