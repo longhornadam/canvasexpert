@@ -10,7 +10,6 @@ from datetime import datetime
 
 from .. import models
 from api.webui import canvas_client, config
-from api.webui.gradebook_service import _apply_curve_model, _load_curve_events, _save_curve_events
 from api.webui.routes.gradebook_common import _assignment, _assignment_submissions, _course_students
 
 
@@ -133,7 +132,8 @@ class CurveAdapter:
         pts = a.get("points_possible") or 0
         scored = baseline.get("scored_students", [])
         scores = [s.get("score") or 0 for s in scored]
-        preview = _apply_curve_model(scored, payload.get("curve_type"),
+        from api.webui.gradebook_service import _apply_curve_model as _acm
+        preview = _acm(scored, payload.get("curve_type"),
                                       payload.get("settings", {}), pts)
         return {
             "course_name": course_name,
@@ -161,7 +161,8 @@ class CurveAdapter:
         scored = baseline.get("scored_students", [])
 
         # Re-apply curve model server-side
-        results = _apply_curve_model(scored, curve_type, settings, pts)
+        from api.webui.gradebook_service import _apply_curve_model as _acm
+        results = _acm(scored, curve_type, settings, pts)
 
         if not results:
             step["state"] = "applied"
@@ -220,7 +221,8 @@ class CurveAdapter:
             "changed": r.get("changed", True),
         } for r in results]
 
-        events = _load_curve_events()
+        from api.webui.gradebook_service import _load_curve_events as _lce
+        events = _lce()
         events.append({
             "id": event_id, "course_id": str(course_id),
             "assignment_id": str(assignment_id),
@@ -229,7 +231,8 @@ class CurveAdapter:
             "applied_at": datetime.now().isoformat(timespec="seconds"),
             "reverted": False, "students": event_students,
         })
-        _save_curve_events(events)
+        from api.webui.gradebook_service import _save_curve_events as _sce
+        _sce(events)
 
         step["state"] = "applied" if all_ok else "partial"
         step["event_id"] = event_id

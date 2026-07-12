@@ -116,9 +116,8 @@ def test_execute_curves_assignment(tmp_path, monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.curve.canvas_client._canvas_send", fake_send)
     monkeypatch.setattr("api.operation_ledger.adapters.curve.config.active_courses", _fake_courses)
     # Mock curve event persistence
-    monkeypatch.setattr("api.operation_ledger.adapters.curve._load_curve_events", lambda: [])
-    monkeypatch.setattr("api.operation_ledger.adapters.curve._save_curve_events", lambda e: None)
-
+    monkeypatch.setattr("api.webui.gradebook_service._load_curve_events", lambda: [])
+    monkeypatch.setattr("api.webui.gradebook_service._save_curve_events", lambda e: None)
     a = CurveAdapter()
     p = {"assignment_id": "10", "curve_type": "flat_bump", "settings": {"bump": 5}}
     op = models.new_operation(
