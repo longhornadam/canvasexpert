@@ -112,7 +112,8 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 - Resolves course-resource placeholders (`{{file:NAME}}`, `{{page:Title}}` per course).
 - Creates assignment(s) with configurable submission types, points, dates, grading category.
 - **Tier overrides**: one file with tiers → multiple assignments, each visible only to
-  its group via an assignment override. Each tier can have its own scaffolding text.
+  its group via an assignment override. Each tier can have its own scaffolding text;
+  the operation review shows safe group counts and one gradebook column per tier.
 
 ### Pages (PageForge)
 - Extracts JSON from the `<PAGEFORGE_JSON>` envelope.

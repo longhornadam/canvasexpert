@@ -116,6 +116,20 @@ def _apply_recovered(operation_id: str, target_key: str, result: dict,
                             step["returned_object_id"] = result["module_item_id"]
                             step["state"] = "applied"
                             break
+                for recovered_step in result.get("steps", []):
+                    existing = next(
+                        (step for step in t.get("steps", [])
+                         if step.get("step_key") == recovered_step.get("step_key")),
+                        None,
+                    )
+                    if existing is None:
+                        continue
+                    for key in (
+                        "state", "returned_object_id", "returned_object_url",
+                        "error_code",
+                    ):
+                        if key in recovered_step:
+                            existing[key] = recovered_step.get(key)
                 t["claim_owner"] = None
                 t["claim_acquired_at"] = None
                 t["claim_lease_expires_at"] = None

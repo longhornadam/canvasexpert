@@ -229,6 +229,16 @@
         warnings.push("Per-assignment auto-push is enabled only for policy-eligible cases.");
       }
     }
+    if (first.tiered) {
+      frozen.forEach(function (review) {
+        (review.tiers || []).forEach(function (tier) {
+          details.push((review.course_name || "Course") + " — " + tier.label +
+            ": " + tier.group + " (" + tier.student_count + " students)");
+        });
+      });
+      warnings.push("Canvas will create one assignment/gradebook column per tier.");
+      warnings.push("Only that group's students can see each assignment (only_visible_to_overrides=true).");
+    }
     return {
       title: "Review Canvas content push",
       action: confirmLabel || "Review this Canvas change before continuing.",

@@ -313,6 +313,7 @@ def _receipt_targets(targets: list[dict]) -> list[dict]:
         "returned_object_id": t.get("returned_object_id"),
         "returned_object_url": t.get("returned_object_url"),
         "error_code": t.get("error_code"),
+        "steps": _safe_steps(t.get("steps", [])),
     } for t in targets]
 
 
@@ -332,4 +333,13 @@ def _project_target_results(results: list[dict]) -> list[dict]:
         "returned_object_id": r.get("returned_object_id"),
         "returned_object_url": r.get("returned_object_url"),
         "error_code": r.get("error_code"),
+        "steps": _safe_steps(r.get("steps", [])),
     } for r in results]
+
+
+def _safe_steps(steps: list[dict]) -> list[dict]:
+    allowed = (
+        "step_key", "state", "returned_object_id",
+        "returned_object_url", "error_code",
+    )
+    return [{key: step.get(key) for key in allowed} for step in steps]

@@ -1,13 +1,9 @@
 """AssignmentForge adapter for the crash-safe ``content.assignment`` kind.
 
-Core assignment creation + dependencies: parse an ``<ASSIGNMENTFORGE_JSON>``
-file, validate canonical fields, create a single whole-class assignment per
-course, optionally upload a printable PDF, optionally attach to a module,
-and optionally schedule PowerGrader auto-score.
+Parse and safely apply whole-class or Canvas-group-differentiated assignments.
 
 Excluded from this adapter:
 - Rubric association (slice 11c1).
-- Differentiation tiers (slice 11b3).
 - Placeholder resolution.
 """
 import mimetypes
@@ -17,6 +13,7 @@ from pathlib import Path
 import requests
 
 from .. import models
+from .assignment_groups import GroupResolutionError, resolve_assignment_groups
 from api.webui import af, canvas_client, config
 
 
@@ -39,11 +36,20 @@ class AssignmentAdapter:
         if not name:
             raise ValueError("AssignmentForge file must have a title")
 
-        if data.get("tiers"):
-            raise ValueError(
-                "Tiered assignments are not supported through this "
-                "push path yet. Use the base whole-class fields only."
-            )
+        tier_rows = af.tier_payloads(data)
+        tiers = [] if not data.get("tiers") else [{
+            "label": str(row.get("label") or "").strip(),
+            "group": str(row.get("group") or "").strip(),
+            "title": str(row.get("title") or "").strip(),
+            "description": str(row.get("description") or ""),
+        } for row in tier_rows]
+        normalized_groups = [_normalize(row["group"]) for row in tiers]
+        if len(set(normalized_groups)) != len(normalized_groups):
+            raise ValueError("Tier group names must be unique after trimming and case-folding")
+        if tiers and prepare_request.get("rubric_path"):
+            raise ValueError("Rubric association is not supported for tiered assignments")
+        if tiers and prepare_request.get("printable_path"):
+            raise ValueError("Printable attachments are not supported for tiered assignments")
 
         description = str(data.get("description") or "")
         if af.PLACEHOLDER_RE.search(description):
@@ -69,6 +75,8 @@ class AssignmentAdapter:
             "post_to_sis": bool(prepare_request.get("post_to_sis")),
             "source_path": path,
         }
+        if tiers:
+            payload["tiers"] = tiers
         if sub_fields.get("allowed_extensions"):
             payload["allowed_extensions"] = sub_fields["allowed_extensions"]
         if sub_fields.get("external_tool_tag_attributes"):
@@ -122,6 +130,7 @@ class AssignmentAdapter:
             "module_name": payload.get("module_name"),
             "autoscore_schedule": payload.get("autoscore_schedule"),
             "autoscore_auto_push": payload.get("autoscore_auto_push"),
+            "tiers": payload.get("tiers"),
         }
         return models.sha256_dict(keys)
 
@@ -161,6 +170,25 @@ class AssignmentAdapter:
     def capture_baseline(self, payload: dict, target: dict) -> dict:
         course_id = target["course_id"]
         name = payload.get("name", "")
+        if payload.get("tiers"):
+            try:
+                groups = resolve_assignment_groups(course_id, payload["tiers"])
+            except GroupResolutionError as exc:
+                return {"canvas_error": str(exc)}
+            assignments, error = canvas_client._canvas_get_all(
+                f"/api/v1/courses/{course_id}/assignments",
+                {"per_page": 100, "search_term": name},
+            )
+            if error:
+                return {"canvas_error": "Canvas assignments could not be read."}
+            matches = [
+                {"id": str(row.get("id")), "html_url": row.get("html_url")}
+                for row in (assignments or [])
+                if row.get("id") is not None
+                and _normalize(row.get("name")) == _normalize(name)
+            ]
+            return {"group_snapshot": groups["safe"], "existing_assignments": matches}
+
         baseline = {"existing_assignment": None}
         assignments, error = canvas_client._canvas_get(
             f"/api/v1/courses/{course_id}/assignments",
@@ -182,6 +210,22 @@ class AssignmentAdapter:
         return baseline
 
     def check_drift(self, payload: dict, target: dict, baseline: dict) -> bool:
+        if payload.get("tiers"):
+            if baseline is None or "canvas_error" in baseline:
+                return True
+            fresh = self.capture_baseline(payload, target)
+            if "canvas_error" in fresh:
+                return True
+            if fresh.get("group_snapshot") != baseline.get("group_snapshot"):
+                return True
+            known = {
+                str(step.get("returned_object_id"))
+                for step in target.get("steps", [])
+                if str(step.get("step_key", "")).startswith("create_tier_assignment:")
+                and step.get("returned_object_id") is not None
+            }
+            current = {row["id"] for row in fresh.get("existing_assignments", [])}
+            return bool(current - known)
         if baseline is None:
             return False
         if "canvas_error" in baseline:
@@ -221,7 +265,7 @@ class AssignmentAdapter:
         if payload.get("autoscore_schedule"):
             autoscore["scheduled"] = True
             autoscore["auto_push"] = bool(payload.get("autoscore_auto_push"))
-        return {
+        review = {
             "course_name": course_name,
             "assignment_name": payload.get("name"),
             "points": payload.get("points"),
@@ -236,6 +280,26 @@ class AssignmentAdapter:
             "dependencies": dependencies,
             "autoscore": autoscore,
         }
+        if payload.get("tiers"):
+            safe = baseline.get("group_snapshot") or {}
+            review.update({
+                "tiered": True,
+                "tier_count": len(payload["tiers"]),
+                "tiers": [{
+                    "label": row.get("label"),
+                    "group": row.get("group_name"),
+                    "student_count": row.get("student_count"),
+                } for row in safe.get("tiers", [])],
+                "only_visible_to_overrides": True,
+                "tier_warning": (
+                    "Canvas will create one assignment/gradebook column per tier; "
+                    "only that group's students can see each assignment."
+                ),
+            })
+            review["baseline_has_existing"] = bool(baseline.get("existing_assignments"))
+            review["baseline_existing_id"] = None
+            review["baseline_existing_url"] = None
+        return review
 
     # ── Execute ──────────────────────────────────────────────────────────
 
@@ -243,6 +307,8 @@ class AssignmentAdapter:
         self, payload: dict, target: dict, baseline: dict,
         claim: dict, context,
     ) -> dict:
+        if payload.get("tiers"):
+            return _execute_tiered(payload, target, baseline, context)
         course_id = target["course_id"]
         name = payload.get("name", "Untitled assignment")
         steps = _ordered_steps(target)
@@ -463,6 +529,8 @@ class AssignmentAdapter:
     # ── Reconciliation ───────────────────────────────────────────────────
 
     def reconcile(self, payload: dict, target: dict, baseline: dict) -> dict:
+        if payload.get("tiers"):
+            return _reconcile_tiered(payload, target)
         course_id = target["course_id"]
         steps = _ordered_steps(target)
         step = _step(steps, "create_assignment")
@@ -576,6 +644,329 @@ def _find_assignment_group(course_id: str, name: str) -> int | None:
     return None
 
 
+def _reconcile_tiered(payload: dict, target: dict) -> dict:
+    """Prove every completed tier dependency by exact durable identity."""
+    course_id = target["course_id"]
+    stored_steps = _ordered_steps(target)
+    projected = []
+    module_step = _find_step(stored_steps, "create_module")
+    module_id = module_step.get("returned_object_id")
+
+    if payload.get("module_name") and module_id:
+        module, error = canvas_client._canvas_get(
+            f"/api/v1/courses/{course_id}/modules/{module_id}"
+        )
+        if error or not module or str(module.get("id")) != str(module_id):
+            return _tier_reconcile_result("sent_unknown", projected)
+        projected.append(_applied_safe_step(module_step))
+
+    for index, _tier in enumerate(payload.get("tiers") or []):
+        assignment_step = _find_step(stored_steps, f"create_tier_assignment:{index}")
+        assignment_id = assignment_step.get("returned_object_id")
+        if not assignment_id:
+            return _tier_reconcile_unfinished(assignment_step, projected)
+        assignment, error = canvas_client._canvas_get(
+            f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
+        )
+        if (error or not assignment
+                or str(assignment.get("id")) != str(assignment_id)):
+            return _tier_reconcile_result("sent_unknown", projected)
+        projected.append(_applied_safe_step(
+            assignment_step, returned_object_url=assignment.get("html_url")
+        ))
+
+        override_step = _find_step(stored_steps, f"create_tier_override:{index}")
+        override_id = override_step.get("returned_object_id")
+        if not override_id:
+            return _tier_reconcile_unfinished(override_step, projected)
+        override, error = canvas_client._canvas_get(
+            f"/api/v1/courses/{course_id}/assignments/{assignment_id}/overrides/{override_id}"
+        )
+        if error or not override or str(override.get("id")) != str(override_id):
+            return _tier_reconcile_result("sent_unknown", projected)
+        projected.append(_applied_safe_step(override_step))
+
+        if payload.get("module_name"):
+            attach_step = _find_step(stored_steps, f"attach_module:{index}")
+            item_id = attach_step.get("returned_object_id")
+            step_module_id = attach_step.get("module_id") or module_id
+            if not item_id or not step_module_id:
+                return _tier_reconcile_unfinished(attach_step, projected)
+            item, error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/modules/{step_module_id}/items/{item_id}"
+            )
+            if (error or not item
+                    or str(item.get("id")) != str(item_id)
+                    or str(item.get("type", "")).casefold() != "assignment"
+                    or str(item.get("content_id")) != str(assignment_id)):
+                return _tier_reconcile_result("sent_unknown", projected)
+            projected.append(_applied_safe_step(attach_step))
+
+        if payload.get("autoscore_schedule"):
+            schedule_step = _find_step(stored_steps, f"schedule_autoscore:{index}")
+            expected_job_id = _autoscore_queue().make_job_id(course_id, assignment_id)
+            if not schedule_step.get("returned_object_id"):
+                return _tier_reconcile_unfinished(schedule_step, projected)
+            if str(schedule_step.get("returned_object_id")) != str(expected_job_id):
+                return _tier_reconcile_result("sent_unknown", projected)
+            try:
+                jobs = (_autoscore_queue().load_queue() or {}).get("jobs", [])
+            except Exception:
+                return _tier_reconcile_result("sent_unknown", projected)
+            job = next(
+                (row for row in jobs if str(row.get("job_id")) == str(expected_job_id)),
+                None,
+            )
+            if (not job or str(job.get("course_id")) != str(course_id)
+                    or str(job.get("assignment_id")) != str(assignment_id)):
+                return _tier_reconcile_result("sent_unknown", projected)
+            projected.append(_applied_safe_step(schedule_step))
+
+    return _tier_reconcile_result("applied", projected)
+
+
+def _tier_reconcile_unfinished(step: dict, projected: list[dict]) -> dict:
+    state = "sent_unknown" if step.get("outbound_started_at") else "pending"
+    return _tier_reconcile_result(state, projected)
+
+
+def _tier_reconcile_result(state: str, steps: list[dict]) -> dict:
+    return {
+        "state": state,
+        "returned_object_id": None,
+        "returned_object_url": None,
+        "steps": steps,
+    }
+
+
+def _applied_safe_step(step: dict, returned_object_url=None) -> dict:
+    return {
+        "step_key": step.get("step_key"),
+        "state": "applied",
+        "returned_object_id": step.get("returned_object_id"),
+        "returned_object_url": returned_object_url or step.get("returned_object_url"),
+        "error_code": None,
+    }
+
+
+def _execute_tiered(payload: dict, target: dict, baseline: dict, context) -> dict:
+    """Apply ordered tier assignment/override steps without persisting roster IDs."""
+    course_id = target["course_id"]
+    tiers = payload["tiers"]
+    steps = _ordered_steps(target)
+    try:
+        resolved = resolve_assignment_groups(course_id, tiers)
+    except GroupResolutionError:
+        return _build_result("failed", steps=steps, error_code="group_resolution_failed")
+    if resolved["safe"] != baseline.get("group_snapshot"):
+        return _build_result("failed", steps=steps, error_code="group_membership_drift")
+
+    safe_by_index = {row["index"]: row for row in resolved["safe"]["tiers"]}
+    transient_ids = resolved["student_ids_by_group"]
+    last_assignment_id = None
+    last_assignment_url = None
+
+    for index, tier in enumerate(tiers):
+        assignment_key = f"create_tier_assignment:{index}"
+        override_key = f"create_tier_override:{index}"
+        assignment_step = _ensure_step(steps, assignment_key)
+        assignment_id = assignment_step.get("returned_object_id")
+        assignment_url = assignment_step.get("returned_object_url")
+
+        if assignment_id:
+            existing, error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
+            )
+            if error or not existing:
+                return _build_result(
+                    "sent_unknown", steps=steps,
+                    error_code="assignment_exact_id_unverified",
+                )
+            assignment_step["state"] = "skipped"
+            assignment_url = existing.get("html_url") or assignment_url
+        elif assignment_step.get("outbound_started_at"):
+            return _build_result(
+                "sent_unknown", steps=steps,
+                error_code="assignment_creation_unresolved",
+            )
+        else:
+            assignment_data = _assignment_data(payload, tier["description"], course_id)
+            assignment_data["only_visible_to_overrides"] = True
+            request = {"assignment": assignment_data}
+            path = f"/api/v1/courses/{course_id}/assignments"
+            marked = context.before_send(assignment_key, models.sha256_dict({
+                "method": "POST", "path": path, "payload": request,
+            }))
+            _replace_local_step(steps, marked)
+            response, error = canvas_client._canvas_send("POST", path, request)
+            if error:
+                state = "sent_unknown" if _is_uncertain(error) else _tier_failure_state(steps)
+                marked["state"] = state if state == "sent_unknown" else "failed"
+                marked["error_code"] = "timeout_or_disconnect" if state == "sent_unknown" else "canvas_rejected"
+                marked["private_diagnostic"] = type(error).__name__
+                marked = context.checkpoint_step(marked)
+                _replace_local_step(steps, marked)
+                return _build_result(state, steps=steps, error_code=marked["error_code"])
+            assignment_id = str(response.get("id")) if isinstance(response, dict) and response.get("id") is not None else None
+            assignment_url = response.get("html_url") if isinstance(response, dict) else None
+            if not assignment_id:
+                marked["state"] = "sent_unknown"
+                marked["error_code"] = "unparseable_response"
+                marked["private_diagnostic"] = "missing assignment id"
+                marked = context.checkpoint_step(marked)
+                _replace_local_step(steps, marked)
+                return _build_result("sent_unknown", steps=steps, error_code="unparseable_response")
+            marked["state"] = "applied"
+            marked = context.checkpoint_step(
+                marked, returned_object_id=assignment_id,
+                returned_object_url=assignment_url,
+            )
+            _replace_local_step(steps, marked)
+
+        last_assignment_id, last_assignment_url = assignment_id, assignment_url
+        override_step = _ensure_step(steps, override_key)
+        override_id = override_step.get("returned_object_id")
+        if override_id:
+            existing, error = canvas_client._canvas_get(
+                f"/api/v1/courses/{course_id}/assignments/{assignment_id}/overrides/{override_id}"
+            )
+            if error or not existing:
+                return _build_result("sent_unknown", steps=steps, error_code="override_exact_id_unverified")
+            override_step["state"] = "skipped"
+        elif override_step.get("outbound_started_at"):
+            return _build_result("sent_unknown", steps=steps, error_code="override_creation_unresolved")
+        else:
+            safe_tier = safe_by_index[index]
+            override_request = {"assignment_override": {
+                "title": f"{tier['label']} assignment access",
+                "student_ids": transient_ids[safe_tier["group_id"]],
+            }}
+            for key in ("due_at", "unlock_at", "lock_at"):
+                if payload.get(key):
+                    override_request["assignment_override"][key] = payload[key]
+            path = f"/api/v1/courses/{course_id}/assignments/{assignment_id}/overrides"
+            # Persist only the accepted safe membership digest, never the request body.
+            marked = context.before_send(override_key, models.sha256_dict({
+                "method": "POST", "path": path,
+                "membership_digest": safe_tier["membership_digest"],
+            }))
+            _replace_local_step(steps, marked)
+            response, error = canvas_client._canvas_send("POST", path, override_request)
+            if error:
+                state = "sent_unknown" if _is_uncertain(error) else "partial"
+                marked["state"] = state if state == "sent_unknown" else "failed"
+                marked["error_code"] = "timeout_or_disconnect" if state == "sent_unknown" else "override_rejected"
+                marked["private_diagnostic"] = type(error).__name__
+                marked = context.checkpoint_step(marked)
+                _replace_local_step(steps, marked)
+                return _build_result(state, steps=steps, error_code=marked["error_code"])
+            override_id = str(response.get("id")) if isinstance(response, dict) and response.get("id") is not None else None
+            if not override_id:
+                marked["state"] = "sent_unknown"
+                marked["error_code"] = "unparseable_response"
+                marked["private_diagnostic"] = "missing override id"
+                marked = context.checkpoint_step(marked)
+                _replace_local_step(steps, marked)
+                return _build_result("sent_unknown", steps=steps, error_code="unparseable_response")
+            marked["state"] = "applied"
+            marked = context.checkpoint_step(marked, returned_object_id=override_id)
+            _replace_local_step(steps, marked)
+
+        if payload.get("module_name"):
+            result = _attach_to_module(
+                course_id, assignment_id, payload["name"], payload["module_name"],
+                steps, context, attach_step_key=f"attach_module:{index}",
+            )
+            if result.get("state") != "applied":
+                if result.get("state") == "failed":
+                    result["state"] = "partial"
+                return result
+
+        if payload.get("autoscore_schedule"):
+            result = _schedule_tier_autoscore(
+                payload, course_id, assignment_id, index, steps, context
+            )
+            if result is not None:
+                return result
+
+    return _build_result(
+        "applied", steps=steps,
+        returned_object_id=None, returned_object_url=None,
+    )
+
+
+def _assignment_data(payload: dict, description: str, course_id: str) -> dict:
+    data = {
+        "name": payload.get("name", "Untitled assignment"),
+        "submission_types": payload.get("submission_types", ["online_text_entry"]),
+    }
+    if description:
+        data["description"] = description
+    if payload.get("points") is not None:
+        data["points_possible"] = float(payload["points"])
+    for key in ("allowed_extensions", "external_tool_tag_attributes"):
+        if payload.get(key):
+            data[key] = payload[key]
+    for key in ("due_at", "unlock_at", "lock_at"):
+        if payload.get(key):
+            data[key] = payload[key]
+    if payload.get("post_to_sis"):
+        data["post_to_sis"] = True
+    if payload.get("published"):
+        data["published"] = True
+    assignment_group_name = payload.get("assignment_group_name")
+    if assignment_group_name:
+        group_id = _find_assignment_group(course_id, assignment_group_name)
+        if group_id is not None:
+            data["assignment_group_id"] = group_id
+    return data
+
+
+def _tier_failure_state(steps: list[dict]) -> str:
+    return "partial" if any(
+        step.get("state") in ("applied", "skipped")
+        and step.get("returned_object_id")
+        for step in steps
+    ) else "failed"
+
+
+def _schedule_tier_autoscore(payload, course_id, assignment_id, index, steps, context):
+    queue = _autoscore_queue()
+    settings = _autoscore_settings(payload)
+    policy = _autoscore_push_policy(payload)
+    job_id = queue.make_job_id(course_id, assignment_id)
+    key = f"schedule_autoscore:{index}"
+    step = _ensure_step(steps, key)
+    if step.get("returned_object_id") == job_id and step.get("state") in ("applied", "skipped"):
+        step["state"] = "skipped"
+        return None
+    marked = context.before_send(key, models.sha256_dict({
+        "assignment_id": assignment_id, "due_at": payload.get("due_at"),
+        "settings": settings, "auto_push": _as_bool(payload.get("autoscore_auto_push")),
+        "push_policy": policy,
+    }))
+    _replace_local_step(steps, marked)
+    try:
+        job = _schedule_autoscore(
+            course_id=course_id, course_name=_active_course_name(course_id),
+            assignment_id=assignment_id, assignment_name=payload["name"],
+            payload=payload, settings=settings, push_policy=policy, queue=queue,
+        )
+        if str(job.get("job_id") or job_id) != job_id:
+            raise ValueError("unexpected queue job ID")
+        marked["state"] = "applied"
+        marked = context.checkpoint_step(marked, returned_object_id=job_id)
+        _replace_local_step(steps, marked)
+        return None
+    except Exception as exc:
+        marked["state"] = "failed"
+        marked["error_code"] = "autoscore_queue_failed"
+        marked["private_diagnostic"] = type(exc).__name__
+        marked = context.checkpoint_step(marked)
+        _replace_local_step(steps, marked)
+        return _build_result("partial", steps=steps, error_code="autoscore_queue_failed")
+
+
 def _validate_printable_pdf(pdf_path: str) -> tuple:
     """Validate a printable PDF path. Returns (Path, None) or (None, error)."""
     if not pdf_path:
@@ -676,6 +1067,7 @@ def _file_link_html(uploaded_file: dict) -> str:
 def _attach_to_module(
     course_id: str, assignment_id: str, name: str,
     module_name: str, steps: list[dict], context,
+    *, attach_step_key: str = "attach_module",
 ) -> dict:
     """Find or create a Canvas module and attach the assignment.
 
@@ -683,7 +1075,7 @@ def _attach_to_module(
     is mutated in place; on failure returns a *build_result early-return dict.
     """
     create_module_step = _find_step(steps, "create_module")
-    attach_step = _find_step(steps, "attach_module")
+    attach_step = _find_step(steps, attach_step_key)
     module_id = _module_id_from_steps(create_module_step, attach_step)
 
     if not module_id:
@@ -707,7 +1099,7 @@ def _attach_to_module(
             )
         if matches:
             module_id = str(matches[0].get("id"))
-            attach_step = _ensure_step(steps, "attach_module")
+            attach_step = _ensure_step(steps, attach_step_key)
             attach_step["module_id"] = module_id
         else:
             create_module_step = _ensure_step(steps, "create_module")
@@ -769,7 +1161,7 @@ def _attach_to_module(
             _replace_local_step(steps, create_module_step)
 
     # ── Attach the assignment to the module ──────────────────────────
-    attach_step = _ensure_step(steps, "attach_module")
+    attach_step = _ensure_step(steps, attach_step_key)
     attach_step["module_id"] = str(module_id)
     item_id = attach_step.get("returned_object_id")
     if attach_step.get("state") in ("applied", "skipped") and item_id:
@@ -800,7 +1192,7 @@ def _attach_to_module(
     digest = models.sha256_dict({
         "method": "POST", "path": item_path, "payload": item_request,
     })
-    marked = context.before_send("attach_module", digest)
+    marked = context.before_send(attach_step_key, digest)
     marked["module_id"] = str(module_id)
     _replace_local_step(steps, marked)
     attach_step = marked
@@ -855,6 +1247,20 @@ def _ordered_steps(target: dict) -> list[dict]:
         step.get("step_key"): step
         for step in target.get("steps", [])
     }
+    if any(":" in str(key) for key in existing):
+        def tier_order(step):
+            key = str(step.get("step_key") or "")
+            if key == "create_module":
+                return (-1, 0)
+            prefix, _, suffix = key.partition(":")
+            rank = {
+                "create_tier_assignment": 0,
+                "create_tier_override": 1,
+                "attach_module": 2,
+                "schedule_autoscore": 3,
+            }.get(prefix, 9)
+            return (int(suffix) if suffix.isdigit() else 999999, rank)
+        return sorted(existing.values(), key=tier_order)
     order = (
         "create_assignment", "create_module", "attach_module",
         "schedule_autoscore",

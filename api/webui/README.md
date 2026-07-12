@@ -264,10 +264,11 @@ into student and answer-key DOCX/PDF files. PDFs are rendered with the installed
 Microsoft Edge through Playwright; DOCX files are rendered through bundled Pandoc.
 
 ### Assignment tab
-Pick a whole-class `<ASSIGNMENTFORGE_JSON>` file, then **Validate** / **Push
-assignment…**. Delivery: dates, grading category, module, SIS, publish, and an
-optional per-assignment scheduled Auto-Score job. Tier differentiation and rubric
-association are not part of this operation path.
+Pick an `<ASSIGNMENTFORGE_JSON>` file, then **Validate** / **Push assignment…**.
+Delivery: dates, grading category, module, SIS, publish, and an optional
+per-assignment scheduled Auto-Score job. Authored tiers use the course's
+teacher-selected Roster group set and create one group-visible Canvas assignment
+and gradebook column per tier. Rubric association is not part of this operation path.
 
 ### Page tab
 Pick a `<PAGEFORGE_JSON>` file, then **Validate** / **Push page…**. Module placement

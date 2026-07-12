@@ -119,7 +119,7 @@ def test_payload_build_raises_on_missing_path():
         adapter.build_payload({})
 
 
-def test_payload_build_raises_on_tiers(tmp_path, monkeypatch):
+def test_payload_build_accepts_tiers(tmp_path, monkeypatch):
     af_file = tmp_path / "tiered.assignmentforge.json"
     af_file.write_text(
         """<ASSIGNMENTFORGE_JSON>
@@ -128,8 +128,11 @@ def test_payload_build_raises_on_tiers(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     adapter = AssignmentAdapter()
-    with pytest.raises(ValueError, match="Tiered assignments"):
-        adapter.build_payload({"path": str(af_file)})
+    payload = adapter.build_payload({"path": str(af_file)})
+    assert payload["tiers"] == [{
+        "label": "Support", "group": "Support", "title": "Tiered",
+        "description": "<p>Hi</p>",
+    }]
 
 
 def test_payload_build_raises_on_placeholders(tmp_path, monkeypatch):
