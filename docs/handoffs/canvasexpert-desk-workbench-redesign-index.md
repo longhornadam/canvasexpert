@@ -62,7 +62,7 @@ Before any redesign implementation:
 | 11c0 | `archive/canvasexpert-redesign-11c0-rubric-path-audit.md` | 10r |
 | 11c1 | `archive/canvasexpert-redesign-11c1-rubric-operation.md` | 11c0 |
 | 11d0 | `archive/canvasexpert-redesign-11d0-quiz-operation-deferral.md` | 11r |
-| 11d1 | `canvasexpert-redesign-11d1-quiz-plan-whole-operation.md` | 11d0 |
+| 11d1 | `archive/canvasexpert-redesign-11d1-quiz-plan-whole-operation.md` | 11d0 |
 | 11d2 | `canvasexpert-redesign-11d2-quiz-differentiation-operation.md` | 11d1, 11b4 |
 | 11d3 | `canvasexpert-redesign-11d3-quiz-progress-browser-cutover.md` | 11d2 |
 | 11r | `archive/canvasexpert-redesign-11r-operation-integration-acceptance-repair.md` | 11a, 11b3, 11c1 |
