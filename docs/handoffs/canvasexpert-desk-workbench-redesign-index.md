@@ -1,34 +1,32 @@
-# Ferrari index: CanvasExpert Desk / Workbench / Instrument redesign
+# CanvasExpert Desk / Workbench / Instrument redesign
 
-Status: architecture and implementation sequence approved for specification only.
-Implementation is deferred until the user explicitly authorizes a slice.
+Status: architecture accepted. Operation ledger is the crash-safe backend safety
+layer for content pushes. Browser migration, SSE, and feedback parity are deferred
+to post-release. The remaining work is 11d2 (mechanical), 11d3-simplified
+(polling endpoint), and 15 (release acceptance).
 
-## Product decision
+## Product decisions (locked 2026-07-12)
 
-CanvasExpert is a dense expert console organized by **jobs -> courses -> students**.
-It emphasizes raw utility, multi-course scope, professional language, warm/dark
-scientific-instrument styling, and 1920px+ desktop use.
+1. **Polling, not SSE.** Operation progress is exposed via a polling GET endpoint
+   that returns current target/step states from the durable ledger. No event log,
+   no reconnection protocol, no asyncio threading. The ledger's checkpointed step
+   state is the source of truth.
 
-- **Desk**: Start, Continue, Attention, Prepared, Receipts, and cross-course state.
-- **Workbench**: one resumable job, a persistent Work rail, explicit focused course and
-  write targets, and a server-owned operation summary.
-- **Instrument**: an expanded view of the same job for grading, comparison, preview,
-  or delivery. It never duplicates the job/form.
+2. **Browser migration deferred.** The operation ledger is a backend safety layer
+   accessible via API. Legacy streaming routes remain active and are not shut down.
+   Browser migration to the operation-ledger path is a post-release UX improvement.
 
-Creation and pushing are first-class. Detected work does not dominate teacher intent.
-Operational labels remain terse: Work, Start, Continue, Attention, Scope, Prepared,
-Receipt. Do not add redundant labels such as “Teacher Jobs.”
+3. **Feedback stays on its existing path.** The feedback pipeline already has its
+   own safety layer (SAFE/PRIVATE zones, pseudonymization, teacher review before
+   push). Operation-ledger integration for feedback is deferred to post-release.
 
-## Stop-line prerequisite
+4. **UI workbench slices deferred.** PowerGrader workbench (12a), roster workbench
+   (13d3), settings system map (14b1), and secondary surfaces (14b2) are
+   post-release polish. The backends are complete and accessible via API.
 
-Before any redesign implementation:
-
-1. Resolve and accept/archive the active `webui-09` and PowerGrader setup handoffs.
-2. Reconcile uncommitted changes overlapping `base.html`, PowerGrader setup files,
-   `test_webui_template_contracts.py`, and module maps.
-3. Preserve unrelated engine refactoring and the handoff archive move.
-4. Fetch and compare `dev` with `origin/dev` and `main`; do not merge or clean histories.
-5. Establish the baseline in slice 00.
+5. **Release criteria.** Release = all registered operation kinds pass their
+   focused tests, the full API test suite is green, and the operation ledger
+   recovers correctly from a simulated crash. No browser runtime check required.
 
 ## Durable contracts
 
@@ -36,69 +34,49 @@ Before any redesign implementation:
 - `docs/contracts/operation-ledger-contract.md`
 - Existing `docs/contracts/feedback-scoring-contract.md`
 
-## Dependency-ordered slices
+## Slice status
 
-| Slice | Handoff | Depends on |
+### Accepted and archived
+
+| Slice | Description | Status |
 |---|---|---|
-| 00 | `canvasexpert-redesign-00-baseline-gate.md` | none |
-| 01 | `canvasexpert-redesign-01-visual-foundation.md` | 00 |
-| 02 | `canvasexpert-redesign-02-shared-context.md` | 01 |
-| 03 | `canvasexpert-redesign-03-readiness-strip.md` | 02 |
-| 04 | `canvasexpert-redesign-04-powergrader-push-safety.md` | 00 |
-| 05a | `canvasexpert-redesign-05a-receipt-store.md` | 04 |
-| 05b | `canvasexpert-redesign-05b-curve-storage-relocation.md` | 05a |
-| 06a | `canvasexpert-redesign-06a-work-registry.md` | 02, 03, 05a |
-| 06b | `canvasexpert-redesign-06b-work-discovery.md` | 06a |
-| 07 | `canvasexpert-redesign-07-desk.md` | 06b |
-| 08 | `canvasexpert-redesign-08-creation-workbench.md` | 07 |
-| 09 | `canvasexpert-redesign-09-creation-instrument.md` | 08 |
-| 10 | `canvasexpert-redesign-10-operation-ledger-pilot.md` | 05a, 08 |
-| 10r | `canvasexpert-redesign-10r-operation-ledger-acceptance-repair.md` | 10 |
-| 11a | `archive/canvasexpert-redesign-11a-quick-operation.md` | 10r |
-| 11b1 | `archive/canvasexpert-redesign-11b1-assignment-core-operation.md` | 10r |
-| 11b2 | `archive/canvasexpert-redesign-11b2-assignment-dependencies.md` | 11b1 |
-| 11b3 | `archive/canvasexpert-redesign-11b3-assignment-autoscore.md` | 11b2 |
-| 11b4 | `archive/canvasexpert-redesign-11b4-assignment-differentiation.md` | 11b3, 11r |
-| 11c0 | `archive/canvasexpert-redesign-11c0-rubric-path-audit.md` | 10r |
-| 11c1 | `archive/canvasexpert-redesign-11c1-rubric-operation.md` | 11c0 |
-| 11d0 | `archive/canvasexpert-redesign-11d0-quiz-operation-deferral.md` | 11r |
-| 11d1 | `archive/canvasexpert-redesign-11d1-quiz-plan-whole-operation.md` | 11d0 |
-| 11d2 | `canvasexpert-redesign-11d2-quiz-differentiation-operation.md` | 11d1, 11b4 |
-| 11d3 | `canvasexpert-redesign-11d3-quiz-progress-browser-cutover.md` | 11d2 |
-| 11r | `archive/canvasexpert-redesign-11r-operation-integration-acceptance-repair.md` | 11a, 11b3, 11c1 |
-| 12a | `canvasexpert-redesign-12a-powergrader-workbench.md` | 06a, 10r |
-| 12b0 | `canvasexpert-redesign-12b0-feedback-parity-matrix.md` | 12a |
-| 12b1 | `canvasexpert-redesign-12b1-feedback-import-lane.md` | 12b0 |
-| 12b2 | `canvasexpert-redesign-12b2-feedback-batch-lane.md` | 12b1 |
-| 12b3 | `canvasexpert-redesign-12b3-feedback-push-safety.md` | 12b2, 10r |
-| 12b4 | `canvasexpert-redesign-12b4-feedback-persona-folders.md` | 12b2 |
-| 12b5 | `canvasexpert-redesign-12b5-feedback-parity-acceptance.md` | 12b3, 12b4 |
-| 13a | `canvasexpert-redesign-13a-late-policy-operation.md` | 05a, 10r |
-| 13b1 | `canvasexpert-redesign-13b1-sweep-operation.md` | 05a, 10r |
-| 13b2 | `canvasexpert-redesign-13b2-extension-operation.md` | 05a, 10r |
-| 13c | `canvasexpert-redesign-13c-curve-operation.md` | 05b, 10r |
-| 13d1 | `canvasexpert-redesign-13d1-roster-group-create.md` | 05a, 10r |
-| 13d2 | `canvasexpert-redesign-13d2-roster-membership.md` | 13d1 |
-| 13d3 | `canvasexpert-redesign-13d3-roster-workbench.md` | 13d2 |
-| 13e | `canvasexpert-redesign-13e-routines-integration.md` | 05a, 06a |
-| 14a | `canvasexpert-redesign-14a-gradebook-workbench.md` | 13a, 13b1, 13b2, 13c |
-| 14b1 | `canvasexpert-redesign-14b1-settings-system-map.md` | 12a, 13d3, 13e |
-| 14b2 | `canvasexpert-redesign-14b2-secondary-surfaces.md` | 14b1 |
-| 14c | `canvasexpert-redesign-14c-navigation-legacy-cleanup.md` | 11a, 11b4, 11c1, 11d3, 12b5, 14a, 14b1, 14b2 |
-| 15 | `canvasexpert-redesign-15-release-acceptance.md` | all prior |
+| 00-10r | Baseline, visual foundation, shared context, readiness, receipts, work registry, desk, workbench, operation-ledger pilot + repair | archived |
+| 11a | Quick assignment operation | archived |
+| 11b1-11b4 | Assignment operation (core, dependencies, autoscore, differentiation) | archived |
+| 11c0-11c1 | Rubric path audit + operation | archived |
+| 11d0 | Quiz operation deferral | archived |
+| 11d1 | Quiz plan and whole-class operation | archived |
+| 11r | Operation integration acceptance repair | archived |
+| 13a-13c | Gradebook operations (late policy, sweep, extension, curve) | archived |
+| 13d1-13d2 | Roster group-set and membership | archived |
+| 13e | Routines integration | archived |
+| 14a | Gradebook workbench composition | archived |
 
-Slices are accepted sequentially. A later handoff being present is not authorization to
-start it. Each implementation is one commit by default and remains active until Ferrari
-or the user reviews evidence and archives it.
+### Remaining work
 
-Discovery gates 11c0 and 12b0 are deliberately Ferrari-owned. Before delegating their
-dependent Toyota slices, Ferrari must replace any named placeholders or “from the accepted
-matrix” ownership references with exact files, symbols, interfaces, and commands learned
-from the gate. The dependent draft is not Toyota-ready until that amendment is reviewed.
+| Slice | Track | Description | Depends on |
+|---|---|---|---|
+| 11d2 | Direct (smaller model) | Quiz differentiation adapter — same pattern as 11b4. Safe group/extra-time resolution, checkpointed override steps. Browser stays legacy. | 11d1, 11b4 |
+| 11d3 | Direct (smaller model) | Polling endpoint only — one GET route returning target/step states. No SSE, no event log, no asyncio threading. Browser polling loop optional. | 11d2 |
+| 15 | Design (frontier) | Release acceptance — run all focused + full API tests, verify restart recovery, declare done. No browser runtime check. | 11d2, 11d3 |
+
+### Deferred to post-release
+
+| Slice | Reason |
+|---|---|
+| 12a | PowerGrader workbench — UI polish, backend complete |
+| 12b0-12b5 | Feedback parity — feedback stays on existing safe path |
+| 13d3 | Roster workbench — UI polish, backend complete |
+| 14b1-14b2 | Settings/secondary surfaces — UI polish |
+| 14c | Navigation legacy cleanup — nothing to clean up (browser migration deferred) |
+
+Slices are implemented directly (Track 1) or with a brief design note (Track 2).
+No handoff documents. The commit message + diff is the record. See AGENTS.md
+"Agent workflow: two-track model" for the full policy.
 
 ## Cross-cutting safety rules
 
-Every handoff inherits and repeats the relevant rules:
+Every implementation inherits these rules:
 
 - Never commit secrets, student data, private local paths, or real course data.
 - Focused course and write-target courses are distinct.

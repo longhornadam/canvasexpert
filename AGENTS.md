@@ -189,126 +189,105 @@ a nonstandard location, `CANVAS_EXPERT_EDGE_PATH` can point to `msedge.exe`.
    model is "FERPA safe", "guaranteed anonymous", or unable to infer identity. Tell
    teachers to review SAFE files before uploading them.
 
-## Ferrari / Toyota workflow
+## Agent workflow: two-track model
 
-We split planning from implementation to save tokens, compute, and cost:
+We use model switching to save tokens and cost, but the old Ferrari/Toyota handoff
+ceremony was the dominant token sink. The new model is simpler: **two tracks**,
+decided by whether the work involves an open architecture decision or is pure
+pattern replication.
 
-- **Ferrari = high-capability planning agent.** Use for planning, architecture,
-  security-sensitive changes, cross-cutting refactors, and anything touching the
-  guardrails above.
-- **Toyota = lower-cost implementation agent.** Use for well-scoped implementation
-  where the plan is already clear.
+### Track 1: Direct implementation (smaller model)
 
-The boundary is decision authority, not merely coding difficulty. If two competent
-engineers could make different choices that produce materially different behavior,
-architecture, safety, persistence, or user experience, Ferrari must make and document
-that choice before implementation is delegated.
+Use when the work follows an established pattern in the codebase. The existing
+adapter, route, or test file **is** the spec. No handoff document is written.
 
-### Ferrari decision authority
+Criteria — all must be true:
 
-Ferrari must decide and specify:
+- An existing implementation demonstrates the exact pattern (e.g., a registered
+  operation-ledger adapter, a gradebook route, a test file using the same mocks).
+- No new public contract, persistence model, or external-transmission path.
+- No guardrail-adjacent decision (credentials, FERPA, live Canvas writes, scheduled
+  auto-push, browser security).
+- Two competent engineers would produce materially the same code by pattern-matching.
 
-- Product behavior, workflow sequence, user-visible semantics, and navigation
-- Architecture, module ownership, dependency placement, initialization/load order,
-  and public interfaces
-- Cross-cutting abstractions, compatibility requirements, and migration/removal order
-- State ownership, persistence, enablement predicates, and invariants
-- Security, privacy, FERPA, external transmission, credentials, and live Canvas-write
-  behavior
-- Contracts, schemas, error behavior, scope exclusions, and rollback boundaries
-- Verification strategy, including which positive, negative, integration, and runtime
-  evidence actually proves the change
-- Commit sequencing and whether work may be grouped
+Direct-track work:
 
-If any of those decisions remain open, the task is not Toyota-ready. Ferrari must also
-inspect the actual integration points before writing the handoff; naming a file without
-resolving load order, ownership, or caller behavior is not sufficient architecture.
+- Read the reference implementation and the test pattern.
+- Implement in one commit (or one batch commit for grouped slices).
+- Self-review against the reference pattern.
+- Run focused tests + the full API test suite.
+- Report: commit hash, files changed, test counts, and the reference pattern used.
+- No handoff file. No archive ceremony. The commit message + diff is the record.
 
-Security-sensitive, guardrail-adjacent, external-transmission, live-write, shared
-cross-page initialization, and public-contract changes stay in the Ferrari lane unless
-the remaining implementation is purely mechanical after Ferrari has fully specified and
-reviewed the design.
+### Track 2: Design-then-implement (frontier model)
 
-### Toyota implementation authority
+Use when the work involves an architecture decision, a guardrail-adjacent change,
+or cross-cutting verification that two engineers might resolve differently.
 
-Toyota may decide only local implementation details that cannot alter the specified
-behavior or architecture, such as:
+Criteria — any one triggers Track 2:
 
-- Private helper decomposition and local variable names
-- Equivalent syntax behind a specified interface
-- Mechanical call-site migration
-- Styling values within explicit constraints
-- Fixture organization for already-specified assertions
-- Direct cleanup required to complete the specified change
+- New infrastructure (SSE, recovery, threading, persistence format).
+- Guardrail-adjacent: credentials, FERPA, live Canvas writes, scheduled auto-push.
+- Cross-cutting: touches multiple subsystems, public contracts, or migration order.
+- Verification strategy is not obvious from an existing pattern.
 
-Toyota must not invent or replace abstractions, reinterpret product or safety wording,
-choose a persistence model, broaden scope, weaken the verification oracle, or make an
-unresolved product/architecture/safety decision.
+Track-2 work:
 
-### Mandatory Toyota escalation
+- Write a **brief design note** (3-10 lines, not a 5-page handoff) in the commit
+  message or a `docs/reference/` note. State the decision and why.
+- Implement directly. No separate planning agent pass.
+- Self-review against the design note.
+- Run focused tests + the full API test suite.
+- For guardrail-adjacent changes, the user reviews the diff before merge.
 
-Toyota must stop and report the issue instead of guessing when:
+### What replaced the old handoff system
 
-- A named insertion point, symbol, interface, or assumption does not exist
-- Existing behavior contradicts the handoff
-- Multiple materially different implementations satisfy the prose
-- Satisfying the handoff requires changing another subsystem or public contract
-- A prescribed test cannot prove the claimed behavior
-- A guardrail or external side effect is involved but not completely specified
-- It discovers a regression outside the authorized repair scope
+- **No handoff documents.** The index entry + reference pattern is the spec for
+  Track 1. The design note in the commit message is the spec for Track 2.
+- **No archive ceremony.** Implemented slices are marked done in the index.
+  The commit history is the archive.
+- **No separate review pass.** The implementing agent self-reviews against the
+  reference pattern (Track 1) or the design note (Track 2). The user reviews
+  guardrail-adjacent changes.
+- **Batching encouraged.** Group related Track-1 slices into one commit when
+  context carries over (e.g., all gradebook adapters in one pass).
 
-### Toyota-ready handoff standard
+### Escalation (both tracks)
 
-**A plan handed to Toyota must be self-contained.** It must include:
+Stop and report instead of guessing when:
 
-- One bounded objective and, by default, one commit
-- Exact files, symbols, interfaces, and insertion/load order
-- Exact behavior, state transitions or pseudocode, edge cases, and invariants
-- Exact forbidden changes and out-of-scope systems
-- Exact positive and negative tests, portable test requirements, and commands
-- Required integration/runtime checks when templates, JavaScript, CSS, initialization,
-  or cross-module wiring are involved
-- Expected evidence in the implementer's reply
-- Explicit escalation/stop conditions
+- A named insertion point, symbol, interface, or assumption does not exist.
+- Existing behavior contradicts the plan.
+- Multiple materially different implementations satisfy the requirement.
+- Satisfying the requirement requires changing another subsystem or public contract.
+- A guardrail or external side effect is involved but not completely specified.
+- A regression is discovered outside the authorized scope.
 
-A handoff is not self-contained if Toyota must choose among materially different
-user-visible, architectural, safety, persistence, or verification outcomes.
+### Tests and worktree independence
 
-Source-text tests do not establish WebUI correctness. Changes to shared browser scripts,
-templates, navigation, initialization, or safety controls require loading every affected
-route in the rendered local app, checking the required globals/state, and confirming zero
-new browser-console errors. Backend pytest results cannot substitute for this check.
-
-Tests and tools must be worktree-independent: derive repository paths from the executing
+Tests must be worktree-independent: derive repository paths from the executing
 file or current workspace and never commit a developer-specific absolute path.
 
-### Acceptance authority and sequencing
-
-- Toyota implements one accepted handoff at a time, reports evidence, and stops.
-- Toyota does not declare architectural acceptance, archive its own handoff, or begin a
-  dependent handoff.
-- Ferrari reviews the diff, tests, runtime behavior, and required evidence before accepting
-  the slice or issuing the next one.
-- Only Ferrari or the user may move an accepted handoff to `docs/handoffs/archive/`.
-- A passing test suite is evidence, not completion; unmet acceptance criteria keep the
-  handoff active.
+Source-text tests do not establish WebUI correctness. Changes to shared browser
+scripts, templates, navigation, initialization, or safety controls require loading
+every affected route in the rendered local app, checking the required globals/state,
+and confirming zero new browser-console errors. Backend pytest results cannot
+substitute for this check.
 
 ## Handoffs and docs
 
-- New active implementation handoffs belong in `docs/handoffs/`.
-- Completed or historical handoffs belong in `docs/handoffs/archive/`.
-- Toyota implementers must leave active handoffs in place. Only Ferrari or the user may
-  archive a handoff after reviewing its diff and acceptance evidence.
-- Do not leave stale active specs at the top level after implementation.
-- Handoffs are implementation instructions, not canonical architecture. Once a handoff
-  is implemented, update this file, `api/README.md`, or `api/webui/README.md` if the
-  project shape changed.
+- The old per-slice handoff system is retired. See "Agent workflow" above.
+- `docs/handoffs/archive/` contains historical handoffs from the old Ferrari/Toyota
+  system. They are reference material, not active specs.
+- New design notes for Track-2 work go in the commit message or a brief
+  `docs/reference/` note. No new files in `docs/handoffs/`.
 - `docs/contracts/` contains durable data contracts.
 - `docs/guides/` contains durable usage/authoring guidance.
-- `docs/reference/` contains stable reference notes.
+- `docs/reference/` contains stable reference notes, including the redesign index
+  that tracks slice status.
 
 Project-local tool routing lives in `TOOLS.md` and `tools/manifests/`. Do not invent
-tool conventions in scattered handoff docs.
+tool conventions in scattered docs.
 
 ## Tool Awareness Policy
 
