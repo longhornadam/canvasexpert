@@ -48,8 +48,9 @@ mostly markup, data injection, and script includes.
 
 Shared modules own:
 
-- `push/core.js` - shared escaping, form POST, log/banner, busy-state, SSE,
-  printable generation, generic content push, and the `window.CE_PUSH` namespace
+- `push/core.js` - shared escaping, form POST, log/banner, busy-state, legacy SSE,
+  printable generation, operation prepare/review/apply, bounded operation-status
+  polling, Summary recovery controls, and the `window.CE_PUSH` namespace
 - `push/file_sources.js` - library/paste/upload staging and skill-copy helper;
   still provides the legacy `initFileSource` and `copySkill` globals
 - `push/delivery.js` - datetime conversion, QuizForge delivery settings, module
@@ -74,8 +75,9 @@ Work tools feature scripts own:
 
 Shared push scripts still own the core push cards:
 
-- `push/quiz.js` - QuizForge validation, preview, whole-class push, differentiated
-  push, and group manifest behavior
+- `push/quiz.js` - QuizForge validation and preview plus typed whole-class and
+  differentiated `content.quiz` operation preparation; group data is used to build
+  teacher controls but browser-observed membership IDs are not sent for preparation
 - `push/assignment.js` - AssignmentForge validation/push card behavior
 - `push/page.js` - PageForge validation/push card behavior
 - `push/rubric.js` - RubricForge validation/prompt/push card behavior
@@ -101,14 +103,19 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 `routes/push_streaming.py` owns:
 
 - `/api/push/preview`
-- `/api/push/stream`
-- `/api/push-multi-whole/stream`
-- `/api/push-variants/stream`
-- `/api/push-multi/stream`
+- compatibility-only legacy quiz streaming routes (`/api/push/stream`,
+  `/api/push-multi-whole/stream`, `/api/push-variants/stream`, and
+  `/api/push-multi/stream`); Course Expert no longer calls them
+
+`routes/operations.py` owns Course Expert's live content-operation boundary:
+
+- typed prepare, frozen review, digest-gated apply, and retry routes
+- the PII-minimized operation list and bounded polling status endpoint
 
 `push_service.py` owns in-process assignment/page/quick/printable pushes and the
-AssignmentForge/PageForge/RubricForge service path. QuizForge live pushes still run
-through CLI subprocess/streaming routes.
+AssignmentForge/PageForge/RubricForge service path. Course Expert QuizForge live
+pushes use the `content.quiz` operation adapter; legacy CLI/subprocess streaming
+routes remain only for compatibility.
 
 ## First Places To Look By Symptom
 
@@ -119,8 +126,9 @@ through CLI subprocess/streaming routes.
 - target course picker: `push/course_picker.js`
 - module/category dropdowns or delivery settings: `push/delivery.js`,
   `course_expert/tabs.js`
-- QuizForge validate/preview/live stream: `push/quiz.js`, `routes/push_streaming.py`,
-  `qf_pusher.py`
+- QuizForge validate/preview: `push/quiz.js`, `routes/push_streaming.py`
+- QuizForge prepare/review/apply/progress: `push/quiz.js`, `push/core.js`,
+  `routes/operations.py`, `operation_ledger/adapters/quiz.py`
 - Assignment/Page/Rubric card behavior: matching `push/*.js`,
   `routes/push_validation.py`, `push_service.py`
 - file paste/upload issues: `push/file_sources.js`, `routes/push_validation.py`

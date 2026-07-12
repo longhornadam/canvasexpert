@@ -176,10 +176,39 @@ the senior. Do not leave the only copy of execution state or test evidence in ch
 
 ### Execution result
 
-- Traffic light: **not started**
-- Changes are uncommitted
-- Files changed: none
-- Verification commands and pass/fail/skip counts: not run
-- Rendered routes checked: not run
-- Deviations from the brief: none
-- Remaining blocker or decision: none
+- Traffic light: **GREEN**
+- Commit: this handoff's containing implementation commit (exact hash reported at
+  handback).
+- Files changed: `api/webui/static/push/core.js`,
+  `api/webui/static/push/quiz.js`,
+  `api/webui/static/workbench.css`,
+  `api/tests/test_webui_template_contracts.py`,
+  `docs/reference/course-expert-module-map.md`,
+  `docs/reference/operation-ledger-release-status.md`, and this archived handoff.
+- Verification commands and pass/fail/skip counts:
+  - required focused pytest matrix: **139 passed, 0 failed, 0 skipped**;
+  - affected browser-contract rerun after the final browser-script corrections:
+    **70 passed, 0 failed, 0 skipped**;
+  - affected browser-contract rerun after the scoped narrow-layout correction:
+    **71 passed, 0 failed, 0 skipped**;
+  - `node --check` for both changed JavaScript files: **2 passed**;
+  - `git diff --check`: **passed**.
+- Rendered routes checked with a lifespan-disabled server and no write/local-operation
+  action:
+  - `/course-expert?tab=quiz`, 1366x768 light: Quiz deep link active; whole and
+    differentiated controls present and differentiated activates; delivery, target,
+    and Summary surfaces visible; scripts loaded once in dependency order; no
+    document overflow; **0 console warnings/errors**.
+  - `/course-expert?tab=quiz`, 760x900 dark: Course Expert is one 705px column; the
+    Work rail wraps at 705px; center and Summary are full-width; Differentiated
+    activates (`data-mode=diff`) and its card remains 705px wide; no document
+    overflow; **0 console warnings/errors**.
+  - Summary correctly showed the safe empty state on this machine. No operation was
+    fabricated; ordinal/private-field rendering remains covered by the focused
+    browser contract.
+- Deviations from the brief: none. No backend route/adapter/contract change, live
+  Canvas write, operation creation, review, apply, retry, or physical generation
+  was performed.
+- Remaining blocker or decision: none. Luna completed the brief without Terra
+  escalation; the only correction was the authorized Course Expert-specific
+  responsive breakpoint.

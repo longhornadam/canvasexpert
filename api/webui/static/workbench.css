@@ -665,6 +665,56 @@ html[data-theme="dark"] .ce-operation-panel {
   cursor: pointer;
 }
 
+@media (max-width: 980px) {
+  .ce-workbench-grid.ce-course-expert-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ce-workbench-shell .ce-course-expert-grid > .ce-work-rail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    min-width: 0;
+    padding: 0 0 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--ce-rule-strong);
+  }
+
+  .ce-course-expert-grid .ce-work-rail-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .ce-course-expert-grid .ce-work-rail-section:first-child {
+    flex: 1 1 100%;
+  }
+
+  .ce-course-expert-grid .ce-work-rail-section-title {
+    margin: 0 4px 0 0;
+  }
+
+  .ce-workbench-shell .ce-course-expert-grid .ce-work-rail .ce-work-rail-item {
+    width: auto;
+    padding: 6px 10px;
+    border-bottom: 0;
+    white-space: nowrap;
+  }
+
+  .ce-course-expert-grid .ce-work-rail-item-desc {
+    display: none;
+  }
+
+  .ce-course-expert-grid .ce-course-expert-center,
+  .ce-course-expert-grid .ce-summary-panel {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 /* ── Instrument view ────────────────────────────────────────────────── */
 .ce-instrument-toggle {
   display: inline-block;

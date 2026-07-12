@@ -167,6 +167,7 @@
   }
 
   var operationKinds = {
+    qf: "content.quiz",
     quick: "content.quick_assignment",
     af: "content.assignment",
     pf: "content.page",
@@ -215,14 +216,14 @@
     if (first.page_title) details.push("Page: " + first.page_title);
     if (first.rubric_title) details.push("Rubric: " + first.rubric_title);
     if (first.points != null) details.push("Points: " + first.points);
-    if (first.total_points != null) details.push("Rubric points: " + first.total_points);
+    if (first.rubric_title && first.total_points != null) details.push("Rubric points: " + first.total_points);
     if (first.criteria_count != null) details.push("Criteria: " + first.criteria_count);
-    if (first.due_at) details.push("Due: " + first.due_at);
-    if (first.module_name) details.push("Module: " + first.module_name);
+    if (!first.mode && first.due_at) details.push("Due: " + first.due_at);
+    if (!first.mode && first.module_name) details.push("Module: " + first.module_name);
     if (first.student_page_title) details.push("Student page: " + first.student_page_title);
-    if (first.post_to_sis) details.push("Sync to SIS: yes");
-    if (first.published === true) warnings.push("The item will be published for students.");
-    if (first.published === false) warnings.push("The item will be created unpublished.");
+    if (!first.mode && first.post_to_sis) details.push("Sync to SIS: yes");
+    if (!first.mode && first.published === true) warnings.push("The item will be published for students.");
+    if (!first.mode && first.published === false) warnings.push("The item will be created unpublished.");
     if (first.autoscore && first.autoscore.scheduled) {
       warnings.push("Scheduled Auto-Score will create draft AI suggestions after the due date.");
       if (first.autoscore.auto_push) {
@@ -239,6 +240,55 @@
       warnings.push("Canvas will create one assignment/gradebook column per tier.");
       warnings.push("Only that group's students can see each assignment (only_visible_to_overrides=true).");
     }
+    frozen.forEach(function (review) {
+      var prefix = review.course_name ? review.course_name + " — " : "";
+      if (review.mode === "whole") {
+        if (review.title) details.push(prefix + "Quiz: " + review.title);
+        if (review.item_count != null) details.push(prefix + "Items: " + review.item_count);
+        if (review.total_points != null) details.push(prefix + "Points: " + review.total_points);
+        if (review.due_at) details.push(prefix + "Due: " + review.due_at);
+        if (review.unlock_at) details.push(prefix + "Unlock: " + review.unlock_at);
+        if (review.lock_at) details.push(prefix + "Lock: " + review.lock_at);
+        if (review.module_name) details.push(prefix + "Module: " + review.module_name);
+        if (review.assignment_group_name) details.push(prefix + "Assignment group: " + review.assignment_group_name);
+        if (review.post_to_sis) details.push(prefix + "Sync to SIS: yes");
+        if (review.multiple_attempts) {
+          var attempts = review.allowed_attempts == null ? "multiple" : review.allowed_attempts;
+          details.push(prefix + "Attempts: " + attempts +
+            (review.score_to_keep ? " (keep " + review.score_to_keep + ")" : ""));
+        }
+        if (review.time_limit_minutes != null) details.push(prefix + "Time limit: " + review.time_limit_minutes + " minutes");
+        if (review.shuffle_questions) details.push(prefix + "Shuffle questions: yes");
+        if (review.shuffle_answers) details.push(prefix + "Shuffle answers: yes");
+        if (review.one_at_a_time) details.push(prefix + "One question at a time: yes");
+        if (review.allow_backtracking === false) details.push(prefix + "Backtracking: disabled");
+        if (review.calculator_type) details.push(prefix + "Calculator: " + review.calculator_type);
+        if (review.access_code) details.push(prefix + "Access code: configured");
+        if (review.hide_results) warnings.push(prefix + "Student result visibility will be restricted.");
+        if (review.published === true) warnings.push(prefix + "The quiz will be published for students.");
+        if (review.published === false) warnings.push(prefix + "The quiz will be created unpublished.");
+        if (review.baseline_has_existing) warnings.push(prefix + "A quiz with this title already exists; review carefully.");
+      }
+      if (review.mode === "differentiated") {
+        (review.variants || []).forEach(function (variant) {
+          var tier = (review.tiers || []).find(function (row) {
+            return row.group === variant.group_name;
+          });
+          var count = tier && tier.student_count != null
+            ? " (" + tier.student_count + " students)" : "";
+          details.push(prefix + (variant.title || "Quiz variant") + " — " +
+            (variant.group_name || "Canvas group") + count);
+          if (variant.item_count != null || variant.total_points != null) {
+            details.push(prefix + "Variant totals: " +
+              (variant.item_count != null ? variant.item_count + " items" : "") +
+              (variant.item_count != null && variant.total_points != null ? ", " : "") +
+              (variant.total_points != null ? variant.total_points + " points" : ""));
+          }
+        });
+        if (review.tier_warning) warnings.push(prefix + review.tier_warning);
+        if (review.baseline_has_existing) warnings.push(prefix + "One or more matching quiz titles already exist; review carefully.");
+      }
+    });
     return {
       title: "Review Canvas content push",
       action: confirmLabel || "Review this Canvas change before continuing.",
@@ -262,10 +312,12 @@
       renderOperationsList();
       return { cancelled: true };
     }
-    var applied = await postJson(
+    var applyPromise = postJson(
       "/api/operation-batches/" + encodeURIComponent(batch.batch_id) + "/apply",
       { review_digest: batch.review_digest }
     );
+    pollOperation(operationId);
+    var applied = await applyPromise;
     if (logFn) {
       (applied.target_results || []).forEach(function (result, index) {
         var review = (batch.frozen_reviews || [])[index] || {};
@@ -332,10 +384,96 @@
             '<span class="ce-op-kind">' + esc(op.kind) + '</span> ' +
             '<span class="ce-op-status">' + esc(op.status) + '</span> ' +
             '<span class="ce-op-targets">' + Number(op.target_count || 0) + ' target(s)</span> ' +
-            buttons + '</div>';
+            buttons + '<div class="ce-op-progress" data-op-progress="' +
+            esc(op.operation_id) + '"></div></div>';
         }).join("");
+        ops.forEach(function (op) {
+          if (op.status === "applying") {
+            pollOperation(op.operation_id);
+          } else {
+            loadOperationProgress(op.operation_id);
+          }
+        });
       })
       .catch(function () {});
+  }
+
+  var operationPollers = Object.create(null);
+  var terminalOperationStates = ["applied", "partial", "failed", "attention"];
+
+  function stopOperationPoll(operationId) {
+    var poller = operationPollers[operationId];
+    if (poller && poller.timer) clearTimeout(poller.timer);
+    delete operationPollers[operationId];
+  }
+
+  function renderOperationProgress(snapshot) {
+    var container = document.querySelector('[data-op-progress="' + snapshot.operation_id + '"]');
+    if (!container) return;
+    container.innerHTML = (snapshot.targets || []).map(function (target, targetIndex) {
+      var steps = (target.steps || []).map(function (step, stepIndex) {
+        return '<span class="ce-op-step">Step ' + (stepIndex + 1) + ': ' + esc(step.state || "pending") + '</span>';
+      }).join(" ");
+      return '<div class="ce-op-target-progress">Target ' + (targetIndex + 1) + ': ' +
+        esc(target.state || "pending") + (steps ? ' <span class="ce-op-steps">' + steps + '</span>' : "") + '</div>';
+    }).join("");
+  }
+
+  function loadOperationProgress(operationId) {
+    fetch("/api/operations/" + encodeURIComponent(operationId) + "/status")
+      .then(function (response) {
+        if (!response.ok) throw new Error("Status check failed (HTTP " + response.status + ")");
+        return response.json();
+      })
+      .then(renderOperationProgress)
+      .catch(function () {});
+  }
+
+  function pollOperation(operationId) {
+    if (!operationId || operationPollers[operationId]) return;
+    operationPollers[operationId] = { timer: null, attempts: 0, terminalHits: 0 };
+    function tick() {
+      var poller = operationPollers[operationId];
+      if (!poller) return;
+      poller.attempts += 1;
+      fetch("/api/operations/" + encodeURIComponent(operationId) + "/status")
+        .then(function (response) {
+          if (!response.ok) throw new Error("Status check failed (HTTP " + response.status + ")");
+          return response.json();
+        })
+        .then(function (snapshot) {
+          renderOperationProgress(snapshot);
+          if (terminalOperationStates.indexOf(snapshot.status) >= 0) {
+            poller.terminalHits += 1;
+            if (poller.terminalHits >= 2) {
+              stopOperationPoll(operationId);
+              renderOperationsList();
+              return;
+            }
+          } else {
+            poller.terminalHits = 0;
+          }
+          if (poller.attempts >= 120) {
+            stopOperationPoll(operationId);
+            var paused = document.querySelector('[data-op-progress="' + operationId + '"]');
+            if (paused) paused.textContent = "Progress polling paused. Refresh Summary to check the operation.";
+            return;
+          }
+          poller.timer = setTimeout(tick, 1000);
+        })
+        .catch(function (error) {
+          stopOperationPoll(operationId);
+          var container = document.querySelector('[data-op-progress="' + operationId + '"]');
+          if (container) container.textContent = "Progress unavailable: " + error.message;
+        });
+    }
+    tick();
+  }
+
+  if (window.addEventListener) {
+    window.addEventListener("pagehide", function () {
+      Object.keys(operationPollers).forEach(stopOperationPoll);
+    });
   }
 
   document.addEventListener("click", function (event) {
@@ -350,7 +488,9 @@
     var retryBtn = event.target.closest(".ce-op-retry");
     if (retryBtn) {
       retryBtn.disabled = true;
-      postJson("/api/operations/" + encodeURIComponent(retryBtn.dataset.opId) + "/retry", {})
+      var retryPromise = postJson("/api/operations/" + encodeURIComponent(retryBtn.dataset.opId) + "/retry", {});
+      pollOperation(retryBtn.dataset.opId);
+      retryPromise
         .catch(function (e) { alert(e.message); })
         .finally(function () { retryBtn.disabled = false; renderOperationsList(); });
     }
@@ -367,14 +507,14 @@
       btn.disabled = true;
       try {
         var prepared = await prepareOperation(operationKind, payload, log);
-        await reviewAndApply(prepared.operation_id, log, bannerEl, confirmLabel);
+        return await reviewAndApply(prepared.operation_id, log, bannerEl, confirmLabel);
       } catch (e) {
         log("ERROR: " + e.message);
         showBanner(bannerEl, "fail", "✗ " + esc(e.message));
+        return null;
       } finally {
         btn.disabled = false;
       }
-      return;
     }
     var effects = describeContentEffects(payload);
     var ok = await window.CE_WRITE_REVIEW.confirm({

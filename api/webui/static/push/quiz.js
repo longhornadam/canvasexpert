@@ -8,12 +8,11 @@
     "hideBanner",
     "showBanner",
     "setBusy",
-    "streamSSE",
+    "pushContent",
     "currentCourseId",
     "targetCourses",
     "collectSettings",
     "generatePhysical",
-    "canvasWriteReview",
   ].every(function (name) { return typeof push[name] === "function"; });
 
   var fileSel = document.getElementById("quizfile");
@@ -195,53 +194,33 @@
     var path = fileSel?.value;
     if (!targets.length) return alert("Check at least one course on the right.");
     if (!path) return alert("Pick a quiz file first.");
-    var fname = path.split(/[\\/]/).pop();
     var settingsObj = {};
-    try { settingsObj = JSON.parse(push.collectSettings() || "{}"); } catch (e) { settingsObj = {}; }
-    var details = [
-      "Source file: " + fname,
-      "Canvas instance: " + (window.QF_CANVAS_BASE || "(configured Canvas)"),
-    ];
-    if (settingsObj.due_at) details.push("Due: " + settingsObj.due_at);
-    if (settingsObj.unlock_at) details.push("Unlock: " + settingsObj.unlock_at);
-    if (settingsObj.lock_at) details.push("Lock: " + settingsObj.lock_at);
-    if (settingsObj.module_name) details.push("Add to module: " + settingsObj.module_name);
-    if (settingsObj.assignment_group_name) details.push("Assignment group: " + settingsObj.assignment_group_name);
-    var warnings = [
-      settingsObj.published ? "Quiz will be published for students." : "Quiz will be created unpublished.",
-    ];
-    if (settingsObj.post_to_sis) warnings.push("Post to SIS is enabled where Canvas supports it.");
-    if (settingsObj.shuffle_questions || settingsObj.shuffle_answers) warnings.push("Shuffle settings will affect student attempts.");
-    if (settingsObj.hide_results) warnings.push("Student result visibility will be restricted.");
-    var ok = await push.canvasWriteReview({
-      title: "Review live quiz push",
-      action: "Create a live Canvas quiz from \"" + fname + "\".",
-      targets: targets,
-      details: details,
-      warnings: warnings,
-      confirmText: "Create quiz in Canvas",
-    });
-    if (!ok) return;
-    var log = push.showLog(result);
-    push.hideBanner(document.getElementById("push-banner"));
-    push.setBusy(true);
-    var settings = encodeURIComponent(push.collectSettings());
-    var url;
-    if (targets.length === 1) {
-      log("Pushing live quiz…\n");
-      url = "/api/push/stream?course_id=" + encodeURIComponent(targets[0].id) +
-            "&path=" + encodeURIComponent(path) + "&settings=" + settings;
-    } else {
-      log("Pushing live quiz to " + targets.length + " courses…\n");
-      var ids = targets.map(function (t) { return t.id; }).join(",");
-      url = "/api/push-multi-whole/stream?course_ids=" + encodeURIComponent(ids) +
-            "&path=" + encodeURIComponent(path) + "&settings=" + settings;
+    try {
+      settingsObj = JSON.parse(push.collectSettings() || "{}");
+    } catch (e) {
+      return alert("Quiz delivery settings could not be read. Refresh and try again.");
     }
     var wantPhysical = document.getElementById("physical-version")?.checked;
-    push.streamSSE(url, log, document.getElementById("push-banner"), function (ok) {
+    push.setBusy(true);
+    try {
+      var applied = await push.pushContent(
+        "qf",
+        { mode: "whole", path: path, settings: settingsObj },
+        result,
+        document.getElementById("push-banner"),
+        this,
+        "Create this QuizForge quiz in Canvas."
+      );
+      if (applied && applied.status === "applied" && wantPhysical) {
+        var physicalLog = function (line) {
+          result.textContent += line + "\n";
+          result.scrollTop = result.scrollHeight;
+        };
+        await push.generatePhysical(path, physicalLog, document.getElementById("push-banner"));
+      }
+    } finally {
       push.setBusy(false);
-      if (ok && wantPhysical) push.generatePhysical(path, log, document.getElementById("push-banner"));
-    });
+    }
   });
 
   document.getElementById("btn-add-variant")?.addEventListener("click", function () {
@@ -256,67 +235,31 @@
     var variants = rows.map(function (r) {
       return {
         path: r.querySelector(".variant-file")?.value || "",
-        groupId: r.querySelector(".variant-group")?.value || "",
-        groupName: r.querySelector(".variant-group")?.selectedOptions[0]?.dataset.groupName || "",
-        studentIds: JSON.parse(r.querySelector(".variant-group")?.selectedOptions[0]?.dataset.studentIds || "[]"),
+        group_name: r.querySelector(".variant-group")?.selectedOptions[0]?.dataset.groupName || "",
       };
     }).filter(function (v) { return v.path; });
     if (variants.length < 2) return alert("Add at least 2 tier rows with files selected.");
-
-    var ok = await push.canvasWriteReview({
-      title: "Review tiered quiz push",
-      action: "Create " + variants.length + " tiered quiz variant(s) in Canvas.",
-      targets: targets,
-      details: variants.map(function (v) {
-        return (v.groupName || "Canvas group") + ": " + v.path.split(/[\\/]/).pop() +
-          " (" + v.studentIds.length + " student" + (v.studentIds.length === 1 ? "" : "s") + ")";
-      }),
-      warnings: [
-        "Each tier is assigned to the selected Canvas group membership.",
-        "Review publish and notification settings in Canvas after creation if needed.",
-      ],
-      confirmText: "Push tiered quizzes",
-    });
-    if (!ok) return;
-
-    var log = push.showLog(document.getElementById("variants-result"));
-    push.hideBanner(document.getElementById("variants-banner"));
+    if (variants.some(function (variant) { return !variant.group_name.trim(); })) {
+      return alert("Choose a Canvas group for every tier row with a quiz file.");
+    }
+    var settingsObj = {};
+    try {
+      settingsObj = JSON.parse(push.collectSettings() || "{}");
+    } catch (e) {
+      return alert("Quiz delivery settings could not be read. Refresh and try again.");
+    }
     push.setBusy(true);
-
-    if (targets.length === 1) {
-      var t = targets[0];
-      var entries = variants.map(function (v) {
-        return {
-          label: v.groupName,
-          path: v.path,
-          student_ids: v.studentIds,
-          group_name: v.groupName,
-        };
-      });
-      log("Pushing variants…\n");
-      push.streamSSE(
-        "/api/push-variants/stream?course_id=" + encodeURIComponent(t.id) +
-        "&manifest=" + encodeURIComponent(JSON.stringify(entries)),
-        log, document.getElementById("variants-banner"), function () { push.setBusy(false); });
-    } else {
-      var multiManifest = targets.map(function (t) {
-        return {
-          course_id: t.id,
-          course_name: t.name,
-          variants: variants.map(function (v) {
-            return {
-              label: v.groupName,
-              path: v.path,
-              student_ids: v.studentIds,
-              group_name: v.groupName,
-            };
-          }),
-        };
-      });
-      log("Pushing variants to " + targets.length + " courses…\n");
-      push.streamSSE(
-        "/api/push-multi/stream?multi_manifest=" + encodeURIComponent(JSON.stringify(multiManifest)),
-        log, document.getElementById("variants-banner"), function () { push.setBusy(false); });
+    try {
+      await push.pushContent(
+        "qf",
+        { mode: "differentiated", variants: variants, settings: settingsObj },
+        document.getElementById("variants-result"),
+        document.getElementById("variants-banner"),
+        this,
+        "Create these differentiated QuizForge quizzes in Canvas."
+      );
+    } finally {
+      push.setBusy(false);
     }
   });
 })();

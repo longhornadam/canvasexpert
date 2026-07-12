@@ -18,6 +18,7 @@ def _slurp(rel: str) -> str:
 def test_operation_gateway_aliases_and_no_direct_legacy_calls():
     core = _slurp("api/webui/static/push/core.js")
     for alias, kind in {
+        "qf": "content.quiz",
         "quick": "content.quick_assignment",
         "af": "content.assignment",
         "pf": "content.page",
@@ -33,6 +34,34 @@ def test_operation_gateway_aliases_and_no_direct_legacy_calls():
     ):
         assert "/api/content/push" not in _slurp(rel)
     assert '{ payload: payload, targets: targets }' in core
+
+
+def test_quiz_push_uses_typed_operation_payloads_not_streaming_writes():
+    quiz = _slurp("api/webui/static/push/quiz.js")
+    assert 'push.pushContent(' in quiz
+    assert '"qf"' in quiz
+    assert '{ mode: "whole", path: path, settings: settingsObj }' in quiz
+    assert '{ mode: "differentiated", variants: variants, settings: settingsObj }' in quiz
+    for legacy_route in (
+        "/api/push/stream",
+        "/api/push-multi-whole/stream",
+        "/api/push-variants/stream",
+        "/api/push-multi/stream",
+    ):
+        assert legacy_route not in quiz
+    assert "push.streamSSE(" not in quiz
+    assert "push.canvasWriteReview(" not in quiz
+    assert "studentIds:" not in quiz
+
+
+def test_operation_summary_polling_uses_ordinal_labels_only():
+    core = _slurp("api/webui/static/push/core.js")
+    assert '"/api/operations/" + encodeURIComponent(operationId) + "/status"' in core
+    assert "Target ' + (targetIndex + 1)" in core
+    assert "Step ' + (stepIndex + 1)" in core
+    assert "target.target_key" not in core
+    assert "step.step_key" not in core
+    assert 'window.addEventListener("pagehide"' in core
 
 
 def test_shared_csrf_meta_and_push_script_order():
@@ -405,6 +434,23 @@ def test_course_expert_has_work_rail():
     assert 'data-rail-tab="download"' in html
     assert 'data-rail-tab="students"' in html
     assert 'data-rail-tab="quick"' in html
+
+
+def test_course_expert_grid_collapses_at_intermediate_width():
+    """Course Expert must not squeeze its three workbench columns on tablets."""
+    css = _slurp("api/webui/static/workbench.css")
+    responsive = css[css.index("@media (max-width: 980px)"):]
+    grid = re.search(
+        r"\.ce-workbench-grid\.ce-course-expert-grid\s*\{([^}]*)\}",
+        responsive,
+        re.DOTALL,
+    )
+    assert grid and re.search(
+        r"grid-template-columns:\s*minmax\(0,\s*1fr\)", grid.group(1)
+    )
+    assert ".ce-course-expert-grid > .ce-work-rail" in responsive
+    assert ".ce-course-expert-grid .ce-course-expert-center" in responsive
+    assert ".ce-course-expert-grid .ce-summary-panel" in responsive
 
 
 def test_course_expert_preserves_all_critical_ids():
