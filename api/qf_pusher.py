@@ -33,6 +33,16 @@ QUIZ_SETTINGS = {
 
 TOTAL_POINTS = 100  # QuizForge requires a 100-point total
 
+SETTING_KEYS = (
+    "shuffle_answers", "shuffle_questions", "access_code",
+    "allow_multiple_attempts", "score_to_keep", "allowed_attempts",
+    "build_on_last_attempt", "attempt_cooldown", "has_time_limit",
+    "time_limit_minutes", "calculator_type", "one_at_a_time",
+    "allow_backtracking", "hide_results", "due_at", "unlock_at", "lock_at",
+    "assignment_group_id", "assignment_group_name", "post_to_sis", "published",
+    "module_id", "module_name",
+)
+
 
 def distribute_points(items, total=TOTAL_POINTS):
     """Per-item points. Respect explicit QF `points` if any item sets them;
@@ -84,6 +94,116 @@ def prepare_items(data):
             it["_rationale"] = rationales[it["id"]]
         prepared.append(it)
     return prepared
+
+
+def _normalized_settings(settings):
+    if not isinstance(settings, dict):
+        raise ValueError("QF push settings must be an object")
+    return {key: settings[key] for key in SETTING_KEYS if key in settings}
+
+
+def _effective_quiz_settings(push_settings):
+    quiz_settings = dict(QUIZ_SETTINGS)
+    if "shuffle_answers" in push_settings:
+        quiz_settings["shuffle_answers"] = bool(push_settings["shuffle_answers"])
+    if "shuffle_questions" in push_settings:
+        quiz_settings["shuffle_questions"] = bool(push_settings["shuffle_questions"])
+    if push_settings.get("access_code"):
+        quiz_settings["require_student_access_code"] = True
+        quiz_settings["student_access_code"] = str(push_settings["access_code"]).strip()
+    if push_settings.get("allow_multiple_attempts"):
+        score = push_settings.get("score_to_keep", "highest")
+        raw_attempts = push_settings.get("allowed_attempts", -1)
+        attempt_count = -1 if str(raw_attempts) in ("-1", "unlimited") else int(raw_attempts)
+        attempts = {
+            "multiple_attempts_enabled": True,
+            "score_to_keep": score if score in ("highest", "latest", "average", "first") else "highest",
+            "build_on_last_attempt": bool(push_settings.get("build_on_last_attempt", False)),
+        }
+        if attempt_count > 0:
+            attempts.update({"attempt_limit": True, "max_attempts": attempt_count})
+        cooldown = int(push_settings.get("attempt_cooldown", 0) or 0)
+        if cooldown > 0:
+            attempts.update({"cooling_period": True, "cooling_period_seconds": cooldown * 60})
+        quiz_settings["multiple_attempts"] = attempts
+    if push_settings.get("has_time_limit"):
+        minutes = int(push_settings.get("time_limit_minutes", 0))
+        if minutes > 0:
+            quiz_settings.update({
+                "has_time_limit": True,
+                "session_time_limit_in_seconds": minutes * 60,
+            })
+    if push_settings.get("calculator_type") in ("basic", "scientific"):
+        quiz_settings["calculator_type"] = push_settings["calculator_type"]
+    if push_settings.get("one_at_a_time"):
+        quiz_settings.update({
+            "one_at_a_time_type": "question",
+            "allow_backtracking": bool(push_settings.get("allow_backtracking", True)),
+        })
+    if push_settings.get("hide_results"):
+        quiz_settings["result_view_settings"] = {
+            "result_view_restricted": True,
+            "display_points_awarded": False,
+            "display_points_possible": False,
+            "display_items": False,
+        }
+    else:
+        quiz_settings["result_view_settings"] = {
+            "result_view_restricted": True,
+            "display_points_awarded": True,
+            "display_points_possible": True,
+            "display_items": True,
+            "display_item_response": True,
+            "display_item_response_correctness": True,
+            "display_item_response_qualifier": "after_last_attempt",
+            "display_item_correct_answer": True,
+            "display_item_feedback": True,
+        }
+    return quiz_settings
+
+
+def build_push_plan(path, settings=None):
+    """Build the deterministic, JSON-safe no-network QuizForge push plan."""
+    push_settings = _normalized_settings(settings or {})
+    data = load_qf(path)
+    title = data.get("title", os.path.basename(path))
+    prepared = prepare_items(data)
+    points = distribute_points(prepared)
+    items = []
+    for index, (qf_item, point) in enumerate(zip(prepared, points), 1):
+        payload = transform.build_item(qf_item, index)
+        payload["item"]["points_possible"] = point
+        items.append({
+            "index": index,
+            "source_item_id": qf_item.get("id"),
+            "source_type": qf_item.get("type"),
+            "payload": payload,
+        })
+    quiz_points = round(sum(points), 2) if points else 1
+    assignment_keys = (
+        "due_at", "unlock_at", "lock_at", "assignment_group_id",
+        "assignment_group_name", "post_to_sis", "published",
+        "allow_multiple_attempts", "allowed_attempts",
+    )
+    return {
+        "version": 1,
+        "title": title,
+        "source_path": str(path),
+        "quiz_payload": {"quiz": {
+            "title": title,
+            "points_possible": quiz_points,
+            "grading_type": "points",
+            "quiz_settings": _effective_quiz_settings(push_settings),
+        }},
+        "items": items,
+        "assignment_settings": {
+            key: push_settings[key] for key in assignment_keys if key in push_settings
+        },
+        "module": {
+            key: push_settings[key] for key in ("module_id", "module_name")
+            if push_settings.get(key) not in (None, "")
+        },
+    }
 
 
 def find_assignment_group_id(course_id, name):
@@ -247,22 +367,13 @@ def push_file(path, dry_run=False):
     data = load_qf(path)
     title = data.get("title", os.path.basename(path))
     items = prepare_items(data)
+    plan = build_push_plan(path, push_settings)
     print(f"\n=== {os.path.basename(path)} -> '{title}'  ({len(items)} items) ===")
     teks.coverage_report(items)  # always: pure-local TEKS tracking
 
-    payloads = []
-    for i, qf_item in enumerate(items, 1):
-        try:
-            payloads.append((qf_item["type"], transform.build_item(qf_item, i)))
-        except Exception as e:
-            print(f"  [build error] item {qf_item.get('id')} ({qf_item['type']}): {e}")
-            raise
-
-    # distribute the 100-point total across items
-    pts = distribute_points(items)
-    for (t, p), point in zip(payloads, pts):
-        p["item"]["points_possible"] = point
-    quiz_points = round(sum(pts), 2) if pts else 1
+    payloads = [(item["source_type"], item["payload"]) for item in plan["items"]]
+    pts = [item["payload"]["item"]["points_possible"] for item in plan["items"]]
+    quiz_points = plan["quiz_payload"]["quiz"]["points_possible"]
     print(f"  points: {quiz_points} total across {len(pts)} items "
           f"({pts[0] if pts else 0} each)")
 
@@ -274,86 +385,9 @@ def push_file(path, dry_run=False):
             print(f"\n[dry-run] would apply settings: {json.dumps(push_settings, indent=2)}")
         return None
 
-    # Effective New-Quiz settings: QF defaults + optional UI overrides.
-    quiz_settings = dict(QUIZ_SETTINGS)
-    if "shuffle_answers" in push_settings:
-        quiz_settings["shuffle_answers"] = bool(push_settings["shuffle_answers"])
-    if "shuffle_questions" in push_settings:
-        quiz_settings["shuffle_questions"] = bool(push_settings["shuffle_questions"])
-
-    # Access code — confirmed field names from live probe
-    if push_settings.get("access_code"):
-        quiz_settings["require_student_access_code"] = True
-        quiz_settings["student_access_code"] = str(push_settings["access_code"]).strip()
-
-    # Multiple attempts — quiz_settings carries score/build flags; attempt COUNT goes
-    # to patch_assignment (it's on the REST assignment, not quiz_settings)
-    if push_settings.get("allow_multiple_attempts"):
-        sto = push_settings.get("score_to_keep", "highest")
-        raw_attempts = push_settings.get("allowed_attempts", -1)
-        attempt_count = -1 if str(raw_attempts) in ("-1", "unlimited") else int(raw_attempts)
-        ma = {
-            "multiple_attempts_enabled": True,
-            "score_to_keep": sto if sto in ("highest", "latest", "average", "first") else "highest",
-            "build_on_last_attempt": bool(push_settings.get("build_on_last_attempt", False)),
-        }
-        if attempt_count > 0:
-            ma["attempt_limit"] = True          # "Limited" vs "Unlimited" toggle
-            ma["max_attempts"]  = attempt_count
-        cooldown_min = int(push_settings.get("attempt_cooldown", 0) or 0)
-        if cooldown_min > 0:
-            ma["cooling_period"]         = True
-            ma["cooling_period_seconds"] = cooldown_min * 60
-        quiz_settings["multiple_attempts"] = ma
-
-    # Time limit
-    if push_settings.get("has_time_limit"):
-        mins = int(push_settings.get("time_limit_minutes", 0))
-        if mins > 0:
-            quiz_settings["has_time_limit"] = True
-            quiz_settings["session_time_limit_in_seconds"] = mins * 60
-
-    # Calculator type (confirmed field from live probe)
-    if push_settings.get("calculator_type") in ("basic", "scientific"):
-        quiz_settings["calculator_type"] = push_settings["calculator_type"]
-
-    # One question at a time (field name unverified — live probe showed "none" as default)
-    if push_settings.get("one_at_a_time"):
-        quiz_settings["one_at_a_time_type"] = "question"
-        quiz_settings["allow_backtracking"] = bool(
-            push_settings.get("allow_backtracking", True))
-
-    # Result view. Canvas only surfaces per-item rationales when the display
-    # flags are EXPLICITLY set — an empty/unrestricted result view shows the
-    # student NOTHING (confirmed live: empty result_view_settings hides every
-    # rationale even after manually enabling viewing). So the QF "learn from
-    # your mistakes" default must spell out the flags. The view is technically
-    # "restricted" (Canvas's word for "customized"), but it SHOWS feedback +
-    # correct answers after the last attempt.
-    if push_settings.get("hide_results"):
-        quiz_settings["result_view_settings"] = {
-            "result_view_restricted": True,
-            "display_points_awarded": False,
-            "display_points_possible": False,
-            "display_items": False,
-        }
-    else:
-        quiz_settings["result_view_settings"] = {
-            "result_view_restricted": True,
-            "display_points_awarded": True,
-            "display_points_possible": True,
-            "display_items": True,
-            "display_item_response": True,
-            "display_item_response_correctness": True,
-            "display_item_response_qualifier": "after_last_attempt",
-            "display_item_correct_answer": True,
-            "display_item_feedback": True,
-        }
-
     status, q = canvas.post(
         canvas.quiz(f"/courses/{COURSE_ID}/quizzes"),
-        json={"quiz": {"title": title, "points_possible": quiz_points,
-                       "grading_type": "points", "quiz_settings": quiz_settings}},
+        json=plan["quiz_payload"],
     )
     if not q or "id" not in q:
         print("  !! quiz creation failed")
@@ -415,6 +449,16 @@ def main():
         print(__doc__)
         return
     path = sys.argv[1]
+    if "--plan-json" in sys.argv[2:]:
+        try:
+            raw = os.environ.get("QF_PUSH_SETTINGS", "").strip()
+            settings = json.loads(raw) if raw else {}
+            print(json.dumps(build_push_plan(path, settings), ensure_ascii=False,
+                             separators=(",", ":")))
+        except Exception as exc:
+            print(f"plan error: {exc}", file=sys.stderr)
+            raise SystemExit(2)
+        return
     push_file(path, dry_run="--dry-run" in sys.argv[2:])
 
 
