@@ -72,12 +72,17 @@ implementation is authorized by them.
 |---|---|---|
 | PowerGrader session workbench and responsive grading instrument | `docs/handoffs/archive/powergrader-frontend-workbench.md` | **completed** |
 
+### Active frontend work
+
+| Work | Authority | Status |
+|---|---|---|
+| Roster Workbench lenses | `docs/handoffs/roster-frontend-workbench.md` | **ready for implementation** |
+
 ### Deferred to post-release
 
 | Slice | Reason |
 |---|---|
 | 12b0-12b5 | Feedback parity — feedback stays on existing safe path |
-| 13d3 | Roster workbench — UI polish, backend complete |
 | 14b1-14b2 | Settings/secondary surfaces — UI polish |
 | 14c | Navigation legacy cleanup — nothing to clean up (browser migration deferred) |
 
