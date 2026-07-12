@@ -400,12 +400,11 @@ def test_legacy_nav_labels_absent():
 
 
 def test_dashboard_has_desk_start_surface():
-    """The Desk must expose its explicit Start section and course field."""
+    """The Desk must expose its Tools section and course context."""
     html = _slurp("api/webui/templates/dashboard.html")
-    assert 'class="ce-desk-label ce-create-mark">Start</p>' in html
     assert 'id="desk-course-field"' in html
-    for heading in ["Continue", "Attention", "Prepared", "Receipts"]:
-        assert f">{heading}<" in html or f">{heading} " in html
+    for heading in ["Tools", "In progress", "Needs review", "Prepared", "Receipts"]:
+        assert f">{heading}<" in html
 
 
 def test_desk_contract_keeps_workbench_boundaries():
@@ -418,11 +417,70 @@ def test_desk_contract_keeps_workbench_boundaries():
     assert "/api/work/scan" in js
     assert "/api/work?section=all" in js
     assert "/api/receipts" in js
-    assert "No prepared operations yet." in html
+    assert "No prepared operations." in html
     assert 'name="canvasexpert-csrf-token"' in _slurp("api/webui/templates/base.html")
     assert 'name="canvasexpert-csrf-token"' not in workbench
     assert "/static/workbench.css" not in workbench
     assert js.count("X-CanvasExpert-CSRF") == 1
+
+
+def test_workbench_instrument_language_and_drafting_grid_contract():
+    """Named working panes use the grid and operational copy survives rerenders."""
+    templates = {
+        "course": _slurp("api/webui/templates/course_expert.html"),
+        "gradebook": _slurp("api/webui/templates/gradebook.html"),
+        "roster": _slurp("api/webui/templates/roster.html"),
+        "powergrader": _slurp("api/webui/templates/powergrader_setup.html"),
+    }
+    assert 'class="ce-course-expert-center ce-drafting-grid"' in templates["course"]
+    assert 'class="gb-content expert-main ce-drafting-grid"' in templates["gradebook"]
+    assert 'class="roster-workbench-main ce-drafting-grid"' in templates["roster"]
+    assert 'class="pg-workbench-content ce-drafting-grid"' in templates["powergrader"]
+
+    dashboard = _slurp("api/webui/templates/dashboard.html")
+    desk_js = _slurp("api/webui/static/desk.js")
+    for text in [
+        ">Desk<", ">Course context<", "Saved targets are unchanged.",
+        'id="desk-local-status">Local state.</span>', ">Tools<", ">In progress<", ">Needs review<",
+        ">Prepared<", ">Receipts<", "No open work.",
+        "No items need review.", "No prepared operations.", "No receipts.",
+    ]:
+        assert text in dashboard
+    for text in ["No open work.", "No items need review.", "No receipts.", "Local state updated."]:
+        assert text in desk_js
+    for old_text in ["The work in front of you.", "Resume local work.", "Needs a decision."]:
+        assert old_text not in dashboard
+    assert "Using local projections." not in dashboard
+    assert "<strong>Local state.</strong>" not in dashboard
+
+    course_js = _slurp("api/webui/static/course_expert/work_rail.js")
+    for heading in ["Tools", "In progress", "Review"]:
+        assert f">{heading}<" in templates["course"]
+    assert templates["course"].count("None.") == 2
+    assert "None." in course_js
+
+    assert '<h1 id="roster-title">Roster</h1>' in templates["roster"]
+    assert "Student settings for CanvasExpert" not in templates["roster"]
+    assert "roster-v2-kicker" not in templates["roster"]
+
+    power_js = _slurp("api/webui/static/powergrader/setup_sessions.js")
+    for heading in ["Sessions", "Ready to post", "In progress"]:
+        assert f">{heading}<" in templates["powergrader"]
+    assert "Open an existing session instead of starting a duplicate." in templates["powergrader"]
+    assert "Grade locally, prepare a pseudonymized packet for your AI chat, or draft-score with OpenRouter." in templates["powergrader"]
+    assert "<strong>Grade one assignment.</strong>" not in templates["powergrader"]
+    assert "pg-lane-description" not in templates["powergrader"]
+    assert "return 'None.';" in power_js
+
+    css = _slurp("api/webui/static/workbench.css")
+    grid_rules = re.findall(
+        r"\.ce-workbench-page\s+\.ce-drafting-grid\s*\{([^}]*)\}",
+        css,
+        re.DOTALL,
+    )
+    assert any("background-size: 24px 24px" in rule for rule in grid_rules)
+    assert any("padding: 12px" in rule for rule in grid_rules)
+    assert 'html[data-theme="dark"] .ce-drafting-grid' in css
 
 
 def test_desk_start_links_preserve_existing_routes():

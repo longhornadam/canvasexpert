@@ -5,7 +5,8 @@
 .ce-workbench-shell,
 .ce-instrument-shell,
 .ce-status-strip,
-.ce-operation-panel {
+.ce-operation-panel,
+.ce-drafting-grid {
   --ce-paper: #f4efe6;
   --ce-paper-raised: #fbf8f1;
   --ce-graphite: #20252a;
@@ -31,7 +32,8 @@ html[data-theme="dark"] .ce-desk-shell,
 html[data-theme="dark"] .ce-workbench-shell,
 html[data-theme="dark"] .ce-instrument-shell,
 html[data-theme="dark"] .ce-status-strip,
-html[data-theme="dark"] .ce-operation-panel {
+html[data-theme="dark"] .ce-operation-panel,
+html[data-theme="dark"] .ce-drafting-grid {
   --ce-paper: #20252a;
   --ce-paper-raised: #282e34;
   --ce-graphite: #171a1d;
@@ -158,11 +160,12 @@ html[data-theme="dark"] .ce-operation-panel {
   border-bottom: 0;
 }
 
-.ce-workbench-shell .ce-drafting-grid,
-.ce-instrument-shell .ce-drafting-grid {
+.ce-workbench-page .ce-drafting-grid {
   background-image: linear-gradient(var(--ce-grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--ce-grid-line) 1px, transparent 1px);
   background-size: 24px 24px;
+  border-radius: 8px;
+  padding: 12px;
 }
 
 .ce-desk-shell .ce-attention-mark,

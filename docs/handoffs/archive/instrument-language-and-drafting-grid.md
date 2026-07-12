@@ -1,6 +1,6 @@
 # Execution brief: restore the drafting surface and remove SaaS-style framing
 
-Status: **ready for implementation**
+Status: **completed**
 
 Risk: **low**
 
@@ -144,10 +144,37 @@ the senior. Do not leave the only copy of execution state or test evidence in ch
 
 ### Execution result
 
-- Traffic light: **not started**
-- Changes are uncommitted
-- Files changed: none
-- Verification commands and pass/fail/skip counts: not run
-- Rendered routes checked: not run
+- Traffic light: **GREEN**
+- Changes are included in the same implementation commit as this archived handoff
+- Files changed: `api/webui/templates/dashboard.html`, `course_expert.html`,
+  `gradebook.html`, `roster.html`, `powergrader_setup.html`;
+  `api/webui/static/desk.js`, `course_expert/work_rail.js`,
+  `powergrader/setup_sessions.js`, `workbench.css`;
+  `api/tests/test_webui_template_contracts.py`; and this handoff
+- Verification commands and pass/fail/skip counts:
+  - `py -m pytest api/tests/test_webui_template_contracts.py api/tests/test_route_contract.py`:
+    76 passed on the final run (the first run had 75 passed and one new test-assertion
+    failure, corrected before rerun)
+  - `node --check api/webui/static/desk.js`: passed
+  - `node --check api/webui/static/course_expert/work_rail.js`: passed
+  - `node --check api/webui/static/powergrader/setup_sessions.js`: passed
+  - `git diff --check`: passed before this result update; final check also passed
+  - Bounded copy correction: `py -m pytest api/tests/test_webui_template_contracts.py`:
+    75 passed; subsequent `git diff --check`: passed
+  - Drafting-grid specificity correction: `py -m pytest
+    api/tests/test_webui_template_contracts.py`: 75 passed on the final run (the first edit
+    changed the token selector rather than the visual rule and produced one new assertion
+    failure; corrected before rerun); subsequent `git diff --check`: passed
+- Rendered routes checked: Sol completed the lifespan-disabled light/dark desktop matrix for
+  `/`, `/course-expert?tab=quiz`, `/gradebook`, `/powergrader`, and `/roster`. Every route had
+  exactly one correct active header route, no document overflow, and combined console
+  warnings/errors of 0. Locked Desk, Course Expert, PowerGrader, and Roster copy was correct.
+  All four named working panes computed the grid with 12px inset, and representative child
+  surfaces had opaque backgrounds; the Gradebook specificity repair was confirmed at 12px.
+  At 760x900, Course Expert measured 705px with a 681px solid child, PowerGrader 713px with a
+  689px solid child, and Roster 740px with a 716px solid child. All three retained grid=true,
+  12px padding, the correct active route, opaque child backgrounds, no page overflow, and
+  combined console warnings/errors of 0. Evidence contained structural values only and no
+  private course, roster, session, note, or student content.
 - Deviations from the brief: none
-- Remaining blocker or decision: none
+- Remaining blocker or decision: none; Terra escalation was not needed

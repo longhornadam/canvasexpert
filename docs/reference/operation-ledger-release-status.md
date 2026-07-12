@@ -74,12 +74,7 @@ implementation is authorized by them.
 | Roster Workbench lenses over one student dataset | `docs/handoffs/archive/roster-frontend-workbench.md` | **completed** |
 | Course Expert Quiz operation-ledger browser migration | `docs/handoffs/archive/course-expert-quiz-ledger-migration.md` | **completed** |
 | Shared Workbench header visual integration | `docs/handoffs/archive/workbench-header-integration.md` | **completed** |
-
-### Active frontend work
-
-| Work | Authority | Status |
-|---|---|---|
-| Instrument language and drafting-grid restoration | `docs/handoffs/instrument-language-and-drafting-grid.md` | **ready for implementation** |
+| Instrument language and drafting-grid restoration | `docs/handoffs/archive/instrument-language-and-drafting-grid.md` | **completed** |
 
 ### Deferred to post-release
 

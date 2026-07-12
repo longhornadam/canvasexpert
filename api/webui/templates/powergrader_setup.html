@@ -15,18 +15,18 @@
         <a class="ce-work-rail-item" href="#pg-start-new">Start new <span class="pg-rail-count" id="pg-start-count">+</span></a>
       </div>
       <div class="ce-work-rail-section">
-        <a class="ce-work-rail-item" href="#pg-attention">Attention <span class="pg-rail-count" id="pg-attention-count">0</span></a>
-        <a class="ce-work-rail-item" href="#pg-continue">Continue <span class="pg-rail-count" id="pg-continue-count">0</span></a>
+        <a class="ce-work-rail-item" href="#pg-attention">Ready to post <span class="pg-rail-count" id="pg-attention-count">0</span></a>
+        <a class="ce-work-rail-item" href="#pg-continue">In progress <span class="pg-rail-count" id="pg-continue-count">0</span></a>
         <a class="ce-work-rail-item" href="#pg-completed">Completed <span class="pg-rail-count" id="pg-completed-count">0</span></a>
       </div>
     </nav>
-    <div class="pg-workbench-content">
+    <div class="pg-workbench-content ce-drafting-grid">
 
 <section class="card pg-setup-card">
   <div class="pg-setup-header">
     <h1>PowerGrader</h1>
     <p class="hint">
-      <strong>Grade one assignment.</strong> Grade entirely yourself, prepare a pseudonymized packet for your own AI chat, or draft-score with OpenRouter.
+      Grade locally, prepare a pseudonymized packet for your AI chat, or draft-score with OpenRouter.
     </p>
   </div>
 
@@ -38,20 +38,18 @@
   <section class="pg-sessions-card" id="pg-sessions-card" aria-labelledby="pg-session-work-title">
     <div class="pg-section-heading">
       <div>
-        <h2 id="pg-session-work-title">Your grading work</h2>
-        <p class="hint">Resume local sessions before starting a duplicate.</p>
+        <h2 id="pg-session-work-title">Sessions</h2>
+        <p class="hint">Open an existing session instead of starting a duplicate.</p>
       </div>
       <span id="pg-sessions-status" class="hint" role="status" aria-live="polite">Loading sessions…</span>
     </div>
     <div id="pg-sessions-tbody">
       <section class="pg-session-lane pg-session-lane--attention" id="pg-attention" aria-labelledby="pg-attention-title">
-        <h3 id="pg-attention-title">Attention</h3>
-        <p class="pg-lane-description">Approved work waiting for teacher-reviewed posting.</p>
+        <h3 id="pg-attention-title">Ready to post</h3>
         <div class="pg-session-list" id="pg-attention-list"></div>
       </section>
       <section class="pg-session-lane" id="pg-continue" aria-labelledby="pg-continue-title">
-        <h3 id="pg-continue-title">Continue</h3>
-        <p class="pg-lane-description">Sessions still in progress.</p>
+        <h3 id="pg-continue-title">In progress</h3>
         <div class="pg-session-list" id="pg-continue-list"></div>
       </section>
     </div>

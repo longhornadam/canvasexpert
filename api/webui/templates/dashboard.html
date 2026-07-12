@@ -7,12 +7,10 @@
 
   <section class="ce-desk-intro" aria-labelledby="desk-title">
     <div>
-      <p class="ce-desk-kicker">CanvasExpert / Desk</p>
-      <h1 id="desk-title">The work in front of you.</h1>
-      <p class="ce-desk-lede">Start a workflow, resume local work, or review what needs a decision.</p>
+      <h1 id="desk-title">Desk</h1>
     </div>
     <div class="ce-desk-scope" aria-label="Desk course scope">
-      <label for="desk-course-field">Course field</label>
+      <label for="desk-course-field">Course context</label>
       <select id="desk-course-field">
         <option value="">Keep saved context</option>
         <option value="__all__">All active courses</option>
@@ -20,14 +18,13 @@
         <option value="{{ course.id }}">{{ course.nickname or course.name }}</option>
         {% endfor %}
       </select>
-      <p id="desk-scope-note" class="ce-desk-scope-note">Saved focus and targets stay unchanged until you start a workflow.</p>
+      <p id="desk-scope-note" class="ce-desk-scope-note">Saved targets are unchanged.</p>
     </div>
   </section>
 
   <div class="ce-desk-toolbar" aria-label="Desk actions">
     <div>
-      <strong>Local command surface</strong>
-      <span id="desk-local-status">Using local projections.</span>
+      <span id="desk-local-status">Local state.</span>
     </div>
     <button type="button" id="desk-scan" class="ce-desk-button ce-desk-button--primary">Scan active courses</button>
   </div>
@@ -36,10 +33,8 @@
     <section class="ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
       <div class="ce-desk-panel-head">
         <div>
-          <p class="ce-desk-label ce-create-mark">Start</p>
-          <h2 id="desk-start-title">Create, grade, manage.</h2>
+          <h2 id="desk-start-title">Tools</h2>
         </div>
-        <span class="ce-desk-panel-note">Choose a workflow</span>
       </div>
       <div class="ce-desk-start-grid">
         <a class="ce-desk-start-card ce-create-mark" data-desk-start href="/push/assignment">
@@ -79,40 +74,40 @@
     </section>
 
     <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-continue-title">
-      <div class="ce-desk-panel-head"><div><p class="ce-desk-label">Continue</p><h2 id="desk-continue-title">Resume local work.</h2></div></div>
+      <div class="ce-desk-panel-head"><h2 id="desk-continue-title">In progress</h2></div>
       <div id="desk-continue-list" class="ce-desk-list" aria-live="polite">
         {% for job in initial_jobs if job.status in ['draft', 'ready', 'in_progress'] %}
         <article class="ce-desk-job" data-job-id="{{ job.job_id }}" data-material-version="{{ job.material_version }}" data-origin="{{ job.origin }}">
           <div><strong>{{ job.title }}</strong><span>{{ job.kind }} · {{ job.counts.total }} items</span></div>
           <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">Continue</a>
         </article>
-        {% else %}<p class="ce-desk-empty">No local work to continue.</p>{% endfor %}
+        {% else %}<p class="ce-desk-empty">No open work.</p>{% endfor %}
       </div>
     </section>
 
     <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-attention-title">
-      <div class="ce-desk-panel-head"><div><p class="ce-desk-label ce-attention-mark">Attention</p><h2 id="desk-attention-title">Needs a decision.</h2></div></div>
+      <div class="ce-desk-panel-head"><h2 id="desk-attention-title">Needs review</h2></div>
       <div id="desk-attention-list" class="ce-desk-list" aria-live="polite">
         {% for job in initial_jobs if job.status == 'attention' %}
         <article class="ce-desk-job" data-job-id="{{ job.job_id }}" data-material-version="{{ job.material_version }}" data-origin="{{ job.origin }}">
           <div><strong>{{ job.title }}</strong><span>{{ job.attention_reason or 'Work needs attention' }}</span></div>
           <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">Review</a>
         </article>
-        {% else %}<p class="ce-desk-empty">No current attention items.</p>{% endfor %}
+        {% else %}<p class="ce-desk-empty">No items need review.</p>{% endfor %}
       </div>
     </section>
 
     <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-prepared-title">
-      <div class="ce-desk-panel-head"><div><p class="ce-desk-label ce-prepared-mark">Prepared</p><h2 id="desk-prepared-title">Ready for a later slice.</h2></div></div>
-      <p id="desk-prepared-empty" class="ce-desk-empty">No prepared operations yet.</p>
+      <div class="ce-desk-panel-head"><h2 id="desk-prepared-title">Prepared</h2></div>
+      <p id="desk-prepared-empty" class="ce-desk-empty">No prepared operations.</p>
     </section>
 
     <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-receipts-title">
-      <div class="ce-desk-panel-head"><div><p class="ce-desk-label">Receipts</p><h2 id="desk-receipts-title">Durable results.</h2></div></div>
+      <div class="ce-desk-panel-head"><h2 id="desk-receipts-title">Receipts</h2></div>
       <div id="desk-receipts-list" class="ce-desk-list" aria-live="polite">
         {% for receipt in initial_receipts %}
         <article class="ce-desk-receipt"><div><strong>{{ receipt.kind }}</strong><span>{{ receipt.status }} · {{ receipt.target_count }} target{{ '' if receipt.target_count == 1 else 's' }}</span></div><a class="ce-desk-inline-link" href="{{ receipt.detail_url }}">Receipt</a></article>
-        {% else %}<p class="ce-desk-empty">No receipts recorded yet.</p>{% endfor %}
+        {% else %}<p class="ce-desk-empty">No receipts.</p>{% endfor %}
       </div>
     </section>
   </div>

@@ -66,7 +66,7 @@
   function renderJobList(node, jobs, actionLabel) {
     if (!node) return;
     if (!jobs.length) {
-      emptyList(node, actionLabel === "Review" ? "No current attention items." : "No local work to continue.");
+      emptyList(node, actionLabel === "Review" ? "No items need review." : "No open work.");
       return;
     }
     clear(node);
@@ -96,7 +96,7 @@
   function renderReceipts() {
     if (!receiptsList) return;
     if (!state.receipts.length) {
-      emptyList(receiptsList, "No receipts recorded yet.");
+      emptyList(receiptsList, "No receipts.");
       return;
     }
     clear(receiptsList);
@@ -142,7 +142,7 @@
       state.jobs = Array.isArray(workResult.body.jobs) ? workResult.body.jobs : [];
       state.receipts = Array.isArray(receiptResult.body.receipts) ? receiptResult.body.receipts : [];
       render();
-      if (localStatus) localStatus.textContent = "Using current local projections.";
+      if (localStatus) localStatus.textContent = "Local state updated.";
     }).catch(function () {
       if (localStatus) localStatus.textContent = "Showing the last local view; refresh was unavailable.";
     });

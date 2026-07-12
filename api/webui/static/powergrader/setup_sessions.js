@@ -50,9 +50,7 @@
   }
 
   function emptyState(lane) {
-    if (lane === 'attention') return 'No approved work is waiting to post.';
-    if (lane === 'completed') return 'No completed sessions for this course.';
-    return 'No sessions to continue. Start a new grading session below.';
+    return 'None.';
   }
 
   function setText(id, value) {

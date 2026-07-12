@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  /* Work rail — activates tabs and shows Continue/Attention summaries. */
+  /* Work rail — activates tabs and shows in-progress/review summaries. */
 
   var railItems = document.querySelectorAll("[data-rail-tab]");
   var continueEl = document.getElementById("ce-rail-continue");
@@ -19,7 +19,7 @@
     });
   });
 
-  /* ── Continue / Attention summaries ────────────────────────────────── */
+  /* ── In-progress / review summaries ────────────────────────────────── */
   function fetchWork() {
     fetch("/api/work?section=all", {
       headers: { Accept: "application/json" },
@@ -41,9 +41,7 @@
   function renderList(container, jobs, label) {
     if (!container) return;
     if (!jobs.length) {
-      container.innerHTML =
-        '<p class="ce-work-rail-empty">No local work to ' +
-        (label === "Review" ? "review." : "continue.") + "</p>";
+      container.innerHTML = '<p class="ce-work-rail-empty">None.</p>';
       return;
     }
     var html = "";
