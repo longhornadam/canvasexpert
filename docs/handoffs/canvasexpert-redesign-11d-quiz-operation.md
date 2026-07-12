@@ -1,5 +1,28 @@
 # Toyota handoff 11d: QuizForge streaming operation adapter
 
+## Status
+
+Deferred by Ferrari on 2026-07-11. This handoff is not implementation authorization
+until the proof gaps below are resolved and Ferrari reissues it as a self-contained
+Toyota handoff.
+
+## Deferral rationale
+
+The current text leaves material architecture and safety choices open across subprocess
+streaming, whole-class versus differentiated target identity, New Quizzes object tiers,
+lost-client continuation, and retry reconciliation. In particular, the repo does not yet
+prove an exact returned-ID/postcondition chain for every quiz, item, stimulus, assignment,
+module item, and differentiated variant created by the subprocess path. Same-title
+matching is forbidden and cannot close that gap.
+
+Before implementation, Ferrari must inspect the actual runner/subprocess event protocol,
+New Quizzes API calls and returned IDs, validation manifest ownership, standalone and
+Course Expert callers, disconnect behavior, and existing tests. The replacement handoff
+must define server-owned progress persistence, exact per-step idempotency/reconciliation,
+partial/retry semantics, and an explicitly authorized disposable-course live matrix.
+Until then, the existing QuizForge legacy path remains visibly separate and no
+`content.quiz` apply capability may be registered.
+
 ## Objective
 
 Migrate QuizForge whole-class and differentiated pushes into the ledger without losing

@@ -24,3 +24,7 @@ git diff --check
 
 Stop if core fields cannot be separated from dependencies. One commit; reply with hash,
 surface parity, target result matrix, receipt evidence, and no-live-write statement.
+
+Accepted by Ferrari on 2026-07-11 after integration repair `a2d6617`; explicit-target
+prepare/review/apply, exact-ID recovery, full tests, and rendered parity checks passed.
+Tiered content remains excluded under deferred slice 11b4.

@@ -42,3 +42,7 @@ Both the CourseExpert Quick tab and standalone Quick route use this adapter; nei
 retain a direct write. Persist before POST and record returned assignment ID. Timeout or
 disconnect is `sent_unknown` Attention; same-title matching never proves success, and
 retry requires exact reconciliation proving absence.
+
+Accepted by Ferrari on 2026-07-11 after integration repair `a2d6617`; focused and full
+API suites plus rendered Course Expert/standalone runtime checks passed with fake Canvas
+only and zero browser-console errors.

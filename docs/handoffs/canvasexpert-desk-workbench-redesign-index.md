@@ -54,13 +54,15 @@ Before any redesign implementation:
 | 09 | `canvasexpert-redesign-09-creation-instrument.md` | 08 |
 | 10 | `canvasexpert-redesign-10-operation-ledger-pilot.md` | 05a, 08 |
 | 10r | `canvasexpert-redesign-10r-operation-ledger-acceptance-repair.md` | 10 |
-| 11a | `canvasexpert-redesign-11a-quick-operation.md` | 10r |
-| 11b1 | `canvasexpert-redesign-11b1-assignment-core-operation.md` | 10r |
-| 11b2 | `canvasexpert-redesign-11b2-assignment-dependencies.md` | 11b1 |
-| 11b3 | `canvasexpert-redesign-11b3-assignment-differentiation-autoscore.md` | 11b2 |
-| 11c0 | `canvasexpert-redesign-11c0-rubric-path-audit.md` | 10r |
-| 11c1 | `canvasexpert-redesign-11c1-rubric-operation.md` | 11c0 |
-| 11d | `canvasexpert-redesign-11d-quiz-operation.md` | 10r |
+| 11a | `archive/canvasexpert-redesign-11a-quick-operation.md` | 10r |
+| 11b1 | `archive/canvasexpert-redesign-11b1-assignment-core-operation.md` | 10r |
+| 11b2 | `archive/canvasexpert-redesign-11b2-assignment-dependencies.md` | 11b1 |
+| 11b3 | `archive/canvasexpert-redesign-11b3-assignment-autoscore.md` | 11b2 |
+| 11b4 | `canvasexpert-redesign-11b4-assignment-differentiation.md` | 11b3, 11r |
+| 11c0 | `archive/canvasexpert-redesign-11c0-rubric-path-audit.md` | 10r |
+| 11c1 | `archive/canvasexpert-redesign-11c1-rubric-operation.md` | 11c0 |
+| 11d (deferred) | `canvasexpert-redesign-11d-quiz-operation.md` | 11r |
+| 11r | `archive/canvasexpert-redesign-11r-operation-integration-acceptance-repair.md` | 11a, 11b3, 11c1 |
 | 12a | `canvasexpert-redesign-12a-powergrader-workbench.md` | 06a, 10r |
 | 12b0 | `canvasexpert-redesign-12b0-feedback-parity-matrix.md` | 12a |
 | 12b1 | `canvasexpert-redesign-12b1-feedback-import-lane.md` | 12b0 |
@@ -79,7 +81,7 @@ Before any redesign implementation:
 | 14a | `canvasexpert-redesign-14a-gradebook-workbench.md` | 13a, 13b1, 13b2, 13c |
 | 14b1 | `canvasexpert-redesign-14b1-settings-system-map.md` | 12a, 13d3, 13e |
 | 14b2 | `canvasexpert-redesign-14b2-secondary-surfaces.md` | 14b1 |
-| 14c | `canvasexpert-redesign-14c-navigation-legacy-cleanup.md` | 11a, 11b3, 11c1, 11d, 12b5, 14a, 14b1, 14b2 |
+| 14c | `canvasexpert-redesign-14c-navigation-legacy-cleanup.md` | 11a, 11b4, 11c1, 11d, 12b5, 14a, 14b1, 14b2 |
 | 15 | `canvasexpert-redesign-15-release-acceptance.md` | all prior |
 
 Slices are accepted sequentially. A later handoff being present is not authorization to

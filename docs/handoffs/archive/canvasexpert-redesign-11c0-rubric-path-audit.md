@@ -20,3 +20,6 @@ git diff --check
 
 One documentation commit. Reply with hash, call graph, discrepancy table, current
 capability verdict, and exact proposed 11c1 insertion points. Stop on contradictory paths.
+
+Accepted by Ferrari on 2026-07-11. Its discovery was consumed by 11c1 and corrected by
+the 11r integration acceptance repair.

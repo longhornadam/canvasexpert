@@ -193,3 +193,18 @@ Reply with the one commit hash, exact files, focused/full test counts, HTTP targ
 Auto-Score success/failure/retry evidence, standalone/Course Expert runtime results,
 console-error count, configured-workspace non-mutation evidence, and explicit
 no-live-write confirmation.
+
+## Ferrari acceptance
+
+Accepted 2026-07-11 after independent review of commit `a2d6617`.
+
+- Five JavaScript syntax checks passed.
+- Focused acceptance suite: 229 passed.
+- Full API suite: 474 passed, 1 skipped.
+- Explicit-target HTTP prepare/review/apply matrix passed with fake Canvas only.
+- Scheduled Auto-Score success, partial failure, deterministic retry, stale-diagnostic
+  clearing, and configured-workspace isolation passed.
+- `/course-expert`, `/push/quick`, `/push/assignment`, `/push/page`, and `/push/rubric`
+  rendered with one non-empty CSRF token and the shared operation script; Course Expert
+  tab behavior executed and all five routes produced zero browser-console errors.
+- `git diff --check` passed. No live Canvas write was performed.

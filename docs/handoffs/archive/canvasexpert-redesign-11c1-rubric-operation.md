@@ -134,3 +134,7 @@ git diff --check
 ```
 
 Runtime verification with fakes; live-fire only by explicit authorization.
+
+Accepted by Ferrari on 2026-07-11 after integration repair `a2d6617`; selected-target
+standalone/Course Expert wiring, fake-Canvas apply, full tests, and zero-console-error
+rendered checks passed. Assignment-rubric association remains excluded.

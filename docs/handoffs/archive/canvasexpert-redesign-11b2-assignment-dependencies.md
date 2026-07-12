@@ -16,3 +16,6 @@ Test missing/invalid files, upload partial, module drift, ambiguous response, ex
 unresolved-only retry, and core-only parity. Run assignment operation, push-service,
 printable-attach, route, JS, and diff checks. Stop if an existing helper combines rubric
 or scheduled behavior inseparably. One commit with dependency-order evidence.
+
+Accepted by Ferrari on 2026-07-11 after integration repair `a2d6617`. Rubric association
+and differentiated/tier behavior remain excluded.
