@@ -75,6 +75,12 @@ implementation is authorized by them.
 | Course Expert Quiz operation-ledger browser migration | `docs/handoffs/archive/course-expert-quiz-ledger-migration.md` | **completed** |
 | Shared Workbench header visual integration | `docs/handoffs/archive/workbench-header-integration.md` | **completed** |
 
+### Active frontend work
+
+| Work | Authority | Status |
+|---|---|---|
+| Instrument language and drafting-grid restoration | `docs/handoffs/instrument-language-and-drafting-grid.md` | **ready for implementation** |
+
 ### Deferred to post-release
 
 | Slice | Reason |
