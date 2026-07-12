@@ -76,6 +76,12 @@ implementation is authorized by them.
 | Shared Workbench header visual integration | `docs/handoffs/archive/workbench-header-integration.md` | **completed** |
 | Instrument language and drafting-grid restoration | `docs/handoffs/archive/instrument-language-and-drafting-grid.md` | **completed** |
 
+### Active frontend work
+
+| Work | Authority | Status |
+|---|---|---|
+| Workbench readiness/header and Desk control consolidation | `docs/handoffs/workbench-readiness-header-consolidation.md` | **ready for implementation** |
+
 ### Deferred to post-release
 
 | Slice | Reason |
