@@ -265,13 +265,34 @@ def test_course_picker_uses_shared_context_without_dual_writes():
     assert "canvasExpert.push.coursePicker.v1" not in js
 
 
-def test_workbench_base_owns_readiness_strip_and_script():
-    """Only the Workbench base opts into readiness markup and behavior."""
+def test_workbench_header_owns_single_readiness_root_and_script():
+    """Workbench header owns the only readiness markup; its base owns one script."""
     base = _slurp("api/webui/templates/base.html")
     workbench = _slurp("api/webui/templates/workbench_base.html")
+    header = _slurp("api/webui/templates/_workbench_header.html")
+    readiness = _slurp("api/webui/templates/_readiness_strip.html")
     assert "_readiness_strip.html" not in base
-    assert "_readiness_strip.html" in workbench
-    assert '/static/readiness.js?v={{ asset_v }}' in workbench
+    assert "_readiness_strip.html" not in workbench
+    assert header.count('{% include "_readiness_strip.html" %}') == 1
+    assert header.index('</nav>') < header.index('_readiness_strip.html') < header.index('class="topbar-right"')
+    assert readiness.count('id="ce-readiness-strip"') == 1
+    assert workbench.count('/static/readiness.js?v={{ asset_v }}') == 1
+    assert '/static/readiness.js' not in base
+
+
+def test_workbench_readiness_preserves_behavior_and_accessibility_hooks():
+    """Moving readiness must not change its JS or accessible DOM contract."""
+    readiness = _slurp("api/webui/templates/_readiness_strip.html")
+    assert 'aria-live="polite"' in readiness
+    assert 'data-status="unknown"' in readiness
+    for component in ("canvas", "openrouter", "privacy"):
+        assert readiness.count(f'data-readiness-component="{component}"') == 1
+        assert readiness.count(f'data-readiness-dot="{component}"') == 1
+        assert readiness.count(f'data-readiness-value="{component}"') == 1
+    for hook in ("data-readiness-refresh", "data-readiness-details", "data-readiness-detail"):
+        assert len(re.findall(rf"\s{hook}(?:\s|>)", readiness)) == 1
+    assert "Refresh" in readiness
+    assert "Readiness details" in readiness
 
 
 def test_workbench_header_stays_scoped_and_preserves_controls():
@@ -312,11 +333,60 @@ def test_workbench_header_css_owns_scoped_narrow_composition():
     css = _slurp("api/webui/static/workbench.css")
     assert ".ce-workbench-header.topbar" in css
     assert 'html[data-theme="dark"] .ce-workbench-header.topbar' in css
+    intermediate = css[css.index("@media (max-width: 1180px)"):css.index("@media (max-width: 760px)")]
+    for selector, column, row in (
+        (r"\.ce-workbench-header\.topbar \.brand", "1", "1"),
+        (r"\.ce-workbench-header\.topbar nav", "2", "1"),
+        (r"\.ce-workbench-header\.topbar \.topbar-right", "3", "1"),
+        (r"\.ce-workbench-header\.topbar \.ce-status-strip", "1 / -1", "2"),
+    ):
+        assert re.search(
+            rf"{selector}\s*\{{[^}}]*grid-column: {re.escape(column)};[^}}]*grid-row: {row};",
+            intermediate,
+            re.DOTALL,
+        )
     narrow = css[css.index("@media (max-width: 760px)"):]
-    assert ".ce-workbench-header.topbar nav" in narrow
-    assert "order: 3" in narrow
+    for selector, column, row in (
+        (r"\.ce-workbench-header\.topbar \.brand", "1", "1"),
+        (r"\.ce-workbench-header\.topbar \.topbar-right", "2", "1"),
+        (r"\.ce-workbench-header\.topbar nav", "1 / -1", "2"),
+        (r"\.ce-workbench-header\.topbar \.ce-status-strip", "1 / -1", "3"),
+    ):
+        assert re.search(
+            rf"{selector}\s*\{{[^}}]*grid-column: {re.escape(column)};[^}}]*grid-row: {row};",
+            narrow,
+            re.DOTALL,
+        )
     assert "overflow-x: auto" in narrow
+    assert ".ce-workbench-header .ce-status-strip .ce-readiness-details[open] [data-readiness-detail]" in css
+    assert "max-width: min(420px, calc(100vw - 32px))" in css
     assert re.search(r"(?m)^\.topbar\s*\{", css) is None
+
+
+def test_desk_starts_with_compact_controls_without_visible_hero():
+    """Desk orientation stays in the active header while its controls remain intact."""
+    html = _slurp("api/webui/templates/dashboard.html")
+    assert 'id="desk-root" class="ce-desk-shell" aria-label="Desk"' in html
+    assert "ce-desk-intro" not in html
+    assert "desk-title" not in html
+    assert re.search(r"<h1(?:\s|>)", html) is None
+    toolbar_start = html.index('class="ce-desk-toolbar"')
+    tools_start = html.index('class="ce-desk-grid"')
+    toolbar = html[toolbar_start:tools_start]
+    assert 'aria-label="Desk controls"' in toolbar
+    for control_id in ("desk-course-field", "desk-scope-note", "desk-local-status", "desk-scan"):
+        assert toolbar.count(f'id="{control_id}"') == 1
+    assert toolbar.index('id="desk-course-field"') < toolbar.index('id="desk-local-status"') < toolbar.index('id="desk-scan"')
+    assert '<option value="">Keep saved context</option>' in toolbar
+    assert '<option value="__all__">All active courses</option>' in toolbar
+
+
+def test_desk_intro_css_is_removed_and_toolbar_owns_compact_layout():
+    css = _slurp("api/webui/static/workbench.css")
+    for removed in (".ce-desk-intro", ".ce-desk-kicker", ".ce-desk-lede"):
+        assert removed not in css
+    assert "grid-template-columns: minmax(260px, 360px) minmax(0, 1fr) auto" in css
+    assert ".ce-desk-local-state" in css
 
 
 def test_powergrader_review_apply_contract():
@@ -440,7 +510,7 @@ def test_workbench_instrument_language_and_drafting_grid_contract():
     dashboard = _slurp("api/webui/templates/dashboard.html")
     desk_js = _slurp("api/webui/static/desk.js")
     for text in [
-        ">Desk<", ">Course context<", "Saved targets are unchanged.",
+        ">Course context<", "Saved targets are unchanged.",
         'id="desk-local-status">Local state.</span>', ">Tools<", ">In progress<", ">Needs review<",
         ">Prepared<", ">Receipts<", "No open work.",
         "No items need review.", "No prepared operations.", "No receipts.",

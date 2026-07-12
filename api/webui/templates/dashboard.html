@@ -2,13 +2,10 @@
 {% block title %}Desk · Canvas Expert{% endblock %}
 {% block body_class %}ce-workbench-page ce-desk-page{% endblock %}
 {% block content %}
-<div id="desk-root" class="ce-desk-shell">
+<div id="desk-root" class="ce-desk-shell" aria-label="Desk">
   <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "receipts": initial_receipts} | tojson }}</script>
 
-  <section class="ce-desk-intro" aria-labelledby="desk-title">
-    <div>
-      <h1 id="desk-title">Desk</h1>
-    </div>
+  <div class="ce-desk-toolbar" aria-label="Desk controls">
     <div class="ce-desk-scope" aria-label="Desk course scope">
       <label for="desk-course-field">Course context</label>
       <select id="desk-course-field">
@@ -20,10 +17,7 @@
       </select>
       <p id="desk-scope-note" class="ce-desk-scope-note">Saved targets are unchanged.</p>
     </div>
-  </section>
-
-  <div class="ce-desk-toolbar" aria-label="Desk actions">
-    <div>
+    <div class="ce-desk-local-state">
       <span id="desk-local-status">Local state.</span>
     </div>
     <button type="button" id="desk-scan" class="ce-desk-button ce-desk-button--primary">Scan active courses</button>

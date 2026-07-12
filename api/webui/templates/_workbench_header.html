@@ -8,6 +8,7 @@
     <a class="ce-workbench-nav-link{% if workbench_section == 'manage' %} ce-workbench-nav-link--active{% endif %}" href="/roster"{% if workbench_section == 'manage' %} aria-current="page"{% endif %}>Students</a>
     <a class="ce-workbench-nav-link{% if workbench_section == 'automate' %} ce-workbench-nav-link--active{% endif %}" href="/routines"{% if workbench_section == 'automate' %} aria-current="page"{% endif %}>Automations</a>
   </nav>
+  {% include "_readiness_strip.html" %}
   <div class="topbar-right">
     <a class="topbar-settings-link{% if workbench_section == 'settings' %} ce-workbench-nav-link--active{% endif %}" href="/settings"{% if workbench_section == 'settings' %} aria-current="page"{% endif %}>Settings</a>
     <button class="theme-toggle" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle theme">

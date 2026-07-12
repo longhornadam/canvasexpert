@@ -1,6 +1,6 @@
 # Execution brief: consolidate readiness into the Workbench header
 
-Status: **ready for implementation**
+Status: **completed**
 
 Risk: **low**
 
@@ -134,10 +134,38 @@ the senior. Do not leave the only copy of execution state or test evidence in ch
 
 ### Execution result
 
-- Traffic light: **not started**
-- Changes are uncommitted
-- Files changed: none
-- Verification commands and pass/fail/skip counts: not run
-- Rendered routes checked: not run
-- Deviations from the brief: none
-- Remaining blocker or decision: none
+- Traffic light: **GREEN**
+- Changes are committed in the enclosing implementation commit.
+- Files changed: `api/webui/templates/_workbench_header.html`,
+  `api/webui/templates/workbench_base.html`, `api/webui/templates/dashboard.html`,
+  `api/webui/static/workbench.css`, `api/tests/test_webui_template_contracts.py`,
+  `docs/reference/operation-ledger-release-status.md`, and this archived handoff.
+- Verification commands and pass/fail/skip counts:
+  - `py -m pytest api/tests/test_webui_template_contracts.py api/tests/test_route_contract.py`
+    — 79 passed, 0 failed.
+  - `node --check api/webui/static/readiness.js` — passed.
+  - `node --check api/webui/static/desk.js` — passed.
+  - `git diff --check` — passed (line-ending notices only).
+  - Follow-up after intermediate-grid correction:
+    `py -m pytest api/tests/test_webui_template_contracts.py` — 78 passed, 0 failed;
+    `git diff --check` — passed (line-ending notices only).
+- Rendered routes checked with a lifespan-disabled server using structural-only evidence:
+  - 1366x768 light/dark matrix for `/`, `/course-expert`, `/gradebook`, `/powergrader`,
+    and `/roster`: one 52px header, one correct active route, readiness inside the header,
+    three readiness components, one readiness script, no separate body status root, unique
+    theme control, no document overflow, and zero combined console warnings/errors.
+  - Desk desktop: no h1/intro; one toolbar owns course field/note/local status/Scan; Tools
+    follows immediately as the first panel.
+  - 1000x800 after the bounded grid repair: one 72px header with brand/navigation/Settings-
+    theme on row 1 and readiness on row 2; no overflow or console warnings/errors.
+  - 760x900 opposite-theme matrix for `/`, `/course-expert?tab=quiz`, and `/powergrader`:
+    one 113px header with brand/Settings-theme, navigation, and readiness on rows 1, 2, and
+    3; all links/status components displayed and reachable, one correct active route, no
+    overflow, and zero combined console warnings/errors.
+  - Desk narrow: no h1; course context spans the full first control row, local status and
+    Scan share the next compact row, and Tools remains the next content section.
+  - Healthy readiness did not expose degraded-only details; contained popover/max-width
+    behavior remains covered by focused CSS/template contracts without fabricating state.
+  - Legacy base/header remained untouched by diff and contract.
+- Deviations from the brief: none.
+- Remaining blocker or decision: none. Terra escalation was not needed.
