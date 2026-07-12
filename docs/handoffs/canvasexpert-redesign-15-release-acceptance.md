@@ -1,34 +1,57 @@
-# Ferrari acceptance 15: Desk / Workbench / Instrument release gate
+# 15: Release acceptance
 
-Ferrari/user alone accepts and archives. Run full API and engine suites, every changed JS
-through `node --check`, `git diff --check`, secret/PII/absolute-path scans, and fetch/
-compare `dev`, `origin/dev`, and `origin/main`.
+## Objective
 
-Render with lifespan off at 1920x1080 and 2560x1440, dark/light: Desk; every CourseExpert
-tab and standalone redirect; PG setup/queue; Gradebook; Roster; Routines; Settings;
-Course Info; Downloads; Reports; AI Expert; About; Welcome; Feedback. Record globals,
-unique IDs, focus, dialog bounds, deep links, context truth, no unintended page scroll,
-and zero new console errors/warnings.
+Verify the operation ledger is complete and crash-safe, then declare the redesign
+done. No browser runtime check. No live-fire matrix. No rendered verification.
 
-Functional acceptance proves real Start/Continue/Attention persistence; independent
-focus/targets; one Workbench/Instrument DOM state; readiness truth; review invalidation;
-write-ahead recovery; partial receipts; unresolved-only retry; ambiguous Attention;
-proven reversal; PG keyboard review; draft semantics; exactly-once routines; and Feedback
-parity.
+## Acceptance criteria
 
-## Separately authorized live-fire matrix
+1. **All focused adapter tests pass.** Every registered operation kind has a test
+   file and it passes:
+   - `test_quiz_operation.py` (11d1 + 11d2)
+   - `test_assignment_operation.py` + `test_assignment_tier_operation.py`
+   - `test_quick_assignment_operation.py`
+   - `test_page_operation.py`
+   - `test_rubric_operation.py`
+   - `test_late_policy_operation.py`
+   - `test_sweep_operation.py`
+   - `test_extension_operation.py`
+   - `test_curve_operation.py`
+   - `test_roster_group_set_operation.py`
+   - `test_roster_membership_operation.py`
 
-Using disposable Canvas objects, every apply-capable kind requires: happy path plus GET
-postcondition; cancel/no-write; drift/no-write; ambiguous-success reconciliation; repeat/
-no-new-effect; induced partial plus unresolved-only retry; restart/reconnect; and, where
-supported, reversal plus GET postcondition and cleanup. Name prepare-only kinds and prove
-no apply control. Repo evidence uses fictional labels/redacted receipt references; real
-IDs/details remain untracked PRIVATE. Missing any row fails acceptance. Live fire requires
-separate user authorization.
+2. **Full API test suite is green.** `py -m pytest api/tests` — all pass, at most
+   one pre-existing skip.
 
-## Rollback
+3. **Restart recovery verified.** The recovery tests in `test_operation_ledger.py`
+   pass: claimed/sent-unknown steps reconcile by exact IDs, operation status
+   finalizes correctly, no duplicate sends after restart.
 
-There is no invented runtime feature flag. Revert accepted migration commits in reverse
-dependency order while preserving registry, machine-local operations/receipts/backups,
-PG sessions, autoscore queue, settings, activity, and Feedback storage. Never delete user
-data as rollback. Document any forward-schema reader limitation before release.
+4. **`git diff --check` is clean.** No whitespace errors.
+
+5. **No secrets, PII, or absolute paths in the diff.** Scan the full diff for
+   token patterns, student names, or developer-specific paths.
+
+6. **All registered kinds listed.** `registry.known_kinds()` returns every
+   expected operation kind.
+
+## What this is NOT
+
+- No browser runtime verification (browser migration deferred)
+- No live-fire Canvas matrix (not authorized)
+- No rendered-app oracle check
+- No SSE/event verification (polling only, 11d3)
+
+## Commands
+
+```powershell
+py -m pytest api/tests
+py -m pytest engine/tests
+git diff --check
+```
+
+## Reference
+
+`api/operation_ledger/registry.py::known_kinds` for the registered kind list.
+`api/tests/test_operation_ledger.py` for the recovery test pattern.
