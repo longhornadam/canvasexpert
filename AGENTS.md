@@ -349,6 +349,8 @@ new browser-console errors. Backend pytest results cannot substitute for this ch
 - `docs/contracts/` contains durable data contracts.
 - `docs/guides/` contains durable usage/authoring guidance.
 - `docs/reference/` contains stable architecture, module maps, and verified facts.
+- For content operation-ledger adapter ownership and current split boundaries, start with
+  `docs/reference/operation-ledger-module-map.md`.
 
 Project-local tool routing lives in `TOOLS.md` and `tools/manifests/`. Do not invent
 tool conventions in scattered docs.

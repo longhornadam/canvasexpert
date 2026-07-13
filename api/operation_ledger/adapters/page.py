@@ -3,6 +3,19 @@
 import json
 
 from .. import models
+from .adapter_support import (
+    as_list as _as_list,
+    build_result as _build_result,
+    ensure_step as _ensure_step,
+    find_step as _find_step,
+    has_outbound_marker as _has_outbound_marker,
+    is_uncertain as _is_uncertain,
+    module_id_from_steps as _module_id_from_steps,
+    normalize as _normalize_title,
+    ordered_steps as _ordered_steps_from_order,
+    prepend_step as _step,
+    replace_step as _replace_local_step,
+)
 from api.webui import canvas_client, config, pf
 
 
@@ -432,81 +445,7 @@ def _read_modules(course_id: str):
 
 
 def _ordered_steps(target: dict) -> list[dict]:
-    existing = {step.get("step_key"): step for step in target.get("steps", [])}
-    order = ("create_page", "create_module", "attach_module")
-    return [existing[key] for key in order if key in existing]
-
-
-def _find_step(steps: list[dict], step_key: str) -> dict:
-    return next((step for step in steps if step.get("step_key") == step_key),
-                models.new_step(step_key))
-
-
-def _step(steps: list[dict], step_key: str) -> dict:
-    found = next((step for step in steps if step.get("step_key") == step_key), None)
-    if found is not None:
-        return found
-    step = models.new_step(step_key)
-    steps.insert(0, step)
-    return step
-
-
-def _ensure_step(steps: list[dict], step_key: str) -> dict:
-    found = next((step for step in steps if step.get("step_key") == step_key), None)
-    if found is not None:
-        return found
-    step = models.new_step(step_key)
-    steps.append(step)
-    return step
-
-
-def _replace_local_step(steps: list[dict], step: dict) -> None:
-    for index, existing in enumerate(steps):
-        if existing.get("step_key") == step.get("step_key"):
-            steps[index] = step
-            return
-    steps.append(step)
-
-
-def _module_id_from_steps(create_step: dict, attach_step: dict) -> str | None:
-    return (str(create_step.get("returned_object_id"))
-            if create_step.get("returned_object_id") is not None else
-            str(attach_step.get("module_id"))
-            if attach_step.get("module_id") is not None else None)
-
-
-def _has_outbound_marker(steps: list[dict]) -> bool:
-    return any(step.get("outbound_started_at") for step in steps)
-
-
-def _as_list(data) -> list:
-    if data is None:
-        return []
-    return data if isinstance(data, list) else [data]
-
-
-def _normalize_title(value) -> str:
-    return str(value or "").strip().lower()
-
-
-def _is_uncertain(error: str) -> bool:
-    lower = str(error or "").lower()
-    return any(term in lower for term in (
-        "timeout", "timed out", "connection", "network", "unparseable",
-        "no response", "read timed out",
-    ))
-
-
-def _build_result(state: str, *, steps: list[dict],
-                  returned_object_id: str | None = None,
-                  returned_object_url: str | None = None,
-                  error_code: str | None = None,
-                  private_diagnostic: str | None = None) -> dict:
-    return {
-        "state": state,
-        "returned_object_id": returned_object_id,
-        "returned_object_url": returned_object_url,
-        "error_code": error_code,
-        "private_diagnostic": private_diagnostic,
-        "steps": steps,
-    }
+    return _ordered_steps_from_order(
+        target,
+        ("create_page", "create_module", "attach_module"),
+    )
