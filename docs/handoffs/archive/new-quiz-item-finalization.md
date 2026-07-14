@@ -1,6 +1,6 @@
 # Execution brief: reviewed New Quiz item finalization in PowerGrader
 
-Status: **ready for implementation**
+Status: **blocked — superseded by authorized transport capture**
 
 Risk: **high**
 
