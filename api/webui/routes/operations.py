@@ -7,7 +7,7 @@ names — the adapter owns all Canvas interaction.
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from api.webui.local_request_guard import require_local_mutation
+from ..local_request_guard import require_local_mutation
 
 from api.operation_ledger import (
     batches, executor, models, operations, registry,

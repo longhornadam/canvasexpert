@@ -84,6 +84,31 @@ Unknown versions, origins, statuses, source types, absolute URLs, absolute files
 paths, and non-string Canvas IDs are rejected. `focused_course_id` is empty or a member
 of `course_ids`.
 
+## Transient Desk presentation sidecar
+
+The exact job shape above remains generic and is the only job shape written to registry,
+discovery, suppression, session, or queue storage. For the loopback-only Desk UI,
+`GET /api/work` may return a separate top-level `presentations` mapping keyed by opaque
+`job_id`. Dashboard initial data receives the same mapping. Each value has exactly four
+string fields:
+
+```json
+{
+  "course_label": "configured Current-course nickname or empty",
+  "title": "local semantic title",
+  "summary": "aggregate-only progress sentence",
+  "action_label": "specific local action label"
+}
+```
+
+This sidecar is computed on demand from Current-course configuration, PowerGrader session
+summaries, scheduled autoscore metadata, and the already-public job counts. It is never
+merged into a job or persisted. It may include a teacher-authored assignment title and
+aggregate student/submission counts, but never student names or IDs, grades, comments,
+submission content, feedback, roster notes, or per-student state. Missing local authorities
+fail closed to generic presentation text without opening a full private session or reading
+Canvas.
+
 ## Authority and adapters
 
 The registry never copies authoritative subsystem payloads:
@@ -96,7 +121,9 @@ The registry never copies authoritative subsystem payloads:
 - Canvas assignment/submission truth remains in Canvas and bounded discovery caches.
 - Prepared operations and receipts use the Operation Ledger Contract.
 
-Adapters project summaries into jobs and hydrate details only after the job opens.
+Adapters project summaries into jobs and hydrate details only after the job opens. The
+transient Desk presentation sidecar is a display projection, not hydration and not an
+authority.
 
 ## Detected findings
 

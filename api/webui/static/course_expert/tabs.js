@@ -5,6 +5,13 @@
     return Array.prototype.slice.call(document.querySelectorAll(".ce-tab[role='tab']"));
   }
 
+  function updateWorkspaceTitle(tabName) {
+    var title = document.getElementById("ce-workspace-title");
+    if (!title) return;
+    var tab = document.querySelector('.ce-tab[data-tab="' + tabName + '"]');
+    title.textContent = tab ? tab.textContent.trim() : "Workspace";
+  }
+
   function activateTab(tabName, options) {
     var shouldFocus = options && options.focus;
     var activated = false;
@@ -24,6 +31,7 @@
       panel.hidden = !isActive;
       panel.inert = !isActive;
     });
+    if (activated) updateWorkspaceTitle(tabName);
     return activated;
   }
 

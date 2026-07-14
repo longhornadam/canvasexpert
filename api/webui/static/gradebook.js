@@ -291,45 +291,6 @@
     }
   }
 
-  // ── Course picker: all courses auto-load, bookmarked pinned on top ─────
-
-  (async function loadAllCoursesIntoPicker() {
-    const sel = document.getElementById("gb-course-sel");
-    if (!sel) return;
-    const bookmarked = [...sel.options].filter(o => o.value).map(o => ({
-      id: o.value, name: o.dataset.name || o.text, nick: o.text,
-    }));
-    try {
-      const d = await fetch("/api/courses").then(r => r.json());
-      if (!d.ok || !d.courses?.length) return;   // offline/no token → keep bookmarks
-      const cur = sel.value;
-      const bmIds = new Set(bookmarked.map(b => b.id));
-      sel.innerHTML = '<option value="">— pick a course —</option>';
-      if (bookmarked.length) {
-        const og = document.createElement("optgroup");
-        og.label = "★ Bookmarked";
-        bookmarked.forEach(b => {
-          const o = new Option(b.nick, b.id);
-          o.dataset.name = b.name;
-          og.appendChild(o);
-        });
-        sel.appendChild(og);
-      }
-      const rest = d.courses.filter(c => !bmIds.has(c.id));
-      if (rest.length) {
-        const og = document.createElement("optgroup");
-        og.label = "All courses";
-        rest.forEach(c => {
-          const o = new Option(c.name, c.id);
-          o.dataset.name = c.name;
-          og.appendChild(o);
-        });
-        sel.appendChild(og);
-      }
-      if (cur) sel.value = cur;
-    } catch (e) { /* keep server-rendered bookmarks */ }
-  })();
-
   // ── Course change: reset + auto-load active tab ────────────────────────
 
   document.getElementById("gb-course-sel")?.addEventListener("change", () => {

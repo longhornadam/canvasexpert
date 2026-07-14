@@ -3,14 +3,14 @@
 {% block body_class %}ce-workbench-page ce-desk-page{% endblock %}
 {% block content %}
 <div id="desk-root" class="ce-desk-shell" aria-label="Desk">
-  <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "receipts": initial_receipts} | tojson }}</script>
+  <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "presentations": initial_presentations, "operations": initial_operations, "receipts": initial_receipts} | tojson }}</script>
 
   <div class="ce-desk-toolbar" aria-label="Desk controls">
     <div class="ce-desk-scope" aria-label="Desk course scope">
       <label for="desk-course-field">Course context</label>
       <select id="desk-course-field">
         <option value="">Keep saved context</option>
-        <option value="__all__">All active courses</option>
+        <option value="__all__">All Current courses</option>
         {% for course in saved_courses %}
         <option value="{{ course.id }}">{{ course.nickname or course.name }}</option>
         {% endfor %}
@@ -20,89 +20,94 @@
     <div class="ce-desk-local-state">
       <span id="desk-local-status">Local state.</span>
     </div>
-    <button type="button" id="desk-scan" class="ce-desk-button ce-desk-button--primary">Scan active courses</button>
+    <button type="button" id="desk-scan" class="ce-desk-button ce-desk-button--primary">Scan Current courses</button>
   </div>
 
   <div class="ce-desk-grid">
     <section class="ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
       <div class="ce-desk-panel-head">
-        <div>
-          <h2 id="desk-start-title">Tools</h2>
-        </div>
+        <h2 id="desk-start-title">Start</h2>
       </div>
-      <div class="ce-desk-start-grid">
-        <a class="ce-desk-start-card ce-create-mark" data-desk-start href="/course-expert?tab=assignment">
-          <span class="ce-desk-card-index">01</span><strong>Assignment</strong><span>Create and publish authored work.</span>
-        </a>
-        <a class="ce-desk-start-card ce-create-mark" data-desk-start href="/course-expert?tab=quiz">
-          <span class="ce-desk-card-index">02</span><strong>Quiz</strong><span>Validate and deliver a QuizForge assessment.</span>
-        </a>
-        <a class="ce-desk-start-card ce-create-mark" data-desk-start href="/course-expert?tab=quick">
-          <span class="ce-desk-card-index">03</span><strong>Quick column</strong><span>Add a fast gradebook column.</span>
-        </a>
-        <a class="ce-desk-start-card ce-create-mark" data-desk-start href="/course-expert?tab=page">
-          <span class="ce-desk-card-index">04</span><strong>Page</strong><span>Create and place a Canvas page.</span>
-        </a>
-        <a class="ce-desk-start-card ce-create-mark" data-desk-start href="/course-expert?tab=rubric">
-          <span class="ce-desk-card-index">05</span><strong>Rubric</strong><span>Create or update a course rubric.</span>
-        </a>
-        <a class="ce-desk-start-card ce-grade-mark" data-desk-start href="/powergrader">
-          <span class="ce-desk-card-index">06</span><strong>PowerGrader</strong><span>Grade one assignment in a focused queue.</span>
-        </a>
-        <a class="ce-desk-start-card ce-grade-mark" data-desk-start href="/gradebook">
-          <span class="ce-desk-card-index">07</span><strong>Gradebook</strong><span>Review policy, extensions, curves, or snapshots.</span>
-        </a>
-        <a class="ce-desk-start-card ce-grade-mark" data-desk-start href="/roster">
-          <span class="ce-desk-card-index">08</span><strong>Roster</strong><span>Manage student settings and groups.</span>
-        </a>
-        <a class="ce-desk-start-card ce-grade-mark" data-desk-start href="/course-expert?tab=students">
-          <span class="ce-desk-card-index">09</span><strong>Reports</strong><span>Build a student report packet.</span>
-        </a>
-        <a class="ce-desk-start-card ce-prepared-mark" data-desk-start href="/course-expert?tab=download">
-          <span class="ce-desk-card-index">10</span><strong>Downloads</strong><span>Collect student work locally.</span>
-        </a>
-        <a class="ce-desk-start-card ce-prepared-mark" data-desk-start href="/routines">
-          <span class="ce-desk-card-index">11</span><strong>Routines</strong><span>Review local automations and due work.</span>
-        </a>
+      <div class="ce-desk-launch-groups">
+        <section class="ce-desk-launch-group" aria-labelledby="desk-create-title">
+          <h3 id="desk-create-title" class="ce-create-mark">Create</h3>
+          <div class="ce-desk-launch-list">
+            <a data-desk-start href="/course-expert?tab=assignment">Assignment <span aria-hidden="true">→</span></a>
+            <a data-desk-start href="/course-expert?tab=quiz">Quiz <span aria-hidden="true">→</span></a>
+            <a data-desk-start href="/course-expert?tab=quick">Quick column <span aria-hidden="true">→</span></a>
+            <a data-desk-start href="/course-expert?tab=page">Page <span aria-hidden="true">→</span></a>
+            <a data-desk-start href="/course-expert?tab=rubric">Rubric <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
+        <section class="ce-desk-launch-group" aria-labelledby="desk-grade-title">
+          <h3 id="desk-grade-title" class="ce-grade-mark">Grade</h3>
+          <div class="ce-desk-launch-list">
+            <a data-desk-start href="/powergrader">PowerGrader <span aria-hidden="true">→</span></a>
+            <a data-desk-start href="/gradebook">Gradebook <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
+        <section class="ce-desk-launch-group" aria-labelledby="desk-manage-title">
+          <h3 id="desk-manage-title" class="ce-attention-mark">Manage</h3>
+          <div class="ce-desk-launch-list">
+            <a data-desk-start href="/roster">Roster <span aria-hidden="true">→</span></a>
+            <a data-desk-start href="/course-expert?tab=students">Reports <span aria-hidden="true">→</span></a>
+            <a data-desk-start href="/course-expert?tab=download">Downloads <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
+        <section class="ce-desk-launch-group" aria-labelledby="desk-automate-title">
+          <h3 id="desk-automate-title" class="ce-prepared-mark">Automate</h3>
+          <div class="ce-desk-launch-list">
+            <a data-desk-start href="/routines">Routines <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
       </div>
     </section>
 
-    <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-continue-title">
-      <div class="ce-desk-panel-head"><h2 id="desk-continue-title">In progress</h2></div>
+    <section class="ce-desk-panel ce-desk-panel--continue" aria-labelledby="desk-continue-title">
+      <div class="ce-desk-panel-head"><h2 id="desk-continue-title">Continue</h2></div>
       <div id="desk-continue-list" class="ce-desk-list" aria-live="polite">
         {% for job in initial_jobs if job.status in ['draft', 'ready', 'in_progress'] %}
+        {% set presentation = initial_presentations.get(job.job_id, {}) %}
         <article class="ce-desk-job" data-job-id="{{ job.job_id }}" data-material-version="{{ job.material_version }}" data-origin="{{ job.origin }}">
-          <div><strong>{{ job.title }}</strong><span>{{ job.kind }} · {{ job.counts.total }} items</span></div>
-          <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">Continue</a>
+          <div class="ce-desk-job-detail">{% if presentation.course_label %}<span class="ce-desk-course-label">{{ presentation.course_label }}</span>{% endif %}<strong>{{ presentation.title or job.title or 'Work item' }}</strong><span class="ce-desk-job-summary">{{ presentation.summary or 'Work in progress' }}</span></div>
+          <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">{{ presentation.action_label or 'Continue' }}</a>
+          <div class="ce-desk-job-actions"><button type="button" data-job-action="ignore" data-job-id="{{ job.job_id }}">Ignore</button><button type="button" data-job-action="snooze" data-job-id="{{ job.job_id }}">Snooze</button>{% if job.origin == 'intentional' %}<button type="button" data-job-action="complete" data-job-id="{{ job.job_id }}">Complete</button>{% endif %}</div>
         </article>
         {% else %}<p class="ce-desk-empty">No open work.</p>{% endfor %}
       </div>
     </section>
 
-    <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-attention-title">
-      <div class="ce-desk-panel-head"><h2 id="desk-attention-title">Needs review</h2></div>
+    <section class="ce-desk-panel ce-desk-panel--attention" aria-labelledby="desk-attention-title">
+      <div class="ce-desk-panel-head"><h2 id="desk-attention-title">Attention</h2></div>
       <div id="desk-attention-list" class="ce-desk-list" aria-live="polite">
         {% for job in initial_jobs if job.status == 'attention' %}
+        {% set presentation = initial_presentations.get(job.job_id, {}) %}
         <article class="ce-desk-job" data-job-id="{{ job.job_id }}" data-material-version="{{ job.material_version }}" data-origin="{{ job.origin }}">
-          <div><strong>{{ job.title }}</strong><span>{{ job.attention_reason or 'Work needs attention' }}</span></div>
-          <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">Review</a>
+          <div class="ce-desk-job-detail">{% if presentation.course_label %}<span class="ce-desk-course-label">{{ presentation.course_label }}</span>{% endif %}<strong>{{ presentation.title or job.title or 'Work item' }}</strong><span class="ce-desk-job-summary">{{ presentation.summary or job.attention_reason or 'Work needs attention' }}</span></div>
+          <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">{{ presentation.action_label or 'Review' }}</a>
+          <div class="ce-desk-job-actions"><button type="button" data-job-action="ignore" data-job-id="{{ job.job_id }}">Ignore</button><button type="button" data-job-action="snooze" data-job-id="{{ job.job_id }}">Snooze</button>{% if job.origin == 'intentional' %}<button type="button" data-job-action="complete" data-job-id="{{ job.job_id }}">Complete</button>{% endif %}</div>
         </article>
         {% else %}<p class="ce-desk-empty">No items need review.</p>{% endfor %}
       </div>
     </section>
 
-    <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-prepared-title">
-      <div class="ce-desk-panel-head"><h2 id="desk-prepared-title">Prepared</h2></div>
-      <p id="desk-prepared-empty" class="ce-desk-empty">No prepared operations.</p>
-    </section>
-
-    <section class="ce-desk-panel ce-desk-panel--half" aria-labelledby="desk-receipts-title">
-      <div class="ce-desk-panel-head"><h2 id="desk-receipts-title">Receipts</h2></div>
-      <div id="desk-receipts-list" class="ce-desk-list" aria-live="polite">
-        {% for receipt in initial_receipts %}
-        <article class="ce-desk-receipt"><div><strong>{{ receipt.kind }}</strong><span>{{ receipt.status }} · {{ receipt.target_count }} target{{ '' if receipt.target_count == 1 else 's' }}</span></div><a class="ce-desk-inline-link" href="{{ receipt.detail_url }}">Receipt</a></article>
-        {% else %}<p class="ce-desk-empty">No receipts.</p>{% endfor %}
-      </div>
+    <section class="ce-desk-panel ce-desk-panel--rail" aria-label="Prepared operations and receipts">
+      <section class="ce-desk-rail-section" aria-labelledby="desk-prepared-title">
+        <div class="ce-desk-panel-head"><h2 id="desk-prepared-title">Prepared</h2><span class="ce-desk-panel-note">Canvas unchanged</span></div>
+        <div id="desk-prepared-list" class="ce-desk-list" aria-live="polite">
+          {% for operation in initial_operations if operation.status in ['prepared', 'reviewed'] %}
+          <article class="ce-desk-prepared"><div><strong>{{ operation.kind }}</strong><span>{{ operation.status }} · {{ operation.target_count }} target{{ '' if operation.target_count == 1 else 's' }}</span></div></article>
+          {% else %}<p id="desk-prepared-empty" class="ce-desk-empty">No prepared operations.</p>{% endfor %}
+        </div>
+      </section>
+      <section class="ce-desk-rail-section" aria-labelledby="desk-receipts-title">
+        <div class="ce-desk-panel-head"><h2 id="desk-receipts-title">Receipts</h2></div>
+        <div id="desk-receipts-list" class="ce-desk-list" aria-live="polite">
+          {% for receipt in initial_receipts %}
+          <article class="ce-desk-receipt"><div><strong>{{ receipt.kind }}</strong><span>{{ receipt.status }} · {{ receipt.target_count }} target{{ '' if receipt.target_count == 1 else 's' }}</span></div><a class="ce-desk-inline-link" href="{{ receipt.detail_url }}">Receipt</a></article>
+          {% else %}<p class="ce-desk-empty">No receipts.</p>{% endfor %}
+        </div>
+      </section>
     </section>
   </div>
 </div>

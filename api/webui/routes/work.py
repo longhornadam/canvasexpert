@@ -10,7 +10,8 @@ from fastapi.responses import JSONResponse
 
 from api.work_registry import adapters, discovery, storage, suppressions
 from api.work_registry.models import public_job, validate_registry_document
-from api.webui.local_request_guard import require_local_mutation
+from .. import config
+from ..local_request_guard import require_local_mutation
 
 
 router = APIRouter(prefix="/api", tags=["work"])
@@ -20,7 +21,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _all_jobs() -> list[dict]:
+def _raw_jobs() -> list[dict]:
     registry_jobs = storage.read_registry().get("jobs", [])
     projected = {job["job_id"]: job for job in registry_jobs if isinstance(job, dict)}
     for job in adapters.collect_local_jobs():
@@ -33,7 +34,200 @@ def _all_jobs() -> list[dict]:
         ):
             continue
         projected[job["job_id"]] = job
-    return [public_job(job) for job in projected.values()]
+    current_ids = {
+        str(course.get("id") or "").strip()
+        for course in config.active_courses()
+        if str(course.get("id") or "").strip()
+    }
+    visible = []
+    for job in projected.values():
+        course_ids = {
+            str(course_id).strip()
+            for course_id in (job.get("course_ids") or [])
+            if str(course_id).strip()
+        }
+        if course_ids and not course_ids.intersection(current_ids):
+            continue
+        visible.append(job)
+    return visible
+
+
+def _all_jobs() -> list[dict]:
+    return [public_job(job) for job in _raw_jobs()]
+
+
+def _text(value) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _count(value) -> int:
+    return value if type(value) is int and value >= 0 else 0
+
+
+def _plural(count: int, singular: str, plural: str | None = None) -> str:
+    return singular if count == 1 else (plural or f"{singular}s")
+
+
+def _current_course_labels() -> dict[str, str]:
+    try:
+        courses = config.active_courses()
+    except Exception:
+        return {}
+    labels = {}
+    for course in courses if isinstance(courses, list) else []:
+        if not isinstance(course, dict):
+            continue
+        course_id = _text(course.get("id"))
+        label = _text(course.get("nickname")) or _text(course.get("name"))
+        if course_id and label:
+            labels[course_id] = label
+    return labels
+
+
+def _session_assignment_names() -> dict[str, str]:
+    try:
+        from api.powergrader import session_store
+        summaries = session_store.list_session_summaries()
+    except Exception:
+        return {}
+    names = {}
+    for summary in summaries if isinstance(summaries, list) else []:
+        if not isinstance(summary, dict):
+            continue
+        session_id = _text(summary.get("session_id"))
+        assignment_name = _text(summary.get("assignment_name"))
+        if session_id and assignment_name:
+            names[session_id] = assignment_name
+    return names
+
+
+def _scheduled_display_metadata() -> dict[str, tuple[str, str]]:
+    try:
+        from api.powergrader import autoscore_queue
+        queue = autoscore_queue.load_queue()
+    except Exception:
+        return {}
+    metadata = {}
+    entries = queue.get("jobs", []) if isinstance(queue, dict) else []
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        job_id = _text(entry.get("job_id"))
+        if job_id:
+            metadata[job_id] = (
+                _text(entry.get("assignment_name")),
+                _text(entry.get("status")),
+            )
+    return metadata
+
+
+def _course_label(job: dict, labels: dict[str, str]) -> str:
+    focused = _text(job.get("focused_course_id"))
+    if focused in labels:
+        return labels[focused]
+    for course_id in job.get("course_ids") or []:
+        normalized = _text(course_id)
+        if normalized in labels:
+            return labels[normalized]
+    return ""
+
+
+def _powergrader_summary(counts: dict) -> str:
+    total = _count(counts.get("total"))
+    pending = _count(counts.get("pending"))
+    affected = _count(counts.get("affected"))
+    if total == 0:
+        return "No students in session"
+    prefix = f"{total} {_plural(total, 'student')}"
+    if pending == 0 and affected == 0:
+        return f"{prefix} · all reviewed and posted"
+    clauses = [prefix]
+    if pending:
+        clauses.append(f"{pending} awaiting review")
+    if affected:
+        clauses.append(f"{affected} approved, not posted")
+    return " · ".join(clauses)
+
+
+def _scheduled_summary(status: str) -> str:
+    if status == "scheduled":
+        return "Waiting to run"
+    if status == "session_ready":
+        return "Draft ready for review"
+    if status in {"needs_attention", "needs_review", "failed", "partial_auto_pushed"}:
+        return "Needs attention"
+    if status in {"auto_pushed", "completed"}:
+        return "Completed"
+    return "In progress"
+
+
+def _aggregate_summary(job: dict) -> tuple[str, str, str]:
+    counts = job.get("counts") if isinstance(job.get("counts"), dict) else {}
+    pending = _count(counts.get("pending"))
+    affected = _count(counts.get("affected"))
+    total = _count(counts.get("total"))
+    kind = _text(job.get("kind"))
+    if kind == "grade.debt":
+        count = pending
+        return (
+            "Grading needed",
+            f"{count} {_plural(count, 'submission')} awaiting grading",
+            "Open PowerGrader",
+        )
+    if kind == "late.work":
+        count = affected
+        return "Late work", f"{count} late {_plural(count, 'submission')}", "Open Gradebook"
+    if kind == "roster.warning":
+        count = affected
+        return (
+            "Roster attention",
+            f"{count} roster {_plural(count, 'issue')} need review",
+            "Open Roster",
+        )
+    count = total or pending or affected
+    title = _text(job.get("title")) or "Work item"
+    if job.get("status") == "attention":
+        summary = f"{count} {_plural(count, 'record')} need review" if count else "Work needs review"
+        return title, summary, "Review"
+    summary = f"{count} {_plural(count, 'record')} in progress" if count else "Work in progress"
+    return title, summary, "Continue"
+
+
+def _presentations(jobs: list[dict]) -> dict[str, dict[str, str]]:
+    labels = _current_course_labels()
+    kinds = {_text(job.get("kind")) for job in jobs if isinstance(job, dict)}
+    session_names = _session_assignment_names() if "grade.powergrader" in kinds else {}
+    scheduled_metadata = (
+        _scheduled_display_metadata() if "grade.powergrader.scheduled" in kinds else {}
+    )
+    presentations = {}
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        job_id = _text(job.get("job_id"))
+        if not job_id:
+            continue
+        kind = _text(job.get("kind"))
+        source_ref = job.get("source_ref") if isinstance(job.get("source_ref"), dict) else {}
+        source_value = _text(source_ref.get("value"))
+        if kind == "grade.powergrader":
+            title = session_names.get(source_value) or "PowerGrader session"
+            summary = _powergrader_summary(job.get("counts") or {})
+            action_label = "Review & post" if _count((job.get("counts") or {}).get("affected")) else "Continue grading"
+        elif kind == "grade.powergrader.scheduled":
+            assignment_name, status = scheduled_metadata.get(source_value, ("", ""))
+            title = assignment_name or "Scheduled PowerGrader"
+            summary = _scheduled_summary(status)
+            action_label = "Open grading"
+        else:
+            title, summary, action_label = _aggregate_summary(job)
+        presentations[job_id] = {
+            "course_label": _course_label(job, labels),
+            "title": title,
+            "summary": summary,
+            "action_label": action_label,
+        }
+    return presentations
 
 
 def _section_jobs(section: str) -> list[dict] | None:
@@ -67,7 +261,7 @@ async def _exact_body(request: Request, keys: set[str]):
 
 
 def _find_current(job_id: str):
-    return next((job for job in _all_jobs() if job["job_id"] == job_id), None)
+    return next((job for job in _raw_jobs() if job["job_id"] == job_id), None)
 
 
 def _conflict(message: str = "job is unknown or stale"):
@@ -103,7 +297,12 @@ def get_work(section: str = "continue"):
     jobs = _section_jobs(section)
     if jobs is None:
         return JSONResponse({"ok": False, "error": "unknown section"}, status_code=400)
-    return JSONResponse({"ok": True, "jobs": jobs, "start_sources": adapters.collect_start_sources()})
+    return JSONResponse({
+        "ok": True,
+        "jobs": jobs,
+        "presentations": _presentations(jobs),
+        "start_sources": adapters.collect_start_sources(),
+    })
 
 
 @router.post("/work/scan")

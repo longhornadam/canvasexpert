@@ -307,7 +307,7 @@ def test_push_grades_includes_late_override_for_late_catchup_student():
     assert saved["students"][0]["posted"] is True
 
 
-def test_late_score_rejects_non_assisted_session(monkeypatch):
+def test_late_routes_reject_non_assisted_session(monkeypatch):
     session = {
         "session_id": "sid",
         "mode": "fast",
@@ -318,11 +318,12 @@ def test_late_score_rejects_non_assisted_session(monkeypatch):
     monkeypatch.setattr(powergrader, "_load_session", load_session)
     monkeypatch.setattr(powergrader, "_save_session", save_session)
 
-    response = powergrader.pg_late_score("sid")
-    data = _response_json(response)
-
-    assert data["ok"] is False
-    assert "Auto-Score With API" in data["error"]
+    for route in (powergrader.pg_late_preview, powergrader.pg_late_score):
+        data = _response_json(route("sid"))
+        assert data == {
+            "ok": False,
+            "error": "Late catch-up requires Auto-Score With API.",
+        }
     assert state["mode"] == "fast"
 
 

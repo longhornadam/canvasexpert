@@ -11,9 +11,9 @@ safety layer for content pushes. See the acceptance table below.
    no reconnection protocol, no asyncio threading. The ledger's checkpointed step
    state is the source of truth.
 
-2. **Browser migration deferred.** The operation ledger is a backend safety layer
-   accessible via API. Legacy streaming routes remain active and are not shut down.
-   Browser migration to the operation-ledger path is a post-release UX improvement.
+2. **Browser migration complete.** The operation ledger is the sole browser live-write path for
+   quizzes. The legacy QuizForge streaming HTTP wrappers were removed in July 2026.
+   Direct CLI (`qf_pusher.py`, `push_tiers.py`) remains a supported manual path.
 
 3. **Feedback stays on its existing path.** The feedback pipeline already has its
    own safety layer (SAFE/PRIVATE zones, pseudonymization, teacher review before

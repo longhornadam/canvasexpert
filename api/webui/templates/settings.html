@@ -200,50 +200,81 @@
   </div>
 </section>
 
-<section class="card">
-  <h2>Bookmarked courses</h2>
+<section class="card" id="current-courses-card">
+  <h2>Current courses</h2>
   <p class="hint">
-    Save the courses you push to often — they appear at the top of the course
-    picker on the dashboard. You can always browse all your courses live from
-    the dashboard too.
+    Canvas Expert uses only these courses in Desk scans, normal course pickers, and
+    automatic PowerGrader work. Move a finished course to Previous to keep its local
+    history without including it in current work.
   </p>
 
-  {% if saved_courses %}
-  <p class="hint" style="margin-bottom:10px">
-    Only <strong>Active</strong> courses appear in the dashboard picker and multi-course
-    push list. Mark courses you no longer need as Inactive to keep things tidy.
-  </p>
+  {% if current_courses %}
   <table class="profiles">
-    <thead><tr><th>Nickname</th><th>Course name</th><th>ID</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Nickname</th><th>Course name</th><th>ID</th><th></th><th></th></tr></thead>
     <tbody>
-      {% for c in saved_courses %}
+      {% for c in current_courses %}
       <tr id="course-row-{{ c.id }}">
         <td><strong>{{ c.nickname }}</strong></td>
         <td class="muted">{{ c.name }}</td>
         <td class="muted">#{{ c.id }}</td>
         <td>
-          {% if c.active %}
-          <button class="small active-toggle" style="color:#2f8132;border-color:#a8d5b5"
-                  data-course-id="{{ c.id }}" data-current="true">✓ Active</button>
-          {% else %}
-          <button class="small active-toggle" style="color:var(--muted)"
-                  data-course-id="{{ c.id }}" data-current="false">Inactive</button>
-          {% endif %}
+          <button class="small active-toggle" data-course-id="{{ c.id }}"
+                  data-current="true">Move to Previous</button>
         </td>
         <td>
           <button class="danger small" data-remove-course="{{ c.id }}"
-                  data-remove-name="{{ c.nickname }}">Remove</button>
+                  data-remove-name="{{ c.nickname }}">Remove from Canvas Expert</button>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p class="hint">No bookmarks yet — fetch your courses below and add some.</p>
+  <p class="hint">No Current courses yet. Add one from Canvas below.</p>
   {% endif %}
+</section>
 
+<section class="card" id="previous-courses-card">
+  <h2>Previous courses</h2>
+  <p class="hint">
+    Previous courses stay saved with their local sessions, receipts, downloads, and
+    settings. They are excluded from normal work until you make them Current again.
+  </p>
+
+  {% if previous_courses %}
+  <table class="profiles">
+    <thead><tr><th>Nickname</th><th>Course name</th><th>ID</th><th></th><th></th></tr></thead>
+    <tbody>
+      {% for c in previous_courses %}
+      <tr id="course-row-{{ c.id }}">
+        <td><strong>{{ c.nickname }}</strong></td>
+        <td class="muted">{{ c.name }}</td>
+        <td class="muted">#{{ c.id }}</td>
+        <td>
+          <button class="small active-toggle" data-course-id="{{ c.id }}"
+                  data-current="false">Make Current</button>
+        </td>
+        <td>
+          <button class="danger small" data-remove-course="{{ c.id }}"
+                  data-remove-name="{{ c.nickname }}">Remove from Canvas Expert</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="hint">No Previous courses.</p>
+  {% endif %}
+</section>
+
+<section class="card" id="add-courses-card">
+  <h2>Add courses from Canvas</h2>
+  <p class="hint">
+    Browse every course available to your Canvas account. Adding a course makes it
+    Current in Canvas Expert.
+  </p>
   <div class="actions" style="margin-top:16px">
-    <button type="button" id="btn-fetch-courses">Browse all my courses…</button>
+    <button type="button" id="btn-fetch-courses">Browse Canvas courses…</button>
   </div>
 
   <div id="course-browser" hidden style="margin-top:16px">

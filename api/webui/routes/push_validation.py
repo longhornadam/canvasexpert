@@ -1,4 +1,4 @@
-"""Validation and physical-render routes used by the push UI."""
+"""Validation, physical-render, and dry-run preview routes used by the push UI."""
 import os
 import sys
 import uuid as _uuid
@@ -6,7 +6,7 @@ import uuid as _uuid
 from fastapi import File, Form, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from .. import af, pf, rf
+from .. import af, config, pf, rf, runner
 from ..deps import TEMP_DIR, REPO_ROOT, _exports_dir, _workspace_folder
 
 
@@ -29,6 +29,18 @@ def register_validation_routes(router, exports_dir_func=_exports_dir, workspace_
         else:
             return JSONResponse({"ok": False, "error": "No content or file provided"})
         return JSONResponse({"ok": True, "path": path})
+
+    @router.post("/api/push/preview")
+    def api_push_preview(course_id: str = Form(...), path: str = Form(...), settings: str = Form("")):
+        """Dry-run preview: run qf_pusher.py with --dry-run for one course."""
+        try:
+            env = config.resolve_env(course_id)
+        except ValueError as e:
+            return JSONResponse({"ok": False, "error": str(e)})
+        if settings:
+            env["QF_PUSH_SETTINGS"] = settings
+        code, output = runner.run_capture(["qf_pusher.py", path, "--dry-run"], env)
+        return JSONResponse({"ok": code == 0, "output": output})
 
     @router.post("/api/validate")
     def api_validate(path: str = Form(...)):

@@ -66,7 +66,7 @@ loaded roster; they do not own a second dataset or mutation path.
 - full roster merge
 - route decorators and dependency injection for one-student updates
 - route decorators and dependency injection for bulk actions
-- group scheme/tier scheme route flow
+- group-set preference and group-label route flow
 - route orchestration around vault, groups, and config merges
 
 Helper ownership:

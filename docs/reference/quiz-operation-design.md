@@ -8,10 +8,11 @@
 
 ## Existing live path
 
-Both Quiz UI surfaces currently call GET streaming routes in
-`api/webui/routes/push_streaming.py`. Whole-class routes run `qf_pusher.py`; differentiated
-routes put browser-supplied manifests (including raw student IDs) into temporary files and
-run `push_tiers.py`. `runner.run_streaming` yields human stdout plus a final `[exit N]`.
+The Course Expert Quiz UI calls typed operation-ledger prepare/review/apply through
+`push/core.js::pushContent`. The legacy QuizForge streaming HTTP wrappers
+(`api/webui/routes/push_streaming.py`) were removed in July 2026.
+
+Direct CLI (`qf_pusher.py`, `push_tiers.py`) remains a supported manual teacher path.
 
 `qf_pusher.py` currently:
 

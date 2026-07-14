@@ -232,40 +232,11 @@
         publishContext("course_picker");
       }
     });
+    var currentCourses = Array.from(checklist.querySelectorAll(".cc-row")).map(function (row) {
+      return { id: row.dataset.id, name: row.dataset.name };
+    });
+    context?.reconcile(currentCourses, { source: "course_picker", authoritative: true });
     applySavedState();
-  }
-
-  async function loadAllCoursesIntoChecklist() {
-    if (!checklist) return;
-    try {
-      var d = await fetch("/api/courses").then(function (r) { return r.json(); });
-      if (!d.ok || !d.courses?.length) return;
-      context?.reconcile(d.courses, { source: "course_picker", authoritative: true });
-      var have = new Set(Array.from(checklist.querySelectorAll(".cc-row")).map(function (r) {
-        return r.dataset.id;
-      }));
-      var extras = d.courses.filter(function (c) { return !have.has(c.id); });
-      if (!extras.length) return;
-      var div = document.createElement("div");
-      div.className = "cc-all-divider";
-      div.textContent = "All courses";
-      checklist.appendChild(div);
-      extras.forEach(function (c) {
-        var row = document.createElement("div");
-        row.className = "cc-row";
-        row.dataset.id = c.id;
-        row.dataset.name = c.name;
-        row.innerHTML =
-          '<input type="checkbox" class="cc-cb" value="' + push.esc(c.id) +
-          '" data-name="' + push.esc(c.name) + '">' +
-          '<button type="button" class="cc-focus" title="Focus this course">' +
-          push.esc(c.name) + "</button>";
-        checklist.appendChild(row);
-      });
-      applySavedState();
-    } catch (e) {
-      // Keep bookmarks only when offline or unauthenticated.
-    }
   }
 
   window.CE_PUSH = Object.assign(window.CE_PUSH || {}, {
@@ -279,6 +250,5 @@
   window.targetCourses = targetCourses;
 
   bindChecklist();
-  loadAllCoursesIntoChecklist();
   renderCourseScopeSummaries();
 })();

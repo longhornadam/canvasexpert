@@ -14,23 +14,26 @@
   <div class="ce-workbench-grid ce-course-expert-grid">
 
     <!-- ── Work rail (left) ─────────────────────────────────────────────── -->
-    <div class="ce-work-rail" aria-label="Work tools">
-      <div class="ce-work-rail-section">
-        <p class="ce-work-rail-section-title">Tools</p>
-        <button type="button" class="ce-work-rail-item" data-rail-tab="quiz">Quiz<span class="ce-work-rail-item-desc">Create and deliver a QuizForge assessment</span></button>
-        <button type="button" class="ce-work-rail-item" data-rail-tab="assignment">Assignment<span class="ce-work-rail-item-desc">Create and push an AssignmentForge file</span></button>
-        <button type="button" class="ce-work-rail-item" data-rail-tab="page">Page<span class="ce-work-rail-item-desc">Create and place a Canvas page</span></button>
-        <button type="button" class="ce-work-rail-item" data-rail-tab="rubric">Rubric<span class="ce-work-rail-item-desc">Create or update a course rubric</span></button>
-        <button type="button" class="ce-work-rail-item" data-rail-tab="quick">Quick column<span class="ce-work-rail-item-desc">Add a fast gradebook column</span></button>
-        <button type="button" class="ce-work-rail-item" data-rail-tab="download">Download Work<span class="ce-work-rail-item-desc">Collect student work locally</span></button>
-        <button type="button" class="ce-work-rail-item" data-rail-tab="students">Student Reports<span class="ce-work-rail-item-desc">Build a student report packet</span></button>
+    <div class="ce-work-rail" aria-label="Work">
+      <div class="ce-work-rail-head"><h2>Work</h2></div>
+      <div class="ce-work-rail-section ce-work-rail-section--start">
+        <p class="ce-work-rail-section-title">Start</p>
+        <div class="ce-work-rail-start-grid">
+          <button type="button" class="ce-work-rail-item" data-rail-tab="quiz">Quiz<span class="ce-work-rail-item-desc">Create and deliver a QuizForge assessment</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="assignment">Assignment<span class="ce-work-rail-item-desc">Create and push an AssignmentForge file</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="page">Page<span class="ce-work-rail-item-desc">Create and place a Canvas page</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="rubric">Rubric<span class="ce-work-rail-item-desc">Create or update a course rubric</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="quick">Quick column<span class="ce-work-rail-item-desc">Add a fast gradebook column</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="download">Download Work<span class="ce-work-rail-item-desc">Collect student work locally</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="students">Student Reports<span class="ce-work-rail-item-desc">Build a student report packet</span></button>
+        </div>
       </div>
       <div class="ce-work-rail-section">
-        <p class="ce-work-rail-section-title">In progress</p>
+        <p class="ce-work-rail-section-title">Continue</p>
         <div id="ce-rail-continue"><p class="ce-work-rail-empty">None.</p></div>
       </div>
       <div class="ce-work-rail-section">
-        <p class="ce-work-rail-section-title">Review</p>
+        <p class="ce-work-rail-section-title">Attention</p>
         <div id="ce-rail-attention"><p class="ce-work-rail-empty">None.</p></div>
       </div>
     </div>
@@ -49,7 +52,13 @@
     </div>
   </aside>
 
+  <div class="ce-workspace-header">
+    <p>Workspace</p>
+    <h1 id="ce-workspace-title">Quiz</h1>
+  </div>
+
   <!-- ── Tab content ───────────────────────────────────────────────────── -->
+  <div class="ce-workspace-stage">
   <div class="ce-content ce-panels-wrap expert-main">
   <section class="card tool-course-card ce-course-work-card">
     <div class="tool-course-card-head">
@@ -71,13 +80,13 @@
               {% for c in saved_courses %}
               <div class="cc-row" data-id="{{ c.id }}" data-name="{{ c.name }}">
                 <input type="checkbox" class="cc-cb" value="{{ c.id }}" data-name="{{ c.name }}">
-                <span class="cc-star" title="Bookmarked">★</span>
+                <span class="cc-star" title="Current course">★</span>
                 <button type="button" class="cc-focus" title="Focus this course">{{ c.nickname }}</button>
               </div>
               {% endfor %}
               {% if not saved_courses %}
               <p class="hint" style="font-size:13px; margin:0">
-                No bookmarked courses yet. <a href="/settings">Add some in Settings</a>.
+                No Current courses yet. <a href="/settings">Add courses in Settings</a>.
               </p>
               {% endif %}
             </div>
@@ -586,7 +595,7 @@
       <h2 style="margin-bottom:12px">Student Reports</h2>
       <p class="hint" style="margin-top:0">
         Pick a student and compile copies of their work plus summaries across every
-        active course they're in. Saved to your Student Reports folder (synced via OneDrive).
+        Current course they're in. Saved to your Student Reports folder (synced via OneDrive).
       </p>
 
       <div class="sr-pick">
@@ -729,15 +738,17 @@
   </div><!-- /#ce-tab-quick -->
 
   </div><!-- /.ce-panels-wrap -->
+  </div><!-- /.ce-workspace-stage -->
   </div><!-- /.ce-course-expert-center -->
 
-  <!-- ── Summary panel (right) ────────────────────────────────────────── -->
-  <div class="ce-summary-panel" aria-label="Operation summary">
-    <h3>Summary</h3>
+  <!-- ── Operation ledger (right) ─────────────────────────────────────── -->
+  <aside class="ce-summary-panel" aria-label="Operation ledger">
+    <h3>Operation ledger</h3>
+    <p class="ce-operation-flow">Work → Review → Canvas</p>
     <div id="ce-operations-list" class="ce-operations-list">
       <p class="ce-operations-empty">Canvas unchanged.</p>
     </div>
-  </div>
+  </aside>
 
   </div><!-- /.ce-workbench-grid -->
 </div><!-- /.ce-workbench-shell -->

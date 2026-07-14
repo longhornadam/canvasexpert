@@ -396,11 +396,11 @@ def pg_late_preview(session_id: str):
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     session_actions.invalidate_pending_review(session)
-    if not (session.get("late_watch") or {}).get("supported"):
-        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
     err = _late_watch_error(session)
     if err:
         return JSONResponse({"ok": False, "error": err})
+    if not (session.get("late_watch") or {}).get("supported"):
+        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
 
     subs, adata, fetch_err = canvas_fetch.fetch_submissions(
         str(session.get("course_id") or ""),
@@ -422,6 +422,9 @@ def pg_late_score(session_id: str):
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     session_actions.invalidate_pending_review(session)
+    err = _late_watch_error(session)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
     if not (session.get("late_watch") or {}).get("supported"):
         return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
     result = _run_late_catchup_score(session)

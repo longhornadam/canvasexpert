@@ -87,6 +87,24 @@ def test_config_split_stays_machine_local_without_workspace(tmp_path, monkeypatc
     assert not (tmp_path / "OneDrive").exists()
 
 
+def test_adding_a_saved_previous_course_makes_it_current(tmp_path, monkeypatch):
+    machine_config = tmp_path / "config.json"
+    monkeypatch.setattr(config_io, "CONFIG_PATH", str(machine_config))
+    monkeypatch.setattr(workspace, "workspace_root", lambda: None)
+    _write_json(machine_config, {
+        "saved_courses": [{
+            "id": "777", "name": "Biology", "nickname": "Old Bio", "active": False,
+        }],
+    })
+
+    config.bookmark_course("777", "Biology", "Summer Bio")
+
+    saved = json.loads(machine_config.read_text(encoding="utf-8"))["saved_courses"]
+    assert saved == [{
+        "id": "777", "name": "Biology", "nickname": "Summer Bio", "active": True,
+    }]
+
+
 def test_personas_seed_once_then_follow_folder_changes(tmp_path, monkeypatch):
     root = tmp_path / "CanvasExpert"
     root.mkdir()

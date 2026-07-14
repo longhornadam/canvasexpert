@@ -6,14 +6,10 @@ Routes:
     GET  /api/roster          — full roster merge (students + vault + settings + groups)
     POST /api/roster/student  — update one student's settings
     POST /api/roster/bulk     — bulk action on many students
-    GET  /api/roster/tier-scheme  — get course tier scheme
-    POST /api/roster/tier-scheme  — save course tier scheme
 
 V3: Canvas groups are the source of truth for tier/group assignment.
 Does NOT write local tier_id.
 """
-import json
-
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
@@ -350,36 +346,6 @@ def roster_bulk_update(
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,
     ))
-
-
-# --------------------------------------------------------------------------
-# Tier-scheme endpoints (kept for backward compatibility)
-# --------------------------------------------------------------------------
-
-
-@router.get("/tier-scheme")
-def get_tier_scheme(course_id: str = Query("")):
-    """Get the tier scheme for a course (V2 compatibility)."""
-    if not course_id:
-        return JSONResponse({"ok": False, "error": "course_id required."})
-    scheme = config.get_roster_tier_scheme(course_id)
-    return JSONResponse({"ok": True, "tier_scheme": scheme})
-
-
-@router.post("/tier-scheme")
-def save_tier_scheme(course_id: str = Form(...), scheme: str = Form(...)):
-    """Save a tier scheme for a course."""
-    if not course_id:
-        return JSONResponse({"ok": False, "error": "course_id required."})
-    try:
-        parsed = json.loads(scheme)
-    except json.JSONDecodeError as e:
-        return JSONResponse({"ok": False, "error": f"Invalid scheme JSON: {e}"})
-    try:
-        config.set_roster_tier_scheme(course_id, parsed)
-    except ValueError as e:
-        return JSONResponse({"ok": False, "error": str(e)})
-    return JSONResponse({"ok": True, "tier_scheme": config.get_roster_tier_scheme(course_id)})
 
 
 # --------------------------------------------------------------------------

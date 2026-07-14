@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import config, workspace
 from ..local_request_guard import csrf_token
+from api.operation_ledger import operations as operation_store
 from api.operation_ledger import receipts as receipt_store
 from . import work as work_routes
 from ..deps import (
@@ -57,6 +58,15 @@ def _routines_template_context() -> dict:
 def dashboard(request: Request):
     courses = config.active_courses()
     initial_jobs = work_routes._section_jobs("all") or []
+    initial_presentations = work_routes._presentations(initial_jobs)
+    initial_operations = [
+        {
+            "kind": operation.get("kind"),
+            "status": operation.get("status"),
+            "target_count": operation.get("target_count"),
+        }
+        for operation in operation_store.list_operations_pii_minimized()
+    ]
     workspace_root = workspace.workspace_root()
     workspace_status = "local folders"
     if workspace_root:
@@ -72,6 +82,8 @@ def dashboard(request: Request):
         "workspace_status": workspace_status,
         "csrf_token": csrf_token(),
         "initial_jobs": initial_jobs,
+        "initial_presentations": initial_presentations,
+        "initial_operations": initial_operations,
         "initial_receipts": receipt_store.list_receipts(),
     })
 
@@ -226,6 +238,7 @@ def routines_page(request: Request):
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
     root = workspace.workspace_root()
+    saved_courses = config.saved_courses()
     return templates.TemplateResponse(request, "settings.html", {
         "nav_section":   "settings",
         "canvas_base":   config.get_canvas_base(),
@@ -234,7 +247,9 @@ def settings_page(request: Request):
         "openrouter_model": config.get_openrouter_model(),
         "default_openrouter_model": config.DEFAULT_OPENROUTER_MODEL,
         "openrouter_model_presets": config.openrouter_model_presets(),
-        "saved_courses": config.saved_courses(),
+        "saved_courses": saved_courses,
+        "current_courses": [course for course in saved_courses if course.get("active", True)],
+        "previous_courses": [course for course in saved_courses if not course.get("active", True)],
         "base_default":  config.CANVAS_BASE_DEFAULT,
         "download_root": config.get_download_root(),
         "ai_ta_dir":     AI_TA_DIR,

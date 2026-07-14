@@ -72,7 +72,7 @@
     if (!id) return alert("Select a course first.");
     this.disabled = true; this.textContent = "Loading…";
     try {
-      var data = await fetch("/api/assignments?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); });
+      var data = await fetch("/api/assignments-full?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); });
       if (!data.ok) { alert("Error: " + data.error); return; }
       dlAssignments = data.assignments || [];
       var tbody = document.getElementById("dl-tbody");
@@ -95,7 +95,7 @@
             "</td>" +
             "<td>" + assignmentBadge(a.submission_types) + "</td>" +
             "<td>" + push.esc(a.due_at ? new Date(a.due_at).toLocaleDateString() : "—") + "</td>" +
-            "<td>" + push.esc(a.points != null ? a.points : "—") + "</td>";
+            "<td>" + push.esc(a.points_possible != null ? a.points_possible : "—") + "</td>";
           tbody.appendChild(tr);
         });
       }

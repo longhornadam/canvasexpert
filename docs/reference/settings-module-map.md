@@ -38,7 +38,7 @@ changes again.
 
 - Canvas base/token reveal, save, and connection test flow
 - OpenRouter key/model save, test, and current-model price loading
-- course browser, bookmark, active/inactive, and removal actions
+- Canvas course browser plus Current/Previous and removal actions
 - download root, workspace folder open, and AI-TA folder/rebuild actions
 - academic calendar list, built-in load/remove, custom CSV parse, preview, save,
   and copy-LLM-prompt behavior
@@ -48,7 +48,7 @@ Current split:
 - `settings.js` - shared status/helpers bootstrap
 - `settings/account.js` - Canvas token/base URL and connection testing
 - `settings/openrouter.js` - OpenRouter key/model/model-list UX
-- `settings/courses.js` - course browser and bookmark actions
+- `settings/courses.js` - Canvas course browser and Current/Previous actions
 - `settings/workspace.js` - download root, workspace, AI-TA file actions
 - `settings/calendars.js` - calendar list/load/parse/save/copy prompt
 
@@ -73,7 +73,7 @@ unless there is a strong reason.
 - token/base URL problems: `settings/account.js`, `settings.js`, `routes/settings.py`, `config/canvas.py`
 - OpenRouter settings/model list: `settings/openrouter.js`, `settings.js`, `routes/settings.py`,
   `config/canvas.py`, `api/openrouter_client.py`
-- course bookmark problems: `settings/courses.js`, `settings.js`, `routes/settings.py`,
+- Current/Previous course problems: `settings/courses.js`, `settings.js`, `routes/settings.py`,
   `config/courses.py`
 - calendar parse/load problems: `settings/calendars.js`, `settings.js`, `routes/calendar.py`,
   `config/calendars.py`
@@ -89,3 +89,6 @@ unless there is a strong reason.
 - Keep Settings local-only and do not introduce a public callback or OAuth route.
 - Preserve the `config.*` facade and storage keys unless a migration is explicitly
   planned and tested.
+- `config.active_courses()` is the compatibility-named Current-course boundary for
+  normal pickers, Desk discovery, and automatic work. `saved_courses()` includes both
+  Current and Previous courses.

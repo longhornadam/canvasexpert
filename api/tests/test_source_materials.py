@@ -1,6 +1,22 @@
 from docx import Document
 
 from api.webui import source_materials, workspace
+from api.webui.source_material_extractors import extract_text_from_bytes as _extract_text_from_bytes
+
+
+def test_extract_plain_text_direct():
+    """The extractor module can be imported directly for dependency-light cases."""
+    text, warnings = _extract_text_from_bytes("hello.txt", b"Hello, world!")
+    assert warnings == []
+    assert text == "Hello, world!"
+
+
+def test_extract_html_direct():
+    """HTML stripping works when importing the extractor module directly."""
+    text, warnings = _extract_text_from_bytes("page.html", b"<p>Hello<br>world</p>")
+    assert warnings == []
+    assert "Hello" in text
+    assert "world" in text
 
 
 def test_extract_docx_text_from_uploaded_bytes(tmp_path):

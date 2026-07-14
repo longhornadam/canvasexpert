@@ -499,6 +499,8 @@
   }
 
   window.CE_PUSH = Object.assign(window.CE_PUSH || {}, {
+    esc: esc,
+    postForm: postForm,
     postJson: postJson,
     showLog: showLog,
     hideBanner: hideBanner,

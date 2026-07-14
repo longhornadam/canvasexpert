@@ -16,10 +16,10 @@
       row.className = "course-row";
       row.innerHTML =
         "<span>" + CE.esc(c.name) + ' <span class="muted">#' + CE.esc(c.id) + "</span></span>" +
-        '<button type="button" class="small" data-id="' + CE.esc(c.id) + '" data-name="' + CE.esc(c.name) + '">Bookmark</button>';
+        '<button type="button" class="small" data-id="' + CE.esc(c.id) + '" data-name="' + CE.esc(c.name) + '">Add as Current</button>';
       row.querySelector("button").addEventListener("click", async function (ev) {
         var btn = ev.currentTarget;
-        var nickname = prompt("Bookmark nickname for:\n" + c.name + " (#" + c.id + ")", c.name);
+        var nickname = prompt("Nickname for this Current course:\n" + c.name + " (#" + c.id + ")", c.name);
         if (nickname === null) return;
         btn.disabled = true;
         btn.textContent = "Saving…";
@@ -33,10 +33,11 @@
         });
         var d = await r.json();
         if (d.ok) {
-          btn.textContent = "✓ Saved";
+          btn.textContent = "✓ Current";
+          location.reload();
         } else {
           btn.disabled = false;
-          btn.textContent = "Bookmark";
+          btn.textContent = "Add as Current";
           alert("Failed: " + d.error);
         }
       });
@@ -53,7 +54,7 @@
     var resp = await fetch("/api/courses");
     var data = await resp.json();
     btnFetch.disabled = false;
-    btnFetch.textContent = "Browse all my courses…";
+    btnFetch.textContent = "Browse Canvas courses…";
     if (!data.ok) {
       alert("Could not fetch courses: " + data.error);
       return;
@@ -76,6 +77,11 @@
       var id = btn.dataset.courseId;
       var current = btn.dataset.current === "true";
       var newVal = !current;
+      if (current && !confirm(
+        "Move this course to Previous?\n\n" +
+        "Local sessions, receipts, downloads, and settings will be retained. " +
+        "Desk scans and automatic PowerGrader work will pause for this course until you make it Current again."
+      )) return;
       btn.disabled = true;
       var r = await fetch("/settings/courses/" + encodeURIComponent(id) + "/set-active", {
         method: "POST",
@@ -87,17 +93,7 @@
         alert("Failed to update.");
         return;
       }
-      btn.dataset.current = String(newVal);
-      if (newVal) {
-        btn.textContent = "✓ Active";
-        btn.style.color = "#2f8132";
-        btn.style.borderColor = "#a8d5b5";
-      } else {
-        btn.textContent = "Inactive";
-        btn.style.color = "var(--muted)";
-        btn.style.borderColor = "var(--line)";
-      }
-      btn.disabled = false;
+      location.reload();
     });
   });
 
@@ -105,7 +101,10 @@
     btn.addEventListener("click", async function () {
       var id = btn.dataset.removeCourse;
       var name = btn.dataset.removeName;
-      if (!confirm('Remove bookmark for "' + name + '"?')) return;
+      if (!confirm(
+        'Remove "' + name + '" from Canvas Expert?\n\n' +
+        "This is separate from moving a course to Previous. Local work is retained, but the course will no longer appear in either course list."
+      )) return;
       await fetch("/settings/courses/" + encodeURIComponent(id) + "/remove", { method: "POST" });
       location.reload();
     });

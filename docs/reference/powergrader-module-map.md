@@ -3,9 +3,9 @@
 Purpose: give future debugging sessions a low-token routing map so they can jump
 straight to the owning file instead of re-mapping PowerGrader from scratch.
 
-As of 2026-07-12, the old browser entry files are thin shims and no current
-PowerGrader Python or JS implementation file is above the 500-line threshold.
-Use this file as the first stop before reading code.
+As of 2026-07-13, the old browser entry files are thin shims. The route owner remains
+a 513-line orchestration file; the source-material facade and format readers are now
+split for lower-cost debugging. Use this file as the first stop before reading code.
 
 ## Page / route ownership
 
@@ -21,7 +21,7 @@ into nearby helper modules or the backend package when it becomes reusable.
 
 ## Current size snapshot
 
-- `api/webui/routes/powergrader.py` - 488 lines
+- `api/webui/routes/powergrader.py` - 513 lines
 - `api/webui/static/powergrader/setup_core.js` - 381 lines
 - `api/webui/static/powergrader/setup_sessions.js` - 115 lines
 - `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
@@ -47,6 +47,13 @@ into nearby helper modules or the backend package when it becomes reusable.
 - `api/powergrader/copilot_packet_support.py` - 137 lines
 - `api/webui/routes/routines_powergrader.py` - 361 lines
 - `api/powergrader/scheduled_autoscore_support.py` - 127 lines
+
+## Source-material routing
+
+- `api/webui/source_materials.py` — 216 lines — workspace paths, source-material
+  listing, context assembly, token estimation, warnings, response presets
+- `api/webui/source_material_extractors.py` — 244 lines — file-format decoding and
+  normalization (PDF, DOCX, PPTX, XLSX, ODT, HTML, RTF, plain text)
 
 ## Setup screen routing
 
@@ -189,6 +196,9 @@ Ownership:
   - course-module picker loading and module-item reference shaping
 - `api/webui/routes/routines_powergrader.py`
   - scheduled autoscore and late-catchup routine runners
+  - execution-time Current-course gates before queue claims, Canvas reads, AI calls,
+    session mutation, or Canvas writes; Previous-course work remains queued for
+    automatic resumption when made Current
   - imports pure autoscore helper logic from the backend package
 
 ## First places to look by symptom

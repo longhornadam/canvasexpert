@@ -3,10 +3,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.webui.routes import routines
 from api.webui.routes import routines_powergrader
+
+
+@pytest.fixture(autouse=True)
+def _current_course_scope(monkeypatch):
+    monkeypatch.setattr(routines.config, "active_courses", lambda: [{
+        "id": "course-1", "name": "Period 1", "nickname": "Period 1", "active": True,
+    }])
 
 
 def _queue_job(**overrides):
@@ -358,6 +367,41 @@ def test_scheduled_autoscore_marks_missing_assignment_as_failed(monkeypatch):
     assert job["status"] == "failed"
     assert job["reason"] == "Canvas assignment is no longer available."
     assert job["last_error"] == "Canvas assignment is no longer available."
+
+
+def test_scheduled_autoscore_pauses_previous_course_before_claim_or_side_effect(monkeypatch):
+    queue = {"version": 1, "jobs": [_queue_job()]}
+    monkeypatch.setattr(routines.config, "active_courses", lambda: [{"id": "course-current"}])
+    monkeypatch.setattr(routines.autoscore_queue, "load_queue", lambda: queue)
+    monkeypatch.setattr(routines.autoscore_queue, "due_jobs", lambda q, now=None: q["jobs"])
+    monkeypatch.setattr(routines.autoscore_queue, "claim_job", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Previous-course job must not be claimed")))
+    monkeypatch.setattr(routines.autoscore_queue, "save_queue", lambda q: (_ for _ in ()).throw(AssertionError("Previous-course queue state must remain unchanged")))
+    monkeypatch.setattr(routines.canvas_fetch, "fetch_submissions", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Previous-course job must not fetch Canvas")))
+    monkeypatch.setattr(routines.ai_workflow, "run_ai_workflow", lambda **kwargs: (_ for _ in ()).throw(AssertionError("Previous-course job must not call AI")))
+
+    result = routines._run_routine_powergrader_scheduled_autoscore({"max_jobs": 10})
+
+    assert result["ok"] is True
+    assert "1 paused for Previous courses" in result["summary"]
+    assert queue["jobs"][0]["status"] == "scheduled"
+
+
+def test_automatic_late_catchup_pauses_previous_course_before_session_load(monkeypatch):
+    monkeypatch.setattr(routines.config, "has_openrouter_key", lambda: True)
+    monkeypatch.setattr(routines.config, "active_courses", lambda: [{"id": "course-current"}])
+    monkeypatch.setattr(routines.session_store, "list_session_summaries", lambda: [{
+        "session_id": "session-previous",
+        "course_id": "course-previous",
+        "mode": "assisted",
+    }])
+    monkeypatch.setattr(routines.session_store, "load_session", lambda session_id: (_ for _ in ()).throw(AssertionError("Previous-course session must not load")))
+    monkeypatch.setattr(routines.pg_routes, "_run_late_catchup_score", lambda session: (_ for _ in ()).throw(AssertionError("Previous-course session must not score")))
+
+    result = routines._run_routine_powergrader_late_catchup({"max_sessions": 10})
+
+    assert result["ok"] is True
+    assert "1 paused for Previous courses" in result["summary"]
+    assert any("paused because their courses are Previous" in line for line in result["lines"])
 
 
 def test_powergrader_routines_do_not_use_absolute_routines_bridge():

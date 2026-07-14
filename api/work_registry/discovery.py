@@ -46,10 +46,38 @@ def _course_id(course: dict) -> str:
     return str(value) if value not in (None, "") else ""
 
 
-def _scan_course(course: dict, *, now: str, deadline: float) -> dict:
+def _scan_course(course: dict, *, now: str, deadline: float, canvas_get_all=None) -> dict:
     course_id = _course_id(course)
     if not course_id:
         raise ProviderFailure()
+    source_get_all = _canvas_get_all if canvas_get_all is None else canvas_get_all
+    assignments_path = f"/api/v1/courses/{course_id}/assignments"
+    submissions_path = f"/api/v1/courses/{course_id}/students/submissions"
+    assignments_params = {"per_page": 100}
+    rich_submissions_params = {
+        "student_ids[]": "all",
+        "include[]": "submission_comments",
+        "per_page": 100,
+    }
+    late_submissions_params = {"student_ids[]": "all", "per_page": 100}
+    shared_reads = {}
+
+    def course_get_all(path, params=None, timeout=REQUEST_TIMEOUT_SECONDS):
+        if path == assignments_path and params == assignments_params and "assignments" in shared_reads:
+            return shared_reads["assignments"], None
+        if path == submissions_path and params == late_submissions_params and "submissions" in shared_reads:
+            return shared_reads["submissions"], None
+
+        result = source_get_all(path, params=params, timeout=timeout)
+        if isinstance(result, tuple) and len(result) == 2:
+            rows, error = result
+            if isinstance(rows, list) and error is None:
+                if path == assignments_path and params == assignments_params:
+                    shared_reads["assignments"] = rows
+                elif path == submissions_path and params == rich_submissions_params:
+                    shared_reads["submissions"] = rows
+        return result
+
     findings = []
     errors = []
     providers = (grading_debt.scan_course, late_work.scan_course, roster_warnings.scan_course)
@@ -59,7 +87,7 @@ def _scan_course(course: dict, *, now: str, deadline: float) -> dict:
                 course_id,
                 now=now,
                 deadline=deadline,
-                canvas_get_all=_canvas_get_all,
+                canvas_get_all=course_get_all,
             ))
         except Exception as exc:
             errors.append(_error_code(exc))

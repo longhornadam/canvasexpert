@@ -1,4 +1,4 @@
-"""Bookmarked courses configuration (synced to workspace).
+"""Saved course configuration (synced to workspace).
 
 Uses lazy module-reference so monkeypatches to config._io propagate correctly.
 """
@@ -6,8 +6,10 @@ from . import _io as _io_mod
 
 
 def saved_courses() -> list[dict]:
-    """All bookmarked courses [{id, name, nickname, active}].
-    `active` defaults to True for older entries that pre-date the field.
+    """All Current and Previous courses [{id, name, nickname, active}].
+
+    ``active`` is the persisted compatibility field for Current-course
+    membership and defaults to True for older entries that pre-date the field.
     """
     courses = _io_mod._synced_state().get("saved_courses", [])
     for c in courses:
@@ -16,12 +18,12 @@ def saved_courses() -> list[dict]:
 
 
 def active_courses() -> list[dict]:
-    """Only the active bookmarked courses — used for dashboard dropdowns."""
+    """Current courses, which define Canvas Expert's operational scope."""
     return [c for c in saved_courses() if c.get("active", True)]
 
 
 def set_course_active(course_id: str, active: bool):
-    """Mark a bookmarked course active or inactive."""
+    """Move a saved course between the Current and Previous sets."""
     state = _io_mod._synced_state()
     for c in state.get("saved_courses", []):
         if c["id"] == str(course_id):
@@ -38,6 +40,7 @@ def bookmark_course(course_id: str, course_name: str, nickname: str = ""):
         if c["id"] == course_id:
             c["name"] = course_name
             c["nickname"] = nickname or course_name
+            c["active"] = True
             _io_mod._save_synced_key("saved_courses", courses)
             return
     courses.append({

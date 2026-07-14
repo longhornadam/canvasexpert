@@ -153,6 +153,70 @@ def test_course_provider_failure_does_not_stop_other_providers(monkeypatch):
     assert {job["assignment_id"] for job in record["findings"]} == {"late-1", "warning-1"}
 
 
+def test_scan_course_shares_successful_assignment_and_submission_reads(monkeypatch):
+    monkeypatch.setattr(grading_debt, "powergrader_evidence", lambda: {})
+    monkeypatch.setattr(
+        late_work.config,
+        "get_sweep_settings",
+        lambda: {"skip_weekends": False, "holidays": []},
+    )
+    monkeypatch.setattr(late_work.config, "get_extra_time", lambda course_id: [])
+    monkeypatch.setattr(
+        late_work.config,
+        "get_combined_calendar_for_range",
+        lambda: {"no_count_dates": []},
+    )
+    monkeypatch.setattr(roster_warnings, "scan_course", lambda *args, **kwargs: [])
+
+    assignments_path = "/api/v1/courses/course-1/assignments"
+    submissions_path = "/api/v1/courses/course-1/students/submissions"
+    calls = {assignments_path: 0, submissions_path: 0}
+
+    def fake_get(path, params=None, timeout=None):
+        assert timeout == 10
+        calls[path] += 1
+        if path == assignments_path:
+            return [
+                {"id": "debt-1", "published": True, "due_at": "2026-07-09T11:00:00+00:00"},
+                {"id": "late-1", "published": True, "due_at": "2026-07-09T11:00:00+00:00"},
+            ], None
+        assert path == submissions_path
+        assert params == {
+            "student_ids[]": "all",
+            "include[]": "submission_comments",
+            "per_page": 100,
+        }
+        return [
+            {
+                "assignment_id": "debt-1",
+                "user_id": "fictional-learner-1",
+                "workflow_state": "submitted",
+                "submitted_at": "2026-07-11T11:00:00+00:00",
+                "score": None,
+                "submission_comments": [],
+            },
+            {
+                "assignment_id": "late-1",
+                "user_id": "fictional-learner-2",
+                "workflow_state": "late",
+                "late": True,
+                "submitted_at": "2026-07-11T11:00:00+00:00",
+                "submission_comments": [],
+            },
+        ], None
+
+    record = discovery._scan_course(
+        {"id": "course-1"},
+        now="2026-07-11T12:00:00+00:00",
+        deadline=time.monotonic() + 5,
+        canvas_get_all=fake_get,
+    )
+
+    assert record["stale"] is False
+    assert {item["kind"] for item in record["findings"]} == {"grade.debt", "late.work"}
+    assert calls == {assignments_path: 1, submissions_path: 1}
+
+
 def test_provider_timeout_is_fixed_and_redacted():
     def timed_out(*args, **kwargs):
         return None, "Read timed out"

@@ -37,8 +37,8 @@ Work tools are split for low-token debugging.
 - Shared browser files: `push/core.js`, `push/file_sources.js`, `push/delivery.js`, `push/rubrics.js`, `push/course_picker.js`, `push.js`
 - Feature files: `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `push/download.js`
 - Work tools page files: `course_expert/tabs.js`, `course_expert/student_reports.js`, `course_expert/portfolio.js`, `course_expert/quick_assignment.js`
-- Backend push routes: `routes/push.py`, `routes/push_validation.py`, `routes/push_streaming.py`
-- Service helpers: `source_materials.py`
+- Backend push routes: `routes/push.py`, `routes/push_validation.py`
+- Source-material facade/extractors: `source_materials.py`, `source_material_extractors.py`
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/course-expert-module-map.md`.
 
@@ -110,10 +110,14 @@ Paste your Canvas base URL and API token once. The token is stored in the **OS c
 store** (Windows Credential Manager) via `keyring` — never written to disk in plaintext.
 `api/.env` remains for CLI/scripting use only.  **Test connection** verifies the token.
 
-### Bookmarked courses
-Browse your live course list and bookmark the handful you use regularly. Mark each
-**Active / Inactive** — only Active bookmarks appear in the course pickers. Nicknames
-set here are the display names used throughout the app.
+### Current and Previous courses
+**Current courses** define Canvas Expert's operational scope: Desk scans, normal
+course pickers, and automatic PowerGrader work use only this set. Move finished
+courses to **Previous courses** to keep their local history while excluding them from
+current work; moving them back is reversible. **Add courses from Canvas** is the only
+surface that browses every live Canvas course. Nicknames set here are the display
+names used throughout the app. Internally, `active_courses()` is the compatibility-
+named Current-course boundary and the persisted `active` field remains unchanged.
 
 ### Academic calendars
 Load one or more calendars from your workspace **Calendars** folder, or paste a
@@ -141,16 +145,19 @@ Root folder for submission downloads. Each course gets its own subfolder.
 ## Desk (`/`)
 
 Desk is the full-width local landing surface for Start, Continue, Attention,
-Prepared, Receipts, and active-course context. Its initial view is rendered from
-local active-course configuration, the work registry, and real receipt
+Prepared, Receipts, and Current-course context. Its initial view is rendered from
+local Current-course configuration, the work registry, and real receipt
 projections. Readiness continues to come from `/api/readiness`; the Desk's
 asynchronous Scan uses the guarded `POST /api/work/scan` route and never scans
 Canvas during an ordinary `GET /api/work`.
 
 Start cards preserve the existing workflow routes and apply an explicitly chosen
 course scope through the shared `CE_CONTEXT` contract. Continue and Attention
-show local work-registry items; Ignore, Snooze, and Complete use the guarded
-local mutation routes. Prepared is intentionally honest until prepared-operation
+show local work-registry items with a transient, non-persisted presentation sidecar:
+Current-course label, locally known assignment title, aggregate progress sentence, and
+specific action label. Exact registry jobs remain generic and PII-minimized; the sidecar
+never opens full PowerGrader sessions or scans Canvas. Ignore, Snooze, and Complete use
+the guarded local mutation routes. Prepared is intentionally honest until prepared-operation
 projections are available, and currently reports that there are no prepared
 operations. Desk reads `/api/work` and `/api/receipts`, does not call
 `/api/operations`, and does not alter the legacy `/api/activity` behavior.
@@ -230,7 +237,7 @@ running their own copy who are comfortable writing Python (or having their LLM w
 
 One page, six tabs: **Quiz · Assignment · Page · Rubric · Download Work · Student Reports · *Quick***.
 
-**Target courses** are picked in a compact **header dropdown** (Gradebook-style, but
+**Target courses** are picked from Current courses in a compact **header dropdown** (Gradebook-style, but
 multi-select): checkboxes add courses to the push set; clicking a course **name**
 focuses it. The **focused** course feeds course-specific dropdowns (grading
 categories, modules) and is the source for Download Work. The trigger shows the
@@ -292,7 +299,7 @@ No Forge file involved; for authored instructions use the Assignment tab.
 
 ### Student Reports tab
 On-demand per-student packet: pick a course → load the roster → pick a student →
-check the sections to include → **Generate**. Runs across **every active course**
+check the sections to include → **Generate**. Runs across **every Current course**
 the student is in, not just the one used to load the roster.
 
 **Packet structure** (in the synced workspace, `<student_reports_root>/<Student>/<Course>/`):
@@ -432,7 +439,7 @@ skill files, served from the AI-TA library (`/api/ai-ta/file?name=…`):
 
 ## Course Info (`/course`)
 
-Detail page for any bookmarked course: roster + emails, group sets with member names,
+Detail page for any Current course: roster + emails, group sets with member names,
 modules, assignments, Canvas quick-links, download folder path.
 
 ---
@@ -449,8 +456,8 @@ course-info reads are direct Canvas REST calls through split Web UI routes
 
 Push routes are split by role: `routes/push.py` keeps the shared router, Canvas
 module/group lookup, and generic content push; `routes/push_validation.py` owns
-file validation and physical render endpoints; `routes/push_streaming.py` owns
-QuizForge preview and streaming push endpoints.
+file validation, physical render, and dry-run preview endpoints. The legacy
+QuizForge streaming HTTP wrappers were removed in July 2026.
 
 Printable physical outputs use sync render routes. Keep those routes synchronous
 because Playwright's sync API cannot run inside an active asyncio event loop. The

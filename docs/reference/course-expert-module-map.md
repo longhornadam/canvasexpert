@@ -4,7 +4,7 @@ Purpose: route Work tools debugging without re-reading the page template,
 shared push modules, and the feature scripts that own the remaining browser
 workflows.
 
-As of 2026-07-08, Work tools browser behavior is split into small shared
+As of 2026-07-13, Work tools browser behavior is split into small shared
 push modules plus page-specific feature scripts. `course_expert.html` is now
 mostly markup, data injection, and script includes.
 
@@ -14,9 +14,9 @@ mostly markup, data injection, and script includes.
 - Shared browser modules: `api/webui/static/push.js`, `api/webui/static/push/*.js`
 - Work tools feature scripts: `api/webui/static/course_expert/*.js`
 - Route owner: `api/webui/routes/push.py`
-- Validation/physical routes: `api/webui/routes/push_validation.py`
-- Streaming QuizForge routes: `api/webui/routes/push_streaming.py`
-- Source-material extraction: `api/webui/source_materials.py`
+- Validation/physical/preview routes: `api/webui/routes/push_validation.py`
+- Source-material facade/extraction: `api/webui/source_materials.py`,
+  `api/webui/source_material_extractors.py`
 
 ## Current Size Snapshot
 
@@ -26,15 +26,15 @@ mostly markup, data injection, and script includes.
 - `api/webui/static/course_expert/portfolio.js` - 110 lines
 - `api/webui/static/course_expert/quick_assignment.js` - 34 lines
 - `api/webui/static/course_expert/work_rail.js` - new Work rail sidebar (replaces legacy sidebar navigation)
-- `api/webui/source_materials.py` - 420 lines
+- `api/webui/source_materials.py` - 216 lines (facade)
+- `api/webui/source_material_extractors.py` - 244 lines (format decoding/normalization)
 - `api/webui/static/push/quiz.js` - 294 lines
 - `api/webui/static/push/download.js` - 246 lines
 - `api/webui/static/push/core.js` - 207 lines
 - `api/webui/static/push/course_picker.js` - 180 lines
 - `api/webui/static/push/delivery.js` - 161 lines
 - `api/webui/static/push/file_sources.js` - 160 lines
-- `api/webui/routes/push_validation.py` - 160 lines
-- `api/webui/routes/push_streaming.py` - 147 lines
+- `api/webui/routes/push_validation.py` - 172 lines (includes dry-run preview)
 - `api/webui/static/push/assignment.js` - 136 lines
 - `api/webui/routes/push.py` - 88 lines
 - `api/webui/static/push/page.js` - 57 lines
@@ -95,21 +95,18 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 - `/api/temp-upload`
 - `/api/validate`, `/api/af/validate`, `/api/pf/validate`, `/api/rf/validate`
 - `/api/physical/quiz`
+- `/api/push/preview` (dry-run QuizForge preview)
 - RubricForge scoring prompt route
-
-`routes/push_streaming.py` owns:
-
-- `/api/push/preview`
-- compatibility-only legacy quiz streaming routes (`/api/push/stream`,
-  `/api/push-multi-whole/stream`, `/api/push-variants/stream`, and
-  `/api/push-multi/stream`); Course Expert no longer calls them
 
 `routes/operations.py` owns Course Expert's live content-operation boundary:
 
 - typed prepare, frozen review, digest-gated apply, and retry routes
 - the PII-minimized operation list and bounded polling status endpoint
 
-- Course Expert now uses typed operation preparation and review for live content pushes.
+- Course Expert uses typed operation preparation and review as the sole browser live-write path for quizzes.
+  The legacy QuizForge streaming HTTP wrappers (`/api/push/stream`, `/api/push-multi-whole/stream`,
+  `/api/push-variants/stream`, `/api/push-multi/stream`) were removed in July 2026.
+  Direct CLI (`qf_pusher.py`, `push_tiers.py`) remains a supported manual path.
 - Assignment/Page/Rubric printable path ownership lives in `api/operation_ledger/adapters/assignment.py`.
 
 ## First Places To Look By Symptom
@@ -121,7 +118,7 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 - target course picker: `push/course_picker.js`
 - module/category dropdowns or delivery settings: `push/delivery.js`,
   `course_expert/tabs.js`
-- QuizForge validate/preview: `push/quiz.js`, `routes/push_streaming.py`
+- QuizForge validate/preview: `push/quiz.js`, `routes/push_validation.py`
 - QuizForge prepare/review/apply/progress: `push/quiz.js`, `push/core.js`,
   `routes/operations.py`, `operation_ledger/adapters/quiz.py`
 - Assignment/Page/Rubric card behavior: matching `push/*.js`,

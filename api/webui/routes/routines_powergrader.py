@@ -58,12 +58,21 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
     if not jobs:
         return {"ok": True, "lines": ["· no scheduled PowerGrader jobs are due"], "summary": "0 scheduled jobs due"}
 
+    current_ids = {
+        str(course.get("id") or "").strip()
+        for course in deps.config.active_courses()
+        if str(course.get("id") or "").strip()
+    }
+    runnable_jobs = [job for job in jobs if str(job.get("course_id") or "").strip() in current_ids]
+    paused = len(jobs) - len(runnable_jobs)
     max_jobs = int(params.get("max_jobs", 10) or 10)
     lines, ok, processed = [], True, 0
+    if paused:
+        lines.append(f"· {paused} scheduled PowerGrader job(s) paused because their courses are Previous")
     worker_id = deps.autoscore_queue.machine_id()
     now_dt = datetime.now(timezone.utc)
 
-    for job in jobs[:max_jobs]:
+    for job in runnable_jobs[:max_jobs]:
         label = autoscore_support.autoscore_job_label(job) or str(job.get("job_id") or "scheduled job")
         job_id = str(job.get("job_id") or "")
         if not job_id:
@@ -311,7 +320,7 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
             deps.autoscore_queue.release_job(queue, job_id, worker_id=worker_id, now=now_dt)
             deps.autoscore_queue.save_queue(queue)
 
-    summary = f"{processed} scheduled job(s) processed"
+    summary = f"{processed} scheduled job(s) processed; {paused} paused for Previous courses"
     return {"ok": ok, "lines": lines, "summary": summary}
 
 
@@ -323,11 +332,17 @@ def _run_routine_powergrader_late_catchup(params, deps: PowerGraderRoutineDeps):
     if not deps.config.has_openrouter_key():
         return {"ok": False, "lines": ["✗ no OpenRouter key saved"], "summary": "no OpenRouter key saved"}
 
+    current_courses = deps.config.active_courses()
+    current_ids = {
+        str(course.get("id") or "").strip()
+        for course in current_courses
+        if str(course.get("id") or "").strip()
+    }
     max_sessions = int(params.get("max_sessions", 10) or 10)
     seen: set[str] = set()
-    lines, ok, processed = [], True, 0
+    lines, ok, processed, paused = [], True, 0, 0
     course_name = {str(c["id"]): (c.get("nickname") or c.get("name") or str(c["id"]))
-                   for c in deps.config.active_courses()}
+                   for c in current_courses}
 
     for summary in deps.session_store.list_session_summaries():
         if processed >= max_sessions:
@@ -337,6 +352,9 @@ def _run_routine_powergrader_late_catchup(params, deps: PowerGraderRoutineDeps):
             continue
         seen.add(session_id)
         if summary.get("mode") != "assisted":
+            continue
+        if str(summary.get("course_id") or "").strip() not in current_ids:
+            paused += 1
             continue
         session = deps.session_store.load_session(session_id)
         if not session:
@@ -357,5 +375,7 @@ def _run_routine_powergrader_late_catchup(params, deps: PowerGraderRoutineDeps):
         else:
             lines.append(f"· {label}: no new late submissions")
 
-    summary = f"{processed} PowerGrader session(s) checked; uses OpenRouter"
+    if paused:
+        lines.append(f"· {paused} PowerGrader late-watch session(s) paused because their courses are Previous")
+    summary = f"{processed} PowerGrader session(s) checked; {paused} paused for Previous courses; uses OpenRouter"
     return {"ok": ok, "lines": lines or ["· no watched PowerGrader sessions"], "summary": summary}

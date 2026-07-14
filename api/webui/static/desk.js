@@ -5,25 +5,40 @@
   if (!root) return;
 
   var dataScript = document.getElementById("desk-initial-data");
-  var initial = { jobs: [], receipts: [] };
+  var initial = { jobs: [], presentations: {}, operations: [], receipts: [] };
   try {
     initial = JSON.parse(dataScript ? dataScript.textContent : "{}") || initial;
   } catch (e) {
-    initial = { jobs: [], receipts: [] };
+    initial = { jobs: [], presentations: {}, operations: [], receipts: [] };
   }
 
   var state = {
     jobs: Array.isArray(initial.jobs) ? initial.jobs : [],
+    presentations: initial.presentations && typeof initial.presentations === "object"
+      ? initial.presentations : {},
+    operations: Array.isArray(initial.operations) ? initial.operations : [],
     receipts: Array.isArray(initial.receipts) ? initial.receipts : [],
   };
   var continueList = document.getElementById("desk-continue-list");
   var attentionList = document.getElementById("desk-attention-list");
+  var preparedList = document.getElementById("desk-prepared-list");
   var receiptsList = document.getElementById("desk-receipts-list");
   var localStatus = document.getElementById("desk-local-status");
   var scanButton = document.getElementById("desk-scan");
   var courseField = document.getElementById("desk-course-field");
   var scopeNote = document.getElementById("desk-scope-note");
   var csrfMeta = document.querySelector('meta[name="canvasexpert-csrf-token"]');
+  var sharedContext = window.CE_CONTEXT;
+
+  function currentCourseOptions() {
+    return Array.from(courseField ? courseField.options : []).filter(function (option) {
+      return option.value && option.value !== "__all__";
+    }).map(function (option) {
+      return { id: option.value, name: option.textContent };
+    });
+  }
+
+  sharedContext?.reconcile(currentCourseOptions(), { source: "desk", authoritative: true });
 
   function element(tag, className, text) {
     var node = document.createElement(tag);
@@ -71,21 +86,24 @@
     }
     clear(node);
     jobs.forEach(function (job) {
+      var presentation = state.presentations[job.job_id] || {};
       var article = element("article", "ce-desk-job");
       article.dataset.jobId = job.job_id;
       article.dataset.materialVersion = job.material_version;
       article.dataset.origin = job.origin;
 
-      var detail = element("div");
-      detail.appendChild(element("strong", "", job.title || "Work item"));
-      var counts = job.counts || {};
-      var summary = actionLabel === "Review"
+      var detail = element("div", "ce-desk-job-detail");
+      if (presentation.course_label) {
+        detail.appendChild(element("span", "ce-desk-course-label", presentation.course_label));
+      }
+      detail.appendChild(element("strong", "", presentation.title || job.title || "Work item"));
+      var fallbackSummary = actionLabel === "Review"
         ? (job.attention_reason || "Work needs attention")
-        : ((job.kind || "Work") + " · " + (counts.total || 0) + " items");
-      detail.appendChild(element("span", "", summary));
+        : "Work in progress";
+      detail.appendChild(element("span", "ce-desk-job-summary", presentation.summary || fallbackSummary));
       article.appendChild(detail);
 
-      var link = element("a", "ce-desk-inline-link", actionLabel);
+      var link = element("a", "ce-desk-inline-link", presentation.action_label || actionLabel);
       link.href = job.resumable_url || "/";
       article.appendChild(link);
       article.appendChild(jobActions(job));
@@ -114,6 +132,30 @@
     });
   }
 
+  function renderPrepared() {
+    if (!preparedList) return;
+    var prepared = state.operations.filter(function (operation) {
+      return ["prepared", "reviewed"].indexOf(operation.status) !== -1;
+    });
+    if (!prepared.length) {
+      clear(preparedList);
+      var empty = element("p", "ce-desk-empty", "No prepared operations.");
+      empty.id = "desk-prepared-empty";
+      preparedList.appendChild(empty);
+      return;
+    }
+    clear(preparedList);
+    prepared.forEach(function (operation) {
+      var article = element("article", "ce-desk-prepared");
+      var detail = element("div");
+      detail.appendChild(element("strong", "", operation.kind || "Operation"));
+      var count = Number(operation.target_count) === 1 ? "target" : "targets";
+      detail.appendChild(element("span", "", (operation.status || "prepared") + " · " + (operation.target_count || 0) + " " + count));
+      article.appendChild(detail);
+      preparedList.appendChild(article);
+    });
+  }
+
   function render() {
     renderJobList(continueList, state.jobs.filter(function (job) {
       return ["draft", "ready", "in_progress"].indexOf(job.status) !== -1;
@@ -121,6 +163,7 @@
     renderJobList(attentionList, state.jobs.filter(function (job) {
       return job.status === "attention";
     }), "Review");
+    renderPrepared();
     renderReceipts();
   }
 
@@ -133,13 +176,19 @@
   function refreshLocal() {
     return Promise.all([
       fetch("/api/work?section=all", { headers: { "Accept": "application/json" } }).then(responseJson),
+      fetch("/api/operations", { headers: { "Accept": "application/json" } }).then(responseJson),
       fetch("/api/receipts", { headers: { "Accept": "application/json" } }).then(responseJson),
     ]).then(function (results) {
       var workResult = results[0];
-      var receiptResult = results[1];
+      var operationResult = results[1];
+      var receiptResult = results[2];
       if (!workResult.response.ok || !workResult.body.ok) throw new Error("work_unavailable");
+      if (!operationResult.response.ok || !operationResult.body.ok) throw new Error("operations_unavailable");
       if (!receiptResult.response.ok || !receiptResult.body.ok) throw new Error("receipts_unavailable");
       state.jobs = Array.isArray(workResult.body.jobs) ? workResult.body.jobs : [];
+      state.presentations = workResult.body.presentations && typeof workResult.body.presentations === "object"
+        ? workResult.body.presentations : {};
+      state.operations = Array.isArray(operationResult.body.operations) ? operationResult.body.operations : [];
       state.receipts = Array.isArray(receiptResult.body.receipts) ? receiptResult.body.receipts : [];
       render();
       if (localStatus) localStatus.textContent = "Local state updated.";
@@ -196,18 +245,14 @@
   });
 
   function applyExplicitScope() {
-    var context = window.CE_CONTEXT;
+    var context = sharedContext;
     var selection = courseField ? courseField.value : "";
     if (!context || !selection) return;
     if (selection === "__all__") {
-      var allCourses = Array.from(courseField.options).filter(function (option) {
-        return option.value && option.value !== "__all__";
-      }).map(function (option) {
-        return { id: option.value, name: option.textContent };
-      });
+      var allCourses = currentCourseOptions();
       context.setFocus(null, "desk");
       context.setTargets(allCourses, "desk");
-      if (scopeNote) scopeNote.textContent = "All active courses will be used as targets.";
+      if (scopeNote) scopeNote.textContent = "All Current courses will be used as targets.";
       return;
     }
     var option = courseField.options[courseField.selectedIndex];
@@ -226,7 +271,7 @@
   if (scanButton) {
     scanButton.addEventListener("click", function () {
       scanButton.disabled = true;
-      if (localStatus) localStatus.textContent = "Scanning active courses…";
+      if (localStatus) localStatus.textContent = "Scanning Current courses…";
       fetch("/api/work/scan", {
         method: "POST",
         headers: mutationHeaders(),
