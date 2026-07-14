@@ -30,6 +30,10 @@ credential or request shape.
 - A verified temporary write remains for the operator to inspect live. Return YELLOW pending
   explicit cleanup direction; do not clear it automatically. An ambiguous outcome is RED,
   with no second write. The later production PowerGrader feature remains out of scope.
+- For this capture, a completed Essay response is a supported manual text item even when the
+  same result also contains a File Upload item. The probe may change the Essay item only while
+  preserving every other item, including the File Upload, exactly. This does not alter the
+  locked future product rule that a mixed student finalization routes wholly to SpeedGrader.
 
 ## Scope
 
@@ -58,8 +62,9 @@ credential or request shape.
 
 ## Implementation requirements
 
-1. Prove the target is a New Quiz and identify one completed dummy attempt with a supported
-   manual text item, without printing identifying or response content.
+1. Prove the target is a New Quiz and identify one completed dummy Essay response as the
+   supported manual text item, without printing identifying or response content. A coexisting
+   File Upload item is preserved, not treated as a capture blocker.
 2. Record only content-free stage outcomes while resolving the web session, GraphQL preview
    launch, signed grading launch, participant/result credentials, current result, complete item
    collection, and current fudge. Do not expose values in exceptions or logs.
@@ -87,8 +92,8 @@ Stop with RED rather than guessing if:
 
 - Any required launch, participant, result, or item shape is unknown; complete current item
   state/fudge cannot be proven; or a credential would need persistence or disclosure.
-- The target is not clearly the user-authorized dummy New Quiz, lacks a safe completed manual
-  item, or a write outcome is ambiguous.
+- The target is not clearly the user-authorized dummy New Quiz, lacks a safe completed Essay
+  response, or a write outcome is ambiguous.
 - The capture requires a second write, an automatic rollback, a normal assignment endpoint,
   a public contract expansion, or an unrelated change.
 
@@ -103,6 +108,6 @@ senior. Do not leave the only copy of execution state or test evidence in chat.
 - Commit hash: `eda6cc3` blocker record; live-preflight update follows in a closure commit
 - Files changed: this execution result only
 - Verification commands and pass/fail/skip counts: `py -m pytest api/tests/test_powergrader_new_quizzes.py` passed **8** tests; `git diff --check` passed.
-- Live probe: content-free assignment preflight confirmed New Quiz; submission/report preflight found no completed supported manual text item. No grader launch, credential-resolution, result read, POST, or verification request was issued.
+- Live probe: content-free assignment preflight confirmed New Quiz; clarified submission/report preflight confirmed one eligible completed Essay response despite a separate File Upload item. No grader launch, credential-resolution, result read, POST, or verification request was issued.
 - Deviations from the brief: none.
-- Remaining blocker or cleanup decision: target evidence is not a safe completed manual-text item for the authorized temporary write. No write was issued, so no cleanup is required.
+- Remaining blocker or cleanup decision: although the Essay is eligible, the routed implementation/reference still has no executable web-session/GraphQL submission-preview launch form or complete result/fudge payload contract. The existing code's distinct read-side sessionless/native-file path cannot safely be substituted. A write would require guessing the high-risk credential/result transport. No write was issued, so no cleanup is required.
