@@ -18,6 +18,7 @@ from api.powergrader import canvas_fetch
 from api.powergrader import new_quiz_fetch as nq
 from api.powergrader import session_builder
 from api.powergrader import student_attachments
+from api.powergrader.assignment_refresh import RefreshBudget, REFRESH_BINARY_LIMIT
 from api.webui.config import courses
 
 
@@ -134,6 +135,38 @@ def test_ordinary_download_failure_keeps_failed_evidence_and_expected_parity(tmp
     )
     assert decision["held"] is True
     assert decision["attachment_count"] == decision["expected_count"] == 1
+
+
+def test_focused_refresh_budget_reuses_exact_match_and_skips_over_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr(canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    monkeypatch.setattr(canvas_fetch.workspace, "workspace_root", lambda: str(tmp_path))
+    budget = RefreshBudget(4)
+    existing = tmp_path / "managed.txt"
+    existing.write_text("keep", encoding="utf-8")
+    submissions = [{"user_id": "user-1", "user": {"name": "Fictional"}, "attachments": [
+        {"id": "same", "filename": "same.txt", "size": 4, "url": "https://canvas.test/same"},
+        {"id": "too-big", "filename": "large.txt", "size": 5, "url": "https://canvas.test/large"},
+    ]}]
+    calls = []
+    def destination(_submission, source, filename, attempt):
+        return str(tmp_path / f"{source['id']}-{filename}"), attempt
+    def download(*args, **kwargs):
+        calls.append(args[0]); Path(args[1]).write_bytes(b"data"); return {"actual_size": 4, "declared_size": 4}
+    canvas_fetch.ingest_ordinary_attachments(submissions, course_name="Course", course_id="c",
+        assignment_name="Assignment", assignment_id="a", byte_budget=budget, target_path=destination,
+        require_identity=True, download=download, reusable_records={"same": {
+            "local_path": str(existing), "content_indicator": {"size": 4}, "actual_size": 4,
+        }})
+    first, second = submissions[0]["attachments"]
+    assert first["download_status"] == "reused"
+    assert second["error_code"] == "refresh_budget_exceeded"
+    assert calls == []
+
+
+def test_focused_refresh_budget_has_exact_ten_mib_boundary():
+    budget = RefreshBudget()
+    assert budget.reserve(REFRESH_BINARY_LIMIT) is True
+    assert budget.reserve(1) is False
 
 
 class _DownloadResponse:

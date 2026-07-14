@@ -220,3 +220,23 @@ def test_powergrader_compatibility_reads_are_new_first_and_non_destructive(tmp_p
     autoscore_queue.save_queue({"version": 1, "jobs": [{"job_id": "new"}]})
     assert old_queue.read_text(encoding="utf-8").find('"old"') >= 0
     assert autoscore_queue.load_queue()["jobs"][0]["job_id"] == "new"
+
+
+def test_assignment_evidence_manifest_is_atomic_identity_checked_and_conflict_fail_closed(tmp_path, monkeypatch):
+    root = tmp_path / "CanvasExpert"
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    kwargs = {"course_name": "Course", "course_id": "course-1", "assignment_name": "Essay", "assignment_id": "assignment-1"}
+    manifest = {"version": 1, "course_id": "course-1", "assignment_id": "assignment-1", "evidence": []}
+    path = workspace.write_assignment_evidence_manifest(manifest, **kwargs)
+    assert path and workspace.read_assignment_evidence_manifest(**kwargs) == manifest
+    assert workspace.write_assignment_evidence_manifest({**manifest, "course_id": "wrong"}, **kwargs) is None
+    conflict = Path(path).with_name("Fictional assignment_evidence_manifest conflicted copy.json")
+    conflict.write_text("{}", encoding="utf-8")
+    assert workspace.read_assignment_evidence_manifest(**kwargs) is None
+    assert workspace.write_assignment_evidence_manifest(manifest, **kwargs) is None
+
+
+def test_managed_evidence_path_uses_identity_not_filename_suffix(tmp_path):
+    first = workspace.managed_evidence_path("Course", "course", "Essay", "assignment", "Student", "user", 2, "file-1", "draft.docx", tmp_path)
+    second = workspace.managed_evidence_path("Course", "course", "Essay", "assignment", "Student", "user", 2, "file-2", "draft.docx", tmp_path)
+    assert first != second and "file-1" in first and "file-2" in second

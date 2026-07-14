@@ -11,7 +11,7 @@ import openrouter_client as orc
 from .. import config, source_materials, workspace
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
-from powergrader import (ai_workflow, canvas_fetch, context, estimates,
+from powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
                          import_results, late_catchup, packet, privacy,
                          session_actions, session_builder, session_store,
                          start_workflow)
@@ -226,19 +226,10 @@ def pg_start(
     session_id = str(uuid.uuid4())
     course_name = config.course_display_name(course_id)
 
-    # Fetch submissions
-    try:
-        subs, adata, err = canvas_fetch.fetch_submissions(
-            course_id, assignment_id, session_id=session_id,
-        )
-    except TypeError as exc:
-        # Keep narrow compatibility with external/test fetch adapters that
-        # still expose the pre-session_id two-argument seam.
-        if "session_id" not in str(exc):
-            raise
-        subs, adata, err = canvas_fetch.fetch_submissions(course_id, assignment_id)
-    if err:
-        return JSONResponse({"ok": False, "error": err, "privacy_steps": []})
+    # One focused owner acquires canonical local evidence before this session.
+    subs, adata, refresh = assignment_refresh.refresh_assignment(course_id, assignment_id, session_id=session_id)
+    if refresh.get("error"):
+        return JSONResponse({"ok": False, "error": refresh["error"], "privacy_steps": []})
     if not subs:
         return JSONResponse({"ok": False, "error": "No submissions found for this assignment.",
                              "privacy_steps": []})
@@ -258,15 +249,6 @@ def pg_start(
 
     initial_missing_user_ids = late_catchup.initial_missing_user_ids(subs or [])
     submitted_user_ids = sorted({str(s.get("user_id", "")) for s in submitted if s.get("user_id")})
-
-    if not is_new_quiz:
-        canvas_fetch.ingest_ordinary_attachments(
-            submitted,
-            course_name=course_name,
-            course_id=course_id,
-            assignment_name=assignment_name,
-            assignment_id=assignment_id,
-        )
 
     selected_model = (model_id or "").strip() or config.get_openrouter_model()
     late_watch = build_late_watch_state(
@@ -360,6 +342,8 @@ def pg_start(
         copilot_packet=ai_result.get("copilot_packet"),
         late_watch=late_watch,
         canvas_writeback_supported=not is_new_quiz,
+        evidence_manifest=refresh.get("manifest_path"),
+        evidence_status=refresh.get("status", "unknown"),
     )
     _save_session(session)
 
@@ -373,6 +357,7 @@ def pg_start(
         privacy_steps=privacy_steps,
         privacy_artifacts=privacy_artifacts,
         copilot_packet=ai_result.get("copilot_packet"),
+        evidence_status=refresh.get("status", "unknown"),
     ))
 
 

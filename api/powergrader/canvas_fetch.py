@@ -33,7 +33,8 @@ CANVAS_AUTH_HEADERS = {
 }
 
 
-def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | None = None):
+def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | None = None,
+                      new_quiz_files=True, byte_budget=None, evidence_path=None, reusable_records=None):
     """Fetch submissions for one assignment. Returns ``(subs, assignment, error)``."""
     subs, err = _canvas_get_all(
         f"/api/v1/courses/{course_id}/students/submissions",
@@ -48,6 +49,16 @@ def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | N
     adata = adata or {}
     if adata.get("is_quiz_lti_assignment") is True:
         from powergrader import new_quiz_fetch
+        if evidence_path == "managed":
+            def evidence_path(target, value, filename, attempt):
+                user = target.get("user") or {}
+                evidence_id = value.get("id") or value.get("file_id") or value.get("uuid")
+                return workspace.managed_evidence_path(
+                    config.course_display_name(course_id) or course_id, course_id,
+                    assignment_id, assignment_id,
+                    user.get("sortable_name") or user.get("name") or target.get("user_id"), target.get("user_id"),
+                    attempt, evidence_id, filename,
+                )
         normalized, nq_err = new_quiz_fetch.fetch(
             course_id,
             assignment_id,
@@ -55,6 +66,10 @@ def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | N
             session_id=session_id,
             course_name=config.course_display_name(course_id),
             assignment_name=adata.get("name") or assignment_id,
+            materialize_files=new_quiz_files,
+            byte_budget=byte_budget,
+            evidence_path=evidence_path,
+            reusable_records=reusable_records,
         )
         return normalized, adata, nq_err
     if adata.get("quiz_id") or "online_quiz" in (adata.get("submission_types") or []):
@@ -272,6 +287,10 @@ def ingest_ordinary_attachments(
     assignment_id: str,
     http_session=None,
     download=None,
+    byte_budget=None,
+    target_path=None,
+    reusable_records=None,
+    require_identity=False,
 ) -> list[dict]:
     """Preserve and route every ordinary Canvas upload exactly once per input.
 
@@ -310,6 +329,7 @@ def ingest_ordinary_attachments(
                 "ai_eligible": False,
                 "local_only": False,
                 "warnings": [],
+                "content_indicator": {key: source.get(key) for key in ("size", "updated_at", "modified_at", "created_at", "uuid", "md5") if source.get(key) not in (None, "")},
             }
             if not headers or not canvas_base:
                 meta.update({
@@ -320,15 +340,29 @@ def ingest_ordinary_attachments(
                 records.append(meta)
                 continue
             url = source.get("url")
-            dest, attempt = _target_path(
+            dest, attempt = (target_path(submission, source, filename, _attempt(submission))
+                            if target_path else _target_path(
                 course_name=course_name,
                 course_id=course_id,
                 assignment_name=assignment_name,
                 assignment_id=assignment_id,
                 submission=submission,
                 filename=filename,
-            )
+            ))
             meta["attempt"] = attempt
+            evidence_id = source.get("id") or source.get("file_id") or source.get("attachment_id")
+            if require_identity and not evidence_id:
+                meta.update({"extraction_status": "failed", "error_code": "missing_evidence_identity",
+                             "error_message": "Canvas did not provide a stable identity for this upload."})
+                records.append(meta)
+                continue
+            reuse = (reusable_records or {}).get(str(evidence_id))
+            if (reuse and reuse.get("content_indicator") == meta["content_indicator"]
+                    and reuse.get("local_path") and os.path.isfile(reuse["local_path"])):
+                meta.update({key: value for key, value in reuse.items() if key not in {"url", "headers", "signed_url"}})
+                meta["download_status"] = "reused"
+                records.append(meta)
+                continue
             if not dest:
                 meta.update({
                     "extraction_status": "failed",
@@ -343,6 +377,20 @@ def ingest_ordinary_attachments(
                     "error_code": "missing_attachment_url",
                     "error_message": "Canvas did not provide an attachment download location.",
                 })
+                records.append(meta)
+                continue
+            try:
+                declared = int(declared_size)
+            except (TypeError, ValueError):
+                declared = None
+            if declared is None or declared < 0:
+                meta.update({"extraction_status": "failed", "error_code": "size_unavailable",
+                             "error_message": "Canvas did not provide a usable file size; review it in Canvas."})
+                records.append(meta)
+                continue
+            if byte_budget is not None and not byte_budget.reserve(declared):
+                meta.update({"extraction_status": "failed", "error_code": "refresh_budget_exceeded",
+                             "error_message": "This upload exceeds the focused refresh limit; review it in Canvas."})
                 records.append(meta)
                 continue
             try:

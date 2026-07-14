@@ -399,7 +399,7 @@ def _resolve_native_candidate(session, backend: str, native_headers: dict,
 
 def _native_file_transport(session, base, headers, course_id, assignment_id,
                            normalized, *, session_id=None, download=None,
-                           course_name="", assignment_name=""):
+                           course_name="", assignment_name="", byte_budget=None, evidence_path=None, reusable_records=None):
     """Resolve and download file answers. Returns (count, stage_error)."""
     file_targets = [target for target in normalized or [] if _target_has_files(target)]
 
@@ -566,6 +566,9 @@ def _native_file_transport(session, base, headers, course_id, assignment_id,
                     download=download,
                     course_name=course_name,
                     assignment_name=assignment_name,
+                    byte_budget=byte_budget,
+                    evidence_path=evidence_path,
+                    reusable_records=reusable_records,
                 )
             except requests.RequestException:
                 _mark_expected_failure(target, _native_error(
@@ -588,7 +591,7 @@ def _native_file_transport(session, base, headers, course_id, assignment_id,
 
 
 def _download_item_files(target, item_results, course_id, assignment_id, *, session_id=None,
-                         download=None, course_name="", assignment_name=""):
+                         download=None, course_name="", assignment_name="", byte_budget=None, evidence_path=None, reusable_records=None):
     pairs = _expected_records(target)
     if not pairs:
         return 0, None
@@ -646,12 +649,15 @@ def _download_item_files(target, item_results, course_id, assignment_id, *, sess
         for (item_file, top_file), value in zip(expected, values_by_item[item_id]):
             original = os.path.basename(str(value.get("name") or item_file.get("filename") or "file")) or "file"
             filename = workspace.safe_component(original, 150)
-            stem, ext = os.path.splitext(filename)
-            dest = os.path.join(attempt_dir, filename)
-            number = 2
-            while os.path.exists(dest) or os.path.exists(dest + ".partial"):
-                dest = os.path.join(attempt_dir, f"{stem} ({number}){ext}")
-                number += 1
+            file_identity = value.get("id") or value.get("file_id") or value.get("uuid")
+            dest = (evidence_path(target, value, original, attempt) if evidence_path else None)
+            if not dest:
+                stem, ext = os.path.splitext(filename)
+                dest = os.path.join(attempt_dir, filename)
+                number = 2
+                while os.path.exists(dest) or os.path.exists(dest + ".partial"):
+                    dest = os.path.join(attempt_dir, f"{stem} ({number}){ext}")
+                    number += 1
             meta = {
                 "filename": original,
                 "local_path": dest,
@@ -664,7 +670,33 @@ def _download_item_files(target, item_results, course_id, assignment_id, *, sess
                 "ai_eligible": False,
                 "local_only": False,
                 "warnings": [],
+                "evidence_id": str(file_identity or ""),
+                "content_indicator": {"size": value.get("size")} if value.get("size") is not None else {},
             }
+            try:
+                declared = int(value.get("size"))
+            except (TypeError, ValueError):
+                declared = None
+            strict_identity = byte_budget is not None or evidence_path is not None
+            if strict_identity and (not file_identity or declared is None or declared < 0):
+                meta.update({"extraction_status": "failed", "error_code": "missing_evidence_identity_or_size",
+                             "error_message": "New Quiz did not provide stable file identity and size; review it in Canvas."})
+                item_file.update(meta); top_file.update(meta)
+                continue
+            reuse = (reusable_records or {}).get(str(file_identity))
+            expected_indicator = {"size": value.get("size")} if value.get("size") is not None else {}
+            if (reuse and reuse.get("content_indicator") == expected_indicator
+                    and reuse.get("local_path") and os.path.isfile(reuse["local_path"])):
+                meta.update({key: value for key, value in reuse.items() if key not in {"url", "headers", "signed_url"}})
+                meta["download_status"] = "reused"
+                item_file.update(meta); top_file.update(meta)
+                count += 1
+                continue
+            if byte_budget is not None and not byte_budget.reserve(declared):
+                meta.update({"extraction_status": "failed", "error_code": "refresh_budget_exceeded",
+                             "error_message": "This upload exceeds the focused refresh limit; review it in Canvas."})
+                item_file.update(meta); top_file.update(meta)
+                continue
             try:
                 result = clean(value.get("url"), dest, declared_size=value.get("size")) or {}
                 meta.update({k: v for k, v in result.items() if k not in {"url", "signed_url", "headers"}})
@@ -765,7 +797,8 @@ def _has_file_refs(rows):
 
 
 def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=time.sleep,
-          session_id=None, download=None, course_name="", assignment_name=""):
+          session_id=None, download=None, course_name="", assignment_name="", materialize_files=True,
+          byte_budget=None, evidence_path=None, reusable_records=None):
     headers, base = _canvas_headers()
     if not headers or not base:
         return None, "No Canvas token saved — go to Settings."
@@ -792,13 +825,16 @@ def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=tim
         if any(_parse_time(s.get("submitted_at")) is None or _parse_time(s.get("new_quiz_reported_at")) is None or _parse_time(s["submitted_at"]) > _parse_time(s["new_quiz_reported_at"]) for s in subs):
             return None, "New Quiz report is still older than Canvas. Wait briefly and try again; no session was created."
 
-    if _has_file_refs(rows):
+    if _has_file_refs(rows) and materialize_files:
         if session_id:
             _, native_err = _native_file_transport(
                 session, base, headers, course_id, assignment_id, subs,
                 session_id=session_id, download=download,
                 course_name=course_name or course_id,
                 assignment_name=assignment_name or assignment_id,
+                byte_budget=byte_budget,
+                evidence_path=evidence_path,
+                reusable_records=reusable_records,
             )
             if native_err:
                 for sub in subs:
@@ -811,4 +847,9 @@ def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=tim
             for sub in subs:
                 if _target_has_files(sub):
                     _mark_expected_failure(sub, unavailable)
+    elif _has_file_refs(rows):
+        deferred = _native_error("file_refresh_deferred", "New Quiz uploads were not materialized by this focused refresh.")
+        for sub in subs:
+            if _target_has_files(sub):
+                _mark_expected_failure(sub, deferred)
     return subs, None

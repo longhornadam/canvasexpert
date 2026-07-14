@@ -79,6 +79,7 @@ def build_start_success_payload(
     privacy_steps: list[dict],
     privacy_artifacts: dict,
     copilot_packet: dict | None,
+    evidence_status: str = "unknown",
 ) -> dict:
     return {
         "ok": True,
@@ -92,6 +93,7 @@ def build_start_success_payload(
         "packet_zip": privacy_artifacts.get("packet_zip"),
         "copilot_batch_count": (copilot_packet or {}).get("batch_count", 0),
         "copilot_packet_folder": (copilot_packet or {}).get("packet_folder"),
+        "evidence_status": evidence_status,
     }
 
 

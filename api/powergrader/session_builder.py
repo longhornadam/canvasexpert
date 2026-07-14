@@ -119,6 +119,8 @@ def build_session(
     copilot_packet: dict | None = None,
     late_watch: dict | None = None,
     canvas_writeback_supported: bool = True,
+    evidence_manifest: str | None = None,
+    evidence_status: str = "unknown",
 ) -> dict:
     """Build the session dictionary ready to save."""
     return {
@@ -140,6 +142,8 @@ def build_session(
         "copilot_packet":  copilot_packet,
         "late_watch":      late_watch,
         "canvas_writeback_supported": canvas_writeback_supported,
+        "evidence_manifest": evidence_manifest,
+        "evidence_status": evidence_status,
         "students":        students or [],
         "push_log":        [],
     }

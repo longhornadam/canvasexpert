@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -229,6 +230,72 @@ def attempt_folder(course_name, course_id, assignment_name, assignment_id,
                         "Assignments", named_id_folder(assignment_name, assignment_id),
                         "Student Work", named_id_folder(student_name, user_id),
                         f"Attempt {attempt_text}") if base else None
+
+
+ASSIGNMENT_EVIDENCE_MANIFEST = "assignment_evidence_manifest.json"
+
+
+def assignment_evidence_manifest_path(course_name, course_id, assignment_name, assignment_id, root=None):
+    """Return the private, canonical manifest path for one assignment."""
+    folder = assignment_folder(course_name, course_id, assignment_name, assignment_id, root)
+    return os.path.join(folder, ASSIGNMENT_EVIDENCE_MANIFEST) if folder else None
+
+
+def managed_evidence_path(course_name, course_id, assignment_name, assignment_id,
+                          student_name, user_id, attempt, evidence_id, filename, root=None):
+    """Return a deterministic managed-original path; filenames are never identity."""
+    base = attempt_folder(course_name, course_id, assignment_name, assignment_id,
+                          student_name, user_id, attempt, root)
+    if not base or not evidence_id:
+        return None
+    return bounded_join(base, f"{safe_id(evidence_id)} — {safe_component(filename, 150)}")
+
+
+def assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root=None):
+    """Find OneDrive-style competing manifests without selecting or modifying either."""
+    path = assignment_evidence_manifest_path(course_name, course_id, assignment_name, assignment_id, root)
+    if not path:
+        return []
+    directory = os.path.dirname(path)
+    if not os.path.isdir(directory):
+        return []
+    return [candidate for candidate in glob.glob(os.path.join(directory, "*assignment_evidence_manifest*.json"))
+            if os.path.normcase(os.path.abspath(candidate)) != os.path.normcase(os.path.abspath(path))]
+
+
+def read_assignment_evidence_manifest(course_name, course_id, assignment_name, assignment_id, root=None):
+    path = assignment_evidence_manifest_path(course_name, course_id, assignment_name, assignment_id, root)
+    if not path or assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root):
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(data, dict) or str(data.get("course_id")) != str(course_id) or str(data.get("assignment_id")) != str(assignment_id):
+        return None
+    return data
+
+
+def write_assignment_evidence_manifest(manifest: dict, *, course_name, course_id, assignment_name, assignment_id, root=None):
+    """Atomically replace a validated private manifest after evidence is finalized."""
+    path = assignment_evidence_manifest_path(course_name, course_id, assignment_name, assignment_id, root)
+    if not path or str(manifest.get("course_id")) != str(course_id) or str(manifest.get("assignment_id")) != str(assignment_id):
+        return None
+    if assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root):
+        return None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".assignment_evidence_", suffix=".partial", dir=os.path.dirname(path), text=True)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        return path
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def ai_assignment_root(course_name, course_id, assignment_name, assignment_id, root=None):
