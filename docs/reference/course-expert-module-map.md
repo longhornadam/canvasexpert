@@ -29,7 +29,6 @@ mostly markup, data injection, and script includes.
 - `api/webui/source_materials.py` - 216 lines (facade)
 - `api/webui/source_material_extractors.py` - 244 lines (format decoding/normalization)
 - `api/webui/static/push/quiz.js` - 294 lines
-- `api/webui/static/push/download.js` - 246 lines
 - `api/webui/static/push/core.js` - 207 lines
 - `api/webui/static/push/course_picker.js` - 180 lines
 - `api/webui/static/push/delivery.js` - 161 lines
@@ -79,7 +78,6 @@ Shared push scripts still own the core push cards:
 - `push/assignment.js` - AssignmentForge validation/push card behavior
 - `push/page.js` - PageForge validation/push card behavior
 - `push/rubric.js` - RubricForge validation/prompt/push card behavior
-- `push/download.js` - Download Work assignment selection/download behavior
 
 `course_expert.html` now contains markup plus script includes. Standalone legacy
 push pages load `_push_common_scripts.html` before their feature script; Course
@@ -126,7 +124,7 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 - file paste/upload issues: `push/file_sources.js`, `routes/push_validation.py`
 - printable output failures: `push/core.js`, `routes/push_validation.py`,
   `engine/rendering/physical/`
-- Download Work behavior: `push/download.js`, `api/downloader.py`,
+- Assignment evidence refresh: `api/powergrader/assignment_refresh.py` (shared owner)
   download-related routes
 - Student Reports/portfolio inline behavior: `course_expert/student_reports.js`,
   `course_expert/portfolio.js`, report/portfolio routes

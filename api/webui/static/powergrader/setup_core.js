@@ -30,6 +30,9 @@
   var status = document.getElementById('pg-start-status');
   var aiLabel = document.getElementById('pg-ai-label');
   var unsupportedHintEl = document.getElementById('pg-assignment-unsupported-hint');
+  var refreshBtn = document.getElementById('pg-refresh-assignment');
+  var folderBtn = document.getElementById('pg-open-assignment-folder');
+  var evidenceStatus = document.getElementById('pg-evidence-status');
 
   function currentMode() {
     var checked = modeChoices.find(function(el){ return el.checked; });
@@ -73,6 +76,8 @@
     var ackBox = document.getElementById('pg-ai-check');
     var ackOk = !isAi || (ackBox && ackBox.checked);
     startBtn.disabled = !(setupConfig.hasWorkspace && cid && aid && ackOk);
+    if (refreshBtn) refreshBtn.disabled = !(setupConfig.hasWorkspace && cid && aid);
+    if (folderBtn) folderBtn.disabled = !(setupConfig.hasWorkspace && cid && aid);
   }
 
   function setStatus(msg, err){
@@ -358,6 +363,25 @@
     });
   }
 
+  function bindEvidenceActions() {
+    function values(){ return { course_id: courseEl.value, assignment_id: asnEl.value }; }
+    if (refreshBtn) refreshBtn.addEventListener('click', function(){
+      refreshBtn.disabled = true;
+      if (evidenceStatus) evidenceStatus.textContent = 'Refreshing assignment evidence…';
+      fetch('/api/powergrader/refresh', {method: 'POST', body: new URLSearchParams(values())})
+        .then(function(r){ return r.json(); }).then(function(data){
+          if (evidenceStatus) evidenceStatus.textContent = data.ok ? 'Assignment evidence is ' + (data.status || 'incomplete') + '.' : (data.error || 'The focused refresh could not be completed.');
+        }).catch(function(){ if (evidenceStatus) evidenceStatus.textContent = 'The focused refresh could not be completed.'; })
+        .finally(syncStartEnabled);
+    });
+    if (folderBtn) folderBtn.addEventListener('click', function(){
+      fetch('/api/powergrader/open-assignment-folder', {method: 'POST', body: new URLSearchParams(values())})
+        .then(function(r){ return r.json(); }).then(function(data){
+          if (evidenceStatus) evidenceStatus.textContent = data.ok ? 'Opened the local assignment folder.' : (data.error || 'The local assignment folder could not be opened.');
+        }).catch(function(){ if (evidenceStatus) evidenceStatus.textContent = 'The local assignment folder could not be opened.'; });
+    });
+  }
+
   pg.esc = esc;
   pg.currentMode = currentMode;
   pg.defaultModel = function(){ return defaultModel; };
@@ -377,5 +401,6 @@
   if (ackBox) ackBox.addEventListener('change', syncStartEnabled);
   bindRubricSync();
   bindStartSession();
+  bindEvidenceActions();
   if (typeof pg.loadSessions === 'function') pg.loadSessions('');
 })();

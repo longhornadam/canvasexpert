@@ -15,7 +15,12 @@ import tempfile
 import requests
 
 import portfolio
-from downloader import _download_binary, _get_all_pages, safe_name
+from submission_transport import download_binary, get_all_pages
+from webui.workspace import safe_component
+
+safe_name = safe_component
+_download_binary = download_binary
+_get_all_pages = get_all_pages
 
 
 def _assignment_entries(subs, session, work_dir, date_from, date_to):

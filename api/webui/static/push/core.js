@@ -70,44 +70,6 @@
     showBanner(el, kind, lines);
   }
 
-  function streamSSE(url, logFn, bannerEl, onDone) {
-    hideBanner(bannerEl);
-    var canvasUrl = null;
-    var resultLines = [];
-    var es = new EventSource(url);
-    es.onmessage = function (ev) {
-      var line = JSON.parse(ev.data);
-      if (line.startsWith("  CANVAS_URL: ")) {
-        canvasUrl = line.slice("  CANVAS_URL: ".length).trim();
-        return;
-      }
-      if (line.startsWith("  PUSH_OK: ")) {
-        var title = line.slice("  PUSH_OK: ".length).trim();
-        resultLines.push({ ok: true, title: title, url: canvasUrl });
-        canvasUrl = null;
-        logFn(line);
-        return;
-      }
-      if (line.startsWith("  PUSH_WARN: ")) {
-        var msg = line.slice("  PUSH_WARN: ".length).trim();
-        resultLines.push({ ok: false, title: msg, url: canvasUrl });
-        canvasUrl = null;
-        logFn(line);
-        return;
-      }
-      logFn(line);
-      if (/^\[exit \d+\]$/.test(line)) {
-        es.close();
-        renderBanner(bannerEl, resultLines, line === "[exit 0]");
-        if (onDone) onDone(line === "[exit 0]");
-      }
-    };
-    es.onerror = function () {
-      es.close();
-      if (onDone) onDone(false);
-    };
-  }
-
   async function generatePhysical(path, logFn, bannerEl) {
     logFn("\nGenerating printable version (PDF + DOCX)…");
     try {
@@ -513,7 +475,6 @@
     generatePhysical: generatePhysical,
     showBanner: showBanner,
     setBusy: setBusy,
-    streamSSE: streamSSE,
   });
 
   renderOperationsList();

@@ -35,7 +35,7 @@ Work tools are split for low-token debugging.
 
 - Page/template owner: `course_expert.html`
 - Shared browser files: `push/core.js`, `push/file_sources.js`, `push/delivery.js`, `push/rubrics.js`, `push/course_picker.js`, `push.js`
-- Feature files: `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `push/download.js`
+- Feature files: `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`
 - Work tools page files: `course_expert/tabs.js`, `course_expert/student_reports.js`, `course_expert/portfolio.js`, `course_expert/quick_assignment.js`
 - Backend push routes: `routes/push.py`, `routes/push_validation.py`
 - Source-material facade/extractors: `source_materials.py`, `source_material_extractors.py`
@@ -235,7 +235,7 @@ running their own copy who are comfortable writing Python (or having their LLM w
 
 ## Work Tools (`/course-expert`)
 
-One page, six tabs: **Quiz · Assignment · Page · Rubric · Download Work · Student Reports · *Quick***.
+One page, six tabs: **Quiz · Assignment · Page · Rubric · Student Reports · *Quick***.
 
 **Target courses** are picked from Current courses in a compact **header dropdown** (Gradebook-style, but
 multi-select): checkboxes add courses to the push set; clicking a course **name**
@@ -284,7 +284,7 @@ Pick a `<RUBRICFORGE_JSON>` file, then **Validate** / **Push rubric…**. After 
 teacher reviews the frozen operation, it creates the course rubric and, when the
 file requests one, a student explainer page.
 
-### Download Work tab
+### Assignment evidence refresh
 Downloads student work from the **focused** course. Load assignments, filter by
 type and due-date range (All / Fall / Spring / 30d / 90d presets), select, download
 to a canonical course-first folder tree: `Courses/<Course>/Assignments/<Assignment>/Student Work/<Student>/Attempt <n>/`,
@@ -305,8 +305,9 @@ the student is in, not just the one used to load the roster.
 **Packet structure** (in the synced workspace, `<student_reports_root>/<Student>/<Course>/`):
 - `Assignments/` — work samples in their original formats (HTML for text entries,
   original files for uploads, URL redirects as `.txt`), named as
-  `<Asgn> - <F Last>...`. New Quizzes item-level work is unavailable (PAT limitation,
-  not OAuth — only scores appear in the Info DOCX).
+  `<Asgn> - <F Last>...`. Student Reports currently do not materialize New Quiz item
+  responses, so only scores appear in the Info DOCX. This is a missing Student Reports
+  integration, not a PAT capability limit.
 - `Info/` — a dated `<Student> - <Course> - <YYYY-MM-DD>.docx` with per-assignment
   rows for grade, status, and submission date; neutral factual lines for late
   submissions, extended due dates, and curve adjustments; submission comments.
@@ -325,10 +326,12 @@ packets for just this cohort, skipping courses whose data hasn't changed (dedupe
 `_manifest.json`). The private note attached to a monitored student is never rendered
 into any packet.
 
-**New Quizzes limitation:** Enrollment-gated personal access tokens can retrieve
-constructed responses through the Student Analysis JSON report. Item-level response
-downloads in Student Reports and item-level write-back remain unavailable; New Quiz
-scores still appear in the Submissions API and are reported in the Info document.
+**New Quizzes status:** Enrollment-gated personal access tokens can retrieve constructed
+responses through the Student Analysis JSON report. Canvas's first-party grader can also
+write item scores and grader feedback through a short-lived signed grading launch. Student
+Reports does not yet consume the response path, and current PowerGrader routes do not yet
+expose the write path. New Quiz scores still appear in the Submissions API and are reported
+in the Info document. See `docs/reference/new-quizzes-grading-transport.md`.
 
 ---
 
@@ -386,8 +389,10 @@ The setup page uses a wide responsive workspace with:
 
 New Quizzes are selectable for written-response review in all three modes. Each
 session is a local Student Analysis JSON snapshot: file-upload entries are filename-only,
-and PowerGrader does not offer New Quiz posting, late catch-up, scheduled scoring, or
-item-level write-back. Classic Quizzes remain unavailable.
+and current PowerGrader does not yet offer New Quiz posting, late catch-up, scheduled
+scoring, or item-level write-back. The posting limit is current product state, not a Canvas
+PAT limitation; the verified first-party transport is documented in
+`docs/reference/new-quizzes-grading-transport.md`. Classic Quizzes remain unavailable.
 
 After a course is selected, the assignment picker groups work by Canvas course
 module and immediately shows the final three modules in course order. The Modules
@@ -451,7 +456,7 @@ modules, assignments, Canvas quick-links, download folder path.
 
 Quiz pushes delegate to the existing CLI scripts as subprocesses with credentials
 injected via environment variables (`QF_PUSH_SETTINGS` carries assignment settings as
-JSON) and stream progress over SSE. Downloads run in-process via `downloader.py`.
+JSON) and stream progress over SSE. Assignment evidence refreshes are focused PowerGrader reads.
 Assignment / page / rubric / quick-assignment creation plus gradebook and
 course-info reads are direct Canvas REST calls through split Web UI routes
 (`/api/gradebook`, `/api/course-detail`). The push logic itself

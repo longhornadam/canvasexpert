@@ -9,18 +9,16 @@ import sys
 from datetime import datetime
 
 from fastapi import APIRouter, File, Form, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
 import requests
 
-import downloader
 import nq_report
 import portfolio
 import portfolio_service
 import student_packet
-from .. import config
+from .. import config, workspace
 from ..canvas_client import _canvas_get_all, _canvas_headers
-from ..deps import _sse
 from ..gradebook_service import _load_curve_events
 
 router = APIRouter(prefix="/api", tags=["reports"])
@@ -119,13 +117,9 @@ def list_assignments_full(course_id: str):
         }
         for a in results
     ]
-    DL = downloader.DOWNLOADABLE_TYPES
     assignments.sort(
         key=lambda a: a["due_at"] if a["due_at"] else "0000-00-00",
         reverse=True,
-    )
-    assignments.sort(
-        key=lambda a: 0 if set(a["submission_types"]) & DL else 1,
     )
     return JSONResponse({"ok": True, "assignments": assignments})
 
@@ -133,44 +127,13 @@ def list_assignments_full(course_id: str):
 @router.get("/course-folder")
 def course_folder(course_name: str, course_id: str = ""):
     """Return the local download folder path for a course and whether it exists."""
-    root = config.get_download_root()
     if not course_id:
         for course in config.active_courses():
             if course.get("name") == course_name or course.get("nickname") == course_name:
                 course_id = str(course.get("id") or "")
                 break
-    path = downloader._course_dir(root, course_name, course_id or "unknown")
+    path = workspace.course_folder(course_name, course_id or "unknown")
     return JSONResponse({"path": path, "exists": os.path.isdir(path)})
-
-
-@router.get("/submissions/download/stream")
-def submissions_download_stream(course_id: str, course_name: str,
-                                 assignment_ids: str):
-    """SSE stream — downloads submissions, yields progress lines.
-    assignment_ids: comma-separated list of assignment IDs.
-    Final SSE line: COURSE_FOLDER: <path>
-    """
-    token = config.get_token()
-    if not token:
-        return StreamingResponse(
-            _sse(["!! No Canvas token saved.", "[exit 1]"]),
-            media_type="text/event-stream",
-        )
-    ids  = [i.strip() for i in assignment_ids.split(",") if i.strip()]
-    base = config.get_canvas_base()
-    root = config.get_download_root()
-
-    def lines():
-        try:
-            yield from downloader.run_download(
-                course_id, course_name, ids, base, token, root
-            )
-            yield "[exit 0]"
-        except Exception as e:
-            yield f"!! Fatal: {e}"
-            yield "[exit 1]"
-
-    return StreamingResponse(_sse(lines()), media_type="text/event-stream")
 
 
 # --------------------------------------------------------------------------
@@ -267,7 +230,7 @@ async def portfolio_from_nq_csv(file: UploadFile = File(...),
                                       "Student Analysis CSV?"})
 
     out_dir = os.path.join(config.get_student_reports_root(),
-                           downloader.safe_name(title) + " - Portfolios")
+                           workspace.safe_component(title) + " - Portfolios")
     try:
         written = portfolio.render_portfolio(data, out_dir, quiz_title=title)
     except Exception as e:

@@ -11,8 +11,8 @@ from .. import config, activity
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
 from ..schooldays import _school_days_late, _parse_iso_local
-import downloader
 import student_packet
+from powergrader import assignment_refresh
 
 try:
     from nq_report import html_to_text
@@ -106,34 +106,36 @@ def _run_routine_sweep(params):
 def _run_routine_download(params):
     window = int(params.get("window_days", 14))
     cutoff = (datetime.now().date() - timedelta(days=window)).isoformat()
-    token, base, root = config.get_token(), config.get_canvas_base(), config.get_download_root()
-    if not token:
-        return {"ok": False, "lines": ["✗ no Canvas token saved"], "summary": "no token"}
+    if not config.get_token():
+        return {"ok": False, "lines": ["✗ Canvas connection is unavailable"], "summary": "unavailable"}
     DOWNLOADABLE = {"online_text_entry", "online_upload", "online_url", "discussion_topic"}
-    lines, ok, total = [], True, 0
+    lines, ok, total, current, incomplete, failed = [], True, 0, 0, 0, 0
     for c in config.active_courses():
         asgns, err = _canvas_get_all(f"/api/v1/courses/{c['id']}/assignments", {"per_page": 100})
         if err:
-            lines.append(f"✗ {c['nickname']}: {err}")
+            lines.append("✗ assignment listing failed")
             ok = False
             continue
         ids = [str(a["id"]) for a in (asgns or [])
                if (a.get("due_at") or "")[:10] >= cutoff
                and set(a.get("submission_types") or []) & DOWNLOADABLE]
         if not ids:
-            lines.append(f"· {c['nickname']}: nothing due in window")
+            lines.append("· no eligible assignments in window")
             continue
-        errs = 0
-        for line in downloader.run_download(str(c["id"]), c["name"], ids, base, token, root):
-            if line.strip().startswith("!!"):
-                errs += 1
-        total += len(ids)
-        if errs:
-            ok = False
-        lines.append(f"✓ {c['nickname']}: refreshed {len(ids)} assignment folder(s)"
-                     + (f" ({errs} error(s))" if errs else ""))
+        for assignment_id in ids:
+            total += 1
+            _, _, result = assignment_refresh.refresh_assignment(
+                str(c["id"]), assignment_id, session_id=f"routine-{_uuid.uuid4()}")
+            status = result.get("status")
+            if result.get("error") or status == "unavailable":
+                failed += 1; ok = False
+            elif status == "current":
+                current += 1
+            else:
+                incomplete += 1; ok = False
+    lines.append(f"Focused refresh: {current} current, {incomplete} incomplete, {failed} failed.")
     return {"ok": ok, "lines": lines,
-            "summary": f"{total} assignment folder(s) refreshed"}
+            "summary": f"{total} assignment refresh(es): {current} current, {incomplete} incomplete, {failed} failed"}
 
 
 # --------------------------------------------------------------------------

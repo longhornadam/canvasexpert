@@ -86,6 +86,11 @@
           <select id="pg-assignment" name="assignment_id" required disabled>
             <option value="">— select course first —</option>
           </select>
+          <div class="actions" style="margin-top:8px">
+            <button type="button" class="small" id="pg-refresh-assignment" disabled>Refresh from Canvas</button>
+            <button type="button" class="small" id="pg-open-assignment-folder" disabled>Open local folder</button>
+          </div>
+          <small id="pg-evidence-status" class="lbl-hint" aria-live="polite"></small>
           <small id="pg-assignment-unsupported-hint" class="lbl-hint" hidden>
             New Quizzes are selectable for written-response review only; they create a local snapshot and cannot write grades or comments back to Canvas. Classic Quizzes remain unsupported.
           </small>

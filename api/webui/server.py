@@ -26,7 +26,6 @@ _API_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(_API_DIR)
 sys.path.insert(0, _API_DIR)
 sys.path.insert(0, _REPO_ROOT)
-import downloader    # noqa: E402
 import student_packet  # noqa: E402
 
 from . import af, ai_ta, activity, config, pf, rf, runner

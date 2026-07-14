@@ -177,6 +177,7 @@ Ownership:
 - `api/powergrader/assignment_refresh.py`
   - focused assignment refresh and the private, URL-free evidence-manifest input for new sessions
   - 10 MiB aggregate binary budget, managed-evidence reuse, and incomplete-scope signaling
+  - explicit setup refresh/folder actions use this same owner
 - `api/powergrader/session_store.py`
   - session persistence on disk under `_System/PowerGrader/Sessions/`, with new-first legacy reads
 - `api/powergrader/canvas_fetch.py`

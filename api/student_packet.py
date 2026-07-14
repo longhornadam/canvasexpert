@@ -10,10 +10,34 @@ from datetime import datetime
 import requests
 from docx import Document
 
-from downloader import (
-    _download_binary, _get_all_pages, _reserve_filename, _student_file_tag,
-    _work_filename, safe_name,
-)
+from submission_transport import download_binary as _download_binary, get_all_pages as _get_all_pages
+from webui.workspace import safe_component
+
+
+def safe_name(value, max_len=80):
+    return safe_component(value, max_len=max_len)
+
+
+def _student_file_tag(user, fallback_user_id=None):
+    user = user or {}
+    raw = user.get("sortable_name") or user.get("name") or f"user_{fallback_user_id}"
+    return safe_name(raw, 40)
+
+
+def _work_filename(assignment_name, student_tag, ext="", detail=""):
+    stem = safe_name(assignment_name, 110) + " - " + safe_name(student_tag, 40)
+    return stem + (" - " + safe_name(detail, 40) if detail else "") + (ext or "")
+
+
+def _reserve_filename(filename, used):
+    stem, ext = os.path.splitext(filename)
+    directory = used.get("__directory__", "") if isinstance(used, dict) else ""
+    names = used.setdefault("__names__", set()) if isinstance(used, dict) else used
+    candidate, number = filename, 2
+    while candidate in names or (directory and os.path.exists(os.path.join(directory, candidate))):
+        candidate = f"{stem} ({number}){ext}"; number += 1
+    names.add(candidate)
+    return candidate
 
 # Section keys the UI offers (order preserved in the document):
 SECTIONS = ["standing", "late", "adjustments", "comments", "work"]

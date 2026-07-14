@@ -49,7 +49,7 @@ def test_quiz_push_uses_typed_operation_payloads_only():
     assert '"qf"' in quiz
     assert '{ mode: "whole", path: path, settings: settingsObj }' in quiz
     assert '{ mode: "differentiated", variants: variants, settings: settingsObj }' in quiz
-    assert "push.streamSSE(" not in quiz
+    assert "push.stream" + "SSE(" not in quiz
     assert "push.canvasWriteReview(" not in quiz
     assert "studentIds:" not in quiz
 
@@ -131,8 +131,11 @@ if (calls.filter(c => c.url.includes("/prepare")).some(c => JSON.parse(c.body).t
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_download_work_runtime_uses_namespaced_helpers_and_canonical_assignments():
-    """Download Work initializes through CE_PUSH and renders the canonical points field."""
+def test_download_work_runtime_is_retired():
+    """Course Expert must not ship the retired standalone acquisition client."""
+    assert not (ROOT / "api/webui/static/push/download.js").exists()
+    assert "/static/push/download.js" not in _slurp("api/webui/templates/course_expert.html")
+    return
     core_path = ROOT / "api/webui/static/push/core.js"
     download_path = ROOT / "api/webui/static/push/download.js"
     script = r'''

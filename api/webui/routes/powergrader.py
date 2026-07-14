@@ -1,6 +1,7 @@
 """PowerGrader route orchestration."""
 import json
 import os
+import subprocess
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, File, Form, Request, UploadFile
@@ -51,6 +52,45 @@ _write_openrouter_debug_file = privacy.write_openrouter_debug_file
 
 _build_safe_ai_packet = packet.build_safe_ai_packet
 _vault = context.vault
+
+
+def _powergrader_assignment_context(course_id: str, assignment_id: str):
+    course_id, assignment_id = str(course_id or "").strip(), str(assignment_id or "").strip()
+    if not course_id or not assignment_id:
+        return None, "Select a course and assignment first."
+    if not any(str(course.get("id")) == course_id for course in config.active_courses()):
+        return None, "Select a saved current course first."
+    course_name = config.course_display_name(course_id) or course_id
+    return (course_id, assignment_id, course_name), None
+
+
+@router.post("/api/powergrader/refresh")
+def pg_refresh(course_id: str = Form(""), assignment_id: str = Form("")):
+    context_value, error = _powergrader_assignment_context(course_id, assignment_id)
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    course_id, assignment_id, _ = context_value
+    _, _, result = assignment_refresh.refresh_assignment(course_id, assignment_id, session_id=f"refresh-{uuid.uuid4()}")
+    if result.get("error"):
+        return JSONResponse({"ok": False, "error": "The focused refresh could not be completed.", "status": "unavailable"})
+    return JSONResponse({"ok": True, "status": result.get("status", "incomplete")})
+
+
+@router.post("/api/powergrader/open-assignment-folder")
+def pg_open_assignment_folder(course_id: str = Form(""), assignment_id: str = Form("")):
+    context_value, error = _powergrader_assignment_context(course_id, assignment_id)
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    course_id, assignment_id, course_name = context_value
+    path = workspace.assignment_folder(course_name, course_id, assignment_id, assignment_id)
+    if not path or not workspace.path_within_workspace(path):
+        return JSONResponse({"ok": False, "error": "The local assignment folder is unavailable."})
+    try:
+        os.makedirs(path, exist_ok=True)
+        subprocess.Popen(["explorer", path])
+        return JSONResponse({"ok": True})
+    except OSError:
+        return JSONResponse({"ok": False, "error": "The local assignment folder could not be opened."})
 
 
 def _late_watch_error(session: dict, *, require_key: bool = False, require_source_context: bool = False) -> str | None:

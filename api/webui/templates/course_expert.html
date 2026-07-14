@@ -24,7 +24,6 @@
           <button type="button" class="ce-work-rail-item" data-rail-tab="page">Page<span class="ce-work-rail-item-desc">Create and place a Canvas page</span></button>
           <button type="button" class="ce-work-rail-item" data-rail-tab="rubric">Rubric<span class="ce-work-rail-item-desc">Create or update a course rubric</span></button>
           <button type="button" class="ce-work-rail-item" data-rail-tab="quick">Quick column<span class="ce-work-rail-item-desc">Add a fast gradebook column</span></button>
-          <button type="button" class="ce-work-rail-item" data-rail-tab="download">Download Work<span class="ce-work-rail-item-desc">Collect student work locally</span></button>
           <button type="button" class="ce-work-rail-item" data-rail-tab="students">Student Reports<span class="ce-work-rail-item-desc">Build a student report packet</span></button>
         </div>
       </div>
@@ -46,7 +45,6 @@
       <button type="button" id="ce-tab-button-assignment" class="ce-tab" data-tab="assignment" role="tab" aria-selected="false" aria-controls="ce-tab-assignment" tabindex="-1">Assignment</button>
       <button type="button" id="ce-tab-button-page" class="ce-tab" data-tab="page" role="tab" aria-selected="false" aria-controls="ce-tab-page" tabindex="-1">Page</button>
       <button type="button" id="ce-tab-button-rubric" class="ce-tab" data-tab="rubric" role="tab" aria-selected="false" aria-controls="ce-tab-rubric" tabindex="-1">Rubric</button>
-      <button type="button" id="ce-tab-button-download" class="ce-tab" data-tab="download" role="tab" aria-selected="false" aria-controls="ce-tab-download" tabindex="-1">Download Work</button>
       <button type="button" id="ce-tab-button-students" class="ce-tab" data-tab="students" role="tab" aria-selected="false" aria-controls="ce-tab-students" tabindex="-1">Student Reports</button>
       <button type="button" id="ce-tab-button-quick" class="ce-tab ce-tab--alt" data-tab="quick" role="tab" aria-selected="false" aria-controls="ce-tab-quick" tabindex="-1"><em>Quick Assignment</em></button>
     </div>
@@ -514,81 +512,6 @@
 
   </div><!-- /#ce-tab-rubric -->
 
-  <!-- ── Download Work tab ─────────────────────────────────────────────── -->
-  <div id="ce-tab-download" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-download" hidden>
-
-    <div id="download">
-      <h2 class="section-heading">Download student work</h2>
-      <div class="card">
-        <p class="hint" style="margin:0 0 14px">
-          Downloads student work to your local folder from the <strong>focused course</strong>
-          (click a course name in Targets above to focus it).
-          Text entries → .html, file uploads → original file.
-          All students get an entry in _index.csv even with no submission.
-        </p>
-        <div class="dl-toolbar">
-          <button id="btn-load-assignments" class="small">Load assignments…</button>
-          <span id="dl-filter-wrap" hidden>
-            <select id="dl-type-filter" class="small-select">
-              <option value="">All types</option>
-              <option value="online_text_entry">Text</option>
-              <option value="online_upload">Upload</option>
-              <option value="discussion_topic">Discussion</option>
-              <option value="online_url">URL</option>
-            </select>
-            <button id="btn-dl-select-all" class="small">Select all</button>
-            <button id="btn-dl-clear" class="small">Clear</button>
-          </span>
-        </div>
-        <div id="dl-date-bar" class="dl-date-bar" hidden>
-          <span class="hint" style="white-space:nowrap">Due between</span>
-          <input type="date" id="dl-date-from" class="small-input">
-          <span class="hint">–</span>
-          <input type="date" id="dl-date-to" class="small-input">
-          <span class="dl-presets">
-            <button class="chip" data-preset="all">All</button>
-            <button class="chip" data-preset="fall">Fall</button>
-            <button class="chip" data-preset="spring">Spring</button>
-            <button class="chip" data-preset="30d">30 days</button>
-            <button class="chip" data-preset="90d">90 days</button>
-          </span>
-          <span id="dl-visible-count" class="hint"></span>
-        </div>
-        <div class="actions" id="dl-action-row" style="display:none">
-          <button id="btn-download-selected" class="primary">⬇ Download selected</button>
-          <span id="dl-selected-count" class="hint"></span>
-        </div>
-        <div class="course-scope-summary" data-course-scope="download" aria-live="polite"></div>
-        <div id="dl-assignment-table" class="table-scroll" hidden>
-          <table class="dl-table">
-            <thead>
-              <tr>
-                <th style="width:32px"><input type="checkbox" id="dl-check-all" title="Toggle all downloadable"></th>
-                <th>Assignment</th>
-                <th>Type</th>
-                <th>Due</th>
-                <th>Pts</th>
-              </tr>
-            </thead>
-            <tbody id="dl-tbody"></tbody>
-          </table>
-        </div>
-        <pre id="dl-log" class="log" hidden></pre>
-        <div id="dl-banner" class="push-banner" hidden></div>
-        <div id="folder-row" class="folder-row" hidden>
-          <span class="hint" style="font-size:12px; white-space:nowrap">Saves to:</span>
-          <code id="folder-path" class="folder-path" title=""></code>
-          <div class="folder-actions">
-            <button type="button" class="small" id="btn-open-folder">📁 Open ↗</button>
-            <button type="button" class="small" id="btn-change-folder">Change…</button>
-            <span id="folder-note" class="hint" style="font-size:11px"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div><!-- /#ce-tab-download -->
-
   <!-- ── Student Reports tab ───────────────────────────────────────────── -->
   <div id="ce-tab-students" class="ce-panel" role="tabpanel" aria-labelledby="ce-tab-button-students" hidden>
     <div class="card">
@@ -767,7 +690,6 @@
 <script src="/static/push/page.js?v={{ asset_v }}"></script>
 <script src="/static/push/rubric.js?v={{ asset_v }}"></script>
 <script src="/static/push/assignment.js?v={{ asset_v }}"></script>
-<script src="/static/push/download.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/tabs.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/student_reports.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/portfolio.js?v={{ asset_v }}"></script>
