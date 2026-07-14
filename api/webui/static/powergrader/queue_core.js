@@ -262,6 +262,7 @@
         frame.srcdoc = buildSrcdoc(st.body);
       }
     }
+    if (queue.renderNewQuizItems) queue.renderNewQuizItems(st);
   }
 
   function buildSrcdoc(bodyHtml) {

@@ -85,6 +85,7 @@ def import_results_into_session(
 
     rows = fp.reidentify(parsed, vault)
     by_uid = fp.merge_rows_by_uid(rows)
+    item_by_uid = fp.item_rows_by_uid(rows)
     updated = 0
     for st in session.get("students") or []:
         row = by_uid.get(str(st.get("user_id") or ""))
@@ -92,6 +93,7 @@ def import_results_into_session(
             continue
         st["ai_score"] = row.get("score")
         st["ai_feedback"] = row.get("feedback")
+        st["ai_item_results"] = item_by_uid.get(str(st.get("user_id") or ""), [])
         updated += 1
 
     unresolved_count = sum(1 for row in rows if not row.get("resolved"))

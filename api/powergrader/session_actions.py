@@ -26,6 +26,107 @@ def _digest(value) -> str:
 
 def invalidate_pending_review(session: dict) -> None:
     session.pop("pending_push_review", None)
+    session.pop("pending_new_quiz_review", None)
+
+
+def _new_quiz_decisions(raw: str) -> tuple[list[dict] | None, str | None]:
+    try:
+        values = json.loads(raw)
+    except Exception:
+        return None, "invalid_item_decisions"
+    if not isinstance(values, list):
+        return None, "invalid_item_decisions"
+    clean = []
+    for value in values:
+        if not isinstance(value, dict) or not value.get("item_id"):
+            return None, "invalid_item_decisions"
+        try:
+            score = float(value.get("score"))
+        except (TypeError, ValueError):
+            return None, "invalid_item_decisions"
+        clean.append({
+            "item_id": str(value["item_id"]), "score": score,
+            "teacher_feedback": str(value.get("teacher_feedback") or ""),
+            "ta_feedback": str(value.get("ta_feedback") or ""),
+        })
+    return clean, None
+
+
+def review_new_quiz_finalization(session_id: str, *, user_id: str, decisions_json: str,
+                                 load_session, save_session, preflight) -> tuple[dict, int]:
+    session = load_session(session_id)
+    if not session:
+        return {"ok": False, "code": "session_not_found", "error": "Session not found."}, 404
+    if not session.get("new_quiz_item_finalization_supported"):
+        return {"ok": False, "code": "new_quiz_finalization_unavailable", "error": "This session does not support New Quiz item finalization."}, 200
+    student = next((item for item in session.get("students", []) if str(item.get("user_id")) == str(user_id)), None)
+    if not student:
+        return {"ok": False, "code": "student_not_found", "error": "Student not found in session."}, 200
+    if student.get("speedgrader_required"):
+        return {"ok": False, "code": "speedgrader_required", "error": "This student's New Quiz evidence requires SpeedGrader review."}, 200
+    decisions, error = _new_quiz_decisions(decisions_json)
+    if error:
+        return {"ok": False, "code": error, "error": "Enter one valid teacher score for every reviewed item."}, 200
+    try:
+        baseline = preflight(session, student, decisions)
+    except Exception as exc:
+        code = getattr(exc, "code", "new_quiz_preflight_failed")
+        return {"ok": False, "code": code, "error": "Canvas could not freeze this student's current New Quiz result."}, 200
+    pending = {
+        "token": secrets.token_urlsafe(32), "created_at": _iso(_now()),
+        "expires_at": _iso(_now() + REVIEW_TTL), "user_id": str(user_id),
+        "result_id": baseline["result_id"], "state_digest": baseline["state_digest"],
+        "decision_digest": baseline["decision_digest"],
+    }
+    session["pending_new_quiz_review"] = pending
+    save_session(session)
+    return {"ok": True, "review_token": pending["token"], "expires_at": pending["expires_at"], "item_count": len(decisions)}, 200
+
+
+def finalize_new_quiz(session_id: str, *, user_id: str, review_token: str, decisions_json: str,
+                      load_session, save_session, apply) -> tuple[dict, int]:
+    session = load_session(session_id)
+    if not session:
+        return {"ok": False, "code": "session_not_found", "error": "Session not found."}, 404
+    pending = session.get("pending_new_quiz_review") or {}
+    decisions, error = _new_quiz_decisions(decisions_json)
+    decision_digest = _digest(decisions) if decisions else ""
+    if not error and session.setdefault("new_quiz_finalized_digests", {}).get(str(user_id)) == decision_digest:
+        return {"ok": True, "status": "already_applied", "code": "already_applied"}, 200
+    if error or not pending or pending.get("user_id") != str(user_id) or pending.get("token") != review_token:
+        return _review_error("review_mismatch")
+    try:
+        if _now() >= datetime.fromisoformat(pending["expires_at"]):
+            invalidate_pending_review(session); save_session(session)
+            return _review_error("review_expired")
+    except (KeyError, ValueError, TypeError):
+        return _review_error("review_required")
+    if _digest(decisions) != pending.get("decision_digest"):
+        return _review_error("payload_changed")
+    key = _digest({"user_id": str(user_id), "decision_digest": pending["decision_digest"], "state_digest": pending["state_digest"]})
+    if session.setdefault("new_quiz_idempotency", {}).get(str(user_id)) == key:
+        return {"ok": True, "status": "already_applied", "code": "already_applied"}, 200
+    student = next((item for item in session.get("students", []) if str(item.get("user_id")) == str(user_id)), None)
+    if not student or student.get("speedgrader_required"):
+        return {"ok": False, "code": "speedgrader_required", "error": "This student's New Quiz evidence requires SpeedGrader review."}, 200
+    try:
+        result = apply(session, student, decisions, pending)
+    except Exception as exc:
+        code = getattr(exc, "code", "write_unknown")
+        session.setdefault("new_quiz_receipts", []).append({"ts": _iso(_now()), "user_id": str(user_id), "outcome": code, "content_minimized": True})
+        # An ambiguous or rejected write must never be retried through the
+        # same frozen approval.  The teacher reviews Canvas first, then starts
+        # a new explicit review if another attempt is warranted.
+        invalidate_pending_review(session)
+        save_session(session)
+        return {"ok": False, "code": code, "error": "New Quiz finalization was not verified; review in SpeedGrader before retrying."}, 409
+    session["new_quiz_idempotency"][str(user_id)] = key
+    session["new_quiz_finalized_digests"][str(user_id)] = decision_digest
+    student["new_quiz_finalized"] = True
+    session.setdefault("new_quiz_receipts", []).append({"ts": _iso(_now()), "user_id": str(user_id), "outcome": "verified", "result_digest": result.get("state_digest"), "content_minimized": True})
+    invalidate_pending_review(session)
+    save_session(session)
+    return {"ok": True, "status": "finalized", "code": "finalized"}, 200
 
 
 def _parse_ids(raw: str, *, allow_empty: bool = True) -> tuple[list[str] | None, str | None]:

@@ -30,6 +30,10 @@ There are two different paths:
    time-limited Canvas web session through `GET /login/session_token`; Canvas GraphQL
    supplies the submission preview launch; the signed LTI flow issues short-lived
    participant and result credentials for the quiz services.
+   The separate sessionless native-launch credential supports the focused result-read
+   chain, but a user-authorized Phase A probe on 2026-07-14 received `401` when it
+   submitted a complete item-result collection plus current fudge to the write endpoint.
+   Treat it as read-only; the web-session/signed-launch credential is required for writes.
 
 Never persist or log the session URL, signed LTI fields, cookies, launch token, participant
 credential, result token, or signed file URL. A direct PAT bearer request is not a substitute
@@ -98,6 +102,10 @@ check so Canvas drift does not weaken review or write safety.
 - `api/powergrader/new_quiz_fetch.py` uses native result acquisition; the live participant
   result key `quiz_api_quiz_session_id` is normalized alongside older/synthetic
   `quiz_session_id` shapes (fixed 2026-07-14, live-verified: file evidence downloads).
+- The sessionless result credential is deliberately **not** a production write credential:
+  its Phase A full-result POST was rejected without changing the authoritative result.
+  The future grader adapter must acquire the web-session/GraphQL signed grader launch for
+  each deliberate finalization, keeping all launch/session/result credentials in memory.
 - Live report shape (verified 2026-07-14): upload answers arrive as filename-only strings
   with no file refs — `normalize()` seeds the expected file record from the answer so the
   native transport can materialize the upload. `item_responses[].item_type` carries the

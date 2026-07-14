@@ -24,6 +24,7 @@ def build_students(
     *,
     submitted: list[dict],
     ai_by_uid: dict,
+    ai_item_by_uid: dict | None = None,
     roster_settings: dict,
     tier_map: dict,
     monitored: dict,
@@ -63,8 +64,14 @@ def build_students(
         if expected_count is None and not attachments:
             expected_count = 0
         eligibility = eligibility_decision(attachments, expected_count=expected_count)
+        requires_speedgrader = any(
+            "upload" in str(item.get("type") or "").lower().replace("_", "-")
+            or (str(item.get("type") or "").lower() != "essay" and item.get("earned_score") is None)
+            for item in new_quiz_items
+        )
 
         ai = ai_by_uid.get(uid, {})
+        ai_items = (ai_item_by_uid or {}).get(uid, [])
         ai_failure = (ai_failures or {}).get(uid)
         students.append({
             "user_id":       uid,
@@ -75,11 +82,13 @@ def build_students(
             "new_quiz_items": new_quiz_items,
             "attachment_eligibility": eligibility,
             "new_quiz_files_error": s.get("new_quiz_files_error"),
+            "speedgrader_required": requires_speedgrader,
             "code_files":    code_files,
             "current_score": s.get("score"),
             "status":        "pending",
             "ai_score":      ai.get("score"),
             "ai_feedback":   ai.get("feedback"),
+            "ai_item_results": [dict(item) for item in ai_items],
             **({"ai_scoring_error": ai_failure} if ai_failure else {}),
             "teacher_score": None,
             "teacher_feedback": "",
@@ -120,6 +129,7 @@ def build_session(
     late_watch: dict | None = None,
     canvas_writeback_supported: bool = True,
     comment_writeback_supported: bool = False,
+    new_quiz_item_finalization_supported: bool = False,
     evidence_manifest: str | None = None,
     evidence_status: str = "unknown",
 ) -> dict:
@@ -144,6 +154,7 @@ def build_session(
         "late_watch":      late_watch,
         "canvas_writeback_supported": canvas_writeback_supported,
         "comment_writeback_supported": comment_writeback_supported,
+        "new_quiz_item_finalization_supported": new_quiz_item_finalization_supported,
         "evidence_manifest": evidence_manifest,
         "evidence_status": evidence_status,
         "students":        students or [],

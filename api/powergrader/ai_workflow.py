@@ -41,6 +41,7 @@ def run_ai_workflow(
     privacy_steps: list[dict] = []
     privacy_artifacts: dict = {}
     ai_by_uid: dict = {}
+    ai_item_by_uid: dict = {}
     ai_failures: dict = {}
     budget_result = None
     debug_path = None
@@ -405,6 +406,7 @@ def run_ai_workflow(
                     ),
                 ))
                 ai_by_uid = fp.merge_rows_by_uid(rows)
+                ai_item_by_uid = fp.item_rows_by_uid(rows)
                 if ai_failures:
                     privacy_steps.append(privacy.privacy_step(
                         "ai_manual_review", "Marked isolated AI failures for teacher review", "warn",
@@ -436,6 +438,7 @@ def run_ai_workflow(
                     privacy_steps=privacy_steps,
                     privacy_artifacts=privacy_artifacts,
                     ai_by_uid=ai_by_uid,
+                    ai_item_by_uid=ai_item_by_uid,
                     ai_failures=ai_failures,
                     budget=budget_result,
                     debug_path=debug_path,
@@ -448,6 +451,7 @@ def run_ai_workflow(
         privacy_steps=privacy_steps,
         privacy_artifacts=privacy_artifacts,
         ai_by_uid=ai_by_uid,
+        ai_item_by_uid=ai_item_by_uid,
         ai_failures=ai_failures,
         packet_zip=privacy_artifacts.get("packet_zip"),
         budget=budget_result,

@@ -1,12 +1,17 @@
 """Synthetic New Quiz report coverage; fixture data intentionally contains no PII."""
+import copy
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from api.powergrader import new_quiz_fetch as nq
 from api.feedback_artifacts import pseudonymize_submissions
 from api.feedback_vault import Vault
 from api.powergrader import session_actions
+from api.powergrader import new_quiz_grader
 from api.webui.routes.powergrader_helpers import build_late_watch_state
 
 
@@ -297,3 +302,179 @@ def test_native_file_transport_joins_same_attempt_and_drops_signed_url(tmp_path,
     assert file_meta["item_id"] == "file-item"
     assert file_meta["attempt"] == 2
     assert Path(file_meta["local_path"]).exists()
+
+
+def test_new_quiz_feedback_composition_keeps_teacher_and_ta_separate():
+    assert new_quiz_grader.compose_feedback("", "TA block") == "TA SCORE + FEEDBACK\n\nTA block"
+    combined = new_quiz_grader.compose_feedback("My note", "TA block")
+    assert combined == "MY FEEDBACK\n\nMy note\n\n-------\n\nTA SCORE + FEEDBACK\n\nTA block"
+
+
+def test_new_quiz_finalization_review_is_frozen_and_idempotent():
+    session = {
+        "session_id": "synthetic", "new_quiz_item_finalization_supported": True,
+        "students": [{"user_id": "fake-user", "speedgrader_required": False}],
+    }
+    saved = []
+    decisions = '[{"item_id":"essay-1","score":2,"teacher_feedback":"My note","ta_feedback":"TA block"}]'
+    baseline = {"result_id": "result-1", "state_digest": "a" * 64,
+                "decision_digest": session_actions._digest([{"item_id": "essay-1", "score": 2.0, "teacher_feedback": "My note", "ta_feedback": "TA block"}])}
+    review, code = session_actions.review_new_quiz_finalization(
+        "synthetic", user_id="fake-user", decisions_json=decisions,
+        load_session=lambda _: session, save_session=lambda value: saved.append(copy.deepcopy(value)),
+        preflight=lambda *_args: baseline,
+    )
+    assert code == 200 and review["ok"] is True
+    applied = []
+    result, code = session_actions.finalize_new_quiz(
+        "synthetic", user_id="fake-user", review_token=review["review_token"], decisions_json=decisions,
+        load_session=lambda _: session, save_session=lambda value: saved.append(copy.deepcopy(value)),
+        apply=lambda *_args: applied.append(True) or {"state_digest": "b" * 64},
+    )
+    assert code == 200 and result["status"] == "finalized" and applied == [True]
+    repeat, code = session_actions.finalize_new_quiz(
+        "synthetic", user_id="fake-user", review_token=review["review_token"], decisions_json=decisions,
+        load_session=lambda _: session, save_session=lambda _: None, apply=lambda *_args: (_ for _ in ()).throw(AssertionError("must not write twice")),
+    )
+    assert code == 200 and repeat["status"] == "already_applied"
+    assert "token" not in json.dumps(session.get("new_quiz_receipts", []))
+    assert set(session.get("new_quiz_receipts", [])[0]) == {"ts", "user_id", "outcome", "result_digest", "content_minimized"}
+
+
+def test_new_quiz_finalization_does_not_retry_an_unverified_write():
+    session = {
+        "session_id": "synthetic", "new_quiz_item_finalization_supported": True,
+        "students": [{"user_id": "fake-user", "speedgrader_required": False}],
+    }
+    decisions = '[{"item_id":"essay-1","score":2,"teacher_feedback":"","ta_feedback":"TA block"}]'
+    baseline = {"result_id": "result-1", "state_digest": "a" * 64,
+                "decision_digest": session_actions._digest([{"item_id": "essay-1", "score": 2.0, "teacher_feedback": "", "ta_feedback": "TA block"}])}
+    review, _ = session_actions.review_new_quiz_finalization(
+        "synthetic", user_id="fake-user", decisions_json=decisions,
+        load_session=lambda _: session, save_session=lambda _: None, preflight=lambda *_args: baseline,
+    )
+    error = new_quiz_grader.GraderError("write_unknown")
+    failed, status = session_actions.finalize_new_quiz(
+        "synthetic", user_id="fake-user", review_token=review["review_token"], decisions_json=decisions,
+        load_session=lambda _: session, save_session=lambda _: None,
+        apply=lambda *_args: (_ for _ in ()).throw(error),
+    )
+    assert status == 409 and failed["code"] == "write_unknown"
+    retried, status = session_actions.finalize_new_quiz(
+        "synthetic", user_id="fake-user", review_token=review["review_token"], decisions_json=decisions,
+        load_session=lambda _: session, save_session=lambda _: None,
+        apply=lambda *_args: (_ for _ in ()).throw(AssertionError("must not retry an unknown write")),
+    )
+    assert status == 409 and retried["code"] == "review_mismatch"
+    assert "pending_new_quiz_review" not in session
+
+
+def _grader_state(result_id="result-1", essay_score=0.0, essay_feedback="", total=2.0):
+    rows = [
+        {"id": "row-essay", "item_id": "essay-1", "points_possible": 5.0,
+         "score": essay_score, "feedback": essay_feedback},
+        {"id": "row-auto", "item_id": "auto-1", "points_possible": 2.0,
+         "score": 2.0, "feedback": "Auto feedback"},
+    ]
+    return {
+        "host": "https://synthetic-quiz.invalid",
+        "headers": {"Authorization": "synthetic-signed-credential"},
+        "quiz_session_id": "session-1",
+        "authoritative": {"id": result_id, "fudge_points": 0.0, "score": total},
+        "rows": rows,
+    }
+
+
+class _WriteSession:
+    def __init__(self, status=201):
+        self.status = status
+        self.posts = []
+
+    def post(self, url, **kwargs):
+        self.posts.append((url, kwargs))
+        return _NativeResponse(status=self.status)
+
+
+def _final_decisions():
+    return [{"item_id": "essay-1", "score": 3.0,
+             "teacher_feedback": "Teacher note", "ta_feedback": "TA draft"}]
+
+
+def test_new_quiz_adapter_writes_complete_collection_and_verifies(monkeypatch):
+    before = _grader_state()
+    after = _grader_state("result-2", 3.0,
+                          "MY FEEDBACK\n\nTeacher note\n\n-------\n\nTA SCORE + FEEDBACK\n\nTA draft", 5.0)
+    http = _WriteSession()
+    states = [before, after]
+    monkeypatch.setattr(new_quiz_grader, "_signed_context", lambda **_kwargs: (http, "unused", {}, "unused"))
+    monkeypatch.setattr(new_quiz_grader, "_read_current", lambda _context: states.pop(0))
+    baseline = {
+        "result_id": "result-1",
+        "state_digest": new_quiz_grader._digest(new_quiz_grader._result_state(before["authoritative"], before["rows"])),
+    }
+    result = new_quiz_grader.apply(
+        canvas_base="https://canvas.invalid", token="synthetic-pat", assignment_id="assignment",
+        user_id="student", decisions=_final_decisions(), baseline=baseline,
+    )
+    assert result["result_id"] == "result-2"
+    assert len(http.posts) == 1
+    payload = http.posts[0][1]["json"]
+    assert set(payload) == {"results", "fudge_points"}
+    assert all("id" not in row for row in payload["results"])
+    assert payload["results"][1]["score"] == 2.0
+    assert payload["results"][1]["feedback"] == "Auto feedback"
+
+
+def test_new_quiz_adapter_fails_closed_on_item_mismatch_and_drift(monkeypatch):
+    before = _grader_state()
+    monkeypatch.setattr(new_quiz_grader, "_signed_context", lambda **_kwargs: (object(), "unused", {}, "unused"))
+    monkeypatch.setattr(new_quiz_grader, "_read_current", lambda _context: before)
+    with pytest.raises(new_quiz_grader.GraderError, match="item_mismatch"):
+        new_quiz_grader.preflight(
+            canvas_base="https://canvas.invalid", token="synthetic-pat", assignment_id="assignment",
+            user_id="student", decisions=[{"item_id": "not-present", "score": 1.0, "ta_feedback": "TA"}],
+        )
+    drift = _grader_state("result-2")
+    http = _WriteSession()
+    monkeypatch.setattr(new_quiz_grader, "_signed_context", lambda **_kwargs: (http, "unused", {}, "unused"))
+    monkeypatch.setattr(new_quiz_grader, "_read_current", lambda _context: drift)
+    with pytest.raises(new_quiz_grader.GraderError, match="result_version_drift"):
+        new_quiz_grader.apply(
+            canvas_base="https://canvas.invalid", token="synthetic-pat", assignment_id="assignment",
+            user_id="student", decisions=_final_decisions(),
+            baseline={"result_id": "result-1", "state_digest": "not-the-current-state"},
+        )
+    assert http.posts == []
+
+
+def test_new_quiz_adapter_marks_ambiguous_write_without_retry(monkeypatch):
+    before = _grader_state()
+    after = _grader_state("result-2", 3.0,
+                          "MY FEEDBACK\n\nTeacher note\n\n-------\n\nTA SCORE + FEEDBACK\n\nTA draft", 5.0)
+    http = _WriteSession(status=500)
+    monkeypatch.setattr(new_quiz_grader, "_signed_context", lambda **_kwargs: (http, "unused", {}, "unused"))
+    states = [before, after]
+    monkeypatch.setattr(new_quiz_grader, "_read_current", lambda _context: states.pop(0))
+    baseline = {
+        "result_id": "result-1",
+        "state_digest": new_quiz_grader._digest(new_quiz_grader._result_state(before["authoritative"], before["rows"])),
+    }
+    result = new_quiz_grader.apply(
+        canvas_base="https://canvas.invalid", token="synthetic-pat", assignment_id="assignment",
+        user_id="student", decisions=_final_decisions(), baseline=baseline,
+    )
+    assert result["result_id"] == "result-2"
+    assert len(http.posts) == 1
+
+
+def test_new_quiz_preflight_receipt_is_credential_hygienic(monkeypatch):
+    current = _grader_state()
+    monkeypatch.setattr(new_quiz_grader, "_signed_context", lambda **_kwargs: (object(), "https://signed.invalid", {"Authorization": "synthetic-secret"}, "participant"))
+    monkeypatch.setattr(new_quiz_grader, "_read_current", lambda _context: current)
+    receipt = new_quiz_grader.preflight(
+        canvas_base="https://canvas.invalid", token="synthetic-pat", assignment_id="assignment",
+        user_id="student", decisions=_final_decisions(),
+    )
+    serialized = json.dumps(receipt)
+    assert set(receipt) == {"result_id", "state_digest", "decision_digest"}
+    assert "synthetic-secret" not in serialized and "signed.invalid" not in serialized

@@ -14,6 +14,7 @@ from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
 from powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
                          import_results, late_catchup, packet, privacy,
+                         new_quiz_grader,
                          session_actions, session_builder, session_store,
                          start_workflow)
 from .powergrader_helpers import (
@@ -342,6 +343,7 @@ def pg_start(
     students = session_builder.build_students(
         submitted=submitted,
         ai_by_uid=ai_by_uid,
+        ai_item_by_uid=ai_result.get("ai_item_by_uid") or {},
         ai_failures=ai_result.get("ai_failures") or {},
         roster_settings=roster_settings,
         tier_map=tier_map,
@@ -383,6 +385,7 @@ def pg_start(
         late_watch=late_watch,
         canvas_writeback_supported=not is_new_quiz,
         comment_writeback_supported=is_new_quiz,
+        new_quiz_item_finalization_supported=is_new_quiz,
         evidence_manifest=refresh.get("manifest_path"),
         evidence_status=refresh.get("status", "unknown"),
     )
@@ -567,5 +570,39 @@ def pg_push(
         save_session=_save_session,
         canvas_send=_canvas_send,
         canvas_get=_canvas_get,
+    )
+    return JSONResponse(payload, status_code=status_code)
+
+
+def _new_quiz_preflight(session: dict, student: dict, decisions: list[dict]) -> dict:
+    return new_quiz_grader.preflight(
+        canvas_base=config.get_canvas_base(), token=config.get_token(),
+        assignment_id=str(session["assignment_id"]), user_id=str(student["user_id"]),
+        decisions=decisions,
+    )
+
+
+def _new_quiz_apply(session: dict, student: dict, decisions: list[dict], pending: dict) -> dict:
+    return new_quiz_grader.apply(
+        canvas_base=config.get_canvas_base(), token=config.get_token(),
+        assignment_id=str(session["assignment_id"]), user_id=str(student["user_id"]),
+        decisions=decisions, baseline=pending,
+    )
+
+
+@router.post("/api/powergrader/session/{session_id}/new-quiz-review")
+def pg_new_quiz_review(session_id: str, user_id: str = Form(""), item_decisions: str = Form("")):
+    payload, status_code = session_actions.review_new_quiz_finalization(
+        session_id, user_id=user_id, decisions_json=item_decisions,
+        load_session=_load_session, save_session=_save_session, preflight=_new_quiz_preflight,
+    )
+    return JSONResponse(payload, status_code=status_code)
+
+
+@router.post("/api/powergrader/session/{session_id}/new-quiz-finalize")
+def pg_new_quiz_finalize(session_id: str, user_id: str = Form(""), review_token: str = Form(""), item_decisions: str = Form("")):
+    payload, status_code = session_actions.finalize_new_quiz(
+        session_id, user_id=user_id, review_token=review_token, decisions_json=item_decisions,
+        load_session=_load_session, save_session=_save_session, apply=_new_quiz_apply,
     )
     return JSONResponse(payload, status_code=status_code)

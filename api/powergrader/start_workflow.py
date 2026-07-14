@@ -68,6 +68,7 @@ def build_start_session(
     late_watch: dict,
     canvas_writeback_supported: bool = True,
     comment_writeback_supported: bool = False,
+    new_quiz_item_finalization_supported: bool = False,
     evidence_manifest: str | None = None,
     evidence_status: str = "unknown",
 ) -> dict:
@@ -91,6 +92,7 @@ def build_start_session(
         late_watch=late_watch,
         canvas_writeback_supported=canvas_writeback_supported,
         comment_writeback_supported=comment_writeback_supported,
+        new_quiz_item_finalization_supported=new_quiz_item_finalization_supported,
         evidence_manifest=evidence_manifest,
         evidence_status=evidence_status,
     )

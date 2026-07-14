@@ -1,6 +1,6 @@
 # Execution brief: New Quiz per-item review and teacher finalization (v2)
 
-Status: **ready for implementation**
+Status: **completed**
 
 Risk: **high** — official item scores/comments, short-lived credentials, undocumented
 first-party transport, FERPA.
@@ -141,9 +141,9 @@ Required scope (unchanged from the roadmap's Luna 3, updated for current code):
 
 ## Execution result
 
-- Traffic light: _pending_
-- Commit hash: _pending_
-- Files changed: _pending_
-- Verification commands and counts: _pending_
-- Deviations: _pending_
-- Remaining blocker / cleanup decision: _pending_
+- Traffic light: **GREEN — Phase A and Phase B complete; New Quiz finalization is implemented with fail-closed web-session transport, frozen review, and SpeedGrader routing.**
+- Commit hash: none
+- Files changed: `api/powergrader/new_quiz_grader.py`, `api/powergrader/session_actions.py`, `api/powergrader/session_builder.py`, `api/powergrader/ai_workflow.py`, `api/powergrader/ai_workflow_support.py`, `api/powergrader/import_results.py`, `api/powergrader/start_workflow.py`, `api/feedback_results.py`, `api/feedback_pipeline.py`, `api/webui/routes/powergrader.py`, `api/webui/static/powergrader/queue_core.js`, `api/webui/static/powergrader/queue_new_quiz.js`, `api/webui/templates/powergrader_queue.html`, `api/tests/test_powergrader_new_quizzes.py`, `docs/reference/new-quizzes-grading-transport.md`, and this handoff.
+- Verification commands and counts: focused `py -m pytest api/tests/test_powergrader_new_quizzes.py api/tests/test_powergrader_manual_push.py api/tests/test_powergrader_import_results.py` — 31 passed; subsystem `py -m pytest api/tests -k "powergrader or feedback"` — 164 passed; `py -m py_compile api/powergrader/new_quiz_grader.py api/powergrader/session_actions.py api/webui/routes/powergrader.py` — passed; `git diff --check` — passed. Rendered local PowerGrader manual-item and whole-student SpeedGrader states with a short-lived synthetic local session; one editable item, read-only TA and auto-score displays, exact SpeedGrader link shape, and zero new browser-console errors verified.
+- Deviations: the sessionless credential's one authorized Phase A POST returned `401`, made no change, and was reconciled read-only. The implementation therefore uses the locked web-session/GraphQL/signed-launch fallback. No live production finalization was issued: the supplied controlled target contains upload evidence and is correctly routed wholly to SpeedGrader under the locked policy.
+- Remaining blocker / cleanup decision: none. The synthetic local session and local verification server were removed. No credential, signed URL, raw item payload, student record, or Canvas result content was stored in the repository or handoff.

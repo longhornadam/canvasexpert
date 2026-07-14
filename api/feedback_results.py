@@ -251,6 +251,25 @@ def merge_rows_by_uid(rows: list) -> dict:
     return merged
 
 
+def item_rows_by_uid(rows: list) -> dict[str, list[dict]]:
+    """Keep validated AI drafts item-local for New Quiz review.
+
+    ``merge_rows_by_uid`` remains the compatibility summary used by ordinary
+    PowerGrader feedback.  This companion deliberately keeps the same
+    reidentified/validated rows rather than introducing another scoring shape.
+    """
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        if not row.get("resolved") or not row.get("item_id"):
+            continue
+        grouped.setdefault(str(row.get("canvas_id") or ""), []).append({
+            "item_id": str(row.get("item_id")),
+            "score": row.get("score"),
+            "feedback": row.get("feedback") or "",
+        })
+    return grouped
+
+
 def reidentified_csv(rows: list) -> str:
     """Render re-identified results as CSV text (for the ToEnter folder)."""
     buf = io.StringIO()
