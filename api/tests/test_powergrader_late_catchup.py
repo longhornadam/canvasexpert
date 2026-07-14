@@ -169,7 +169,7 @@ def test_late_score_appends_new_students_once(monkeypatch):
     monkeypatch.setattr(powergrader, "_load_session", load_session)
     monkeypatch.setattr(powergrader, "_save_session", save_session)
     monkeypatch.setattr(powergrader.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: (_late_submission_rows(), {"name": "Essay", "description": "Explain the text.", "due_at": "2026-09-10T23:59:00Z"}, None))
-    monkeypatch.setattr(powergrader.canvas_fetch, "enrich_with_code_files", lambda subs: None)
+    monkeypatch.setattr(powergrader.canvas_fetch, "ingest_ordinary_attachments", lambda subs, **kwargs: subs)
 
     def fake_run_ai_workflow(**kwargs):
         ai_calls.append(kwargs)
@@ -213,7 +213,7 @@ def test_late_score_reuses_stored_source_context(monkeypatch):
     monkeypatch.setattr(powergrader, "_load_session", load_session)
     monkeypatch.setattr(powergrader, "_save_session", save_session)
     monkeypatch.setattr(powergrader.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: (_late_submission_rows(), {"name": "Essay", "description": "Explain the text.", "due_at": "2026-09-10T23:59:00Z"}, None))
-    monkeypatch.setattr(powergrader.canvas_fetch, "enrich_with_code_files", lambda subs: None)
+    monkeypatch.setattr(powergrader.canvas_fetch, "ingest_ordinary_attachments", lambda subs, **kwargs: subs)
 
     def fake_run_ai_workflow(**kwargs):
         assert kwargs["source_context_override"]["sentinel"] == "keep-me"
@@ -335,7 +335,7 @@ def test_late_score_does_not_append_on_ai_error(monkeypatch):
     monkeypatch.setattr(powergrader, "_load_session", load_session)
     monkeypatch.setattr(powergrader, "_save_session", save_session)
     monkeypatch.setattr(powergrader.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: (_late_submission_rows(), {"name": "Essay", "description": "Explain the text.", "due_at": "2026-09-10T23:59:00Z"}, None))
-    monkeypatch.setattr(powergrader.canvas_fetch, "enrich_with_code_files", lambda subs: None)
+    monkeypatch.setattr(powergrader.canvas_fetch, "ingest_ordinary_attachments", lambda subs, **kwargs: subs)
     monkeypatch.setattr(powergrader.ai_workflow, "run_ai_workflow", lambda **kwargs: {
         "ok": False,
         "error": "OpenRouter model error",

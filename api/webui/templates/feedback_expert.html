@@ -24,8 +24,9 @@
   <h2 style="color:var(--ce-blue)">Prepare a feedback batch</h2>
   <p class="hint" style="margin-top:0">
     Select a course and assignment below. Canvas Expert will download the submissions,
-    create pseudonymized SAFE files with real names kept in the private vault,
-    and show you a summary. From there you can open the SAFE folder for manual scoring
+    create pseudonymized files under the AI Packets (Pseudonymized) workspace area,
+    with real names kept in the private vault, and show you a summary. From there
+    you can open the pseudonymized packet area for manual scoring
     or, if OpenRouter is configured, request draft scoring.
   </p>
 
@@ -67,15 +68,15 @@
     <span id="gf-status" class="hint"></span>
   </div>
   <div class="actions" style="margin-top:6px">
-    <button type="button" class="small fx-open" data-folder="safe" {% if not feedback_root %}disabled{% endif %}>📁 Open SAFE folder</button>
+    <button type="button" class="small fx-open" data-folder="safe" {% if not feedback_root %}disabled{% endif %}>📁 Open AI Packets folder</button>
     <button type="button" class="small fx-open" data-folder="private" {% if not feedback_root %}disabled{% endif %}>🔒 Open PRIVATE folder</button>
-    <span class="hint">SAFE = pseudonymized copies to review before any LLM upload. PRIVATE = real names, stays on this PC.</span>
+    <span class="hint">Pseudonymized packets require teacher review before upload. Courses and _System contain real names or machine state and stay PRIVATE.</span>
   </div>
   <div id="gf-progress-wrap" hidden>
     <div class="progress-bar"><div class="progress-fill" id="gf-progress-fill"></div></div>
     <pre id="gf-log" class="log"></pre>
     <div id="gf-result-actions" hidden>
-      <button type="button" class="small" id="gf-open-safe">📁 Open SAFE folder</button>
+      <button type="button" class="small" id="gf-open-safe">📁 Open AI Packets folder</button>
       <button type="button" class="small" id="gf-open-private">🔒 Open PRIVATE folder</button>
       <button type="button" class="small primary" id="gf-push" title="Jump to Push to Canvas">⬆ Push to Canvas</button>
     </div>

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 
+AI_MANUAL_REVIEW_MESSAGE = "No AI draft was produced; manual grading is required."
+
+
 def workflow_result(
     *,
     ok: bool,
@@ -11,6 +14,7 @@ def workflow_result(
     privacy_steps: list[dict] | None = None,
     privacy_artifacts: dict | None = None,
     ai_by_uid: dict | None = None,
+    ai_failures: dict | None = None,
     packet_zip: str | None = None,
     budget=None,
     debug_path: str | None = None,
@@ -24,6 +28,7 @@ def workflow_result(
         "privacy_steps": privacy_steps or [],
         "privacy_artifacts": privacy_artifacts or {},
         "ai_by_uid": ai_by_uid or {},
+        "ai_failures": ai_failures or {},
         "packet_zip": packet_zip,
         "budget": budget,
         "debug_path": debug_path,

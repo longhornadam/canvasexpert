@@ -59,6 +59,9 @@ def _price_per_mtok(value) -> float | None:
 
 def _model_row(model: dict) -> dict:
     pricing = model.get("pricing") or {}
+    architecture = model.get("architecture") or {}
+    input_modalities = list(architecture.get("input_modalities") or [])
+    output_modalities = list(architecture.get("output_modalities") or [])
     prompt = _price_per_mtok(pricing.get("prompt"))
     completion = _price_per_mtok(pricing.get("completion"))
     return {
@@ -68,6 +71,11 @@ def _model_row(model: dict) -> dict:
         "created": model.get("created") or 0,
         "input_per_mtok": prompt,
         "output_per_mtok": completion,
+        "input_modalities": input_modalities,
+        "output_modalities": output_modalities,
+        "image_capable": "image" in input_modalities,
+        "image_per_mtok": _price_per_mtok(pricing.get("image")),
+        "request_price": pricing.get("request"),
         "scenario_cost": (
             None if prompt is None or completion is None
             else (prompt * SCENARIO_INPUT_TOKENS + completion * SCENARIO_OUTPUT_TOKENS) / 1_000_000

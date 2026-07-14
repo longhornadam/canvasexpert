@@ -67,31 +67,23 @@ def test_download_assignment_uses_assignment_then_student_suffix(tmp_path):
         str(tmp_path),
     ))
 
-    by_assignment = tmp_path / "by_assignment" / "Narrative One"
-    by_student = tmp_path / "by_student"
+    by_assignment = tmp_path / "Assignments" / "Narrative One — 42"
+    amy = by_assignment / "Student Work" / "Learner, Amy — 101" / "Attempt 1"
+    ben = by_assignment / "Student Work" / "Writer, Ben The — 102" / "Attempt 1"
 
-    expected_assignment_files = {
-        "Narrative One - A Learner.html",
-        "Narrative One - A Learner - URL.txt",
-        "Narrative One - A Learner - final draft.docx",
-        "Narrative One - B Writer.html",
-    }
-    assert expected_assignment_files <= {p.name for p in by_assignment.iterdir()}
-    assert not (by_assignment / "Amy Learner.html").exists()
-
-    assert (by_student / "Amy Learner" / "Narrative One - A Learner.html").exists()
-    assert (by_student / "Amy Learner" / "Narrative One - A Learner - URL.txt").exists()
-    assert (by_student / "Amy Learner" / "Narrative One - A Learner - final draft.docx").exists()
-    assert (by_student / "Ben The Writer" / "Narrative One - B Writer.html").exists()
+    assert (amy / "Written Response.txt").exists()
+    assert (amy / "Submitted URL.txt").exists()
+    assert (amy / "final draft.docx").exists()
+    assert (ben / "Written Response.txt").exists()
+    assert (tmp_path / "Course Information.txt").exists() is False
+    assert (by_assignment / "Assignment Information.txt").exists()
 
     with open(by_assignment / "_index.csv", newline="", encoding="utf-8") as f:
         rows = {row["name"]: row for row in csv.DictReader(f)}
     assert rows["Amy Learner"]["files"] == (
-        "Narrative One - A Learner.html; "
-        "Narrative One - A Learner - URL.txt; "
-        "Narrative One - A Learner - final draft.docx"
+        "Written Response.txt; Submitted URL.txt; final draft.docx"
     )
-    assert rows["Ben The Writer"]["files"] == "Narrative One - B Writer.html"
+    assert rows["Ben The Writer"]["files"] == "Written Response.txt"
 
 
 def test_matching_student_suffixes_do_not_overwrite_files(tmp_path):
@@ -124,7 +116,7 @@ def test_matching_student_suffixes_do_not_overwrite_files(tmp_path):
         str(tmp_path),
     ))
 
-    by_assignment = tmp_path / "by_assignment" / "Reflection"
-    assert (by_assignment / "Reflection - A Learner.html").exists()
-    assert (by_assignment / "Reflection - A Learner (2).html").exists()
+    asgn = tmp_path / "Assignments" / "Reflection — 77"
+    assert (asgn / "Student Work" / "Learner, Amy — 201" / "Attempt 1" / "Written Response.txt").exists()
+    assert (asgn / "Student Work" / "Learner, Alex — 202" / "Attempt 1" / "Written Response.txt").exists()
 

@@ -73,8 +73,13 @@ lives in `api/webui/config.json` (gitignored).
 
 When OneDrive is available, teacher-authored content lives in
 `OneDrive\CanvasExpert\` with `AI-TA\`, `Rubrics\`, `Quizzes\`, `Assignments\`,
-`Pages\`, `Exports\`, and synced `settings.json`. Default rubric files are seeded
-into `Rubrics\` only when the filename is missing, so user edits win forever.
+`Pages\`, `Exports\`, and synced `settings.json`. Human-facing student work is
+canonical under `Courses\<Course>\Assignments\<Assignment>\Student Work\`;
+pseudonymized artifacts live under `AI Packets (Pseudonymized)\`, derived output
+under `Student Reports\`, and vault/session/audit state under `_System\`.
+Default rubric files are seeded into `Rubrics\` only when the filename is missing,
+so user edits win forever. `Courses\` and `_System\` are PRIVATE; review every
+pseudonymized packet before sharing because it is not guaranteed anonymous.
 
 Machine-local state stays machine-local: `canvas_base`, `download_root`, and the
 Canvas token in Credential Manager. Synced state is last-writer-wins through
@@ -137,7 +142,7 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `teks.py` | TEKS coverage report + visible labels |
 | `qf_pusher.py` | Driver: envelope → live quiz (points, settings, stimulus, TEKS) |
 | `push_tiers.py` | Differentiation: variants → student groups via assignment overrides (`--manifest`) |
-| `downloader.py` | Submission downloader → `by_assignment/` + `by_student/` tree, `_index.csv` / `_portfolio.csv` |
+| `downloader.py` | Submission downloader → canonical `Courses/<course>/Assignments/<assignment>/Student Work/<student>/Attempt <n>/` tree; no duplicate raw by-student mirror |
 | `validate_qf.py` | QuizForge compliance checker |
 | `qf_ui.py` | Launches the local web UI (see "Web UI" above) |
 | `../engine/rendering/physical/` | Local printable DOCX/PDF render stack (Edge via Playwright for PDF, Pandoc for DOCX) |

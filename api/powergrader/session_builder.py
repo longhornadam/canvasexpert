@@ -2,6 +2,23 @@
 
 from datetime import datetime
 
+try:
+    from powergrader.student_attachments import eligibility_decision
+except ModuleNotFoundError:
+    from api.powergrader.student_attachments import eligibility_decision
+
+
+def _attachment_metadata(attachment: dict) -> dict:
+    """Persist review metadata only; never persist a Canvas/signed URL."""
+    allowed = (
+        "filename", "display_name", "local_path", "declared_size", "actual_size",
+        "size", "detected_media_type", "media_type", "download_status",
+        "extraction_status", "extracted_text_path", "attempt", "item_id",
+        "item_link", "ai_eligible", "local_only", "warnings", "error_code",
+        "error_message",
+    )
+    return {key: attachment.get(key) for key in allowed if key in attachment}
+
 
 def build_students(
     *,
@@ -11,6 +28,7 @@ def build_students(
     tier_map: dict,
     monitored: dict,
     extra_time_map: dict,
+    ai_failures: dict | None = None,
 ) -> list[dict]:
     """Build the sorted student list for a session from Canvas submission data."""
     students = []
@@ -27,7 +45,7 @@ def build_students(
 
         body = s.get("body") or ""
         attachments = [
-            {"filename": a.get("filename") or a.get("display_name", ""), "size": a.get("size", 0)}
+            _attachment_metadata({**a, "filename": a.get("filename") or a.get("display_name", "")})
             for a in (s.get("attachments") or [])
             if a.get("filename") or a.get("display_name")
         ]
@@ -35,18 +53,34 @@ def build_students(
             {"filename": cf.get("filename", ""), "text": cf.get("text", "")}
             for cf in (s.get("code_files") or [])
         ]
+        new_quiz_items = []
+        for item in (s.get("new_quiz_items") or []):
+            new_quiz_items.append({
+                key: item.get(key) for key in ("item_id", "type", "prompt", "possible", "earned_score", "files")
+                if key in item
+            })
+        expected_count = s.get("expected_attachment_count")
+        if expected_count is None and not attachments:
+            expected_count = 0
+        eligibility = eligibility_decision(attachments, expected_count=expected_count)
 
         ai = ai_by_uid.get(uid, {})
+        ai_failure = (ai_failures or {}).get(uid)
         students.append({
             "user_id":       uid,
             "real_name":     real_name,
             "body":          body,
             "attachments":   attachments,
+            "attachment_expected_count": expected_count,
+            "new_quiz_items": new_quiz_items,
+            "attachment_eligibility": eligibility,
+            "new_quiz_files_error": s.get("new_quiz_files_error"),
             "code_files":    code_files,
             "current_score": s.get("score"),
             "status":        "pending",
             "ai_score":      ai.get("score"),
             "ai_feedback":   ai.get("feedback"),
+            **({"ai_scoring_error": ai_failure} if ai_failure else {}),
             "teacher_score": None,
             "teacher_feedback": "",
             "posted":        False,

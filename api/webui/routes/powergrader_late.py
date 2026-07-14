@@ -34,6 +34,7 @@ def _build_late_catchup_students(
     assignment: dict,
     submitted: list[dict],
     ai_by_uid: dict,
+    ai_failures: dict | None = None,
     batch_id: str,
 ) -> list[dict]:
     roster_settings = config.get_roster_student_settings(course_id)
@@ -45,6 +46,7 @@ def _build_late_catchup_students(
     students = session_builder.build_students(
         submitted=submitted,
         ai_by_uid=ai_by_uid,
+        ai_failures=ai_failures or {},
         roster_settings=roster_settings,
         tier_map=tier_map,
         monitored=monitored,
@@ -100,7 +102,15 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
             "ai_result": None,
         }
 
-    canvas_fetch.enrich_with_code_files(new_subs)
+    is_new_quiz = (adata or {}).get("is_quiz_lti_assignment") is True
+    if not is_new_quiz:
+        canvas_fetch.ingest_ordinary_attachments(
+            new_subs,
+            course_name=config.course_display_name(course_id),
+            course_id=course_id,
+            assignment_name=(adata or {}).get("name") or session.get("assignment_name") or assignment_id,
+            assignment_id=assignment_id,
+        )
     batch_id = late_catchup.make_late_batch_id()
     selected_model = session.get("model_id") or config.get_openrouter_model()
     response_kind = session.get("response_kind") or late_watch.get("response_kind") or "scr"
@@ -112,6 +122,7 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
         assignment_name=assignment_name,
         assignment_description=assignment_description,
         course_id=course_id,
+        course_name=config.course_display_name(course_id),
         assignment_id=assignment_id,
         session_id=session.get("session_id", ""),
         rubric_name=session.get("rubric_name", ""),
@@ -142,6 +153,7 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
         assignment=adata or {},
         submitted=new_subs,
         ai_by_uid=ai_result.get("ai_by_uid") or {},
+        ai_failures=ai_result.get("ai_failures") or {},
         batch_id=batch_id,
     )
     appended_user_ids = [str(st.get("user_id", "")) for st in students if st.get("user_id")]

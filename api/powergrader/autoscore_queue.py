@@ -41,10 +41,9 @@ UNSUPPORTED_TYPES = {
 
 
 def queue_dir() -> str | None:
-    root = workspace.workspace_root()
-    if not root:
+    d = workspace.powergrader_jobs_dir()
+    if not d:
         return None
-    d = os.path.join(root, "PowerGrader")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -56,18 +55,26 @@ def queue_path() -> str | None:
     return os.path.join(d, QUEUE_FILENAME)
 
 
+def _legacy_queue_paths() -> list[str]:
+    return workspace.compatibility_paths(QUEUE_FILENAME, kind="job")
+
+
 def _default_queue() -> dict:
     return {"version": QUEUE_VERSION, "jobs": []}
 
 
 def load_queue() -> dict:
     path = queue_path()
-    if not path or not os.path.isfile(path):
-        return _default_queue()
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except Exception:
+    candidates = ([path] if path and os.path.isfile(path) else []) + _legacy_queue_paths()
+    data = None
+    for candidate in candidates:
+        try:
+            with open(candidate, encoding="utf-8") as fh:
+                data = json.load(fh)
+            break
+        except Exception:
+            continue
+    if data is None:
         return _default_queue()
     if not isinstance(data, dict):
         return _default_queue()

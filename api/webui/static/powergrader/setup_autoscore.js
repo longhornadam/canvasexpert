@@ -62,6 +62,7 @@
   function modelCostText(m) {
     if (!m) return "";
     var price = "Input " + priceText(m.input_per_mtok) + "/M · Output " + priceText(m.output_per_mtok) + "/M";
+    if (m.image_capable) price += " · image input";
     var scenario = modelScenarioText(m);
     return price + (scenario ? " · " + scenario : "");
   }
@@ -74,6 +75,9 @@
       note: m.note || (source === "live" ? "Current OpenRouter listing" : ""),
       input_per_mtok: m.input_per_mtok,
       output_per_mtok: m.output_per_mtok,
+      input_modalities: m.input_modalities || [],
+      image_capable: !!m.image_capable || (m.input_modalities || []).indexOf("image") !== -1,
+      image_per_mtok: m.image_per_mtok,
       scenario_cost: scenario,
       cost_tier: m.cost_tier || costTier(scenario),
       source: source || m.source || "preset"

@@ -175,11 +175,17 @@ Ownership:
 - `api/powergrader/late_catchup.py`
   - late submission detection and watch bookkeeping
 - `api/powergrader/session_store.py`
-  - session persistence on disk
+  - session persistence on disk under `_System/PowerGrader/Sessions/`, with new-first legacy reads
 - `api/powergrader/canvas_fetch.py`
-  - submission fetch + code file enrichment
+  - submission fetch plus authenticated ordinary-upload streaming, atomic preservation, and shared attachment routing
 - `api/powergrader/new_quiz_fetch.py`
-  - New Quiz Student Analysis JSON report polling, latest-attempt reconciliation, and local snapshot normalization; New Quiz sessions never write back to Canvas
+  - read-only Student Analysis snapshot, URL-free expected evidence, unambiguous native attempt joins, and clean signed-file download
+- `api/powergrader/student_attachments.py`
+  - local text/DOCX/raster routing, extraction sidecars, eligibility gates, and metadata-stripped AI derivatives
+- `api/webui/workspace.py`
+  - canonical course/assignment/student/attempt and AI-run path ownership plus legacy compatibility helpers
+- `api/webui/config/courses.py`
+  - saved-course lookup for nickname/name/ID display ownership
 - `api/powergrader/scheduled_autoscore_support.py`
   - scheduled autoscore label/status helpers
   - existing Canvas-state extraction

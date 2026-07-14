@@ -167,3 +167,56 @@ def test_workspace_migration_is_idempotent(tmp_path, monkeypatch):
     assert second[0]["id"] == "1"
     assert workspace_state["saved_courses"][0]["id"] == "1"
     assert workspace_state["extra_time"]["1"][0]["name"] == "Ada"
+
+
+def test_canonical_course_first_paths_keep_ids_and_bound_long_names(tmp_path, monkeypatch):
+    root = tmp_path / "CanvasExpert"
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    path = workspace.attempt_folder(
+        "A" * 400, "course/fictional", "B" * 400, "assignment/fictional",
+        "C" * 400, "student/fictional", 3,
+    )
+    assert "Courses" in path and "Assignments" in path and "Student Work" in path
+    assert "course_fictional" in path and "assignment_fictional" in path and "student_fictional" in path
+    assert path.endswith("Attempt 3")
+    assert len(path) <= workspace.MAX_PATH_LENGTH
+
+
+def test_legacy_feedback_is_read_only_and_new_roots_are_seeded(tmp_path, monkeypatch):
+    root = tmp_path / "CanvasExpert"
+    legacy = root / "FeedbackExpert" / "_system" / "vault"
+    legacy.mkdir(parents=True)
+    marker = legacy / "vault.json"
+    marker.write_text("legacy", encoding="utf-8")
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+
+    workspace.ensure_workspace()
+    assert marker.read_text(encoding="utf-8") == "legacy"
+    assert (root / "Courses").is_dir()
+    assert (root / "AI Packets (Pseudonymized)").is_dir()
+    assert (root / "_System" / "Identity Vault").is_dir()
+    assert not (root / "_System" / "Identity Vault" / "vault.json").exists()
+
+
+def test_powergrader_compatibility_reads_are_new_first_and_non_destructive(tmp_path, monkeypatch):
+    from api.powergrader import autoscore_queue, session_store
+
+    root = tmp_path / "CanvasExpert"
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    monkeypatch.setattr(session_store.workspace, "workspace_root", lambda: str(root))
+    monkeypatch.setattr(autoscore_queue.workspace, "workspace_root", lambda: str(root))
+    legacy = root / "PowerGrader"
+    legacy.mkdir(parents=True)
+    old_session = legacy / "sid_session.json"
+    old_session.write_text(json.dumps({"session_id": "sid", "created": "old", "students": []}), encoding="utf-8")
+    old_queue = legacy / "autoscore_queue.json"
+    old_queue.write_text(json.dumps({"version": 1, "jobs": [{"job_id": "old"}]}), encoding="utf-8")
+
+    assert session_store.load_session("sid")["created"] == "old"
+    assert autoscore_queue.load_queue()["jobs"][0]["job_id"] == "old"
+    session_store.save_session({"session_id": "sid", "created": "new", "students": []})
+    assert old_session.read_text(encoding="utf-8").find('"old"') >= 0
+    assert session_store.load_session("sid")["created"] == "new"
+    autoscore_queue.save_queue({"version": 1, "jobs": [{"job_id": "new"}]})
+    assert old_queue.read_text(encoding="utf-8").find('"old"') >= 0
+    assert autoscore_queue.load_queue()["jobs"][0]["job_id"] == "new"

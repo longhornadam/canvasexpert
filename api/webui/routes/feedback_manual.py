@@ -23,6 +23,23 @@ from .feedback_common import (
 router = APIRouter()
 
 
+def _workflow_paths():
+    """Use legacy inbox paths when present; otherwise use canonical aliases."""
+    legacy = workspace.feedback_legacy_folder("1_Inbox")
+    if legacy:
+        return (
+            legacy,
+            workspace.feedback_legacy_folder("2_ForLLM"),
+            workspace.feedback_legacy_folder("_archive"),
+            workspace.feedback_legacy_folder("3_FromLLM"),
+            workspace.feedback_legacy_folder("4_ToEnter"),
+        )
+    return (
+        workspace.courses_root(), workspace.ai_packets_root(), workspace.archive_dir(),
+        workspace.ai_packets_root(), workspace.courses_root(),
+    )
+
+
 @router.post("/persona")
 def save_persona(name: str = Form(""), personality: str = Form("")):
     config.set_ai_ta_persona(name, personality)
@@ -31,28 +48,27 @@ def save_persona(name: str = Form(""), personality: str = Form("")):
 
 @router.post("/process-inbox")
 def process_inbox():
-    if not workspace.feedback_root():
+    if not workspace.workspace_root():
         return JSONResponse({"ok": False, "error": "No workspace configured — finish setup first."})
     workspace.ensure_workspace()
+    inbox, forllm, archive, _, _ = _workflow_paths()
     log, folder = drain_pipeline(fp.process_inbox(
-        workspace.feedback_folder("1_Inbox"),
-        workspace.feedback_folder("2_ForLLM"),
-        workspace.feedback_folder("_archive"),
+        inbox, forllm, archive,
         vault(), ai_ta_name()))
-    return JSONResponse({"ok": True, "folder": folder or workspace.feedback_folder("2_ForLLM"),
+    return JSONResponse({"ok": True, "folder": folder or forllm,
                          "log": log})
 
 
 @router.post("/reidentify")
 def reidentify():
-    if not workspace.feedback_root():
+    if not workspace.workspace_root():
         return JSONResponse({"ok": False, "error": "No workspace configured — finish setup first."})
     workspace.ensure_workspace()
+    _, _, _, fromllm, toenter = _workflow_paths()
     log, folder = drain_pipeline(fp.reidentify_dir(
-        workspace.feedback_folder("3_FromLLM"),
-        workspace.feedback_folder("4_ToEnter"),
+        fromllm, toenter,
         vault()))
-    return JSONResponse({"ok": True, "folder": folder or workspace.feedback_folder("4_ToEnter"),
+    return JSONResponse({"ok": True, "folder": folder or toenter,
                          "log": log})
 
 
@@ -69,7 +85,7 @@ def openrouter_config(api_key: str = Form(""), model: str = Form("")):
 @router.get("/status")
 def status():
     """Return key/model state, rubrics, and per-bundle safety verdicts."""
-    fb = workspace.feedback_root()
+    fb = workspace.workspace_root()
     bundles = []
     if fb:
         v = vault()
@@ -100,7 +116,7 @@ def status():
 @router.post("/score-openrouter")
 def score_openrouter(rubric_name: str = Form(""), bundle_name: str = Form("")):
     """Send pseudonymized bundles to OpenRouter, then re-identify locally."""
-    if not workspace.feedback_root():
+    if not workspace.workspace_root():
         return JSONResponse({"ok": False, "error": "No workspace configured."})
     if not config.has_openrouter_key():
         return JSONResponse({"ok": False, "error": "No OpenRouter API key saved."})
@@ -108,7 +124,7 @@ def score_openrouter(rubric_name: str = Form(""), bundle_name: str = Form("")):
     v, persona = vault(), config.get_ai_ta_persona()
     model, api_key = config.get_openrouter_model(), config.get_openrouter_key()
     rubric_text = load_rubric_text(rubric_name)
-    toenter = workspace.feedback_folder("4_ToEnter")
+    _, _, _, _, toenter = _workflow_paths()
     os.makedirs(toenter, exist_ok=True)
 
     paths = bundle_paths()

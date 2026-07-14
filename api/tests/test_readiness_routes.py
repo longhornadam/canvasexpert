@@ -49,5 +49,5 @@ def test_privacy_probe_removes_temporary_file(tmp_path, monkeypatch):
     monkeypatch.setattr(readiness.workspace, "workspace_root", lambda: str(root))
     result = readiness._probe_privacy()
     assert result == {"status": "ready"}
-    system = root / "FeedbackExpert" / "_system"
+    system = root / "_System"
     assert list(system.glob(".readiness-*.probe")) == []

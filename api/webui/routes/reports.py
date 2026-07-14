@@ -131,10 +131,15 @@ def list_assignments_full(course_id: str):
 
 
 @router.get("/course-folder")
-def course_folder(course_name: str):
+def course_folder(course_name: str, course_id: str = ""):
     """Return the local download folder path for a course and whether it exists."""
     root = config.get_download_root()
-    path = os.path.join(root, downloader.safe_name(course_name))
+    if not course_id:
+        for course in config.active_courses():
+            if course.get("name") == course_name or course.get("nickname") == course_name:
+                course_id = str(course.get("id") or "")
+                break
+    path = downloader._course_dir(root, course_name, course_id or "unknown")
     return JSONResponse({"path": path, "exists": os.path.isdir(path)})
 
 

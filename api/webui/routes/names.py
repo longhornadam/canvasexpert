@@ -24,7 +24,8 @@ names_router = APIRouter(prefix="/api/names", tags=["names"])
 
 
 def _vault():
-    return feedback_vault.Vault(os.path.join(workspace.feedback_folder("_vault"), "vault.json"))
+    root = workspace.identity_vault_dir() or workspace.feedback_folder("_vault")
+    return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
 
 
 def _fetch_students(course_id: str):
@@ -165,7 +166,7 @@ def export_who_is_who(course_id: str = Form("")):
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
     vault = _vault()
-    private_dir = workspace.feedback_folder("PRIVATE")
+    private_dir = workspace.courses_root()
     if not private_dir:
         return JSONResponse({"ok": False, "error": "No workspace configured."})
     os.makedirs(private_dir, exist_ok=True)

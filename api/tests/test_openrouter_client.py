@@ -1,6 +1,7 @@
 """Offline tests for the OpenRouter client — request build, response parse, and the
 injected-http score path. No network, no key."""
 import json
+import base64
 
 import pytest
 
@@ -20,6 +21,42 @@ def test_build_request_shape():
     assert "Sage" in system and "warm and specific" in system and "RUBRIC TEXT HERE" in system
     user = req["messages"][1]["content"]
     assert "S001" in user                       # pseudonymous bundle is the payload
+
+
+def test_multimodal_request_puts_association_text_before_image(tmp_path):
+    image = tmp_path / "safe.png"
+    image.write_bytes(b"synthetic image bytes")
+    bundle = {"quiz_title": "Synthetic", "students": [{
+        "pseudonym": "S001", "responses": [{
+            "item_id": "item-1", "prompt": "Look", "response": "See image.",
+            "media": [{"item_id": "item-1", "local_path": str(image),
+                       "media_type": "image/png", "filename": "attachment-1"}],
+        }],
+    }]}
+    request = orc.build_request(bundle, "rubric", PERSONA, "vision/model")
+    content = request["messages"][1]["content"]
+    assert content[0]["type"] == "text"
+    assert "pseudonym S001" in content[1]["text"]
+    assert content[2]["type"] == "image_url"
+    assert content[2]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert str(image) not in json.dumps(request)
+
+
+def test_budget_rejects_media_for_text_only_model():
+    class _Resp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [{"id": "text/model", "architecture": {"input_modalities": ["text"]},
+                              "pricing": {"prompt": "0.000001", "completion": "0.000001"}}]}
+
+    bundle = {"students": [{"pseudonym": "S001", "responses": [{
+        "item_id": "1", "response": "x", "media": [{"item_id": "1", "local_path": __file__}],
+    }]}]}
+    result = orc.teacher_workflow_budget(
+        bundle, "", "text/model", http_get=lambda *a, **k: _Resp(), student_count=1,
+    )
+    assert result["ok"] is False
+    assert any("image input" in reason for reason in result["reasons"])
 
 
 def test_parse_response_extracts_results():

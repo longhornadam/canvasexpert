@@ -1,10 +1,10 @@
 # Execution brief: Course-first student work and inspectable New Quiz uploads
 
-Status: **design complete — held for later approval; do not execute yet**
+Status: **superseded — implementation remains YELLOW after acceptance review**
 
 Risk: **high**
 
-Executor: **unassigned — Terra recommended when the senior explicitly releases this brief**
+Executor: **Luna (in-thread)**
 
 ## Outcome
 
@@ -179,8 +179,8 @@ legacy `FeedbackExpert/PRIVATE/PowerGrader` shape and migrate them again afterwa
 
 ## Out of scope
 
-- No executor assignment or implementation until a senior explicitly releases this
-  held brief.
+- The brief was explicitly released by the user for in-thread implementation; no
+  separate executor or live probe was used.
 - No automatic deletion, move, or cleanup of `FeedbackExpert/`, `PowerGrader/`,
   `Exports/`, or any other existing synced folder.
 - No duplicate by-student copy of raw submissions and no OneDrive hardlinks, junctions,
@@ -371,15 +371,41 @@ Stop with RED rather than guessing if:
 
 ## Return report
 
+Acceptance review found implementation defects beyond the unavailable browser check:
+ordinary assignment attachments still bypass the shared router; mixed media batches drop
+text-only students and do not isolate provider errors; New Quiz retrieval failures do not
+always reach top-level eligibility; ambiguous same-attempt participant sessions select the
+first match; and New Quiz originals use an ID-only course display name. Correction work is
+owned by
+`docs/handoffs/archive/course-first-attachment-acceptance-repair.md`.
+
 Before handback, replace the placeholders below in this file as well as reporting them to
 the senior. Do not leave the only copy of execution state or test evidence in chat.
 
 ### Execution result
 
-- Traffic light: **not started**
-- Commit hash: **none — design brief only**
-- Files changed: **none**
-- Verification commands and pass/fail/skip counts: **not run**
-- Rendered routes checked: **none**
-- Deviations from the brief: **none**
-- Remaining blocker or decision: **senior/user must explicitly release the held brief and assign one executor**
+- Traffic light: **YELLOW** — implementation and required synthetic/API checks are
+  complete; the mandatory rendered-browser check is unavailable in this environment.
+- Commit hash: **none — changes remain in the working tree for user review**
+- Files changed: **41 tracked files plus new `api/powergrader/student_attachments.py`
+  and `api/tests/test_student_attachments.py`**; the principal implementation seams
+  are workspace ownership, downloader, New Quiz transport, attachment routing,
+  privacy/AI artifacts, OpenRouter multimodal requests, PowerGrader storage/UI, docs,
+  and synthetic tests.
+- Verification commands and pass/fail/skip counts:
+  - `py -m pytest api/tests/test_workspace.py api/tests/test_downloader.py api/tests/test_student_attachments.py api/tests/test_powergrader_new_quizzes.py api/tests/test_openrouter_client.py api/tests/test_powergrader_packet.py api/tests/test_readiness_routes.py api/tests/test_route_contract.py` — **52 passed**.
+  - `py -m pytest api/tests` — **630 passed, 1 skipped**.
+  - `py -m compileall -q api` — **passed**.
+  - `node --check api/webui/static/powergrader/queue_core.js` and
+    `node --check api/webui/static/powergrader/setup_autoscore.js` — **passed**.
+  - Local HTTP smoke checks for `/powergrader`, `/settings`, and
+    `/feedback-expert` — **200 responses**.
+- Rendered routes checked: **not completed**. The required in-app Browser skill was
+  loaded, but its runtime failed during setup with `Cannot redefine property: process`;
+  no standalone browser or live Canvas/OpenRouter call was substituted.
+- Deviations from the brief: **none in implementation scope**. The browser-runtime
+  failure is a verification-environment limitation only. No live probe, Canvas write,
+  New Quiz write-back, scheduled scoring, or external AI request was made.
+- Remaining blocker or decision: run the four rendered-route checks in a working
+  in-app Browser runtime before changing this result to GREEN. The code is ready for
+  review and the full API evidence is recorded above.

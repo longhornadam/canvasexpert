@@ -85,8 +85,8 @@ Route module ownership:
   - `/push/apply`
   - current Canvas score lookup, SAFE bundle lookup, and Canvas PUT payloads
 - `feedback_common.py`
-  - vault resolution, rubric text loading, content-free audit receipts,
-    bundle discovery, and budget error wording
+  - canonical `_System/Identity Vault` resolution, rubric text loading,
+    content-free audit receipts, bundle discovery, and budget error wording
 
 ## Pipeline Routing
 

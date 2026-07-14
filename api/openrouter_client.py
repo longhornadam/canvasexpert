@@ -5,6 +5,8 @@ caller MUST run feedback_safety.scan_payload() and confirm GREEN before invoking
 score() — this module assumes it is handed an already-pseudonymized bundle.
 """
 import json
+import base64
+import copy
 from json import JSONDecodeError
 
 try:
@@ -151,6 +153,10 @@ def model_pricing(model: str, *, http_get=None, timeout: int = 15) -> dict | Non
             "model": model,
             "input_per_mtok": input_per,
             "output_per_mtok": output_per,
+            "input_modalities": list((row.get("architecture") or {}).get("input_modalities") or []),
+            "output_modalities": list((row.get("architecture") or {}).get("output_modalities") or []),
+            "image_per_mtok": _price_per_mtok(pricing.get("image")),
+            "request_price": pricing.get("request"),
         }
     return None
 
@@ -202,6 +208,7 @@ def teacher_workflow_budget(
         price_error = str(e)
 
     estimate = estimate_cost_usd(input_tokens, output_tokens, price)
+    media_count = _media_count(bundle)
     premium_marker = any(marker in model.lower() for marker in _KNOWN_PREMIUM_MODEL_MARKERS)
     ok = True
     reasons: list[str] = []
@@ -220,6 +227,14 @@ def teacher_workflow_budget(
         ok = False
         reasons.append("live pricing could not be verified for the selected model")
 
+    if media_count:
+        modalities = set(price.get("input_modalities") or []) if price else set()
+        if "image" not in modalities:
+            ok = False
+            reasons.append("selected OpenRouter model does not advertise image input for uploaded evidence")
+        elif not price.get("image_per_mtok"):
+            warnings.append("image estimate is a floor because this provider reports image input through tokenized usage")
+
     return {
         "ok": ok,
         "model": model,
@@ -230,7 +245,49 @@ def teacher_workflow_budget(
         "price_error": price_error,
         "reasons": reasons,
         "warnings": warnings,
+        "media_count": media_count,
+        "model_metadata": price,
     }
+
+
+def _media_count(bundle: dict) -> int:
+    count = 0
+    for student in (bundle or {}).get("students") or []:
+        for response in student.get("responses") or []:
+            count += len(response.get("media") or [])
+    return count
+
+
+def _bundle_for_request(bundle: dict) -> tuple[dict, list[dict]]:
+    """Replace safe derivative paths with data URLs and strip local paths."""
+    clean = copy.deepcopy(bundle or {})
+    image_parts: list[dict] = []
+    for student in clean.get("students") or []:
+        pseudo = student.get("pseudonym") or "unknown"
+        for response in student.get("responses") or []:
+            media = []
+            for item in response.get("media") or []:
+                path = item.get("local_path")
+                if not path or not isinstance(path, str):
+                    raise ValueError("safe media derivative is missing a local path")
+                try:
+                    with open(path, "rb") as f:
+                        encoded = base64.b64encode(f.read()).decode("ascii")
+                except OSError as exc:
+                    raise ValueError("safe media derivative could not be read") from exc
+                media_type = item.get("media_type") or "image/png"
+                media.append({"item_id": str(item.get("item_id") or response.get("item_id") or ""),
+                              "filename": item.get("filename") or "attachment"})
+                image_parts.extend([
+                    {"type": "text", "text": (
+                        f"Attached image for pseudonym {pseudo}, item_id "
+                        f"{item.get('item_id') or response.get('item_id') or ''}."
+                    )},
+                    {"type": "image_url",
+                     "image_url": {"url": f"data:{media_type};base64,{encoded}"}},
+                ])
+            response["media"] = media
+    return clean, image_parts
 
 
 def build_request(bundle: dict, rubric_text: str, persona: dict, model: str,
@@ -271,13 +328,17 @@ def build_request(bundle: dict, rubric_text: str, persona: dict, model: str,
 
     if rubric_text:
         system += f"\n\n--- RUBRIC (score strictly by this) ---\n{rubric_text}\n"
+    request_bundle, image_parts = _bundle_for_request(bundle)
+    user_text = "Score every response in this bundle and return ONLY the JSON array described above:\n\n" + json.dumps(request_bundle, ensure_ascii=False)
+    if image_parts:
+        content = [{"type": "text", "text": user_text}] + image_parts
+    else:
+        content = user_text
     return {
         "model": model,
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user",
-             "content": "Score every response in this bundle and return ONLY the "
-                        "JSON array described above:\n\n" + json.dumps(bundle, ensure_ascii=False)},
+            {"role": "user", "content": content},
         ],
         "temperature": 0.2,
     }
@@ -292,10 +353,17 @@ def parse_response(resp_json: dict) -> list:
 
 def score(bundle: dict, rubric_text: str, persona: dict, *, api_key: str,
           model: str, http_post=None, timeout: int = 120,
-          feedback_pattern: dict | None = None) -> list:
+          feedback_pattern: dict | None = None, model_metadata: dict | None = None,
+          http_get=None) -> list:
     """Live call. `http_post` is injectable for tests. Returns parsed results list."""
     if not api_key:
         raise ValueError("No OpenRouter API key set.")
+    if _media_count(bundle):
+        metadata = model_metadata
+        if metadata is None:
+            metadata = model_pricing(model, http_get=http_get)
+        if not metadata or "image" not in set(metadata.get("input_modalities") or []):
+            raise ValueError("selected OpenRouter model does not advertise image input for uploaded evidence")
     if http_post is None:
         import requests
         http_post = requests.post

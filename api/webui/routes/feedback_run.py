@@ -1,6 +1,7 @@
 """Feedback tools assignment-driven prepare and OpenRouter scoring stream."""
 import json
 import os
+import glob
 
 import requests
 from fastapi import APIRouter, Query
@@ -104,8 +105,8 @@ def feedback_run_prepare(
     persona = config.get_persona()
     result = fp.write_safe_and_private(
         bundle, v,
-        workspace.feedback_folder("SAFE"),
-        workspace.feedback_folder("PRIVATE"),
+        workspace.ai_packets_root(),
+        workspace.courses_root(),
         persona.get("name") or ai_ta_name(),
         persona=persona,
         protected=protected,
@@ -152,9 +153,10 @@ def feedback_run_stream(
 
     def stream():
         try:
-            forllm = workspace.feedback_folder("SAFE")
-            bpath = os.path.join(forllm, os.path.basename(bundle_name))
-            if not os.path.isfile(bpath):
+            forllm = workspace.ai_packets_root()
+            candidates = glob.glob(os.path.join(forllm, "**", os.path.basename(bundle_name)), recursive=True)
+            bpath = sorted(candidates, key=lambda p: os.path.getmtime(p), reverse=True)[0] if candidates else ""
+            if not bpath or not os.path.isfile(bpath):
                 yield "!! Prepared bundle not found — run prepare again."
                 yield "[exit 1]"
                 return
@@ -202,7 +204,7 @@ def feedback_run_stream(
 
             yield f"Re-identifying {len(results)} result(s)…"
             rows = fp.reidentify(results, v)
-            toenter = workspace.feedback_folder("PRIVATE")
+            toenter = workspace.courses_root()
             os.makedirs(toenter, exist_ok=True)
             stem = fp._safe(assignment_name)
             dest = os.path.join(toenter, f"{stem}__to-enter.csv")

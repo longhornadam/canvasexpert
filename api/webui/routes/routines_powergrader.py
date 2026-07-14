@@ -131,7 +131,16 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                 lines.append(f"· {label}: waiting for an OpenRouter key")
                 continue
 
-            deps.canvas_fetch.enrich_with_code_files(submitted)
+            session = deps.session_store.load_session(session_id)
+            course_name = deps.config.course_display_name(course_id)
+            if not session and (adata or {}).get("is_quiz_lti_assignment") is not True:
+                deps.canvas_fetch.ingest_ordinary_attachments(
+                    submitted,
+                    course_name=course_name,
+                    course_id=course_id,
+                    assignment_name=adata.get("name") or job_ref.get("assignment_name") or assignment_id,
+                    assignment_id=assignment_id,
+                )
             settings = job_ref.get("settings") or {}
             selected_model = str(settings.get("model_id") or deps.config.get_openrouter_model()).strip() or deps.config.get_openrouter_model()
             persona_id = str(settings.get("persona_id") or "sage").strip() or "sage"
@@ -155,7 +164,6 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
             assignment_name = adata.get("name") or job_ref.get("assignment_name") or assignment_id
             assignment_description = deps.html_to_text(adata.get("description") or "")
             points_possible = float(adata.get("points_possible") or 100)
-            session = deps.session_store.load_session(session_id)
             created_session = False
             if not session:
                 session_ai = deps.ai_workflow.run_ai_workflow(
@@ -164,6 +172,7 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                     assignment_name=assignment_name,
                     assignment_description=assignment_description,
                     course_id=course_id,
+                    course_name=course_name,
                     assignment_id=assignment_id,
                     session_id=session_id,
                     rubric_name=rubric_name,
@@ -193,6 +202,7 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                 students = deps.session_builder.build_students(
                     submitted=submitted,
                     ai_by_uid=session_ai.get("ai_by_uid") or {},
+                    ai_failures=session_ai.get("ai_failures") or {},
                     roster_settings=roster_settings,
                     tier_map=tier_map,
                     monitored=monitored,

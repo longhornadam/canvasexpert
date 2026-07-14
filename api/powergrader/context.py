@@ -10,12 +10,12 @@ from webui.deps import list_rubric_files
 
 
 def vault():
-    vpath = workspace.feedback_folder("_vault")
+    vpath = workspace.identity_vault_dir()
     if vpath:
         os.makedirs(vpath, exist_ok=True)
         return feedback_vault.Vault(os.path.join(vpath, "vault.json"))
     root = workspace.workspace_root()
-    fallback = os.path.join(root or ".", "PowerGrader", "_vault")
+    fallback = os.path.join(root or ".", "_System", "Identity Vault")
     os.makedirs(fallback, exist_ok=True)
     return feedback_vault.Vault(os.path.join(fallback, "vault.json"))
 

@@ -2,7 +2,7 @@
 
 The single most sensitive artifact in the app: it is the only thing that can
 re-identify pseudonymized work. It lives in the synced workspace
-(the existing FeedbackExpert/_system/vault/ workspace path), NEVER in the repo, and is NEVER transmitted
+(`_System/Identity Vault/`), NEVER in the repo, and is NEVER transmitted
 anywhere.
 
 Keyed on the Canvas user id (stable, present in the Student Analysis CSV `ID`

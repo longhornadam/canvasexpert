@@ -8,11 +8,13 @@ try:                                   # script context (run from api/)
     from feedback_vault import Vault
     import feedback_scrub
     import feedback_safety
+    from powergrader import student_attachments
 except ModuleNotFoundError:            # package context (tests: api.feedback_artifacts)
     from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
     from api.feedback_vault import Vault
     from api import feedback_scrub
     from api import feedback_safety
+    from api.powergrader import student_attachments
 
 try:
     from feedback_contract import (
@@ -33,6 +35,17 @@ try:
     from feedback_results import parse_results, reidentify, reidentified_csv
 except ModuleNotFoundError:
     from api.feedback_results import parse_results, reidentify, reidentified_csv
+
+
+def _attachment_meta(attachment: dict) -> dict:
+    """Copy local evidence metadata without any URL/token-bearing fields."""
+    allowed = {
+        "filename", "display_name", "local_path", "declared_size", "actual_size", "size",
+        "detected_media_type", "media_type", "download_status", "extraction_status",
+        "extracted_text_path", "attempt", "item_id", "item_link", "ai_eligible",
+        "local_only", "warnings", "error_code", "error_message",
+    }
+    return {k: attachment.get(k) for k in allowed if k in attachment}
 
 
 def pseudonymize(parsed: dict, vault: Vault, quiz_title: str) -> dict:
@@ -81,11 +94,29 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
         a = s.get("assignment") or {}
         user = s.get("user") or {}
         new_quiz_items = s.get("new_quiz_items") or []
+        attachment_values = [
+            _attachment_meta(a) for a in (s.get("attachments") or [])
+            if isinstance(a, dict) and (a.get("local_path") or a.get("download_status"))
+        ]
         if new_quiz_items:
             existing = by_student.get(uid)
             if existing is None:
-                by_student[uid] = {"responses": [], "real_name": user.get("name") or user.get("sortable_name") or "", "sis_id": str(user.get("sis_user_id") or "")}
-            by_student[uid]["responses"] = [{"item_id": str(item.get("item_id") or ""), "prompt": html_to_text(item.get("prompt") or ""), "response": html_to_text(item.get("raw_html_answer") or ""), "possible": item.get("possible")} for item in new_quiz_items]
+                by_student[uid] = {
+                    "responses": [], "attachments": [],
+                    "real_name": user.get("name") or user.get("sortable_name") or "",
+                    "sis_id": str(user.get("sis_user_id") or ""),
+                    "_expected_attachment_count": s.get("expected_attachment_count", len(attachment_values)),
+                }
+            by_student[uid]["attachments"].extend(attachment_values)
+            by_student[uid]["_expected_attachment_count"] = s.get(
+                "expected_attachment_count", by_student[uid].get("_expected_attachment_count", len(attachment_values))
+            )
+            by_student[uid]["responses"] = [{
+                "item_id": str(item.get("item_id") or ""),
+                "prompt": html_to_text(item.get("prompt") or ""),
+                "response": html_to_text(item.get("raw_html_answer") or ""),
+                "possible": item.get("possible"),
+            } for item in new_quiz_items]
             continue
         prompt = html_to_text(a.get("description") or "")
         body_text = html_to_text(s.get("body") or "")
@@ -93,8 +124,16 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
         # never html_to_text'd, or an HTML submission's tags (the thing being graded)
         # would be stripped. The route fetches these into s["code_files"].
         code_files = s.get("code_files") or []
-        code_text = "\n\n".join(f"--- {cf.get('filename', 'file')} ---\n{cf.get('text', '')}"
-                                for cf in code_files if cf.get("text"))
+        # ``code_files`` is a legacy read path only.  New ordinary ingestion
+        # routes every attachment through local_attachments exactly once.
+        normalized_attachments = any(
+            isinstance(attachment, dict) and ("download_status" in attachment or attachment.get("local_path"))
+            for attachment in (s.get("attachments") or [])
+        )
+        code_text = "" if normalized_attachments else "\n\n".join(
+            f"--- {cf.get('filename', 'file')} ---\n{cf.get('text', '')}"
+            for cf in code_files if cf.get("text")
+        )
         response = "\n\n".join(p for p in (body_text, code_text) if p).strip()
         if not response and not (s.get("attachments") or []):
             continue
@@ -107,6 +146,8 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
             "score":    s.get("score"),
             "real_name": user.get("name") or user.get("sortable_name") or "",
             "sis_id":    str(user.get("sis_user_id") or ""),
+            "attachments": attachment_values,
+            "_expected_attachment_count": s.get("expected_attachment_count", len(attachment_values)),
         }
         # Keep latest submission per assignment
         existing = by_student.get(uid)
@@ -135,6 +176,8 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
         students.append({
             "pseudonym": pseudo,
             "responses": responses,
+            "local_attachments": entry.get("attachments") or [],
+            "_expected_attachment_count": entry.get("_expected_attachment_count", 0),
         })
 
     return {"contract_version": CONTRACT_VERSION,
@@ -182,6 +225,78 @@ def _scrub_bundle(bundle: dict, vault: Vault,
             if isinstance(material, dict) and material.get("text"):
                 material["text"] = feedback_scrub.scrub_text(material.get("text") or "", rmap)
     return out
+
+
+def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str) -> tuple[dict, list[str], list[str]]:
+    """Convert downloaded local evidence into safe text/media or hold the student."""
+    import copy
+
+    out = copy.deepcopy(bundle)
+    excluded: list[str] = []
+    log: list[str] = []
+    kept_students = []
+    for student in out.get("students") or []:
+        attachments = [a for a in student.get("local_attachments") or [] if isinstance(a, dict)]
+        if not attachments:
+            student.pop("local_attachments", None)
+            student.pop("_expected_attachment_count", None)
+            kept_students.append(student)
+            continue
+        expected_count = student.get("_expected_attachment_count", len(attachments))
+        decision = student_attachments.eligibility_decision(attachments, expected_count=expected_count)
+        pseudo = student.get("pseudonym") or "unknown"
+        if not decision["eligible"]:
+            excluded.append(pseudo)
+            log.append(f"!! HELD {pseudo} — attachment evidence needs teacher review: {decision['reasons'][0]}")
+            continue
+        media_dir = os.path.join(safe_dir, "Students", pseudo.replace(" ", "-"))
+        for index, attachment in enumerate(attachments, start=1):
+            local_path = attachment.get("local_path")
+            if not local_path or not os.path.isfile(local_path):
+                excluded.append(pseudo)
+                log.append(f"!! HELD {pseudo} — downloaded attachment is no longer available locally")
+                break
+            try:
+                with open(local_path, "rb") as source:
+                    raw_attachment = source.read()
+                routed = student_attachments.route_bytes(
+                    f"attachment-{index}{os.path.splitext(attachment.get('filename') or '')[1]}",
+                    raw_attachment,
+                )
+            except Exception as exc:
+                excluded.append(pseudo)
+                log.append(f"!! HELD {pseudo} — attachment validation failed ({type(exc).__name__})")
+                break
+            routed_decision = student_attachments.eligibility_decision([routed])
+            if not routed_decision["eligible"]:
+                excluded.append(pseudo)
+                log.append(
+                    f"!! HELD {pseudo} — attachment evidence changed or failed validation "
+                    f"({routed_decision['reasons'][0]})"
+                )
+                break
+            for response in student.get("responses") or []:
+                if attachment.get("item_id") and str(response.get("item_id")) != str(attachment.get("item_id")):
+                    continue
+                if routed.get("text"):
+                    response["response"] = (response.get("response") or "") + "\n\n" + (
+                        f"Attachment {index} text:\n{routed['text']}"
+                    )
+                for output in student_attachments.write_safe_derivatives(
+                    routed, media_dir, pseudonym=pseudo, item_id=attachment.get("item_id") or index
+                ):
+                    response.setdefault("media", []).append({
+                        "item_id": str(attachment.get("item_id") or ""),
+                        "filename": f"attachment-{index}",
+                        "local_path": output["local_path"],
+                        "media_type": output["media_type"],
+                    })
+        student.pop("local_attachments", None)
+        student.pop("_expected_attachment_count", None)
+        if pseudo not in excluded:
+            kept_students.append(student)
+    out["students"] = kept_students
+    return out, excluded, log
 
 
 def _shared_context_blob(shared) -> str:
@@ -234,8 +349,11 @@ def write_safe_and_private(
     shared_context_excluded = False
     stem = _safe(bundle.get("quiz_title", "assignment"))
 
-    # Step 1: scrub
-    safe = _scrub_bundle(bundle, vault, protected=protected)
+    # Step 1: convert approved local evidence, then scrub text.
+    prepared, attachment_excluded, attachment_log = _prepare_attachment_safe_bundle(bundle, safe_dir)
+    excluded.extend(attachment_excluded)
+    log.extend(attachment_log)
+    safe = _scrub_bundle(prepared, vault, protected=protected)
 
     # Step 2: assert_scrubbed receipt — structural HARD gate (forbidden identity
     # keys / raw ids). A correctly built bundle never trips this; it catches a
@@ -283,13 +401,16 @@ def write_safe_and_private(
         for s in submissions:
             body = s.get("body") or ""
             has_code = bool(s.get("code_files"))
-            non_code = [a for a in (s.get("attachments") or [])]
+            non_code = [a for a in (s.get("attachments") or [])
+                        if not a.get("ai_eligible") or a.get("download_status") != "downloaded"]
             if not body.strip() and not has_code and non_code:
                 user = s.get("user") or {}
                 attachment_only.append({
                     "user_id": s.get("user_id"),
                     "name": user.get("name") or "",
-                    "urls": [a.get("url") for a in non_code if a.get("url")],
+                    "attachment_count": len(non_code),
+                    "filenames": [a.get("filename") or a.get("display_name") or "attachment"
+                                  for a in non_code],
                 })
 
     # Step 4: write SAFE bundle

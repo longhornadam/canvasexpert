@@ -1,6 +1,7 @@
 """Feedback tools push-preview and Canvas write routes."""
 import json
 import os
+import glob
 
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
@@ -25,12 +26,13 @@ def _load_safe_bundle(course_id: str, assignment_id: str):
     """Best-effort load of the SAFE bundle for this assignment."""
     adata, _ = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
     name = (adata or {}).get("name") or assignment_id
-    safe_dir = workspace.feedback_folder("SAFE")
+    safe_dir = workspace.ai_packets_root()
     if not safe_dir:
         return None
-    path = os.path.join(safe_dir, f"{fp._safe(name)}__bundle.json")
-    if not os.path.isfile(path):
+    candidates = glob.glob(os.path.join(safe_dir, "**", f"{fp._safe(name)}__bundle.json"), recursive=True)
+    if not candidates:
         return None
+    path = sorted(candidates, key=lambda p: os.path.getmtime(p), reverse=True)[0]
     try:
         with open(path, encoding="utf-8") as f:
             return json.load(f)

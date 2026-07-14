@@ -21,9 +21,25 @@ def privacy_step(step_id: str, label: str, status: str,
     return item
 
 
-def feedback_artifact_dirs() -> tuple[str | None, str | None]:
+def feedback_artifact_dirs(
+    *, course_name: str = "", course_id: str = "",
+    assignment_name: str = "", assignment_id: str = "",
+    mode: str = "assisted", run_timestamp: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Resolve new AI/private homes; no new FeedbackExpert tree is created."""
     workspace.ensure_workspace()
-    return workspace.feedback_folder("SAFE"), workspace.feedback_folder("PRIVATE")
+    if course_id and assignment_id:
+        safe = workspace.ai_run_folder(
+            course_name or course_id, course_id,
+            assignment_name or assignment_id, assignment_id,
+            mode or "assisted", run_timestamp=run_timestamp,
+        )
+        private = workspace.assignment_folder(
+            course_name or course_id, course_id,
+            assignment_name or assignment_id, assignment_id,
+        )
+        return safe, private
+    return workspace.ai_packets_root(), workspace.courses_root()
 
 
 def write_privacy_audit_file(
@@ -38,7 +54,12 @@ def write_privacy_audit_file(
 ) -> str | None:
     try:
         os.makedirs(private_folder, exist_ok=True)
-        path = os.path.join(private_folder, f"{fp._safe(assignment_name)}__powergrader-privacy-audit.json")
+        audit_root = workspace.audits_dir() or private_folder
+        os.makedirs(audit_root, exist_ok=True)
+        path = os.path.join(
+            audit_root,
+            f"{fp._safe(assignment_name)}__powergrader-privacy-audit-{fp._safe(session_id)}.json",
+        )
         with open(path, "w", encoding="utf-8") as f:
             json.dump({
                 "session_id": session_id,
@@ -72,8 +93,12 @@ def write_openrouter_debug_file(
     if not private_folder:
         return None
     try:
-        os.makedirs(private_folder, exist_ok=True)
-        path = os.path.join(private_folder, f"{fp._safe(assignment_name)}__openrouter-debug.json")
+        debug_root = workspace.system_folder("PowerGrader") or private_folder
+        os.makedirs(debug_root, exist_ok=True)
+        path = os.path.join(
+            debug_root,
+            f"{fp._safe(assignment_name)}__openrouter-debug-{fp._safe(session_id)}.json",
+        )
         payload = {
             "created": datetime.now().isoformat(timespec="seconds"),
             "session_id": session_id,

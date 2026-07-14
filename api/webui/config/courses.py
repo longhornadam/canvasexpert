@@ -22,6 +22,16 @@ def active_courses() -> list[dict]:
     return [c for c in saved_courses() if c.get("active", True)]
 
 
+def course_display_name(course_id: str) -> str:
+    """Return the saved teacher-facing course label for a Canvas course ID."""
+    wanted = str(course_id or "").strip()
+    for course in saved_courses():
+        if str(course.get("id") or "").strip() != wanted:
+            continue
+        return str(course.get("nickname") or course.get("name") or wanted).strip() or wanted
+    return wanted
+
+
 def set_course_active(course_id: str, active: bool):
     """Move a saved course between the Current and Previous sets."""
     state = _io_mod._synced_state()

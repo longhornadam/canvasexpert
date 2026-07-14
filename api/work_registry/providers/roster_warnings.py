@@ -156,7 +156,7 @@ def _group_map(categories: list[dict]) -> dict[str, list[dict]]:
 
 def _vault_context() -> tuple[dict, set[str], dict]:
     try:
-        private_root = workspace.feedback_folder("_vault")
+        private_root = workspace.identity_vault_dir()
         vault_entries = feedback_vault.Vault(os.path.join(private_root, "vault.json")).entries() if private_root else []
     except Exception:
         vault_entries = []

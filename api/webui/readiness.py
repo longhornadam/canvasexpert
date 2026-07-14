@@ -60,7 +60,7 @@ def _probe_privacy() -> dict:
     root = workspace.workspace_root()
     if not root:
         return _component("unconfigured", "unconfigured")
-    system = os.path.join(root, "FeedbackExpert", "_system")
+    system = workspace.system_root()
     probe_path = None
     try:
         os.makedirs(system, exist_ok=True)

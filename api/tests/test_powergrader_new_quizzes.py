@@ -31,6 +31,48 @@ class _Session:
         return self.gets.pop(0)
 
 
+class _NativeResponse:
+    def __init__(self, status=200, payload=None, text=""):
+        self.status_code = status
+        self.payload = payload
+        self.text = text
+        self.url = ""
+    def json(self):
+        return self.payload
+
+
+class _NativeSession:
+    def __init__(self):
+        self.cookies = {}
+        self.calls = []
+    def get(self, url, **kwargs):
+        self.calls.append(("GET", url, kwargs))
+        if "sessionless_launch" in url:
+            return _NativeResponse(payload={"url": "https://canvas.invalid/new-quiz-launch"})
+        if url.endswith("new-quiz-launch"):
+            env = {"NEW_QUIZZES": {"params": {"backend_url": "https://nq.invalid", "resource": "x"},
+                                  "signature": "signature"}, "ACCOUNT_ID": "account"}
+            return _NativeResponse(text=f"<script>ENV = {__import__('json').dumps(env)};</script>")
+        if "/participants" in url:
+            return _NativeResponse(payload=[{"canvas_user_id": "fake-user", "participant_sessions": [{"id": "ps-1"}]}])
+        if "/participant_sessions/ps-1/results" in url:
+            return _NativeResponse(payload={"quiz_host": "https://quiz.invalid", "result_token": "raw-signature", "quiz_session_id": "qs-1"})
+        if url.endswith("/api/quiz_sessions/qs-1"):
+            return _NativeResponse(payload={"authoritative_result": {"id": "ar-1", "attempt": 2}})
+        if "session_item_results" in url:
+            return _NativeResponse(payload=[{"item_id": "file-item", "scored_data": {"value": [
+                {"id": "file-1", "name": "answer.png", "size": 4, "url": "https://signed.invalid/one"}
+            ]}}])
+        raise AssertionError(f"unexpected native GET {url}")
+    def post(self, url, **kwargs):
+        self.calls.append(("POST", url, kwargs))
+        if "/api/v1/jwts" in url:
+            return _NativeResponse(payload={"token": "workflow-jwt"})
+        if url.endswith("/api/native/launch"):
+            return _NativeResponse(payload={"access_token": "native-token", "entry_path": {"resourceId": "resource"}})
+        raise AssertionError(f"unexpected native POST {url}")
+
+
 def test_normalize_uses_nested_entry_id_and_latest_attempt_safe_text(tmp_path):
     core = [{"user_id": "fake-01", "submitted_at": "2026-01-02T00:00:00Z", "score": 4,
              "late": True, "seconds_late": 60, "user": {"name": "Fictional Student"}}]
@@ -42,7 +84,11 @@ def test_normalize_uses_nested_entry_id_and_latest_attempt_safe_text(tmp_path):
     subs = nq.normalize(core, rows, items)
     assert subs[0]["new_quiz_attempt"] == 2
     assert "latest answer" in subs[0]["new_quiz_items"][0]["raw_html_answer"]
-    assert subs[0]["new_quiz_items"][1]["files"] == [{"filename": "fictional.pdf"}]
+    file_placeholder = subs[0]["new_quiz_items"][1]["files"][0]
+    assert file_placeholder["filename"] == "fictional.pdf"
+    assert file_placeholder["download_status"] == "pending"
+    assert "url" not in file_placeholder
+    assert subs[0]["attachments"][0]["item_id"] == "nested-file"
     vault = Vault(str(tmp_path / "vault.json"))
     bundle = pseudonymize_submissions(subs, vault, "Fictional Quiz")
     responses = bundle["students"][0]["responses"]
@@ -118,3 +164,31 @@ def test_new_quiz_server_gates_block_push_and_late_watch_without_canvas():
     assert payload["code"] == "canvas_writeback_unsupported"
     late = build_late_watch_state(mode="assisted", watch_late="true", has_openrouter_key=True, initial_missing_user_ids=[], submitted_user_ids=[], response_kind="scr", new_quiz_snapshot=True)
     assert late["supported"] is False and "immutable snapshots" in late["reason"]
+
+
+def test_native_file_transport_joins_same_attempt_and_drops_signed_url(tmp_path, monkeypatch):
+    monkeypatch.setattr(nq.workspace, "workspace_root", lambda: str(tmp_path))
+    session = _NativeSession()
+    target = {
+        "user_id": "fake-user", "user": {"name": "Fictional Student"},
+        "assignment": {"name": "Synthetic Upload"}, "new_quiz_attempt": 2,
+        "new_quiz_items": [{"item_id": "file-item", "files": [{"filename": "answer.png"}]}],
+        "attachments": [],
+    }
+
+    def fake_download(url, dest, *, declared_size=None):
+        assert url.startswith("https://")
+        Path(dest).write_bytes(b"data")
+        return {"actual_size": 4}
+
+    count, error = nq._native_file_transport(
+        session, "https://canvas.invalid", {"Authorization": "Bearer synthetic"},
+        "course-1", "assignment-1", [target], session_id="session-1", download=fake_download,
+    )
+    assert error is None and count == 1
+    blob = __import__('json').dumps(target)
+    assert "signed.invalid" not in blob
+    file_meta = target["attachments"][0]
+    assert file_meta["item_id"] == "file-item"
+    assert file_meta["attempt"] == 2
+    assert Path(file_meta["local_path"]).exists()

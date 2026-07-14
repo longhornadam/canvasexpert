@@ -218,15 +218,30 @@
       });
     }
 
-    var nonTextAtts = (st.attachments || []).filter(function(a){
-      var ext = (a.filename || '').split('.').pop().toLowerCase();
-      return ['py','html','htm','css','js','txt','md','json','csv'].indexOf(ext) === -1;
-    });
-    if (nonTextAtts.length) {
-      subHtml += '<div class="pg-sub-section"><div class="pg-sub-label">Attachments</div>' +
+    var allAtts = st.attachments || [];
+    if (allAtts.length) {
+      subHtml += '<div class="pg-sub-section"><div class="pg-sub-label">Attachments and evidence status</div>' +
         '<ul class="pg-att-list">' +
-        nonTextAtts.map(function(a){ return '<li>📎 ' + esc(a.filename) + (a.size ? ' (' + Math.round(a.size/1024) + ' KB)' : '') + '</li>'; }).join('') +
-        '</ul></div>';
+        allAtts.map(function(a){
+          var status = a.download_status === 'downloaded'
+            ? (a.extraction_status === 'extracted' || a.extraction_status === 'validated' ? ' · AI-ready locally' : ' · held locally')
+            : (a.download_status ? ' · ' + a.download_status : ' · local review needed');
+          var open = a.local_path
+            ? ' <button type="button" class="small" data-open-path="' + esc(a.local_path) + '">Open file</button>'
+            : '';
+          var size = a.actual_size || a.size || a.declared_size;
+          return '<li>📎 ' + esc(a.filename || 'attachment') + (size ? ' (' + Math.round(size/1024) + ' KB)' : '') + esc(status) + open + '</li>';
+        }).join('') +
+        '</ul>' +
+        (st.attachment_eligibility && st.attachment_eligibility.held
+          ? '<p class="pg-no-text">Held from automated scoring: ' + esc((st.attachment_eligibility.reasons || []).join('; ')) + '</p>' : '') +
+        '</div>';
+    }
+    if (st.new_quiz_files_error) {
+      subHtml += '<div class="pg-sub-section"><p class="pg-no-text">New Quiz upload retrieval is unavailable; written responses remain available. ' + esc(st.new_quiz_files_error.message || '') + '</p></div>';
+    }
+    if (st.ai_scoring_error) {
+      subHtml += '<div class="pg-sub-section"><p class="pg-no-text">AI draft unavailable; manual grading is required.</p></div>';
     }
 
     subPane.innerHTML = subHtml;

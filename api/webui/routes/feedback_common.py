@@ -22,7 +22,8 @@ def budget_error_message(budget: dict) -> str:
 
 
 def vault():
-    return feedback_vault.Vault(os.path.join(workspace.feedback_folder("_vault"), "vault.json"))
+    root = workspace.identity_vault_dir() or workspace.feedback_folder("_vault")
+    return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
 
 
 def ai_ta_name():
@@ -55,7 +56,7 @@ def load_rubric_text(rubric_name):
 
 def audit(entry: dict):
     """Append a content-free provenance line to _audit/audit.log."""
-    path = os.path.join(workspace.feedback_folder("_audit") or ".", "audit.log")
+    path = os.path.join(workspace.audits_dir() or workspace.feedback_folder("_audit") or ".", "audit.log")
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         entry = {"ts": datetime.now().isoformat(timespec="seconds"), **entry}
@@ -66,7 +67,15 @@ def audit(entry: dict):
 
 
 def bundle_paths():
-    forllm = workspace.feedback_folder("2_ForLLM")
-    if not forllm or not os.path.isdir(forllm):
-        return []
-    return sorted(glob.glob(os.path.join(forllm, "*__bundle.json")))
+    roots = []
+    legacy = workspace.feedback_legacy_folder("2_ForLLM")
+    if legacy:
+        roots.append(legacy)
+    canonical = workspace.ai_packets_root()
+    if canonical:
+        roots.append(canonical)
+    paths = []
+    for root in roots:
+        if os.path.isdir(root):
+            paths.extend(glob.glob(os.path.join(root, "**", "*__bundle.json"), recursive=True))
+    return sorted(set(paths))

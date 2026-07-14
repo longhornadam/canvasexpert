@@ -29,6 +29,7 @@ from .canvas import (
 # --- bookmarked courses ---
 from .courses import (
     saved_courses, active_courses,
+    course_display_name,
     set_course_active, bookmark_course, remove_course,
 )
 

@@ -224,9 +224,19 @@ def pg_start(
         return JSONResponse({"ok": False, "error": "No workspace configured — finish setup first."})
     mode = normalize_mode(mode)
     session_id = str(uuid.uuid4())
+    course_name = config.course_display_name(course_id)
 
     # Fetch submissions
-    subs, adata, err = canvas_fetch.fetch_submissions(course_id, assignment_id)
+    try:
+        subs, adata, err = canvas_fetch.fetch_submissions(
+            course_id, assignment_id, session_id=session_id,
+        )
+    except TypeError as exc:
+        # Keep narrow compatibility with external/test fetch adapters that
+        # still expose the pre-session_id two-argument seam.
+        if "session_id" not in str(exc):
+            raise
+        subs, adata, err = canvas_fetch.fetch_submissions(course_id, assignment_id)
     if err:
         return JSONResponse({"ok": False, "error": err, "privacy_steps": []})
     if not subs:
@@ -236,6 +246,7 @@ def pg_start(
     assignment_name = adata.get("name") or assignment_id
     assignment_description = html_to_text(adata.get("description") or "")
     points_possible = float(adata.get("points_possible") or 100)
+    is_new_quiz = adata.get("is_quiz_lti_assignment") is True
 
     submitted = [
         s for s in subs
@@ -249,7 +260,13 @@ def pg_start(
     submitted_user_ids = sorted({str(s.get("user_id", "")) for s in submitted if s.get("user_id")})
 
     if not is_new_quiz:
-        canvas_fetch.enrich_with_code_files(submitted)
+        canvas_fetch.ingest_ordinary_attachments(
+            submitted,
+            course_name=course_name,
+            course_id=course_id,
+            assignment_name=assignment_name,
+            assignment_id=assignment_id,
+        )
 
     selected_model = (model_id or "").strip() or config.get_openrouter_model()
     late_watch = build_late_watch_state(
@@ -269,6 +286,7 @@ def pg_start(
         assignment_name=assignment_name,
         assignment_description=assignment_description,
         course_id=course_id,
+        course_name=course_name,
         assignment_id=assignment_id,
         session_id=session_id,
         rubric_name=rubric_name,
@@ -302,6 +320,7 @@ def pg_start(
     students = session_builder.build_students(
         submitted=submitted,
         ai_by_uid=ai_by_uid,
+        ai_failures=ai_result.get("ai_failures") or {},
         roster_settings=roster_settings,
         tier_map=tier_map,
         monitored=monitored,

@@ -144,13 +144,24 @@ def ai_expert_page(request: Request):
 
 @router.get("/feedback-expert", response_class=HTMLResponse)
 def feedback_expert_page(request: Request):
-    fb = workspace.feedback_root()
+    fb = workspace.workspace_root()
     folders = {}
     if fb:
-        folders = {k: workspace.feedback_folder(v) for k, v in {
-            "inbox": "1_Inbox", "forllm": "2_ForLLM",
-            "fromllm": "3_FromLLM", "toenter": "4_ToEnter",
-            "safe": "SAFE", "private": "PRIVATE", "system": "_system"}.items()}
+        folders = {
+            "inbox": workspace.courses_root(),
+            "forllm": workspace.ai_packets_root(),
+            "fromllm": workspace.ai_packets_root(),
+            "toenter": workspace.courses_root(),
+            "safe": workspace.ai_packets_root(),
+            "private": workspace.courses_root(),
+            "system": workspace.system_root(),
+        }
+        legacy = workspace.feedback_root()
+        if legacy:
+            folders.update({k: workspace.feedback_folder(v) for k, v in {
+                "inbox": "1_Inbox", "forllm": "2_ForLLM", "fromllm": "3_FromLLM",
+                "toenter": "4_ToEnter", "safe": "SAFE", "private": "PRIVATE",
+                "system": "_system"}.items()})
     return templates.TemplateResponse(request, "feedback_expert.html", {
         "nav_section":   "grade",
         "persona":       config.get_ai_ta_persona(),
@@ -264,6 +275,9 @@ def settings_page(request: Request):
             {"name": "Pages", "path": workspace.folder("Pages")},
             {"name": "Exports", "path": workspace.folder("Exports")},
             {"name": "Source Materials", "path": workspace.folder("Source Materials")},
+            {"name": "Courses (PRIVATE)", "path": workspace.courses_root()},
+            {"name": "AI Packets (review before sharing)", "path": workspace.ai_packets_root()},
+            {"name": "_System (PRIVATE)", "path": workspace.system_root()},
         ],
         "computer_name": os.environ.get("COMPUTERNAME", "this PC"),
         "tier_tags": config.get_tier_tags(),

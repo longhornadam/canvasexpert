@@ -19,6 +19,7 @@ def run_ai_workflow(
     assignment_name: str,
     assignment_description: str,
     course_id: str,
+    course_name: str = "",
     assignment_id: str,
     session_id: str,
     rubric_name: str,
@@ -40,6 +41,7 @@ def run_ai_workflow(
     privacy_steps: list[dict] = []
     privacy_artifacts: dict = {}
     ai_by_uid: dict = {}
+    ai_failures: dict = {}
     budget_result = None
     debug_path = None
     copilot_info = None
@@ -56,6 +58,7 @@ def run_ai_workflow(
             privacy_steps=privacy_steps,
             privacy_artifacts=privacy_artifacts,
             ai_by_uid=ai_by_uid,
+            ai_failures=ai_failures,
             source_context=source_context,
         )
 
@@ -69,6 +72,7 @@ def run_ai_workflow(
             privacy_steps=privacy_steps,
             privacy_artifacts=privacy_artifacts,
             ai_by_uid=ai_by_uid,
+            ai_failures=ai_failures,
             source_context=source_context,
         )
 
@@ -134,7 +138,13 @@ def run_ai_workflow(
         fb_pattern = patterns[0] if patterns else None
         model = selected_model
 
-        safe_dir, private_dir = privacy.feedback_artifact_dirs()
+        safe_dir, private_dir = privacy.feedback_artifact_dirs(
+            course_name=course_name or course_id,
+            course_id=course_id,
+            assignment_name=artifact_name,
+            assignment_id=assignment_id,
+            mode=mode,
+        )
         if not safe_dir or not private_dir:
             privacy_steps.append(privacy.privacy_step(
                 "safe_private", "Wrote Safe AI Packet and Private decoder artifacts", "failed",
@@ -329,15 +339,61 @@ def run_ai_workflow(
             ))
 
             try:
-                results = orc.score(
-                    llm_bundle, rubric_text, persona,
-                    api_key=config.get_openrouter_key(),
-                    model=model,
-                    feedback_pattern=fb_pattern,
-                )
+                all_students = list(llm_bundle.get("students") or [])
+                media_students = [
+                    student for student in all_students
+                    if any(response.get("media") for response in student.get("responses") or [])
+                ]
+                media_pseudonyms = {str(student.get("pseudonym") or "") for student in media_students}
+                text_students = [
+                    student for student in all_students
+                    if str(student.get("pseudonym") or "") not in media_pseudonyms
+                ]
+                results = []
+                isolated_failures: list[tuple[str, Exception]] = []
+                if text_students:
+                    text_bundle = {**llm_bundle, "students": text_students}
+                    try:
+                        results.extend(orc.score(
+                            text_bundle, rubric_text, persona,
+                            api_key=config.get_openrouter_key(), model=model,
+                            feedback_pattern=fb_pattern,
+                            model_metadata=budget_result.get("model_metadata"),
+                        ))
+                    except Exception as exc:
+                        if not media_students:
+                            raise
+                        for student in text_students:
+                            isolated_failures.append((str(student.get("pseudonym") or ""), exc))
+                # Keep each media-bearing request isolated so an image or
+                # provider failure cannot associate evidence with another
+                # pseudonym or discard the rest of the class.
+                for student in media_students:
+                    one_student_bundle = {**llm_bundle, "students": [student]}
+                    try:
+                        results.extend(orc.score(
+                            one_student_bundle, rubric_text, persona,
+                            api_key=config.get_openrouter_key(), model=model,
+                            feedback_pattern=fb_pattern,
+                            model_metadata=budget_result.get("model_metadata"),
+                        ))
+                    except Exception as exc:
+                        isolated_failures.append((str(student.get("pseudonym") or ""), exc))
+
+                for pseudonym, _exc in isolated_failures:
+                    who = vault.reverse(pseudonym)
+                    if who and who.get("canvas_id"):
+                        ai_failures[str(who["canvas_id"])] = ai_workflow_support.AI_MANUAL_REVIEW_MESSAGE
+
+                if not results and isolated_failures:
+                    raise isolated_failures[-1][1]
+
+                requested = len(all_students)
+                successful = len({str(row.get("pseudonym") or "") for row in results if row.get("pseudonym")})
+                failed = len({pseudo for pseudo, _ in isolated_failures if pseudo})
                 privacy_steps.append(privacy.privacy_step(
                     "llm_send", "Sent only the Safe AI Packet to OpenRouter", "ok",
-                    f"{safe_students} pseudonymized student bundle(s) sent; real names were not included.",
+                    f"Requested {requested} pseudonymized student(s); {successful} returned AI drafts and {failed} need manual review. Real names were not included.",
                 ))
                 rows = fp.reidentify(results, vault)
                 unresolved = sum(1 for row in rows if not row.get("resolved"))
@@ -349,6 +405,11 @@ def run_ai_workflow(
                     ),
                 ))
                 ai_by_uid = {row["canvas_id"]: row for row in rows if row.get("resolved")}
+                if ai_failures:
+                    privacy_steps.append(privacy.privacy_step(
+                        "ai_manual_review", "Marked isolated AI failures for teacher review", "warn",
+                        f"{len(ai_failures)} student(s) received no AI draft; manual grading is required.",
+                    ))
             except Exception as e:
                 debug_path = privacy.write_openrouter_debug_file(
                     private_dir,
@@ -375,6 +436,7 @@ def run_ai_workflow(
                     privacy_steps=privacy_steps,
                     privacy_artifacts=privacy_artifacts,
                     ai_by_uid=ai_by_uid,
+                    ai_failures=ai_failures,
                     budget=budget_result,
                     debug_path=debug_path,
                     copilot_packet=copilot_info,
@@ -386,6 +448,7 @@ def run_ai_workflow(
         privacy_steps=privacy_steps,
         privacy_artifacts=privacy_artifacts,
         ai_by_uid=ai_by_uid,
+        ai_failures=ai_failures,
         packet_zip=privacy_artifacts.get("packet_zip"),
         budget=budget_result,
         debug_path=debug_path,

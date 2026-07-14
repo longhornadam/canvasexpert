@@ -287,7 +287,7 @@ file requests one, a student explainer page.
 ### Download Work tab
 Downloads student work from the **focused** course. Load assignments, filter by
 type and due-date range (All / Fall / Spring / 30d / 90d presets), select, download
-to a local folder tree: `by_assignment/<Asgn>/...`, `by_student/<Student>/...`,
+to a canonical course-first folder tree: `Courses/<Course>/Assignments/<Assignment>/Student Work/<Student>/Attempt <n>/`,
 `_index.csv` per assignment, `_portfolio.csv` per student. Files are named
 `<Asgn> - <F Last>.html`, `<Asgn> - <F Last> - URL.txt`, or
 `<Asgn> - <F Last> - <original file>`.
@@ -398,7 +398,9 @@ Modes:
 
 - **Grade Myself** — fetches submitted work and opens the queue with no AI packet
   or API call.
-- **Use My AI Chat** — writes local SAFE and PRIVATE artifacts, keeps the legacy
+- **Use My AI Chat** — writes reviewed pseudonymized artifacts under `AI Packets
+  (Pseudonymized)/` and private originals/state under the canonical workspace,
+  keeps the legacy
   Safe AI Packet ZIP, and also creates Copilot-friendly batch folders. Each batch
   folder has exactly three numbered upload files: assignment information, rubric
   and TA personality, and that batch's pseudonymized student work. Teachers start
@@ -414,9 +416,10 @@ against the selected batch before updating AI suggestions, so a response from on
 batch cannot silently update another batch. AI suggestions remain drafts until the
 teacher reviews, edits, approves, and pushes.
 
-Safety wording is practical rather than absolute: SAFE files use pseudonyms and
-remove obvious student identifiers before upload, but teachers should review the
-files before sending them to any external chat tool.
+Safety wording is practical rather than absolute: pseudonymized files use synthetic
+names and remove obvious identifiers before upload, but visible content can still
+identify a student. Teachers should review every file before sending it to an
+external chat tool.
 
 ---
 

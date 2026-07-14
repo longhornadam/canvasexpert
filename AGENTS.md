@@ -84,8 +84,10 @@ is split under `api/webui/routes/feedback_*.py`; the pipeline facade
 the **Feedback Scoring Contract** (`docs/contracts/feedback-scoring-contract.md`):
 any scoring tool emits LLM-agnostic JSON, Canvas Expert validates it, re-identifies
 through the local vault, and lets the teacher review before `PUT` grade/comment calls.
-Workspace layout is under `<workspace>/FeedbackExpert/` with SAFE, PRIVATE, and
-system/vault zones. New Quizzes item-level write-back remains blocked by Canvas PAT
+Workspace layout is under `<workspace>/Courses/`, `<workspace>/AI Packets
+(Pseudonymized)/`, `<workspace>/Student Reports/`, and `<workspace>/_System/`.
+`FeedbackExpert/` is a compatibility-read location only; new writes use the
+canonical roots. New Quizzes item-level write-back remains blocked by Canvas PAT
 limitations; scores can still be read where the normal Submissions API exposes them.
 For low-token debugging and file ownership, start with
 `docs/reference/feedbackexpert-module-map.md`.
@@ -132,7 +134,8 @@ receipt capture, and it may only push AI-generated results for eligible students
 Blocked, uncertain, unsupported, or otherwise review-needed cases stay in the review
 path. Local-only, FERPA, and secret-handling guardrails remain unchanged.
 
-PowerGrader sessions are stored under `<workspace>/PowerGrader/`. They are PRIVATE:
+PowerGrader sessions are stored under `<workspace>/_System/PowerGrader/Sessions/`
+and jobs under `_System/PowerGrader/Jobs/`. They are PRIVATE:
 real names, submission content, grades, and teacher comments must never be committed.
 AI suggestions are drafts until the teacher reviews, edits, approves, and pushes,
 except for the narrow scheduled auto-push path above where the teacher has explicitly

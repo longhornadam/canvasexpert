@@ -139,7 +139,7 @@ def test_scheduled_autoscore_creates_draft_session_without_canvas_writeback(monk
         "due_at": "2026-06-28T23:59:00-05:00",
         "points_possible": 10,
     }, None))
-    monkeypatch.setattr(routines.canvas_fetch, "enrich_with_code_files", lambda subs: None)
+    monkeypatch.setattr(routines.canvas_fetch, "ingest_ordinary_attachments", lambda subs, **kwargs: subs)
     monkeypatch.setattr(routines, "_canvas_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("scheduled autoscore must not write grades/comments")))
     monkeypatch.setattr(routines.autopush_executor, "run_autopush_for_session", lambda **kwargs: (_ for _ in ()).throw(AssertionError("draft-only autoscore must not invoke autopush executor")))
 
@@ -215,7 +215,7 @@ def test_scheduled_autoscore_runs_autopush_when_enabled(monkeypatch):
         "due_at": "2026-06-28T23:59:00-05:00",
         "points_possible": 10,
     }, None))
-    monkeypatch.setattr(routines.canvas_fetch, "enrich_with_code_files", lambda subs: None)
+    monkeypatch.setattr(routines.canvas_fetch, "ingest_ordinary_attachments", lambda subs, **kwargs: subs)
     monkeypatch.setattr(routines, "_canvas_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("scheduled autoscore must not write grades/comments directly")))
 
     def fake_run_autopush_for_session(**kwargs):
@@ -311,7 +311,13 @@ def test_scheduled_autoscore_runs_autopush_for_existing_session(monkeypatch):
         "due_at": "2026-06-28T23:59:00-05:00",
         "points_possible": 10,
     }, None))
-    monkeypatch.setattr(routines.canvas_fetch, "enrich_with_code_files", lambda subs: None)
+    monkeypatch.setattr(
+        routines.canvas_fetch,
+        "ingest_ordinary_attachments",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("existing scheduled sessions must not re-ingest ordinary attachments")
+        ),
+    )
     monkeypatch.setattr(routines.session_store, "load_session", lambda session_id: existing_session if session_id == "existing-session" else None)
     monkeypatch.setattr(routines.session_store, "save_session", lambda session: None)
     monkeypatch.setattr(routines.ai_workflow, "run_ai_workflow", lambda **kwargs: (_ for _ in ()).throw(AssertionError("existing sessions should not be rescored")))
