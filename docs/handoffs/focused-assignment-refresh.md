@@ -171,12 +171,12 @@ senior. Do not leave the only copy of execution state or test evidence in chat.
 ### Execution result
 
 - Traffic light: **GREEN**
-- Commit hash: `c3b56cc` (amended below to include this execution result)
+- Commit hash: `c3b56cc` implementation; `d9d4ca7` canonical-course-folder reuse repair (this record follows in a closure commit)
 - Files changed: `api/powergrader/assignment_refresh.py`, `canvas_fetch.py`,
   `new_quiz_fetch.py`, `session_builder.py`, `start_workflow.py`,
   `api/webui/workspace.py`, `api/webui/routes/powergrader.py`,
   `powergrader_helpers.py`, focused attachment/workspace tests, and the PowerGrader module map.
-- Verification: `py -m compileall -q api/powergrader api/webui` passed; focused attachment/New Quiz/workspace suite passed **35** tests; packet/Copilot/import/route-contract suite passed **14** tests; `git diff --check` passed.  `GET /powergrader` returned **200** from the local app.
+- Verification: `py -m compileall -q api/powergrader api/webui` passed; focused attachment/New Quiz/workspace suite passed **36** tests, including a two-refresh saved-course-folder reuse regression; packet/Copilot/import/route-contract suite passed **14** tests; `git diff --check` passed.  `GET /powergrader` returned **200** from the local app.
 - Rendered route: `/powergrader` setup rendered successfully in the local browser with zero console errors. No real course or assignment was selected, started, logged, or persisted; no real student evidence was used.
 - Deviations: none in implementation scope. The managed evidence directory uses the immutable assignment ID as its readable component so it can be located before and after the authoritative assignment title response.
 - Remaining blocker or decision: none.
