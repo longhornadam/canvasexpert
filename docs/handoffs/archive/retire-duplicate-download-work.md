@@ -1,6 +1,6 @@
 # Execution brief: retire duplicate Download Work acquisition
 
-Status: **ready for implementation**
+Status: **completed — GREEN accepted 2026-07-14**
 
 Risk: **high**
 
