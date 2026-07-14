@@ -92,7 +92,6 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
     if error:
         return None, None, {"error": error}
     assignment = assignment or {}
-    course_name = str(assignment.get("course_name") or course_id)
     assignment_name = str(assignment.get("name") or assignment_id)
     conflicts = workspace.assignment_evidence_conflicts(course_name, course_id, evidence_assignment_name, assignment_id, root)
     if not assignment.get("is_quiz_lti_assignment"):

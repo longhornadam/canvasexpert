@@ -19,6 +19,7 @@ from api.powergrader import new_quiz_fetch as nq
 from api.powergrader import session_builder
 from api.powergrader import student_attachments
 from api.powergrader.assignment_refresh import RefreshBudget, REFRESH_BINARY_LIMIT
+from api.powergrader import assignment_refresh
 from api.webui.config import courses
 
 
@@ -42,7 +43,7 @@ def test_course_display_name_prefers_saved_nickname(monkeypatch):
 
 
 def test_ordinary_ingestion_preserves_all_formats_and_routes_shared_gate(tmp_path, monkeypatch):
-    monkeypatch.setattr(canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    monkeypatch.setattr(assignment_refresh.canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
     monkeypatch.setattr(canvas_fetch.workspace, "workspace_root", lambda: str(tmp_path))
 
     payloads = {
@@ -167,6 +168,40 @@ def test_focused_refresh_budget_has_exact_ten_mib_boundary():
     budget = RefreshBudget()
     assert budget.reserve(REFRESH_BINARY_LIMIT) is True
     assert budget.reserve(1) is False
+
+
+def test_second_focused_refresh_reuses_manifest_in_saved_course_folder(tmp_path, monkeypatch):
+    """The Canvas response name must not redirect a second refresh to a new folder."""
+    try:
+        from webui import config as refresh_config
+    except ModuleNotFoundError:
+        from api.webui import config as refresh_config
+    monkeypatch.setattr(assignment_refresh.workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(refresh_config, "course_display_name", lambda _course_id: "Saved Course")
+    monkeypatch.setattr(canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    calls = []
+    def fake_fetch(*_args, **_kwargs):
+        return ([{"id": "submission-1", "user_id": "user-1", "attempt": 1,
+                  "user": {"name": "Fictional Student"}, "attachments": [{
+                      "id": "file-1", "filename": "answer.txt", "size": 4,
+                      "url": "https://canvas.test/file-1",
+                  }]}], {"name": "Essay", "course_name": "Different Canvas Course"}, None)
+    def fake_download(_url, destination, **_kwargs):
+        calls.append(destination)
+        Path(destination).parent.mkdir(parents=True, exist_ok=True)
+        Path(destination).write_bytes(b"work")
+        return {"actual_size": 4, "declared_size": 4}
+    monkeypatch.setattr(assignment_refresh.canvas_fetch, "fetch_submissions", fake_fetch)
+    monkeypatch.setattr(assignment_refresh.canvas_fetch, "_download_canvas_attachment", fake_download)
+
+    first_subs, _, first = assignment_refresh.refresh_assignment("course-1", "assignment-1", session_id="first")
+    second_subs, _, second = assignment_refresh.refresh_assignment("course-1", "assignment-1", session_id="second")
+
+    assert first["status"] == second["status"] == "current"
+    assert "Saved Course" in first["manifest_path"]
+    assert first_subs[0]["attachments"][0]["download_status"] == "downloaded"
+    assert second_subs[0]["attachments"][0]["download_status"] == "reused"
+    assert len(calls) == 1
 
 
 class _DownloadResponse:
