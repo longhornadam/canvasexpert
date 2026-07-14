@@ -1,6 +1,6 @@
 # Execution brief: focused assignment refresh owns shared local evidence
 
-Status: **ready for implementation**
+Status: **completed — GREEN accepted 2026-07-14**
 
 Risk: **high**
 
