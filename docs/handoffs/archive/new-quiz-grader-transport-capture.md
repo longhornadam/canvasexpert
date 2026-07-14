@@ -1,6 +1,16 @@
 # Execution brief: capture the New Quiz grader transport safely
 
-Status: **ready for implementation**
+Status: **superseded 2026-07-14 — archived**
+
+> Superseded by `docs/handoffs/new-quiz-item-finalization-v2.md`. The RED blocker below is
+> stale: the sessionless native launch chain was live-verified the same day (participants →
+> participant-session results → quiz session → `session_item_results` read, with the
+> `quiz_api_quiz_session_id` shape normalized in `new_quiz_fetch._resolve_native_candidate`).
+> The only transport question still open is whether the write POST accepts the
+> sessionless-launch result credential; the v2 brief carries that forward as its Phase A
+> with these same capture safety rules.
+
+Original status: **ready for implementation**
 
 Risk: **high**
 

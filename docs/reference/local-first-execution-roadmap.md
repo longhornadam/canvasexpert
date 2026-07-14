@@ -9,18 +9,27 @@ architecture or infer which subsystem should move first.
 
 ## Execution protocol
 
-- Run exactly **one Luna executor at a time**.
-- Before each batch, Sol creates or revises the single active brief in `docs/handoffs/`
-  using `HANDOFF_TEMPLATE.md`, resolving that batch's named decision gate and current exact
-  symbols. This roadmap is not handed to Luna as a substitute for an execution brief.
-- Luna reads `AGENTS.md`, that one active brief, and only the references routed by it.
-- Luna implements the complete batch, self-reviews, records the traffic-light result in the
-  brief, and commits on `dev` when authorized.
-- GREEN permits Sol to inspect the returned summary and risk seams, close/archive the brief
-  in the same batch, and prepare the next brief. YELLOW returns to the same Luna with narrow
-  direction. RED returns to Sol and stops the sequence.
+Updated 2026-07-14: implementation moves to an external senior-tier executor (Codex,
+Terra/Sol class). The batch names below keep their historical "Luna N" labels for
+continuity; they do not imply a Luna-tier executor.
+
+- Run exactly **one implementation executor at a time**, regardless of tier.
+- Before each batch, the senior (Claude, orchestrator role) creates or revises the single
+  active brief in `docs/handoffs/` using `HANDOFF_TEMPLATE.md`, resolving that batch's named
+  decision gate and current exact symbols. This roadmap is never handed to an executor as a
+  substitute for an execution brief.
+- The executor reads `AGENTS.md`, that one active brief, and only the references routed by
+  it. A senior-tier executor does not expand scope, renegotiate locked decisions, or relax
+  stop conditions — extra capability goes into implementation quality and self-review, not
+  authority.
+- The executor implements the complete batch, self-reviews against the brief's locked
+  decisions, records the traffic-light result in the brief, and commits on `dev` when
+  authorized.
+- GREEN permits the senior to inspect the returned summary and risk seams, close/archive the
+  brief in the same batch, and prepare the next brief. YELLOW returns to the same executor
+  with narrow direction. RED returns to the senior and stops the sequence.
 - Do not run a second planner, parallel implementers, or an automatic reviewer. Do not start
-  the next Luna while the prior brief, diff, verification, or decision remains unresolved.
+  the next batch while the prior brief, diff, verification, or decision remains unresolved.
 - Each batch must leave current docs and module maps truthful. There is no separate cleanup
   or documentation-only executor at the end.
 
@@ -148,12 +157,17 @@ Expected verification seam:
 Stop if an existing Download Work caller needs behavior the focused owner cannot provide
 without broadening the persistence contract.
 
-## Luna 3 — New Quiz item review and teacher finalization in PowerGrader **(transport capture in progress 2026-07-14)**
+## Luna 3 — New Quiz item review and teacher finalization in PowerGrader **(ACTIVE — brief ready 2026-07-14)**
 
-Archived RED record: `docs/handoffs/archive/new-quiz-item-finalization.md`. The sole active
-capture is `docs/handoffs/new-quiz-grader-transport-capture.md`. Do not resume production work
-until it yields a de-identified executable contract or synthetic fixture; the existing native
-file-read transport is not authorization to guess the write chain.
+Active brief: `docs/handoffs/new-quiz-item-finalization-v2.md` (Phase A closes the one open
+write-credential question under the archived capture rules; Phase B implements the adapter
+and per-item finalization UI). Archived RED records:
+`docs/handoffs/archive/new-quiz-item-finalization.md` and
+`docs/handoffs/archive/new-quiz-grader-transport-capture.md` — their blockers are stale:
+the sessionless native read chain is live-verified (commit `7fb63b9`), the
+`quiz_api_quiz_session_id` shape is normalized, and interim lanes shipped the same day
+(per-item AI drafts merged per student, comment-only assignment-level feedback push,
+upload-text AI payload policy).
 
 Depends on: **Luna 1 GREEN** and the mixed-item decision gate.
 
