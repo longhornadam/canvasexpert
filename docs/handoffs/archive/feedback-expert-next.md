@@ -1,5 +1,11 @@
 # Handoff: FeedbackExpert — Phase B done, Phase C is next
 
+> **Historical capability correction (2026-07-14):** Any PAT/403, API-fetch, or unavailable
+> New Quiz item-write claim below is superseded. An actively enrolled teacher can retrieve
+> New Quiz reports, and Canvas's first-party signed grader launch can write per-item scores
+> and grader feedback. Canvas Expert did not expose that transport when this handoff was
+> written. See `docs/reference/new-quizzes-grading-transport.md`.
+
 > **SUPERSEDED (2026-06-21):** the active V1 is now **`feedbackexpert-name-manager-v1.md`**
 > (SAFE/PRIVATE folders, aggressive scrub, fake-name pseudonyms, a Name Manager screen).
 > **Automated re-identification / Phase C push is parked** in favor of a PowerGrader-manual
@@ -56,8 +62,9 @@ Then a **progress bar** running the pipeline end to end:
 (the Push is Phase C — wire the button now but the actual write-back stays deferred; until then it
 can be disabled/"coming soon" or just produce the ToEnter CSV).
 
-The existing **CSV drop-folder lane stays** as the path for **New Quizzes** (which still can't be
-API-fetched) and for **"my own LLM tool"** users. The new guided flow is the automated,
+The existing **CSV drop-folder lane stays** as this historical implementation's path for
+**New Quizzes** and for **"my own LLM tool"** users. Later verification established that an
+actively enrolled teacher can API-fetch the Student Analysis report. The new guided flow is the automated,
 Assignments-first headline.
 
 ## Tasks (ordered)
@@ -192,8 +199,8 @@ proven by having an LLM (Claude) author conforming output against it.
 7. **Audit** a pseudonymous line per push into `_audit/`.
 
 **Constraints / decisions:**
-- **Assignments only.** New Quizzes write-back stays parked (PAT/403 limit, see
-  `newquizzes-pat-status` memory).
+- **Assignments only.** New Quizzes write-back stays parked as a scope/product decision in
+  this historical phase. Later verification removed the old PAT/403 capability assumption.
 - **Explicit confirmation required** — this changes real grades and notifies students. Show a
   count ("post N grades + comments to <course>?") before any PUT.
 - **Idempotency-aware** — re-running must not silently double-post; decide skip-already-graded vs

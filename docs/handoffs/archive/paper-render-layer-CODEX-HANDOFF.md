@@ -1,5 +1,10 @@
 # Ferrari handoff - Paper render layer, slices 6 & 7
 
+> **Historical capability correction (2026-07-14):** The PAT/403 New Quiz write-back claim
+> below is superseded. Canvas's actively-enrolled first-party signed grader launch can write
+> per-item scores and grader feedback. Canvas Expert did not expose that transport when this
+> handoff was written. See `docs/reference/new-quizzes-grading-transport.md`.
+
 **You are taking over as the architect ("Ferrari").** Author slices 6 and 7:
 design them as self-contained handoffs in this `docs/handoffs/` folder (match the format of the slice
 1–5 files), then you may implement them. Everything below is the context you need cold — the previous
@@ -54,8 +59,9 @@ Types: `guided_notes`, plus `cornell`/`frayer` after slice 5. `mode ∈ {blank, 
 - **Contracts are canonical.** Authoring semantics live in `LLM_Modules/*_Base.md`, never in engine code.
 - **`api/` is token-holding, local-only, FERPA-sensitive.** Binds `127.0.0.1`; never exposed. Student
   names/IDs/grades/submissions never touch the repo, fixtures, logs, or commits. Read `api/README.md`
-  before touching Canvas push logic — it records hard-won live-API facts (e.g. New Quizzes write-back is
-  parked on a PAT/403 limit). The Canvas token lives only in the OS keychain / `api/.env` (gitignored).
+before touching Canvas push logic — it records hard-won live-API facts. The historical New
+Quiz PAT/403 write-back claim was later disproved; use the canonical grading-transport
+reference. The Canvas token lives only in the OS keychain / `api/.env` (gitignored).
 - **Engines are settled:** PDF = installed Microsoft Edge via Playwright (chosen over WeasyPrint's GTK
   pain and Playwright's downloaded Chromium on district-managed PCs), DOCX = `pypandoc-binary`
   (bundled, no PATH). The app uses the standard Windows Edge install; set `CANVAS_EXPERT_EDGE_PATH`

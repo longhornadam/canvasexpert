@@ -1,5 +1,10 @@
 # PowerGrader Quiz Visibility Follow-up
 
+> **Historical capability correction (2026-07-14):** The PAT limitation recorded below is
+> superseded. Canvas's actively-enrolled first-party signed grader launch can retrieve and
+> write per-item result state. Canvas Expert did not expose that transport when this handoff
+> was written. See `docs/reference/new-quizzes-grading-transport.md`.
+
 Status: active handoff for a VS Code implementation agent.
 
 ## Goal
@@ -69,9 +74,10 @@ plain-text/code uploads:
 - `api/powergrader/autoscore_queue.py` already treats quiz-based assignments as
   unsupported for scheduled auto-score.
 
-New Quizzes item-level write-back remains blocked by Canvas PAT limitations, and
-the normal Submissions API does not provide the item-level student text that
-PowerGrader needs for grading.
+That PowerGrader version blocked New Quizzes item-level write-back, while the normal
+Submissions API did not provide the item-level student text needed for grading. Later
+verification proved that Canvas's signed first-party grader launch provides item results
+and write-back; the old block was product state, not a PAT capability limit.
 
 ## Required Behavior
 

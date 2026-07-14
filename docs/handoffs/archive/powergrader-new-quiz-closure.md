@@ -1,5 +1,10 @@
 # Execution brief: Close PowerGrader New Quiz written-response delivery
 
+> **Historical capability correction (2026-07-14):** The item-write limitation recorded
+> below was current product state, not a Canvas capability limit. Canvas's actively-enrolled
+> first-party signed grader launch can write per-item scores and grader feedback. See
+> `docs/reference/new-quizzes-grading-transport.md`.
+
 Status: **ready for implementation**
 
 Risk: **medium**
@@ -29,7 +34,8 @@ worktree changes.
   Documentation must distinguish this probe from a teacher-facing feature.
 - Correct the stale claim in `api/webui/README.md` that a PAT cannot retrieve New Quiz
   item-level responses. It can retrieve constructed responses through the enrollment-gated
-  Student Analysis JSON report; item-level **write-back** remains unavailable.
+  Student Analysis JSON report; item-level write-back was not exposed by that PowerGrader
+  version, although Canvas capability was verified later.
 - Preserve every unrelated staged, unstaged, and untracked worktree change. The broad
   workbench changes and overlapping module-map edits are not authorized for this commit.
 - Push to `origin/dev`; do not delete `dev`, merge branches, force-push, or modify `main`.

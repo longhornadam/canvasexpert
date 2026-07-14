@@ -1,5 +1,11 @@
 # Handoff: FeedbackExpert V1 — Name Manager + Scrub + SAFE/PRIVATE folders
 
+> **Historical capability correction (2026-07-14):** Any PAT/403 or unavailable
+> New Quiz item-write claim below is superseded. An actively enrolled teacher can reach
+> New Quiz reports, and Canvas's first-party signed grader launch can write per-item scores
+> and grader feedback. Canvas Expert did not expose that transport when this handoff was
+> written. See `docs/reference/new-quizzes-grading-transport.md`.
+
 > **STATUS: IMPLEMENTED (on `dev`).** This is a historical build spec, kept for context.
 > All six tasks shipped, plus **Push to Canvas** (Phase C) and **plain-text code-file scoring**
 > (the v1.1 "attachment-only excluded" deferral below was closed — `.py`/`.html`/etc. uploads
@@ -73,7 +79,8 @@ pseudonym from the start and never contain a real name to clean up.
 - `docs/contracts/feedback-scoring-contract.md`, `feedback_pipeline.validate_results`,
   `feedback_pipeline.reidentify`, and the `3_FromLLM`/ToEnter push path — **parked, keep as
   dormant code.** Don't delete; don't extend. (A future auto-push may reuse them.)
-- New Quizzes write-back (parked, PAT/403 limit).
+- New Quizzes write-back (parked in this historical implementation; later verified as
+  available through Canvas's signed first-party grader launch, not blocked by PAT type).
 
 ## Tests / run
 

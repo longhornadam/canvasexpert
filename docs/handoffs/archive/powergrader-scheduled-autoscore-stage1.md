@@ -1,5 +1,10 @@
 # PowerGrader Scheduled Auto-Score - Stage 1 Handoff
 
+> **Historical capability correction (2026-07-14):** The limited New Quiz response/write
+> language below describes the scope and product state of this old slice, not current Canvas
+> capability. Canvas's actively-enrolled first-party signed grader launch can retrieve and
+> write per-item result state. See `docs/reference/new-quizzes-grading-transport.md`.
+
 ## Goal
 
 Build the first safe implementation slice for teacher-scheduled PowerGrader
@@ -64,9 +69,9 @@ assignment id needed by the queue. Do not assume URL parsing is enough.
    has passed, the job can be marked due. If due date is removed or the assignment is
    inaccessible, mark `needs_attention`.
 6. New Quizzes should not get full auto-score support in this slice. New Quizzes are
-   Canvas/LTI quizzes, often auto-scored by Canvas, and item-level response/writeback
-   remains limited. It is acceptable to produce an explicit unsupported status for quiz
-   pushes.
+   Canvas/LTI quizzes, often auto-scored by Canvas, and this historical slice did not
+   implement the signed item response/write-back transport. It is acceptable here to
+   produce an explicit unsupported status for quiz pushes.
 
 ## Submission Factors to Respect
 

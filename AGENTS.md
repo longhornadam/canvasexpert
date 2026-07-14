@@ -87,8 +87,11 @@ through the local vault, and lets the teacher review before `PUT` grade/comment 
 Workspace layout is under `<workspace>/Courses/`, `<workspace>/AI Packets
 (Pseudonymized)/`, `<workspace>/Student Reports/`, and `<workspace>/_System/`.
 `FeedbackExpert/` is a compatibility-read location only; new writes use the
-canonical roots. New Quizzes item-level write-back remains blocked by Canvas PAT
-limitations; scores can still be read where the normal Submissions API exposes them.
+canonical roots. New Quizzes item-level score and grader-feedback writes are available
+through Canvas's actively-enrolled first-party grader launch, but current Canvas Expert
+routes still block that write-back until the high-risk reviewed transport is implemented.
+Do not describe this as a PAT limitation; see
+`docs/reference/new-quizzes-grading-transport.md`.
 For low-token debugging and file ownership, start with
 `docs/reference/feedbackexpert-module-map.md`.
 

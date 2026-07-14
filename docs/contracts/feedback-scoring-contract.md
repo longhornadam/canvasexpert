@@ -110,9 +110,12 @@ Implemented in `api/webui/routes/feedback.py` (`/api/feedback/push/preview` and
        comment[text_comment]    = <feedback>   # may include a persona signoff
    ```
 
-   Works on Assignments today (PAT in active courses). New Quizzes write-back stays parked
-   (same PAT/403 limit as the report pull). Late penalties stay in gradebook tools'
-   late-sweep, by design.
+   This ordinary Submissions API path works on Assignments today. New Quizzes require a
+   separate reviewed item-result adapter: Canvas capability is verified, but current Canvas
+   Expert write-back remains parked until that high-risk transport is implemented. It must
+   not reuse this assignment-total `PUT`; see
+   `docs/reference/new-quizzes-grading-transport.md`. Late penalties stay in gradebook
+   tools' late-sweep, by design.
 6. An audit line per push lands in `_audit/` - content-free (counts only), never names/scores.
 
 Push is explicitly confirmed because it changes real grades and notifies students. It is

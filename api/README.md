@@ -202,6 +202,15 @@ ANTHROPIC_KEY=
   PAT limitation. Use `py diagnose_newquizzes.py --course <id> [--assignment <nq_id>]`
   (see `api/diagnose_newquizzes.py`) to check any course; it reads 401 (missing scope —
   admin can grant), 403 (concluded enrollment, or missing scope), and transient 5xx apart.
+- **Per-item manual grading is also available, but not as an ordinary PAT REST call.**
+  Canvas's first-party grader uses `/login/session_token`, the signed LTI submission launch,
+  and short-lived participant/result credentials to read and write the authoritative New
+  Quiz item-result collection. A live dummy-data probe verified independent item score and
+  grader-feedback writes. Each accepted update creates a new authoritative result ID, so
+  post-write verification must re-fetch the quiz session before reading item results. This
+  transport is not documented as a stable public grading API; isolate it, fail closed on
+  drift, and fall back to SpeedGrader. See
+  `docs/reference/new-quizzes-grading-transport.md`.
 - **The Reports API (student/item analysis) is the response-content path, but the gateway
   is flaky.** `POST /api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`
   (`report_type=student_analysis|item_analysis`, `format=csv|json`) enqueues a report and
@@ -214,16 +223,18 @@ ANTHROPIC_KEY=
   Regardless of the API, the **Student Analysis CSV downloads fine from the New Quizzes UI**
   (full responses included) — the always-available manual fallback, and the only option for
   courses where your enrollment has concluded.
-- **PowerGrader New Quiz sessions are read-only snapshots.** They use the Student Analysis
-  JSON report for written responses and deliberately do not write grades or comments back
-  to Canvas or participate in late catch-up.
+- **PowerGrader New Quiz sessions are currently read-only snapshots.** They use the Student
+  Analysis JSON report for written responses, and current Canvas Expert route/session gates
+  do not yet expose item score or grader-feedback write-back. This is an implementation and
+  review-safety limit, not a Canvas PAT capability limit. New Quiz late catch-up and
+  scheduled scoring also remain unimplemented.
 - **Common Cartridge import is the zero-auth power path** (Settings → Import Course
   Content). Vanilla CC 1.x carries only the portable common subset, but a **Canvas-flavored
   export package** (CC + Canvas extensions: `canvas_export.txt`, `course_settings/*.xml`)
   presets nearly everything the UI can — module structure/prerequisites, assignment-group
   weights, due/unlock/lock dates, submission types, rubrics+associations, publish state.
   The import-time **"Convert content to New Quizzes"** checkbox upgrades Classic-QTI quizzes
-  to New Quizzes on import (creation only — unrelated to the response-pull block above).
+  to New Quizzes on import (creation only — unrelated to response acquisition or grading).
   Only roster-relational things (per-student/section overrides) genuinely need the live API.
 - Rubric `DELETE` returns a spurious 500 but still deletes.
 - **One assignment override per student per assignment** — granting a second
