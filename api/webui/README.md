@@ -318,9 +318,10 @@ packets for just this cohort, skipping courses whose data hasn't changed (dedupe
 `_manifest.json`). The private note attached to a monitored student is never rendered
 into any packet.
 
-**New Quizzes limitation:** Canvas personal access tokens cannot retrieve New Quizzes
-item-level responses. New Quiz scores still appear in the Submissions API and ARE
-reported in the Info document; only the downloadable item-level work is unavailable.
+**New Quizzes limitation:** Enrollment-gated personal access tokens can retrieve
+constructed responses through the Student Analysis JSON report. Item-level response
+downloads in Student Reports and item-level write-back remain unavailable; New Quiz
+scores still appear in the Submissions API and are reported in the Info document.
 
 ---
 
@@ -375,6 +376,11 @@ The setup page uses a wide responsive workspace with:
   rubric-only panel; AI modes show a two-column AI setup/source material layout.
 - **Course-wide search** that scans all assignments regardless of the selected
   module view, and module filtering that defaults to the last three modules.
+
+New Quizzes are selectable for written-response review in all three modes. Each
+session is a local Student Analysis JSON snapshot: file-upload entries are filename-only,
+and PowerGrader does not offer New Quiz posting, late catch-up, scheduled scoring, or
+item-level write-back. Classic Quizzes remain unavailable.
 
 After a course is selected, the assignment picker groups work by Canvas course
 module and immediately shows the final three modules in course order. The Modules

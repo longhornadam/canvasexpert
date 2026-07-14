@@ -140,6 +140,7 @@ def pg_estimate(
         return JSONResponse({"ok": False, "error": err})
     adata = adata or {}
     assignment_name = adata.get("name") or assignment_id
+    is_new_quiz = adata.get("is_quiz_lti_assignment") is True
     assignment_description = html_to_text(adata.get("description") or "")
     student_count, count_basis = estimates.assignment_student_count(adata)
 
@@ -247,7 +248,8 @@ def pg_start(
     initial_missing_user_ids = late_catchup.initial_missing_user_ids(subs or [])
     submitted_user_ids = sorted({str(s.get("user_id", "")) for s in submitted if s.get("user_id")})
 
-    canvas_fetch.enrich_with_code_files(submitted)
+    if not is_new_quiz:
+        canvas_fetch.enrich_with_code_files(submitted)
 
     selected_model = (model_id or "").strip() or config.get_openrouter_model()
     late_watch = build_late_watch_state(
@@ -257,6 +259,7 @@ def pg_start(
         initial_missing_user_ids=initial_missing_user_ids,
         submitted_user_ids=submitted_user_ids,
         response_kind=response_kind,
+        new_quiz_snapshot=is_new_quiz,
     )
 
     # AI workflow
@@ -337,6 +340,7 @@ def pg_start(
         mode_label=_mode_label(mode),
         copilot_packet=ai_result.get("copilot_packet"),
         late_watch=late_watch,
+        canvas_writeback_supported=not is_new_quiz,
     )
     _save_session(session)
 
@@ -372,6 +376,8 @@ def pg_late_watch(
     session_actions.invalidate_pending_review(session)
     if session.get("mode") != "assisted":
         return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-Score With API."})
+    if not (session.get("late_watch") or {}).get("supported"):
+        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
     late_watch = session.get("late_watch") or {}
     late_watch["enabled"] = str(enabled).lower() in {"1", "true", "yes", "on"}
     if not late_watch["enabled"]:
@@ -390,6 +396,8 @@ def pg_late_preview(session_id: str):
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     session_actions.invalidate_pending_review(session)
+    if not (session.get("late_watch") or {}).get("supported"):
+        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
     err = _late_watch_error(session)
     if err:
         return JSONResponse({"ok": False, "error": err})
@@ -414,6 +422,8 @@ def pg_late_score(session_id: str):
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     session_actions.invalidate_pending_review(session)
+    if not (session.get("late_watch") or {}).get("supported"):
+        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
     result = _run_late_catchup_score(session)
     if not result["ok"]:
         return JSONResponse(result)

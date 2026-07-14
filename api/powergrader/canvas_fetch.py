@@ -23,8 +23,17 @@ def fetch_submissions(course_id: str, assignment_id: str):
     )
     if err:
         return None, None, err
-    adata, _ = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
-    return subs, adata or {}, None
+    adata, assignment_err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
+    if assignment_err:
+        return None, None, assignment_err
+    adata = adata or {}
+    if adata.get("is_quiz_lti_assignment") is True:
+        from powergrader import new_quiz_fetch
+        normalized, nq_err = new_quiz_fetch.fetch(course_id, assignment_id, subs or [])
+        return normalized, adata, nq_err
+    if adata.get("quiz_id") or "online_quiz" in (adata.get("submission_types") or []):
+        return None, adata, "Classic Quizzes are not supported in PowerGrader."
+    return subs, adata, None
 
 
 def enrich_with_code_files(subs):

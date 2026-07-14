@@ -80,6 +80,13 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
             continue
         a = s.get("assignment") or {}
         user = s.get("user") or {}
+        new_quiz_items = s.get("new_quiz_items") or []
+        if new_quiz_items:
+            existing = by_student.get(uid)
+            if existing is None:
+                by_student[uid] = {"responses": [], "real_name": user.get("name") or user.get("sortable_name") or "", "sis_id": str(user.get("sis_user_id") or "")}
+            by_student[uid]["responses"] = [{"item_id": str(item.get("item_id") or ""), "prompt": html_to_text(item.get("prompt") or ""), "response": html_to_text(item.get("raw_html_answer") or ""), "possible": item.get("possible")} for item in new_quiz_items]
+            continue
         prompt = html_to_text(a.get("description") or "")
         body_text = html_to_text(s.get("body") or "")
         # Plain-text code-file uploads (.py/.html/...) are folded in as RAW text —
@@ -119,14 +126,15 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
     for uid, entry in by_student.items():
         pseudo = vault.get_or_assign(uid, entry["real_name"], entry["sis_id"],
                                      roster_names=roster_tokens)
+        responses = entry.get("responses") or [{
+            "item_id":  entry["item_id"],
+            "prompt":   entry["prompt"],
+            "response": entry["response"],
+            "possible": entry["possible"],
+        }]
         students.append({
             "pseudonym": pseudo,
-            "responses": [{
-                "item_id":  entry["item_id"],
-                "prompt":   entry["prompt"],
-                "response": entry["response"],
-                "possible": entry["possible"],
-            }],
+            "responses": responses,
         })
 
     return {"contract_version": CONTRACT_VERSION,

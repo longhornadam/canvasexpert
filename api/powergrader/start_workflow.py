@@ -66,6 +66,7 @@ def build_start_session(
     mode_label: str,
     copilot_packet: dict | None,
     late_watch: dict,
+    canvas_writeback_supported: bool = True,
 ) -> dict:
     return build_session(
         session_id=session_id,
@@ -85,4 +86,5 @@ def build_start_session(
         mode_label=mode_label,
         copilot_packet=copilot_packet,
         late_watch=late_watch,
+        canvas_writeback_supported=canvas_writeback_supported,
     )

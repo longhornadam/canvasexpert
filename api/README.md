@@ -209,6 +209,9 @@ ANTHROPIC_KEY=
   Regardless of the API, the **Student Analysis CSV downloads fine from the New Quizzes UI**
   (full responses included) — the always-available manual fallback, and the only option for
   courses where your enrollment has concluded.
+- **PowerGrader New Quiz sessions are read-only snapshots.** They use the Student Analysis
+  JSON report for written responses and deliberately do not write grades or comments back
+  to Canvas or participate in late catch-up.
 - **Common Cartridge import is the zero-auth power path** (Settings → Import Course
   Content). Vanilla CC 1.x carries only the portable common subset, but a **Canvas-flavored
   export package** (CC + Canvas extensions: `canvas_export.txt`, `course_settings/*.xml`)

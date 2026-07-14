@@ -17,11 +17,15 @@ def build_late_watch_state(
     initial_missing_user_ids: list[str],
     submitted_user_ids: list[str],
     response_kind: str,
+    new_quiz_snapshot: bool = False,
 ) -> dict:
     watch_late_enabled = str(watch_late).lower() in {"1", "true", "yes", "on"}
-    late_supported = mode == "assisted" and has_openrouter_key
+    late_supported = mode == "assisted" and has_openrouter_key and not new_quiz_snapshot
     late_reason = ""
-    if not watch_late_enabled:
+    if new_quiz_snapshot:
+        late_reason = "New Quiz sessions are immutable snapshots; late catch-up is not supported."
+        watch_late_enabled = False
+    elif not watch_late_enabled:
         late_reason = "Late catch-up is disabled for this session."
     elif mode != "assisted":
         late_reason = "Late catch-up requires Auto-Score With API."

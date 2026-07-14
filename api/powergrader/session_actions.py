@@ -130,6 +130,8 @@ def review_push(
     session = load_session(session_id)
     if not session:
         return {"ok": False, "code": "session_not_found", "error": "Session not found."}, 404
+    if not session.get("canvas_writeback_supported", True):
+        return {"ok": False, "code": "canvas_writeback_unsupported", "error": "New Quiz sessions are local snapshots and cannot write grades or comments to Canvas."}, 200
     requested, error = _parse_ids(user_ids)
     if error:
         return {"ok": False, "code": error, "error": "Select valid submissions for review."}, 200
@@ -245,6 +247,8 @@ def push_grades(
     session = load_session(session_id)
     if not session:
         return {"ok": False, "code": "session_not_found", "error": "Session not found."}, 404
+    if not session.get("canvas_writeback_supported", True):
+        return {"ok": False, "code": "canvas_writeback_unsupported", "error": "New Quiz sessions are local snapshots and cannot write grades or comments to Canvas."}, 200
     pending = session.get("pending_push_review")
     if not pending or not review_token:
         return _review_error("review_required")

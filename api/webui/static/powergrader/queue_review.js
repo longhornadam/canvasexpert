@@ -106,6 +106,7 @@
   }
 
   function pushOne() {
+    if (queue.getSession && queue.getSession() && queue.getSession().canvas_writeback_supported === false) { if (queue.showStatus) queue.showStatus('New Quiz snapshots cannot write to Canvas.', true); return; }
     var st = currentStudent();
     if (!st) return;
     var userId = st.user_id;
@@ -117,6 +118,7 @@
   }
 
   function bulkPush() {
+    if (queue.getSession && queue.getSession() && queue.getSession().canvas_writeback_supported === false) { if (queue.showStatus) queue.showStatus('New Quiz snapshots cannot write to Canvas.', true); return; }
     bulkPushBtn.disabled = true;
     var userIds = getStudents().filter(function(s){ return s.status === 'approved' && !s.posted; })
       .map(function(s){ return s.user_id; });

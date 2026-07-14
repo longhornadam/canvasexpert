@@ -56,6 +56,8 @@ def build_students(
             "is_monitored":  bool(mon),
             "monitored_note": (mon or {}).get("note", ""),
             "extra_time_days": extra_days,
+            **({"new_quiz_attempt": s.get("new_quiz_attempt"), "canvas_late": bool(s.get("late")),
+                "seconds_late": s.get("seconds_late")} if s.get("new_quiz_attempt") is not None else {}),
             **({"late_catchup": s.get("late_catchup")} if s.get("late_catchup") else {}),
         })
 
@@ -82,6 +84,7 @@ def build_session(
     mode_label: str = "",
     copilot_packet: dict | None = None,
     late_watch: dict | None = None,
+    canvas_writeback_supported: bool = True,
 ) -> dict:
     """Build the session dictionary ready to save."""
     return {
@@ -102,6 +105,7 @@ def build_session(
         "privacy_artifacts": privacy_artifacts or {},
         "copilot_packet":  copilot_packet,
         "late_watch":      late_watch,
+        "canvas_writeback_supported": canvas_writeback_supported,
         "students":        students or [],
         "push_log":        [],
     }

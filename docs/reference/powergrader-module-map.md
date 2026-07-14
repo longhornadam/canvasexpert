@@ -171,6 +171,8 @@ Ownership:
   - session persistence on disk
 - `api/powergrader/canvas_fetch.py`
   - submission fetch + code file enrichment
+- `api/powergrader/new_quiz_fetch.py`
+  - New Quiz Student Analysis JSON report polling, latest-attempt reconciliation, and local snapshot normalization; New Quiz sessions never write back to Canvas
 - `api/powergrader/scheduled_autoscore_support.py`
   - scheduled autoscore label/status helpers
   - existing Canvas-state extraction

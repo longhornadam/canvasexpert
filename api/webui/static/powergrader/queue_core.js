@@ -141,12 +141,21 @@
       }
       badgesEl.appendChild(lb);
     }
+    if (st.new_quiz_attempt !== undefined) {
+      var nq = document.createElement('span'); nq.className = 'pg-badge pg-badge--tier';
+      nq.textContent = 'New Quiz · Attempt ' + st.new_quiz_attempt; badgesEl.appendChild(nq);
+      if (st.canvas_late) { var late = document.createElement('span'); late.className = 'pg-badge pg-badge--late'; late.textContent = 'Late in Canvas'; badgesEl.appendChild(late); }
+    }
     if (st.posted) {
       var pb = document.createElement('span');
       pb.className = 'pg-badge pg-badge--posted';
       pb.textContent = '✓ Posted';
       badgesEl.appendChild(pb);
     }
+    var noWrite = session && session.canvas_writeback_supported === false;
+    var pushOne = document.getElementById('pg-push-one');
+    if (pushOne) { pushOne.hidden = noWrite; }
+    if (bulkPushBtn) { bulkPushBtn.hidden = noWrite; }
 
     ptsEl.textContent = '/ ' + (session.points_possible || '?');
     scoreEl.max = session.points_possible || 100;

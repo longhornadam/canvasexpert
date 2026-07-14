@@ -161,7 +161,7 @@
           return '<option value="' + esc(a.id) + '"' + sel + '>' + esc(a.name) + esc(assignmentDueLabel(a)) + '</option>';
         }).join('');
         html += searchQuizzes.map(function(a){
-          return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported yet)</option>';
+          return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported)</option>';
         }).join('');
         html += '</optgroup>';
       }
@@ -185,7 +185,7 @@
         }).join('');
         html += quizzes.map(function(a){
           seenQuizIds[a.id] = true;
-          return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported yet)</option>';
+          return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported)</option>';
         }).join('');
         html += '</optgroup>';
       });
@@ -293,8 +293,8 @@
         }
         var loaded = assignmentsResponse.assignments || [];
 
-        var gradeable = loaded.filter(isPowerGraderStartable);
-        var quizzes = loaded.filter(function(a){ return isQuizAssignment(a) && !isPowerGraderStartable(a); });
+        var gradeable = loaded.filter(function(a){ return isPowerGraderStartable(a) || a.is_quiz_lti_assignment === true; });
+        var quizzes = loaded.filter(function(a){ return isQuizAssignment(a) && a.is_quiz_lti_assignment !== true && !isPowerGraderStartable(a); });
         loadedAssignments = gradeable;
         unsupportedQuizAssignments = quizzes;
         loadedModules = modulesResponse.modules || [];
