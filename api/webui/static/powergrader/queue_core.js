@@ -33,6 +33,10 @@
   var kbdAHint = document.getElementById('pg-kbd-a-hint');
 
   queue.getSession = function(){ return session; };
+  queue.writebackMode = function(){
+    if (!session || session.canvas_writeback_supported !== false) return 'full';
+    return session.comment_writeback_supported === true ? 'comments' : 'none';
+  };
   queue.setSession = function(nextSession){
     session = nextSession || null;
     queue.session = session;
@@ -152,10 +156,13 @@
       pb.textContent = '✓ Posted';
       badgesEl.appendChild(pb);
     }
-    var noWrite = session && session.canvas_writeback_supported === false;
+    var writeMode = queue.writebackMode();
     var pushOne = document.getElementById('pg-push-one');
-    if (pushOne) { pushOne.hidden = noWrite; }
-    if (bulkPushBtn) { bulkPushBtn.hidden = noWrite; }
+    if (pushOne) {
+      pushOne.hidden = writeMode === 'none';
+      pushOne.textContent = writeMode === 'comments' ? 'Post feedback comment now' : 'Push this student now';
+    }
+    if (bulkPushBtn) { bulkPushBtn.hidden = writeMode === 'none'; }
 
     ptsEl.textContent = '/ ' + (session.points_possible || '?');
     scoreEl.max = session.points_possible || 100;
@@ -336,9 +343,13 @@
     var pct = Math.round((posted / total) * 100);
     progressFill.style.width = pct + '%';
     progressLbl.textContent = posted + ' posted, ' + approved + ' approved — ' + total + ' total';
-    var readyToPush = students.filter(function(s){ return s.status === 'approved' && !s.posted; }).length;
+    var commentsOnly = queue.writebackMode() === 'comments';
+    var readyToPush = students.filter(function(s){
+      if (s.status !== 'approved' || s.posted) return false;
+      return commentsOnly ? !!(s.teacher_feedback && s.teacher_feedback.trim()) : true;
+    }).length;
     bulkPushBtn.disabled = readyToPush === 0;
-    bulkPushBtn.textContent = 'Push approved to Canvas (' + readyToPush + ')';
+    bulkPushBtn.textContent = (commentsOnly ? 'Post approved feedback comments (' : 'Push approved to Canvas (') + readyToPush + ')';
   }
 
   var _statusTimer;

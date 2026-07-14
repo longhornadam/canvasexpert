@@ -92,8 +92,76 @@ def test_normalize_uses_nested_entry_id_and_latest_attempt_safe_text(tmp_path):
     vault = Vault(str(tmp_path / "vault.json"))
     bundle = pseudonymize_submissions(subs, vault, "Fictional Quiz")
     responses = bundle["students"][0]["responses"]
-    assert [item["response"] for item in responses] == ["latest answer", ""]
+    # The PDF upload has no locally-extracted text, so the item stays local.
+    assert [item["response"] for item in responses] == ["latest answer"]
     assert "fake-01" not in str(bundle)
+
+
+def test_normalize_live_shape_maps_slug_points_and_seeds_upload_expectation():
+    """Live /items entries carry interaction_type_slug + OUTER points, and live
+    reports describe uploads as filename-only answers with item_type but no
+    file refs (shape captured 2026-07-14 against a real course)."""
+    core = [{"user_id": "fake-01", "submitted_at": "2026-01-02T00:00:00Z", "user": {"name": "Fictional Student"}}]
+    rows = [{
+        "student_data": {"id": "fake-01", "attempt": 1, "submitted_at": "2026-01-02T00:00:00Z"},
+        "item_responses": [
+            {"item_id": "entry-essay", "item_type": "essay", "answer": "<p>an answer</p>", "score": None},
+            {"item_id": "entry-upload", "item_type": "file-upload", "answer": "fictional-notes.txt", "score": None},
+        ],
+    }]
+    items = [
+        {"id": "outer-1", "points_possible": 50.0, "entry_type": "Item",
+         "entry": {"id": "entry-essay", "interaction_type_slug": "essay", "item_body": "<p>Explain.</p>"}},
+        {"id": "outer-2", "points_possible": 50.0, "entry_type": "Item",
+         "entry": {"id": "entry-upload", "interaction_type_slug": "file-upload", "item_body": "<p>Upload.</p>"}},
+    ]
+    subs = nq.normalize(core, rows, items)
+    essay, upload = subs[0]["new_quiz_items"]
+    assert essay["type"] == "essay" and essay["possible"] == 50.0
+    assert upload["type"] == "file-upload" and upload["possible"] == 50.0
+    seeded = upload["files"][0]
+    assert seeded["filename"] == "fictional-notes.txt"
+    assert seeded["download_status"] == "pending"
+    assert "url" not in seeded
+    assert subs[0]["attachments"][0]["filename"] == "fictional-notes.txt"
+
+
+def test_pseudonymize_new_quiz_uploads_use_extracted_text_or_stay_local(tmp_path):
+    """Upload items reach the AI only as locally-extracted text; unreadable
+    uploads (image/PDF/failed) are excluded entirely, never sent as filenames."""
+    extracted = tmp_path / "notes__extracted.txt"
+    extracted.write_text("Synthetic extracted essay text.", encoding="utf-8")
+    subs = [{
+        "user_id": "fake-01", "user": {"name": "Fictional Student"},
+        "new_quiz_items": [
+            {"item_id": "essay-1", "type": "essay", "prompt": "<p>Explain.</p>",
+             "raw_html_answer": "<p>typed answer</p>", "possible": 50},
+            {"item_id": "upload-1", "type": "file-upload", "prompt": "<p>Upload notes.</p>",
+             "raw_html_answer": "notes.txt", "possible": 25,
+             "files": [{"filename": "notes.txt", "extracted_text_path": str(extracted)}]},
+            {"item_id": "upload-2", "type": "file-upload", "prompt": "<p>Upload a photo.</p>",
+             "raw_html_answer": "photo.jpg", "possible": 25,
+             "files": [{"filename": "photo.jpg", "extraction_status": "validated"}]},
+        ],
+    }, {
+        "user_id": "fake-02", "user": {"name": "Second Fictional"},
+        "new_quiz_items": [
+            {"item_id": "upload-2", "type": "file-upload", "prompt": "<p>Upload a photo.</p>",
+             "raw_html_answer": "other.jpg", "possible": 25,
+             "files": [{"filename": "other.jpg"}]},
+        ],
+    }]
+    vault = Vault(str(tmp_path / "vault.json"))
+    bundle = pseudonymize_submissions(subs, vault, "Fictional Quiz")
+    students = bundle["students"]
+    assert len(students) == 1                       # photo-only student stays local
+    responses = students[0]["responses"]
+    assert [r["item_id"] for r in responses] == ["essay-1", "upload-1"]
+    assert responses[0]["response"] == "typed answer"
+    assert "Synthetic extracted essay text." in responses[1]["response"]
+    assert responses[1]["possible"] == 25
+    assert "photo.jpg" not in str(bundle)           # ignored uploads leave no trace in the AI payload
+    assert students[0]["local_attachments"] == []   # New Quiz files never enter the media lane
 
 
 def test_normalize_uses_nested_student_analysis_attempt_and_timestamp():
@@ -164,6 +232,43 @@ def test_new_quiz_server_gates_block_push_and_late_watch_without_canvas():
     assert payload["code"] == "canvas_writeback_unsupported"
     late = build_late_watch_state(mode="assisted", watch_late="true", has_openrouter_key=True, initial_missing_user_ids=[], submitted_user_ids=[], response_kind="scr", new_quiz_snapshot=True)
     assert late["supported"] is False and "immutable snapshots" in late["reason"]
+
+
+def test_native_transport_accepts_live_result_shape(tmp_path, monkeypatch):
+    """Live results use host/token/quiz_api_quiz_session_id, no attempt inside
+    authoritative_result (shape captured 2026-07-14 against a real course)."""
+    monkeypatch.setattr(nq.workspace, "workspace_root", lambda: str(tmp_path))
+
+    class _LiveSession(_NativeSession):
+        def get(self, url, **kwargs):
+            if "/participant_sessions/ps-1/results" in url:
+                return _NativeResponse(payload={
+                    "host": "https://quiz.invalid", "token": "raw-signature",
+                    "quiz_api_quiz_session_id": "qs-1", "attempt_history": [],
+                })
+            if url.endswith("/api/quiz_sessions/qs-1"):
+                return _NativeResponse(payload={
+                    "attempt": 2, "authoritative_result": {"id": "ar-1"},
+                })
+            return super().get(url, **kwargs)
+
+    target = {
+        "user_id": "fake-user", "user": {"name": "Fictional Student"},
+        "assignment": {"name": "Synthetic Upload"}, "new_quiz_attempt": 2,
+        "new_quiz_items": [{"item_id": "file-item", "files": [{"filename": "answer.png"}]}],
+        "attachments": [],
+    }
+
+    def fake_download(url, dest, *, declared_size=None):
+        Path(dest).write_bytes(b"data")
+        return {"actual_size": 4}
+
+    count, error = nq._native_file_transport(
+        _LiveSession(), "https://canvas.invalid", {"Authorization": "Bearer synthetic"},
+        "course-1", "assignment-1", [target], session_id="session-1", download=fake_download,
+    )
+    assert error is None and count == 1
+    assert target["attachments"][0]["download_status"] == "downloaded"
 
 
 def test_native_file_transport_joins_same_attempt_and_drops_signed_url(tmp_path, monkeypatch):

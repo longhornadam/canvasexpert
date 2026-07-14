@@ -15,7 +15,8 @@ Quizzes item write-back is blocked by personal access tokens.
 | Constructed responses | Student Analysis JSON/CSV exposes item responses; the UI CSV remains a fallback | PowerGrader uses JSON snapshots; CSV remains a manual fallback |
 | Native file evidence | Canvas's signed native/LTI result path exposes current attempt item evidence | PowerGrader has a focused signed-file acquisition path; unsupported or failed evidence remains teacher-review-only |
 | Per-item manual score | Canvas's first-party grader accepts an independent score for each manual item | Technically verified but not yet exposed; current PowerGrader routes still block New Quiz write-back |
-| Per-item grader feedback | The same result update accepts one grader-feedback value per item | Technically verified but not yet exposed |
+| Per-item grader feedback | The same result update accepts one grader-feedback value per item ("Additional Comments") | Technically verified but not yet exposed |
+| Assignment-level submission comments | The ordinary Submissions API accepts comment writes on a New Quiz submission without touching the quiz-engine score (write + delete verified live 2026-07-14) | Exposed: New Quiz sessions post teacher-reviewed feedback as assignment comments through the frozen manual push review (comment-only; never a score) |
 | Assignment total | Canvas derives the New Quiz result total from item scores and fudge points | Do not replace item grading with a forced ordinary-assignment total write |
 
 ## Authentication boundaries
@@ -88,11 +89,22 @@ check so Canvas drift does not weaken review or write safety.
 ## Current implementation facts
 
 - PowerGrader can select New Quizzes and build local written-response sessions.
-- Current route/session gates deliberately reject New Quiz Canvas write-back. That is a
-  Canvas Expert implementation limit, not a PAT capability limit.
-- `api/powergrader/new_quiz_fetch.py` already uses native result acquisition, but the live
-  participant result key `quiz_api_quiz_session_id` must be normalized alongside older or
-  synthetic `quiz_session_id` shapes before this transport is reused.
+- New Quiz sessions support a **comment-only manual push** (2026-07-14): teacher-approved
+  feedback posts as ordinary assignment-level submission comments through the same frozen
+  review/drift/idempotency flow as ordinary pushes, and the payload never contains a
+  `submission`/`posted_grade` key. Item scores and per-item "Additional Comments" remain
+  blocked pending the reviewed item-grading adapter; legacy New Quiz sessions without the
+  `comment_writeback_supported` flag stay fully blocked.
+- `api/powergrader/new_quiz_fetch.py` uses native result acquisition; the live participant
+  result key `quiz_api_quiz_session_id` is normalized alongside older/synthetic
+  `quiz_session_id` shapes (fixed 2026-07-14, live-verified: file evidence downloads).
+- Live report shape (verified 2026-07-14): upload answers arrive as filename-only strings
+  with no file refs — `normalize()` seeds the expected file record from the answer so the
+  native transport can materialize the upload. `item_responses[].item_type` carries the
+  interaction slug; catalog points live on the OUTER `/items` record.
+- AI-payload policy (2026-07-14): New Quiz uploads never enter the AI lane as files or
+  filenames. Locally-extracted text (TXT/DOCX-style) is inlined as an essay-like response;
+  unreadable uploads (image/PDF/failed) are excluded from the packet and stay teacher-review-only.
 - Student Reports currently do not materialize New Quiz item responses. That is a missing
   consumer integration, not proof that Canvas cannot provide item responses.
 - The ordinary Canvas Submissions API does not expose the complete New Quiz item-result

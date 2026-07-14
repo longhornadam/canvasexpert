@@ -115,8 +115,14 @@ def _item_map(items):
     for outer in items:
         for entry in outer.get("entry", []) if isinstance(outer.get("entry"), list) else [outer.get("entry")]:
             if isinstance(entry, dict) and entry.get("id") is not None:
-                out[str(entry["id"])] = entry
+                # Live /items entries carry points only on the OUTER record and
+                # the type only as interaction_type_slug; keep both reachable.
+                out[str(entry["id"])] = {**entry, "_outer_points_possible": outer.get("points_possible")}
     return out
+
+
+def _is_upload_kind(kind) -> bool:
+    return "upload" in str(kind or "").lower().replace("-", "_")
 
 
 def _attempt_time(row):
@@ -177,7 +183,8 @@ def normalize(core_submissions, report_rows, items, *, assignment_name: str = ""
             # catalog is stale/malformed; the absent catalog entry becomes a
             # local reconciliation problem instead of silently dropping work.
             item = item or {}
-            kind = item.get("item_type") or item.get("type") or ""
+            kind = (answer.get("item_type") or item.get("interaction_type_slug")
+                    or item.get("item_type") or item.get("type") or "")
             raw = answer.get("answer") or answer.get("response") or ""
             files = answer.get("files") or answer.get("attachments") or []
             # Do not retain signed URLs even in this intermediate snapshot.
@@ -186,10 +193,16 @@ def normalize(core_submissions, report_rows, items, *, assignment_name: str = ""
                 _file_placeholder(_file_name(file), item_id, selected_attempt)
                 for file in files if isinstance(file, dict)
             ]
+            if not item_files and _is_upload_kind(kind) and isinstance(raw, str) and raw.strip():
+                # Current Canvas builds report a file-upload answer as the bare
+                # filename with no file refs; seed one expected record so the
+                # native transport can resolve and preserve the actual upload.
+                item_files = [_file_placeholder(os.path.basename(raw.strip()), item_id, selected_attempt)]
             new_items.append({
                 "item_id": item_id, "type": kind,
                 "prompt": item.get("item_body") or "", "raw_html_answer": raw,
-                "possible": item.get("points_possible") or item.get("points") or 0,
+                "possible": (item.get("_outer_points_possible")
+                             or item.get("points_possible") or item.get("points") or 0),
                 "earned_score": answer.get("score"),
                 "files": item_files,
             })
@@ -369,7 +382,10 @@ def _resolve_native_candidate(session, backend: str, native_headers: dict,
     result_info = _json(result_response) or {}
     quiz_host = result_info.get("quiz_host") or result_info.get("quiz_api_host") or result_info.get("host")
     result_token = result_info.get("result_token") or result_info.get("token") or _token(result_info)
-    quiz_session_id = result_info.get("quiz_session_id") or result_info.get("quizSessionId")
+    # Live Canvas names this quiz_api_quiz_session_id (verified 2026-07-14);
+    # older/synthetic shapes stay supported.
+    quiz_session_id = (result_info.get("quiz_session_id") or result_info.get("quizSessionId")
+                       or result_info.get("quiz_api_quiz_session_id"))
     if not quiz_host or not result_token or not quiz_session_id:
         return None
     result_headers = {"Authorization": str(result_token), "AuthType": "Signature"}
@@ -788,14 +804,6 @@ def _download_signed_url(url, dest, *, declared_size=None, http_session=None, fr
         raise
 
 
-def _has_file_refs(rows):
-    for row in rows or []:
-        for answer in row.get("item_responses") or []:
-            if answer.get("files") or answer.get("attachments"):
-                return True
-    return False
-
-
 def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=time.sleep,
           session_id=None, download=None, course_name="", assignment_name="", materialize_files=True,
           byte_budget=None, evidence_path=None, reusable_records=None):
@@ -825,7 +833,11 @@ def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=tim
         if any(_parse_time(s.get("submitted_at")) is None or _parse_time(s.get("new_quiz_reported_at")) is None or _parse_time(s["submitted_at"]) > _parse_time(s["new_quiz_reported_at"]) for s in subs):
             return None, "New Quiz report is still older than Canvas. Wait briefly and try again; no session was created."
 
-    if _has_file_refs(rows) and materialize_files:
+    # Gate on the normalized snapshot, not the raw report: current Canvas
+    # builds report uploads as filename-only answers with no file refs, and
+    # normalize() seeds the expected records for those.
+    has_expected_files = any(_target_has_files(sub) for sub in subs)
+    if has_expected_files and materialize_files:
         if session_id:
             _, native_err = _native_file_transport(
                 session, base, headers, course_id, assignment_id, subs,
@@ -847,7 +859,7 @@ def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=tim
             for sub in subs:
                 if _target_has_files(sub):
                     _mark_expected_failure(sub, unavailable)
-    elif _has_file_refs(rows):
+    elif has_expected_files:
         deferred = _native_error("file_refresh_deferred", "New Quiz uploads were not materialized by this focused refresh.")
         for sub in subs:
             if _target_has_files(sub):

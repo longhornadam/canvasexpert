@@ -43,10 +43,32 @@ def _parse_ids(raw: str, *, allow_empty: bool = True) -> tuple[list[str] | None,
     return ids, None
 
 
-def _payload(student: dict) -> dict:
+def _writeback_mode(session: dict) -> str:
+    """What this session may write to Canvas.
+
+    "full" — grades and comments through the Submissions API.
+    "comments_only" — assignment-level comments only (New Quiz sessions:
+    scores belong to the quiz engine, which has no reviewed write transport
+    yet, but submission comments are ordinary Canvas data — verified live
+    2026-07-14).
+    "none" — legacy New Quiz sessions created before the comment lane.
+    """
+    if session.get("canvas_writeback_supported", True):
+        return "full"
+    if session.get("comment_writeback_supported") is True:
+        return "comments_only"
+    return "none"
+
+
+def _payload(student: dict, *, comments_only: bool = False) -> dict:
     score = student.get("teacher_score")
     feedback = (student.get("teacher_feedback") or "").strip()
     payload: dict = {}
+    if comments_only:
+        # Never touch the score or lateness of a quiz-engine-owned grade.
+        if feedback:
+            payload["comment"] = {"text_comment": feedback}
+        return payload
     if score is not None:
         payload["submission"] = {"posted_grade": str(score)}
     if feedback:
@@ -108,14 +130,14 @@ def _fetch_snapshot(session: dict, user_id: str, canvas_get) -> tuple[dict | Non
     return _snapshot(data), None
 
 
-def _eligible_students(session: dict) -> dict[str, dict]:
+def _eligible_students(session: dict, *, comments_only: bool = False) -> dict[str, dict]:
     return {
         str(student.get("user_id")): student
         for student in session.get("students", [])
         if student.get("user_id") is not None
         and student.get("status") == "approved"
         and not student.get("posted")
-        and _payload(student)
+        and _payload(student, comments_only=comments_only)
     }
 
 
@@ -130,15 +152,19 @@ def review_push(
     session = load_session(session_id)
     if not session:
         return {"ok": False, "code": "session_not_found", "error": "Session not found."}, 404
-    if not session.get("canvas_writeback_supported", True):
-        return {"ok": False, "code": "canvas_writeback_unsupported", "error": "New Quiz sessions are local snapshots and cannot write grades or comments to Canvas."}, 200
+    mode = _writeback_mode(session)
+    if mode == "none":
+        return {"ok": False, "code": "canvas_writeback_unsupported", "error": "This session was created before New Quiz comment posting. Start a new session to post feedback comments."}, 200
+    comments_only = mode == "comments_only"
     requested, error = _parse_ids(user_ids)
     if error:
         return {"ok": False, "code": error, "error": "Select valid submissions for review."}, 200
-    eligible = _eligible_students(session)
+    eligible = _eligible_students(session, comments_only=comments_only)
     ordered_ids = requested or [str(student.get("user_id")) for student in session.get("students", []) if str(student.get("user_id")) in eligible]
     if not ordered_ids or any(user_id not in eligible for user_id in ordered_ids):
-        return {"ok": False, "code": "invalid_selection", "error": "Selected submissions are no longer eligible."}, 200
+        error_text = ("Selected submissions have no approved feedback to post. New Quiz sessions post feedback comments only; scores are entered in Canvas."
+                      if comments_only else "Selected submissions are no longer eligible.")
+        return {"ok": False, "code": "invalid_selection", "error": error_text}, 200
 
     baselines = {}
     payload_digests = {}
@@ -149,7 +175,7 @@ def review_push(
         baseline, fetch_error = _fetch_snapshot(session, user_id, canvas_get)
         if fetch_error:
             return {"ok": False, "code": fetch_error, "error": "Could not capture the Canvas review baseline."}, 200
-        payload = _payload(student)
+        payload = _payload(student, comments_only=comments_only)
         baselines[user_id] = baseline
         payload_digests[user_id] = _digest(payload)
         target_digests[user_id] = _digest({"user_id": user_id, "payload": payload, "baseline": baseline})
@@ -182,6 +208,7 @@ def review_push(
         "user_ids": ordered_ids,
         "overall_digest": pending["overall_digest"],
         "targets": targets,
+        "writeback_mode": mode,
     }, 200
 
 
@@ -247,8 +274,10 @@ def push_grades(
     session = load_session(session_id)
     if not session:
         return {"ok": False, "code": "session_not_found", "error": "Session not found."}, 404
-    if not session.get("canvas_writeback_supported", True):
-        return {"ok": False, "code": "canvas_writeback_unsupported", "error": "New Quiz sessions are local snapshots and cannot write grades or comments to Canvas."}, 200
+    mode = _writeback_mode(session)
+    if mode == "none":
+        return {"ok": False, "code": "canvas_writeback_unsupported", "error": "This session was created before New Quiz comment posting. Start a new session to post feedback comments."}, 200
+    comments_only = mode == "comments_only"
     pending = session.get("pending_push_review")
     if not pending or not review_token:
         return _review_error("review_required")
@@ -268,9 +297,9 @@ def push_grades(
     preflight = []
     for user_id in requested:
         student = students.get(user_id)
-        if not student or not _payload(student):
+        if not student or not _payload(student, comments_only=comments_only):
             return _review_error("payload_changed")
-        payload = _payload(student)
+        payload = _payload(student, comments_only=comments_only)
         payload_digest = _digest(payload)
         if payload_digest != pending.get("payload_digests", {}).get(user_id):
             return _review_error("payload_changed")

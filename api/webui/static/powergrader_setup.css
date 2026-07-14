@@ -3,29 +3,20 @@
 
 /* ── Page width and card measure ──────────────────────────────────── */
 .pg-workbench-grid {
-  grid-template-columns: minmax(190px, .2fr) minmax(0, .8fr) !important;
+  grid-template-columns: minmax(0, 1fr) !important;
   gap: 20px !important;
   padding: 20px 24px;
 }
 
-.pg-session-rail { align-self: start; position: sticky; top: 16px; }
-.pg-session-rail .ce-work-rail-section + .ce-work-rail-section { margin-top: 18px; }
-.pg-session-rail .ce-work-rail-section-title {
-  margin: 0 12px 6px; color: var(--ce-ink-muted);
-  font: 700 11px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase;
-}
-.pg-session-rail .ce-work-rail-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-}
-.pg-rail-count, .pg-summary-count {
-  min-width: 24px; padding: 2px 7px; border-radius: 999px;
+.pg-summary-count {
+  display: inline-block; min-width: 24px; padding: 2px 7px; border-radius: 999px;
   background: var(--ce-rule); color: var(--ce-ink-muted); font-size: 11px; text-align: center;
 }
 .pg-workbench-content { min-width: 0; max-width: 1180px; }
 
 .pg-setup-card { padding: 24px; }
 
-.pg-sessions-card { margin: 24px 0; }
+.pg-sessions-card { margin: 24px 0; padding: 24px; }
 
 /* ── Visual hierarchy ──────────────────────────────────────────────── */
 .pg-setup-header h1 {
@@ -155,7 +146,6 @@
   border-radius: 8px; color: var(--ce-ink-muted); font-size: 12px;
 }
 .pg-session-error { color: var(--ce-attention); }
-.pg-start-anchor { scroll-margin-top: 16px; }
 .pg-completed {
   margin-top: 16px; padding: 12px 14px; border: 1px solid var(--ce-rule);
   border-radius: 8px; background: var(--ce-paper-raised); scroll-margin-top: 16px;
@@ -432,17 +422,6 @@
 
 /* ── Intermediate layout (max-width: 980px) ────────────────────────── */
 @media (max-width: 980px) {
-  .pg-workbench-grid { grid-template-columns: 1fr !important; }
-  .pg-session-rail {
-    position: static; display: flex; gap: 12px; overflow-x: auto;
-    padding: 0 0 12px !important; border-right: 0 !important;
-    border-bottom: 1px solid var(--ce-rule-strong);
-  }
-  .pg-session-rail .ce-work-rail-section { display: flex; gap: 4px; align-items: center; }
-  .pg-session-rail .ce-work-rail-section + .ce-work-rail-section { margin-top: 0; }
-  .pg-session-rail .ce-work-rail-section-title { display: none; }
-  .pg-session-rail .ce-work-rail-item { width: auto; white-space: nowrap; }
-
   .pg-work-grid {
     grid-template-columns: 1fr;
   }

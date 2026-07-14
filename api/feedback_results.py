@@ -86,9 +86,31 @@ def normalize_ai_feedback(feedback: str, disclosure: str = "") -> str:
     return f"{text}\n\n{disclosure}".strip() if text else disclosure
 
 
+def _first_json_block(text: str):
+    """Return the first JSON array/object embedded in prose or a code fence."""
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"[\[{]", text):
+        try:
+            data, _ = decoder.raw_decode(text, match.start())
+        except json.JSONDecodeError:
+            continue
+        return data
+    raise ValueError("the model reply did not contain valid JSON results")
+
+
 def parse_results(text: str) -> list:
-    """Parse the LLM's result JSON (an array, or an object wrapping `results`)."""
-    data = json.loads(text)
+    """Parse the LLM's result JSON (an array, or an object wrapping `results`).
+
+    Models routinely wrap the JSON in a markdown code fence or lead with a
+    sentence of prose; tolerate that instead of failing the scoring batch.
+    """
+    raw = str(text or "").strip()
+    if not raw:
+        raise ValueError("the model reply was empty")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        data = _first_json_block(raw)
     if isinstance(data, dict):
         data = data.get("results", [])
     return data if isinstance(data, list) else []
@@ -182,6 +204,51 @@ def reidentify(results: list, vault: Vault) -> list:
             "disclosure": disclosure,
         })
     return out
+
+
+def merge_rows_by_uid(rows: list) -> dict:
+    """Combine per-item reidentified rows into one draft per student.
+
+    Multi-item work (a New Quiz with an essay item and an upload item, for
+    example) produces one result per (pseudonym, item_id), but a PowerGrader
+    session holds one AI draft per student. Item drafts must be merged —
+    a plain ``{canvas_id: row}`` dict silently keeps only the last item.
+    Returns ``{canvas_id: row}`` with unresolved rows excluded.
+    """
+    grouped: dict[str, list] = {}
+    for row in rows:
+        if not row.get("resolved"):
+            continue
+        grouped.setdefault(str(row.get("canvas_id") or ""), []).append(row)
+
+    merged: dict[str, dict] = {}
+    for uid, items in grouped.items():
+        if len(items) == 1:
+            merged[uid] = items[0]
+            continue
+        disclosure = next((i.get("disclosure") for i in items if i.get("disclosure")), "")
+        sections = []
+        for index, item in enumerate(items, 1):
+            text = _remove_phrase(str(item.get("feedback") or ""), disclosure)
+            score = item.get("score")
+            label = "not AI-scored" if score is None else f"AI score {score}"
+            sections.append(f"Item {index} of {len(items)} ({label}):\n{text}".strip())
+        feedback = "\n\n".join(sections)
+        if disclosure:
+            feedback = f"{feedback}\n\n{disclosure}".strip()
+        scores = [item.get("score") for item in items]
+        total = (
+            sum(scores)
+            if scores and all(isinstance(s, (int, float)) for s in scores)
+            else None
+        )
+        merged[uid] = {
+            **items[0],
+            "item_id": ",".join(str(item.get("item_id") or "") for item in items),
+            "score": total,
+            "feedback": feedback,
+        }
+    return merged
 
 
 def reidentified_csv(rows: list) -> str:

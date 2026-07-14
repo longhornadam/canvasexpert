@@ -71,6 +71,60 @@ def pseudonymize(parsed: dict, vault: Vault, quiz_title: str) -> dict:
             "review_required": True, "note": _REVIEW_NOTE, "students": students}
 
 
+def _is_upload_item(item: dict) -> bool:
+    kind = str(item.get("type") or "").lower().replace("-", "_")
+    return "upload" in kind
+
+
+def _extracted_upload_text(files: list) -> str | None:
+    """Join locally-extracted text for one item's uploads.
+
+    Returns None unless EVERY upload on the item has readable local text —
+    a partially-readable upload item must not be scored as if it were complete.
+    """
+    texts = []
+    for file in files or []:
+        if not isinstance(file, dict):
+            return None
+        path = file.get("extracted_text_path")
+        text = ""
+        if path and os.path.isfile(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    text = f.read().strip()
+            except OSError:
+                text = ""
+        if not text:
+            return None
+        texts.append(f"[Uploaded file text: {file.get('filename') or 'upload'}]\n{text}")
+    return "\n\n".join(texts) if texts else None
+
+
+def _new_quiz_ai_response(item: dict) -> dict | None:
+    """Map one New Quiz item to an AI-scorable response, or None to keep it local.
+
+    File-upload items are never sent as files or filenames: a TXT/DOCX-style
+    upload with locally-extracted text is packaged like an essay response;
+    anything else (image, PDF, PPTX, failed download) is excluded from the AI
+    payload entirely and stays in the local queue for teacher review.
+    """
+    if _is_upload_item(item):
+        response_text = _extracted_upload_text(item.get("files"))
+        if response_text is None:
+            return None
+    else:
+        response_text = html_to_text(item.get("raw_html_answer") or "")
+        extra = _extracted_upload_text(item.get("files"))
+        if extra:
+            response_text = "\n\n".join(part for part in (response_text, extra) if part)
+    return {
+        "item_id": str(item.get("item_id") or ""),
+        "prompt": html_to_text(item.get("prompt") or ""),
+        "response": response_text,
+        "possible": item.get("possible"),
+    }
+
+
 def pseudonymize_submissions(submissions: list, vault: Vault,
                               assignment_title: str) -> dict:
     """Build an LLM-safe bundle from Canvas API submissions (assignments path).
@@ -101,22 +155,19 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
         if new_quiz_items:
             existing = by_student.get(uid)
             if existing is None:
+                # New Quiz uploads never enter the AI lane as files: readable
+                # local text is inlined per item below, everything else stays
+                # local-only for teacher review. No attachments, no media.
                 by_student[uid] = {
                     "responses": [], "attachments": [],
                     "real_name": user.get("name") or user.get("sortable_name") or "",
                     "sis_id": str(user.get("sis_user_id") or ""),
-                    "_expected_attachment_count": s.get("expected_attachment_count", len(attachment_values)),
+                    "_expected_attachment_count": 0,
                 }
-            by_student[uid]["attachments"].extend(attachment_values)
-            by_student[uid]["_expected_attachment_count"] = s.get(
-                "expected_attachment_count", by_student[uid].get("_expected_attachment_count", len(attachment_values))
-            )
-            by_student[uid]["responses"] = [{
-                "item_id": str(item.get("item_id") or ""),
-                "prompt": html_to_text(item.get("prompt") or ""),
-                "response": html_to_text(item.get("raw_html_answer") or ""),
-                "possible": item.get("possible"),
-            } for item in new_quiz_items]
+            by_student[uid]["responses"] = [
+                entry for entry in (_new_quiz_ai_response(item) for item in new_quiz_items)
+                if entry is not None
+            ]
             continue
         prompt = html_to_text(a.get("description") or "")
         body_text = html_to_text(s.get("body") or "")
@@ -165,6 +216,10 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
 
     students = []
     for uid, entry in by_student.items():
+        if "responses" in entry and not entry["responses"]:
+            # New Quiz student whose only items were excluded from the AI lane
+            # (e.g. image/PDF uploads): keep them out of the packet entirely.
+            continue
         pseudo = vault.get_or_assign(uid, entry["real_name"], entry["sis_id"],
                                      roster_names=roster_tokens)
         responses = entry.get("responses") or [{

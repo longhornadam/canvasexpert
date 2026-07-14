@@ -67,6 +67,7 @@ def build_start_session(
     copilot_packet: dict | None,
     late_watch: dict,
     canvas_writeback_supported: bool = True,
+    comment_writeback_supported: bool = False,
     evidence_manifest: str | None = None,
     evidence_status: str = "unknown",
 ) -> dict:
@@ -89,6 +90,7 @@ def build_start_session(
         copilot_packet=copilot_packet,
         late_watch=late_watch,
         canvas_writeback_supported=canvas_writeback_supported,
+        comment_writeback_supported=comment_writeback_supported,
         evidence_manifest=evidence_manifest,
         evidence_status=evidence_status,
     )

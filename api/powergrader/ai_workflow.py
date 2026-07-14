@@ -404,7 +404,7 @@ def run_ai_workflow(
                         + (f" {unresolved} unresolved result(s) need review." if unresolved else "")
                     ),
                 ))
-                ai_by_uid = {row["canvas_id"]: row for row in rows if row.get("resolved")}
+                ai_by_uid = fp.merge_rows_by_uid(rows)
                 if ai_failures:
                     privacy_steps.append(privacy.privacy_step(
                         "ai_manual_review", "Marked isolated AI failures for teacher review", "warn",

@@ -67,6 +67,32 @@ def test_parse_response_extracts_results():
     assert results[0]["pseudonym"] == "S001" and results[0]["score"] == 9
 
 
+def test_parse_response_tolerates_code_fence_and_prose():
+    rows = [{"pseudonym": "S001", "item_id": "1003", "score": 9, "feedback": "Good."}]
+    fenced = "```json\n" + json.dumps(rows) + "\n```"
+    prose = "Here are the scores you asked for:\n\n" + json.dumps(rows) + "\n\nLet me know!"
+    for content in (fenced, prose):
+        resp = {"choices": [{"message": {"content": content}}]}
+        assert orc.parse_response(resp)[0]["pseudonym"] == "S001"
+
+
+def test_parse_response_reports_empty_model_reply():
+    resp = {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
+    with pytest.raises(orc.OpenRouterResponseError) as exc:
+        orc.parse_response(resp)
+    msg = str(exc.value)
+    assert "finish_reason=length" in msg
+    assert exc.value.response_snippet == "<empty model reply>"
+
+
+def test_parse_response_reports_error_body_on_http_200():
+    resp = {"error": {"message": "Provider returned error", "code": 502}}
+    with pytest.raises(orc.OpenRouterResponseError) as exc:
+        orc.parse_response(resp)
+    assert "Provider returned error" in str(exc.value)
+    assert exc.value.status_code == "502"
+
+
 def test_score_uses_injected_post_and_endpoint():
     captured = {}
 

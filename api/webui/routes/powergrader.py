@@ -382,6 +382,7 @@ def pg_start(
         copilot_packet=ai_result.get("copilot_packet"),
         late_watch=late_watch,
         canvas_writeback_supported=not is_new_quiz,
+        comment_writeback_supported=is_new_quiz,
         evidence_manifest=refresh.get("manifest_path"),
         evidence_status=refresh.get("status", "unknown"),
     )

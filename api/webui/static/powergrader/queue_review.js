@@ -76,13 +76,17 @@
       .then(function(r){ return r.json(); })
       .then(function(reviewData){
         if (!reviewData.ok) throw new Error(reviewData.error || 'Push review failed.');
+        var commentsOnly = reviewData.writeback_mode === 'comments_only';
         return window.CE_WRITE_REVIEW.confirm({
           title: 'Review PowerGrader push',
-          action: 'Apply approved grades and feedback',
+          action: commentsOnly
+            ? 'Post approved feedback as assignment comments (no scores are written)'
+            : 'Apply approved grades and feedback',
           targets: reviewData.targets || [],
-          details: ['Frozen review for ' + reviewData.user_ids.length + ' submission(s).'],
+          details: ['Frozen review for ' + reviewData.user_ids.length + ' submission(s).'].concat(commentsOnly
+            ? ['New Quiz session: item scores are not written; enter them in the Canvas grader.'] : []),
           warnings: ['Canvas is checked again before each write. Any drift blocks the apply.'],
-          confirmText: 'Apply to Canvas',
+          confirmText: commentsOnly ? 'Post comments to Canvas' : 'Apply to Canvas',
         }).then(function(confirmed){
           if (!confirmed) return null;
           var apply = new FormData();
@@ -105,10 +109,19 @@
       .finally(function(){ if (button) button.disabled = false; });
   }
 
+  function writebackMode() {
+    return queue.writebackMode ? queue.writebackMode() : 'full';
+  }
+
   function pushOne() {
-    if (queue.getSession && queue.getSession() && queue.getSession().canvas_writeback_supported === false) { if (queue.showStatus) queue.showStatus('New Quiz snapshots cannot write to Canvas.', true); return; }
+    var mode = writebackMode();
+    if (mode === 'none') { if (queue.showStatus) queue.showStatus('This New Quiz session predates comment posting. Start a new session to post feedback.', true); return; }
     var st = currentStudent();
     if (!st) return;
+    if (mode === 'comments' && !(feedbackEl.value && feedbackEl.value.trim())) {
+      if (queue.showStatus) queue.showStatus('New Quiz sessions post feedback comments only — write feedback first. Scores are entered in Canvas.', true);
+      return;
+    }
     var userId = st.user_id;
     pushOneBtn.disabled = true;
     saveGrade('approved', false, function(ok){
@@ -118,10 +131,13 @@
   }
 
   function bulkPush() {
-    if (queue.getSession && queue.getSession() && queue.getSession().canvas_writeback_supported === false) { if (queue.showStatus) queue.showStatus('New Quiz snapshots cannot write to Canvas.', true); return; }
+    var mode = writebackMode();
+    if (mode === 'none') { if (queue.showStatus) queue.showStatus('This New Quiz session predates comment posting. Start a new session to post feedback.', true); return; }
     bulkPushBtn.disabled = true;
-    var userIds = getStudents().filter(function(s){ return s.status === 'approved' && !s.posted; })
-      .map(function(s){ return s.user_id; });
+    var userIds = getStudents().filter(function(s){
+      if (s.status !== 'approved' || s.posted) return false;
+      return mode === 'comments' ? !!(s.teacher_feedback && s.teacher_feedback.trim()) : true;
+    }).map(function(s){ return s.user_id; });
     if (!userIds.length) { bulkPushBtn.disabled = false; return; }
     reviewAndApply(userIds, bulkPushBtn);
   }

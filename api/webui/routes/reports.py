@@ -114,6 +114,7 @@ def list_assignments_full(course_id: str):
                 if a.get("assignment_group_id") is not None else "",
             "is_quiz":              _is_quiz(a),
             "quiz_kind":            _quiz_kind(a),
+            "is_quiz_lti_assignment": a.get("is_quiz_lti_assignment") is True,
         }
         for a in results
     ]

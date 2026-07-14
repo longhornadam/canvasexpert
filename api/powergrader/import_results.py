@@ -84,7 +84,7 @@ def import_results_into_session(
         }, 200
 
     rows = fp.reidentify(parsed, vault)
-    by_uid = {str(row.get("canvas_id") or ""): row for row in rows if row.get("resolved")}
+    by_uid = fp.merge_rows_by_uid(rows)
     updated = 0
     for st in session.get("students") or []:
         row = by_uid.get(str(st.get("user_id") or ""))

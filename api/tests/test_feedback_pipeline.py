@@ -207,6 +207,45 @@ def test_self_authored_results_conform_to_contract(tmp_path):
     assert all("Drafted by" not in r["feedback"] for r in rows)
 
 
+def test_merge_rows_by_uid_combines_multi_item_drafts():
+    """Two items for one student merge into one draft (regression: a plain
+    {canvas_id: row} dict kept only the last item, so a New Quiz essay draft
+    was silently overwritten by the photo-upload draft)."""
+    disclosure = "Drafted by Coach Vale (AI), reviewed by your teacher."
+    rows = [
+        {"resolved": True, "canvas_id": "42", "item_id": "essay-1", "score": 4,
+         "feedback": f"Strong ideas.\n\n{disclosure}", "disclosure": disclosure},
+        {"resolved": True, "canvas_id": "42", "item_id": "photo-2", "score": 0,
+         "feedback": f"Teacher will review the image.\n\n{disclosure}", "disclosure": disclosure},
+        {"resolved": True, "canvas_id": "7", "item_id": "essay-1", "score": 9,
+         "feedback": "Nice.", "disclosure": ""},
+        {"resolved": False, "canvas_id": "", "item_id": "essay-1", "score": 1,
+         "feedback": "?", "disclosure": ""},
+    ]
+    merged = fp.merge_rows_by_uid(rows)
+    assert set(merged) == {"42", "7"}
+    combined = merged["42"]
+    assert combined["score"] == 4
+    assert "Item 1 of 2 (AI score 4):" in combined["feedback"]
+    assert "Strong ideas." in combined["feedback"]
+    assert "Item 2 of 2 (AI score 0):" in combined["feedback"]
+    assert combined["feedback"].count("Coach Vale") == 1
+    assert combined["item_id"] == "essay-1,photo-2"
+    assert merged["7"]["feedback"] == "Nice."      # single-item passthrough
+
+
+def test_merge_rows_by_uid_leaves_total_blank_when_an_item_is_unscored():
+    rows = [
+        {"resolved": True, "canvas_id": "42", "item_id": "a", "score": 4,
+         "feedback": "Good.", "disclosure": ""},
+        {"resolved": True, "canvas_id": "42", "item_id": "b", "score": None,
+         "feedback": "Teacher reviews the image.", "disclosure": ""},
+    ]
+    merged = fp.merge_rows_by_uid(rows)
+    assert merged["42"]["score"] is None
+    assert "not AI-scored" in merged["42"]["feedback"]
+
+
 def test_normalize_ai_feedback_removes_duplicate_signature_and_formats():
     out = fp.normalize_ai_feedback(
         "Score: 8/10 Glows: clear thesis. Grows: connect evidence back. "

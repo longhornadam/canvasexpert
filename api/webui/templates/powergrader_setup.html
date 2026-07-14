@@ -9,17 +9,6 @@
 
 <div class="ce-workbench-shell pg-workbench-shell">
   <div class="ce-workbench-grid pg-workbench-grid">
-    <nav class="ce-work-rail pg-session-rail" aria-label="PowerGrader sessions">
-      <div class="ce-work-rail-section">
-        <p class="ce-work-rail-section-title">PowerGrader</p>
-        <a class="ce-work-rail-item" href="#pg-start-new">Start new <span class="pg-rail-count" id="pg-start-count">+</span></a>
-      </div>
-      <div class="ce-work-rail-section">
-        <a class="ce-work-rail-item" href="#pg-attention">Ready to post <span class="pg-rail-count" id="pg-attention-count">0</span></a>
-        <a class="ce-work-rail-item" href="#pg-continue">In progress <span class="pg-rail-count" id="pg-continue-count">0</span></a>
-        <a class="ce-work-rail-item" href="#pg-completed">Completed <span class="pg-rail-count" id="pg-completed-count">0</span></a>
-      </div>
-    </nav>
     <div class="pg-workbench-content ce-drafting-grid">
 
 <section class="card pg-setup-card">
@@ -34,28 +23,6 @@
   <div class="callout warn">No workspace configured — <a href="/settings">finish setup in Settings</a> so PowerGrader has a place to save sessions.</div>
   {% endif %}
 
-  <!-- ── New session ─────────────────────────────────────────────────── -->
-  <section class="pg-sessions-card" id="pg-sessions-card" aria-labelledby="pg-session-work-title">
-    <div class="pg-section-heading">
-      <div>
-        <h2 id="pg-session-work-title">Sessions</h2>
-        <p class="hint">Open an existing session instead of starting a duplicate.</p>
-      </div>
-      <span id="pg-sessions-status" class="hint" role="status" aria-live="polite">Loading sessions…</span>
-    </div>
-    <div id="pg-sessions-tbody">
-      <section class="pg-session-lane pg-session-lane--attention" id="pg-attention" aria-labelledby="pg-attention-title">
-        <h3 id="pg-attention-title">Ready to post</h3>
-        <div class="pg-session-list" id="pg-attention-list"></div>
-      </section>
-      <section class="pg-session-lane" id="pg-continue" aria-labelledby="pg-continue-title">
-        <h3 id="pg-continue-title">In progress</h3>
-        <div class="pg-session-list" id="pg-continue-list"></div>
-      </section>
-    </div>
-  </section>
-
-  <div id="pg-start-new" class="pg-start-anchor" aria-hidden="true"></div>
   <form id="pg-start-form" enctype="multipart/form-data">
 
     <!-- ═══ Section 1: Choose work ═══ -->
@@ -92,7 +59,7 @@
           </div>
           <small id="pg-evidence-status" class="lbl-hint" aria-live="polite"></small>
           <small id="pg-assignment-unsupported-hint" class="lbl-hint" hidden>
-            New Quizzes are selectable for written-response review only; they create a local snapshot and cannot write grades or comments back to Canvas. Classic Quizzes remain unsupported.
+            New Quizzes are reviewed from a local snapshot: teacher-approved feedback posts to Canvas as assignment comments, and item scores are entered in the Canvas grader. Classic Quizzes remain unsupported.
           </small>
         </div>
       </div>
@@ -280,6 +247,27 @@
       <div id="pg-privacy-list" class="pg-privacy-list"></div>
     </div>
   </form>
+</section>
+
+<!-- ── Existing sessions ─────────────────────────────────────────────── -->
+<section class="card pg-sessions-card" id="pg-sessions-card" aria-labelledby="pg-session-work-title">
+  <div class="pg-section-heading">
+    <div>
+      <h2 id="pg-session-work-title">Existing sessions</h2>
+      <p class="hint">Resume one of these instead of starting a duplicate.</p>
+    </div>
+    <span id="pg-sessions-status" class="hint" role="status" aria-live="polite">Loading sessions…</span>
+  </div>
+  <div id="pg-sessions-tbody">
+    <section class="pg-session-lane pg-session-lane--attention" id="pg-attention" aria-labelledby="pg-attention-title">
+      <h3 id="pg-attention-title">Ready to post <span class="pg-summary-count" id="pg-attention-count">0</span></h3>
+      <div class="pg-session-list" id="pg-attention-list"></div>
+    </section>
+    <section class="pg-session-lane" id="pg-continue" aria-labelledby="pg-continue-title">
+      <h3 id="pg-continue-title">In progress <span class="pg-summary-count" id="pg-continue-count">0</span></h3>
+      <div class="pg-session-list" id="pg-continue-list"></div>
+    </section>
+  </div>
 </section>
 
 <!-- ── Resume existing sessions ──────────────────────────────────────── -->

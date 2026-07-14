@@ -345,10 +345,44 @@ def build_request(bundle: dict, rubric_text: str, persona: dict, model: str,
 
 
 def parse_response(resp_json: dict) -> list:
-    """Extract the results array from an OpenRouter chat-completions response (pure)."""
-    content = (((resp_json or {}).get("choices") or [{}])[0]
-               .get("message", {}).get("content", "")) or ""
-    return parse_results(content)
+    """Extract the results array from an OpenRouter chat-completions response (pure).
+
+    OpenRouter can return HTTP 200 with an ``{"error": ...}`` body (moderation,
+    provider outage, credit exhaustion), and models sometimes wrap their JSON in
+    prose the downstream parser rejects. Both must surface as
+    OpenRouterResponseError so the debug file records what actually came back.
+    """
+    data = resp_json or {}
+    error = data.get("error")
+    if error:
+        message = error.get("message") if isinstance(error, dict) else str(error)
+        code = str((error.get("code") if isinstance(error, dict) else "") or "unknown")
+        raise OpenRouterResponseError(
+            f"OpenRouter returned an error instead of a scoring reply "
+            f"(code {code}): {message}",
+            context="OpenRouter scoring reply",
+            status_code=code,
+            response_snippet=str(message or "")[:500],
+        )
+    choice = (data.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    content = message.get("content") or ""
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text") or "" for part in content if isinstance(part, dict)
+        )
+    try:
+        return parse_results(content)
+    except ValueError as e:
+        snippet = str(content or "").strip()[:500] or "<empty model reply>"
+        finish = str(choice.get("finish_reason") or "unknown")
+        raise OpenRouterResponseError(
+            f"OpenRouter scoring reply was not usable JSON ({e}); "
+            f"finish_reason={finish}. Model reply started with: {snippet}",
+            context="OpenRouter scoring reply",
+            status_code="200",
+            response_snippet=snippet,
+        ) from e
 
 
 def score(bundle: dict, rubric_text: str, persona: dict, *, api_key: str,
