@@ -420,7 +420,7 @@ Stop with RED rather than guessing if:
   could not run because this environment exposes no browser binding. Do not begin
   Cohort 3 until the user reviews this diff and accepts/re-runs the visual gate.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
-  - Implementation commit `fb319cc` on `dev` (16 files, 599 insertions, 351
+  - Implementation commit `1e6a45f` on `dev` (16 files, 600 insertions, 351
     deletions) migrates Gradebook, Roster, and Settings to
     `workspace · left-main`, migrates Routines to `document · wide`, moves the shared
     routines partial with its consumers, adds the stateless Settings anchor index, and
