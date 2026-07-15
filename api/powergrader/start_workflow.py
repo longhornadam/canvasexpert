@@ -1,5 +1,7 @@
 """PowerGrader start-workflow helpers shared by route orchestration."""
 
+from datetime import datetime
+
 
 def build_extra_time_map(extra_time_list: list[dict]) -> dict:
     return {str(entry["id"]): entry.get("days", 0) for entry in extra_time_list}
@@ -46,6 +48,24 @@ def append_privacy_audit_step(
     return privacy_artifacts, privacy_steps
 
 
+def _auto_post_block(mode: str, auto_post_enabled: bool) -> dict:
+    """Build the auto_post block for a new session."""
+    from datetime import timezone
+    if not auto_post_enabled or mode not in ("assisted", "packet"):
+        return {
+            "enabled": False,
+            "authorized_at": None,
+            "disabled_at": None,
+            "policy_version": 2,
+        }
+    return {
+        "enabled": True,
+        "authorized_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "disabled_at": None,
+        "policy_version": 2,
+    }
+
+
 def build_start_session(
     *,
     build_session,
@@ -71,8 +91,9 @@ def build_start_session(
     new_quiz_item_finalization_supported: bool = False,
     evidence_manifest: str | None = None,
     evidence_status: str = "unknown",
+    auto_post_enabled: bool = False,
 ) -> dict:
-    return build_session(
+    session = build_session(
         session_id=session_id,
         course_id=course_id,
         assignment_id=assignment_id,
@@ -96,3 +117,7 @@ def build_start_session(
         evidence_manifest=evidence_manifest,
         evidence_status=evidence_status,
     )
+    session["auto_post"] = _auto_post_block(mode, auto_post_enabled)
+    session["auto_post_log"] = []
+    session["auto_post_summary"] = None
+    return session

@@ -97,6 +97,7 @@
         if (queue.renderPrivacyAudit) queue.renderPrivacyAudit(session);
         if (queue.renderLateWatch) queue.renderLateWatch(session);
         if (queue.renderPacketPanel) queue.renderPacketPanel(session);
+        if (queue.renderAutoPost) queue.renderAutoPost(session);
         renderStudent(Math.min(currentIndex, Math.max(0, students.length - 1)));
         if (options.onSuccess) options.onSuccess(session);
         return true;
@@ -153,13 +154,22 @@
     if (st.posted) {
       var pb = document.createElement('span');
       pb.className = 'pg-badge pg-badge--posted';
-      pb.textContent = '✓ Posted';
+      if (st.status === 'auto_pushed') {
+        pb.textContent = '✓ Auto-posted';
+        pb.title = 'To change this grade, edit it in Canvas SpeedGrader.';
+      } else {
+        pb.textContent = '✓ Posted';
+      }
       badgesEl.appendChild(pb);
     }
     var writeMode = queue.writebackMode();
     var pushOne = document.getElementById('pg-push-one');
     if (pushOne) {
       pushOne.hidden = writeMode === 'none';
+      pushOne.disabled = !!st.posted;
+      pushOne.title = st.status === 'auto_pushed'
+        ? 'To change this grade, edit it in Canvas SpeedGrader.'
+        : '';
       pushOne.textContent = writeMode === 'comments' ? 'Post feedback comment now' : 'Push this student now';
     }
     if (bulkPushBtn) { bulkPushBtn.hidden = writeMode === 'none'; }
@@ -363,6 +373,83 @@
   }
 
   function esc(s){ var d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
+
+  /* ── Auto-post banner ────────────────────────────────────────────── */
+  function renderAutoPost(s) {
+    var strip = document.getElementById('pg-autopost-strip');
+    var summaryEl = document.getElementById('pg-autopost-summary');
+    var actionsEl = document.getElementById('pg-autopost-actions');
+    if (!strip || !summaryEl || !actionsEl) return;
+    var autoPost = (s && s.auto_post) || {};
+    var autoPostSummary = (s && s.auto_post_summary) || null;
+    if (!autoPost.enabled && !autoPostSummary) {
+      if (autoPost.disabled_at) {
+        strip.hidden = false;
+        summaryEl.textContent = 'Automatic posting is off.';
+        if (autoPostSummary) {
+          var bits = buildAutoPostSummaryText(autoPostSummary);
+          if (bits) summaryEl.textContent += ' ' + bits;
+        }
+        actionsEl.innerHTML = '';
+      } else {
+        strip.hidden = true;
+      }
+      return;
+    }
+    strip.hidden = false;
+    if (autoPost.enabled) {
+      var disableBtn = document.createElement('button');
+      disableBtn.type = 'button';
+      disableBtn.className = 'small';
+      disableBtn.textContent = 'Stop automatic posting';
+      disableBtn.addEventListener('click', function(){
+        fetch('/api/powergrader/session/' + SESSION_ID + '/auto-post-disable', {method:'POST'})
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if (d.ok) {
+              if (queue.reloadSession) queue.reloadSession({ indexOverride: idx });
+              else window.location.reload();
+            } else {
+              showStatus('Could not disable automatic posting: ' + (d.error || 'unknown'), true);
+            }
+          })
+          .catch(function(e){ showStatus('Disable error: ' + e, true); });
+      });
+      actionsEl.innerHTML = '';
+      actionsEl.appendChild(disableBtn);
+    } else {
+      // Disabled: show off status without the disable action
+      actionsEl.innerHTML = '';
+    }
+    var bits = buildAutoPostSummaryText(autoPostSummary);
+    summaryEl.textContent = autoPost.enabled ? (bits || 'Automatic posting is on.') : ('Automatic posting is off.' + (bits ? ' ' + bits : ''));
+  }
+
+  function buildAutoPostSummaryText(autoPostSummary) {
+    if (!autoPostSummary) return '';
+    var bits = [];
+    if (autoPostSummary.evaluated !== undefined) {
+      bits.push('Latest automatic-post run: ' + autoPostSummary.pushed + ' of ' + autoPostSummary.evaluated + ' evaluated results posted');
+    }
+    if (autoPostSummary.needs_review) {
+      bits.push(autoPostSummary.needs_review + ' held for review');
+    }
+    if (autoPostSummary.blocked) {
+      bits.push(autoPostSummary.blocked + ' blocked');
+    }
+    if (autoPostSummary.reason_counts) {
+      var reasons = Object.keys(autoPostSummary.reason_counts)
+        .filter(function(k){ return k !== 'pushed'; })
+        .map(function(k){ return k.replace(/_/g, ' ') + ': ' + autoPostSummary.reason_counts[k]; })
+        .join('; ');
+      if (reasons) bits.push('(' + reasons + ')');
+    }
+    if (autoPostSummary.skipped_reason) {
+      bits.push('Skipped: ' + autoPostSummary.skipped_reason.replace(/_/g, ' '));
+    }
+    return bits.join('; ');
+  }
+  queue.renderAutoPost = renderAutoPost;
 
   loadSession();
 })();

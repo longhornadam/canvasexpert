@@ -164,6 +164,12 @@ def _is_readable_upload(assignment: dict) -> bool:
 
 
 def classify_assignment_for_autoscore(assignment: dict) -> tuple[str, str]:
+    grading_type = str(assignment.get("grading_type") or "").strip().lower()
+    if grading_type != "points":
+        return "unsupported", f"grading type '{grading_type}' is not supported for scheduled auto-score"
+    if assignment.get("group_category_id"):
+        return "unsupported", "group assignments are not supported for scheduled auto-score"
+
     types = set(_submission_types(assignment))
     if not types:
         return "unsupported", "no submission types are configured"

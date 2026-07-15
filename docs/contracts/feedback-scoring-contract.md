@@ -90,7 +90,7 @@ Rules enforced by `validate_results`:
 - Per-criterion rubric scoring (`rubric_assessment[criterion_id][points]`) - v1 posts a
   single `score` as `posted_grade`.
 
-## How reviewed PowerGrader sessions consume this
+## How PowerGrader sessions consume this
 
 The retired FeedbackExpert direct-push routes do not consume this contract. A named
 PowerGrader session validates imported results against its SAFE bundle, re-identifies
@@ -100,7 +100,10 @@ for any Canvas write.
 1. Teacher starts a packet-mode PowerGrader session, then pastes or locally selects a
    compatible result JSON file in that session.
 2. `validate_results(results, bundle, vault)` must be `ok` (hard errors block; warnings shown).
-   The SAFE bundle is loaded best-effort for coverage/score-range cross-checks.
+   A named Copilot batch is validated against that batch's required SAFE bundle. Late
+   Copilot batches own their own SAFE-bundle path; an explicitly named path that is missing
+   fails closed. Only legacy batches without the field fall back to the session's initial
+   top-level bundle.
 3. `reidentify(results, vault)` maps `pseudonym` to `canvas_id` / `real_name`.
 4. PowerGrader shows local suggestions for teacher edit/approval, freezes the current Canvas
    state before write, and refuses stale or unresolved results.
@@ -120,5 +123,17 @@ for any Canvas write.
    tools' late-sweep, by design.
 6. An audit line per push lands in `_audit/` - content-free (counts only), never names/scores.
 
-Push is explicitly confirmed because it changes real grades and notifies students. It is
-idempotency-aware: the preview shows the current grade, and graded rows are opt-in to overwrite.
+Ordinarily, the teacher explicitly confirms a PowerGrader push because it changes real grades
+and may notify students. Two narrow, default-off exceptions use the same scoring result shape:
+
+- **Scheduled auto-push** is authorized for one scheduled job/assignment.
+- **Interactive automatic posting** is authorized only while creating one new assisted or
+  packet PowerGrader session. Fast, Classic Quiz, and New Quiz sessions cannot enable it.
+
+Both exceptions are teacher-controlled and must pass fresh Canvas state, assignment policy,
+submission identity/drift, idempotency, and writable receipt-directory checks before a grade
+and comment PUT. Any missing, changed, excused, already-graded, unsupported, out-of-range, or
+otherwise uncertain case remains in the normal review queue. Packet late generation performs
+no Canvas write; only a later valid import for that batch can trigger the session-scoped policy.
+An automatically posted row is not reopened in Canvas Expert v1; the teacher changes it in
+Canvas SpeedGrader.

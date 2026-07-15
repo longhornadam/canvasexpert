@@ -132,6 +132,26 @@ def update_late_watch_after_score(session: dict, appended_user_ids: list[str], n
     )
 
 
+def update_late_watch_after_generate(session: dict, appended_user_ids: list[str], now_iso: str) -> None:
+    """Update known/generated IDs, last_generated, last_summary for packet mode."""
+    late_watch = (session or {}).setdefault("late_watch", {})
+    known_ids = {str(uid) for uid in late_watch.get("known_user_ids") or [] if str(uid)}
+    generated_ids = {str(uid) for uid in late_watch.get("generated_user_ids") or [] if str(uid)}
+    for uid in appended_user_ids or []:
+        uid = str(uid)
+        if not uid:
+            continue
+        known_ids.add(uid)
+        generated_ids.add(uid)
+    late_watch["known_user_ids"] = sorted(known_ids)
+    late_watch["generated_user_ids"] = sorted(generated_ids)
+    late_watch["last_generated"] = now_iso
+    late_watch["last_summary"] = (
+        f"{len(appended_user_ids or [])} late submission(s) processed for Copilot batch."
+        if appended_user_ids else "No late submissions processed."
+    )
+
+
 def apply_lateness_to_submission_payload(payload: dict, student: dict) -> dict:
     """If student has late_catchup metadata, add late policy fields under submission."""
     meta = (student or {}).get("late_catchup") or {}

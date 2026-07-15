@@ -12,8 +12,11 @@ except ModuleNotFoundError:
 
 
 def _late_watch_error(session: dict, *, require_key: bool = False, require_source_context: bool = False) -> str | None:
-    if not session or session.get("mode") != "assisted":
-        return "Late catch-up requires Auto-Score With API."
+    if not session:
+        return "Session not found."
+    mode = session.get("mode", "")
+    if mode not in ("assisted", "packet"):
+        return "Late catch-up requires Auto-Score With API or AI Chat mode."
     late_watch = session.get("late_watch") or {}
     if not late_watch:
         return "Late catch-up is not configured for this session."
@@ -21,7 +24,7 @@ def _late_watch_error(session: dict, *, require_key: bool = False, require_sourc
         return late_watch.get("reason") or "Late catch-up is disabled for this session."
     if not late_watch.get("supported"):
         return late_watch.get("reason") or "Late catch-up is not supported for this session."
-    if require_key and not config.has_openrouter_key():
+    if require_key and mode == "assisted" and not config.has_openrouter_key():
         return "No OpenRouter key is currently saved."
     if require_source_context and late_watch.get("source_context") is None:
         return "Saved source context is missing for this session."
@@ -74,7 +77,10 @@ def _build_late_catchup_students(
 
 
 def _run_late_catchup_score(session: dict, *, save_session) -> dict:
-    """Fetch, score, and append late catch-up submissions for one session."""
+    """Fetch, score, and append late catch-up submissions for one session.
+
+    Returns appended_user_ids for auto-post scoping.
+    """
     err = _late_watch_error(session, require_key=True, require_source_context=True)
     if err:
         return {"ok": False, "error": err, "status_code": 200, "privacy_steps": []}
@@ -82,6 +88,7 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
     late_watch = session.get("late_watch") or {}
     course_id = str(session.get("course_id") or "")
     assignment_id = str(session.get("assignment_id") or "")
+    mode = session.get("mode", "")
     subs, adata, fetch_err = canvas_fetch.fetch_submissions(course_id, assignment_id)
     if fetch_err:
         return {"ok": False, "error": fetch_err, "status_code": 200, "privacy_steps": []}
@@ -100,6 +107,7 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
             "privacy_steps": [],
             "privacy_artifacts": {},
             "ai_result": None,
+            "appended_user_ids": [],
         }
 
     is_new_quiz = (adata or {}).get("is_quiz_lti_assignment") is True
@@ -116,8 +124,10 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
     response_kind = session.get("response_kind") or late_watch.get("response_kind") or "scr"
     assignment_name = adata.get("name") or session.get("assignment_name") or assignment_id
     assignment_description = session.get("assignment_description") or html_to_text(adata.get("description") or "")
+    artifact_name = f"{assignment_name} - Late Catch-Up {batch_id}"
+
     ai_result = ai_workflow.run_ai_workflow(
-        mode="assisted",
+        mode=mode,
         submitted=new_subs,
         assignment_name=assignment_name,
         assignment_description=assignment_description,
@@ -132,9 +142,10 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
         source_text="",
         source_files_json="",
         source_uploads=None,
-        has_openrouter_key=config.has_openrouter_key(),
+        has_openrouter_key=config.has_openrouter_key() or mode == "packet",
         source_context_override=late_watch.get("source_context") or {},
-        artifact_assignment_name=f"{assignment_name} - Late Catch-Up {batch_id}",
+        artifact_assignment_name=artifact_name,
+        copilot_batch_prefix=batch_id,
     )
     if not ai_result["ok"]:
         return {
@@ -146,6 +157,7 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
             "budget": ai_result.get("budget"),
             "debug_path": ai_result.get("debug_path"),
             "copilot_packet": ai_result.get("copilot_packet"),
+            "appended_user_ids": [],
         }
 
     students = _build_late_catchup_students(
@@ -157,22 +169,90 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
         batch_id=batch_id,
     )
     appended_user_ids = [str(st.get("user_id", "")) for st in students if st.get("user_id")]
-    session.setdefault("students", []).extend(students)
-    late_catchup.update_late_watch_after_score(session, appended_user_ids, now_iso)
+
+    is_packet = mode == "packet"
+
+    if is_packet:
+        # Packet mode: append new unscored student rows before saving.
+        # Their AI fields remain empty until import.
+        for st in students:
+            st["ai_score"] = None
+            st["ai_feedback"] = None
+        session.setdefault("students", []).extend(students)
+        late_catchup.update_late_watch_after_generate(session, appended_user_ids, now_iso)
+        generated_count = _merge_late_batches(session, ai_result, batch_id, artifact_name)
+        session.setdefault("late_catchup_artifacts", []).append({
+            "ts": now_iso,
+            "late_batch_id": batch_id,
+            "mode": "packet",
+            "privacy_steps": ai_result.get("privacy_steps") or [],
+            "privacy_artifacts": ai_result.get("privacy_artifacts") or {},
+            "copilot_batches_added": generated_count,
+        })
+        late_watch["generated_user_ids"] = sorted(set(
+            late_watch.get("generated_user_ids") or []
+        ) | set(appended_user_ids))
+        late_watch["last_generated"] = now_iso
+        late_watch["known_user_ids"] = sorted(set(
+            late_watch.get("known_user_ids") or []
+        ) | set(appended_user_ids))
+        generated_count_val = generated_count
+    else:
+        # Assisted mode: append students with AI scores
+        session.setdefault("students", []).extend(students)
+        late_catchup.update_late_watch_after_score(session, appended_user_ids, now_iso)
+        generated_count_val = 0
+
     session.setdefault("late_catchup_log", []).append({
         "ts": now_iso,
         "batch_id": batch_id,
         "appended": len(students),
-        "ai_scored": len(ai_result.get("ai_by_uid") or {}),
+        "ai_scored": len(ai_result.get("ai_by_uid") or {}) if not is_packet else 0,
+        "generated": len(students) if is_packet else 0,
+        "copilot_batches_added": generated_count_val if is_packet else 0,
+        "mode": mode,
         "errors": [],
     })
     save_session(session)
-    return {
+    out = {
         "ok": True,
         "appended": len(students),
-        "ai_scored": len(ai_result.get("ai_by_uid") or {}),
         "batch_id": batch_id,
         "session_id": session.get("session_id", ""),
         "privacy_steps": ai_result.get("privacy_steps") or [],
         "privacy_artifacts": ai_result.get("privacy_artifacts") or {},
+        "appended_user_ids": appended_user_ids,
     }
+    if is_packet:
+        out["ai_scored"] = 0
+        out["generated"] = len(students)
+        out["copilot_batches_added"] = generated_count_val
+    else:
+        out["ai_scored"] = len(ai_result.get("ai_by_uid") or {})
+    return out
+
+
+def _merge_late_batches(session: dict, ai_result: dict, batch_id: str, artifact_name: str) -> int:
+    """Merge late batch Copilot batches into the session's copilot_packet."""
+    copilot_info = ai_result.get("copilot_packet")
+    if not copilot_info:
+        return 0
+    new_batches = copilot_info.get("batches") or []
+    if not new_batches:
+        return 0
+
+    existing_packet = session.setdefault("copilot_packet", {})
+    existing_batches = existing_packet.get("batches") or []
+
+    for batch in new_batches:
+        batch["late_catchup"] = True
+        batch["late_batch_id"] = batch_id
+        existing_batches.append(batch)
+
+    # Recompute counts from merged arrays
+    existing_packet["batches"] = existing_batches
+    existing_packet["batch_count"] = len(existing_batches)
+    existing_packet["student_count"] = sum(
+        b.get("student_count", 0) for b in existing_batches
+    )
+    return len(new_batches)

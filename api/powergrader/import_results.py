@@ -26,31 +26,23 @@ def import_results_into_session(
     if not results_text.strip():
         return {"ok": False, "error": "Paste the AI result JSON first."}, 200
 
-    artifacts = session.get("privacy_artifacts") or {}
-    safe_bundle = artifacts.get("safe_bundle") or ""
-    if not safe_bundle or not os.path.isfile(safe_bundle):
-        return {"ok": False, "error": "Safe AI Packet student response bundle is missing."}, 200
-
+    # 1. Parse results text
     try:
         parsed = fp.parse_results(results_text)
     except Exception as e:
         return {"ok": False, "error": f"Could not parse JSON: {e}"}, 200
-    try:
-        with open(safe_bundle, encoding="utf-8") as f:
-            bundle = json.load(f)
-    except Exception as e:
-        return {"ok": False, "error": f"Could not load Safe AI Packet bundle: {e}"}, 200
 
+    # 2. Resolve batch and its expected keys without mutating the session
     batch = None
     expected_keys = set()
-    batch_id = (batch_id or "").strip()
-    if batch_id:
+    clean_batch_id = (batch_id or "").strip()
+    if clean_batch_id:
         for candidate in ((session.get("copilot_packet") or {}).get("batches") or []):
-            if candidate.get("batch_id") == batch_id:
+            if candidate.get("batch_id") == clean_batch_id:
                 batch = candidate
                 break
         if not batch:
-            return {"ok": False, "error": f"Copilot batch '{batch_id}' was not found in this session."}, 200
+            return {"ok": False, "error": f"Copilot batch '{clean_batch_id}' was not found in this session."}, 200
         expected_keys = {
             (row.get("pseudonym"), str(row.get("item_id", "")))
             for row in batch.get("expected_results") or []
@@ -73,8 +65,37 @@ def import_results_into_session(
                 },
             }, 200
 
+    # 3. Select the SAFE bundle path
+    # If a batch explicitly names a safe_bundle path, that path must exist
+    # (fail closed).  Fallback to the top-level bundle only when the batch
+    # has no safe_bundle key at all.
+    if batch:
+        batch_path = batch.get("safe_bundle")
+        if batch_path:
+            if not os.path.isfile(batch_path):
+                return {"ok": False, "error": "Safe AI Packet student response bundle is missing."}, 200
+            safe_bundle = batch_path
+        else:
+            # Batch has no safe_bundle key — fall back to top-level bundle
+            artifacts = session.get("privacy_artifacts") or {}
+            safe_bundle = artifacts.get("safe_bundle") or ""
+    else:
+        artifacts = session.get("privacy_artifacts") or {}
+        safe_bundle = artifacts.get("safe_bundle") or ""
+
+    if not safe_bundle or not os.path.isfile(safe_bundle):
+        return {"ok": False, "error": "Safe AI Packet student response bundle is missing."}, 200
+
+    # 4. Load the bundle
+    try:
+        with open(safe_bundle, encoding="utf-8") as f:
+            bundle = json.load(f)
+    except Exception as e:
+        return {"ok": False, "error": f"Could not load Safe AI Packet bundle: {e}"}, 200
+
+    # 5. Validate against bundle
     vault = vault_factory()
-    bundle_for_validation = _bundle_for_batch(bundle, expected_keys) if batch_id else bundle
+    bundle_for_validation = _bundle_for_batch(bundle, expected_keys) if clean_batch_id else bundle
     verdict = fp.validate_results(parsed, bundle_for_validation, vault)
     if not verdict["ok"]:
         return {
@@ -83,19 +104,23 @@ def import_results_into_session(
             "validation": verdict,
         }, 200
 
+    # 6. Reidentify and merge
     rows = fp.reidentify(parsed, vault)
     by_uid = fp.merge_rows_by_uid(rows)
     item_by_uid = fp.item_rows_by_uid(rows)
-    updated = 0
+    updated_user_ids: set[str] = set()
     for st in session.get("students") or []:
-        row = by_uid.get(str(st.get("user_id") or ""))
+        uid = str(st.get("user_id") or "")
+        row = by_uid.get(uid)
         if not row:
             continue
         st["ai_score"] = row.get("score")
         st["ai_feedback"] = row.get("feedback")
-        st["ai_item_results"] = item_by_uid.get(str(st.get("user_id") or ""), [])
-        updated += 1
+        st["ai_item_results"] = item_by_uid.get(uid, [])
+        updated_user_ids.add(uid)
+    updated = len(updated_user_ids)
 
+    # 7. Update batch metadata
     unresolved_count = sum(1 for row in rows if not row.get("resolved"))
     if batch is not None:
         batch["imported_at"] = datetime.now().isoformat(timespec="seconds")
@@ -107,9 +132,10 @@ def import_results_into_session(
         else:
             batch["status"] = "partial"
 
+    # 8. Log and save
     session.setdefault("ai_import_log", []).append({
         "ts": datetime.now().isoformat(timespec="seconds"),
-        "batch_id": batch_id,
+        "batch_id": clean_batch_id,
         "updated": updated,
         "validation": verdict,
     })
@@ -117,11 +143,12 @@ def import_results_into_session(
     payload = {
         "ok": True,
         "updated": updated,
+        "updated_user_ids": sorted(updated_user_ids),
         "validation": verdict,
         "unresolved": unresolved_count,
     }
-    if batch_id:
-        payload["batch_id"] = batch_id
+    if clean_batch_id:
+        payload["batch_id"] = clean_batch_id
         payload["batch_status"] = batch.get("status") if batch else ""
     return payload, 200
 

@@ -426,8 +426,25 @@ Modes:
 The Copilot flow is designed for education tenants where ZIP upload or large-file
 context behavior may be limited. Batch imports validate `pseudonym` and `item_id`
 against the selected batch before updating AI suggestions, so a response from one
-batch cannot silently update another batch. AI suggestions remain drafts until the
-teacher reviews, edits, approves, and pushes.
+batch cannot silently update another batch. Late Copilot batches are additive, use a
+distinct batch prefix and visible **Late** label, and own the SAFE bundle used to validate
+their later import.
+
+AI suggestions remain drafts until the teacher reviews, edits, approves, and pushes unless
+the teacher explicitly enables one of two narrow automatic-post paths:
+
+- A scheduled Auto-Score job may opt one job/assignment into scheduled auto-push.
+- A newly created assisted or packet PowerGrader session may opt only that session into
+  **Automatically post eligible AI results to Canvas**. The checkbox is default-off and
+  non-sticky. Grade Myself, Classic Quiz, and New Quiz sessions cannot enable it.
+
+Both paths require fresh Canvas state, supported points-based individual assignment metadata,
+unchanged submission identity, no existing Canvas work, valid in-range AI output, idempotency,
+and a writable receipt directory. Missing, changed, excused, unsupported, or otherwise
+uncertain rows stay in the review queue. Packet late generation itself never posts; a valid
+batch import is its only automatic-post trigger. The queue keeps the latest trigger summary
+and marks successful rows **Auto-posted**. Canvas Expert v1 does not reopen those rows; use
+Canvas SpeedGrader to change an automatically posted grade.
 
 Safety wording is practical rather than absolute: pseudonymized files use synthetic
 names and remove obvious identifiers before upload, but visible content can still

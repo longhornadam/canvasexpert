@@ -3,7 +3,7 @@
 Purpose: give future debugging sessions a low-token routing map so they can jump
 straight to the owning file instead of re-mapping PowerGrader from scratch.
 
-As of 2026-07-14, the old browser entry files are thin shims. PowerGrader setup now opens
+As of 2026-07-15, the old browser entry files are thin shims. PowerGrader setup now opens
 course assignment/module choices from Course Catalog v1 before refreshing the selected
 Current course in the background. Use this file as the first stop before reading code.
 
@@ -47,6 +47,8 @@ into nearby helper modules or the backend package when it becomes reusable.
 - `api/powergrader/autoscore_claims.py` - 202 lines
 - `api/powergrader/autopush_policy.py` - 308 lines
 - `api/powergrader/autopush_policy_result.py` - 63 lines
+- `api/powergrader/push_context.py` - scheduled and interactive authorization-context builders
+- `api/powergrader/interactive_autopush.py` - guarded fresh-state runner for one interactive trigger
 - `api/powergrader/copilot_packet.py` - 222 lines
 - `api/powergrader/copilot_packet_support.py` - 137 lines
 - `api/webui/routes/routines_powergrader.py` - 361 lines
@@ -117,6 +119,7 @@ Ownership:
   - student rendering
   - AI draft formatting
   - progress/status rendering
+  - latest automatic-post summary/history banner, disable control, and auto-posted row badge/hint
 - `queue_review.js`
   - approve/skip/save
   - push-one and bulk push
@@ -126,12 +129,12 @@ Ownership:
 - `queue_privacy.js`
   - privacy audit strip summary and actions
 - `queue_late_catchup.js`
-  - late preview and late scoring controls
+  - assisted late scoring and packet **Generate Late Copilot Batch** controls
   - late-watch strip rendering
 - `queue_import.js`
   - packet strip rendering
   - legacy JSON import
-  - Copilot batch import
+  - Copilot batch import, including Late labels and full-session refresh after import
   - packet folder / prompt actions
 
 ## Backend package routing
@@ -164,6 +167,13 @@ Ownership:
   - final auto-push decision for one student
 - `api/powergrader/autopush_policy_result.py`
   - canonical decision payload builders for blocked/review/allowed outcomes
+- `api/powergrader/push_context.py`
+  - immutable scheduled-job and interactive-session authorization contexts
+  - policy-v2 grade/comment permission flags consumed by the shared evaluator/executor
+- `api/powergrader/interactive_autopush.py`
+  - interactive-session guards and exact trigger scoping
+  - fresh paginated Canvas submission/assignment projection with fail-closed fallback
+  - receipt-directory resolution and sanitized latest-run summary/log shaping
 - `api/powergrader/session_builder.py`
   - queue student list construction
   - final session dict layout
@@ -172,6 +182,8 @@ Ownership:
   - Canvas push mutation
 - `api/powergrader/import_results.py`
   - Copilot / legacy import validation and merge
+  - exact updated-user IDs and batch-owned SAFE-bundle selection; legacy fallback only when
+    the batch has no bundle field
 - `api/powergrader/copilot_packet.py`
   - fresh-chat Copilot batch construction
   - token-budget-based batch splitting
@@ -188,6 +200,8 @@ Ownership:
   - explicit setup refresh/folder actions use this same owner
 - `api/powergrader/session_store.py`
   - session persistence on disk under `_System/PowerGrader/Sessions/`, with new-first legacy reads
+  - process-local per-session `RLock`; interactive trigger routes hold it from authoritative
+    load through fresh-state evaluation, any Canvas PUT, and final save
 - `api/powergrader/canvas_fetch.py`
   - submission fetch plus authenticated ordinary-upload streaming, atomic preservation, and shared attachment routing
 - `api/powergrader/new_quiz_fetch.py`
@@ -213,6 +227,10 @@ Ownership:
 
 - `api/webui/routes/powergrader_late.py`
   - late-catchup route support and compatibility bridge
+- `api/webui/routes/powergrader.py`
+  - session-scoped automatic-post authorization at start
+  - locked `packet_import` and `assisted_late` triggers plus the locked disable endpoint
+  - packet late generation remains write-free until a valid batch import
 - `api/webui/routes/powergrader_helpers.py`
   - pure response/payload helpers
 - `api/webui/routes/powergrader_setup_support.py`
@@ -257,6 +275,9 @@ Ownership:
 - Auto-push eligibility or idempotency behavior is wrong:
   - `autopush_policy.py`
   - `autopush_policy_result.py`
+  - `push_context.py`
+  - `interactive_autopush.py`
+  - `powergrader.py::{pg_start,pg_import_results,pg_late_score,pg_auto_post_disable}`
   - `autoscore_claims.py`
 - Scheduled autoscore routine behavior is wrong:
   - `routines_powergrader.py`

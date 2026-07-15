@@ -102,8 +102,17 @@ def build_copilot_batches(
     effective_context_tokens: int = DEFAULT_COPILOT_CONTEXT_TOKENS,
     output_reserve_tokens: int = COPILOT_OUTPUT_RESERVE_TOKENS,
     safety_margin_tokens: int = COPILOT_SAFETY_MARGIN_TOKENS,
+    batch_id_prefix: str | None = None,
+    safe_bundle_path: str | None = None,
 ) -> dict:
-    """Build fresh-chat Copilot batch folders from a SAFE LLM bundle."""
+    """Build fresh-chat Copilot batch folders from a SAFE LLM bundle.
+
+    Args:
+        batch_id_prefix: Optional prefix for batch IDs (e.g. 'late-20260715-142200').
+            Initial batches use 'batch-01'; late batches use '<prefix>-batch-01'.
+        safe_bundle_path: Absolute path to the SAFE bundle JSON. Each batch stores
+            its own absolute safe_bundle path for validation.
+    """
     safe_dir = os.path.abspath(safe_dir)
     safe_name = _safe_assignment_name(assignment_name)
     packet_folder = os.path.abspath(os.path.join(safe_dir, safe_ai_packet_name(assignment_name), "Copilot Batches"))
@@ -151,6 +160,12 @@ def build_copilot_batches(
         folder = os.path.abspath(os.path.join(packet_folder, f"Batch {index:02d} of {total_batches:02d}"))
         os.makedirs(folder, exist_ok=True)
 
+        # Compute the batch_id: prefix + 'batch-XX' for late, or 'batch-XX' for initial
+        if batch_id_prefix:
+            batch_id_value = f"{batch_id_prefix}-batch-{index:02d}"
+        else:
+            batch_id_value = f"batch-{index:02d}"
+
         assignment_info_path = os.path.join(folder, f"01 - {safe_name} - Assignment Information - SAFE.md")
         rubric_persona_path = os.path.join(folder, f"02 - {safe_name} - Rubric and TA Personality - SAFE.md")
         student_work_path = os.path.join(
@@ -179,7 +194,7 @@ def build_copilot_batches(
             for entry in raw_batch["entries"]
         ]
         batches.append({
-            "batch_id": f"batch-{index:02d}",
+            "batch_id": batch_id_value,
             "label": label,
             "folder": folder,
             "files": {
@@ -187,6 +202,7 @@ def build_copilot_batches(
                 "rubric_persona": rubric_persona_path,
                 "student_work": student_work_path,
             },
+            "safe_bundle": safe_bundle_path,
             "prompt": prompt,
             "student_count": len(raw_batch["entries"]),
             "token_estimate": token_estimate,

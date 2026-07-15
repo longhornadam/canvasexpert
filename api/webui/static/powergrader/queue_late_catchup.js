@@ -22,6 +22,11 @@
     return queue.getSession ? queue.getSession() : null;
   }
 
+  function currentMode() {
+    var s = getSession();
+    return s ? (s.mode || 'fast') : 'fast';
+  }
+
   function renderLateWatch(s) {
     if (!lateStrip || !lateSummary || !lateActions || !lateDetail) return;
     var late = (s && s.late_watch) || null;
@@ -33,11 +38,13 @@
     }
     lateStrip.hidden = false;
     var enabled = !!late.enabled && !!late.supported;
+    var mode = s ? s.mode : 'fast';
+    var isPacket = mode === 'packet';
     var summaryBits = [];
     if (late.reason && !enabled) {
       summaryBits.push(late.reason);
     } else if (enabled) {
-      summaryBits.push('Watching');
+      summaryBits.push(isPacket ? 'Generating' : 'Watching');
     } else {
       summaryBits.push('Not watching');
     }
@@ -46,16 +53,24 @@
     latePreviewBtn.disabled = !enabled;
     lateScoreBtn.hidden = true;
     lateScoreBtn.disabled = true;
+    // Relabel for packet mode
+    lateScoreBtn.textContent = isPacket ? 'Generate Late Copilot Batch' : 'Score New Late Work';
     var initialMissing = (late.initial_missing_user_ids || []).length;
     var knownCount = (late.known_user_ids || []).length;
     var scoredCount = (late.scored_user_ids || []).length;
+    var generatedCount = (late.generated_user_ids || []).length;
     var details = [
       '<div class="pg-late-detail-row">Initial missing: ' + initialMissing + '</div>',
       '<div class="pg-late-detail-row">Known in queue: ' + knownCount + '</div>',
-      '<div class="pg-late-detail-row">Already appended: ' + scoredCount + '</div>'
     ];
+    if (isPacket) {
+      details.push('<div class="pg-late-detail-row">Copilot batches generated: ' + generatedCount + '</div>');
+    } else {
+      details.push('<div class="pg-late-detail-row">Already appended: ' + scoredCount + '</div>');
+    }
     if (late.last_checked) details.push('<div class="pg-late-detail-row">Last checked: ' + esc(late.last_checked) + '</div>');
     if (late.last_scored) details.push('<div class="pg-late-detail-row">Last scored: ' + esc(late.last_scored) + '</div>');
+    if (late.last_generated) details.push('<div class="pg-late-detail-row">Last generated: ' + esc(late.last_generated) + '</div>');
     lateDetail.innerHTML = details.join('');
   }
 
@@ -134,13 +149,15 @@
 
   lateScoreBtn && lateScoreBtn.addEventListener('click', function(){
     lateScoreBtn.disabled = true;
-    if (lateSummary) lateSummary.textContent = 'Scoring new late submissions…';
+    var mode = currentMode();
+    var label = mode === 'packet' ? 'Generating late Copilot batch…' : 'Scoring new late submissions…';
+    if (lateSummary) lateSummary.textContent = label;
     fetch('/api/powergrader/session/' + sessionId + '/late-score', {method:'POST'})
       .then(function(r){ return r.json(); })
       .then(function(d){
         if (!d.ok) {
-          if (lateSummary) lateSummary.textContent = d.error || 'Late scoring failed.';
-          if (queue.showStatus) queue.showStatus(d.error || 'Late scoring failed.', true);
+          if (lateSummary) lateSummary.textContent = d.error || (mode === 'packet' ? 'Late generation failed.' : 'Late scoring failed.');
+          if (queue.showStatus) queue.showStatus(d.error || (mode === 'packet' ? 'Late generation failed.' : 'Late scoring failed.'), true);
           return;
         }
         return refreshAfterLateScore(d.appended);

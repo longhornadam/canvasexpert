@@ -28,12 +28,27 @@ def autoscore_receipt_dir(job: dict, session_store) -> str | None:
 
 
 def autoscore_canvas_states(submissions: list[dict] | None) -> dict[str, dict]:
+    """Project fresh Canvas submission rows into the shared state format.
+
+    Every returned row has canvas_state_present=True, user_id, submission_id,
+    attempt, submitted_at, excused, and workflow_state, plus the existing
+    score/comment fields.  Explicit None is preserved for missing identity
+    fields so policy can distinguish missing data from an unchanged value.
+    """
     states: dict[str, dict] = {}
     for sub in submissions or []:
         uid = str(sub.get("user_id") or "").strip()
         if not uid:
             continue
-        state: dict = {}
+        state: dict = {
+            "canvas_state_present": True,
+            "user_id": uid,
+            "submission_id": str(sub.get("id") or "").strip() or None,
+            "attempt": sub.get("attempt"),
+            "submitted_at": sub.get("submitted_at"),
+            "excused": sub.get("excused") is True,
+            "workflow_state": str(sub.get("workflow_state") or "").strip() or None,
+        }
         if sub.get("score") is not None:
             state["existing_score"] = sub.get("score")
         comments = []
@@ -91,6 +106,8 @@ def autoscore_summary_payload(result: dict) -> dict:
         "pushed": int(result.get("pushed") or 0),
         "needs_review": int(result.get("needs_review") or 0),
         "blocked": int(result.get("blocked") or 0),
+        "evaluated": int(result.get("evaluated") or 0),
+        "reason_counts": dict(result.get("reason_counts") or {}),
         "errors": [
             {"user_id": err.get("user_id"), "reason": err.get("reason")}
             for err in (result.get("errors") or [])

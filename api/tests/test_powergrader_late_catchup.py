@@ -322,7 +322,7 @@ def test_late_routes_reject_non_assisted_session(monkeypatch):
         data = _response_json(route("sid"))
         assert data == {
             "ok": False,
-            "error": "Late catch-up requires Auto-Score With API.",
+            "error": "Late catch-up requires Auto-Score With API or AI Chat mode.",
         }
     assert state["mode"] == "fast"
 

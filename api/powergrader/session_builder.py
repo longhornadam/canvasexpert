@@ -85,6 +85,10 @@ def build_students(
             "speedgrader_required": requires_speedgrader,
             "code_files":    code_files,
             "current_score": s.get("score"),
+            "submission_baseline": {
+                "attempt": s.get("attempt"),
+                "submitted_at": s.get("submitted_at"),
+            },
             "status":        "pending",
             "ai_score":      ai.get("score"),
             "ai_feedback":   ai.get("feedback"),

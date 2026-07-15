@@ -67,6 +67,7 @@ def test_scheduled_autoscore_reschedules_when_due_date_moves_later(monkeypatch):
     monkeypatch.setattr(routines.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: ([], {
         "name": "Essay 1",
         "submission_types": ["online_text_entry"],
+        "grading_type": "points",
         "due_at": "2099-07-02T23:59:00-05:00",
     }, None))
     monkeypatch.setattr(routines, "_canvas_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("scheduled autoscore must not write grades/comments")))
@@ -97,6 +98,7 @@ def test_scheduled_autoscore_reschedules_when_no_submitted_work(monkeypatch):
     ], {
         "name": "Essay 1",
         "submission_types": ["online_text_entry"],
+        "grading_type": "points",
         "due_at": "2026-06-28T23:59:00-05:00",
     }, None))
     monkeypatch.setattr(routines, "_canvas_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("scheduled autoscore must not write grades/comments")))
@@ -136,6 +138,7 @@ def test_scheduled_autoscore_creates_draft_session_without_canvas_writeback(monk
         "name": "Essay 1",
         "description": "<p>Explain the text.</p>",
         "submission_types": ["online_text_entry"],
+        "grading_type": "points",
         "due_at": "2026-06-28T23:59:00-05:00",
         "points_possible": 10,
     }, None))
@@ -212,6 +215,7 @@ def test_scheduled_autoscore_runs_autopush_when_enabled(monkeypatch):
         "name": "Essay 1",
         "description": "<p>Explain the text.</p>",
         "submission_types": ["online_text_entry"],
+        "grading_type": "points",
         "due_at": "2026-06-28T23:59:00-05:00",
         "points_possible": 10,
     }, None))

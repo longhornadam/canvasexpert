@@ -142,6 +142,7 @@ EXPECTED = [
     ('/api/powergrader/session/{session_id}/late-score', ('POST',)),
     ('/api/powergrader/session/{session_id}/late-watch', ('POST',)),
     ('/api/powergrader/session/{session_id}/import-results', ('POST',)),
+    ('/api/powergrader/session/{session_id}/auto-post-disable', ('POST',)),
     ('/api/powergrader/session/{session_id}/new-quiz-finalize', ('POST',)),
     ('/api/powergrader/session/{session_id}/new-quiz-csv-resolve', ('POST',)),
     ('/api/powergrader/session/{session_id}/new-quiz-review', ('POST',)),

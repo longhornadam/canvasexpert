@@ -33,6 +33,7 @@ def run_ai_workflow(
     source_context_override: dict | None = None,
     artifact_assignment_name: str | None = None,
     feedback_pattern_id: str = "",
+    copilot_batch_prefix: str | None = None,
 ) -> dict:
     """Run the AI/packet workflow for a PowerGrader session.
 
@@ -251,11 +252,13 @@ def run_ai_workflow(
 
         if mode == "packet" and safe_students > 0:
             copilot_info = copilot_packet.build_copilot_batches(
-                assignment_name=assignment_name,
+                assignment_name=artifact_name,
                 safe_dir=safe_dir,
                 llm_bundle=llm_bundle,
                 rubric_text=rubric_text,
                 persona=persona,
+                batch_id_prefix=copilot_batch_prefix,
+                safe_bundle_path=write_result.get("safe_bundle"),
             )
             privacy_artifacts["copilot_packet_folder"] = copilot_info.get("packet_folder")
             privacy_artifacts["copilot_readme"] = copilot_info.get("readme_path")

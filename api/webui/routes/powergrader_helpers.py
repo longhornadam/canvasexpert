@@ -20,18 +20,20 @@ def build_late_watch_state(
     new_quiz_snapshot: bool = False,
 ) -> dict:
     watch_late_enabled = str(watch_late).lower() in {"1", "true", "yes", "on"}
-    late_supported = mode == "assisted" and has_openrouter_key and not new_quiz_snapshot
+    late_supported = mode in ("assisted", "packet") and not new_quiz_snapshot
     late_reason = ""
     if new_quiz_snapshot:
         late_reason = "New Quiz sessions are immutable snapshots; late catch-up is not supported."
         watch_late_enabled = False
     elif not watch_late_enabled:
         late_reason = "Late catch-up is disabled for this session."
-    elif mode != "assisted":
-        late_reason = "Late catch-up requires Auto-Score With API."
-        watch_late_enabled = False
-    elif not late_supported:
+    elif mode == "assisted" and not has_openrouter_key:
         late_reason = "Late catch-up requires Auto-Score With API and a saved OpenRouter key."
+        watch_late_enabled = False
+    elif mode == "packet":
+        late_reason = ""  # Packet mode late generation is separate from scoring
+    elif mode not in ("assisted", "packet"):
+        late_reason = "Late catch-up requires Auto-Score With API or AI Chat mode."
         watch_late_enabled = False
 
     return {
@@ -41,8 +43,10 @@ def build_late_watch_state(
         "initial_missing_user_ids": initial_missing_user_ids,
         "known_user_ids": submitted_user_ids,
         "scored_user_ids": [],
+        "generated_user_ids": [],
         "last_checked": None,
         "last_scored": None,
+        "last_generated": None,
         "last_summary": "",
         "source_context": {},
         "response_kind": response_kind,
@@ -80,8 +84,9 @@ def build_start_success_payload(
     privacy_artifacts: dict,
     copilot_packet: dict | None,
     evidence_status: str = "unknown",
+    auto_post_summary: dict | None = None,
 ) -> dict:
-    return {
+    payload = {
         "ok": True,
         "session_id": session_id,
         "student_count": len(students),
@@ -95,6 +100,9 @@ def build_start_success_payload(
         "copilot_packet_folder": (copilot_packet or {}).get("packet_folder"),
         "evidence_status": evidence_status,
     }
+    if auto_post_summary is not None:
+        payload["auto_post_summary"] = auto_post_summary
+    return payload
 
 
 def build_late_preview_students(new_subs: list[dict]) -> list[dict]:

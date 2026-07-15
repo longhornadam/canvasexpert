@@ -7,19 +7,12 @@ from .gradebook_common import _course_assignments, _course_students, _course_sub
 router = APIRouter(tags=["gradebook"])
 
 
-@router.get("/api/gradebook")
-def api_gradebook(course_id: str):
-    """Whole-course grading snapshot: per-assignment and per-student stats."""
-    students, err = _course_students(course_id)
-    if err:
-        return JSONResponse({"ok": False, "error": err})
-    assignments, err = _course_assignments(course_id)
-    if err:
-        return JSONResponse({"ok": False, "error": err})
-    subs, err = _course_submissions(course_id)
-    if err:
-        return JSONResponse({"ok": False, "error": err})
+def build_snapshot(students, assignments, subs) -> dict:
+    """Pure aggregation: per-assignment and per-student stats for a whole course.
 
+    Student rows additionally carry ``user_id`` (string) so callers that need Canvas
+    identity (e.g. the MCP gradebook tool, to key the pseudonym vault) can use it;
+    the route below strips it before returning JSON so the wire shape is unchanged."""
     smap = {s["id"]: {"name": s.get("sortable_name") or s.get("name", ""),
                       "missing": 0, "late": 0, "ungraded": 0,
                       "score": 0.0, "possible": 0.0}
@@ -77,10 +70,11 @@ def api_gradebook(course_id: str):
     out_assignments.sort(key=lambda a: a["due_at"] or "0000-00-00", reverse=True)
 
     out_students = []
-    for s in smap.values():
+    for sid, s in smap.items():
         pct = (round(s["score"] / s["possible"] * 100, 1)
                if s["possible"] else None)
-        out_students.append({"name": s["name"], "missing": s["missing"],
+        out_students.append({"name": s["name"], "user_id": str(sid),
+                             "missing": s["missing"],
                              "late": s["late"], "ungraded": s["ungraded"],
                              "pct": pct})
     out_students.sort(key=lambda s: s["name"].lower())
@@ -88,7 +82,7 @@ def api_gradebook(course_id: str):
     graded_pcts = [s["pct"] for s in out_students if s["pct"] is not None]
     class_avg = round(sum(graded_pcts) / len(graded_pcts), 1) if graded_pcts else None
 
-    return JSONResponse({
+    return {
         "ok": True,
         "class_avg": class_avg,
         "student_count": len(out_students),
@@ -97,4 +91,25 @@ def api_gradebook(course_id: str):
                               for a in out_assignments if a["submitted"] > a["graded"]),
         "assignments": out_assignments,
         "students": out_students,
-    })
+    }
+
+
+@router.get("/api/gradebook")
+def api_gradebook(course_id: str):
+    """Whole-course grading snapshot: per-assignment and per-student stats."""
+    students, err = _course_students(course_id)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    assignments, err = _course_assignments(course_id)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    subs, err = _course_submissions(course_id)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+
+    snapshot = build_snapshot(students, assignments, subs)
+    snapshot["students"] = [
+        {k: v for k, v in s.items() if k != "user_id"}
+        for s in snapshot["students"]
+    ]
+    return JSONResponse(snapshot)

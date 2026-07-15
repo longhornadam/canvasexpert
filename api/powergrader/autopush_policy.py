@@ -1,7 +1,7 @@
-"""Pure policy checks for scheduled PowerGrader auto-push decisions.
+"""Pure policy checks for PowerGrader auto-push decisions.
 
 This module does not talk to Canvas or mutate queue files. It only evaluates a
-job/student snapshot and returns a structured decision payload.
+context/student snapshot and returns a structured decision payload.
 """
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from decimal import Decimal, InvalidOperation
 from .autoscore_queue import classify_assignment_for_autoscore
 from . import autopush_policy_result as policy_result
 
-POLICY_VERSION = 1
+POLICY_VERSION = 2
 ALLOWED_DECISIONS = {"auto_push_allowed", "needs_review", "blocked"}
-READY_JOB_STATUSES = {"session_ready", "push_ready", "auto_pushing", "partial_auto_pushed"}
+READY_CONTEXT_STATUSES = {"session_ready", "push_ready", "auto_pushing", "partial_auto_pushed"}
 
 
 def _mapping(value: dict | None) -> dict:
@@ -128,7 +128,7 @@ def _has_error_blob(value: dict | None) -> bool:
     mapping = _mapping(value)
     if not mapping:
         return False
-    for key in ("privacy_error", "scoring_error", "error"):
+    for key in ("privacy_error", "scoring_error", "ai_scoring_error", "error"):
         item = mapping.get(key)
         if item not in (None, "", False):
             return True
@@ -187,26 +187,26 @@ def _policy_warning_reason(canvas_state: dict | None) -> str:
 
 def evaluate_student_for_autopush(
     *,
-    job: dict,
+    context: dict,
     assignment: dict,
     student: dict,
     ai_result: dict | None = None,
     canvas_state: dict | None = None,
 ) -> dict:
-    job_map = _mapping(job)
+    context_map = _mapping(context)
     assignment_map = _mapping(assignment)
     student_map = _mapping(student)
     ai_map = _mapping(ai_result) if ai_result is not None else {}
     canvas_map = _mapping(canvas_state)
-    policy = _effective_job_policy(job_map)
+    policy = _effective_job_policy(context_map)
 
     policy_checks = policy_result.empty_policy_checks()
 
-    job_auto_push = job_map.get("auto_push") is True
+    context_auto_push = context_map.get("auto_push") is True
     policy_enabled = policy.get("enabled") is True
-    policy_checks["teacher_opt_in"] = job_auto_push
+    policy_checks["teacher_opt_in"] = context_auto_push
     policy_checks["policy_enabled"] = policy_enabled
-    if not job_auto_push or not policy_enabled:
+    if not context_auto_push or not policy_enabled:
         return policy_result.blocked(policy_checks=policy_checks, blocked_reason="auto_push_not_opted_in")
 
     allow_grade_push = policy.get("allow_grade_push")
@@ -218,13 +218,13 @@ def evaluate_student_for_autopush(
     policy_checks["grade_push_allowed"] = bool(allow_grade_push)
     policy_checks["comments_allowed"] = bool(allow_comment_push)
 
-    job_status = _text(job_map.get("status"))
-    if job_status and job_status not in READY_JOB_STATUSES:
-        policy_checks["job_status_allowed"] = False
-        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="job_not_ready_for_push")
-    policy_checks["job_status_allowed"] = True
+    context_status = _text(context_map.get("status"))
+    if context_status and context_status not in READY_CONTEXT_STATUSES:
+        policy_checks["context_status_allowed"] = False
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="context_not_ready_for_push")
+    policy_checks["context_status_allowed"] = True
 
-    eligibility_source = assignment_map if assignment_map else _mapping(job_map.get("assignment"))
+    eligibility_source = assignment_map if assignment_map else _mapping(context_map.get("assignment_snapshot"))
     eligibility, eligibility_reason = classify_assignment_for_autoscore(eligibility_source)
     if eligibility == "unsupported":
         return policy_result.blocked(policy_checks=policy_checks, blocked_reason="assignment_unsupported")
@@ -235,7 +235,7 @@ def evaluate_student_for_autopush(
 
     user_id, submission_id = _student_identity(student_map, ai_map if ai_result is not None else None, canvas_map)
     if not user_id and not submission_id:
-        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_student_identity")
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_context_identity")
 
     if not _submission_has_work(student_map):
         policy_checks["submission_present"] = False
@@ -245,13 +245,45 @@ def evaluate_student_for_autopush(
     if _has_error_blob(student_map) or _has_error_blob(ai_map) or _has_error_blob(canvas_map):
         return policy_result.blocked(policy_checks=policy_checks, blocked_reason="privacy_or_scoring_error")
 
+    # --- Fail-closed fresh-state checks ---
+    canvas_state_present = canvas_map.get("canvas_state_present")
+    if canvas_state_present is False:
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="canvas_state_unavailable")
+    if canvas_state_present is not True:
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="canvas_state_incomplete")
+
+    if canvas_map.get("excused") is True:
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="submission_excused")
+
+    workflow_state = _text(canvas_map.get("workflow_state"))
+    if workflow_state == "unsubmitted":
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="submission_not_submitted")
+    if not workflow_state:
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="canvas_state_incomplete")
+
+    # --- Submission identity / drift checks ---
+    baseline = _mapping(student_map.get("submission_baseline"))
+    fresh_attempt = canvas_map.get("attempt")
+    fresh_submitted_at = canvas_map.get("submitted_at")
+    baseline_attempt = baseline.get("attempt")
+    baseline_submitted_at = baseline.get("submitted_at")
+
+    if baseline_attempt is None and baseline_submitted_at is None:
+        # No baseline available — existing session created before this field
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="submission_identity_unavailable")
+    if fresh_attempt is None or fresh_submitted_at is None:
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="submission_identity_unavailable")
+    if str(baseline_attempt) != str(fresh_attempt) or str(baseline_submitted_at) != str(fresh_submitted_at):
+        return policy_result.needs_review(policy_checks=policy_checks, review_needed_reason="submission_changed")
+
+    # --- Existing Canvas work clearance ---
     score_value, feedback_value = _effective_score_feedback(student_map, ai_result)
     score = _as_decimal(score_value)
     if score is None:
         return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_ai_score")
     policy_checks["score_present"] = True
 
-    points_possible = _effective_points_possible(job_map, assignment_map, ai_result, student_map)
+    points_possible = _effective_points_possible(context_map, assignment_map, ai_result, student_map)
     if points_possible is None:
         return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_points_possible")
 
@@ -265,10 +297,10 @@ def evaluate_student_for_autopush(
         return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_ai_feedback")
     policy_checks["feedback_present"] = bool(feedback_text)
 
-    course_id = _first_present(job_map.get("course_id"), assignment_map.get("course_id"))
-    assignment_id = _first_present(job_map.get("assignment_id"), assignment_map.get("id"))
+    course_id = _first_present(context_map.get("course_id"), assignment_map.get("course_id"))
+    assignment_id = _first_present(context_map.get("assignment_id"), assignment_map.get("id"))
     if course_id in (None, "") or assignment_id in (None, ""):
-        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_job_identity")
+        return policy_result.blocked(policy_checks=policy_checks, blocked_reason="missing_context_identity")
 
     score_key = _normalize_decimal(score)
     idempotency_key = make_idempotency_key(

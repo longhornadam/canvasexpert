@@ -96,9 +96,10 @@
     }).join('');
     var meta = (batch.student_count || 0) + ' students';
     if (batch.token_estimate) meta += ' · ~' + Number(batch.token_estimate).toLocaleString() + ' tokens';
+    var lateBadge = batch.late_catchup ? ' <span class="pg-late-label">Late</span>' : '';
     return '<div class="pg-copilot-batch" data-batch-id="' + esc(batch.batch_id || '') + '">' +
       '<div class="pg-copilot-batch-head">' +
-        '<strong>' + esc(label) + '</strong>' +
+        '<strong>' + esc(label) + '</strong>' + lateBadge +
         '<span class="pg-batch-status ' + esc(status) + '">' + esc(titleCase(status)) + '</span>' +
       '</div>' +
       '<div class="pg-copilot-batch-meta">' + esc(meta) + '</div>' +
@@ -146,6 +147,7 @@
         if (queue.setStudents) queue.setStudents(fresh.session.students || []);
         if (queue.updateProgress) queue.updateProgress();
         if (queue.renderLateWatch) queue.renderLateWatch(fresh.session);
+        if (queue.renderAutoPost) queue.renderAutoPost(fresh.session);
         renderPacketPanel(fresh.session);
         if (queue.renderStudent) queue.renderStudent(getCurrentIndex());
         if (onSuccess) onSuccess(fresh.session);

@@ -68,7 +68,39 @@
     // Programmatically expand safety details for AI routes
     var safetyPopout = document.getElementById('pg-safety-popout');
     if (safetyPopout) safetyPopout.open = isAi;
+    // Show/hide auto-post checkbox for supported modes (packet/assisted, not fast)
+    var autoPostWrap = document.getElementById('pg-auto-post-wrap');
+    var autoPostCheck = document.getElementById('pg-auto-post');
+    if (autoPostWrap) {
+      autoPostWrap.hidden = mode !== 'packet' && mode !== 'assisted';
+    }
+    // When switching to fast mode, uncheck the auto-post checkbox.
+    // Returning to an AI mode must not silently restore the previous checked state.
+    if (mode === 'fast' && autoPostCheck) {
+      autoPostCheck.checked = false;
+    }
+    // Disable/uncheck auto-post when the selected assignment is a New Quiz
+    updateAutoPostDisabledState();
     syncStartEnabled();
+  }
+
+  function updateAutoPostDisabledState() {
+    var autoPostWrap = document.getElementById('pg-auto-post-wrap');
+    var autoPostCheck = document.getElementById('pg-auto-post');
+    if (!autoPostWrap || !autoPostCheck) return;
+    var selectedAsn = asnEl ? asnEl.options[asnEl.selectedIndex] : null;
+    var isNewQuiz = selectedAsn && selectedAsn.disabled === false &&
+      loadedAssignments.some(function(a){
+        return String(a.id) === String(asnEl.value) && a.is_quiz_lti_assignment === true;
+      });
+    if (isNewQuiz) {
+      autoPostCheck.checked = false;
+      autoPostCheck.disabled = true;
+      autoPostWrap.title = 'Automatic posting is not available for New Quizzes.';
+    } else {
+      autoPostCheck.disabled = false;
+      autoPostWrap.title = '';
+    }
   }
 
   function syncStartEnabled() {
@@ -432,13 +464,29 @@
   }
 
   function bindStartSession() {
-    form && form.addEventListener('submit', function(ev){
+    form && form.addEventListener('submit', async function(ev){
       ev.preventDefault();
       var cid = courseEl.value;
       var aid = asnEl.value;
       if (!cid || !aid) { setStatus('Select a course and assignment first.', true); return; }
-      startBtn.disabled = true;
       var mode = modeInput.value;
+      var autoPostCheck = document.getElementById('pg-auto-post');
+      var autoPostEnabled = autoPostCheck && autoPostCheck.checked && !autoPostCheck.disabled;
+      // If auto-post is enabled, await the confirmation BEFORE disabling the button
+      if (autoPostEnabled && typeof window.CE_WRITE_REVIEW !== 'undefined' && window.CE_WRITE_REVIEW.confirm) {
+        var confirmed = await window.CE_WRITE_REVIEW.confirm({
+          title: 'Automatically post eligible AI results to Canvas',
+          action: 'Start this session and post each eligible AI score and feedback without individual review.',
+          details: ['Applies only to this new PowerGrader session.'],
+          warnings: ['Eligible results may become visible to students immediately.'],
+          confirmText: 'Start and allow automatic posting'
+        });
+        if (!confirmed) {
+          setStatus('Automatic posting was not confirmed.', false);
+          return;
+        }
+      }
+      startBtn.disabled = true;
       if (typeof pg.renderPrivacySteps === 'function' && typeof pg.privacyPlanForMode === 'function') {
         pg.renderPrivacySteps(pg.privacyPlanForMode(mode));
       }
@@ -453,6 +501,7 @@
       var fd = new FormData(form);
       var watchLate = document.getElementById('pg-watch-late');
       fd.set('watch_late', watchLate && watchLate.checked ? 'true' : 'false');
+      fd.set('auto_post', autoPostEnabled ? 'true' : 'false');
       fetch('/api/powergrader/start', {method:'POST', body: fd})
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -511,7 +560,7 @@
   modeChoices.forEach(function(el){ el.addEventListener('change', updateRouteMode); });
   updateRouteMode();
   courseEl && courseEl.addEventListener('change', function(){ loadAssignments(courseEl.value); syncStartEnabled(); });
-  asnEl && asnEl.addEventListener('change', syncStartEnabled);
+  asnEl && asnEl.addEventListener('change', function(){ syncStartEnabled(); updateAutoPostDisabledState(); });
   asnSearchEl && asnSearchEl.addEventListener('input', renderAssignmentOptions);
   asnGroupByEl && asnGroupByEl.addEventListener('change', loadSelectedModules);
   var ackBox = document.getElementById('pg-ai-check');

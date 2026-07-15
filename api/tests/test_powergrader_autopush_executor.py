@@ -9,8 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from api.powergrader.autopush_executor import run_autopush_for_session
 
 
-def _base_job(**extra):
-    job = {
+def _base_context(**extra):
+    ctx = {
         "course_id": "course-1",
         "assignment_id": "assign-1",
         "status": "session_ready",
@@ -19,11 +19,15 @@ def _base_job(**extra):
             "enabled": True,
             "allow_grade_push": True,
             "allow_comment_push": True,
-            "policy_version": 1,
+            "policy_version": 2,
         },
+        "source": "scheduled",
+        "session_id": "session-1",
+        "grade_push_allowed": True,
+        "comment_push_allowed": True,
     }
-    job.update(extra)
-    return job
+    ctx.update(extra)
+    return ctx
 
 
 def _base_assignment(**extra):
@@ -32,6 +36,7 @@ def _base_assignment(**extra):
         "course_id": "course-1",
         "points_possible": 100,
         "submission_types": ["online_text_entry"],
+        "grading_type": "points",
     }
     assignment.update(extra)
     return assignment
@@ -45,13 +50,31 @@ def _base_student(**extra):
         "ai_score": 93,
         "ai_feedback": "Strong answer",
         "posted": False,
+        "submission_baseline": {
+            "attempt": 1,
+            "submitted_at": "2026-07-01T12:00:00Z",
+        },
     }
     student.update(extra)
     return student
 
 
+def _base_canvas_state(**extra):
+    state = {
+        "canvas_state_present": True,
+        "user_id": "student-1",
+        "submission_id": "sub-1",
+        "attempt": 1,
+        "submitted_at": "2026-07-01T12:00:00Z",
+        "excused": False,
+        "workflow_state": "submitted",
+    }
+    state.update(extra)
+    return state
+
+
 def test_pushes_only_allowed_student_and_writes_grade_comment_payload_and_receipt(tmp_path):
-    job = _base_job()
+    ctx = _base_context()
     session = {
         "students": [
             _base_student(),
@@ -66,11 +89,12 @@ def test_pushes_only_allowed_student_and_writes_grade_comment_payload_and_receip
         return {"ok": True}
 
     result = run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=assignment,
         canvas_states_by_user={
-            "student-2": {"existing_score": 75},
+            "student-1": _base_canvas_state(),
+            "student-2": _base_canvas_state(user_id="student-2", submission_id="sub-2", existing_score=75),
         },
         canvas_send=canvas_send,
         receipt_dir=str(tmp_path),
@@ -104,8 +128,8 @@ def test_pushes_only_allowed_student_and_writes_grade_comment_payload_and_receip
     assert on_disk["idempotency_key"] == receipt["idempotency_key"]
 
 
-def test_needs_review_and_blocked_students_are_skipped_and_not_posted():
-    job = _base_job()
+def test_needs_review_and_blocked_students_are_skipped_and_not_posted(tmp_path):
+    ctx = _base_context()
     session = {
         "students": [
             _base_student(user_id="student-1", submission_id="sub-1", ai_score=101, ai_feedback="Too high"),
@@ -120,13 +144,15 @@ def test_needs_review_and_blocked_students_are_skipped_and_not_posted():
         return {"ok": True}
 
     result = run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=assignment,
         canvas_states_by_user={
-            "student-2": {"existing_score": 77},
+            "student-1": _base_canvas_state(user_id="student-1", submission_id="sub-1"),
+            "student-2": _base_canvas_state(user_id="student-2", submission_id="sub-2", existing_score=77),
         },
         canvas_send=canvas_send,
+        receipt_dir=str(tmp_path),
     )
 
     assert result["pushed"] == 0
@@ -137,9 +163,9 @@ def test_needs_review_and_blocked_students_are_skipped_and_not_posted():
     assert session["students"][1]["posted"] is False
 
 
-def test_matching_existing_session_idempotency_key_skips_canvas_send():
-    job = _base_job()
-    student = _base_student(posted=True, autopush_idempotency_key="pg-autopush:v1:course-1:assign-1:student-1:sub-1:93:deadbeef")
+def test_matching_existing_session_idempotency_key_skips_canvas_send(tmp_path):
+    ctx = _base_context()
+    student = _base_student(posted=True, autopush_idempotency_key="pg-autopush:v2:course-1:assign-1:student-1:sub-1:93:deadbeef")
     session = {"students": [student]}
     sent = []
 
@@ -148,11 +174,12 @@ def test_matching_existing_session_idempotency_key_skips_canvas_send():
         return {"ok": True}
 
     result = run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=_base_assignment(),
         canvas_states_by_user=None,
         canvas_send=canvas_send,
+        receipt_dir=str(tmp_path),
     )
 
     assert result["pushed"] == 0
@@ -162,17 +189,17 @@ def test_matching_existing_session_idempotency_key_skips_canvas_send():
 
 
 def test_canvas_send_error_does_not_mark_posted_or_write_receipt(tmp_path):
-    job = _base_job()
+    ctx = _base_context()
     session = {"students": [_base_student()]}
 
     def canvas_send(method, path, payload):
         raise RuntimeError("send failed")
 
     result = run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=_base_assignment(),
-        canvas_states_by_user={},
+        canvas_states_by_user={"student-1": _base_canvas_state()},
         canvas_send=canvas_send,
         receipt_dir=str(tmp_path),
         now="2026-07-01T12:00:00+00:00",
@@ -187,17 +214,17 @@ def test_canvas_send_error_does_not_mark_posted_or_write_receipt(tmp_path):
 
 
 def test_canvas_send_tuple_error_does_not_mark_posted_or_write_receipt(tmp_path):
-    job = _base_job()
+    ctx = _base_context()
     session = {"students": [_base_student()]}
 
     def canvas_send(method, path, payload):
         return None, "Canvas rejected update"
 
     result = run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=_base_assignment(),
-        canvas_states_by_user={},
+        canvas_states_by_user={"student-1": _base_canvas_state()},
         canvas_send=canvas_send,
         receipt_dir=str(tmp_path),
         now="2026-07-01T12:00:00+00:00",
@@ -211,14 +238,15 @@ def test_canvas_send_tuple_error_does_not_mark_posted_or_write_receipt(tmp_path)
     assert result["errors"][0]["reason"] == "canvas_send_error"
 
 
-def test_grade_only_policy_pushes_grade_without_comment_and_allows_empty_feedback():
-    job = _base_job(
+def test_grade_only_policy_pushes_grade_without_comment_and_allows_empty_feedback(tmp_path):
+    ctx = _base_context(
         push_policy={
             "enabled": True,
             "allow_grade_push": True,
             "allow_comment_push": False,
-            "policy_version": 1,
-        }
+            "policy_version": 2,
+        },
+        comment_push_allowed=False,
     )
     session = {
         "students": [
@@ -232,11 +260,12 @@ def test_grade_only_policy_pushes_grade_without_comment_and_allows_empty_feedbac
         return {"ok": True}
 
     result = run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=_base_assignment(),
-        canvas_states_by_user={},
+        canvas_states_by_user={"student-1": _base_canvas_state()},
         canvas_send=canvas_send,
+        receipt_dir=str(tmp_path),
         now="2026-07-01T12:00:00+00:00",
     )
 
@@ -245,8 +274,64 @@ def test_grade_only_policy_pushes_grade_without_comment_and_allows_empty_feedbac
     assert sent[0]["submission"]["posted_grade"] == "93"
 
 
+def test_receipt_dir_preflight_creates_dir_and_continues(tmp_path):
+    ctx = _base_context()
+    session = {"students": [_base_student()]}
+
+    sent = []
+    def canvas_send(method, path, payload):
+        sent.append(payload)
+        return {"ok": True}
+
+    result = run_autopush_for_session(
+        context=ctx,
+        session=session,
+        assignment=_base_assignment(),
+        canvas_states_by_user={"student-1": _base_canvas_state()},
+        canvas_send=canvas_send,
+        receipt_dir=str(tmp_path / "receipts"),
+        now="2026-07-01T12:00:00+00:00",
+    )
+
+    assert result["pushed"] == 1
+    assert len(sent) == 1
+    assert session["students"][0]["posted"] is True
+    assert len(result["receipts"]) == 1
+
+
+def test_evaluated_and_reason_counts_in_summary(tmp_path):
+    ctx = _base_context()
+    session = {
+        "students": [
+            _base_student(),
+            _base_student(user_id="student-2", submission_id="sub-2", ai_score=101, ai_feedback="Too high"),
+        ]
+    }
+    sent = []
+
+    def canvas_send(method, path, payload):
+        sent.append((method, path, payload))
+        return {"ok": True}
+
+    result = run_autopush_for_session(
+        context=ctx,
+        session=session,
+        assignment=_base_assignment(),
+        canvas_states_by_user={
+            "student-1": _base_canvas_state(),
+            "student-2": _base_canvas_state(user_id="student-2", submission_id="sub-2"),
+        },
+        canvas_send=canvas_send,
+        receipt_dir=str(tmp_path),
+    )
+
+    assert result["evaluated"] == 2
+    assert result["reason_counts"].get("pushed") == 1
+    assert result["reason_counts"].get("score_out_of_bounds") == 1
+
+
 def test_late_catchup_metadata_is_included_in_payload(tmp_path):
-    job = _base_job()
+    ctx = _base_context()
     session = {
         "students": [
             _base_student(
@@ -264,10 +349,10 @@ def test_late_catchup_metadata_is_included_in_payload(tmp_path):
         return {"ok": True}
 
     run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=_base_assignment(),
-        canvas_states_by_user={},
+        canvas_states_by_user={"student-1": _base_canvas_state()},
         canvas_send=canvas_send,
         receipt_dir=str(tmp_path),
         now="2026-07-01T12:00:00+00:00",
@@ -278,7 +363,7 @@ def test_late_catchup_metadata_is_included_in_payload(tmp_path):
 
 
 def test_receipts_do_not_include_real_name_body_or_raw_feedback(tmp_path):
-    job = _base_job()
+    ctx = _base_context()
     session = {
         "students": [
             _base_student(real_name="Ada Example", body="Raw body text", ai_feedback="Raw feedback text"),
@@ -289,10 +374,10 @@ def test_receipts_do_not_include_real_name_body_or_raw_feedback(tmp_path):
         return {"ok": True}
 
     result = run_autopush_for_session(
-        job=job,
+        context=ctx,
         session=session,
         assignment=_base_assignment(),
-        canvas_states_by_user={},
+        canvas_states_by_user={"student-1": _base_canvas_state()},
         canvas_send=canvas_send,
         receipt_dir=str(tmp_path),
         now="2026-07-01T12:00:00+00:00",

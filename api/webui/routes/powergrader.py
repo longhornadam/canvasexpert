@@ -254,6 +254,7 @@ def pg_start(
     assignment_id: str = Form(""),
     mode: str = Form("fast"),
     watch_late: str = Form("true"),
+    auto_post: str = Form("false"),
     rubric_name: str = Form(""),
     persona_id: str = Form("sage"),
     feedback_pattern_id: str = Form(""),
@@ -369,6 +370,13 @@ def pg_start(
         privacy_step=_privacy_step,
     )
 
+    # Derive auto_post: enabled only for assisted/packet, not New Quiz, not fast
+    auto_post_enabled = (
+        str(auto_post).lower() in {"1", "true", "yes", "on"}
+        and mode in ("assisted", "packet")
+        and not is_new_quiz
+    )
+
     session = start_workflow.build_start_session(
         build_session=session_builder.build_session,
         session_id=session_id,
@@ -393,10 +401,32 @@ def pg_start(
         new_quiz_item_finalization_supported=is_new_quiz,
         evidence_manifest=refresh.get("manifest_path"),
         evidence_status=refresh.get("status", "unknown"),
+        auto_post_enabled=auto_post_enabled,
     )
     _save_session(session)
 
-    return JSONResponse(build_start_success_payload(
+    # For assisted mode with auto_post, run the initial trigger under the session lock
+    auto_post_summary = None
+    if auto_post_enabled and mode == "assisted":
+        from powergrader.interactive_autopush import run_interactive_autopush
+        with session_store.session_lock(session_id):
+            session = _load_session(session_id)
+            if session:
+                trigger_result = run_interactive_autopush(
+                    session=session,
+                    trigger="assisted_start",
+                    canvas_get_all=_canvas_get_all,
+                    canvas_get=_canvas_get,
+                    canvas_send=_canvas_send,
+                    only_user_ids=None,
+                )
+                if trigger_result:
+                    session["auto_post_summary"] = trigger_result["summary"]
+                    session.setdefault("auto_post_log", []).append(trigger_result["log_entry"])
+                    _save_session(session)
+                    auto_post_summary = trigger_result["summary"]
+
+    payload = build_start_success_payload(
         session_id=session_id,
         students=students,
         assignment_name=assignment_name,
@@ -407,7 +437,10 @@ def pg_start(
         privacy_artifacts=privacy_artifacts,
         copilot_packet=ai_result.get("copilot_packet"),
         evidence_status=refresh.get("status", "unknown"),
-    ))
+    )
+    if auto_post_summary:
+        payload["auto_post_summary"] = auto_post_summary
+    return JSONResponse(payload)
 
 
 @router.post("/api/powergrader/new-quiz-csv")
@@ -448,66 +481,87 @@ def pg_late_watch(
     session_id: str,
     enabled: str = Form("true"),
 ):
-    session = _load_session(session_id)
-    if not session:
-        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
-    session_actions.invalidate_pending_review(session)
-    if session.get("mode") != "assisted":
-        return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-Score With API."})
-    if not (session.get("late_watch") or {}).get("supported"):
-        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
-    late_watch = session.get("late_watch") or {}
-    late_watch["enabled"] = str(enabled).lower() in {"1", "true", "yes", "on"}
-    if not late_watch["enabled"]:
-        late_watch["reason"] = late_watch.get("reason") or "Late catch-up is disabled for this session."
-    else:
-        if late_watch.get("supported"):
-            late_watch["reason"] = ""
-    session["late_watch"] = late_watch
-    _save_session(session)
+    with session_store.session_lock(session_id):
+        session = _load_session(session_id)
+        if not session:
+            return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+        session_actions.invalidate_pending_review(session)
+        if session.get("mode") not in ("assisted", "packet"):
+            return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-Score With API or AI Chat mode."})
+        if not (session.get("late_watch") or {}).get("supported"):
+            return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
+        late_watch = session.get("late_watch") or {}
+        late_watch["enabled"] = str(enabled).lower() in {"1", "true", "yes", "on"}
+        if not late_watch["enabled"]:
+            late_watch["reason"] = late_watch.get("reason") or "Late catch-up is disabled for this session."
+        else:
+            if late_watch.get("supported"):
+                late_watch["reason"] = ""
+        session["late_watch"] = late_watch
+        _save_session(session)
     return JSONResponse({"ok": True, "late_watch": late_watch})
 
 
 @router.post("/api/powergrader/session/{session_id}/late-preview")
 def pg_late_preview(session_id: str):
-    session = _load_session(session_id)
-    if not session:
-        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
-    session_actions.invalidate_pending_review(session)
-    err = _late_watch_error(session)
-    if err:
-        return JSONResponse({"ok": False, "error": err})
-    if not (session.get("late_watch") or {}).get("supported"):
-        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
+    with session_store.session_lock(session_id):
+        session = _load_session(session_id)
+        if not session:
+            return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+        session_actions.invalidate_pending_review(session)
+        err = _late_watch_error(session)
+        if err:
+            return JSONResponse({"ok": False, "error": err})
+        if not (session.get("late_watch") or {}).get("supported"):
+            return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
 
-    subs, adata, fetch_err = canvas_fetch.fetch_submissions(
-        str(session.get("course_id") or ""),
-        str(session.get("assignment_id") or ""),
-    )
-    if fetch_err:
-        return JSONResponse({"ok": False, "error": fetch_err})
+        subs, adata, fetch_err = canvas_fetch.fetch_submissions(
+            str(session.get("course_id") or ""),
+            str(session.get("assignment_id") or ""),
+        )
+        if fetch_err:
+            return JSONResponse({"ok": False, "error": fetch_err})
 
-    new_subs = late_catchup.find_new_submissions(session, subs or [])
-    now_iso = datetime.now().isoformat(timespec="seconds")
-    late_catchup.update_late_watch_after_preview(session, len(new_subs), now_iso)
-    _save_session(session)
+        new_subs = late_catchup.find_new_submissions(session, subs or [])
+        now_iso = datetime.now().isoformat(timespec="seconds")
+        late_catchup.update_late_watch_after_preview(session, len(new_subs), now_iso)
+        _save_session(session)
     return JSONResponse(build_late_preview_payload(new_subs))
 
 
 @router.post("/api/powergrader/session/{session_id}/late-score")
 def pg_late_score(session_id: str):
-    session = _load_session(session_id)
-    if not session:
-        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
-    session_actions.invalidate_pending_review(session)
-    err = _late_watch_error(session)
-    if err:
-        return JSONResponse({"ok": False, "error": err})
-    if not (session.get("late_watch") or {}).get("supported"):
-        return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
-    result = _run_late_catchup_score(session)
-    if not result["ok"]:
-        return JSONResponse(result)
+    with session_store.session_lock(session_id):
+        session = _load_session(session_id)
+        if not session:
+            return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+        session_actions.invalidate_pending_review(session)
+        err = _late_watch_error(session)
+        if err:
+            return JSONResponse({"ok": False, "error": err})
+        if not (session.get("late_watch") or {}).get("supported"):
+            return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
+        result = _run_late_catchup_score(session)
+        if not result["ok"]:
+            return JSONResponse(result)
+        appended_user_ids = result.get("appended_user_ids") or []
+        # Auto-post trigger for assisted mode
+        if appended_user_ids and (session.get("auto_post") or {}).get("enabled") and session.get("mode") == "assisted":
+            from powergrader.interactive_autopush import run_interactive_autopush
+            trigger_result = run_interactive_autopush(
+                session=session,
+                trigger="assisted_late",
+                canvas_get_all=_canvas_get_all,
+                canvas_get=_canvas_get,
+                canvas_send=_canvas_send,
+                only_user_ids=set(appended_user_ids),
+            )
+            if trigger_result:
+                session["auto_post_summary"] = trigger_result["summary"]
+                session.setdefault("auto_post_log", []).append(trigger_result["log_entry"])
+                _save_session(session)
+        else:
+            _save_session(session)
     return JSONResponse({
         "ok": True,
         "appended": result["appended"],
@@ -536,19 +590,61 @@ def pg_import_results(
     results: str = Form(""),
     batch_id: str = Form(""),
 ):
-    session = _load_session(session_id)
-    if session:
-        session_actions.invalidate_pending_review(session)
-        _save_session(session)
-    payload, status_code = import_results.import_results_into_session(
-        session_id,
-        results,
-        batch_id=batch_id if isinstance(batch_id, str) else "",
-        load_session=_load_session,
-        save_session=_save_session,
-        vault_factory=_vault,
-    )
+    with session_store.session_lock(session_id):
+        session = _load_session(session_id)
+        if session:
+            session_actions.invalidate_pending_review(session)
+            _save_session(session)
+        payload, status_code = import_results.import_results_into_session(
+            session_id,
+            results,
+            batch_id=batch_id if isinstance(batch_id, str) else "",
+            load_session=_load_session,
+            save_session=_save_session,
+            vault_factory=_vault,
+        )
+        # If auto-post is enabled, run the trigger scoped to exact updated users
+        if payload.get("ok") and payload.get("updated", 0) > 0:
+            session = _load_session(session_id)
+            if session and (session.get("auto_post") or {}).get("enabled"):
+                from powergrader.interactive_autopush import run_interactive_autopush
+                updated_user_ids = set(payload.get("updated_user_ids") or [])
+                if updated_user_ids:
+                    trigger_result = run_interactive_autopush(
+                        session=session,
+                        trigger="packet_import",
+                        canvas_get_all=_canvas_get_all,
+                        canvas_get=_canvas_get,
+                        canvas_send=_canvas_send,
+                        only_user_ids=updated_user_ids,
+                    )
+                    if trigger_result:
+                        session["auto_post_summary"] = trigger_result["summary"]
+                        session.setdefault("auto_post_log", []).append(trigger_result["log_entry"])
+                        _save_session(session)
+                        payload["auto_post_summary"] = trigger_result["summary"]
     return JSONResponse(payload, status_code=status_code)
+
+
+@router.post("/api/powergrader/session/{session_id}/auto-post-disable")
+def pg_auto_post_disable(session_id: str):
+    with session_store.session_lock(session_id):
+        session = _load_session(session_id)
+        if not session:
+            return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+        auto_post = session.get("auto_post") or {}
+        if not auto_post.get("enabled"):
+            return JSONResponse({"ok": True, "auto_post": auto_post, "message": "Already disabled."})
+        from datetime import datetime, timezone
+        auto_post["enabled"] = False
+        auto_post["disabled_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        session["auto_post"] = auto_post
+        _save_session(session)
+    return JSONResponse({
+        "ok": True,
+        "auto_post": auto_post,
+        "auto_post_summary": session.get("auto_post_summary"),
+    })
 
 
 @router.post("/api/powergrader/session/{session_id}/grade")

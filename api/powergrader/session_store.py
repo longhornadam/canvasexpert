@@ -2,11 +2,33 @@
 
 import json
 import os
+import threading
 
 try:
     from webui import workspace
 except ModuleNotFoundError:  # pragma: no cover - package context
     from api.webui import workspace
+
+# Per-session lock registry for interactive auto-post serialization
+_session_locks: dict[str, threading.RLock] = {}
+_session_lock_guard = threading.Lock()
+
+
+def safe_session_id(session_id: str) -> str:
+    return "".join(c for c in session_id if c.isalnum() or c == "-")
+
+
+def session_lock(session_id: str):
+    """Return a context manager that acquires a per-session RLock.
+
+    This is process-local serialization for the local app, not a distributed
+    lock.  The key is sanitized with safe_session_id.
+    """
+    key = safe_session_id(session_id) or "_"
+    with _session_lock_guard:
+        if key not in _session_locks:
+            _session_locks[key] = threading.RLock()
+        return _session_locks[key]
 
 
 def pg_dir() -> str | None:
@@ -38,10 +60,6 @@ def _read_json(path: str) -> dict | None:
         return value if isinstance(value, dict) else None
     except Exception:
         return None
-
-
-def safe_session_id(session_id: str) -> str:
-    return "".join(c for c in session_id if c.isalnum() or c == "-")
 
 
 def mode_label(mode: str) -> str:

@@ -146,12 +146,20 @@ receipt capture, and it may only push AI-generated results for eligible students
 Blocked, uncertain, unsupported, or otherwise review-needed cases stay in the review
 path. Local-only, FERPA, and secret-handling guardrails remain unchanged.
 
+Interactive automatic posting is a separate, teacher-controlled opt-in for one newly
+created assisted or packet PowerGrader session. It is default-off, non-sticky, and never
+available to Grade Myself, Classic Quiz, or New Quiz sessions. Each trigger must run under
+the per-session lock from authoritative reload through fresh Canvas state/policy checks,
+idempotency, receipt preflight, any grade/comment PUT, and final save. Packet late generation
+does not post; only a valid import against that late batch's own SAFE bundle may trigger a
+scoped write. Uncertain results remain drafts, and v1 overrides happen in Canvas SpeedGrader.
+
 PowerGrader sessions are stored under `<workspace>/_System/PowerGrader/Sessions/`
 and jobs under `_System/PowerGrader/Jobs/`. They are PRIVATE:
 real names, submission content, grades, and teacher comments must never be committed.
 AI suggestions are drafts until the teacher reviews, edits, approves, and pushes,
-except for the narrow scheduled auto-push path above where the teacher has explicitly
-opted in for that specific job and policy/idempotency checks clear the write.
+except for the two narrow opt-ins above: one scheduled job/assignment or one newly created
+interactive session, after fresh-state, policy, idempotency, and receipt checks clear the write.
 
 **AI Expert** (`/ai-expert`) serves paste-ready LLM skill files from the AI-TA library:
 start-here orientation, authoring skills for the Forge contracts, scoring skills from

@@ -19,6 +19,7 @@ def _base_assignment(submission_types, **extra):
     assignment = {
         "name": "Essay 1",
         "submission_types": submission_types,
+        "grading_type": "points",
     }
     assignment.update(extra)
     return assignment

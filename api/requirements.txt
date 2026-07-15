@@ -36,3 +36,6 @@ pypandoc-binary>=1.13   # html -> DOCX; bundles the Pandoc binary (no system ins
 # Pinned to the 0.x line that matches the Starlette pin above (Starlette 1.x switched to httpx2).
 pytest>=8.0             # test runner (py -m pytest api/tests)
 httpx>=0.27,<1          # required by starlette.testclient / fastapi.testclient
+
+# MCP server (api/mcp_server/) — read-only Canvas tools over stdio. Official MCP Python SDK.
+mcp>=1.12,<2

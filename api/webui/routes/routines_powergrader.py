@@ -13,8 +13,10 @@ from typing import Any, Callable
 
 try:
     from powergrader import scheduled_autoscore_support as autoscore_support
+    from powergrader.push_context import build_scheduled_push_context
 except ModuleNotFoundError:  # pragma: no cover - package context
     from api.powergrader import scheduled_autoscore_support as autoscore_support
+    from api.powergrader.push_context import build_scheduled_push_context
 
 _autoscore_job_label = autoscore_support.autoscore_job_label
 _autoscore_fetch_status = autoscore_support.autoscore_fetch_status
@@ -258,7 +260,8 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                     session.setdefault("late_watch", {})
 
             session_action = "created" if created_session else "loaded"
-            auto_push_enabled = bool(job_ref.get("auto_push")) and bool((job_ref.get("push_policy") or {}).get("enabled"))
+            push_context = build_scheduled_push_context(job_ref)
+            auto_push_enabled = bool(push_context.get("auto_push")) and bool((push_context.get("push_policy") or {}).get("enabled"))
             if auto_push_enabled and session:
                 if autoscore_support.autoscore_session_is_fully_pushed(session):
                     deps.autoscore_queue.update_job(
@@ -282,7 +285,7 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                     receipt_dir = autoscore_support.autoscore_receipt_dir(job_ref, deps.session_store)
                     canvas_states_by_user = autoscore_support.autoscore_canvas_states(subs)
                     autopush_result = deps.autopush_executor.run_autopush_for_session(
-                        job=job_ref,
+                        context=push_context,
                         session=session,
                         assignment=adata,
                         canvas_states_by_user=canvas_states_by_user,
