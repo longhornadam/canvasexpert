@@ -415,10 +415,11 @@ Stop with RED rather than guessing if:
 
 ### Cohort 2 result
 
-- Traffic light: **YELLOW** — the complete presentation migration and all required
-  automated checks are green, but the required in-app-browser rendered verification
-  could not run because this environment exposes no browser binding. Do not begin
-  Cohort 3 until the user reviews this diff and accepts/re-runs the visual gate.
+- Traffic light: **YELLOW** — the complete presentation migration and required
+  automated checks are green. A senior's fully synthetic mobile render found a real
+  Settings overflow, which is corrected below; the senior still needs to rerun the
+  visual gate before the user reviews this diff and accepts Cohort 2. Do not begin
+  Cohort 3.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
   - Implementation commit `1e6a45f` on `dev` (16 files, 600 insertions, 351
     deletions) migrates Gradebook, Roster, and Settings to
@@ -433,18 +434,21 @@ Stop with RED rather than guessing if:
     dynamic-visibility changes replace removed template inline display styles with
     page-specific CSS classes in Settings token/key controls and Gradebook curve
     settings; they preserve the same show/hide and form-submission behavior.
+  - Correction commit `e1f0eba` on `dev` adds `overflow-wrap: anywhere` only to
+    code text inside Settings panels. The long calendar-contract code sample was the
+    mobile overflow source; no template, form, link, ID/name, script, route, or
+    credential behavior changed.
   - `py -m pytest api/tests/test_presentation_contracts.py api/tests/test_route_contract.py api/tests/test_webui_template_contracts.py -q` — **28 passed**.
   - `py -m pytest api/tests/test_gradebook_routes.py api/tests/test_roster_routes.py api/tests/test_roster_config.py api/tests/test_workspace.py api/tests/test_readiness_routes.py -q` — **73 passed**.
   - `node --check` passed for `gradebook/curves.js`, `settings.js`,
     `settings/account.js`, and `settings/openrouter.js`; `git diff --check` passed.
-  - Before attempting browser use, started separate baseline/current local wrappers
-    with fictional configuration and verified that both `/api/readiness` and
-    `/api/readiness/probe` returned local stub responses on each wrapper. The
-    baseline was a disposable detached `ed20c90` worktree and was removed with both
-    wrappers after the attempt. The browser runtime reported no available browser
-    binding, so no visual route, console, interaction, light/dark, desktop, or mobile
-    check was performed and no alternate renderer was used. No Canvas or OpenRouter
-    request was made during this process.
+  - After the migration, a senior's fully synthetic browser render found
+    `/settings` at 390px had `documentElement.scrollWidth = 413`; the other three
+    Cohort 2 routes were clean. The correction's focused
+    `py -m pytest api/tests/test_presentation_contracts.py -q` check passed
+    (**6 passed**) with `git diff --check` green. The senior will rerun the isolated
+    light/dark mobile visual suite. No Canvas or OpenRouter request was made during
+    this correction.
 
 ### Cohort 3 result
 
