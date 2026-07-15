@@ -467,10 +467,8 @@ Stop with RED rather than guessing if:
 
 ### Cohort 3 result
 
-- Traffic light: **YELLOW** — implementation and every required non-rendered gate
-  are green. The fully fictional 13-route light/dark browser gate could not start in
-  this environment because the available browser runtime reported no connection.
-  Do not archive this brief until that gate passes.
+- Traffic light: **GREEN** — implementation and every required automated and
+  fully fictional rendered gate passed. This brief is complete and ready to archive.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
   - Implementation commit `b6daa5e` on `dev` (27 files, 433 insertions, 4,527
     deletions) migrates Student Reports, Course Info, and About to
@@ -496,11 +494,10 @@ Stop with RED rather than guessing if:
     and `layouts/workspace.html` extend `base.html`.
   - A temporary local server used only fictional configuration and intercepted every
     `/api/*` request, including both readiness endpoints, before any page script
-    could run. The required in-app-browser selection then returned no available
-    browser connection (`agent.browsers.list()` was empty), so no route, viewport,
-    theme, console, or screenshot result may be claimed. The temporary verifier and
-    server were removed/stopped without a Canvas, OpenRouter, routine, upload, grade,
-    comment, or student-data request.
-  - The senior-owned untracked `api/.codex_cohort2_verify.py` remains untouched for
-    the pending isolated render gate. Remove it at successful closure; do not commit
-    it as product code.
+    could run. The senior verified every registry renderer in light and dark themes
+    at 1920px and 390px: layout/variant/rail count, header/main count, duplicate IDs,
+    page-level overflow, and console output were all clean. The browser client blocked
+    its literal PowerGrader session path, so a local-only `/queue-visual` alias called
+    the same `powergrader_queue` renderer with a synthetic session; no product route
+    changed. The temporary verifier and server were then removed/stopped without a
+    Canvas, OpenRouter, routine, upload, grade, comment, or student-data request.
