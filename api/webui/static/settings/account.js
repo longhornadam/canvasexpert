@@ -26,16 +26,16 @@
   }
 
   btnEditUrl && btnEditUrl.addEventListener("click", function () {
-    var editing = urlInput.style.display === "none";
-    urlInput.style.display = editing ? "" : "none";
-    urlDisplay.style.display = editing ? "none" : "";
+    var editing = urlInput.classList.contains("ce-settings-initially-hidden");
+    urlInput.classList.toggle("ce-settings-initially-hidden", !editing);
+    urlDisplay.classList.toggle("ce-settings-initially-hidden", editing);
     btnEditUrl.textContent = editing ? "Cancel" : "Edit";
     if (editing) urlInput.focus();
   });
 
   btnReplaceToken && btnReplaceToken.addEventListener("click", function () {
-    var showing = tokenInput.style.display !== "none";
-    tokenInput.style.display = showing ? "none" : "";
+    var showing = !tokenInput.classList.contains("ce-settings-initially-hidden");
+    tokenInput.classList.toggle("ce-settings-initially-hidden", showing);
     btnReplaceToken.textContent = showing ? "Replace" : "Cancel";
     if (!showing) tokenInput.focus();
   });

@@ -1,16 +1,14 @@
-{% extends "workbench_base.html" %}
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail %}
 {% block title %}Roster Workbench — Canvas Expert{% endblock %}
-{% block body_class %}ce-workbench-page{% endblock %}
-{% block main_class %}ce-workbench-main roster-page{% endblock %}
+{% block workspace_variant %}left-main{% endblock %}
+{% block workspace_body_class %}roster-page{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/roster_workbench.css?v={{ asset_v }}">
 {% endblock %}
-{% block content %}
-
-<meta name="canvas-base" content="{{ canvas_base }}">
-
-<div class="ce-workbench-shell roster-workbench-shell" id="roster-workbench" data-roster-lens="students">
-  <aside class="roster-workbench-rail" aria-label="Roster lenses">
+{% block left_rail %}
+{% call rail('left', 'Roster lenses') %}
+  <div class="roster-workbench-rail">
     <p class="roster-workbench-rail-kicker">Roster lenses</p>
     <nav class="roster-workbench-lenses">
       <button type="button" class="roster-lens-btn roster-filter-btn active" data-lens="students" data-filter="all" aria-pressed="true">Students</button>
@@ -21,8 +19,15 @@
       <button type="button" class="roster-lens-btn roster-privacy-btn" data-lens="privacy" aria-pressed="false">Privacy</button>
       <a class="roster-lens-btn" href="/students/reports">Student reports</a>
     </nav>
-  </aside>
+  </div>
+{% endcall %}
+{% endblock %}
 
+{% block primary %}
+
+<meta name="canvas-base" content="{{ canvas_base }}">
+
+<div class="roster-workbench-shell" id="roster-workbench" data-roster-lens="students">
   <div class="roster-workbench-main ce-drafting-grid">
     <section class="roster-v2-intro" aria-labelledby="roster-title">
       <h1 id="roster-title">Roster</h1>
@@ -75,7 +80,7 @@
         <label>Groups
           <textarea id="roster-new-group-names" rows="3" placeholder="One group name per line"></textarea>
         </label>
-        <div class="actions">
+        <div class="ce-actions">
           <button type="button" id="roster-add-groups" class="small">Add to selected group set</button>
           <span id="roster-group-builder-status" class="hint"></span>
         </div>
@@ -133,7 +138,7 @@
       <summary><strong>Group labels</strong></summary>
       <div class="roster-v2-tier-editor" id="roster-group-labels-body">
         <div class="roster-v2-tier-rows" id="roster-group-labels-rows"></div>
-        <div class="actions" style="margin-top:8px">
+        <div class="ce-actions ce-roster-action-row">
           <button type="button" id="roster-group-labels-save" class="primary small">Save labels</button>
           <span id="roster-group-labels-status" class="hint"></span>
         </div>
@@ -142,27 +147,27 @@
 
     <details class="roster-v2-details" id="roster-safety-card">
       <summary><strong>AI safety tools</strong></summary>
-      <div class="guided-pickers" style="margin-top:12px; padding:4px 0">
+      <div class="guided-pickers ce-roster-guided-pickers">
         <div class="roster-safety-row">
           <label>Protected name packs</label>
           <div id="roster-protected-packs"></div>
         </div>
         <div class="roster-safety-row">
           <label>Custom protected names</label>
-          <input type="text" id="roster-custom-protected" placeholder="Comma-separated" style="width:300px">
+          <input type="text" id="roster-custom-protected" class="ce-roster-protected-input" placeholder="Comma-separated">
         </div>
-        <div class="actions">
+        <div class="ce-actions">
           <button type="button" id="roster-save-protected" class="small">Save protected names</button>
         </div>
         <div class="roster-safety-row">
           <label>Scrub test</label>
-          <textarea id="roster-scrub-text" rows="3" placeholder="Paste text to test name scrubbing..." style="width:100%"></textarea>
-          <div class="actions">
+          <textarea id="roster-scrub-text" rows="3" class="ce-roster-scrub-input" placeholder="Paste text to test name scrubbing..."></textarea>
+          <div class="ce-actions">
             <button type="button" id="roster-scrub-run" class="small">Test scrub</button>
           </div>
           <pre id="roster-scrub-result" class="roster-scrub-result" hidden></pre>
         </div>
-        <div class="actions" style="margin-top:8px">
+        <div class="ce-actions ce-roster-action-row">
           <button type="button" id="roster-export-who" class="small">Export who-is-who</button>
           <button type="button" id="roster-backup-vault" class="small">Back up vault</button>
         </div>
@@ -172,7 +177,7 @@
 </div>
 {% endblock %}
 
-{% block workbench_scripts %}
+{% block workspace_scripts %}
 <script src="/static/roster.js?v={{ asset_v }}"></script>
 <script src="/static/roster/table.js?v={{ asset_v }}"></script>
 <script src="/static/roster/filters.js?v={{ asset_v }}"></script>

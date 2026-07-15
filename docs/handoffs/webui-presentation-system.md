@@ -415,8 +415,36 @@ Stop with RED rather than guessing if:
 
 ### Cohort 2 result
 
-- Traffic light: **not started**
+- Traffic light: **YELLOW** — the complete presentation migration and all required
+  automated checks are green, but the required in-app-browser rendered verification
+  could not run because this environment exposes no browser binding. Do not begin
+  Cohort 3 until the user reviews this diff and accepts/re-runs the visual gate.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
+  - Implementation commit `fb319cc` on `dev` (16 files, 599 insertions, 351
+    deletions) migrates Gradebook, Roster, and Settings to
+    `workspace · left-main`, migrates Routines to `document · wide`, moves the shared
+    routines partial with its consumers, adds the stateless Settings anchor index, and
+    replaces all Cohort 2 static template inline styles. Added token-consuming
+    Gradebook, Settings, and Routines page CSS; rewrote `roster_workbench.css` to
+    tokens; flipped all four registry rows; and documented the first document-layout
+    consumption. Gradebook's `CE_WRITE_REVIEW`/`CE_GRADEBOOK` and feature-script
+    order, Roster's private-data/safety scripts and order, Settings form IDs/names and
+    credential routes, and Routines control IDs/routes are unchanged. The two narrow
+    dynamic-visibility changes replace removed template inline display styles with
+    page-specific CSS classes in Settings token/key controls and Gradebook curve
+    settings; they preserve the same show/hide and form-submission behavior.
+  - `py -m pytest api/tests/test_presentation_contracts.py api/tests/test_route_contract.py api/tests/test_webui_template_contracts.py -q` — **28 passed**.
+  - `py -m pytest api/tests/test_gradebook_routes.py api/tests/test_roster_routes.py api/tests/test_roster_config.py api/tests/test_workspace.py api/tests/test_readiness_routes.py -q` — **73 passed**.
+  - `node --check` passed for `gradebook/curves.js`, `settings.js`,
+    `settings/account.js`, and `settings/openrouter.js`; `git diff --check` passed.
+  - Before attempting browser use, started separate baseline/current local wrappers
+    with fictional configuration and verified that both `/api/readiness` and
+    `/api/readiness/probe` returned local stub responses on each wrapper. The
+    baseline was a disposable detached `ed20c90` worktree and was removed with both
+    wrappers after the attempt. The browser runtime reported no available browser
+    binding, so no visual route, console, interaction, light/dark, desktop, or mobile
+    check was performed and no alternate renderer was used. No Canvas or OpenRouter
+    request was made during this process.
 
 ### Cohort 3 result
 

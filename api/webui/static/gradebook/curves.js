@@ -57,7 +57,7 @@
     var model = document.getElementById("cv-model")?.value || "flat_bump";
     ["flat_bump", "target_average", "proportional", "floor_cap"].forEach(function (m) {
       var el = document.getElementById("cv-settings-" + m);
-      if (el) el.style.display = (m === model) ? "" : "none";
+      if (el) el.classList.toggle("ce-gradebook-initially-hidden", m !== model);
     });
   }
   document.getElementById("cv-model")?.addEventListener("change", syncCurveSettings);

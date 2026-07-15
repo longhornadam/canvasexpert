@@ -11,7 +11,7 @@
   }
 
   function isHidden(el) {
-    return !el || el.style.display === "none";
+    return !el || el.classList.contains("ce-settings-initially-hidden");
   }
 
   function setStatus(el, msg, kind) {

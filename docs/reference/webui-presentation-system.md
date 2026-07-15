@@ -40,8 +40,10 @@ ID, existing feature class, or `data-ce-hook`.
 The enforcement registry is `api/tests/test_presentation_contracts.py`. It is the
 source of truth for route, template, layout, variant, rail count, and migration state.
 In Cohort 1, Home and both PowerGrader routes use `workspace/full`; Create uses
-`workspace/three`. The remaining routes continue on legacy templates until their
-assigned cohort.
+`workspace/three`. In Cohort 2, Gradebook, Roster, and Settings use
+`workspace/left-main`; Routines is the first `document/wide` consumer. The document
+layout required no interface adjustment at first use. The remaining routes continue
+on legacy templates until their assigned cohort.
 
 ## Change propagation
 

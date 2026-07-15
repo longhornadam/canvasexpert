@@ -1,12 +1,12 @@
-{% extends "base.html" %}
+{% extends "layouts/document.html" %}
 {% block title %}Routines — Canvas Expert{% endblock %}
-{% block content %}
+{% block document_variant %}wide{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/routines.css?v={{ asset_v }}">{% endblock %}
+{% block primary %}
 
 {% if not token_is_set %}
-<div style="max-width:600px; margin:32px auto; padding:0 24px">
-  <div class="callout warn">
+<div class="ce-notice ce-routines-notice">
     No Canvas token saved — <a href="/settings">go to Settings</a> to add one before using Routines.
-  </div>
 </div>
 {% else %}
 {% include "_routines_panel.html" %}

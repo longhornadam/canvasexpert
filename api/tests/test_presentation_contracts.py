@@ -18,10 +18,10 @@ EXPECTED_PRESENTATION = {
     "/course-expert": ("course_expert.html", "workspace", "three", 2, True),
     "/powergrader": ("powergrader_setup.html", "workspace", "full", 0, True),
     "/powergrader/session/{session_id}": ("powergrader_queue.html", "workspace", "full", 0, True),
-    "/gradebook": ("gradebook.html", "workspace", "left-main", 1, False),
-    "/roster": ("roster.html", "workspace", "left-main", 1, False),
-    "/settings": ("settings.html", "workspace", "left-main", 1, False),
-    "/routines": ("routines.html", "document", "wide", 0, False),
+    "/gradebook": ("gradebook.html", "workspace", "left-main", 1, True),
+    "/roster": ("roster.html", "workspace", "left-main", 1, True),
+    "/settings": ("settings.html", "workspace", "left-main", 1, True),
+    "/routines": ("routines.html", "document", "wide", 0, True),
     "/students/reports": ("student_reports.html", "document", "wide", 0, False),
     "/course": ("course.html", "document", "wide", 0, False),
     "/about": ("about.html", "document", "wide", 0, False),
@@ -37,6 +37,10 @@ FEATURE_CSS = (
     "api/webui/static/pages/course_expert.css",
     "api/webui/static/powergrader_setup.css",
     "api/webui/static/powergrader_queue.css",
+    "api/webui/static/pages/gradebook.css",
+    "api/webui/static/roster_workbench.css",
+    "api/webui/static/pages/settings.css",
+    "api/webui/static/pages/routines.css",
 )
 VISUAL_LITERAL_RE = re.compile(r"font-family:|#[0-9a-fA-F]{3,8}|rgb\(|hsl\(|border-radius:|box-shadow:")
 FORBIDDEN_JS_SELECTORS = (
@@ -59,7 +63,20 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages.config, "token_is_set", lambda: True)
     monkeypatch.setattr(pages.config, "get_canvas_base", lambda: "https://canvas.example.test")
     monkeypatch.setattr(pages.config, "active_courses", lambda: courses)
+    monkeypatch.setattr(pages.config, "saved_courses", lambda: courses)
+    monkeypatch.setattr(pages.config, "has_openrouter_key", lambda: False)
+    monkeypatch.setattr(pages.config, "get_openrouter_model", lambda: "model/fictional")
+    monkeypatch.setattr(pages.config, "openrouter_model_presets", lambda: [])
+    monkeypatch.setattr(pages.config, "get_download_root", lambda: "")
+    monkeypatch.setattr(pages.config, "get_calendars", lambda: {})
+    monkeypatch.setattr(pages.config, "get_tier_tags", lambda: {
+        "Support": "", "Core": "", "Accelerate": "", "Extend": "",
+    })
     monkeypatch.setattr(pages.workspace, "workspace_root", lambda: None)
+    monkeypatch.setattr(pages.workspace, "folder", lambda name: "")
+    monkeypatch.setattr(pages.workspace, "courses_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "ai_packets_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "system_root", lambda: "")
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
     monkeypatch.setattr(pages.work_routes, "_presentations", lambda jobs: {})
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
@@ -68,6 +85,14 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages, "list_quiz_files", lambda: [])
     monkeypatch.setattr(pages, "list_assignment_files", lambda: [])
     monkeypatch.setattr(pages, "list_page_files", lambda: [])
+    monkeypatch.setattr(pages, "list_calendar_files", lambda: [])
+    monkeypatch.setattr(pages, "_routines_template_context", lambda: {
+        "custom_dir": "Fictional/custom_routines",
+        "authoring_path": "Fictional/custom_routines/AUTHORING.md",
+        "custom_active": [],
+        "custom_templates": [],
+        "active_count": 1,
+    })
     monkeypatch.setattr(powergrader, "list_rubric_files", lambda: [])
     monkeypatch.setattr(powergrader, "_load_session", lambda session_id: {
         "session_id": session_id,
@@ -86,6 +111,7 @@ def test_registry_is_the_full_program_route_map():
     assert len(EXPECTED_PRESENTATION) == 13
     assert set(MIGRATED_ROUTES) == {
         "/", "/course-expert", "/powergrader", "/powergrader/session/{session_id}",
+        "/gradebook", "/roster", "/settings", "/routines",
     }
 
 
@@ -97,6 +123,8 @@ def test_migrated_templates_use_only_the_workspace_layout_and_no_inline_styles()
         assert f'{{% extends "layouts/{layout}.html" %}}' in text
         assert "stylesheet_bundle" not in text
         assert 'style="' not in text
+        if template == "gradebook.html" or template == "routines.html":
+            assert 'style="' not in (TEMPLATES / "_routines_panel.html").read_text(encoding="utf-8")
 
     for layout in ("workspace.html", "document.html"):
         assert '{% extends "base.html" %}' in (TEMPLATES / "layouts" / layout).read_text(encoding="utf-8")
@@ -124,6 +152,10 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/course-expert": "/course-expert",
         "/powergrader": "/powergrader",
         "/powergrader/session/{session_id}": "/powergrader/session/synthetic-session",
+        "/gradebook": "/gradebook",
+        "/roster": "/roster",
+        "/settings": "/settings",
+        "/routines": "/routines",
     }
     client = _client()
     bundle = (

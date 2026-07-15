@@ -72,8 +72,8 @@
   }
 
   btnReplaceOrKey && btnReplaceOrKey.addEventListener("click", function () {
-    var showing = openrouterKeyInput.style.display !== "none";
-    openrouterKeyInput.style.display = showing ? "none" : "";
+    var showing = !openrouterKeyInput.classList.contains("ce-settings-initially-hidden");
+    openrouterKeyInput.classList.toggle("ce-settings-initially-hidden", showing);
     btnReplaceOrKey.textContent = showing ? "Replace" : "Cancel";
     if (!showing) openrouterKeyInput.focus();
   });

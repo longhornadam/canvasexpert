@@ -1,22 +1,19 @@
-{% extends "workbench_base.html" %}
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail %}
 {% block title %}Gradebook Tools — Canvas Expert{% endblock %}
-{% block body_class %}ce-workbench-page{% endblock %}
-{% block main_class %}ce-workbench-main{% endblock %}
-{% block content %}
+{% block workspace_variant %}left-main{% endblock %}
+{% block workspace_body_class %}ce-gradebook-page{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/pages/gradebook.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/pages/routines.css?v={{ asset_v }}">
+{% endblock %}
 
-{% if not token_is_set %}
-<div style="max-width:600px; margin:32px auto; padding:0 24px">
-  <div class="callout warn">
-    No Canvas token saved — <a href="/settings">go to Settings</a> to add one before using gradebook tools.
-  </div>
-</div>
-{% else %}
-
-<div class="expert-shell expert-shell--gradebook">
-  <!-- ── Sidebar navigation ───────────────────────────────────────────── -->
-  <aside class="expert-sidebar expert-sidebar--gradebook" aria-label="Gradebook tool sections">
-    <div class="expert-sidebar-kicker">Gradebook tools</div>
-    <div class="gb-tabs expert-side-tabs" role="tablist" aria-orientation="vertical">
+{% block left_rail %}
+{% if token_is_set %}
+{% call rail('left', 'Gradebook tool sections') %}
+  <div class="ce-gradebook-rail">
+    <p class="ce-gradebook-rail-kicker">Gradebook tools</p>
+    <div class="ce-tabs ce-gradebook-tabs gb-tabs" role="tablist" aria-orientation="vertical">
       <button type="button" id="gb-tab-button-policy" class="gb-tab active" data-tab="policy" role="tab" aria-selected="true" aria-controls="gb-tab-policy" tabindex="0">Policy &amp; Sweep</button>
       <button type="button" id="gb-tab-button-extra-time" class="gb-tab" data-tab="extra-time" role="tab" aria-selected="false" aria-controls="gb-tab-extra-time" tabindex="-1">Extra-time</button>
       <button type="button" id="gb-tab-button-extensions" class="gb-tab" data-tab="extensions" role="tab" aria-selected="false" aria-controls="gb-tab-extensions" tabindex="-1">Extensions</button>
@@ -24,12 +21,22 @@
       <button type="button" id="gb-tab-button-snapshot" class="gb-tab" data-tab="snapshot" role="tab" aria-selected="false" aria-controls="gb-tab-snapshot" tabindex="-1">Snapshot</button>
       <button type="button" id="gb-tab-button-routines" class="gb-tab" data-tab="routines" role="tab" aria-selected="false" aria-controls="gb-tab-routines" tabindex="-1">Routines</button>
     </div>
-  </aside>
+  </div>
+{% endcall %}
+{% endif %}
+{% endblock %}
 
-  <!-- ── Tab content ─────────────────────────────────────────────────── -->
-  <div class="gb-content expert-main ce-drafting-grid">
-  <section class="card tool-course-card gb-course-work-card">
-    <div class="tool-course-card-head">
+{% block primary %}
+
+{% if not token_is_set %}
+<div class="ce-notice ce-gradebook-notice">
+    No Canvas token saved — <a href="/settings">go to Settings</a> to add one before using gradebook tools.
+</div>
+{% else %}
+
+<div class="ce-gradebook-content ce-drafting-grid">
+  <section class="ce-panel ce-gradebook-panel gb-course-work-card">
+    <div class="ce-gradebook-course-head">
       <div>
         <h2>Course</h2>
         <p class="hint">Select the course these gradebook tools should read or update.</p>
@@ -60,21 +67,21 @@
 
     <!-- Prerequisite readiness message -->
     <div id="gb-readiness-msg" class="ce-action-scope" aria-live="polite">
-      <p class="hint" style="margin:0">No course selected. Gradebook changes are unavailable.</p>
+      <p class="ce-hint ce-gradebook-compact-note">No course selected. Gradebook changes are unavailable.</p>
     </div>
 
     <!-- Late Policy card -->
-    <div class="card" style="margin-bottom:16px">
+    <div class="ce-panel ce-gradebook-panel">
       <h2>Course-wide late work policy <small class="lbl-hint">(Canvas-native)</small></h2>
-      <p class="hint" style="margin:0 0 14px">
+      <p class="ce-hint ce-gradebook-snapshot-lede">
         Canvas applies these deductions automatically in the gradebook — now and for all future
         late work. Targets the selected course only.
       </p>
-      <div class="opt-checks" style="margin:0 0 10px">
+      <div class="opt-checks ce-gradebook-options">
         <label class="opt-check"><input type="checkbox" id="lp-late-enabled" checked>
           Deduct for late submissions</label>
       </div>
-      <div class="settings-grid" style="grid-template-columns:140px 140px 160px">
+      <div class="ce-gradebook-grid ce-gradebook-grid--policy">
         <label>Deduct <small class="lbl-hint">%</small>
           <input type="number" id="lp-deduction" value="10" min="0" max="100" step="0.5">
         </label>
@@ -88,15 +95,15 @@
           <input type="number" id="lp-floor" value="50" min="0" max="100" step="1">
         </label>
       </div>
-      <div class="opt-checks" style="margin-top:12px">
+      <div class="opt-checks ce-gradebook-options ce-gradebook-options--spaced">
         <label class="opt-check"><input type="checkbox" id="lp-missing-enabled">
           Score missing work at</label>
-        <label style="margin:0; font-weight:500; display:inline-flex; align-items:center; gap:6px">
+        <label class="ce-gradebook-inline-option">
           <input type="number" id="lp-missing-pct" value="0" min="0" max="100" step="1"
-                 style="width:80px; margin:0; display:inline-block"> %
+                 class="ce-gradebook-inline-input"> %
         </label>
       </div>
-      <div class="actions">
+      <div class="ce-actions">
         <button id="btn-apply-policy" class="primary">Apply policy to this course…</button>
       </div>
       <p id="lp-status" class="status hint"></p>
@@ -104,9 +111,9 @@
     </div>
 
     <!-- Sweep card -->
-    <div class="card">
+    <div class="ce-panel ce-gradebook-panel">
       <h2>Late work sweep</h2>
-      <p class="hint" style="margin:0 0 10px">
+      <p class="ce-hint ce-gradebook-snapshot-lede">
         Finds every late submission in the selected date range, counts
         <strong>school days</strong> (weekends, district holidays, Rosters extra-time settings), then sets
         Canvas's lateness override to the corrected count. Canvas applies its own late policy —
@@ -114,47 +121,47 @@
       </p>
 
       {% if not has_calendars %}
-      <p class="hint" style="font-size:12.5px; margin-bottom:14px; padding:7px 11px; background:var(--warn-bg); border-radius:var(--r-sm); border:1px solid var(--warn-line)">
+      <p class="ce-gradebook-warn">
         No academic calendar — only weekends are skipped.
         <a href="/settings#cal">Add one in Settings</a> to skip district holidays automatically.
       </p>
       {% endif %}
 
       <!-- Date range row -->
-      <div class="settings-grid" style="grid-template-columns:160px 160px; align-items:start; margin-bottom:6px">
+      <div class="ce-gradebook-grid ce-gradebook-grid--dates">
         <label>From (assignment due) <input type="date" id="sw-from"></label>
         <label>To (assignment due) <input type="date" id="sw-to"></label>
       </div>
       <!-- Period preset chips (populated by JS) -->
-      <div id="sw-period-chips" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px"></div>
+      <div id="sw-period-chips" class="ce-gradebook-chips"></div>
 
-      <div class="settings-grid" style="grid-template-columns:1fr">
+      <div class="ce-gradebook-grid ce-gradebook-grid--single">
         <label>Additional no-count days <small class="lbl-hint">(YYYY-MM-DD, one per line — adds to the calendar)</small>
           <textarea id="sw-holidays" rows="2" placeholder="2026-04-03&#10;2026-05-25"></textarea>
         </label>
       </div>
-      <div class="opt-checks" style="margin-top:8px">
+      <div class="opt-checks ce-gradebook-options ce-gradebook-options--spaced">
         <label class="opt-check"><input type="checkbox" id="sw-weekends" checked> Skip weekends</label>
         <label class="opt-check"><input type="checkbox" id="sw-extra" checked> Honor extra-time settings from Rosters</label>
       </div>
       <p class="gb-roster-note">
         Uses extra-time settings from <a href="/roster?focus=extra-time">Rosters</a>.
       </p>
-      <div class="actions" style="margin-top:12px">
+      <div class="ce-actions ce-gradebook-action-row">
         <button id="btn-sweep-preview">Preview sweep (no changes)</button>
         <button id="btn-sweep-apply" class="primary" hidden>Set lateness for 0 submissions…</button>
       </div>
       <p id="sw-status" class="status hint"></p>
-      <div id="sw-table-wrap" class="table-scroll" hidden>
-        <table class="dl-table">
+      <div id="sw-table-wrap" class="ce-gradebook-table-scroll" hidden>
+        <table class="ce-table ce-gradebook-table">
           <thead><tr>
-            <th style="width:32px"><input type="checkbox" id="sw-check-all" checked title="Toggle all"></th>
+            <th class="ce-gradebook-table-check"><input type="checkbox" id="sw-check-all" checked title="Toggle all"></th>
             <th>Student</th><th>Assignment</th><th>Due → Submitted</th>
             <th>Canvas days</th><th>School days</th><th>Excluded dates</th>
           </tr></thead>
           <tbody id="sw-tbody"></tbody>
         </table>
-        <p class="hint" style="font-size:12.5px; margin:10px 0 0">
+        <p class="ce-hint ce-gradebook-table-note">
           Hover a row for excluded date detail. "School days" is what will be sent to Canvas.
         </p>
       </div>
@@ -166,9 +173,9 @@
 
   <!-- ── Extra-time ───────────────────────────────────────────────────── -->
   <div id="gb-tab-extra-time" class="gb-panel" role="tabpanel" aria-labelledby="gb-tab-button-extra-time" hidden>
-    <div class="card">
+    <div class="ce-panel ce-gradebook-panel">
       <h2>Extra-time students</h2>
-      <p class="hint" style="margin:0 0 14px">
+      <p class="ce-hint ce-gradebook-snapshot-lede">
         This compatibility view reads the same standing extra-time settings used by
         sweep and extensions. Rosters is the main place to manage them.
       </p>
@@ -177,7 +184,7 @@
       </p>
       <p id="xt-status" class="status hint"></p>
       <div id="xt-list" class="xt-list"></div>
-      <div class="actions" style="margin-top:10px">
+      <div class="ce-actions ce-gradebook-action-row">
         <button id="btn-reload-roster" class="small">↻ Reload from Canvas</button>
         <button id="btn-save-roster" class="primary" hidden>Save roster</button>
       </div>
@@ -186,9 +193,9 @@
 
   <!-- ── Extensions ───────────────────────────────────────────────────── -->
   <div id="gb-tab-extensions" class="gb-panel" role="tabpanel" aria-labelledby="gb-tab-button-extensions" hidden>
-    <div class="card">
+    <div class="ce-panel ce-gradebook-panel">
       <h2>Grant an extension</h2>
-      <p class="hint" style="margin:0 0 14px">
+      <p class="ce-hint ce-gradebook-snapshot-lede">
         Gives selected students extra school days on one assignment via a Canvas
         <strong>assignment override</strong> — their due date actually moves, so nothing
         shows as late. District holidays and Rosters extra-time settings are automatically
@@ -198,7 +205,7 @@
         Uses extra-time settings from <a href="/roster?focus=extra-time">Rosters</a>.
       </p>
       <p id="ext-status" class="status hint"></p>
-      <div class="settings-grid" style="grid-template-columns:1fr 130px; align-items:start">
+      <div class="ce-gradebook-grid ce-gradebook-grid--extension">
         <label>Assignment <small class="lbl-hint" id="ext-hint">(loading…)</small>
           <select id="ext-assignment" disabled><option value="">— loading —</option></select>
         </label>
@@ -206,8 +213,8 @@
           <input type="number" id="ext-days" value="1" min="1" max="30" step="1">
         </label>
       </div>
-      <div id="ext-students" class="xt-list" style="margin-top:8px"></div>
-      <div class="actions" style="margin-top:10px">
+      <div id="ext-students" class="xt-list ce-u-mt-2"></div>
+      <div class="ce-actions ce-gradebook-action-row">
         <button id="btn-ext-reload" class="small">↻ Reload assignments &amp; students</button>
         <button id="btn-ext-apply" class="primary" hidden>Grant extension…</button>
       </div>
@@ -217,25 +224,25 @@
 
   <!-- ── Curves ───────────────────────────────────────────────────────── -->
   <div id="gb-tab-curves" class="gb-panel" role="tabpanel" aria-labelledby="gb-tab-button-curves" hidden>
-    <div class="card">
+    <div class="ce-panel ce-gradebook-panel">
       <h2>Curves</h2>
-      <p class="hint" style="margin:0 0 14px">
+      <p class="ce-hint ce-gradebook-snapshot-lede">
         Preview-first. Curved scores are applied before Canvas's late policy runs.
         Every curve is saved as a locally revertible event.
       </p>
 
       <p id="cv-status" class="status hint"></p>
 
-      <div class="settings-grid" style="grid-template-columns:1fr 180px; align-items:start">
+      <div class="ce-gradebook-grid ce-gradebook-grid--curve">
         <label>Assignment <small class="lbl-hint" id="cv-assign-hint">(loading…)</small>
           <select id="cv-assignment" disabled><option value="">— loading —</option></select>
         </label>
-        <div style="margin-top:24px">
+        <div class="ce-gradebook-curve-load">
           <button id="btn-curve-load" class="small">↻ Reload assignments</button>
         </div>
       </div>
 
-      <label style="margin-top:12px; display:block">Curve model
+      <label class="ce-gradebook-model-label">Curve model
         <select id="cv-model">
           <option value="flat_bump">Flat bump — add points to everyone</option>
           <option value="target_average">Target average — raise class avg to X%</option>
@@ -244,50 +251,50 @@
         </select>
       </label>
 
-      <div id="cv-settings-flat_bump" class="cv-settings" style="margin-top:12px">
-        <div class="settings-grid" style="grid-template-columns:140px 160px auto; align-items:end">
+      <div id="cv-settings-flat_bump" class="cv-settings ce-gradebook-curve-settings">
+        <div class="ce-gradebook-grid ce-gradebook-grid--curve-flat">
           <label>Add points
             <input type="number" id="cv-bump" value="5" min="0" step="0.5">
           </label>
           <label>Cap <small class="lbl-hint">(blank = assignment max)</small>
             <input type="number" id="cv-bump-cap" step="0.5" placeholder="no cap">
           </label>
-          <label class="opt-check" style="margin-bottom:8px">
+          <label class="opt-check ce-gradebook-curve-check">
             <input type="checkbox" id="cv-bump-donh"> Do no harm
           </label>
         </div>
       </div>
 
-      <div id="cv-settings-target_average" class="cv-settings" style="display:none; margin-top:12px">
-        <div class="settings-grid" style="grid-template-columns:200px 160px auto; align-items:end">
+      <div id="cv-settings-target_average" class="cv-settings ce-gradebook-curve-settings ce-gradebook-initially-hidden">
+        <div class="ce-gradebook-grid ce-gradebook-grid--curve-target">
           <label>Target class average <small class="lbl-hint">%</small>
             <input type="number" id="cv-target-avg-pct" value="75" min="0" max="100" step="1">
           </label>
           <label>Cap <small class="lbl-hint">(blank = assignment max)</small>
             <input type="number" id="cv-target-cap" step="0.5" placeholder="no cap">
           </label>
-          <label class="opt-check" style="margin-bottom:8px">
+          <label class="opt-check ce-gradebook-curve-check">
             <input type="checkbox" id="cv-target-donh" checked> Do no harm
           </label>
         </div>
       </div>
 
-      <div id="cv-settings-proportional" class="cv-settings" style="display:none; margin-top:12px">
-        <div class="settings-grid" style="grid-template-columns:200px 160px auto; align-items:end">
+      <div id="cv-settings-proportional" class="cv-settings ce-gradebook-curve-settings ce-gradebook-initially-hidden">
+        <div class="ce-gradebook-grid ce-gradebook-grid--curve-proportional">
           <label>Target class average <small class="lbl-hint">%</small>
             <input type="number" id="cv-prop-avg-pct" value="75" min="0" max="100" step="1">
           </label>
           <label>Cap <small class="lbl-hint">(blank = assignment max)</small>
             <input type="number" id="cv-prop-cap" step="0.5" placeholder="no cap">
           </label>
-          <label class="opt-check" style="margin-bottom:8px">
+          <label class="opt-check ce-gradebook-curve-check">
             <input type="checkbox" id="cv-prop-donh" checked> Do no harm
           </label>
         </div>
       </div>
 
-      <div id="cv-settings-floor_cap" class="cv-settings" style="display:none; margin-top:12px">
-        <div class="settings-grid" style="grid-template-columns:160px 160px; align-items:end">
+      <div id="cv-settings-floor_cap" class="cv-settings ce-gradebook-curve-settings ce-gradebook-initially-hidden">
+        <div class="ce-gradebook-grid ce-gradebook-grid--curve-floor">
           <label>Floor <small class="lbl-hint">(min score, 0 = no floor)</small>
             <input type="number" id="cv-floor" value="0" min="0" step="0.5">
           </label>
@@ -297,16 +304,16 @@
         </div>
       </div>
 
-      <div class="actions" style="margin-top:16px">
+      <div class="ce-actions ce-gradebook-action-row">
         <button id="btn-curve-preview">Preview curve (no changes)</button>
         <button id="btn-curve-apply" class="primary" hidden>Apply curve to 0 students…</button>
       </div>
 
-      <div id="cv-preview-wrap" class="table-scroll" hidden>
-        <div id="cv-summary" style="margin:10px 0 12px; font-size:13.5px; color:var(--ink-2)"></div>
-        <table class="dl-table">
+      <div id="cv-preview-wrap" class="ce-gradebook-table-scroll" hidden>
+        <div id="cv-summary" class="ce-gradebook-summary"></div>
+        <table class="ce-table ce-gradebook-table">
           <thead><tr>
-            <th style="width:32px"><input type="checkbox" id="cv-check-all" checked title="Toggle all"></th>
+            <th class="ce-gradebook-table-check"><input type="checkbox" id="cv-check-all" checked title="Toggle all"></th>
             <th>Student</th><th>Original</th><th>Curved</th><th>Change</th>
           </tr></thead>
           <tbody id="cv-tbody"></tbody>
@@ -315,10 +322,10 @@
       <pre id="cv-log" class="log" hidden></pre>
       <div id="cv-banner" class="push-banner" hidden></div>
 
-      <details style="margin-top:16px">
+      <details class="ce-gradebook-history">
         <summary class="delivery-summary">Curve history &amp; revert</summary>
         <div class="delivery-inner">
-          <div class="actions" style="margin-top:0">
+          <div class="ce-actions">
             <button id="btn-curve-events" class="small">Load curve history for this assignment…</button>
           </div>
           <p id="cv-events-status" class="status hint"></p>
@@ -330,44 +337,44 @@
 
   <!-- ── Snapshot ─────────────────────────────────────────────────────── -->
   <div id="gb-tab-snapshot" class="gb-panel" role="tabpanel" aria-labelledby="gb-tab-button-snapshot" hidden>
-    <div class="card">
+    <div class="ce-panel ce-gradebook-panel">
       <h2>Grading snapshot <small class="lbl-hint">(read-only)</small></h2>
-      <p class="hint" style="margin:0 0 14px">
+      <p class="ce-hint ce-gradebook-snapshot-lede">
         Who's missing what, class averages. Pulls every submission — give it a moment.
       </p>
-      <div class="actions" style="margin-top:0">
+      <div class="ce-actions ce-gradebook-snapshot-actions">
         <button id="btn-load-gradebook">Load gradebook…</button>
         <a id="gb-canvas-link" class="small-link" href="#" target="_blank" rel="noopener" hidden>Open in Canvas ↗</a>
       </div>
       <p id="gb-status" class="status hint"></p>
-      <div id="gb-summary" class="info-grid" hidden>
-        <div class="info-tile">
+      <div id="gb-summary" class="ce-gradebook-info-grid" hidden>
+        <div class="ce-gradebook-info-tile">
           <div class="tile-val" id="gb-avg">—</div>
           <div class="tile-label">Class average</div>
         </div>
-        <div class="info-tile">
+        <div class="ce-gradebook-info-tile">
           <div class="tile-val" id="gb-missing">—</div>
           <div class="tile-label">Missing submissions</div>
         </div>
-        <div class="info-tile">
+        <div class="ce-gradebook-info-tile">
           <div class="tile-val" id="gb-ungraded">—</div>
           <div class="tile-label">Awaiting grading</div>
         </div>
-        <div class="info-tile">
+        <div class="ce-gradebook-info-tile">
           <div class="tile-val" id="gb-students">—</div>
           <div class="tile-label">Students</div>
         </div>
       </div>
-      <div id="gb-tables" class="table-scroll" hidden>
+      <div id="gb-tables" class="ce-gradebook-table-scroll" hidden>
         <h3 class="gb-h3">By student <small class="lbl-hint">(sorted by most missing)</small></h3>
-        <table class="dl-table">
+        <table class="ce-table ce-gradebook-table">
           <thead><tr>
             <th>Student</th><th>Missing</th><th>Late</th><th>Ungraded</th><th>Current %</th>
           </tr></thead>
           <tbody id="gb-student-tbody"></tbody>
         </table>
         <h3 class="gb-h3">By assignment <small class="lbl-hint">(newest due date first)</small></h3>
-        <table class="dl-table">
+        <table class="ce-table ce-gradebook-table">
           <thead><tr>
             <th>Assignment</th><th>Due</th><th>Pts</th><th>Submitted</th><th>Graded</th><th>Missing</th><th>Avg</th>
           </tr></thead>
@@ -382,11 +389,13 @@
     {% include "_routines_panel.html" %}
   </div>
 
-  </div><!-- /gb-content -->
-</div><!-- /.expert-shell -->
+  </div><!-- /ce-gradebook-content -->
 
 {% endif %}
 
+{% endblock %}
+
+{% block workspace_scripts %}
 <script>
   window.GB_CANVAS_BASE      = {{ canvas_base | tojson }};
   window.GB_SAVED            = {{ saved_courses | tojson }};
