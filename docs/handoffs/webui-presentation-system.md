@@ -1,6 +1,6 @@
 # Execution brief: Unified WebUI presentation system
 
-Status: **ready for implementation**
+Status: **Cohort 3 awaiting the required isolated rendered-route gate**
 
 Risk: **Cohort 1 medium · Cohort 2 high · Cohort 3 medium** — presentation-only by
 contract, but Cohort 2 touches the templates of grade-write, credential, and
@@ -467,5 +467,40 @@ Stop with RED rather than guessing if:
 
 ### Cohort 3 result
 
-- Traffic light: **not started**
+- Traffic light: **YELLOW** — implementation and every required non-rendered gate
+  are green. The fully fictional 13-route light/dark browser gate could not start in
+  this environment because the available browser runtime reported no connection.
+  Do not archive this brief until that gate passes.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
+  - Implementation commit `b6daa5e` on `dev` (27 files, 433 insertions, 4,527
+    deletions) migrates Student Reports, Course Info, and About to
+    `document · wide`; AI Expert to `document · standard`; and Welcome to the new
+    headerless `wizard` layout. It adds token-consuming feature CSS for all five
+    routes, replaces Welcome's removed static visibility styles with the same
+    wizard-state class flow, switches the base default bundle to `ui/`, and makes all
+    registry rows migrated with repo-wide D11 checks. Student Reports IDs, report /
+    monitor endpoints, and feature-script order; Course Info IDs and `QF_CANVAS_BASE`
+    global; AI Expert controls and API calls; and Welcome IDs, forms, preload theme
+    script, and onboarding endpoints are unchanged.
+  - Closure removed `style.css`, `workbench.css`, `workbench_base.html`,
+    `_workbench_header.html`, `name_manager.html`, and `_course_picker.html` only
+    after the source proof found no live reference. It updates the WebUI README,
+    Course Expert, PowerGrader, and Roster module maps, the canonical flow map, and
+    the presentation reference.
+  - `py -m pytest api/tests/test_presentation_contracts.py -q` — **7 passed**.
+  - `node --check api/webui/static/welcome.js` passed.
+  - `py -m pytest api/tests -q` — **694 passed, 1 skipped**.
+  - `git diff --check` passed. Zero-reference proof found no live template style
+    attributes, no feature visual literals, and no live references to the legacy
+    templates or stylesheet pair; only `layouts/document.html`, `layouts/wizard.html`,
+    and `layouts/workspace.html` extend `base.html`.
+  - A temporary local server used only fictional configuration and intercepted every
+    `/api/*` request, including both readiness endpoints, before any page script
+    could run. The required in-app-browser selection then returned no available
+    browser connection (`agent.browsers.list()` was empty), so no route, viewport,
+    theme, console, or screenshot result may be claimed. The temporary verifier and
+    server were removed/stopped without a Canvas, OpenRouter, routine, upload, grade,
+    comment, or student-data request.
+  - The senior-owned untracked `api/.codex_cohort2_verify.py` remains untouched for
+    the pending isolated render gate. Remove it at successful closure; do not commit
+    it as product code.
