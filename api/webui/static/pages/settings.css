@@ -8,6 +8,7 @@
 .ce-settings-panel { margin: 0; }
 .ce-settings-panel h2 { margin-top: 0; }
 .ce-settings-panel .ce-hint { margin: 0 0 var(--ce-space-2); }
+.ce-settings-panel code { overflow-wrap: anywhere; }
 .ce-settings-link-row { margin: 0 0 var(--ce-space-2); }
 .ce-settings-restart-row { margin-top: var(--ce-space-4); padding-top: var(--ce-space-3); border-top: 1px solid var(--ce-rule); }
 .ce-settings-actions-wrap { flex-wrap: wrap; }
