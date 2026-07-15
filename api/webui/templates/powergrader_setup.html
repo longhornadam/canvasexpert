@@ -37,6 +37,10 @@
             <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
             {% endfor %}
           </select>
+          <div class="pg-course-catalog-actions">
+            <button type="button" class="small" id="pg-sync-course-list" disabled>Sync course list</button>
+            <small id="pg-course-catalog-status" class="lbl-hint" aria-live="polite"></small>
+          </div>
         </div>
         <div class="pg-field pg-assignment-field">
           <label for="pg-assignment">Assignment</label>
@@ -53,7 +57,8 @@
           <select id="pg-assignment" name="assignment_id" required disabled>
             <option value="">— select course first —</option>
           </select>
-          <div class="actions" style="margin-top:8px">
+          <div class="actions pg-assignment-evidence-actions" style="margin-top:8px">
+            <span class="lbl-hint">Assignment evidence</span>
             <button type="button" class="small" id="pg-refresh-assignment" disabled>Refresh from Canvas</button>
             <button type="button" class="small" id="pg-open-assignment-folder" disabled>Open local folder</button>
           </div>

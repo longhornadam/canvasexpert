@@ -485,3 +485,238 @@ def test_powergrader_ack_before_start_button():
     assert ack_idx < btn_idx, (
         "AI acknowledgment checkbox must appear before the start button"
     )
+
+
+def _powergrader_catalog_node_prelude() -> str:
+    return r'''
+import fs from "node:fs";
+import vm from "node:vm";
+
+class Node {
+  constructor(tag, id = "") {
+    this.tagName = tag;
+    this.id = id;
+    this._innerHTML = "";
+    this._textContent = "";
+    this._value = "";
+    this.options = [];
+    this.hidden = false;
+    this.disabled = false;
+    this.dataset = {};
+    this.style = {};
+    this.listeners = {};
+    this.classList = {
+      values: new Set(),
+      toggle: (name, force) => force ? this.classList.values.add(name) : this.classList.values.delete(name),
+      add: name => this.classList.values.add(name),
+      remove: name => this.classList.values.delete(name)
+    };
+  }
+  set textContent(value) { this._textContent = String(value || ""); this._innerHTML = ""; }
+  get textContent() { return this._textContent; }
+  set innerHTML(value) {
+    this._innerHTML = String(value || "");
+    this._textContent = "";
+    if (this.tagName === "select") {
+      this.options = Array.from(this._innerHTML.matchAll(/<option value="([^"]*)"([^>]*)>/g)).map(match => ({
+        value: match[1], selected: match[2].includes("selected")
+      }));
+      const selected = this.options.find(option => option.selected);
+      this._value = selected ? selected.value : (this.options[0] ? this.options[0].value : "");
+    }
+  }
+  get innerHTML() {
+    if (this._innerHTML) return this._innerHTML;
+    return this._textContent.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  }
+  set value(value) {
+    const wanted = String(value || "");
+    if (this.tagName === "select" && this.options.length && !this.options.some(option => option.value === wanted)) {
+      this._value = "";
+    } else {
+      this._value = wanted;
+    }
+  }
+  get value() { return this._value; }
+  addEventListener(event, callback) { this.listeners[event] = callback; }
+  dispatch(event) { if (this.listeners[event]) return this.listeners[event]({target: this, preventDefault() {}}); }
+}
+
+const ids = [
+  "pg-course", "pg-assignment", "pg-assignment-search", "pg-assignment-group-by",
+  "pg-assignment-tools", "pg-mode", "pg-ai-options", "pg-rubric-fast", "pg-start-btn",
+  "pg-start-status", "pg-ai-label", "pg-assignment-unsupported-hint", "pg-refresh-assignment",
+  "pg-open-assignment-folder", "pg-evidence-status", "pg-sync-course-list", "pg-course-catalog-status"
+];
+const elements = Object.fromEntries(ids.map(id => [id, new Node(
+  ["pg-course", "pg-assignment", "pg-assignment-group-by"].includes(id) ? "select" : "div", id
+)]));
+elements["pg-course"].innerHTML = '<option value=""></option><option value="course-a"></option><option value="course-b"></option><option value="course-c"></option>';
+elements["pg-assignment"].innerHTML = '<option value=""></option>';
+elements["pg-assignment-group-by"].innerHTML = '<option value="last_three"></option>';
+elements["pg-assignment-search"].tagName = "input";
+elements["pg-ai-options"].hidden = true;
+
+global.window = {POWERGRADER_SETUP_CONFIG: {hasWorkspace: true, defaultModel: ""}};
+global.document = {
+  getElementById: id => elements[id] || null,
+  createElement: tag => new Node(tag),
+  querySelectorAll: () => [],
+  querySelector: () => null
+};
+
+const tick = async (count = 8) => { for (let i = 0; i < count; i += 1) await Promise.resolve(); };
+const scope = state => ({state, last_success_at: "2026-07-14T12:00:00+00:00", last_attempt_at: "2026-07-14T12:00:00+00:00", error_code: ""});
+const catalog = (courseId, assignmentPrefix, moduleCount = 4) => ({
+  ok: true,
+  available: true,
+  course_id: courseId,
+  course_name: "Fictional Course",
+  updated_at: "2026-07-14T12:00:00+00:00",
+  source: "canonical",
+  warnings: [],
+  scopes: {assignments: scope("current"), modules: scope("current")},
+  assignments: Array.from({length: moduleCount}, (_, index) => ({
+    id: `${assignmentPrefix}-${index + 1}`,
+    name: `${assignmentPrefix} Assignment ${index + 1}`,
+    description_text: index === 0 ? "Special context phrase" : "Ordinary context",
+    due_at: "2026-07-18T05:00:00Z",
+    submission_types: ["online_text_entry"],
+    quiz_id: "",
+    is_quiz: false,
+    quiz_kind: "",
+    is_quiz_lti_assignment: false
+  })),
+  modules: Array.from({length: moduleCount}, (_, index) => ({
+    id: `${courseId}-module-${index + 1}`,
+    name: index === 0 ? "Week One Search Name" : `Module ${index + 1}`,
+    position: index + 1,
+    items: [],
+    assignment_ids: [`${assignmentPrefix}-${index + 1}`],
+    quiz_ids: []
+  }))
+});
+'''
+
+
+def test_powergrader_catalog_runtime_is_local_first_and_search_is_network_free():
+    core_path = ROOT / "api/webui/static/powergrader/setup_core.js"
+    script = _powergrader_catalog_node_prelude() + r'''
+const calls = [];
+let finishRefresh;
+global.fetch = (url, options) => {
+  calls.push({url, options});
+  if (url === "/api/course-catalog?course_id=course-a") {
+    return Promise.resolve({json: async () => catalog("course-a", "A")});
+  }
+  if (url === "/api/course-catalog/refresh") {
+    return new Promise(resolve => { finishRefresh = payload => resolve({json: async () => payload}); });
+  }
+  throw new Error("unexpected fetch " + url);
+};
+
+vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"));
+elements["pg-course"].value = "course-a";
+window.CE_POWERGRADER_SETUP.loadCourseCatalog("course-a");
+await tick();
+
+if (!elements["pg-assignment"].innerHTML.includes("A Assignment 2")) process.exit(2);
+if (elements["pg-assignment"].innerHTML.includes("A Assignment 1")) process.exit(3);
+if (calls.length !== 2 || !calls[0].url.startsWith("/api/course-catalog?") || calls[1].url !== "/api/course-catalog/refresh") process.exit(4);
+
+const beforeSearch = calls.length;
+elements["pg-assignment-search"].value = "special context";
+elements["pg-assignment-search"].dispatch("input");
+if (!elements["pg-assignment"].innerHTML.includes("A Assignment 1")) process.exit(5);
+elements["pg-assignment-search"].value = "week one search";
+elements["pg-assignment-search"].dispatch("input");
+if (!elements["pg-assignment"].innerHTML.includes("A Assignment 1")) process.exit(6);
+elements["pg-assignment-search"].value = "";
+elements["pg-assignment-search"].dispatch("input");
+elements["pg-assignment-group-by"].value = "course-a-module-2";
+elements["pg-assignment-group-by"].dispatch("change");
+if (!elements["pg-assignment"].innerHTML.includes("A Assignment 2") || elements["pg-assignment"].innerHTML.includes("A Assignment 3")) process.exit(7);
+if (calls.length !== beforeSearch) process.exit(8);
+
+finishRefresh({ok: false, error: "synthetic failure"});
+await tick();
+if (!elements["pg-assignment"].innerHTML.includes("A Assignment 2") || elements["pg-assignment"].disabled) process.exit(9);
+if (!elements["pg-course-catalog-status"].textContent.includes("Using the local course list")) process.exit(10);
+
+elements["pg-sync-course-list"].dispatch("click");
+await tick(2);
+if (calls.length !== 3 || calls[2].url !== "/api/course-catalog/refresh") process.exit(11);
+if (!String(calls[2].options.body).includes("course_id=course-a")) process.exit(12);
+'''
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(core_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_powergrader_catalog_runtime_handles_cold_superseded_and_preserved_selection():
+    core_path = ROOT / "api/webui/static/powergrader/setup_core.js"
+    script = _powergrader_catalog_node_prelude() + r'''
+const calls = [];
+let finishAGet;
+let finishBRefresh;
+global.fetch = (url, options) => {
+  calls.push({url, options});
+  if (url === "/api/course-catalog?course_id=course-a") {
+    return new Promise(resolve => { finishAGet = payload => resolve({json: async () => payload}); });
+  }
+  if (url === "/api/course-catalog?course_id=course-b") {
+    return Promise.resolve({json: async () => catalog("course-b", "B", 1)});
+  }
+  if (url === "/api/course-catalog?course_id=course-c") {
+    return Promise.resolve({json: async () => ({ok: true, available: false})});
+  }
+  if (url === "/api/course-catalog/refresh") {
+    const body = String(options.body);
+    if (body.includes("course_id=course-b")) {
+      return new Promise(resolve => { finishBRefresh = payload => resolve({json: async () => payload}); });
+    }
+    if (body.includes("course_id=course-c")) {
+      return Promise.resolve({json: async () => catalog("course-c", "C", 1)});
+    }
+  }
+  throw new Error("unexpected fetch " + url);
+};
+
+vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"));
+elements["pg-course"].value = "course-a";
+window.CE_POWERGRADER_SETUP.loadCourseCatalog("course-a");
+elements["pg-course"].value = "course-b";
+window.CE_POWERGRADER_SETUP.loadCourseCatalog("course-b");
+await tick();
+finishAGet(catalog("course-a", "A", 1));
+await tick();
+if (!elements["pg-assignment"].innerHTML.includes("B Assignment 1") || elements["pg-assignment"].innerHTML.includes("A Assignment 1")) process.exit(2);
+
+elements["pg-assignment"].value = "B-1";
+finishBRefresh(catalog("course-b", "B", 1));
+await tick();
+if (elements["pg-assignment"].value !== "B-1") process.exit(3);
+
+const postsBeforeRepeat = calls.filter(call => call.url === "/api/course-catalog/refresh").length;
+window.CE_POWERGRADER_SETUP.loadCourseCatalog("course-b");
+await tick();
+const postsAfterRepeat = calls.filter(call => call.url === "/api/course-catalog/refresh").length;
+if (postsAfterRepeat !== postsBeforeRepeat) process.exit(4);
+
+elements["pg-course"].value = "course-c";
+window.CE_POWERGRADER_SETUP.loadCourseCatalog("course-c");
+await tick(12);
+if (!elements["pg-assignment"].innerHTML.includes("C Assignment 1")) process.exit(5);
+if (!elements["pg-course-catalog-status"].textContent.includes("Course list synced")) process.exit(6);
+'''
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(core_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout

@@ -16,6 +16,7 @@
   var loadedModules = [];
   var activeModules = [];
   var moduleCache = {};
+  var automaticRefreshStarted = {};
   var activeCourseId = '';
   var loadVersion = 0;
   var moduleSelectionVersion = 0;
@@ -33,6 +34,8 @@
   var refreshBtn = document.getElementById('pg-refresh-assignment');
   var folderBtn = document.getElementById('pg-open-assignment-folder');
   var evidenceStatus = document.getElementById('pg-evidence-status');
+  var syncCourseBtn = document.getElementById('pg-sync-course-list');
+  var catalogStatus = document.getElementById('pg-course-catalog-status');
 
   function currentMode() {
     var checked = modeChoices.find(function(el){ return el.checked; });
@@ -78,6 +81,7 @@
     startBtn.disabled = !(setupConfig.hasWorkspace && cid && aid && ackOk);
     if (refreshBtn) refreshBtn.disabled = !(setupConfig.hasWorkspace && cid && aid);
     if (folderBtn) folderBtn.disabled = !(setupConfig.hasWorkspace && cid && aid);
+    if (syncCourseBtn && !syncCourseBtn.dataset.syncing) syncCourseBtn.disabled = !(setupConfig.hasWorkspace && cid);
   }
 
   function setStatus(msg, err){
@@ -108,12 +112,16 @@
   }
 
   function assignmentDueLabel(a) {
-    return a.due_at ? " (due " + a.due_at + ")" : "";
+    return a.due_at ? " (due " + String(a.due_at).slice(0, 10) + ")" : "";
   }
 
   function assignmentMatchesSearch(a, query) {
     if (!query) return true;
-    return String(a.name || "").toLowerCase().indexOf(query.toLowerCase()) > -1;
+    var moduleNames = loadedModules.filter(function(module){
+      return assignmentBelongsToModule(a, module);
+    }).map(function(module){ return module.name || ""; });
+    var text = [a.name || "", a.description_text || ""].concat(moduleNames).join(" ").toLowerCase();
+    return text.indexOf(query.toLowerCase()) > -1;
   }
 
   function assignmentBelongsToModule(a, module) {
@@ -127,13 +135,15 @@
     (modules || []).forEach(function(module){ moduleCache[module.id] = module; });
   }
 
-  function fillModulePicker() {
+  function fillModulePicker(preferredValue) {
     if (!asnGroupByEl) return;
     asnGroupByEl.innerHTML = '<option value="last_three">Last 3 modules</option>' +
       loadedModules.map(function(module){
         return '<option value="' + esc(module.id) + '">' + esc(module.name) + '</option>';
       }).join('');
-    asnGroupByEl.value = 'last_three';
+    var wanted = preferredValue || 'last_three';
+    asnGroupByEl.value = Array.from(asnGroupByEl.options).some(function(option){ return option.value === wanted; })
+      ? wanted : 'last_three';
   }
 
   function cachedModulesForSelection(value) {
@@ -170,7 +180,7 @@
         }).join('');
         html += '</optgroup>';
       }
-    } else {
+    } else if (activeModules.length) {
       activeModules.forEach(function(module){
         var assignments = loadedAssignments.filter(function(a){
           return !seenAssignmentIds[a.id] && assignmentBelongsToModule(a, module);
@@ -194,6 +204,18 @@
         }).join('');
         html += '</optgroup>';
       });
+    } else if (loadedAssignments.length || unsupportedQuizAssignments.length) {
+      groupCount = 1;
+      visibleQuizCount = unsupportedQuizAssignments.length;
+      html += '<optgroup label="All assignments — module list unavailable">';
+      html += loadedAssignments.map(function(a){
+        var sel = a.id === selectedVal ? ' selected' : '';
+        return '<option value="' + esc(a.id) + '"' + sel + '>' + esc(a.name) + esc(assignmentDueLabel(a)) + '</option>';
+      }).join('');
+      html += unsupportedQuizAssignments.map(function(a){
+        return '<option value="" disabled>' + esc(a.name) + ' (' + unsupportedQuizLabel(a) + ' - not supported)</option>';
+      }).join('');
+      html += '</optgroup>';
     }
 
     if (unsupportedHintEl) unsupportedHintEl.hidden = visibleQuizCount === 0;
@@ -217,34 +239,110 @@
     if (!asnGroupByEl || !activeCourseId) return;
     var value = asnGroupByEl.value || 'last_three';
     var cached = cachedModulesForSelection(value);
-    if (cached) {
-      activeModules = cached;
-      renderAssignmentOptions();
-      syncStartEnabled();
-      return;
-    }
+    activeModules = cached || [];
+    renderAssignmentOptions();
+    syncStartEnabled();
+  }
 
-    var version = ++moduleSelectionVersion;
-    var url = '/api/powergrader/modules?course_id=' + encodeURIComponent(activeCourseId);
-    if (value !== 'last_three') url += '&module_id=' + encodeURIComponent(value);
-    asnEl.disabled = true;
-    asnEl.innerHTML = '<option value="">Loading module…</option>';
-    fetch(url)
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (version !== moduleSelectionVersion || value !== asnGroupByEl.value) return;
-        if (!d.ok) {
-          asnEl.innerHTML = '<option value="">— failed to load module —</option>';
-          return;
+  function catalogTimestamp(data) {
+    var scopes = data && data.scopes || {};
+    return (scopes.assignments && scopes.assignments.last_success_at) ||
+      (scopes.modules && scopes.modules.last_success_at) || data.updated_at || "";
+  }
+
+  function shortTimestamp(value) {
+    if (!value) return "an earlier sync";
+    var parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  }
+
+  function catalogStateMessage(data, prefix) {
+    var scopes = data && data.scopes || {};
+    var states = [scopes.assignments && scopes.assignments.state, scopes.modules && scopes.modules.state].filter(Boolean);
+    var imperfect = states.filter(function(value){ return value !== 'current'; });
+    var message = prefix || (imperfect.length ? 'Using local course list' : 'Course list synced');
+    message += ' from ' + shortTimestamp(catalogTimestamp(data)) + '.';
+    if (imperfect.length) message += ' Some catalog data is ' + imperfect.join('/') + '.';
+    if ((data.warnings || []).indexOf('competing_catalog_files') > -1) message += ' A competing OneDrive catalog copy needs review.';
+    return message;
+  }
+
+  function setCatalogStatus(message, isError) {
+    if (!catalogStatus) return;
+    catalogStatus.textContent = message || '';
+    catalogStatus.classList.toggle('is-error', !!isError);
+  }
+
+  function applyCatalog(data, options) {
+    options = options || {};
+    var selectedAssignment = options.selectedAssignment !== undefined ? options.selectedAssignment : asnEl.value;
+    var selectedModule = options.selectedModule !== undefined
+      ? options.selectedModule : (asnGroupByEl ? asnGroupByEl.value : 'last_three');
+    var searchValue = options.searchValue !== undefined
+      ? options.searchValue : (asnSearchEl ? asnSearchEl.value : '');
+    var loaded = data.assignments || [];
+    loadedAssignments = loaded.filter(function(a){ return isPowerGraderStartable(a) || a.is_quiz_lti_assignment === true; });
+    unsupportedQuizAssignments = loaded.filter(function(a){
+      return isQuizAssignment(a) && a.is_quiz_lti_assignment !== true && !isPowerGraderStartable(a);
+    });
+    loadedModules = data.modules || [];
+    moduleCache = {};
+    cacheSelectedModules(loadedModules);
+    fillModulePicker(selectedModule);
+    activeModules = cachedModulesForSelection(asnGroupByEl ? asnGroupByEl.value : 'last_three') || [];
+    if (asnSearchEl) asnSearchEl.value = searchValue;
+    asnEl.value = selectedAssignment || '';
+    renderAssignmentOptions();
+    if (asnToolsEl) asnToolsEl.hidden = !(loadedModules.length || loadedAssignments.length || unsupportedQuizAssignments.length);
+    syncStartEnabled();
+  }
+
+  function refreshCourseCatalog(cid, version, explicit) {
+    if (!cid || !setupConfig.hasWorkspace) return Promise.resolve();
+    if (!explicit) {
+      if (automaticRefreshStarted[cid]) return Promise.resolve();
+      automaticRefreshStarted[cid] = true;
+    }
+    if (syncCourseBtn) {
+      syncCourseBtn.dataset.syncing = 'true';
+      syncCourseBtn.disabled = true;
+    }
+    setCatalogStatus(explicit ? 'Syncing course list from Canvas…' : 'Checking Canvas for course-list updates…', false);
+    return fetch('/api/course-catalog/refresh', {
+      method: 'POST',
+      body: new URLSearchParams({course_id: cid})
+    }).then(function(r){ return r.json(); }).then(function(data){
+      if (version !== loadVersion || activeCourseId !== cid) return;
+      if (!data.ok || !data.available) {
+        if (loadedAssignments.length || loadedModules.length) {
+          setCatalogStatus('Using the local course list; Canvas sync failed. You can retry with Sync course list.', true);
+          asnEl.disabled = false;
+        } else {
+          asnEl.disabled = true;
+          asnEl.innerHTML = '<option value="">— course list unavailable —</option>';
+          setCatalogStatus((data && data.error) || 'The course list is unavailable. Try Sync course list.', true);
         }
-        cacheSelectedModules(d.selected_modules);
-        activeModules = d.selected_modules || [];
-        renderAssignmentOptions();
+        return;
+      }
+      applyCatalog(data);
+      setCatalogStatus(catalogStateMessage(data, data.source === 'previous' ? 'Using previous local course list' : ''), false);
+      if (typeof pg.loadSessions === 'function') pg.loadSessions(cid);
+    }).catch(function(){
+      if (version !== loadVersion || activeCourseId !== cid) return;
+      if (loadedAssignments.length || loadedModules.length) {
+        asnEl.disabled = false;
+        setCatalogStatus('Using the local course list; Canvas sync failed. You can retry with Sync course list.', true);
+      } else {
+        asnEl.disabled = true;
+        asnEl.innerHTML = '<option value="">— course list unavailable —</option>';
+        setCatalogStatus('The course list is unavailable. Try Sync course list.', true);
+      }
+    }).finally(function(){
+      if (version === loadVersion && activeCourseId === cid) {
+        if (syncCourseBtn) delete syncCourseBtn.dataset.syncing;
         syncStartEnabled();
-      })
-      .catch(function(){
-        if (version === moduleSelectionVersion) asnEl.innerHTML = '<option value="">Error loading module</option>';
-      });
+      }
+    });
   }
 
   function renderStartError(d) {
@@ -272,11 +370,20 @@
       if (asnToolsEl) asnToolsEl.hidden = true;
       if (asnSearchEl) asnSearchEl.value = "";
       if (unsupportedHintEl) unsupportedHintEl.hidden = true;
+      setCatalogStatus('', false);
       if (typeof pg.loadSessions === 'function') pg.loadSessions('');
       return;
     }
+    if (!setupConfig.hasWorkspace) {
+      asnEl.disabled = true;
+      asnEl.innerHTML = '<option value="">— configure workspace first —</option>';
+      setCatalogStatus('Finish workspace setup in Settings before building a local course list.', true);
+      if (typeof pg.loadSessions === 'function') pg.loadSessions(cid);
+      return;
+    }
     asnEl.disabled = true;
-    asnEl.innerHTML = '<option value="">Loading…</option>';
+    asnEl.innerHTML = '<option value="">Opening local course list…</option>';
+    setCatalogStatus('Opening the last local course list…', false);
     if (asnToolsEl) asnToolsEl.hidden = true;
     if (unsupportedHintEl) unsupportedHintEl.hidden = true;
     loadedAssignments = [];
@@ -284,35 +391,32 @@
     loadedModules = [];
     activeModules = [];
     moduleCache = {};
-    Promise.all([
-      fetch('/api/assignments-full?course_id=' + encodeURIComponent(cid)).then(function(r){ return r.json(); }),
-      fetch('/api/powergrader/modules?course_id=' + encodeURIComponent(cid)).then(function(r){ return r.json(); })
-    ])
-      .then(function(results){
-        if (version !== loadVersion) return;
-        var assignmentsResponse = results[0];
-        var modulesResponse = results[1];
-        if (!assignmentsResponse.ok || !assignmentsResponse.assignments || !modulesResponse.ok) {
-          asnEl.innerHTML = '<option value="">— failed to load —</option>';
+    fetch('/api/course-catalog?course_id=' + encodeURIComponent(cid))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (version !== loadVersion || activeCourseId !== cid) return;
+        if (!data.ok) {
+          asnEl.innerHTML = '<option value="">— course list unavailable —</option>';
+          setCatalogStatus(data.error || 'The local course list could not be opened.', true);
           return;
         }
-        var loaded = assignmentsResponse.assignments || [];
-
-        var gradeable = loaded.filter(function(a){ return isPowerGraderStartable(a) || a.is_quiz_lti_assignment === true; });
-        var quizzes = loaded.filter(function(a){ return isQuizAssignment(a) && a.is_quiz_lti_assignment !== true && !isPowerGraderStartable(a); });
-        loadedAssignments = gradeable;
-        unsupportedQuizAssignments = quizzes;
-        loadedModules = modulesResponse.modules || [];
-        cacheSelectedModules(modulesResponse.selected_modules);
-        activeModules = modulesResponse.selected_modules || [];
-        fillModulePicker();
-        if (asnSearchEl) asnSearchEl.value = "";
-        renderAssignmentOptions();
-        if (asnToolsEl && loadedModules.length > 0) asnToolsEl.hidden = false;
-        if (typeof pg.loadSessions === 'function') pg.loadSessions(cid);
+        if (data.available) {
+          applyCatalog(data, {selectedAssignment: '', selectedModule: 'last_three', searchValue: ''});
+          setCatalogStatus(catalogStateMessage(data, data.source === 'previous' ? 'Using previous local course list' : 'Using local course list'), false);
+          if (typeof pg.loadSessions === 'function') pg.loadSessions(cid);
+          refreshCourseCatalog(cid, version, false);
+          return;
+        }
+        asnEl.disabled = true;
+        asnEl.innerHTML = '<option value="">Syncing first course list…</option>';
+        setCatalogStatus('No local course list yet. Syncing from Canvas…', false);
+        refreshCourseCatalog(cid, version, false);
       })
       .catch(function(){
-        if (version === loadVersion) asnEl.innerHTML = '<option value="">Error loading assignments</option>';
+        if (version !== loadVersion || activeCourseId !== cid) return;
+        asnEl.innerHTML = '<option value="">Syncing first course list…</option>';
+        setCatalogStatus('The local course list could not be opened. Trying Canvas once…', true);
+        refreshCourseCatalog(cid, version, false);
       });
   }
 
@@ -382,6 +486,15 @@
     });
   }
 
+  function bindCourseCatalogActions() {
+    if (!syncCourseBtn) return;
+    syncCourseBtn.addEventListener('click', function(){
+      var cid = courseEl ? courseEl.value : '';
+      if (!cid) return;
+      refreshCourseCatalog(cid, loadVersion, true);
+    });
+  }
+
   pg.esc = esc;
   pg.currentMode = currentMode;
   pg.defaultModel = function(){ return defaultModel; };
@@ -390,6 +503,10 @@
   pg.setStatus = setStatus;
   pg.setAiLabelText = updateRouteMode;
   pg.syncStartEnabled = syncStartEnabled;
+  pg.loadCourseCatalog = loadAssignments;
+  pg.syncCourseCatalog = function(){
+    return refreshCourseCatalog(activeCourseId, loadVersion, true);
+  };
 
   modeChoices.forEach(function(el){ el.addEventListener('change', updateRouteMode); });
   updateRouteMode();
@@ -402,5 +519,6 @@
   bindRubricSync();
   bindStartSession();
   bindEvidenceActions();
+  bindCourseCatalogActions();
   if (typeof pg.loadSessions === 'function') pg.loadSessions('');
 })();

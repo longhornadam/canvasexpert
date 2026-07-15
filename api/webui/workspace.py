@@ -35,7 +35,8 @@ COURSES_NAME = "Courses"
 AI_PACKETS_NAME = "AI Packets (Pseudonymized)"
 STUDENT_REPORTS_NAME = "Student Reports"
 SYSTEM_NAME = "_System"
-SYSTEM_SUBFOLDERS = ("Identity Vault", "PowerGrader", "Audits", "Archive")
+SYSTEM_SUBFOLDERS = ("Identity Vault", "PowerGrader", "Audits", "Archive", "Canvas Catalog")
+CANVAS_CATALOG_NAME = "Canvas Catalog"
 LEGACY_FEEDBACK_NAME = "FeedbackExpert"
 
 # Compatibility aliases retained for imports and old UI wording.  New code
@@ -199,6 +200,27 @@ def audits_dir(root=None):
 
 def archive_dir(root=None):
     return system_folder("Archive", root)
+
+
+def canvas_catalog_root(root=None):
+    """Return the durable, student-data-free Canvas Catalog root."""
+    return system_folder(CANVAS_CATALOG_NAME, root)
+
+
+def course_catalog_dir(course_id, root=None):
+    """Return the stable per-course catalog directory owned by Canvas course ID."""
+    base = canvas_catalog_root(root)
+    return os.path.join(base, safe_id(course_id)) if base else None
+
+
+def course_catalog_path(course_id, root=None):
+    directory = course_catalog_dir(course_id, root)
+    return os.path.join(directory, "catalog.v1.json") if directory else None
+
+
+def course_catalog_previous_path(course_id, root=None):
+    directory = course_catalog_dir(course_id, root)
+    return os.path.join(directory, "catalog.v1.previous.json") if directory else None
 
 
 def course_folder(course_name, course_id, root=None):

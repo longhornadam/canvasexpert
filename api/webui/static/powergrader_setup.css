@@ -64,6 +64,16 @@
   color: var(--ink-2);
 }
 
+.pg-course-catalog-actions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px;
+}
+
+.pg-course-catalog-actions .lbl-hint { flex: 1 1 220px; }
+
+#pg-course-catalog-status.is-error { color: var(--ce-red, #c0392b); }
+
+.pg-assignment-evidence-actions { align-items: center; }
+
 /* ── Route selector ────────────────────────────────────────────────── */
 .pg-route-box { display: grid; gap: 8px; }
 

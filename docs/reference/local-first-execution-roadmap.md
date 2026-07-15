@@ -56,10 +56,11 @@ These are not delegated architecture questions:
 2. **Before Luna 3 — resolved 2026-07-14:** a student with any manual item whose evidence
    requires SpeedGrader has their whole finalization routed to SpeedGrader; PowerGrader does
    not create a partial two-authority grading flow.
-3. **Before Luna 4:** set the bounded launch-background policy for configured Current
-   courses: exact scopes, staleness threshold, course limit behavior, and user-visible status
-   language. Default recommendation: availability plus assignment collections only; no
-   roster, submissions, comments, reports, or binaries at launch.
+3. **Before Luna 4 — resolved for the first bounded consumer 2026-07-14:** do not launch-sync
+   every Current course. PowerGrader persists assignment and module collections for the
+   selected Current course, opens from last-good local state, refreshes once per course per
+   page session, and offers explicit retry. No roster, submissions, comments, reports, or
+   binaries enter this catalog. A broader multi-surface coordinator remains unapproved.
 4. **Before Luna 7:** decide the surviving home for the existing Student Reports workflow.
    Do not invent the rejected Parent Conference Prep product merely to make navigation
    symmetrical.
@@ -157,11 +158,9 @@ Expected verification seam:
 Stop if an existing Download Work caller needs behavior the focused owner cannot provide
 without broadening the persistence contract.
 
-## Luna 3 — New Quiz item review and teacher finalization in PowerGrader **(ACTIVE — brief ready 2026-07-14)**
+## Luna 3 — New Quiz item review and teacher finalization in PowerGrader **(GREEN completed 2026-07-14)**
 
-Active brief: `docs/handoffs/new-quiz-item-finalization-v2.md` (Phase A closes the one open
-write-credential question under the archived capture rules; Phase B implements the adapter
-and per-item finalization UI). Archived RED records:
+Completed record: `docs/handoffs/archive/new-quiz-item-finalization-v2.md`. Archived RED records:
 `docs/handoffs/archive/new-quiz-item-finalization.md` and
 `docs/handoffs/archive/new-quiz-grader-transport-capture.md` — their blockers are stale:
 the sessionless native read chain is live-verified (commit `7fb63b9`), the
@@ -219,7 +218,23 @@ Expected verification seam:
 Stop on any unrecognized launch/result shape, item mismatch, credential persistence, unclear
 post-write authority, or inability to reconcile an ambiguous response.
 
+## PowerGrader Course Catalog v1 **(GREEN accepted 2026-07-14)**
+
+Implementation brief: `docs/handoffs/course-catalog-powergrader.md`. Durable contract:
+`docs/contracts/course-catalog-contract.md`.
+
+PowerGrader course selection now reads a strict, student-data-free assignment/module catalog
+from the synced workspace before one selected-course background refresh. Module switching and
+search are local, refresh failures retain usable last-good records, and explicit course-list
+sync remains distinct from focused assignment-evidence refresh. This is the concrete
+PowerGrader portion of non-blocking focus synchronization; it does not implement an all-course
+launch job, generalized coordinator, or migration of other consumers.
+
 ## Luna 4 — Non-blocking launch and focus synchronization
+
+PowerGrader's selected-course catalog portion is complete above. The remaining generalized
+multi-surface coordinator scope is not executable without a new demonstrated consumer and
+brief; do not rebuild the completed catalog vertical as an app-wide synchronization product.
 
 Depends on: **Lunas 1–2 GREEN** and the launch-policy decision gate.
 

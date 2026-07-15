@@ -111,6 +111,15 @@ assignment. It is now modularized:
 For low-token debugging and current file ownership, start with
 `docs/reference/powergrader-module-map.md`.
 
+PowerGrader's course picker reads the durable, student-data-free **Course Catalog v1** from
+`<workspace>/_System/Canvas Catalog/<course-id>/`. Course selection, module switching, and
+assignment search use that local projection before one bounded background refresh of the
+selected Current course. The contract is `docs/contracts/course-catalog-contract.md` and
+the backend owner is `api/course_catalog.py`. This catalog is navigation/search context
+only: focused submissions/evidence and every Canvas write still require their existing live
+paths and safeguards. Do not add student data, raw HTML, URLs, credentials, or private paths
+to catalog records, and do not treat it as a write preflight.
+
 PowerGrader modes:
 
 - **Grade Myself** - fetch submitted work into one local session; no AI packet and no

@@ -1,0 +1,347 @@
+import json
+import threading
+import time
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from api import course_catalog
+from api.webui.routes import course_catalog as course_catalog_routes
+from api.webui.server import app
+
+
+STAMP_1 = "2026-07-14T12:00:00+00:00"
+STAMP_2 = "2026-07-14T13:00:00+00:00"
+
+
+def _assignment(assignment_id="101", **changes):
+    row = {
+        "id": assignment_id,
+        "name": "Fictional Reflection",
+        "description": '<p>Explain <a href="https://example.invalid/private">your reasoning</a>. Visit https://example.invalid/visible</p><script>secret()</script>',
+        "points_possible": 10,
+        "due_at": "2026-07-18T05:00:00Z",
+        "unlock_at": None,
+        "lock_at": None,
+        "created_at": "2026-07-01T05:00:00Z",
+        "updated_at": "2026-07-14T05:00:00Z",
+        "published": True,
+        "submission_types": ["online_text_entry"],
+        "assignment_group_id": 44,
+        "rubric": [{
+            "id": "criterion-1",
+            "description": "Reasoning",
+            "long_description": "<b>Use evidence.</b>",
+            "points": 10,
+            "ratings": [{"id": "rating-1", "description": "Complete", "long_description": "", "points": 10, "url": "drop"}],
+            "url": "drop",
+        }],
+        "rubric_settings": {"id": 9, "title": "Reasoning rubric", "points_possible": 10, "free_form_criterion_comments": True},
+        "html_url": "https://example.invalid/drop",
+        "submission": {"user_id": "must-not-persist"},
+    }
+    row.update(changes)
+    return row
+
+
+def _module(module_id="10", *, items=None, include_items=True, position=1):
+    row = {"id": module_id, "name": f"Module {module_id}", "position": position, "url": "https://example.invalid/drop"}
+    if include_items:
+        row["items"] = items if items is not None else [{
+            "id": f"item-{module_id}",
+            "type": "Assignment",
+            "title": "Fictional Reflection",
+            "position": 1,
+            "content_id": "101",
+            "url": "https://example.invalid/drop",
+        }]
+    return row
+
+
+def _canvas_success(path, params):
+    if path.endswith("/assignments"):
+        return [_assignment()], None
+    if path.endswith("/modules"):
+        return [_module()], None
+    raise AssertionError(f"unexpected Canvas call: {path}")
+
+
+def test_assignment_normalization_is_strict_url_free_and_rejects_unknown_fields(tmp_path):
+    normalized = course_catalog.normalize_assignment(_assignment())
+
+    assert set(normalized) == course_catalog.ASSIGNMENT_KEYS
+    assert normalized["description_text"] == "Explain your reasoning . Visit [link]"
+    assert "https://" not in json.dumps(normalized)
+    assert "user_id" not in json.dumps(normalized)
+    assert normalized["rubric"][0]["ratings"][0] == {
+        "id": "rating-1", "description": "Complete", "long_description": "", "points": 10,
+    }
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+    document = result["catalog"]
+    document["assignments"]["records"]["101"]["html_url"] = "unapproved"
+    with pytest.raises(ValueError, match="assignment schema"):
+        course_catalog.validate_catalog(document)
+    document["assignments"]["records"]["wrong"] = document["assignments"]["records"].pop("101")
+    document["assignments"]["records"]["wrong"].pop("html_url")
+    with pytest.raises(ValueError, match="stable id"):
+        course_catalog.validate_catalog(document)
+
+
+def test_refresh_succeeds_for_both_scopes_and_persists_projection(tmp_path):
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    document = result["catalog"]
+    assert document["assignments"]["state"] == "current"
+    assert document["modules"]["state"] == "current"
+    assert set(document["assignments"]["records"]) == {"101"}
+    projection = course_catalog.public_projection(result, course_id="course-1")
+    assert projection["available"] is True
+    assert projection["modules"][0]["assignment_ids"] == ["101"]
+    stored = course_catalog.read_catalog("course-1", root=str(tmp_path))
+    assert stored["source"] == "canonical"
+    assert stored["catalog"] == document
+
+
+def test_scope_failure_preserves_last_good_records_while_other_scope_updates(tmp_path):
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    def assignment_failure(path, params):
+        if path.endswith("/assignments"):
+            return None, "HTTP 503: do not expose this"
+        if path.endswith("/modules"):
+            return [_module("20", position=2)], None
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=assignment_failure,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )
+
+    assert result["catalog"]["assignments"]["state"] == "stale"
+    assert set(result["catalog"]["assignments"]["records"]) == {"101"}
+    assert result["catalog"]["assignments"]["last_success_at"] == STAMP_1
+    assert result["catalog"]["assignments"]["error_code"] == "canvas_unavailable"
+    assert result["catalog"]["modules"]["state"] == "current"
+    assert result["catalog"]["modules"]["records"][0]["id"] == "20"
+    assert "503" not in json.dumps(result)
+
+
+def test_first_sync_partial_result_keeps_successful_scope(tmp_path):
+    def module_failure(path, params):
+        if path.endswith("/assignments"):
+            return [_assignment()], None
+        if path.endswith("/modules"):
+            return None, "HTTP 403 private detail"
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=module_failure,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    assert result["catalog"]["assignments"]["state"] == "current"
+    assert result["catalog"]["modules"] == {
+        "state": "unavailable", "last_success_at": "", "last_attempt_at": STAMP_1,
+        "error_code": "forbidden", "records": [],
+    }
+    assert course_catalog.public_projection(result, course_id="course-1")["available"] is True
+
+
+def test_empty_scope_response_never_erases_last_good_records(tmp_path):
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    def empty_assignments(path, params):
+        if path.endswith("/assignments"):
+            return [], None
+        if path.endswith("/modules"):
+            return [_module()], None
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=empty_assignments,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )
+    assert result["catalog"]["assignments"]["state"] == "stale"
+    assert set(result["catalog"]["assignments"]["records"]) == {"101"}
+    assert result["catalog"]["assignments"]["error_code"] == "empty_response"
+
+
+def test_inline_empty_items_are_complete_but_omitted_items_use_bounded_fallback(tmp_path):
+    calls = []
+    active = 0
+    peak = 0
+    guard = threading.Lock()
+
+    def canvas_get_all(path, params):
+        nonlocal active, peak
+        calls.append((path, dict(params)))
+        if path.endswith("/assignments"):
+            return [_assignment()], None
+        if path.endswith("/modules"):
+            return [_module("empty", items=[])] + [
+                _module(str(index), include_items=False, position=index + 1) for index in range(5)
+            ], None
+        if path.endswith("/items"):
+            with guard:
+                active += 1
+                peak = max(peak, active)
+            time.sleep(0.01)
+            module_id = path.split("/modules/")[1].split("/")[0]
+            with guard:
+                active -= 1
+            return [{"id": f"item-{module_id}", "type": "Assignment", "title": "Work", "position": 1, "content_id": "101"}], None
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=canvas_get_all,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    assert result["catalog"]["modules"]["state"] == "current"
+    assert peak <= course_catalog.MODULE_ITEM_CONCURRENCY
+    item_calls = [path for path, _ in calls if path.endswith("/items")]
+    assert len(item_calls) == 5
+    assert not any("/modules/empty/items" in path for path in item_calls)
+    assert not any("/assignments/" in path for path, _ in calls)
+    module_params = next(params for path, params in calls if path.endswith("/modules"))
+    assert module_params == {"per_page": 100, "include[]": "items"}
+
+
+def test_partial_module_fallback_reuses_prior_items_and_marks_incomplete(tmp_path):
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    def failed_items(path, params):
+        if path.endswith("/assignments"):
+            return [_assignment()], None
+        if path.endswith("/modules"):
+            return [_module("10", include_items=False)], None
+        if path.endswith("/modules/10/items"):
+            return None, "timeout with private host"
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=failed_items,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )
+    modules = result["catalog"]["modules"]
+    assert modules["state"] == "incomplete"
+    assert modules["error_code"] == "module_items_unavailable"
+    assert modules["records"][0]["items"][0]["content_id"] == "101"
+
+
+def test_atomic_update_preserves_previous_and_leaves_no_temp_files(tmp_path):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    def changed(path, params):
+        if path.endswith("/assignments"):
+            return [_assignment(name="Updated Reflection")], None
+        if path.endswith("/modules"):
+            return [_module()], None
+        raise AssertionError(path)
+
+    second = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=changed,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )["catalog"]
+    directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
+    assert json.loads((directory / "catalog.v1.previous.json").read_text(encoding="utf-8")) == first
+    assert json.loads((directory / "catalog.v1.json").read_text(encoding="utf-8")) == second
+    assert not list(directory.glob("*.tmp"))
+
+
+def test_corrupt_canonical_falls_back_to_previous_and_quarantines_bad_file(tmp_path):
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )
+    directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
+    (directory / "catalog.v1.json").write_text("{broken", encoding="utf-8")
+
+    result = course_catalog.read_catalog("course-1", root=str(tmp_path))
+
+    assert result["source"] == "previous"
+    assert result["catalog"]["updated_at"] == STAMP_1
+    assert "using_previous_catalog" in result["warnings"]
+    assert not (directory / "catalog.v1.json").exists()
+    assert len(list((directory / "quarantine").glob("catalog.v1.json.*.corrupt"))) == 1
+
+
+def test_corrupt_previous_without_canonical_is_unavailable(tmp_path):
+    directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
+    directory.mkdir(parents=True)
+    (directory / "catalog.v1.previous.json").write_text("not-json", encoding="utf-8")
+
+    result = course_catalog.read_catalog("course-1", root=str(tmp_path))
+
+    assert result == {"catalog": None, "source": "none", "warnings": []}
+    assert not (directory / "catalog.v1.previous.json").exists()
+    assert len(list((directory / "quarantine").glob("catalog.v1.previous.json.*.corrupt"))) == 1
+
+
+def test_onedrive_conflict_warns_but_is_never_modified_or_deleted(tmp_path):
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+    directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
+    conflict = directory / "catalog.v1-LAPTOP.json"
+    conflict.write_text('{"leave": "untouched"}', encoding="utf-8")
+
+    read_result = course_catalog.read_catalog("course-1", root=str(tmp_path))
+    refresh_result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )
+
+    assert "competing_catalog_files" in read_result["warnings"]
+    assert "competing_catalog_files" in refresh_result["warnings"]
+    assert conflict.read_text(encoding="utf-8") == '{"leave": "untouched"}'
+
+
+def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    calls = []
+    monkeypatch.setattr(course_catalog_routes.config, "active_courses", lambda: [{"id": "course-1", "name": "Fictional Course"}])
+
+    def fake_read(course_id):
+        calls.append(course_id)
+        return {"catalog": None, "source": "none", "warnings": []}
+
+    monkeypatch.setattr(course_catalog_routes.course_catalog, "read_catalog", fake_read)
+    monkeypatch.setattr(
+        course_catalog_routes, "_canvas_get_all",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GET contacted Canvas")),
+    )
+
+    allowed = client.get("/api/course-catalog", params={"course_id": "course-1"}).json()
+    blocked_get = client.get("/api/course-catalog", params={"course_id": "previous-course"}).json()
+    blocked_post = client.post("/api/course-catalog/refresh", data={"course_id": "previous-course"}).json()
+
+    assert allowed["ok"] is True and allowed["available"] is False
+    assert calls == ["course-1"]
+    assert blocked_get == {"ok": False, "error": "Select a saved current course first."}
+    assert blocked_post == blocked_get

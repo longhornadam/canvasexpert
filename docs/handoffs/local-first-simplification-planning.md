@@ -1,6 +1,6 @@
 # Planning handoff: prioritized Canvas synchronization and a smaller product surface
 
-Status: **planning — Lunas 1–2 complete; Luna 3 transport evidence blocked**
+Status: **planning — Lunas 1–3 and PowerGrader Course Catalog v1 complete**
 
 Risk: **high**
 
@@ -38,15 +38,26 @@ were:
   size and fit in the remaining budget before transfer; otherwise it remains an explicit
   incomplete/native-review evidence case. Application launch never prefetches binaries.
 
-## Luna 3 execution state — RED 2026-07-14
+## Luna 3 execution state — GREEN 2026-07-14
 
-The all-or-nothing SpeedGrader fallback is resolved, but implementation remains blocked until
-the authorized, de-identified transport capture completes. The original RED brief is archived
-at `docs/handoffs/archive/new-quiz-item-finalization.md`; the sole active brief is
-`docs/handoffs/new-quiz-grader-transport-capture.md`. It permits one temporary dummy-target
-write only after a fully observed first-party launch and complete item-results/fudge payload
-are validated, and it requires content-free evidence plus operator-directed cleanup. Do not
-start another Luna or production New Quiz write transport before that capture is resolved.
+The completed record is archived at
+`docs/handoffs/archive/new-quiz-item-finalization-v2.md`. Earlier RED transport-capture
+records remain historical evidence; they no longer describe the current implementation
+state.
+
+## PowerGrader Course Catalog decision gate — resolved 2026-07-14
+
+The teacher's repeated-course-selection workflow does not justify a global CanvasSync product
+or an all-course launch coordinator. Course Catalog v1 persists the complete assignment and
+module metadata collections for one selected Current course beneath `_System/Canvas
+Catalog/<course-id>/`, with no student data, raw HTML, URLs, credentials, or private paths.
+PowerGrader renders the last-good catalog first, searches it locally, and performs one
+non-blocking selected-course refresh per page session plus explicit **Sync course list**.
+
+This resolves the assignment/module picker authority for PowerGrader only. It does not
+authorize launch synchronization of every Current course, migrate another consumer, or
+replace focused live reads for submissions/evidence and Canvas-write safeguards. The durable
+schema and OneDrive behavior live in `docs/contracts/course-catalog-contract.md`.
 
 ## Direction established with the user
 
@@ -453,10 +464,10 @@ shapes still require a narrower pass before implementation.
 | Saved connection and Current-course configuration | local `config`; readiness also probes `/users/self/profile` | **Immediate local**; optional connectivity probe must not gate launch |
 | Accessible course catalog | Settings/dashboard course chooser via `/api/v1/courses` | **Explicit** when managing Current courses; configured Current courses already exist locally |
 | Course identity/availability | multiple feature pickers and Course Info | **Launch background** only if a cheap bounded check materially improves status; never a blocker |
-| Assignment collection | Course Expert, Gradebook, PowerGrader setup, Download routine, grading-debt and late-work discovery via `/courses/:id/assignments` | Strong candidate for **launch background** because of broad reuse, but Current-course count, payload size, and freshness threshold must be measured |
+| Assignment collection | Course Expert, Gradebook, PowerGrader setup, Download routine, grading-debt and late-work discovery via `/courses/:id/assignments` | PowerGrader now uses the durable Course Catalog on selected-course focus; other consumers and any all-course launch policy remain undecided |
 | Assignment detail | PowerGrader start, extensions, curves, content operations via `/assignments/:id` | **Focused** on selection; **pre-write** again when mutation safety requires it |
 | Assignment groups | Create delivery controls via `/assignment_groups` | **Focused** only when creating/pushing content for a target course |
-| Modules and module items | Create placement, PowerGrader module picker, Course Info, operation reconciliation | Collection may be **focused** on course selection; individual items are **pre-write/reconcile**, not launch work |
+| Modules and module items | Create placement, PowerGrader module picker, Course Info, operation reconciliation | PowerGrader now uses focused selected-course Course Catalog refresh with bounded omitted-item fallback; write preparation/reconciliation and other consumers remain live and unchanged |
 | Rubrics and rubric detail | rubric creation/update and grading context | **Focused** when authoring or grading needs them; live recheck before rubric mutation |
 | Roster/enrollment projection | Roster, Gradebook, reports, pseudonym management, routines via `/users` or enrollments | Likely **focused** for Students/Grade and **deferred background** for warnings; names and IDs are private |
 | Group categories, groups, memberships | differentiated creation, Roster, Course Info, roster-warning discovery | **Focused** when a group-aware feature opens; poor launch candidate because it fans out into many calls and has permission-dependent fallbacks |
@@ -547,18 +558,16 @@ batches, their dependencies, risk, verification seams, decision gates, and stop 
 Only one Luna runs at a time, and each batch receives one current execution brief rather
 than treating the roadmap itself as executable.
 
-The first implementation vertical remains assignment evidence because Download Work,
-PowerGrader, Feedback preparation, and Automations overlap there. Its teacher outcome is:
+The first assignment-evidence vertical and the PowerGrader Course Catalog vertical are now
+implemented. Their combined teacher outcome is:
 
-> Canvas Expert opens immediately, refreshes the selected assignment's submission state,
-> downloads only missing or changed ordinary evidence into the canonical private course
-> folder, reports completeness, and lets PowerGrader grade from that shared local copy.
+> PowerGrader opens a selected course from the last-good local assignment/module catalog,
+> refreshes the course list without clearing usable local state, and performs a separate
+> focused assignment refresh before grading from shared local evidence.
 
-Do not expand the first vertical into all-course background acquisition unless the granular
-inventory proves that the same bounded mechanism and verification serve immediate consumers.
-Do not start Luna 1 until the senior has locked the minimum durable identity/freshness
-record, OneDrive conflict rule, current-attempt retention, and binary policy named in the
-roadmap's first decision gate.
+Do not expand these verticals into all-course background acquisition or migrate another
+consumer without a new bounded teacher-visible brief. Course Catalog state cannot satisfy a
+submission/evidence read or a Canvas-write preflight.
 
 ## Reference and insertion points for planning
 
@@ -634,6 +643,5 @@ executor may be active.
 - Rendered routes checked: none
 - Deviations: planning format intentionally replaces the execution-ready status in the
   standard template
-- Remaining blocker: resolve the roadmap's Luna 1 decision gate and convert that batch into
-  the single active execution brief; later decision gates remain intentionally deferred
-  until their dependent GREEN batches are complete
+- Remaining blocker: later roadmap decision gates remain intentionally deferred until a
+  demonstrated teacher workflow requires another bounded vertical

@@ -3,9 +3,9 @@
 Purpose: give future debugging sessions a low-token routing map so they can jump
 straight to the owning file instead of re-mapping PowerGrader from scratch.
 
-As of 2026-07-13, the old browser entry files are thin shims. The route owner remains
-a 513-line orchestration file; the source-material facade and format readers are now
-split for lower-cost debugging. Use this file as the first stop before reading code.
+As of 2026-07-14, the old browser entry files are thin shims. PowerGrader setup now opens
+course assignment/module choices from Course Catalog v1 before refreshing the selected
+Current course in the background. Use this file as the first stop before reading code.
 
 ## Page / route ownership
 
@@ -19,10 +19,12 @@ split for lower-cost debugging. Use this file as the first stop before reading c
 `powergrader.py` remains the APIRouter owner only. Route-local support should move
 into nearby helper modules or the backend package when it becomes reusable.
 
-## Current size snapshot
+## Key file snapshot
 
-- `api/webui/routes/powergrader.py` - 513 lines
-- `api/webui/static/powergrader/setup_core.js` - 381 lines
+- `api/webui/routes/powergrader.py` - route orchestration owner
+- `api/course_catalog.py` - Course Catalog v1 validation, acquisition, and storage owner
+- `api/webui/routes/course_catalog.py` - Current-course-gated disk-read/refresh routes
+- `api/webui/static/powergrader/setup_core.js` - local-first setup/catalog consumer
 - `api/webui/static/powergrader/setup_sessions.js` - 115 lines
 - `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
 - `api/webui/static/powergrader_setup.css` - 527 lines
@@ -69,9 +71,13 @@ Ownership:
 
 - `setup_core.js`
   - mode switching
-  - course -> module -> assignment loading
+  - local Course Catalog read followed by one background selected-course refresh per page
+    session
   - module picker defaults to the last three modules in Canvas course order
-  - assignment search spans the full course regardless of the active module selection
+  - assignment search spans the full local course catalog by assignment name, normalized
+    description text, and associated module name without a Canvas request
+  - explicit course-level **Sync course list** kept separate from assignment-evidence
+    **Refresh from Canvas**
   - rubric picker sync
   - session start submit flow
   - shared `window.CE_POWERGRADER_SETUP` namespace
@@ -187,7 +193,13 @@ Ownership:
 - `api/powergrader/student_attachments.py`
   - local text/DOCX/raster routing, extraction sidecars, eligibility gates, and metadata-stripped AI derivatives
 - `api/webui/workspace.py`
-  - canonical course/assignment/student/attempt and AI-run path ownership plus legacy compatibility helpers
+  - canonical Course Catalog and course/assignment/student/attempt path ownership plus legacy compatibility helpers
+- `api/course_catalog.py`
+  - strict URL-free Course Catalog v1 allowlists and validator
+  - parallel assignment/module acquisition with bounded missing-item fallback
+  - independent scope merge, canonical/previous/quarantine storage, and conflict warnings
+- `api/webui/routes/course_catalog.py`
+  - disk-only local catalog GET and read-only Canvas refresh POST, both gated to Current courses
 - `api/webui/config/courses.py`
   - saved-course lookup for nickname/name/ID display ownership
 - `api/powergrader/scheduled_autoscore_support.py`
@@ -215,6 +227,8 @@ Ownership:
 
 - Setup page fails before session creation:
   - `setup_core.js`
+  - `api/webui/routes/course_catalog.py`
+  - `api/course_catalog.py`
   - `setup_autoscore.js`
   - `powergrader.py::pg_estimate`
   - `powergrader.py::pg_start`
