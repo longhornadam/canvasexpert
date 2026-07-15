@@ -65,4 +65,16 @@
   .ce-settings-tier-grid { grid-template-columns: minmax(0, 1fr); }
   .url-row, .token-row, .ce-settings-input-row { align-items: stretch; flex-wrap: wrap; }
   .url-static, .ce-settings-url-input, .ce-settings-input-row input { width: 100%; }
+  .profiles, .profiles tbody, .profiles tr, .profiles td { display: block; width: 100%; }
+  .profiles thead { display: none; }
+  .profiles tr { margin-top: var(--ce-space-3); padding: var(--ce-space-3); border: 1px solid var(--ce-rule); }
+  .profiles tr:first-child { margin-top: 0; }
+  .profiles td { padding: var(--ce-space-1) 0; border: 0; }
+  .profiles td::before { display: block; color: var(--ce-ink-muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .profiles td:nth-child(1)::before { content: "Nickname"; }
+  .profiles td:nth-child(2)::before { content: "Course name"; }
+  .profiles td:nth-child(3)::before { content: "Course ID"; }
+  .profiles td:nth-child(2) { overflow-wrap: anywhere; }
+  .profiles td:nth-child(4), .profiles td:nth-child(5) { display: inline-block; width: auto; padding-right: var(--ce-space-2); }
+  .profiles td:nth-child(4)::before, .profiles td:nth-child(5)::before { display: none; }
 }

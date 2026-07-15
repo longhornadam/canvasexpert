@@ -416,10 +416,10 @@ Stop with RED rather than guessing if:
 ### Cohort 2 result
 
 - Traffic light: **YELLOW** — the complete presentation migration and required
-  automated checks are green. A senior's fully synthetic mobile render found a real
-  Settings overflow, which is corrected below; the senior still needs to rerun the
-  visual gate before the user reviews this diff and accepts Cohort 2. Do not begin
-  Cohort 3.
+  automated checks are green. The senior found a second Settings-only mobile overflow
+  source and added the unverified CSS correction below immediately before an
+  intentional interruption. Resume with the isolated mobile light/dark render gate;
+  do not begin Cohort 3.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
   - Implementation commit `1e6a45f` on `dev` (16 files, 600 insertions, 351
     deletions) migrates Gradebook, Roster, and Settings to
@@ -449,6 +449,13 @@ Stop with RED rather than guessing if:
     (**6 passed**) with `git diff --check` green. The senior will rerun the isolated
     light/dark mobile visual suite. No Canvas or OpenRouter request was made during
     this correction.
+  - Pause checkpoint commit records a Settings-only mobile table restack at
+    `max-width: 760px`: Current Courses table rows become labelled blocks and retain
+    their existing row IDs and action buttons. This exact change has **not** yet run
+    focused tests or the isolated rendered check. The local untracked
+    `api/.codex_cohort2_verify.py` is a fully synthetic resume-only verifier; it
+    stubs every `/api/*` response, readiness endpoint, host label, courses, and
+    routine paths, and must not be committed as product code.
 
 ### Cohort 3 result
 
