@@ -10,92 +10,17 @@
   <!-- Local fonts (vendored from Google Fonts) -->
   <link rel="stylesheet" href="/static/fonts/fonts.css">
   {% block stylesheet_bundle %}
-  <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
-  <link rel="stylesheet" href="/static/workbench.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/ui/tokens.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/ui/foundation.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/ui/components.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/ui/layouts.css?v={{ asset_v }}">
   {% endblock %}
   <script src="/static/write_review.js?v={{ asset_v }}"></script>
   <script src="/static/app_context.js?v={{ asset_v }}"></script>
   {% block head_extra %}{% endblock %}
 </head>
 <body class="{% if nav_section %}nav-section-{{ nav_section }} {% endif %}{% block body_class %}{% endblock %}">
-  {% block app_header %}
-  <header class="topbar">
-    <a class="brand" href="/">{% include "_ce_logo.svg" %} CanvasExpert</a>
-    {% set current_path = request.url.path %}
-    <nav>
-      <a class="nav-link{% if request.url.path == '/' %} nav-active{% endif %}" href="/">Home</a>
-      <details class="nav-dd{% if nav_section == 'create' %} nav-dd--active{% endif %}">
-        <summary>Create ▾</summary>
-        <div class="dd-menu">
-          <a href="/course-expert">Create home</a>
-          <div class="dd-sep"></div>
-          <a href="/course-expert?tab=quiz">Push quiz</a>
-          <a href="/course-expert?tab=assignment">Push assignment</a>
-          <a href="/course-expert?tab=page">Push page</a>
-          <a href="/course-expert?tab=rubric">Push rubric</a>
-          <a href="/course-expert?tab=quick">Quick assignment</a>
-        </div>
-      </details>
-
-      <details class="nav-dd{% if nav_section == 'grade' %} nav-dd--active{% endif %}">
-        <summary>Grade ▾</summary>
-        <div class="dd-menu">
-          <a href="/powergrader">Grade an assignment</a>
-          <a href="/powergrader?advanced=import">Score writing with AI</a>
-          <a href="/powergrader?advanced=import">Import AI feedback for review</a>
-          <div class="dd-sep"></div>
-          <a href="/gradebook">Gradebooks home</a>
-          <a href="/gradebook?tab=policy">Policy &amp; sweep</a>
-          <a href="/gradebook?tab=extra-time">Extra-time</a>
-          <a href="/gradebook?tab=extensions">Extensions</a>
-          <a href="/gradebook?tab=curves">Curves</a>
-          <a href="/gradebook?tab=snapshot">Snapshot</a>
-          <a href="/gradebook?tab=routines">Routines</a>
-        </div>
-      </details>
-
-      <details class="nav-dd{% if nav_section == 'manage' %} nav-dd--active{% endif %}">
-        <summary>Students ▾</summary>
-        <div class="dd-menu">
-          <a href="/roster">Students</a>
-          <a href="/students/reports">Student reports</a>
-          <a href="/course">Course info</a>
-        </div>
-      </details>
-
-      <a class="nav-link nav-automate{% if nav_section == 'automate' %} nav-active{% endif %}" href="/routines">Automations</a>
-
-      <a class="nav-link nav-settings{% if nav_section == 'settings' %} nav-active{% endif %}" href="/settings">Settings</a>
-
-      <details class="nav-dd{% if nav_section == 'help' %} nav-dd--active{% endif %}">
-        <summary>Help &amp; tools ▾</summary>
-        <div class="dd-menu">
-          <a href="/about">About</a>
-          <a href="/ai-expert">AI instructions</a>
-          <a href="/forge/quizforge/" target="_blank" rel="noopener">QuizForge compiler</a>
-          <div class="dd-sep"></div>
-          <a href="/api/download-contract?name=QuizForge_Base" download>Download QuizForge contract</a>
-          <a href="/api/download-contract?name=AssignmentForge_Base" download>Download AssignmentForge contract</a>
-          <a href="/api/download-contract?name=PageForge_Base" download>Download PageForge contract</a>
-          <a href="/api/download-contract?name=RubricForge_Base" download>Download RubricForge contract</a>
-        </div>
-      </details>
-    </nav>
-    <div class="topbar-right">
-      <button class="theme-toggle" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle theme">
-        <span class="toggle-track">
-          <span class="toggle-thumb"></span>
-          <span class="toggle-icon toggle-icon--sun">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          </span>
-          <span class="toggle-icon toggle-icon--moon">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          </span>
-        </span>
-      </button>
-    </div>
-  </header>
-  {% endblock %}
+  {% block app_header %}{% endblock %}
   {% block status_strip %}{% endblock %}
   <main class="{% block main_class %}page{% endblock %}">
     {% block content %}{% endblock %}
@@ -114,22 +39,8 @@
       setTimeout(function(){ html.classList.remove('ce-transitioning'); }, 320);
     });
   })();
-  // Nav dropdown: close all when another opens or user clicks outside
+  // Keep direct hash links focused after a page renders.
   (function(){
-    var dds = Array.from(document.querySelectorAll('.nav-dd'));
-    dds.forEach(function(dd) {
-      dd.addEventListener('toggle', function() {
-        if (dd.open) {
-          dds.forEach(function(other) { if (other !== dd) other.open = false; });
-        }
-      });
-    });
-    document.addEventListener('click', function(e) {
-      if (!e.target.closest('.nav-dd')) {
-        dds.forEach(function(dd) { dd.open = false; });
-      }
-    });
-    // Activate nav section anchor on page load
     var hash = location.hash;
     if (hash) {
       var el = document.querySelector(hash);

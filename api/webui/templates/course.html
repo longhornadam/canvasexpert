@@ -1,27 +1,32 @@
-{% extends "base.html" %}
+{% extends "layouts/document.html" %}
 {% block title %}Course Info — Canvas Expert{% endblock %}
-{% block content %}
+{% block document_variant %}wide{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/pages/course.css?v={{ asset_v }}">
+{% endblock %}
+{% block primary %}
 
 {% if not token_is_set %}
-<section class="card">
-  <h2>Course Info</h2>
-  <p class="hint" style="margin:6px 0 0">
+<section class="ce-panel">
+  <h1 class="ce-display">Course Info</h1>
+  <p class="hint">
     Save a Canvas token on the <a href="/">Dashboard</a> first — this page reads
     live course data from Canvas.
   </p>
 </section>
 {% elif not saved_courses %}
-<section class="card">
-  <h2>Course Info</h2>
-  <p class="hint" style="margin:6px 0 0">
+<section class="ce-panel">
+  <h1 class="ce-display">Course Info</h1>
+  <p class="hint">
     No bookmarked courses yet. <a href="/settings">Add some in Settings</a>.
   </p>
 </section>
 {% else %}
 
 <!-- ── Course picker + quick links ─────────────────────────────────────── -->
-<div class="card ci-header">
-  <label style="margin:0; flex:1; min-width:240px; max-width:420px">Course
+<div class="ce-course-info">
+<section class="ce-panel ci-header">
+  <label>Course
     <select id="ci-course">
       {% for c in saved_courses %}
       <option value="{{ c.id }}" data-name="{{ c.name }}"
@@ -29,8 +34,8 @@
       {% endfor %}
     </select>
   </label>
-  <div class="quick-links" style="border-top:none; margin-top:0; padding:0">
-    <span class="hint" style="font-size:12px; margin-right:2px">Open in Canvas:</span>
+  <div class="quick-links">
+    <span class="hint">Open in Canvas:</span>
     <a id="ql-home"        href="#" target="_blank" rel="noopener">Home</a>
     <a id="ql-gradebook"   href="#" target="_blank" rel="noopener">Gradebook</a>
     <a id="ql-assignments" href="#" target="_blank" rel="noopener">Assignments</a>
@@ -38,13 +43,13 @@
     <a id="ql-quizzes"     href="#" target="_blank" rel="noopener">Quizzes</a>
     <a id="ql-people"      href="#" target="_blank" rel="noopener">People</a>
   </div>
-</div>
+</section>
 
-<p id="ci-status" class="status hint" style="margin:0 0 14px"></p>
+<p id="ci-status" class="ci-status hint"></p>
 
 <!-- ── Summary tiles + download folder ─────────────────────────────────── -->
-<div class="card">
-  <div class="context-kicker">At a glance</div>
+<section class="ce-panel">
+  <div class="context-kicker ce-eyebrow">At a glance</div>
   <div class="info-grid">
     <div class="info-tile"><div class="tile-val" id="ci-students">—</div><div class="tile-label">Students</div></div>
     <div class="info-tile"><div class="tile-val" id="ci-groupsets">—</div><div class="tile-label">Group sets</div></div>
@@ -52,53 +57,58 @@
     <div class="info-tile"><div class="tile-val" id="ci-assignments">—</div><div class="tile-label">Assignments</div></div>
   </div>
   <div id="folder-row" class="folder-row" hidden>
-    <span class="hint" style="font-size:12px; white-space:nowrap">Downloads save to:</span>
+    <span class="hint">Downloads save to:</span>
     <code id="folder-path" class="folder-path" title=""></code>
     <div class="folder-actions">
       <button type="button" class="small" id="btn-open-folder">📁 Open ↗</button>
       <button type="button" class="small" id="btn-change-folder">Change…</button>
-      <span id="folder-note" class="hint" style="font-size:11px"></span>
+      <span id="folder-note" class="hint"></span>
     </div>
   </div>
-</div>
+</section>
 
 <div class="ci-grid">
   <!-- ── Roster ──────────────────────────────────────────────────────────── -->
-  <div class="card">
-    <div class="context-kicker">Roster</div>
-    <table class="dl-table">
+  <section class="ce-panel">
+    <div class="context-kicker ce-eyebrow">Roster</div>
+    <table class="ce-table dl-table">
       <thead><tr><th>Student</th><th>Email</th></tr></thead>
       <tbody id="ci-roster"></tbody>
     </table>
-  </div>
+  </section>
 
   <div>
     <!-- ── Teams / group sets ────────────────────────────────────────────── -->
-    <div class="card">
-      <div class="context-kicker">Teams &amp; group sets</div>
-      <div id="ci-groups"><p class="hint" style="margin:0">—</p></div>
-    </div>
+    <section class="ce-panel">
+      <div class="context-kicker ce-eyebrow">Teams &amp; group sets</div>
+      <div id="ci-groups"><p class="hint">—</p></div>
+    </section>
 
     <!-- ── Modules ───────────────────────────────────────────────────────── -->
-    <div class="card">
-      <div class="context-kicker">Modules</div>
-      <div id="ci-module-list"><p class="hint" style="margin:0">—</p></div>
-    </div>
+    <section class="ce-panel">
+      <div class="context-kicker ce-eyebrow">Modules</div>
+      <div id="ci-module-list"><p class="hint">—</p></div>
+    </section>
   </div>
 </div>
 
 <!-- ── Assignments ───────────────────────────────────────────────────────── -->
-<div class="card">
-  <div class="context-kicker">Assignments <span id="ci-assign-note" class="cc-count"></span></div>
-  <table class="dl-table">
+<section class="ce-panel">
+  <div class="context-kicker ce-eyebrow">Assignments <span id="ci-assign-note" class="cc-count"></span></div>
+  <table class="ce-table dl-table">
     <thead><tr><th>Assignment</th><th>Due</th><th>Pts</th><th>Status</th></tr></thead>
     <tbody id="ci-assign-tbody"></tbody>
   </table>
-</div>
+</section>
 
 <script>
   window.QF_CANVAS_BASE = {{ canvas_base | tojson }};
 </script>
+</div>
+{% endif %}
+{% endblock %}
+{% block document_scripts %}
+{% if token_is_set and saved_courses %}
 <script src="/static/course_info.js?v={{ asset_v }}"></script>
 {% endif %}
 {% endblock %}

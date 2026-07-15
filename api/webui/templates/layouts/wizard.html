@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block stylesheet_bundle %}
+<link rel="stylesheet" href="/static/ui/tokens.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/foundation.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/components.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/layouts.css?v={{ asset_v }}">
+{% endblock %}
+{% block body_class %}ce-app-page ce-wizard-page{% endblock %}
+{% block app_header %}{% endblock %}
+{% block main_class %}ce-layout-main{% endblock %}
+{% block content %}
+<section class="ce-shell ce-wizard" data-ce-layout="wizard">{% block primary %}{% endblock %}</section>
+{% endblock %}
+{% block scripts_extra %}{% block wizard_scripts %}{% endblock %}{% endblock %}

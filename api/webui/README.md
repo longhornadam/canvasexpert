@@ -7,9 +7,11 @@
 `gradebook.js` + `gradebook/*.js`, `roster.js` + `roster/*.js`,
 `feedback/*.js`, `powergrader_setup.js` + `powergrader/*.js`,
 `powergrader_queue.js` + `powergrader/*.js`, `course_info.js`,
-`settings.js`, `style.css`).
+`settings.js`, `ui/*.css`, and page-owned feature CSS).
 
 For backend overview, setup, files table, and confirmed Canvas API facts, see `api/README.md`.
+For the shared layout/template API and presentation ownership, see
+`docs/reference/webui-presentation-system.md`.
 
 ---
 

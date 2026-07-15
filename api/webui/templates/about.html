@@ -1,10 +1,13 @@
-{% extends "base.html" %}
+{% extends "layouts/document.html" %}
 {% block title %}About — Canvas Expert{% endblock %}
-{% block main_class %}about-page{% endblock %}
-{% block content %}
+{% block document_variant %}wide{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/pages/about.css?v={{ asset_v }}">
+{% endblock %}
+{% block primary %}
 
 <div class="about-hero">
-  <h1>Your Canvas in <i>Developer Mode</i></h1>
+  <h1 class="ce-display">Your Canvas in <i>Developer Mode</i></h1>
   <p>
     Canvas Expert turns the hours you spend wrestling Canvas forms into minutes.
     Describe what you want to your AI, get a clean file back, and push it to
@@ -17,7 +20,7 @@
 
   <!-- ── The pitch ─────────────────────────────────────────────────────── -->
   <div class="about-section">
-    <h2>What it does</h2>
+    <h2 class="ce-display">What it does</h2>
     <div class="about-grid">
       <div class="about-card ac-ce">
         <h3>Work tools</h3>
@@ -48,7 +51,7 @@
 
   <!-- ── The Forges ────────────────────────────────────────────────────── -->
   <div class="about-section">
-    <h2>The Forges — your AI's grammar</h2>
+    <h2 class="ce-display">The Forges — your AI's grammar</h2>
     <p>
       Every piece of content starts as a <strong>Forge file</strong>: a strict,
       documented JSON contract (<code>&lt;QUIZFORGE_JSON&gt;</code>,
@@ -69,7 +72,7 @@
 
   <!-- ── Pedagogy ──────────────────────────────────────────────────────── -->
   <div class="about-section">
-    <h2>Pedagogy is the default, not an option</h2>
+    <h2 class="ce-display">Pedagogy is the default, not an option</h2>
     <ul class="philosophy-list">
       <li><strong>Every answer choice gets a rationale.</strong> Students who miss a
         question see <em>why their specific wrong answer was wrong</em> — the
@@ -88,7 +91,7 @@
 
   <!-- ── Security ──────────────────────────────────────────────────────── -->
   <div class="about-section">
-    <h2>Built safe by design</h2>
+    <h2 class="ce-display">Built safe by design</h2>
     <p>Canvas Expert holds a key to your gradebook, so it's engineered like it matters:</p>
     <ul class="security-list">
       <li><strong>Your token never touches a disk in plaintext.</strong> The Canvas
@@ -122,7 +125,7 @@
 
   <!-- ── Workspace ─────────────────────────────────────────────────────── -->
   <div class="about-section">
-    <h2>Where your content lives — your OneDrive</h2>
+    <h2 class="ce-display">Where your content lives — your OneDrive</h2>
     <p>
       Canvas Expert keeps a single home for everything you author in a
       <code>CanvasExpert</code> folder inside your <strong>OneDrive</strong> — so your
@@ -146,7 +149,7 @@
       <li><strong>settings.json &amp; activity_log.json</strong> — your synced app
         settings and a log of recent pushes, so your setup follows you between machines.</li>
     </ul>
-    <p class="hint" style="margin-top:4px">
+    <p class="hint ce-about-note">
       Two things deliberately <strong>never</strong> sync to OneDrive: your Canvas token
       (it stays in the OS credential store on each machine) and your monitored-students
       list and private notes (machine-local only). Authoring travels with you; secrets
@@ -156,7 +159,7 @@
 
   <!-- ── Workflow ──────────────────────────────────────────────────────── -->
   <div class="about-section">
-    <h2>The whole workflow</h2>
+    <h2 class="ce-display">The whole workflow</h2>
     <ol class="about-steps">
       <li><strong>Describe</strong> what you want to your AI (with the Forge skill loaded).</li>
       <li><strong>Paste or upload</strong> its file into the matching tool tab.</li>
@@ -168,7 +171,7 @@
 
   <!-- ── CTA ───────────────────────────────────────────────────────────── -->
   <div class="about-section about-cta">
-    <h2>Get started</h2>
+    <h2 class="ce-display">Get started</h2>
     <p>
       Add your Canvas token in <a href="/settings">Settings</a> (30 seconds, one time),
       then head to the <a href="/course-expert">Work tools</a> and push your first

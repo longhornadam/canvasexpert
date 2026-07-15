@@ -29,9 +29,9 @@ loaded roster; they do not own a second dataset or mutation path.
 
 ## Load order
 
-`api/webui/templates/roster.html` extends `workbench_base.html`, loads
-`roster_workbench.css` through `head_extra`, and loads browser scripts through
-`workbench_scripts` in this order:
+`api/webui/templates/roster.html` extends `layouts/workspace.html` with the
+`left-main` variant, loads `roster_workbench.css` through `head_extra`, and loads
+browser scripts through `workspace_scripts` in this order:
 
 1. `api/webui/static/roster.js`
 2. `api/webui/static/roster/table.js`

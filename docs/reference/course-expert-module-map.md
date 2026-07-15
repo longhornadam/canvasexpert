@@ -22,7 +22,9 @@ mostly markup, data injection, and script includes.
 ## Current Size Snapshot
 
 - `api/webui/templates/course_expert.html` - Create-only tabs and shared push script includes
-- `api/webui/templates/student_reports.html` - dedicated Students presentation
+- `api/webui/templates/student_reports.html` - dedicated Students presentation on
+  `layouts/document.html` (`document/wide`), with
+  `api/webui/static/pages/student_reports.css` owning presentation only
 - `api/webui/static/course_expert/tabs.js` - 114 lines
 - `api/webui/static/course_expert/student_reports.js` - 111 lines
 - `api/webui/static/course_expert/portfolio.js` - 110 lines

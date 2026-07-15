@@ -11,9 +11,11 @@ Current course in the background. Use this file as the first stop before reading
 
 - Route owner: `api/webui/routes/powergrader.py`
 - Setup page template: `api/webui/templates/powergrader_setup.html` (extends
-  `workbench_base.html` and composes session triage plus the start form)
+  `layouts/workspace.html` with the `full` variant and composes session triage plus
+  the start form)
 - Queue page template: `api/webui/templates/powergrader_queue.html` (extends
-  `workbench_base.html` and composes the grading queue as a responsive Instrument)
+  `layouts/workspace.html` with the `full` variant and composes the grading queue as
+  a responsive Instrument)
 - Backend workflow package: `api/powergrader/`
 
 `powergrader.py` remains the APIRouter owner only. Route-local support should move

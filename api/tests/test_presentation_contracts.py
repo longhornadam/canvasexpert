@@ -22,11 +22,11 @@ EXPECTED_PRESENTATION = {
     "/roster": ("roster.html", "workspace", "left-main", 1, True),
     "/settings": ("settings.html", "workspace", "left-main", 1, True),
     "/routines": ("routines.html", "document", "wide", 0, True),
-    "/students/reports": ("student_reports.html", "document", "wide", 0, False),
-    "/course": ("course.html", "document", "wide", 0, False),
-    "/about": ("about.html", "document", "wide", 0, False),
-    "/ai-expert": ("ai_expert.html", "document", "standard", 0, False),
-    "/welcome": ("welcome.html", "wizard", "", 0, False),
+    "/students/reports": ("student_reports.html", "document", "wide", 0, True),
+    "/course": ("course.html", "document", "wide", 0, True),
+    "/about": ("about.html", "document", "wide", 0, True),
+    "/ai-expert": ("ai_expert.html", "document", "standard", 0, True),
+    "/welcome": ("welcome.html", "wizard", "", 0, True),
 }
 
 MIGRATED_ROUTES = {
@@ -41,6 +41,11 @@ FEATURE_CSS = (
     "api/webui/static/roster_workbench.css",
     "api/webui/static/pages/settings.css",
     "api/webui/static/pages/routines.css",
+    "api/webui/static/pages/student_reports.css",
+    "api/webui/static/pages/course.css",
+    "api/webui/static/pages/about.css",
+    "api/webui/static/pages/ai_expert.css",
+    "api/webui/static/pages/welcome.css",
 )
 VISUAL_LITERAL_RE = re.compile(r"font-family:|#[0-9a-fA-F]{3,8}|rgb\(|hsl\(|border-radius:|box-shadow:")
 FORBIDDEN_JS_SELECTORS = (
@@ -62,6 +67,7 @@ def _configure_fictional(monkeypatch):
     courses = [{"id": "course-1", "name": "Fictional Course", "nickname": "Fictional", "active": True}]
     monkeypatch.setattr(pages.config, "token_is_set", lambda: True)
     monkeypatch.setattr(pages.config, "get_canvas_base", lambda: "https://canvas.example.test")
+    monkeypatch.setattr(pages.config, "get_workspace_path", lambda: "")
     monkeypatch.setattr(pages.config, "active_courses", lambda: courses)
     monkeypatch.setattr(pages.config, "saved_courses", lambda: courses)
     monkeypatch.setattr(pages.config, "has_openrouter_key", lambda: False)
@@ -73,6 +79,7 @@ def _configure_fictional(monkeypatch):
         "Support": "", "Core": "", "Accelerate": "", "Extend": "",
     })
     monkeypatch.setattr(pages.workspace, "workspace_root", lambda: None)
+    monkeypatch.setattr(pages.workspace, "onedrive_root", lambda: "Fictional")
     monkeypatch.setattr(pages.workspace, "folder", lambda name: "")
     monkeypatch.setattr(pages.workspace, "courses_root", lambda: "")
     monkeypatch.setattr(pages.workspace, "ai_packets_root", lambda: "")
@@ -109,16 +116,12 @@ def _configure_fictional(monkeypatch):
 
 def test_registry_is_the_full_program_route_map():
     assert len(EXPECTED_PRESENTATION) == 13
-    assert set(MIGRATED_ROUTES) == {
-        "/", "/course-expert", "/powergrader", "/powergrader/session/{session_id}",
-        "/gradebook", "/roster", "/settings", "/routines",
-    }
+    assert set(MIGRATED_ROUTES) == set(EXPECTED_PRESENTATION)
 
 
-def test_migrated_templates_use_only_the_workspace_layout_and_no_inline_styles():
+def test_all_live_templates_use_layouts_and_no_inline_styles():
     for _, (template, layout, _, _, migrated) in EXPECTED_PRESENTATION.items():
-        if not migrated:
-            continue
+        assert migrated
         text = (TEMPLATES / template).read_text(encoding="utf-8")
         assert f'{{% extends "layouts/{layout}.html" %}}' in text
         assert "stylesheet_bundle" not in text
@@ -126,13 +129,32 @@ def test_migrated_templates_use_only_the_workspace_layout_and_no_inline_styles()
         if template == "gradebook.html" or template == "routines.html":
             assert 'style="' not in (TEMPLATES / "_routines_panel.html").read_text(encoding="utf-8")
 
-    for layout in ("workspace.html", "document.html"):
+    for layout in ("workspace.html", "document.html", "wizard.html"):
         assert '{% extends "base.html" %}' in (TEMPLATES / "layouts" / layout).read_text(encoding="utf-8")
+
+    for template in TEMPLATES.rglob("*.html"):
+        assert 'style="' not in template.read_text(encoding="utf-8"), template.relative_to(ROOT)
 
 
 def test_migrated_feature_css_consumes_shared_visual_tokens():
     for relative in FEATURE_CSS:
         assert not VISUAL_LITERAL_RE.search(_source(relative)), relative
+
+
+def test_legacy_presentation_layer_is_gone():
+    for relative in (
+        "api/webui/static/style.css",
+        "api/webui/static/workbench.css",
+        "api/webui/templates/workbench_base.html",
+        "api/webui/templates/_workbench_header.html",
+        "api/webui/templates/name_manager.html",
+        "api/webui/templates/_course_picker.html",
+    ):
+        assert not (ROOT / relative).exists(), relative
+    for template in TEMPLATES.rglob("*.html"):
+        text = template.read_text(encoding="utf-8")
+        assert "/static/style.css" not in text, template.relative_to(ROOT)
+        assert "/static/workbench.css" not in text, template.relative_to(ROOT)
 
 
 def test_shared_component_classes_are_not_javascript_hooks():
@@ -156,6 +178,11 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/roster": "/roster",
         "/settings": "/settings",
         "/routines": "/routines",
+        "/students/reports": "/students/reports",
+        "/course": "/course",
+        "/about": "/about",
+        "/ai-expert": "/ai-expert",
+        "/welcome": "/welcome",
     }
     client = _client()
     bundle = (
@@ -168,8 +195,11 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         assert response.status_code == 200, url
         text = response.text
         assert f'data-ce-layout="{layout}"' in text
-        assert f'ce-{layout}--{variant}' in text
-        assert text.count("<header") == 1
+        if variant:
+            assert f'ce-{layout}--{variant}' in text
+        else:
+            assert f'ce-{layout}' in text
+        assert text.count("<header") == (0 if layout == "wizard" else 1)
         assert text.count("<main") == 1
         assert len(re.findall(r'class="[^"]*\bce-rail\b', text)) == rails
         assert "/static/style.css" not in text

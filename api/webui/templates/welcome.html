@@ -1,12 +1,14 @@
-{% extends "base.html" %}
+{% extends "layouts/wizard.html" %}
 {% block title %}Welcome — Canvas Expert{% endblock %}
-{% block main_class %}page page--welcome{% endblock %}
-{% block content %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/pages/welcome.css?v={{ asset_v }}">
+{% endblock %}
+{% block primary %}
 
 <div class="wizard">
 
-  <div class="wizard-header">
-    <h1>Welcome to Canvas Expert</h1>
+  <div class="ce-wizard-header">
+    <h1 class="ce-display">Welcome to Canvas Expert</h1>
     <p class="hint">Let's get you set up in a few quick steps.</p>
   </div>
 
@@ -19,8 +21,8 @@
   </div>
 
   <!-- Step 0 — Workspace -->
-  <div class="wizard-panel" id="step-0">
-    <h2>Where should Canvas Expert keep your files?</h2>
+  <div class="ce-panel wizard-panel" id="step-0">
+    <h2 class="ce-display">Where should Canvas Expert keep your files?</h2>
     <p class="hint">
       Canvas Expert stores your quizzes, assignments, pages, rubrics, and exports
       in a local folder. If you use <strong>OneDrive</strong>, put it there so
@@ -33,22 +35,22 @@
                value="{{ workspace_suggestion }}"
                placeholder="C:\Users\You\CanvasExpert" autocomplete="off" required>
       </label>
-      <div id="workspace-result" class="callout" style="display:none"></div>
-      <div class="actions">
+      <div id="workspace-result" class="ce-notice ce-wizard-initially-hidden"></div>
+      <div class="ce-actions">
         <button type="submit" class="primary">Confirm folder</button>
       </div>
     </form>
-    <div id="workspace-done" style="display:none">
-      <div class="callout ok">✓ Workspace ready</div>
-      <div class="actions">
+    <div id="workspace-done" class="ce-wizard-initially-hidden">
+      <div class="ce-notice ce-notice--ok">✓ Workspace ready</div>
+      <div class="ce-actions">
         <button type="button" class="primary" onclick="wizardNext()">Continue →</button>
       </div>
     </div>
   </div>
 
   <!-- Step 1 — Canvas URL -->
-  <div class="wizard-panel" id="step-1" style="display:none">
-    <h2>What web address do you use to log into Canvas?</h2>
+  <div class="ce-panel wizard-panel ce-wizard-initially-hidden" id="step-1">
+    <h2 class="ce-display">What web address do you use to log into Canvas?</h2>
     <p class="hint">
       Paste the full address you type in your browser — we'll strip it down to
       the base URL automatically.
@@ -60,19 +62,19 @@
                value="{{ canvas_base }}" data-saved="{{ canvas_base }}"
                placeholder="https://yourschool.instructure.com" autocomplete="url" required>
       </label>
-      <p class="hint" style="font-size:13px">
+      <p class="hint ce-wizard-example">
         Examples: <code>https://yourschool.instructure.com</code>,
         <code>https://canvas.yourschool.org</code>
       </p>
-      <div id="canvas-url-result" class="callout" style="display:none"></div>
-      <div class="actions">
+      <div id="canvas-url-result" class="ce-notice ce-wizard-initially-hidden"></div>
+      <div class="ce-actions">
         <button type="button" onclick="wizardBack()">← Back</button>
         <button type="submit" class="primary">Save &amp; continue</button>
       </div>
     </form>
-    <div id="canvas-url-done" style="display:none">
-      <div class="callout ok">✓ Canvas address saved</div>
-      <div class="actions">
+    <div id="canvas-url-done" class="ce-wizard-initially-hidden">
+      <div class="ce-notice ce-notice--ok">✓ Canvas address saved</div>
+      <div class="ce-actions">
         <button type="button" onclick="wizardBack()">← Back</button>
         <button type="button" class="primary" onclick="wizardNext()">Continue →</button>
       </div>
@@ -80,16 +82,16 @@
   </div>
 
   <!-- Step 2 — Token -->
-  <div class="wizard-panel" id="step-2" style="display:none">
-    <h2>Connect your Canvas account</h2>
+  <div class="ce-panel wizard-panel ce-wizard-initially-hidden" id="step-2">
+    <h2 class="ce-display">Connect your Canvas account</h2>
     <p class="hint">
       Create a personal access token in Canvas and paste it below. This token
       gives Canvas Expert access to <em>your</em> courses — it's stored in your
       <strong>Windows Credential Manager</strong>, never in any file.
     </p>
-    <div class="callout" style="margin-bottom:12px">
+    <div class="ce-notice ce-wizard-token-help">
       <strong>How to get a token:</strong>
-      <ol style="margin:6px 0 0 16px;padding:0">
+      <ol>
         <li><a id="token-canvas-link" href="#" target="_blank" rel="noopener">Open your Canvas Settings ↗</a>
             — click your <strong>profile photo</strong> in the top-left of Canvas, then choose <strong>Settings</strong></li>
         <li>Scroll down to <strong>Approved Integrations</strong> → click <strong>+ New Access Token</strong></li>
@@ -104,15 +106,15 @@
         <input type="password" name="token" id="token-input"
                placeholder="Paste your Canvas token here" autocomplete="off" required>
       </label>
-      <div id="token-result" class="callout" style="display:none"></div>
-      <div class="actions">
+      <div id="token-result" class="ce-notice ce-wizard-initially-hidden"></div>
+      <div class="ce-actions">
         <button type="button" onclick="wizardBack()">← Back</button>
         <button type="submit" class="primary">Test &amp; save</button>
       </div>
     </form>
-    <div id="token-done" style="display:none">
-      <div class="callout ok" id="token-ok-msg">✓ Connected as <span id="connected-name"></span></div>
-      <div class="actions">
+    <div id="token-done" class="ce-wizard-initially-hidden">
+      <div class="ce-notice ce-notice--ok" id="token-ok-msg">✓ Connected as <span id="connected-name"></span></div>
+      <div class="ce-actions">
         <button type="button" onclick="wizardBack()">← Back</button>
         <button type="button" class="primary" onclick="wizardNext()">Continue →</button>
       </div>
@@ -120,8 +122,8 @@
   </div>
 
   <!-- Step 3 — Calendars -->
-  <div class="wizard-panel" id="step-3" style="display:none">
-    <h2>Activate school calendars (optional)</h2>
+  <div class="ce-panel wizard-panel ce-wizard-initially-hidden" id="step-3">
+    <h2 class="ce-display">Activate school calendars (optional)</h2>
     <p class="hint">
       Calendar files tell Canvas Expert about your school's holidays, grading
       periods, and semester dates. This powers the <strong>late-work,
@@ -131,20 +133,20 @@
     <div id="calendar-list">
       <p class="hint">Loading available calendars…</p>
     </div>
-    <form id="calendar-form" style="display:none">
+    <form id="calendar-form" class="ce-wizard-initially-hidden">
       <div id="calendar-checkboxes"></div>
-      <div id="calendar-result" class="callout" style="display:none"></div>
-      <div class="actions">
+      <div id="calendar-result" class="ce-notice ce-wizard-initially-hidden"></div>
+      <div class="ce-actions">
         <button type="submit" class="primary">Activate selected</button>
       </div>
     </form>
-    <div class="actions" id="calendar-skip-row" style="margin-top:8px">
+    <div class="ce-actions ce-wizard-skip-row" id="calendar-skip-row">
       <button type="button" onclick="wizardBack()">← Back</button>
       <button type="button" onclick="wizardFinish()">Skip — set up calendars later</button>
     </div>
-    <div id="calendar-done" style="display:none">
-      <div class="callout ok" id="calendar-ok-msg"></div>
-      <div class="actions">
+    <div id="calendar-done" class="ce-wizard-initially-hidden">
+      <div class="ce-notice ce-notice--ok" id="calendar-ok-msg"></div>
+      <div class="ce-actions">
         <button type="button" onclick="wizardBack()">← Back</button>
         <button type="button" class="primary" onclick="wizardFinish()">Done — start using Canvas Expert!</button>
       </div>
@@ -152,16 +154,18 @@
   </div>
 
   <!-- Finish / summary -->
-  <div class="wizard-panel" id="step-done" style="display:none">
-    <div class="callout ok" style="font-size:18px;text-align:center;padding:24px">
+  <div class="ce-panel wizard-panel ce-wizard-initially-hidden" id="step-done">
+    <div class="ce-notice ce-notice--ok ce-wizard-finish">
       ✓ All set! You're ready to use Canvas Expert.
     </div>
-    <div class="actions" style="justify-content:center">
+    <div class="ce-actions ce-wizard-finish-actions">
       <a href="/" class="primary button-like">Go to Dashboard</a>
     </div>
   </div>
 
 </div>
 
-<script src="/static/welcome.js"></script>
+{% endblock %}
+{% block wizard_scripts %}
+<script src="/static/welcome.js?v={{ asset_v }}"></script>
 {% endblock %}

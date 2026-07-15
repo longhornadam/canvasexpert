@@ -20,6 +20,7 @@
 .ce-workspace--three .ce-rail--right { padding-right: 0; border-left: 1px solid var(--ce-rule-strong); }
 .ce-document { width: min(100%, var(--ce-width-doc)); margin: 0 auto; padding: clamp(var(--ce-space-4), 2.5vw, 40px); }
 .ce-document--wide { width: min(100%, var(--ce-width-doc-wide)); }
+.ce-wizard { width: min(100%, 680px); margin: 0 auto; padding: clamp(var(--ce-space-4), 6vw, 56px) var(--ce-space-4); }
 @media (max-width: 1180px) {
   .ce-app-header { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ce-app-header .ce-status-strip { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; padding-top: var(--ce-space-2); border-top: 1px solid var(--ce-rule); }

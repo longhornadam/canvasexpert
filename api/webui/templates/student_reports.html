@@ -1,18 +1,20 @@
-{% extends "workbench_base.html" %}
+{% extends "layouts/document.html" %}
 {% block title %}Student reports · Canvas Expert{% endblock %}
-{% block body_class %}ce-workbench-page ce-screen{% endblock %}
-{% block main_class %}ce-workbench-main ce-page{% endblock %}
-{% block content %}
+{% block document_variant %}wide{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/pages/student_reports.css?v={{ asset_v }}">
+{% endblock %}
+{% block primary %}
 
 {% if not token_is_set %}
-<div class="callout warn" style="max-width:680px; margin:32px auto">
+<div class="ce-notice">
   No Canvas token saved — <a href="/settings">go to Settings</a> to add one.
 </div>
 {% else %}
-<div class="ce-content">
-  <div class="card">
-    <h1 style="margin-bottom:12px">Student reports</h1>
-    <p class="hint" style="margin-top:0">
+<div class="ce-student-reports">
+  <section class="ce-panel">
+    <h1 class="ce-display">Student reports</h1>
+    <p class="hint ce-student-reports__lede">
       Pick a student and compile copies of their work plus summaries across every
       Current course they're in. Saved to your Student Reports folder (synced via OneDrive).
     </p>
@@ -39,17 +41,17 @@
       <label><input type="checkbox" class="sr-sec" value="work" checked> Work samples</label>
     </fieldset>
 
-    <div class="actions">
+    <div class="ce-actions">
       <button type="button" id="sr-generate" class="primary" disabled>Generate packet</button>
       <a id="sr-open" class="small open-link" hidden>Open folder</a>
       <span id="sr-status" class="hint"></span>
     </div>
-    <pre id="sr-log" class="log" hidden></pre>
-  </div>
+    <pre id="sr-log" class="ce-report-log" hidden></pre>
+  </section>
 
-  <div class="card" id="nq-portfolio-card">
-    <h2 style="margin-bottom:12px">New Quizzes Writing Portfolio</h2>
-    <p class="hint" style="margin-top:0">
+  <section class="ce-panel" id="nq-portfolio-card">
+    <h2 class="ce-display">New Quizzes Writing Portfolio</h2>
+    <p class="hint ce-student-reports__lede">
       New Quizzes responses can't be pulled from the API, so in Canvas open the quiz →
       <strong>Reports → Student Analysis</strong> and download the CSV, then drop it
       here. Canvas Expert builds one writing-portfolio document per student (prompts +
@@ -63,16 +65,16 @@
         <input type="text" id="nqp-title" placeholder="e.g. THG Ch 1–9 Test" autocomplete="off">
       </label>
     </div>
-    <div class="actions">
+    <div class="ce-actions">
       <button type="button" id="nqp-generate" class="primary" disabled>Generate portfolios</button>
       <a id="nqp-open" class="small open-link" hidden>Open folder</a>
       <span id="nqp-status" class="hint"></span>
     </div>
-  </div>
+  </section>
 
-  <div class="card" id="merged-portfolio-card">
-    <h2 style="margin-bottom:12px">Combined Writing Portfolio</h2>
-    <p class="hint" style="margin-top:0">
+  <section class="ce-panel" id="merged-portfolio-card">
+    <h2 class="ce-display">Combined Writing Portfolio</h2>
+    <p class="hint ce-student-reports__lede">
       One chronological document per student across sources: <strong>Assignment text
       entries + uploaded files/photos</strong>, plus <strong>New Quizzes</strong>
       responses if you add the CSV. Pulls live from the chosen course — scope to your
@@ -99,17 +101,17 @@
       <label>From <small class="lbl-hint">(optional)</small><input type="date" id="mp-from"></label>
       <label>To <small class="lbl-hint">(optional)</small><input type="date" id="mp-to"></label>
     </div>
-    <div class="actions">
+    <div class="ce-actions">
       <button type="button" id="mp-generate" class="primary" disabled>Generate portfolios</button>
       <a id="mp-open" class="small open-link" hidden>Open folder</a>
       <span id="mp-status" class="hint"></span>
     </div>
-    <pre id="mp-log" class="log" hidden></pre>
-  </div>
+    <pre id="mp-log" class="ce-report-log" hidden></pre>
+  </section>
 </div>
 {% endif %}
 {% endblock %}
-{% block workbench_scripts %}
+{% block document_scripts %}
 <script src="/static/course_expert/student_reports.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/portfolio.js?v={{ asset_v }}"></script>
 {% endblock %}
