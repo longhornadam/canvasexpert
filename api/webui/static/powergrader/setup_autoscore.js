@@ -180,7 +180,7 @@
 
   var aiPacketPrivacyPlan = [
     { id: "download", label: "Download submitted work from Canvas", status: "running", detail: "Fetching only this assignment." },
-    { id: "source_context", label: "Load shared source material", status: "pending", detail: "Excerpts are sent once as shared context for the batch." },
+    { id: "source_context", label: "Load shared source material", status: "pending", detail: "Excerpts are sent once as shared source material for the batch." },
     { id: "pseudonymize", label: "Assign pseudonyms and separate identities", status: "pending", detail: "Real names stay in the local vault." },
     { id: "safety_scan", label: "Scan for real names before any LLM call", status: "pending", detail: "Hard matches become yellow or red before sending." },
     { id: "safe_private", label: "Write Safe AI Packet and Private decoder", status: "pending", detail: "The packet uses fake names. The decoder stays local." },

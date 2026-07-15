@@ -12,6 +12,7 @@ from api.webui.local_request_guard import csrf_token
 from api.webui.server import app
 from api.webui.routes import work
 from api.powergrader import autoscore_queue, session_store
+from api.work_registry import adapters
 from api.work_registry.models import material_version, stable_fingerprint
 from api.work_registry.providers import finding
 
@@ -71,6 +72,97 @@ def _scheduled_job(status="in_progress"):
 
 def _client():
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def _session_summary(
+    session_id, *, course_id="course-a", assignment_id="assignment-a",
+    created="2026-07-01T12:00:00+00:00", total=2, approved=0, posted=0,
+):
+    return {
+        "session_id": session_id,
+        "course_id": course_id,
+        "assignment_id": assignment_id,
+        "created": created,
+        "total": total,
+        "approved": approved,
+        "posted": posted,
+    }
+
+
+def test_powergrader_home_selection_prefers_useful_resume_targets(monkeypatch):
+    summaries = [
+        _session_summary("session-incomplete-old"),
+        _session_summary("session-incomplete-new", created="2026-07-02T12:00:00+00:00"),
+        _session_summary(
+            "session-attention-old", assignment_id="assignment-attention",
+            approved=1, created="2026-07-01T12:00:00+00:00",
+        ),
+        _session_summary(
+            "session-incomplete-newer", assignment_id="assignment-attention",
+            created="2026-07-03T12:00:00+00:00",
+        ),
+        _session_summary(
+            "session-most-unposted", assignment_id="assignment-count",
+            total=4, approved=3, posted=0,
+        ),
+        _session_summary(
+            "session-newer-less-unposted", assignment_id="assignment-count",
+            total=4, approved=2, posted=0, created="2026-07-04T12:00:00+00:00",
+        ),
+        _session_summary(
+            "session-tie-old", assignment_id="assignment-tie",
+            total=4, approved=3, posted=1,
+        ),
+        _session_summary(
+            "session-tie-new", assignment_id="assignment-tie",
+            total=4, approved=3, posted=1, created="2026-07-05T12:00:00+00:00",
+        ),
+    ]
+    monkeypatch.setattr(session_store, "list_session_summaries", lambda: summaries)
+
+    jobs = adapters._powergrader_jobs()
+    by_assignment = {job["assignment_id"]: job for job in jobs}
+
+    assert len(jobs) == 4
+    assert by_assignment["assignment-a"]["source_ref"]["value"] == "session-incomplete-new"
+    assert by_assignment["assignment-a"]["counts"] == {
+        "total": 2, "pending": 2, "affected": 0,
+    }
+    assert by_assignment["assignment-attention"]["source_ref"]["value"] == "session-attention-old"
+    assert by_assignment["assignment-attention"]["status"] == "attention"
+    assert by_assignment["assignment-count"]["source_ref"]["value"] == "session-most-unposted"
+    assert by_assignment["assignment-tie"]["source_ref"]["value"] == "session-tie-new"
+
+
+def test_powergrader_home_selection_keeps_completed_distinct_and_uncertain(monkeypatch):
+    summaries = [
+        _session_summary("session-complete-old", total=2, approved=2, posted=2),
+        _session_summary("unsafe session", approved=1, created="2026-07-09T12:00:00+00:00"),
+        _session_summary(
+            "session-complete-new", total=2, approved=2, posted=2,
+            created="2026-07-02T12:00:00+00:00",
+        ),
+        _session_summary("session-other-assignment", assignment_id="assignment-b"),
+        _session_summary("session-other-course", course_id="course-b"),
+        _session_summary("session-no-course-a", course_id=""),
+        _session_summary("session-no-course-b", course_id=""),
+        _session_summary("session-no-assignment-a", assignment_id=""),
+        _session_summary("session-no-assignment-b", assignment_id=""),
+    ]
+    monkeypatch.setattr(session_store, "list_session_summaries", lambda: summaries)
+
+    jobs = adapters._powergrader_jobs()
+    source_ids = [job["source_ref"]["value"] for job in jobs]
+
+    assert len(jobs) == 7
+    assert "session-complete-new" in source_ids
+    assert "session-complete-old" not in source_ids
+    assert next(job for job in jobs if job["source_ref"]["value"] == "session-complete-new")["status"] == "completed"
+    for independent in (
+        "session-other-assignment", "session-other-course", "session-no-course-a",
+        "session-no-course-b", "session-no-assignment-a", "session-no-assignment-b",
+    ):
+        assert independent in source_ids
 
 
 def test_launcher_rendered_csrf_authorizes_stubbed_scan():

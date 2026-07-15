@@ -125,6 +125,13 @@ Adapters project summaries into jobs and hydrate details only after the job open
 transient Desk presentation sidecar is a display projection, not hydration and not an
 authority.
 
+Home projects saved PowerGrader work at the assignment level while PowerGrader keeps its
+full session-level history. When summary records have both a course ID and assignment ID,
+the adapter selects one resume target for that exact pair: the session with the greatest
+number of approved, unposted results (newest breaks ties), otherwise the newest incomplete
+session, otherwise the newest completed session. Counts and resume identity come from the
+selected session and are never summed. Summaries missing either identity remain separate.
+
 ## Detected findings
 
 Discovery is an explicit asynchronous read-only request; `GET /` must not synchronously

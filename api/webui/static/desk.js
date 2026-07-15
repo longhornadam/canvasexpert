@@ -25,20 +25,7 @@
   var receiptsList = document.getElementById("desk-receipts-list");
   var localStatus = document.getElementById("desk-local-status");
   var scanButton = document.getElementById("desk-scan");
-  var courseField = document.getElementById("desk-course-field");
-  var scopeNote = document.getElementById("desk-scope-note");
   var csrfMeta = document.querySelector('meta[name="canvasexpert-csrf-token"]');
-  var sharedContext = window.CE_CONTEXT;
-
-  function currentCourseOptions() {
-    return Array.from(courseField ? courseField.options : []).filter(function (option) {
-      return option.value && option.value !== "__all__";
-    }).map(function (option) {
-      return { id: option.value, name: option.textContent };
-    });
-  }
-
-  sharedContext?.reconcile(currentCourseOptions(), { source: "desk", authoritative: true });
 
   function element(tag, className, text) {
     var node = document.createElement(tag);
@@ -173,7 +160,7 @@
     });
   }
 
-  function refreshLocal() {
+  function refreshLocal(successMessage, failureMessage) {
     return Promise.all([
       fetch("/api/work?section=all", { headers: { "Accept": "application/json" } }).then(responseJson),
       fetch("/api/operations", { headers: { "Accept": "application/json" } }).then(responseJson),
@@ -191,9 +178,9 @@
       state.operations = Array.isArray(operationResult.body.operations) ? operationResult.body.operations : [];
       state.receipts = Array.isArray(receiptResult.body.receipts) ? receiptResult.body.receipts : [];
       render();
-      if (localStatus) localStatus.textContent = "Local state updated.";
+      if (localStatus) localStatus.textContent = successMessage || "Showing saved work.";
     }).catch(function () {
-      if (localStatus) localStatus.textContent = "Showing the last local view; refresh was unavailable.";
+      if (localStatus) localStatus.textContent = failureMessage || "Saved work could not be refreshed; showing the last saved work.";
     });
   }
 
@@ -216,7 +203,7 @@
       if (!result.response.ok || !result.body.ok) throw new Error("mutation_rejected");
       state.jobs = state.jobs.filter(function (item) { return item.job_id !== job.job_id; });
       render();
-      if (localStatus) localStatus.textContent = "Local work updated.";
+      if (localStatus) localStatus.textContent = "Saved work updated.";
     }).catch(function () {
       if (localStatus) localStatus.textContent = "Action could not be completed; local work is unchanged.";
     });
@@ -244,34 +231,10 @@
     mutate(job, action, until).then(function () { scanButton && scanButton.focus(); });
   });
 
-  function applyExplicitScope() {
-    var context = sharedContext;
-    var selection = courseField ? courseField.value : "";
-    if (!context || !selection) return;
-    if (selection === "__all__") {
-      var allCourses = currentCourseOptions();
-      context.setFocus(null, "desk");
-      context.setTargets(allCourses, "desk");
-      if (scopeNote) scopeNote.textContent = "All Current courses will be used as targets.";
-      return;
-    }
-    var option = courseField.options[courseField.selectedIndex];
-    var course = { id: selection, name: option ? option.textContent : "" };
-    context.setFocus(course, "desk");
-    context.setTargets([course], "desk");
-    if (scopeNote) scopeNote.textContent = "Focused and target course set for this workflow.";
-  }
-
-  document.querySelectorAll("[data-desk-start]").forEach(function (link) {
-    link.addEventListener("click", function () {
-      applyExplicitScope();
-    });
-  });
-
   if (scanButton) {
     scanButton.addEventListener("click", function () {
       scanButton.disabled = true;
-      if (localStatus) localStatus.textContent = "Scanning Current courses…";
+      if (localStatus) localStatus.textContent = "Checking active courses…";
       fetch("/api/work/scan", {
         method: "POST",
         headers: mutationHeaders(),
@@ -279,14 +242,15 @@
         if (!result.response.ok || !result.body.ok) {
           throw new Error(result.body.error || "scan_unavailable");
         }
-        if (localStatus) {
-          localStatus.textContent = result.body.partial
-            ? "Scan finished with stale course data; good local results were retained."
-            : "Scan complete; local projections refreshed.";
-        }
-        return refreshLocal();
+        var statusMessage = result.body.partial
+          ? "Some active courses could not be checked; saved work remains."
+          : "Checked active courses.";
+        return refreshLocal(
+          statusMessage,
+          "Active courses were checked, but saved work could not be refreshed."
+        );
       }).catch(function () {
-        if (localStatus) localStatus.textContent = "Scan unavailable; local work is unchanged.";
+        if (localStatus) localStatus.textContent = "Some active courses could not be checked; saved work remains.";
       }).finally(function () {
         scanButton.disabled = false;
         scanButton.focus();

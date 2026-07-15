@@ -1,6 +1,6 @@
 # Execution brief: Home attention that complements Canvas
 
-Status: **ready for implementation**
+Status: **archived after completion**
 
 Risk: **high** — Canvas submission/comment metadata is student-derived private data, even
 though the durable output of this slice is aggregate-only.

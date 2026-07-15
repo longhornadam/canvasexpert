@@ -78,11 +78,11 @@
           </label>
           <label class="pg-route-card">
             <input type="radio" name="pg-mode-choice" value="packet">
-            <span><strong>Prepare for my AI chat</strong><small>Creates a pseudonymized SAFE packet. Pseudonymization reduces exposure but can retain identifying context. You paste results back into PowerGrader.</small></span>
+            <span><strong>Prepare for my AI chat</strong><small>Creates a pseudonymized SAFE packet. Pseudonymized files may still contain details that could identify a student. You paste results back into PowerGrader.</small></span>
           </label>
           <label class="pg-route-card {% if not has_openrouter %}is-disabled{% endif %}">
             <input type="radio" name="pg-mode-choice" value="assisted" {% if not has_openrouter %}disabled{% endif %}>
-            <span><strong>Draft-score with OpenRouter</strong><small>{% if has_openrouter %}Sends the pseudonymized SAFE packet through OpenRouter after a token and cost estimate. Pseudonymization reduces exposure but can retain identifying context. Teacher review is still required before posting.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
+            <span><strong>Draft-score with OpenRouter</strong><small>{% if has_openrouter %}Sends the pseudonymized SAFE packet through OpenRouter after a token and cost estimate. Pseudonymized files may still contain details that could identify a student. Teacher review is still required before posting.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
           </label>
         </div>
         <details class="pg-safety-popout" id="pg-safety-popout">
@@ -243,7 +243,7 @@
     <div class="pg-start-actions">
       <label class="pg-ai-check" id="pg-ai-check-wrap" hidden>
         <input type="checkbox" id="pg-ai-check">
-        <span>I understand that AI routes use a pseudonymized SAFE packet which may retain identifying context.</span>
+        <span>I understand that pseudonymized files may still contain details that could identify a student.</span>
       </label>
       <div class="pg-start-primary">
         <button type="submit" class="primary" id="pg-start-btn" {% if not has_workspace %}disabled{% endif %}>

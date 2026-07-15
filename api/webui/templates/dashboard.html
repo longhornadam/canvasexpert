@@ -7,21 +7,15 @@
   <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "presentations": initial_presentations, "operations": initial_operations, "receipts": initial_receipts} | tojson }}</script>
 
   <div class="ce-desk-toolbar" aria-label="Home controls">
-    <div class="ce-desk-scope" aria-label="Home course scope">
-      <label for="desk-course-field">Course context</label>
-      <select id="desk-course-field">
-        <option value="">Keep saved context</option>
-        <option value="__all__">All Current courses</option>
-        {% for course in saved_courses %}
-        <option value="{{ course.id }}">{{ course.nickname or course.name }}</option>
-        {% endfor %}
-      </select>
-      <p id="desk-scope-note" class="ce-desk-scope-note">Saved targets are unchanged.</p>
-    </div>
+    <p class="ce-desk-active-courses">
+      <strong>Active courses:</strong>
+      <span>{% for course in saved_courses %}{{ course.nickname or course.name }}{% if not loop.last %}, {% endif %}{% else %}None selected{% endfor %}</span>
+      <a href="/settings#current-courses-card">Change in Settings</a>
+    </p>
     <div class="ce-desk-local-state">
-      <span id="desk-local-status">Local state.</span>
+      <span id="desk-local-status">Showing saved work.</span>
     </div>
-    <button type="button" id="desk-scan" class="ce-desk-button ce-desk-button--primary">Scan Current courses</button>
+    <button type="button" id="desk-scan" class="ce-desk-button ce-desk-button--primary">Check active courses</button>
   </div>
 
   <div class="ce-desk-grid">
@@ -33,31 +27,31 @@
         <section class="ce-desk-launch-group" aria-labelledby="desk-create-title">
           <h3 id="desk-create-title" class="ce-create-mark">Create</h3>
           <div class="ce-desk-launch-list">
-            <a data-desk-start href="/course-expert?tab=assignment">Assignment <span aria-hidden="true">→</span></a>
-            <a data-desk-start href="/course-expert?tab=quiz">Quiz <span aria-hidden="true">→</span></a>
-            <a data-desk-start href="/course-expert?tab=quick">Quick column <span aria-hidden="true">→</span></a>
-            <a data-desk-start href="/course-expert?tab=page">Page <span aria-hidden="true">→</span></a>
-            <a data-desk-start href="/course-expert?tab=rubric">Rubric <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=assignment">Assignment <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=quiz">Quiz <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=quick">Quick column <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=page">Page <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=rubric">Rubric <span aria-hidden="true">→</span></a>
           </div>
         </section>
         <section class="ce-desk-launch-group" aria-labelledby="desk-grade-title">
           <h3 id="desk-grade-title" class="ce-grade-mark">Grade</h3>
           <div class="ce-desk-launch-list">
-            <a data-desk-start href="/powergrader">Grade an assignment <span aria-hidden="true">→</span></a>
-            <a data-desk-start href="/gradebook">Gradebook <span aria-hidden="true">→</span></a>
+            <a href="/powergrader">Grade an assignment <span aria-hidden="true">→</span></a>
+            <a href="/gradebook">Gradebook <span aria-hidden="true">→</span></a>
           </div>
         </section>
         <section class="ce-desk-launch-group" aria-labelledby="desk-manage-title">
           <h3 id="desk-manage-title" class="ce-attention-mark">Students</h3>
           <div class="ce-desk-launch-list">
-            <a data-desk-start href="/roster">Students <span aria-hidden="true">→</span></a>
-            <a data-desk-start href="/students/reports">Student reports <span aria-hidden="true">→</span></a>
+            <a href="/roster">Students <span aria-hidden="true">→</span></a>
+            <a href="/students/reports">Student reports <span aria-hidden="true">→</span></a>
           </div>
         </section>
         <section class="ce-desk-launch-group" aria-labelledby="desk-automate-title">
           <h3 id="desk-automate-title" class="ce-prepared-mark">Automations</h3>
           <div class="ce-desk-launch-list">
-            <a data-desk-start href="/routines">Routines <span aria-hidden="true">→</span></a>
+            <a href="/routines">Routines <span aria-hidden="true">→</span></a>
           </div>
         </section>
       </div>

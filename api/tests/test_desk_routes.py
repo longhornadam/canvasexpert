@@ -1,5 +1,6 @@
 """Focused route/render contracts for the slice-07 Desk surface."""
 
+import re
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
@@ -63,13 +64,46 @@ def test_desk_empty_render_is_local_and_honest(monkeypatch):
 
     assert response.status_code == 200
     assert 'class="ce-desk-shell"' in response.text
-    assert 'id="desk-course-field"' in response.text
+    assert 'id="desk-course-field"' not in response.text
+    assert "Active courses:" in response.text
+    assert 'href="/settings#current-courses-card"' in response.text
+    assert "Showing saved work." in response.text
+    assert "Check active courses" in response.text
     assert "No open work." in response.text
     assert "No items need review." in response.text
     assert "No prepared operations." in response.text
     assert "No receipts." in response.text
     assert "/api/operations" not in response.text
     assert 'name="canvasexpert-csrf-token"' in response.text
+
+
+def test_desk_active_courses_use_teacher_names_saved_order_and_empty_state(monkeypatch):
+    _configure(monkeypatch)
+    monkeypatch.setattr(pages.config, "active_courses", lambda: [
+        {"id": "fictional-1", "name": "Course One", "nickname": "Athletics 7"},
+        {"id": "fictional-2", "name": "Course Two", "nickname": "ELA 7"},
+        {"id": "fictional-3", "name": "Course Three", "nickname": "ELA 7 PAP"},
+        {"id": "fictional-4", "name": "Course Four", "nickname": "Intro <to> CS"},
+    ])
+    monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
+    monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
+    monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
+
+    response = _client().get("/")
+    course_line = re.search(
+        r'<p class="ce-desk-active-courses">(.*?)</p>', response.text, re.DOTALL
+    ).group(1)
+
+    assert course_line.index("Athletics 7") < course_line.index("ELA 7")
+    assert course_line.index("ELA 7") < course_line.index("ELA 7 PAP")
+    assert course_line.index("ELA 7 PAP") < course_line.index("Intro &lt;to&gt; CS")
+    assert "fictional-1" not in course_line
+    assert "fictional-4" not in course_line
+
+    monkeypatch.setattr(pages.config, "active_courses", lambda: [])
+    empty_response = _client().get("/")
+    assert "Active courses:" in empty_response.text
+    assert "None selected" in empty_response.text
 
 
 def test_student_reports_has_a_direct_students_page_and_old_tab_redirect(monkeypatch):

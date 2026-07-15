@@ -151,18 +151,20 @@ Root folder for submission downloads. Each course gets its own subfolder.
 ## Home (`/`)
 
 Home is the full-width local landing surface for Start, Continue, Attention,
-Prepared, Receipts, and Current-course context. Its initial view is rendered from
+Prepared, and Receipts. Its top line lists active course names in saved order and links
+directly to the Current courses section in Settings. Its initial view is rendered from
 local Current-course configuration, the work registry, and real receipt
 projections. Readiness continues to come from `/api/readiness`; Home's
-asynchronous Scan uses the guarded `POST /api/work/scan` route and never scans
+asynchronous **Check active courses** action uses the guarded `POST /api/work/scan` route and never scans
 Canvas during an ordinary `GET /api/work`.
 
-Start cards preserve the existing workflow routes and apply an explicitly chosen
-course scope through the shared `CE_CONTEXT` contract. Continue and Attention
-show local work-registry items with a transient, non-persisted presentation sidecar:
+Start links are ordinary navigation and leave course choices to their destination pages.
+Continue and Attention show local work-registry items with a transient, non-persisted presentation sidecar:
 Current-course label, locally known assignment title, aggregate progress sentence, and
 specific action label. Exact registry jobs remain generic and PII-minimized; the sidecar
-never opens full PowerGrader sessions or scans Canvas. Ignore, Snooze, and Complete use
+never opens full PowerGrader sessions or scans Canvas. Multiple PowerGrader sessions for
+the same identified course and assignment produce one Home row, chosen according to the
+Work Registry contract, while PowerGrader retains its full session history. Ignore, Snooze, and Complete use
 the guarded local mutation routes. Prepared is intentionally honest until prepared-operation
 projections are available, and currently reports that there are no prepared
 operations. Home reads `/api/work` and `/api/receipts`, does not call

@@ -74,6 +74,51 @@ def _project(
     return job
 
 
+def _powergrader_summary_rank(summary: dict) -> tuple[int, int, str, str]:
+    """Rank one summary without opening its private PowerGrader session."""
+    total = summary.get("total") if isinstance(summary.get("total"), int) else 0
+    approved = summary.get("approved") if isinstance(summary.get("approved"), int) else 0
+    posted = summary.get("posted") if isinstance(summary.get("posted"), int) else 0
+    unposted = max(approved - posted, 0)
+    completed = posted == total and total > 0
+    if not completed and unposted:
+        priority = 2
+    elif not completed:
+        priority = 1
+    else:
+        priority = 0
+    return priority, unposted, _text(summary.get("created")), _text(summary.get("session_id"))
+
+
+def _select_powergrader_summaries(summaries: list[dict]) -> list[dict]:
+    """Select one Home resume target per certain course/assignment pair."""
+    grouped: dict[tuple[str, str], list[dict]] = {}
+    for summary in summaries:
+        if not isinstance(summary, dict) or not _safe_token(summary.get("session_id")):
+            continue
+        course_id = _text(summary.get("course_id"))
+        assignment_id = _text(summary.get("assignment_id"))
+        if course_id and assignment_id:
+            grouped.setdefault((course_id, assignment_id), []).append(summary)
+
+    selected = {
+        key: max(group, key=_powergrader_summary_rank)
+        for key, group in grouped.items()
+    }
+    output = []
+    emitted: set[tuple[str, str]] = set()
+    for summary in summaries:
+        if not isinstance(summary, dict) or not _safe_token(summary.get("session_id")):
+            continue
+        key = (_text(summary.get("course_id")), _text(summary.get("assignment_id")))
+        if not all(key):
+            output.append(summary)
+        elif key not in emitted:
+            output.append(selected[key])
+            emitted.add(key)
+    return output
+
+
 def _powergrader_jobs() -> list[dict]:
     try:
         from api.powergrader import session_store
@@ -81,7 +126,8 @@ def _powergrader_jobs() -> list[dict]:
     except Exception:
         return []
     output = []
-    for summary in summaries if isinstance(summaries, list) else []:
+    selected_summaries = _select_powergrader_summaries(summaries) if isinstance(summaries, list) else []
+    for summary in selected_summaries:
         if not isinstance(summary, dict):
             continue
         safe_id = _safe_token(summary.get("session_id"))

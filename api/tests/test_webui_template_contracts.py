@@ -275,6 +275,7 @@ def test_course_picker_uses_shared_context_without_dual_writes():
 def test_current_courses_are_the_only_operational_picker_scope():
     settings = _slurp("api/webui/templates/settings.html")
     settings_js = _slurp("api/webui/static/settings/courses.js")
+    dashboard = _slurp("api/webui/templates/dashboard.html")
     desk = _slurp("api/webui/static/desk.js")
     gradebook = _slurp("api/webui/static/gradebook.js")
     course_picker = _slurp("api/webui/static/push/course_picker.js")
@@ -284,7 +285,16 @@ def test_current_courses_are_the_only_operational_picker_scope():
     assert "Move to Previous" in settings
     assert "Make Current" in settings
     assert "automatic PowerGrader work will pause" in settings_js
-    assert "authoritative: true" in desk
+    assert "window.CE_CONTEXT" not in desk
+    assert "context.setFocus" not in desk
+    assert "context.setTargets" not in desk
+    assert "reconcile(" not in desk
+    assert "data-desk-start" not in dashboard
+    for text in (
+        "Showing saved work.", "Checking active courses…", "Checked active courses.",
+        "Some active courses could not be checked; saved work remains.",
+    ):
+        assert text in dashboard or text in desk
     assert "authoritative: true" in course_picker
     assert 'fetch("/api/courses")' not in course_picker
     assert 'fetch("/api/courses")' not in gradebook
@@ -344,18 +354,10 @@ const elements = {
   "desk-prepared-list": new Node("div", "desk-prepared-list"),
   "desk-receipts-list": new Node("div", "desk-receipts-list"),
   "desk-local-status": new Node("span", "desk-local-status"),
-  "desk-scan": new Node("button", "desk-scan"),
-  "desk-course-field": new Node("select", "desk-course-field"),
-  "desk-scope-note": new Node("p", "desk-scope-note")
+  "desk-scan": new Node("button", "desk-scan")
 };
-elements["desk-course-field"].options = [
-  {value: "", textContent: "Keep saved context"},
-  {value: "__all__", textContent: "All Current courses"},
-  {value: "course-1", textContent: "Fictional Course"}
-];
 
 global.window = {
-  CE_CONTEXT: {reconcile() {}, setFocus() {}, setTargets() {}},
   prompt: () => null,
   confirm: () => false
 };
@@ -386,6 +388,7 @@ vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"));
 const initialText = textOf(elements["desk-attention-list"]);
 await new Promise(resolve => setTimeout(resolve, 0));
 const refreshedText = textOf(elements["desk-attention-list"]);
+if (elements["desk-local-status"].textContent !== "Showing saved work.") process.exit(7);
 for (const rendered of [initialText, refreshedText]) {
   if (!rendered.includes("Fictional Course")) process.exit(2);
   if (!rendered.includes("Fictional Reflection")) process.exit(3);
@@ -404,6 +407,15 @@ for (const rendered of [initialText, refreshedText]) {
 
 
 # ── PowerGrader ───────────────────────────────────────────────────────
+
+def test_powergrader_visible_privacy_copy_uses_teacher_language():
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    autoscore = _slurp("api/webui/static/powergrader/setup_autoscore.js")
+    assert "may still contain details that could identify a student" in html
+    assert "identifying context" not in html
+    assert "shared source material for the batch" in autoscore
+    assert "shared context for the batch" not in autoscore
+
 
 def test_powergrader_advanced_import_controls_are_session_bound():
     html = _slurp("api/webui/templates/powergrader_setup.html")
