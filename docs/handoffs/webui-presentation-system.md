@@ -415,11 +415,9 @@ Stop with RED rather than guessing if:
 
 ### Cohort 2 result
 
-- Traffic light: **YELLOW** — the complete presentation migration and required
-  automated checks are green. The senior found a second Settings-only mobile overflow
-  source and added the unverified CSS correction below immediately before an
-  intentional interruption. Resume with the isolated mobile light/dark render gate;
-  do not begin Cohort 3.
+- Traffic light: **GREEN** — Cohort 2's implementation, automated checks, and fully
+  synthetic rendered checks are complete. The user must still review this high-risk
+  diff before Cohort 3 begins.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
   - Implementation commit `1e6a45f` on `dev` (16 files, 600 insertions, 351
     deletions) migrates Gradebook, Roster, and Settings to
@@ -455,9 +453,14 @@ Stop with RED rather than guessing if:
     restack, retaining each `course-row-*` ID and all existing action buttons and
     data attributes. The form/credential markup, IDs/names, routes, and scripts are
     unchanged. `py -m pytest api/tests/test_presentation_contracts.py -q` passed
-    (**6 passed**); `git diff --check` passed. The senior must still complete the
-    isolated light/dark mobile rendered check, so this result remains **YELLOW**.
-    The local untracked `api/.codex_cohort2_verify.py` is a fully synthetic
+    (**6 passed**); `git diff --check` passed.
+  - The senior's fully synthetic browser verification passed all four Cohort 2 routes
+    (`/gradebook`, `/roster`, `/settings`, `/routines`) in light and dark themes at
+    1920px and 390px. At 390px every route had its expected layout/rail count, one
+    header/main, no duplicate IDs, no page-level horizontal overflow, and no console
+    warnings or errors; Settings now has a 375px page width. The 760px-only table
+    restack does not affect the earlier clean 1920px checks. No Canvas or OpenRouter
+    request was made. The local untracked `api/.codex_cohort2_verify.py` is a fully synthetic
     resume-only verifier; it stubs every `/api/*` response, readiness endpoint,
     host label, courses, and routine paths, and must not be committed as product
     code.
