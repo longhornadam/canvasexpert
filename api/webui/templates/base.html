@@ -9,8 +9,10 @@
   <script>try{var t=localStorage.getItem('ce-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
   <!-- Local fonts (vendored from Google Fonts) -->
   <link rel="stylesheet" href="/static/fonts/fonts.css">
+  {% block stylesheet_bundle %}
   <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
   <link rel="stylesheet" href="/static/workbench.css?v={{ asset_v }}">
+  {% endblock %}
   <script src="/static/write_review.js?v={{ asset_v }}"></script>
   <script src="/static/app_context.js?v={{ asset_v }}"></script>
   {% block head_extra %}{% endblock %}

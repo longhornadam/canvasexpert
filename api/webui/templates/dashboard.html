@@ -1,7 +1,8 @@
-{% extends "workbench_base.html" %}
+{% extends "layouts/workspace.html" %}
 {% block title %}Home · Canvas Expert{% endblock %}
-{% block body_class %}ce-workbench-page ce-desk-page{% endblock %}
-{% block content %}
+{% block workspace_body_class %}ce-desk-page{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/dashboard.css?v={{ asset_v }}">{% endblock %}
+{% block primary %}
 <div id="desk-root" class="ce-desk-shell" aria-label="Home">
   <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "presentations": initial_presentations, "operations": initial_operations, "receipts": initial_receipts} | tojson }}</script>
 
@@ -24,7 +25,7 @@
   </div>
 
   <div class="ce-desk-grid">
-    <section class="ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
+    <section class="ce-panel ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
       <div class="ce-desk-panel-head">
         <h2 id="desk-start-title">Start</h2>
       </div>
@@ -62,7 +63,7 @@
       </div>
     </section>
 
-    <section class="ce-desk-panel ce-desk-panel--continue" aria-labelledby="desk-continue-title">
+    <section class="ce-panel ce-desk-panel ce-desk-panel--continue" aria-labelledby="desk-continue-title">
       <div class="ce-desk-panel-head"><h2 id="desk-continue-title">Continue</h2></div>
       <div id="desk-continue-list" class="ce-desk-list" aria-live="polite">
         {% for job in initial_jobs if job.status in ['draft', 'ready', 'in_progress'] %}
@@ -76,7 +77,7 @@
       </div>
     </section>
 
-    <section class="ce-desk-panel ce-desk-panel--attention" aria-labelledby="desk-attention-title">
+    <section class="ce-panel ce-desk-panel ce-desk-panel--attention" aria-labelledby="desk-attention-title">
       <div class="ce-desk-panel-head"><h2 id="desk-attention-title">Attention</h2></div>
       <div id="desk-attention-list" class="ce-desk-list" aria-live="polite">
         {% for job in initial_jobs if job.status == 'attention' %}
@@ -90,7 +91,7 @@
       </div>
     </section>
 
-    <section class="ce-desk-panel ce-desk-panel--rail" aria-label="Prepared operations and receipts">
+    <section class="ce-panel ce-desk-panel ce-desk-panel--rail" aria-label="Prepared operations and receipts">
       <section class="ce-desk-rail-section" aria-labelledby="desk-prepared-title">
         <div class="ce-desk-panel-head"><h2 id="desk-prepared-title">Prepared</h2><span class="ce-desk-panel-note">Canvas unchanged</span></div>
         <div id="desk-prepared-list" class="ce-desk-list" aria-live="polite">
@@ -111,4 +112,4 @@
   </div>
 </div>
 {% endblock %}
-{% block workbench_scripts %}<script src="/static/desk.js?v={{ asset_v }}"></script>{% endblock %}
+{% block workspace_scripts %}<script src="/static/desk.js?v={{ asset_v }}"></script>{% endblock %}

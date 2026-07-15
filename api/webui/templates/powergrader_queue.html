@@ -1,11 +1,10 @@
-{% extends "workbench_base.html" %}
+{% extends "layouts/workspace.html" %}
 {% block title %}PowerGrader — {{ assignment_name }}{% endblock %}
-{% block body_class %}ce-workbench-page pg-queue-body{% endblock %}
-{% block main_class %}ce-workbench-main pg-queue-shell{% endblock %}
+{% block workspace_body_class %}pg-queue-body{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/powergrader_queue.css?v={{ asset_v }}">
 {% endblock %}
-{% block content %}
+{% block primary %}
 
 <meta name="session-id"      content="{{ session_id }}">
 <meta name="assignment-name" content="{{ assignment_name }}">
@@ -13,7 +12,7 @@
 <meta name="mode-label"      content="{{ mode_label }}">
 <meta name="canvas-base"     content="{{ canvas_base }}">
 
-<div class="ce-instrument-shell pg-queue-instrument">
+<div class="pg-queue-instrument">
 
 <!-- ── Top bar ──────────────────────────────────────────────────────── -->
 <div class="pg-topbar">
@@ -24,7 +23,7 @@
   </div>
   <div class="pg-progress-wrap">
     <span id="pg-progress-label" class="pg-progress-label">Loading…</span>
-    <div class="pg-progress-bar"><div id="pg-progress-fill" class="pg-progress-fill" style="width:0%"></div></div>
+    <div class="pg-progress-bar"><div id="pg-progress-fill" class="pg-progress-fill"></div></div>
   </div>
   <div class="pg-topbar-right">
     <button type="button" id="pg-bulk-push" class="primary small" disabled>Push approved to Canvas (0)</button>
@@ -90,14 +89,14 @@
     <div class="pg-score-row">
       <label class="pg-score-label">Score
         <input type="number" id="pg-score" min="0" step="0.5"
-               placeholder="0" style="width:80px">
+               placeholder="0" class="ce-u-compact-input">
         <span class="pg-pts-possible" id="pg-pts-possible"></span>
       </label>
     </div>
     <div id="pg-new-quiz-items" class="pg-ai-panel" hidden></div>
 
     <!-- AI suggestion (manual-chat packet or API mode) -->
-    <div id="pg-ai-panel" class="pg-ai-panel" style="display:none">
+    <div id="pg-ai-panel" class="pg-ai-panel" hidden>
       <div class="pg-ai-header">
         <span class="pg-ai-badge-sm">✨ AI suggestion</span>
         <span class="pg-ai-score-row">Score: <strong id="pg-ai-score-val">—</strong></span>
@@ -110,7 +109,7 @@
     </div>
 
     <!-- Rubric reference -->
-    <details id="pg-rubric-details" class="pg-rubric-details" style="display:none">
+    <details id="pg-rubric-details" class="pg-rubric-details" hidden>
       <summary>Rubric reference</summary>
       <pre id="pg-rubric-text" class="pg-rubric-pre"></pre>
     </details>
@@ -130,10 +129,10 @@
       <button type="button" id="pg-skip" class="small">↓ Skip</button>
       <button type="button" id="pg-save-next" class="primary">↑ Approve &amp; Next</button>
     </div>
-    <button type="button" id="pg-push-one" class="pg-push-one small" style="margin-top:6px;width:100%">Push this student now</button>
-    <button type="button" id="pg-new-quiz-finalize" class="primary" style="margin-top:6px;width:100%" hidden>Finalize student</button>
-    <button type="button" id="pg-new-quiz-csv-resolve" class="primary small" style="margin-top:6px;width:100%" hidden>Resolve authoritative New Quiz result</button>
-    <a id="pg-new-quiz-speedgrader" class="small" style="display:none;margin-top:6px;width:100%;text-align:center" target="_blank" rel="noopener">Open this student in SpeedGrader</a>
+    <button type="button" id="pg-push-one" class="pg-push-one small ce-u-mt-2 ce-u-full-width">Push this student now</button>
+    <button type="button" id="pg-new-quiz-finalize" class="primary ce-u-mt-2 ce-u-full-width" hidden>Finalize student</button>
+    <button type="button" id="pg-new-quiz-csv-resolve" class="primary small ce-u-mt-2 ce-u-full-width" hidden>Resolve authoritative New Quiz result</button>
+    <a id="pg-new-quiz-speedgrader" class="small ce-u-mt-2 ce-u-full-width ce-u-text-center" target="_blank" rel="noopener" hidden>Open this student in SpeedGrader</a>
 
     <!-- Nav -->
     <div class="pg-nav-row">
@@ -150,7 +149,7 @@
   <span><kbd>→</kbd> next</span>
   <span><kbd>↓</kbd> skip</span>
   <span><kbd>↑</kbd> approve &amp; next</span>
-  <span id="pg-kbd-a-hint" style="display:none"><kbd>A</kbd> use AI score</span>
+  <span id="pg-kbd-a-hint" hidden><kbd>A</kbd> use AI score</span>
   <span><kbd>B</kbd> bulk push</span>
 </div>
 
@@ -160,7 +159,7 @@
 </div>
 
 {% endblock %}
-{% block workbench_scripts %}
+{% block workspace_scripts %}
 <script src="/static/powergrader_queue.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_core.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_review.js?v={{ asset_v }}"></script>

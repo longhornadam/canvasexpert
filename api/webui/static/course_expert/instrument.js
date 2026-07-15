@@ -9,7 +9,7 @@
 
   /* ── Instrument toggle button ──────────────────────────────────────── */
   function addInstrumentToggle() {
-    var center = document.querySelector(".ce-course-expert-center");
+    var center = document.querySelector('[data-ce-hook="course-shell"]');
     if (!center) return;
     var existing = document.getElementById("ce-instrument-toggle");
     if (existing) return;

@@ -1,0 +1,15 @@
+<header class="ce-app-header">
+  <a class="brand" href="/">{% include "_ce_logo.svg" %} CanvasExpert</a>
+  <nav class="ce-app-nav" aria-label="Primary navigation">
+    <a class="{% if request.url.path == '/' %}ce-app-nav--active{% endif %}" href="/"{% if request.url.path == '/' %} aria-current="page"{% endif %}>Home</a>
+    <a class="{% if nav_section == 'create' %}ce-app-nav--active{% endif %}" href="/course-expert"{% if nav_section == 'create' %} aria-current="page"{% endif %}>Create</a>
+    <a class="{% if nav_section == 'grade' %}ce-app-nav--active{% endif %}" href="/powergrader"{% if nav_section == 'grade' %} aria-current="page"{% endif %}>Grade</a>
+    <a class="{% if nav_section == 'manage' %}ce-app-nav--active{% endif %}" href="/roster"{% if nav_section == 'manage' %} aria-current="page"{% endif %}>Students</a>
+    <a class="{% if nav_section == 'automate' %}ce-app-nav--active{% endif %}" href="/routines"{% if nav_section == 'automate' %} aria-current="page"{% endif %}>Automations</a>
+  </nav>
+  {% include "_readiness_strip.html" %}
+  <div class="topbar-right">
+    <a class="ce-app-settings{% if nav_section == 'settings' %} ce-app-nav--active{% endif %}" href="/settings"{% if nav_section == 'settings' %} aria-current="page"{% endif %}>Settings</a>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle theme"><span class="toggle-track"><span class="toggle-thumb"></span><span class="toggle-icon toggle-icon--sun">☼</span><span class="toggle-icon toggle-icon--moon">☾</span></span></button>
+  </div>
+</header>

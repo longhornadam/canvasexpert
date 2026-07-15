@@ -65,7 +65,7 @@
   function isAiMode() {
     return MODE === 'assisted' || MODE === 'packet';
   }
-  if (kbdAHint) { kbdAHint.style.display = isAiMode() ? '' : 'none'; }
+  if (kbdAHint) { kbdAHint.hidden = !isAiMode(); }
 
   function loadSession() {
     reloadSession({
@@ -89,7 +89,7 @@
         queue.setStudents(session.students || []);
         rubricText = session.rubric_name || '';
         if (rubricText) {
-          rubricPanel.style.display = '';
+          rubricPanel.hidden = false;
           rubricPre.textContent = '(Rubric: ' + rubricText + ' — open via workspace Rubrics folder)';
         }
 
@@ -191,7 +191,7 @@
       setTimeout(function(){ try { feedbackEl.setSelectionRange(0, 0); } catch(e){} }, 0);
     }
 
-    aiPanel.style.display = 'none';
+    aiPanel.hidden = true;
     aiScoreVal.textContent = hasAiScore ? st.ai_score : 'No AI score';
     aiFeedTxt.textContent = hasAiFeed ? formatAiFeedback(st.ai_feedback) : '(No AI feedback)';
     useAiScore.disabled = !hasAiScore;
@@ -342,7 +342,7 @@
     var approved = students.filter(function(s){ return s.status === 'approved'; }).length;
     var total = students.length;
     var pct = Math.round((posted / total) * 100);
-    progressFill.style.width = pct + '%';
+    progressFill.style.setProperty('--ce-progress', pct + '%');
     progressLbl.textContent = posted + ' posted, ' + approved + ' approved — ' + total + ' total';
     var commentsOnly = queue.writebackMode() === 'comments';
     var readyToPush = students.filter(function(s){

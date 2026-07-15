@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block stylesheet_bundle %}
+<link rel="stylesheet" href="/static/ui/tokens.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/foundation.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/components.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/layouts.css?v={{ asset_v }}">
+{% endblock %}
+{% block body_class %}ce-app-page {% block document_body_class %}{% endblock %}{% endblock %}
+{% block app_header %}{% include "layouts/_app_header.html" %}{% endblock %}
+{% block main_class %}ce-layout-main{% endblock %}
+{% block content %}
+<article class="ce-shell ce-document ce-document--{% block document_variant %}standard{% endblock %}" data-ce-layout="document">{% block primary %}{% endblock %}</article>
+{% endblock %}
+{% block scripts_extra %}
+<script src="/static/readiness.js?v={{ asset_v }}"></script>
+{% block document_scripts %}{% endblock %}
+{% endblock %}

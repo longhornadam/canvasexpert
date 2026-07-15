@@ -23,18 +23,18 @@
   }
   q.renderNewQuizItems = function(st) {
     if (!region || !finalBtn || !speed) return;
-    if (!isNewQuiz() || !st || !(st.new_quiz_items || []).length) { region.hidden=true; finalBtn.hidden=true; if(resolveBtn)resolveBtn.hidden=true; speed.style.display='none'; return; }
+    if (!isNewQuiz() || !st || !(st.new_quiz_items || []).length) { region.hidden=true; finalBtn.hidden=true; if(resolveBtn)resolveBtn.hidden=true; speed.hidden=true; return; }
     if (scoreRow) scoreRow.hidden=true;
     if (feedback) feedback.placeholder='Optional whole-assignment feedback. This uses the separate comment-only lane.';
     if (st.speedgrader_required) {
       var unresolved=isCsvFallback() && (!((q.getSession().new_quiz_csv_provenance.bindings || {})[String(st.user_id)]) || st.csv_provenance_stale);
       region.hidden=false; region.innerHTML='<div class="pg-ai-header"><span class="pg-ai-badge-sm">Canvas review required</span></div><p>' + (unresolved ? 'This CSV row is review-only until PowerGrader matches it to the current authoritative New Quiz result.' : 'This student has file/media or unsupported manual evidence. Keep the full grading decision in SpeedGrader; PowerGrader will not split authority across items.') + '</p>';
-      finalBtn.hidden=true; if(resolveBtn)resolveBtn.hidden=!unresolved; speed.href=speedgraderUrl(st); speed.style.display='block'; return;
+      finalBtn.hidden=true; if(resolveBtn)resolveBtn.hidden=!unresolved; speed.href=speedgraderUrl(st); speed.hidden=false; return;
     }
     if(resolveBtn) resolveBtn.hidden=true;
     var items=manualItems(st);
-    if (!items.length) { region.hidden=false; region.innerHTML='<p>All New Quiz items are auto-graded and read-only.</p>'; finalBtn.hidden=true; speed.style.display='none'; return; }
-    region.hidden=false; speed.style.display='none'; finalBtn.hidden=false;
+    if (!items.length) { region.hidden=false; region.innerHTML='<p>All New Quiz items are auto-graded and read-only.</p>'; finalBtn.hidden=true; speed.hidden=true; return; }
+    region.hidden=false; speed.hidden=true; finalBtn.hidden=false;
     region.innerHTML='<div class="pg-ai-header"><span class="pg-ai-badge-sm">New Quiz item finalization</span></div>' + items.map(function(item){
       var ta=taText(draftFor(st,item),item);
       return '<div class="pg-sub-section" data-nq-item="' + esc(item.item_id) + '"><div class="pg-sub-label">Manual text item · ' + esc(item.possible) + ' points</div><label>Teacher score <input class="nq-score" type="number" min="0" max="' + esc(item.possible) + '" step="0.5" placeholder="Required"></label><label>My feedback<textarea class="nq-feedback" rows="3" placeholder="Optional teacher feedback"></textarea></label><pre class="pg-ai-feedback-text">' + esc(ta || 'No Teaching Assistant proposal is available for this item.') + '</pre></div>';

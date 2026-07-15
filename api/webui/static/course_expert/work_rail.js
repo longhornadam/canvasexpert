@@ -72,7 +72,7 @@
 
   /* ── Active rail item tracking ─────────────────────────────────────── */
   document.addEventListener("click", function (e) {
-    var tabBtn = e.target.closest(".ce-tab[data-tab]");
+    var tabBtn = e.target.closest('[data-ce-hook="course-tab"][data-tab]');
     if (!tabBtn) return;
     var tab = tabBtn.getAttribute("data-tab");
     railItems.forEach(function (item) {

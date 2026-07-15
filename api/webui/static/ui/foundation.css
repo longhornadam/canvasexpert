@@ -1,0 +1,10 @@
+*, *::before, *::after { box-sizing: border-box; }
+html { min-width: 0; overflow-x: hidden; background: var(--ce-surface); }
+body { min-width: 0; margin: 0; background: var(--ce-surface); color: var(--ce-ink); font-family: var(--ce-font-body); line-height: 1.45; }
+button, input, select, textarea { color: inherit; font: inherit; }
+button, select, input, textarea { min-width: 0; }
+button { cursor: pointer; }
+a { color: var(--ce-accent-canvas); }
+img, svg { max-width: 100%; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--ce-focus); outline-offset: 3px; }

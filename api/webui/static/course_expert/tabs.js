@@ -2,20 +2,20 @@
   "use strict";
 
   function tabButtons() {
-    return Array.prototype.slice.call(document.querySelectorAll(".ce-tab[role='tab']"));
+    return Array.prototype.slice.call(document.querySelectorAll('[data-ce-hook="course-tab"][role="tab"]'));
   }
 
   function updateWorkspaceTitle(tabName) {
     var title = document.getElementById("ce-workspace-title");
     if (!title) return;
-    var tab = document.querySelector('.ce-tab[data-tab="' + tabName + '"]');
+    var tab = document.querySelector('[data-ce-hook="course-tab"][data-tab="' + tabName + '"]');
     title.textContent = tab ? tab.textContent.trim() : "Workspace";
   }
 
   function activateTab(tabName, options) {
     var shouldFocus = options && options.focus;
     var activated = false;
-    document.querySelectorAll(".ce-tab").forEach(function (tab) {
+    document.querySelectorAll('[data-ce-hook="course-tab"]').forEach(function (tab) {
       var isActive = tab.dataset.tab === tabName;
       tab.classList.toggle("active", isActive);
       tab.setAttribute("aria-selected", isActive ? "true" : "false");
@@ -25,7 +25,7 @@
         if (shouldFocus) tab.focus();
       }
     });
-    document.querySelectorAll(".ce-panel").forEach(function (panel) {
+    document.querySelectorAll('[data-ce-hook="course-tab-panel"]').forEach(function (panel) {
       var isActive = panel.id === "ce-tab-" + tabName;
       panel.classList.toggle("active", isActive);
       panel.hidden = !isActive;
@@ -59,7 +59,7 @@
   function bindDeepLink() {
     var params = new URLSearchParams(location.search);
     var tab = params.get("tab") || location.hash.replace("#", "");
-    var known = Array.prototype.some.call(document.querySelectorAll(".ce-tab"), function (el) {
+    var known = Array.prototype.some.call(document.querySelectorAll('[data-ce-hook="course-tab"]'), function (el) {
       return el.dataset.tab === tab;
     });
     if (tab && known) {
@@ -153,24 +153,18 @@
   function setView(view, options) {
     var params = new URLSearchParams(location.search);
     var tab = params.get("tab") || "";
-    var shell = document.querySelector(".ce-workbench-shell");
-    var grid = shell && shell.querySelector(".ce-workbench-grid");
-    var rail = shell && shell.querySelector(".ce-work-rail");
-    var summary = shell && shell.querySelector(".ce-summary-panel");
-    var center = shell && shell.querySelector(".ce-course-expert-center");
+    var shell = document.querySelector('[data-ce-hook="course-shell"]');
+    var rail = document.querySelector('[data-ce-hook="course-rail"]');
+    var summary = document.querySelector('[data-ce-hook="course-summary"]');
 
     if (view === "instrument") {
-      if (shell) shell.classList.add("ce-instrument-shell");
-      if (grid) grid.classList.add("ce-instrument-grid");
-      if (rail) rail.style.display = "none";
-      if (summary) summary.style.display = "none";
-      if (center) center.style.flex = "1";
+      if (shell) shell.classList.add("ce-course-expert--instrument");
+      if (rail) rail.hidden = true;
+      if (summary) summary.hidden = true;
     } else {
-      if (shell) shell.classList.remove("ce-instrument-shell");
-      if (grid) grid.classList.remove("ce-instrument-grid");
-      if (rail) rail.style.display = "";
-      if (summary) summary.style.display = "";
-      if (center) center.style.flex = "";
+      if (shell) shell.classList.remove("ce-course-expert--instrument");
+      if (rail) rail.hidden = false;
+      if (summary) summary.hidden = false;
     }
 
     if (options && options.replace) {
