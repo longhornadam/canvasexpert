@@ -435,8 +435,8 @@ Stop with RED rather than guessing if:
     page-specific CSS classes in Settings token/key controls and Gradebook curve
     settings; they preserve the same show/hide and form-submission behavior.
   - Correction commit `e1f0eba` on `dev` adds `overflow-wrap: anywhere` only to
-    code text inside Settings panels. The long calendar-contract code sample was the
-    mobile overflow source; no template, form, link, ID/name, script, route, or
+    code text inside Settings panels. That first, narrow correction did not resolve
+    the mobile overflow; no template, form, link, ID/name, script, route, or
     credential behavior changed.
   - `py -m pytest api/tests/test_presentation_contracts.py api/tests/test_route_contract.py api/tests/test_webui_template_contracts.py -q` — **28 passed**.
   - `py -m pytest api/tests/test_gradebook_routes.py api/tests/test_roster_routes.py api/tests/test_roster_config.py api/tests/test_workspace.py api/tests/test_readiness_routes.py -q` — **73 passed**.
@@ -449,13 +449,18 @@ Stop with RED rather than guessing if:
     (**6 passed**) with `git diff --check` green. The senior will rerun the isolated
     light/dark mobile visual suite. No Canvas or OpenRouter request was made during
     this correction.
-  - Pause checkpoint commit records a Settings-only mobile table restack at
-    `max-width: 760px`: Current Courses table rows become labelled blocks and retain
-    their existing row IDs and action buttons. This exact change has **not** yet run
-    focused tests or the isolated rendered check. The local untracked
-    `api/.codex_cohort2_verify.py` is a fully synthetic resume-only verifier; it
-    stubs every `/api/*` response, readiness endpoint, host label, courses, and
-    routine paths, and must not be committed as product code.
+  - Correction checkpoint `450d5bd` on `dev` identifies the actual 390px source as
+    the Current/Previous Courses `.profiles` tables: their action columns produced
+    the 413px document width. It applies a Settings-only `max-width: 760px` table
+    restack, retaining each `course-row-*` ID and all existing action buttons and
+    data attributes. The form/credential markup, IDs/names, routes, and scripts are
+    unchanged. `py -m pytest api/tests/test_presentation_contracts.py -q` passed
+    (**6 passed**); `git diff --check` passed. The senior must still complete the
+    isolated light/dark mobile rendered check, so this result remains **YELLOW**.
+    The local untracked `api/.codex_cohort2_verify.py` is a fully synthetic
+    resume-only verifier; it stubs every `/api/*` response, readiness endpoint,
+    host label, courses, and routine paths, and must not be committed as product
+    code.
 
 ### Cohort 3 result
 
