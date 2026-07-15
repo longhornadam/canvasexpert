@@ -10,7 +10,7 @@ import pytest
 from api.work_registry import discovery, storage
 from api.work_registry.models import material_version, stable_fingerprint
 from api.work_registry.providers import CourseTimeout, call_canvas_get_all, finding
-from api.work_registry.providers import grading_debt, late_work, roster_warnings
+from api.work_registry.providers import grading_debt, home_attention, late_work, roster_warnings
 
 
 def _job(kind="grade.debt", course_id="course-1", assignment_id="assignment-1"):
@@ -145,6 +145,8 @@ def test_course_provider_failure_does_not_stop_other_providers(monkeypatch):
         "scan_course",
         lambda *args, **kwargs: [_job(kind="roster.warning", assignment_id="warning-1")],
     )
+    monkeypatch.setattr(discovery.home_attention, "scan_comment_follow_up", lambda *args, **kwargs: [])
+    monkeypatch.setattr(discovery.home_attention, "scan_powergrader_ready", lambda *args, **kwargs: [])
 
     record = discovery._scan_course(
         {"id": "course-1"}, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5)
@@ -177,7 +179,8 @@ def test_scan_course_shares_successful_assignment_and_submission_reads(monkeypat
         calls[path] += 1
         if path == assignments_path:
             return [
-                {"id": "debt-1", "published": True, "due_at": "2026-07-09T11:00:00+00:00"},
+                {"id": "debt-1", "published": True, "due_at": "2026-07-09T11:00:00+00:00",
+                 "submission_types": ["online_text_entry"]},
                 {"id": "late-1", "published": True, "due_at": "2026-07-09T11:00:00+00:00"},
             ], None
         assert path == submissions_path
@@ -213,7 +216,9 @@ def test_scan_course_shares_successful_assignment_and_submission_reads(monkeypat
     )
 
     assert record["stale"] is False
-    assert {item["kind"] for item in record["findings"]} == {"grade.debt", "late.work"}
+    assert {item["kind"] for item in record["findings"]} == {
+        "grade.debt", "grade.powergrader_ready", "late.work",
+    }
     assert calls == {assignments_path: 1, submissions_path: 1}
 
 
@@ -268,6 +273,112 @@ def test_late_work_uses_school_day_and_extra_time(monkeypatch):
     assert len(findings) == 1
     assert findings[0]["kind"] == "late.work"
     assert findings[0]["counts"]["affected"] == 1
+
+
+def test_comment_follow_up_classifier_is_ordered_conservative_and_ta_aware():
+    base = {
+        "user_id": "synthetic-student-1",
+        "submission_comments": [
+            {"author_id": "synthetic-staff-1", "author_role": "teacher", "created_at": "2026-07-11T09:00:00+00:00"},
+            {"author_id": "synthetic-student-1", "created_at": "2026-07-11T10:00:00+00:00"},
+        ],
+    }
+    assert home_attention.classify_comment_follow_up(base) == "definite"
+
+    with_ta = {
+        **base,
+        "submission_comments": [
+            *base["submission_comments"],
+            {
+                "author_id": "synthetic-staff-2",
+                "created_at": "2026-07-11T11:00:00+00:00",
+                "comment": home_attention._TA_MARKER,
+            },
+        ],
+    }
+    assert home_attention.classify_comment_follow_up(with_ta) == "definite"
+
+    unknown_staff = {
+        **base,
+        "submission_comments": [
+            base["submission_comments"][1],
+            {"author_id": "synthetic-unknown-1", "created_at": "2026-07-11T11:00:00+00:00"},
+        ],
+    }
+    assert home_attention.classify_comment_follow_up(unknown_staff) == "uncertain"
+
+    proven_staff = {
+        **unknown_staff,
+        "submission_comments": [
+            unknown_staff["submission_comments"][0],
+            {
+                "author_id": "synthetic-staff-3",
+                "author_role": "teacher",
+                "created_at": "2026-07-11T11:00:00+00:00",
+            },
+        ],
+    }
+    assert home_attention.classify_comment_follow_up(proven_staff) == "none"
+
+    malformed = {
+        **base,
+        "submission_comments": [
+            {"created_at": "2026-07-11T10:00:00+00:00"},
+        ],
+    }
+    assert home_attention.classify_comment_follow_up(malformed) == "none"
+
+    ambiguous_order = {
+        **base,
+        "submission_comments": [
+            {"author_id": "synthetic-student-1", "created_at": "2026-07-11T10:00:00+00:00"},
+            {"author_id": "synthetic-staff-4", "created_at": "2026-07-11T10:00:00+00:00"},
+        ],
+    }
+    assert home_attention.classify_comment_follow_up(ambiguous_order) == "none"
+
+
+def test_powergrader_ready_is_text_only_and_comment_scan_stays_aggregate_only():
+    assignments = [
+        {"id": "text", "submission_types": ["online_text_entry"]},
+        {"id": "upload", "submission_types": ["online_upload"]},
+        {"id": "url", "submission_types": ["online_url"]},
+        {"id": "new-quiz", "submission_types": ["online_text_entry"], "quiz_id": "quiz-1"},
+    ]
+    submissions = [
+        {"assignment_id": "text", "user_id": "synthetic-student-1", "workflow_state": "submitted", "score": None,
+         "submitted_at": "2026-07-11T10:00:00+00:00", "submission_comments": []},
+        {"assignment_id": "text", "user_id": "synthetic-student-2", "workflow_state": "pending_review", "score": None,
+         "submitted_at": "2026-07-11T11:00:00+00:00", "submission_comments": []},
+        {"assignment_id": "text", "user_id": "synthetic-student-3", "workflow_state": "submitted", "score": 0,
+         "submitted_at": "2026-07-11T12:00:00+00:00", "submission_comments": []},
+        {"assignment_id": "upload", "user_id": "synthetic-student-4", "workflow_state": "submitted", "score": None,
+         "submitted_at": "2026-07-11T10:00:00+00:00", "submission_comments": []},
+        {"assignment_id": "url", "user_id": "synthetic-student-5", "workflow_state": "submitted", "score": None,
+         "submitted_at": "2026-07-11T10:00:00+00:00", "submission_comments": []},
+        {"assignment_id": "new-quiz", "user_id": "synthetic-student-6", "workflow_state": "submitted", "score": None,
+         "submitted_at": "2026-07-11T10:00:00+00:00", "submission_comments": []},
+    ]
+
+    def fake_get(path, params=None, timeout=None):
+        return (assignments if path.endswith("/assignments") else submissions), None
+
+    ready = home_attention.scan_powergrader_ready(
+        "course-1", now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
+        canvas_get_all=fake_get,
+    )
+    assert [(job["assignment_id"], job["counts"]) for job in ready] == [
+        ("text", {"total": 2, "pending": 2, "affected": 2}),
+    ]
+
+    follow_up = home_attention.scan_comment_follow_up(
+        "course-1", now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
+        canvas_get_all=fake_get,
+    )
+    assert follow_up == []
+    serialized = json.dumps([*ready, *follow_up])
+    assert "synthetic-student" not in serialized
+    assert "submission_comments" not in serialized
 
 
 def test_roster_warning_provider_aggregates_without_writing_vault(monkeypatch):

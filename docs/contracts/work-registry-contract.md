@@ -139,9 +139,21 @@ Initial providers, in order:
    comment, or CanvasExpert session evidence.
 4. Aggregate late-work findings using school-day and extra-time math.
 5. Aggregate roster warning categories.
+6. Aggregate Home attention: evidence-backed student-response follow-up, uncertain staff
+   response checks, and ungraded text-entry PowerGrader suitability.
 
 Discovery persists counts and stable object IDs only. Student identities and submission
-text are fetched when the job opens in a PRIVATE workspace.
+text are retained only when a job opens in a PRIVATE workspace. An explicit discovery
+scan may inspect private metadata transiently for an approved aggregate reduction, but
+must discard it before the scan returns.
+
+The Home-attention provider reads submission comments only during the explicit discovery
+request. It reduces them immediately to assignment-scoped counts; it never returns,
+logs, hashes, caches, or persists comment text, author identity, or per-student state.
+Its definite follow-up signal requires an ordered latest student-authored response. A
+trailing Canvas Expert Teaching Assistant marker does not resolve that signal. A later
+non-student response with unprovable staff origin is a separate aggregate staff-response
+check, not a claim that a human response is awaiting.
 
 ## Ignore and snooze
 

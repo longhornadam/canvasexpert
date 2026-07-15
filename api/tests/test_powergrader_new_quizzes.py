@@ -12,6 +12,7 @@ from api.feedback_artifacts import pseudonymize_submissions
 from api.feedback_vault import Vault
 from api.powergrader import session_actions
 from api.powergrader import new_quiz_grader
+from api.powergrader import new_quiz_csv
 from api.webui.routes.powergrader_helpers import build_late_watch_state
 
 
@@ -308,6 +309,83 @@ def test_new_quiz_feedback_composition_keeps_teacher_and_ta_separate():
     assert new_quiz_grader.compose_feedback("", "TA block") == "TA SCORE + FEEDBACK\n\nTA block"
     combined = new_quiz_grader.compose_feedback("My note", "TA block")
     assert combined == "MY FEEDBACK\n\nMy note\n\n-------\n\nTA SCORE + FEEDBACK\n\nTA block"
+
+
+def test_csv_fallback_session_keeps_digest_and_minimum_private_provenance():
+    raw = (Path(__file__).parent / "fixtures" / "student_analysis_sample.csv").read_bytes()
+    session = new_quiz_csv.make_csv_session(
+        session_id="synthetic", course_id="course-1", assignment_id="assignment-1",
+        assignment_name="Synthetic quiz", raw=raw,
+    )
+    provenance = session["new_quiz_csv_provenance"]
+    assert provenance["digest"] and len(provenance["digest"]) == 64
+    assert provenance["course_id"] == "course-1"
+    assert set(provenance["rows"][0]) == {"user_id", "attempt", "item_ids"}
+    assert "Name,ID,SISID" not in json.dumps(session)
+    assert all(student["speedgrader_required"] for student in session["students"])
+
+
+def test_csv_fallback_rejects_malformed_identity_without_retaining_input():
+    raw = b"Name,ID\nSynthetic,\n"
+    with pytest.raises(new_quiz_csv.CsvProvenanceError):
+        new_quiz_csv.build_csv_students(raw)
+
+
+def test_csv_provenance_resolver_binds_only_matching_current_attempt_and_items(monkeypatch):
+    current = _grader_state()
+    current["authoritative"]["attempt"] = 2
+    monkeypatch.setattr(new_quiz_grader, "_signed_context", lambda **_kwargs: (object(), "unused", {}, "unused"))
+    monkeypatch.setattr(new_quiz_grader, "_read_current", lambda _context: current)
+    bound = new_quiz_grader.resolve_csv_provenance(
+        canvas_base="https://canvas.invalid", token="synthetic", assignment_id="assignment",
+        user_id="student", attempt=2, item_ids=["essay-1", "auto-1"],
+    )
+    assert set(bound) == {"result_id", "state_digest", "attempt"}
+    with pytest.raises(new_quiz_grader.GraderError, match="csv_provenance_mismatch"):
+        new_quiz_grader.resolve_csv_provenance(
+            canvas_base="https://canvas.invalid", token="synthetic", assignment_id="assignment",
+            user_id="student", attempt=1, item_ids=["essay-1", "auto-1"],
+        )
+
+
+def test_csv_session_blocks_finalization_until_resolved_then_fails_closed_on_mismatch():
+    session = {
+        "session_id": "synthetic", "course_id": "course-1", "assignment_id": "assignment-1",
+        "new_quiz_item_finalization_supported": True,
+        "students": [{"user_id": "fake-user", "new_quiz_attempt": 1,
+                      "speedgrader_required": True, "csv_native_manual_evidence": False}],
+        "new_quiz_csv_provenance": {"course_id": "course-1", "assignment_id": "assignment-1",
+            "rows": [{"user_id": "fake-user", "attempt": 1, "item_ids": ["essay-1"]}], "bindings": {}},
+    }
+    decisions = '[{"item_id":"essay-1","score":2,"teacher_feedback":"","ta_feedback":"TA"}]'
+    blocked, _ = session_actions.review_new_quiz_finalization(
+        "synthetic", user_id="fake-user", decisions_json=decisions,
+        load_session=lambda _: session, save_session=lambda _: None, preflight=lambda *_: {},
+    )
+    assert blocked["code"] == "csv_provenance_unresolved"
+    failed, _ = session_actions.resolve_new_quiz_csv_provenance(
+        "synthetic", user_id="fake-user", load_session=lambda _: session, save_session=lambda _: None,
+        resolver=lambda *_: (_ for _ in ()).throw(new_quiz_grader.GraderError("csv_provenance_mismatch")),
+    )
+    assert failed["code"] == "csv_provenance_mismatch"
+    assert session["students"][0]["speedgrader_required"] is True
+
+
+def test_csv_session_requires_binding_to_match_preflight_result():
+    session = {
+        "session_id": "synthetic", "new_quiz_item_finalization_supported": True,
+        "students": [{"user_id": "fake-user", "speedgrader_required": False}],
+        "new_quiz_csv_provenance": {"bindings": {"fake-user": {
+            "result_id": "older-result", "state_digest": "a" * 64, "attempt": 1}}},
+    }
+    result, _ = session_actions.review_new_quiz_finalization(
+        "synthetic", user_id="fake-user",
+        decisions_json='[{"item_id":"essay-1","score":2,"teacher_feedback":"","ta_feedback":"TA"}]',
+        load_session=lambda _: session, save_session=lambda _: None,
+        preflight=lambda *_: {"result_id": "newer-result", "state_digest": "b" * 64, "decision_digest": "c" * 64},
+    )
+    assert result["code"] == "csv_provenance_stale"
+    assert session["students"][0]["speedgrader_required"] is True
 
 
 def test_new_quiz_finalization_review_is_frozen_and_idempotent():

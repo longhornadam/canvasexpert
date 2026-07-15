@@ -3,6 +3,9 @@
 Purpose: give debugging sessions a low-token routing map for Roster without
 reading the route, browser script, and helper modules from scratch.
 
+Student Reports is a separate Students page at `/students/reports`; the Roster rail links
+there directly. It does not share Roster state or embed report controls.
+
 As of 2026-07-12, Roster is a shared Workbench page split across a shared bootstrap
 plus focused browser feature files. The Workbench lenses are visual views over one
 loaded roster; they do not own a second dataset or mutation path.

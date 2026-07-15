@@ -21,10 +21,11 @@
     <a class="brand" href="/">{% include "_ce_logo.svg" %} CanvasExpert</a>
     {% set current_path = request.url.path %}
     <nav>
+      <a class="nav-link{% if request.url.path == '/' %} nav-active{% endif %}" href="/">Home</a>
       <details class="nav-dd{% if nav_section == 'create' %} nav-dd--active{% endif %}">
         <summary>Create ▾</summary>
         <div class="dd-menu">
-          <a href="/course-expert">Work home</a>
+          <a href="/course-expert">Create home</a>
           <div class="dd-sep"></div>
           <a href="/course-expert?tab=quiz">Push quiz</a>
           <a href="/course-expert?tab=assignment">Push assignment</a>
@@ -37,9 +38,9 @@
       <details class="nav-dd{% if nav_section == 'grade' %} nav-dd--active{% endif %}">
         <summary>Grade ▾</summary>
         <div class="dd-menu">
-          <a href="/powergrader">PowerGrader</a>
-          <a href="/feedback-expert">Score writing with AI</a>
-          <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
+          <a href="/powergrader">Grade an assignment</a>
+          <a href="/powergrader?advanced=import">Score writing with AI</a>
+          <a href="/powergrader?advanced=import">Import AI feedback for review</a>
           <div class="dd-sep"></div>
           <a href="/gradebook">Gradebooks home</a>
           <a href="/gradebook?tab=policy">Policy &amp; sweep</a>
@@ -52,16 +53,15 @@
       </details>
 
       <details class="nav-dd{% if nav_section == 'manage' %} nav-dd--active{% endif %}">
-        <summary>Manage ▾</summary>
+        <summary>Students ▾</summary>
         <div class="dd-menu">
-          <a href="/roster">Rosters</a>
-          <a href="/course-expert?tab=download">Download student work</a>
-          <a href="/course-expert?tab=students">Student reports</a>
+          <a href="/roster">Students</a>
+          <a href="/students/reports">Student reports</a>
           <a href="/course">Course info</a>
         </div>
       </details>
 
-      <a class="nav-link nav-automate{% if nav_section == 'automate' %} nav-active{% endif %}" href="/routines">Automate</a>
+      <a class="nav-link nav-automate{% if nav_section == 'automate' %} nav-active{% endif %}" href="/routines">Automations</a>
 
       <a class="nav-link nav-settings{% if nav_section == 'settings' %} nav-active{% endif %}" href="/settings">Settings</a>
 
@@ -69,7 +69,7 @@
         <summary>Help &amp; tools ▾</summary>
         <div class="dd-menu">
           <a href="/about">About</a>
-          <a href="/ai-expert">Authoring helper files</a>
+          <a href="/ai-expert">AI instructions</a>
           <a href="/forge/quizforge/" target="_blank" rel="noopener">QuizForge compiler</a>
           <div class="dd-sep"></div>
           <a href="/api/download-contract?name=QuizForge_Base" download>Download QuizForge contract</a>

@@ -1,10 +1,10 @@
-# Work Tools Module Map
+# Create Module Map
 
-Purpose: route Work tools debugging without re-reading the page template,
+Purpose: route Create debugging without re-reading the page template,
 shared push modules, and the feature scripts that own the remaining browser
 workflows.
 
-As of 2026-07-13, Work tools browser behavior is split into small shared
+As of 2026-07-15, Create browser behavior is split into small shared
 push modules plus page-specific feature scripts. `course_expert.html` is now
 mostly markup, data injection, and script includes.
 
@@ -12,7 +12,8 @@ mostly markup, data injection, and script includes.
 
 - Page template: `api/webui/templates/course_expert.html`
 - Shared browser modules: `api/webui/static/push.js`, `api/webui/static/push/*.js`
-- Work tools feature scripts: `api/webui/static/course_expert/*.js`
+- Create feature scripts: `api/webui/static/course_expert/tabs.js`,
+  `quick_assignment.js`, and `work_rail.js`
 - Route owner: `api/webui/routes/push.py`
 - Validation/physical/preview routes: `api/webui/routes/push_validation.py`
 - Source-material facade/extraction: `api/webui/source_materials.py`,
@@ -20,7 +21,8 @@ mostly markup, data injection, and script includes.
 
 ## Current Size Snapshot
 
-- `api/webui/templates/course_expert.html` - 699 lines
+- `api/webui/templates/course_expert.html` - Create-only tabs and shared push script includes
+- `api/webui/templates/student_reports.html` - dedicated Students presentation
 - `api/webui/static/course_expert/tabs.js` - 114 lines
 - `api/webui/static/course_expert/student_reports.js` - 111 lines
 - `api/webui/static/course_expert/portfolio.js` - 110 lines
@@ -58,17 +60,18 @@ Shared modules own:
   folder lookup, and all-courses expansion; still provides `targetCourses`
 - `push.js` - tiny compatibility bootstrap that runs shared initialization
 
-Work tools feature scripts own:
+Create feature scripts own:
 
 - `course_expert/tabs.js` - tab activation, query/hash deep-linking, delivery
   option toggles, whole/differentiated quiz mode switching, file-source bootstrap,
   copy-skill wiring, and course-picker dismiss behavior; the shared seam is
   `window.CE_COURSE_EXPERT`
-- `course_expert/student_reports.js` - roster load, monitor toggle, and student
-  packet SSE
-- `course_expert/portfolio.js` - New Quizzes CSV portfolio and merged portfolio
-  forms
 - `course_expert/quick_assignment.js` - quick gradebook-column push
+
+Student Reports feature scripts are loaded only by `student_reports.html`:
+
+- `course_expert/student_reports.js` - roster load, monitor toggle, and student packet SSE
+- `course_expert/portfolio.js` - New Quizzes CSV portfolio and merged portfolio forms
 
 Shared push scripts still own the core push cards:
 
@@ -109,9 +112,9 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 
 ## First Places To Look By Symptom
 
-- Work tools tab deep-linking / shell glue: `course_expert/tabs.js`
-- Work tools Student Reports: `course_expert/student_reports.js`
-- Work tools NQ / merged portfolio forms: `course_expert/portfolio.js`
+- Create tab deep-linking / shell glue: `course_expert/tabs.js`
+- Student Reports packet controls: `student_reports.html`, `course_expert/student_reports.js`
+- Student Reports NQ / merged portfolio forms: `student_reports.html`, `course_expert/portfolio.js`
 - Work tools quick assignment: `course_expert/quick_assignment.js`
 - target course picker: `push/course_picker.js`
 - module/category dropdowns or delivery settings: `push/delivery.js`,
@@ -126,8 +129,8 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
   `engine/rendering/physical/`
 - Assignment evidence refresh: `api/powergrader/assignment_refresh.py` (shared owner)
   download-related routes
-- Student Reports/portfolio inline behavior: `course_expert/student_reports.js`,
-  `course_expert/portfolio.js`, report/portfolio routes
+- Student Reports/portfolio behavior: `student_reports.html`,
+  `course_expert/student_reports.js`, `course_expert/portfolio.js`, and report/portfolio routes
 
 ## Guardrails
 

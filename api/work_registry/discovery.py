@@ -12,7 +12,7 @@ from api.webui.canvas_client import _canvas_get_all
 from . import storage
 from .models import validate_job
 from .providers import CourseTimeout, DiscoveryDeadline, CourseUnavailable, ProviderFailure
-from .providers import grading_debt, late_work, roster_warnings
+from .providers import grading_debt, home_attention, late_work, roster_warnings
 
 
 MAX_COURSE_WORKERS = 3
@@ -65,7 +65,11 @@ def _scan_course(course: dict, *, now: str, deadline: float, canvas_get_all=None
     def course_get_all(path, params=None, timeout=REQUEST_TIMEOUT_SECONDS):
         if path == assignments_path and params == assignments_params and "assignments" in shared_reads:
             return shared_reads["assignments"], None
-        if path == submissions_path and params == late_submissions_params and "submissions" in shared_reads:
+        if (
+            path == submissions_path
+            and params in (rich_submissions_params, late_submissions_params)
+            and "submissions" in shared_reads
+        ):
             return shared_reads["submissions"], None
 
         result = source_get_all(path, params=params, timeout=timeout)
@@ -80,7 +84,13 @@ def _scan_course(course: dict, *, now: str, deadline: float, canvas_get_all=None
 
     findings = []
     errors = []
-    providers = (grading_debt.scan_course, late_work.scan_course, roster_warnings.scan_course)
+    providers = (
+        grading_debt.scan_course,
+        home_attention.scan_comment_follow_up,
+        home_attention.scan_powergrader_ready,
+        late_work.scan_course,
+        roster_warnings.scan_course,
+    )
     for provider in providers:
         try:
             findings.extend(provider(

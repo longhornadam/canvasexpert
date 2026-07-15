@@ -14,7 +14,7 @@ from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
 from powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
                          import_results, late_catchup, packet, privacy,
-                         new_quiz_grader,
+                         new_quiz_csv, new_quiz_grader,
                          session_actions, session_builder, session_store,
                          start_workflow)
 from .powergrader_helpers import (
@@ -116,6 +116,7 @@ def powergrader_setup(request: Request):
             saved_courses=config.active_courses(),
             rubrics=[r["label"] for r in list_rubric_files()],
             personas=config.list_personas(),
+            feedback_patterns=config.list_feedback_patterns(),
             has_openrouter=config.has_openrouter_key(),
             openrouter_model=config.get_openrouter_model(),
             default_openrouter_model=config.DEFAULT_OPENROUTER_MODEL,
@@ -167,6 +168,7 @@ def pg_estimate(
     assignment_id: str = Form(""),
     rubric_name: str = Form(""),
     persona_id: str = Form("sage"),
+    feedback_pattern_id: str = Form(""),
     model_id: str = Form(""),
     response_kind: str = Form("scr"),
     source_text: str = Form(""),
@@ -195,7 +197,8 @@ def pg_estimate(
     rubric_text = context.load_rubric_text(rubric_name)
     persona = config.get_persona(persona_id)
     patterns = config.list_feedback_patterns()
-    fb_pattern = patterns[0] if patterns else None
+    fb_pattern = next((item for item in patterns if item.get("id") == feedback_pattern_id), None)
+    fb_pattern = fb_pattern or (patterns[0] if patterns else None)
     preset = source_materials.response_preset(response_kind)
     bundle = estimates.estimate_bundle(
         assignment_name,
@@ -253,6 +256,7 @@ def pg_start(
     watch_late: str = Form("true"),
     rubric_name: str = Form(""),
     persona_id: str = Form("sage"),
+    feedback_pattern_id: str = Form(""),
     model_id: str = Form(""),
     response_kind: str = Form("scr"),
     source_text: str = Form(""),
@@ -314,6 +318,7 @@ def pg_start(
         session_id=session_id,
         rubric_name=rubric_name,
         persona_id=persona_id,
+        feedback_pattern_id=feedback_pattern_id,
         selected_model=selected_model,
         response_kind=response_kind,
         source_text=source_text,
@@ -403,6 +408,31 @@ def pg_start(
         copilot_packet=ai_result.get("copilot_packet"),
         evidence_status=refresh.get("status", "unknown"),
     ))
+
+
+@router.post("/api/powergrader/new-quiz-csv")
+async def pg_new_quiz_csv(
+    course_id: str = Form(""), assignment_id: str = Form(""),
+    assignment_name: str = Form(""), csv_upload: UploadFile = File(None),
+):
+    context_value, error = _powergrader_assignment_context(course_id, assignment_id)
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    if not workspace.workspace_root():
+        return JSONResponse({"ok": False, "error": "No workspace configured — finish setup first."})
+    if not csv_upload:
+        return JSONResponse({"ok": False, "error": "Choose a Student Analysis CSV first."})
+    raw = await csv_upload.read()
+    try:
+        session = new_quiz_csv.make_csv_session(
+            session_id=str(uuid.uuid4()), course_id=course_id, assignment_id=assignment_id,
+            assignment_name=assignment_name or assignment_id, raw=raw,
+        )
+    except new_quiz_csv.CsvProvenanceError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)})
+    _save_session(session)
+    return JSONResponse({"ok": True, "session_id": session["session_id"],
+                         "student_count": len(session["students"]), "review_only": True})
 
 
 @router.get("/api/powergrader/session/{session_id}")
@@ -588,6 +618,23 @@ def _new_quiz_apply(session: dict, student: dict, decisions: list[dict], pending
         assignment_id=str(session["assignment_id"]), user_id=str(student["user_id"]),
         decisions=decisions, baseline=pending,
     )
+
+
+def _resolve_new_quiz_csv(session: dict, student: dict, row: dict) -> dict:
+    return new_quiz_grader.resolve_csv_provenance(
+        canvas_base=config.get_canvas_base(), token=config.get_token(),
+        assignment_id=str(session["assignment_id"]), user_id=str(student["user_id"]),
+        attempt=int(row["attempt"]), item_ids=list(row["item_ids"]),
+    )
+
+
+@router.post("/api/powergrader/session/{session_id}/new-quiz-csv-resolve")
+def pg_new_quiz_csv_resolve(session_id: str, user_id: str = Form("")):
+    payload, status_code = session_actions.resolve_new_quiz_csv_provenance(
+        session_id, user_id=user_id, load_session=_load_session, save_session=_save_session,
+        resolver=_resolve_new_quiz_csv,
+    )
+    return JSONResponse(payload, status_code=status_code)
 
 
 @router.post("/api/powergrader/session/{session_id}/new-quiz-review")

@@ -90,19 +90,21 @@ Rules enforced by `validate_results`:
 - Per-criterion rubric scoring (`rubric_assessment[criterion_id][points]`) - v1 posts a
   single `score` as `posted_grade`.
 
-## How Phase C (Push to Canvas) consumes this - built
+## How reviewed PowerGrader sessions consume this
 
-Implemented in `api/webui/routes/feedback.py` (`/api/feedback/push/preview` and
-`/push/apply`) and surfaced as the **Push to Canvas** panel on the feedback tools page.
+The retired FeedbackExpert direct-push routes do not consume this contract. A named
+PowerGrader session validates imported results against its SAFE bundle, re-identifies
+through the local vault, and uses its frozen review/current-state/idempotency/receipt path
+for any Canvas write.
 
-1. Teacher pastes the conforming results JSON into the Push panel.
+1. Teacher starts a packet-mode PowerGrader session, then pastes or locally selects a
+   compatible result JSON file in that session.
 2. `validate_results(results, bundle, vault)` must be `ok` (hard errors block; warnings shown).
    The SAFE bundle is loaded best-effort for coverage/score-range cross-checks.
 3. `reidentify(results, vault)` maps `pseudonym` to `canvas_id` / `real_name`.
-4. In-browser review preview shows real names, current Canvas grade, new score, and comment.
-   Already-graded rows are unchecked by default (overwrite is opt-in); unresolved pseudonyms
-   cannot be posted.
-5. On explicit count-confirm, push per selected row via `_canvas_send`:
+4. PowerGrader shows local suggestions for teacher edit/approval, freezes the current Canvas
+   state before write, and refuses stale or unresolved results.
+5. On explicit PowerGrader review confirmation, its guarded submission transport writes:
 
    ```text
    PUT /api/v1/courses/{course_id}/assignments/{assignment_id}/submissions/{canvas_id}

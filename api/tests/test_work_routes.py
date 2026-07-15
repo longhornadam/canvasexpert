@@ -225,8 +225,23 @@ def test_scheduled_and_detected_presentations_are_semantic_and_private(monkeypat
         counts={"total": 4, "pending": 4, "affected": 4},
         now="2026-07-11T12:00:00+00:00", resumable_url="/roster",
     )
+    follow_up = finding(
+        kind="grade.followup", course_id="course-1", assignment_id="assignment-follow-up",
+        counts={"total": 2, "pending": 2, "affected": 2},
+        now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+    )
+    staff_check = finding(
+        kind="grade.staff_check", course_id="course-1", assignment_id="assignment-staff-check",
+        counts={"total": 1, "pending": 1, "affected": 1},
+        now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+    )
+    ready = finding(
+        kind="grade.powergrader_ready", course_id="course-1", assignment_id="assignment-ready",
+        counts={"total": 3, "pending": 3, "affected": 3},
+        now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+    )
     monkeypatch.setattr(
-        work.adapters, "collect_local_jobs", lambda: [scheduled, debt, late, roster]
+        work.adapters, "collect_local_jobs", lambda: [scheduled, debt, late, roster, follow_up, staff_check, ready]
     )
     monkeypatch.setattr(autoscore_queue, "load_queue", lambda: {
         "version": 1,
@@ -257,6 +272,24 @@ def test_scheduled_and_detected_presentations_are_semantic_and_private(monkeypat
     assert by_kind["late.work"]["action_label"] == "Open Gradebook"
     assert by_kind["roster.warning"]["summary"] == "4 roster issues need review"
     assert by_kind["roster.warning"]["action_label"] == "Open Roster"
+    assert by_kind["grade.followup"] == {
+        "course_label": "Fictional Course",
+        "title": "Student follow-up",
+        "summary": "2 responses need a human check",
+        "action_label": "Open PowerGrader",
+    }
+    assert by_kind["grade.staff_check"] == {
+        "course_label": "Fictional Course",
+        "title": "Staff response check",
+        "summary": "1 response needs a staff response check",
+        "action_label": "Open PowerGrader",
+    }
+    assert by_kind["grade.powergrader_ready"] == {
+        "course_label": "Fictional Course",
+        "title": "PowerGrader-ready",
+        "summary": "3 ungraded text entries ready for review",
+        "action_label": "Open PowerGrader",
+    }
     serialized = json.dumps(payload)
     for forbidden in ("Private Queue Learner", "Private Queue Comment", "Private Queue Grade"):
         assert forbidden not in serialized

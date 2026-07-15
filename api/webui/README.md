@@ -17,8 +17,9 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 
 | Route | Page | JS |
 |---|---|---|
-| `/` | **Desk** — the cross-course Start / Continue / Attention / Prepared / Receipts surface | `dashboard.html` + `desk.js` |
-| `/course-expert` | **Work tools** — all push tools + downloads, in tabs | `push.js` + `push/*.js`, `course_expert/*.js` |
+| `/` | **Home** — the cross-course Start / Continue / Attention / Prepared / Receipts surface | `dashboard.html` + `desk.js` |
+| `/course-expert` | **Create** — quiz, assignment, page, rubric, and quick-column tools | `push.js` + `push/*.js`, `course_expert/*.js` |
+| `/students/reports` | **Student reports** — packet and portfolio tools under Students | `student_reports.html` + `course_expert/student_reports.js` + `course_expert/portfolio.js` |
 | `/gradebook` | **Gradebook tools** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
 | `/roster` | **Rosters** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
 | `/powergrader` | **PowerGrader** — grade one assignment with three routes: Grade myself, Prepare for my AI chat, or Draft-score with OpenRouter | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
@@ -29,9 +30,9 @@ For backend overview, setup, files table, and confirmed Canvas API facts, see `a
 | `/about` | What-is-Canvas-Expert explainer | — |
 | `/forge/quizforge/` | Embedded QuizForge zero-auth compiler (separate Pyodide app) | its own |
 
-### Work tools module routing
+### Create module routing
 
-Work tools are split for low-token debugging.
+Create is split for low-token debugging.
 
 - Page/template owner: `course_expert.html`
 - Shared browser files: `push/core.js`, `push/file_sources.js`, `push/delivery.js`, `push/rubrics.js`, `push/course_picker.js`, `push.js`
@@ -86,20 +87,23 @@ Roster has backend helper splits and browser feature files.
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
 
-### Feedback tools module routing — Batch feedback & import results
+### Feedback tools module routing — PowerGrader advanced import
 
-Feedback Expert is the **batch scoring** workflow (not assignment-by-assignment grading — use PowerGrader for that). It supports New Quiz CSV workflows, manual tool imports, and OpenRouter draft scoring. Privacy-sensitive and split across route, pipeline, vault, scrub,
-and safety helpers, plus browser feature scripts.
+`/feedback-expert` is a compatibility redirect to `/powergrader?advanced=import`.
+PowerGrader owns packet creation, OpenRouter drafting, CSV fallback review, session-bound
+result import, teacher review, and Canvas write safeguards. `feedback_*` remains the
+shared SAFE/PRIVATE, vault, contract, result-validation, persona, and pattern engine;
+the legacy direct-push presentation and routes are retired.
 
-- Route owner: `api/webui/routes/feedback.py`
-- Route feature files: `routes/feedback_manual.py`, `routes/feedback_library.py`, `routes/feedback_run.py`, `routes/feedback_push.py`
-- Pipeline facade: `api/feedback_pipeline.py`
-- Pipeline feature files: `api/feedback_artifacts.py`, `api/feedback_contract.py`, `api/feedback_results.py`
-- Privacy helpers: `api/feedback_vault.py`, `api/feedback_scrub.py`, `api/feedback_safety.py`
-- Browser feature files: `static/feedback/core.js`, `static/feedback/folders.js`, `static/feedback/personas.js`, `static/feedback/guided_run.js`, `static/feedback/manual.js`, `static/feedback/openrouter.js`, `static/feedback/push.js`
-- Main templates: `feedback_expert.html`, `name_manager.html`
+- Compatibility redirect: `routes/pages.py::feedback_expert_page`
+- Active UI: `powergrader_setup.html`, `powergrader_queue.html`, and
+  `static/powergrader/setup_advanced.js` / `queue_import.js`
+- Shared library API: `routes/feedback_library.py`
+- Shared engines: `api/feedback_pipeline.py`, `api/feedback_artifacts.py`,
+  `api/feedback_contract.py`, `api/feedback_results.py`, `api/feedback_vault.py`,
+  `api/feedback_scrub.py`, `api/feedback_safety.py`
 
-For the full ownership map and privacy-sensitive routing notes, see `docs/reference/feedbackexpert-module-map.md`.
+For privacy-sensitive ownership, see `docs/reference/feedbackexpert-module-map.md`.
 
 ---
 
@@ -142,12 +146,12 @@ Root folder for submission downloads. Each course gets its own subfolder.
 
 ---
 
-## Desk (`/`)
+## Home (`/`)
 
-Desk is the full-width local landing surface for Start, Continue, Attention,
+Home is the full-width local landing surface for Start, Continue, Attention,
 Prepared, Receipts, and Current-course context. Its initial view is rendered from
 local Current-course configuration, the work registry, and real receipt
-projections. Readiness continues to come from `/api/readiness`; the Desk's
+projections. Readiness continues to come from `/api/readiness`; Home's
 asynchronous Scan uses the guarded `POST /api/work/scan` route and never scans
 Canvas during an ordinary `GET /api/work`.
 
@@ -159,7 +163,7 @@ specific action label. Exact registry jobs remain generic and PII-minimized; the
 never opens full PowerGrader sessions or scans Canvas. Ignore, Snooze, and Complete use
 the guarded local mutation routes. Prepared is intentionally honest until prepared-operation
 projections are available, and currently reports that there are no prepared
-operations. Desk reads `/api/work` and `/api/receipts`, does not call
+operations. Home reads `/api/work` and `/api/receipts`, does not call
 `/api/operations`, and does not alter the legacy `/api/activity` behavior.
 
 ### Routines
@@ -233,14 +237,14 @@ running their own copy who are comfortable writing Python (or having their LLM w
 
 ---
 
-## Work Tools (`/course-expert`)
+## Create (`/course-expert`)
 
-One page, six tabs: **Quiz · Assignment · Page · Rubric · Student Reports · *Quick***.
+One page, five tabs: **Quiz · Assignment · Page · Rubric · *Quick***.
 
 **Target courses** are picked from Current courses in a compact **header dropdown** (Gradebook-style, but
 multi-select): checkboxes add courses to the push set; clicking a course **name**
 focuses it. The **focused** course feeds course-specific dropdowns (grading
-categories, modules) and is the source for Download Work. The trigger shows the
+categories and modules. The trigger shows the
 focused course + "· N selected". Pushes go to **every checked course** in one shot.
 
 **File sources:** every Forge-file picker offers **Library** (workspace folder
@@ -297,7 +301,7 @@ to a canonical course-first folder tree: `Courses/<Course>/Assignments/<Assignme
 entry), grading category, due date, publish — created in every checked course.
 No Forge file involved; for authored instructions use the Assignment tab.
 
-### Student Reports tab
+## Student reports (`/students/reports`)
 On-demand per-student packet: pick a course → load the roster → pick a student →
 check the sections to include → **Generate**. Runs across **every Current course**
 the student is in, not just the one used to load the roster.

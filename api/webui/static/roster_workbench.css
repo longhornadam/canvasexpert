@@ -52,6 +52,8 @@
   cursor: pointer;
 }
 
+.roster-workbench-lenses a.roster-lens-btn { text-decoration: none; }
+
 .roster-workbench-lenses .roster-lens-btn span {
   display: block;
   margin-top: 1px;

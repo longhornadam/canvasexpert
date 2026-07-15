@@ -62,6 +62,9 @@ def review_new_quiz_finalization(session_id: str, *, user_id: str, decisions_jso
     student = next((item for item in session.get("students", []) if str(item.get("user_id")) == str(user_id)), None)
     if not student:
         return {"ok": False, "code": "student_not_found", "error": "Student not found in session."}, 200
+    provenance = session.get("new_quiz_csv_provenance") or {}
+    if provenance and str(user_id) not in (provenance.get("bindings") or {}):
+        return {"ok": False, "code": "csv_provenance_unresolved", "error": "Resolve this CSV row against the current New Quiz result before finalizing."}, 200
     if student.get("speedgrader_required"):
         return {"ok": False, "code": "speedgrader_required", "error": "This student's New Quiz evidence requires SpeedGrader review."}, 200
     decisions, error = _new_quiz_decisions(decisions_json)
@@ -72,6 +75,15 @@ def review_new_quiz_finalization(session_id: str, *, user_id: str, decisions_jso
     except Exception as exc:
         code = getattr(exc, "code", "new_quiz_preflight_failed")
         return {"ok": False, "code": code, "error": "Canvas could not freeze this student's current New Quiz result."}, 200
+    if provenance:
+        binding = (provenance.get("bindings") or {}).get(str(user_id)) or {}
+        if (str(baseline.get("result_id") or "") != str(binding.get("result_id") or "")
+                or str(baseline.get("state_digest") or "") != str(binding.get("state_digest") or "")):
+            student["speedgrader_required"] = True
+            student["csv_provenance_stale"] = True
+            invalidate_pending_review(session)
+            save_session(session)
+            return {"ok": False, "code": "csv_provenance_stale", "error": "The current New Quiz result changed; resolve it again or use SpeedGrader."}, 200
     pending = {
         "token": secrets.token_urlsafe(32), "created_at": _iso(_now()),
         "expires_at": _iso(_now() + REVIEW_TTL), "user_id": str(user_id),
@@ -81,6 +93,51 @@ def review_new_quiz_finalization(session_id: str, *, user_id: str, decisions_jso
     session["pending_new_quiz_review"] = pending
     save_session(session)
     return {"ok": True, "review_token": pending["token"], "expires_at": pending["expires_at"], "item_count": len(decisions)}, 200
+
+
+def resolve_new_quiz_csv_provenance(session_id: str, *, user_id: str,
+                                    load_session, save_session, resolver) -> tuple[dict, int]:
+    """Resolve one CSV row with the existing signed authoritative-read chain."""
+    session = load_session(session_id)
+    if not session:
+        return {"ok": False, "code": "session_not_found", "error": "Session not found."}, 404
+    provenance = session.get("new_quiz_csv_provenance") or {}
+    if not provenance:
+        return {"ok": False, "code": "csv_provenance_unavailable", "error": "This is not a CSV fallback session."}, 200
+    if (str(provenance.get("course_id")) != str(session.get("course_id"))
+            or str(provenance.get("assignment_id")) != str(session.get("assignment_id"))):
+        return {"ok": False, "code": "csv_session_scope_mismatch", "error": "The CSV session scope is no longer valid; use SpeedGrader."}, 200
+    student = next((item for item in session.get("students", []) if str(item.get("user_id")) == str(user_id)), None)
+    row = next((item for item in provenance.get("rows", []) if str(item.get("user_id")) == str(user_id)), None)
+    if not student or not row or str(student.get("new_quiz_attempt")) != str(row.get("attempt")):
+        return {"ok": False, "code": "csv_student_mismatch", "error": "The CSV student record cannot be safely bound; use SpeedGrader."}, 200
+    try:
+        binding = resolver(session, student, row)
+    except Exception as exc:
+        student["speedgrader_required"] = True
+        invalidate_pending_review(session)
+        save_session(session)
+        return {"ok": False, "code": getattr(exc, "code", "csv_provenance_unavailable"), "error": "The current New Quiz result could not be safely matched; use SpeedGrader."}, 200
+    if not isinstance(binding, dict) or not binding.get("result_id") or not binding.get("state_digest"):
+        student["speedgrader_required"] = True
+        save_session(session)
+        return {"ok": False, "code": "csv_provenance_unavailable", "error": "The current New Quiz result could not be safely matched; use SpeedGrader."}, 200
+    try:
+        bound_attempt = int(binding.get("attempt"))
+    except (TypeError, ValueError):
+        student["speedgrader_required"] = True
+        save_session(session)
+        return {"ok": False, "code": "csv_provenance_mismatch", "error": "The current New Quiz result could not be safely matched; use SpeedGrader."}, 200
+    provenance.setdefault("bindings", {})[str(user_id)] = {
+        "result_id": str(binding["result_id"]), "state_digest": str(binding["state_digest"]),
+        "attempt": bound_attempt,
+    }
+    # Native/manual evidence remains a whole-student SpeedGrader requirement.
+    student["speedgrader_required"] = bool(student.get("csv_native_manual_evidence"))
+    student.pop("csv_provenance_stale", None)
+    invalidate_pending_review(session)
+    save_session(session)
+    return {"ok": True, "status": "resolved" if not student["speedgrader_required"] else "speedgrader_required"}, 200
 
 
 def finalize_new_quiz(session_id: str, *, user_id: str, review_token: str, decisions_json: str,

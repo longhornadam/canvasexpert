@@ -3,6 +3,7 @@
   var q = window.CE_POWERGRADER_QUEUE || (window.CE_POWERGRADER_QUEUE = {});
   var region = document.getElementById('pg-new-quiz-items');
   var finalBtn = document.getElementById('pg-new-quiz-finalize');
+  var resolveBtn = document.getElementById('pg-new-quiz-csv-resolve');
   var speed = document.getElementById('pg-new-quiz-speedgrader');
   var scoreRow = document.querySelector('.pg-score-row');
   var feedback = document.getElementById('pg-feedback');
@@ -10,6 +11,7 @@
   function esc(value) { var el=document.createElement('div'); el.textContent=String(value || ''); return el.innerHTML; }
   function current() { return (q.getStudents ? q.getStudents() : [])[q.getIndex ? q.getIndex() : 0] || null; }
   function isNewQuiz() { var s=q.getSession && q.getSession(); return !!(s && s.new_quiz_item_finalization_supported); }
+  function isCsvFallback() { var s=q.getSession && q.getSession(); return !!(s && s.new_quiz_csv_provenance); }
   function speedgraderUrl(st) { return (q.getCanvasBase ? q.getCanvasBase() : '') + '/courses/' + encodeURIComponent((q.getSession() || {}).course_id || '') + '/gradebook/speed_grader?assignment_id=' + encodeURIComponent((q.getSession() || {}).assignment_id || '') + '&student_id=' + encodeURIComponent(st.user_id || ''); }
   function manualItems(st) { return (st.new_quiz_items || []).filter(function(item){ return String(item.type || '').toLowerCase() === 'essay'; }); }
   function autoItems(st) { return (st.new_quiz_items || []).filter(function(item){ return String(item.type || '').toLowerCase() !== 'essay'; }); }
@@ -21,13 +23,15 @@
   }
   q.renderNewQuizItems = function(st) {
     if (!region || !finalBtn || !speed) return;
-    if (!isNewQuiz() || !st || !(st.new_quiz_items || []).length) { region.hidden=true; finalBtn.hidden=true; speed.style.display='none'; return; }
+    if (!isNewQuiz() || !st || !(st.new_quiz_items || []).length) { region.hidden=true; finalBtn.hidden=true; if(resolveBtn)resolveBtn.hidden=true; speed.style.display='none'; return; }
     if (scoreRow) scoreRow.hidden=true;
     if (feedback) feedback.placeholder='Optional whole-assignment feedback. This uses the separate comment-only lane.';
     if (st.speedgrader_required) {
-      region.hidden=false; region.innerHTML='<div class="pg-ai-header"><span class="pg-ai-badge-sm">Canvas review required</span></div><p>This student has file/media or unsupported manual evidence. Keep the full grading decision in SpeedGrader; PowerGrader will not split authority across items.</p>';
-      finalBtn.hidden=true; speed.href=speedgraderUrl(st); speed.style.display='block'; return;
+      var unresolved=isCsvFallback() && (!((q.getSession().new_quiz_csv_provenance.bindings || {})[String(st.user_id)]) || st.csv_provenance_stale);
+      region.hidden=false; region.innerHTML='<div class="pg-ai-header"><span class="pg-ai-badge-sm">Canvas review required</span></div><p>' + (unresolved ? 'This CSV row is review-only until PowerGrader matches it to the current authoritative New Quiz result.' : 'This student has file/media or unsupported manual evidence. Keep the full grading decision in SpeedGrader; PowerGrader will not split authority across items.') + '</p>';
+      finalBtn.hidden=true; if(resolveBtn)resolveBtn.hidden=!unresolved; speed.href=speedgraderUrl(st); speed.style.display='block'; return;
     }
+    if(resolveBtn) resolveBtn.hidden=true;
     var items=manualItems(st);
     if (!items.length) { region.hidden=false; region.innerHTML='<p>All New Quiz items are auto-graded and read-only.</p>'; finalBtn.hidden=true; speed.style.display='none'; return; }
     region.hidden=false; speed.style.display='none'; finalBtn.hidden=false;
@@ -53,5 +57,16 @@
       if(!review.ok) throw new Error(review.error || 'Could not freeze the New Quiz result.');
       return window.CE_WRITE_REVIEW.confirm({title:'Finalize New Quiz student',action:'Write the entered item scores and composed item feedback',details:['Canvas will re-check the complete item result set before one write.'],warnings:['Auto-graded items and fudge points stay unchanged.'],confirmText:'Finalize student'}).then(function(yes){if(!yes)return null; var apply=new FormData();apply.append('user_id',st.user_id);apply.append('review_token',review.review_token);apply.append('item_decisions',JSON.stringify(rows));return fetch('/api/powergrader/session/'+sessionId+'/new-quiz-finalize',{method:'POST',body:apply}).then(function(r){return r.json();});});
     }).then(function(result){ if(!result)return; if(!result.ok) throw new Error(result.error || 'Finalization was not verified.'); st.new_quiz_finalized=true; if(q.showStatus)q.showStatus('New Quiz item scores and feedback finalized.',false); }).catch(function(err){if(q.showStatus)q.showStatus(String(err.message || err),true);}).finally(function(){finalBtn.disabled=false;});
+  });
+  resolveBtn && resolveBtn.addEventListener('click', function(){
+    var st=current(); if(!st)return; resolveBtn.disabled=true;
+    var body=new FormData(); body.append('user_id',st.user_id);
+    fetch('/api/powergrader/session/'+sessionId+'/new-quiz-csv-resolve',{method:'POST',body:body})
+      .then(function(r){return r.json();}).then(function(result){
+        if(!result.ok) throw new Error(result.error || 'Could not resolve the New Quiz result.');
+        if(q.reloadSession) return q.reloadSession();
+        window.location.reload();
+      }).catch(function(err){if(q.showStatus)q.showStatus(String(err.message || err),true);})
+      .finally(function(){resolveBtn.disabled=false;});
   });
 })();

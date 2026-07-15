@@ -9,6 +9,7 @@
   var copilotBatches = document.getElementById('pg-copilot-batches');
   var legacyImportBox = document.getElementById('pg-legacy-import-box');
   var importJson = document.getElementById('pg-import-json');
+  var importFile = document.getElementById('pg-import-result-file');
   var importBtn = document.getElementById('pg-import-results');
   var importStatus = document.getElementById('pg-import-status');
 
@@ -193,6 +194,17 @@
   if (getSession()) renderPacketPanel(getSession());
 
   importBtn && importBtn.addEventListener('click', importLegacyResults);
+  importFile && importFile.addEventListener('change', function () {
+    var file = importFile.files && importFile.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      if (importJson) importJson.value = String(reader.result || '');
+      if (importStatus) importStatus.textContent = 'Result file loaded locally. Validate and import it into this session.';
+    };
+    reader.onerror = function () { if (importStatus) importStatus.textContent = 'Could not read that result file.'; };
+    reader.readAsText(file, 'utf-8');
+  });
 
   document.addEventListener('click', function(e) {
     var copyBtn = e.target.closest('[data-copy-batch-prompt]');

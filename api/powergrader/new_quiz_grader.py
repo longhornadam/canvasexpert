@@ -173,6 +173,27 @@ def preflight(*, canvas_base: str, token: str, assignment_id: str, user_id: str,
     return {"result_id": state["result_id"], "state_digest": _digest(state), "decision_digest": _digest(decisions)}
 
 
+def resolve_csv_provenance(*, canvas_base: str, token: str, assignment_id: str,
+                           user_id: str, attempt: int, item_ids: list[str], http_session=None) -> dict:
+    """Bind one CSV row to the current signed New Quiz result or fail closed."""
+    context = _signed_context(canvas_base=canvas_base, token=token,
+                              assignment_id=assignment_id, user_id=user_id,
+                              http_session=http_session)
+    current = _read_current(context)
+    actual_attempt = current["authoritative"].get("attempt")
+    try:
+        same_attempt = int(actual_attempt) == int(attempt)
+    except (TypeError, ValueError):
+        same_attempt = False
+    expected = [str(value or "") for value in item_ids]
+    actual = [str(row.get("item_id") or "") for row in current["rows"]]
+    if (not same_attempt or not expected or not all(expected) or len(set(expected)) != len(expected)
+            or set(actual) != set(expected)):
+        raise GraderError("csv_provenance_mismatch")
+    state = _result_state(current["authoritative"], current["rows"])
+    return {"result_id": state["result_id"], "state_digest": _digest(state), "attempt": int(actual_attempt)}
+
+
 def apply(*, canvas_base: str, token: str, assignment_id: str, user_id: str, decisions: list[dict], baseline: dict, http_session=None) -> dict:
     context = _signed_context(canvas_base=canvas_base, token=token, assignment_id=assignment_id, user_id=user_id, http_session=http_session)
     current = _read_current(context)

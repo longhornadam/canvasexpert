@@ -174,6 +174,27 @@ def _aggregate_summary(job: dict) -> tuple[str, str, str]:
             f"{count} {_plural(count, 'submission')} awaiting grading",
             "Open PowerGrader",
         )
+    if kind == "grade.followup":
+        count = affected
+        return (
+            "Student follow-up",
+            f"{count} {_plural(count, 'response')} {'needs' if count == 1 else 'need'} a human check",
+            "Open PowerGrader",
+        )
+    if kind == "grade.staff_check":
+        count = affected
+        return (
+            "Staff response check",
+            f"{count} {_plural(count, 'response')} needs a staff response check",
+            "Open PowerGrader",
+        )
+    if kind == "grade.powergrader_ready":
+        count = pending
+        return (
+            "PowerGrader-ready",
+            f"{count} ungraded text {_plural(count, 'entry', 'entries')} ready for review",
+            "Open PowerGrader",
+        )
     if kind == "late.work":
         count = affected
         return "Late work", f"{count} late {_plural(count, 'submission')}", "Open Gradebook"

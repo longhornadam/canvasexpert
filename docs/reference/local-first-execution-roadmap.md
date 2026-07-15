@@ -61,9 +61,9 @@ These are not delegated architecture questions:
    selected Current course, opens from last-good local state, refreshes once per course per
    page session, and offers explicit retry. No roster, submissions, comments, reports, or
    binaries enter this catalog. A broader multi-surface coordinator remains unapproved.
-4. **Before Luna 7:** decide the surviving home for the existing Student Reports workflow.
-   Do not invent the rejected Parent Conference Prep product merely to make navigation
-   symmetrical.
+4. **Before Luna 7 — resolved 2026-07-15:** Student Reports lives at
+   `/students/reports`, linked from the existing Students/Roster surface. Do not invent the
+   rejected Parent Conference Prep product merely to make navigation symmetrical.
 
 ## Luna 1 — Focused assignment refresh with one local evidence owner **(GREEN accepted 2026-07-14)**
 
@@ -323,6 +323,12 @@ thread state that does not exist.
 
 ## Luna 6 — Consolidate FeedbackExpert into the grading owner
 
+**Status: GREEN — implemented 2026-07-14.** `/feedback-expert` now redirects to
+PowerGrader advanced import. PowerGrader owns session-bound packet/result-file recovery,
+persona/pattern controls, New Quiz CSV provenance binding, review, and Canvas writes; the
+legacy direct-push presentation/routes are retired while workspace compatibility reads and
+shared feedback engines remain.
+
 Depends on: **Luna 3 GREEN**. It may follow Luna 5 so the teacher-facing grading model is
 stable before route retirement.
 
@@ -363,7 +369,9 @@ Expected verification seam:
 Stop if parity requires changing the public scoring contract, weakening vault boundaries, or
 silently migrating/deleting private data.
 
-## Luna 7 — Finish the smaller teacher-facing product surface
+## Luna 7 — Finish the smaller teacher-facing product surface **(YELLOW: browser verification pending 2026-07-15)**
+
+Implementation record: `docs/handoffs/teacher-surface-finish-luna7.md`.
 
 Depends on: **Lunas 2, 5, and 6 GREEN** plus the Student Reports placement decision.
 
@@ -381,8 +389,9 @@ Required scope:
   task ownership is true.
 - Keep Forge contract names and internal `PowerGrader`, `FeedbackExpert`, operation-ledger,
   and compatibility workspace identifiers where renaming would create migration risk.
-- Place the existing Student Reports workflow according to the senior/user decision without
-  expanding its product scope.
+- Student Reports is now a dedicated `/students/reports` page inside Students; the old
+  `/course-expert?tab=students` bookmark redirects there. Its private routes, report roots,
+  monitored-student data, CSV uploads, and portfolio logic remain unchanged.
 - Update `workbench-canonical-flow-map.md`, affected module maps, and teacher-facing README
   material in the same batch.
 - Preserve redirects for external bookmarks where cheap; remove only proven dead templates,

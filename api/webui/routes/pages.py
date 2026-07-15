@@ -90,6 +90,8 @@ def dashboard(request: Request):
 
 @router.get("/course-expert", response_class=HTMLResponse)
 def course_expert_page(request: Request):
+    if request.query_params.get("tab") == "students":
+        return RedirectResponse("/students/reports", status_code=307)
     skills = list_ai_ta_files()
     return templates.TemplateResponse(request, "course_expert.html", {
         **_push_base_ctx(request),
@@ -102,6 +104,15 @@ def course_expert_page(request: Request):
             "page":       _authoring_skill(skills, "Author a Page"),
             "rubric":     _authoring_skill(skills, "Author a Rubric"),
         },
+    })
+
+
+@router.get("/students/reports", response_class=HTMLResponse)
+def student_reports_page(request: Request):
+    """Dedicated Student Reports presentation; report APIs remain in reports.py."""
+    return templates.TemplateResponse(request, "student_reports.html", {
+        **_push_base_ctx(request),
+        "nav_section": "manage",
     })
 
 
@@ -142,36 +153,10 @@ def ai_expert_page(request: Request):
     })
 
 
-@router.get("/feedback-expert", response_class=HTMLResponse)
-def feedback_expert_page(request: Request):
-    fb = workspace.workspace_root()
-    folders = {}
-    if fb:
-        folders = {
-            "inbox": workspace.courses_root(),
-            "forllm": workspace.ai_packets_root(),
-            "fromllm": workspace.ai_packets_root(),
-            "toenter": workspace.courses_root(),
-            "safe": workspace.ai_packets_root(),
-            "private": workspace.courses_root(),
-            "system": workspace.system_root(),
-        }
-        legacy = workspace.feedback_root()
-        if legacy:
-            folders.update({k: workspace.feedback_folder(v) for k, v in {
-                "inbox": "1_Inbox", "forllm": "2_ForLLM", "fromllm": "3_FromLLM",
-                "toenter": "4_ToEnter", "safe": "SAFE", "private": "PRIVATE",
-                "system": "_system"}.items()})
-    return templates.TemplateResponse(request, "feedback_expert.html", {
-        "nav_section":   "grade",
-        "persona":       config.get_ai_ta_persona(),
-        "feedback_root": fb,
-        "folders":       folders,
-        "saved_courses": config.active_courses(),
-        "openrouter_model": config.get_openrouter_model(),
-        "default_openrouter_model": config.DEFAULT_OPENROUTER_MODEL,
-        "openrouter_model_presets": config.openrouter_model_presets(),
-    })
+@router.get("/feedback-expert", response_class=RedirectResponse)
+def feedback_expert_page():
+    """Keep old bookmarks on the session-bound PowerGrader migration lane."""
+    return RedirectResponse("/powergrader?advanced=import", status_code=307)
 
 
 @router.get("/roster", response_class=HTMLResponse)

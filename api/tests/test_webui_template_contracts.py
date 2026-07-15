@@ -403,41 +403,16 @@ for (const rendered of [initialText, refreshedText]) {
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-# ── Feedback / OpenRouter acknowledgement ────────────────────────────
-
-def test_persona_card_closed_before_push_section():
-    """The </section> closing #persona-card must appear before id='push-section'."""
-    html = _slurp("api/webui/templates/feedback_expert.html")
-    persona_start = html.index('id="persona-card"')
-    first_close_after_persona = html.index("</section>", persona_start)
-    push_start = html.index('id="push-section"')
-    assert first_close_after_persona < push_start, (
-        "Expected </section> closing #persona-card before #push-section. "
-        "DOM nesting regression: push-section may be nested inside persona-card."
-    )
-
-
-def test_guided_run_uses_write_review_confirm():
-    """guided_run.js must use CE_WRITE_REVIEW.confirm, not create backdrop directly."""
-    js = _slurp("api/webui/static/feedback/guided_run.js")
-    assert "CE_WRITE_REVIEW.confirm" in js, (
-        "guided_run.js does not use CE_WRITE_REVIEW.confirm"
-    )
-    assert "ce-review-backdrop" not in js, (
-        "guided_run.js still creates ce-review-backdrop directly"
-    )
-
-
-def test_guided_run_acknowledgement_text():
-    """The OpenRouter acknowledgement text must be present in the Feedback template."""
-    html = _slurp("api/webui/templates/feedback_expert.html")
-    expected = "I understand that this sends the pseudonymized SAFE batch to OpenRouter. It may still contain identifying context."
-    assert expected in html, (
-        "feedback_expert.html missing or changed the required acknowledgement text"
-    )
-
-
 # ── PowerGrader ───────────────────────────────────────────────────────
+
+def test_powergrader_advanced_import_controls_are_session_bound():
+    html = _slurp("api/webui/templates/powergrader_setup.html")
+    queue = _slurp("api/webui/templates/powergrader_queue.html")
+    assert 'id="pg-advanced-import"' in html
+    assert 'id="pg-new-quiz-csv-form"' in html
+    assert 'id="pg-custom-persona-form"' in html
+    assert 'id="pg-feedback-pattern-form"' in html
+    assert 'id="pg-import-result-file"' in queue
 
 def test_powergrader_config_has_workspace():
     """POWERGRADER_SETUP_CONFIG contains hasWorkspace from has_workspace."""

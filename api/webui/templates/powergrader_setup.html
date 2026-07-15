@@ -144,6 +144,14 @@
             </select>
           </div>
           <div class="pg-control-group">
+            <label for="pg-feedback-pattern">Feedback pattern</label>
+            <select name="feedback_pattern_id" id="pg-feedback-pattern">
+              {% for pattern in feedback_patterns %}
+              <option value="{{ pattern.id }}">{{ pattern.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="pg-control-group">
             <div class="pg-control-head">
               <label for="pg-persona">AI persona</label>
               {% if persona_folder %}
@@ -254,6 +262,54 @@
   </form>
 </section>
 
+<details class="card pg-advanced-import" id="pg-advanced-import">
+  <summary>Advanced feedback and imports</summary>
+  <div class="pg-safety-body">
+    <p>Recover an older AI result by starting a packet session above, then importing its pseudonymized JSON or a teacher-selected result file into that named session. PowerGrader validates the session's SAFE packet and keeps teacher review before any Canvas action.</p>
+    <p>For a New Quiz Student Analysis CSV, choose the original course and assignment above, then create a private review-only session here. The CSV is not an authoritative Canvas result: resolve each student against the current Canvas result before item finalization. Any mismatch stays in SpeedGrader.</p>
+    <form id="pg-new-quiz-csv-form" enctype="multipart/form-data">
+      <label for="pg-new-quiz-csv">Student Analysis CSV
+        <input id="pg-new-quiz-csv" name="csv_upload" type="file" accept=".csv,text/csv" required>
+      </label>
+      <button type="submit" class="small">Create private CSV review session</button>
+      <span id="pg-new-quiz-csv-status" class="hint" aria-live="polite"></span>
+    </form>
+    <hr>
+    <h3>Custom AI persona</h3>
+    <form id="pg-custom-persona-form">
+      <label>Name <input id="pg-custom-persona-name" required maxlength="80" autocomplete="off"></label>
+      <label>Personality <textarea id="pg-custom-persona-personality" rows="3" required></textarea></label>
+      <button type="submit" class="small">Save custom persona</button>
+      <span id="pg-custom-persona-status" class="hint" aria-live="polite"></span>
+    </form>
+    <div class="actions" style="margin-top:6px">
+      <label>Remove custom persona
+        <select id="pg-custom-persona-delete"><option value="">— none —</option></select>
+      </label>
+      <button type="button" id="pg-custom-persona-remove" class="small">Remove</button>
+    </div>
+    <hr>
+    <h3>Feedback pattern</h3>
+    <p class="hint">Patterns shape AI drafts only; they never bypass teacher review.</p>
+    <form id="pg-feedback-pattern-form">
+      <label>Pattern <select id="pg-pattern-edit"></select></label>
+      <label>Name <input id="pg-pattern-name" required maxlength="100" autocomplete="off"></label>
+      <div class="pg-fast-row">
+        <label>Glows min <input id="pg-pattern-glows-min" type="number" min="0" max="10" required></label>
+        <label>Glows max <input id="pg-pattern-glows-max" type="number" min="0" max="10" required></label>
+        <label>Grows min <input id="pg-pattern-grows-min" type="number" min="0" max="10" required></label>
+        <label>Grows max <input id="pg-pattern-grows-max" type="number" min="0" max="10" required></label>
+        <label>Strategy min <input id="pg-pattern-strategy-min" type="number" min="0" max="10" required></label>
+        <label>Strategy max <input id="pg-pattern-strategy-max" type="number" min="0" max="10" required></label>
+      </div>
+      <label><input id="pg-pattern-score" type="checkbox"> Score from rubric</label>
+      <label><input id="pg-pattern-sign" type="checkbox"> Sign with persona</label>
+      <button type="submit" class="small">Save pattern</button>
+      <span id="pg-pattern-status" class="hint" aria-live="polite"></span>
+    </form>
+  </div>
+</details>
+
 <!-- ── Existing sessions ─────────────────────────────────────────────── -->
 <section class="card pg-sessions-card" id="pg-sessions-card" aria-labelledby="pg-session-work-title">
   <div class="pg-section-heading">
@@ -297,4 +353,5 @@ window.POWERGRADER_SETUP_CONFIG = {
 <script src="/static/powergrader/setup_sessions.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/setup_core.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/setup_autoscore.js?v={{ asset_v }}"></script>
+<script src="/static/powergrader/setup_advanced.js?v={{ asset_v }}"></script>
 {% endblock %}

@@ -32,6 +32,7 @@ def run_ai_workflow(
     has_openrouter_key: bool,
     source_context_override: dict | None = None,
     artifact_assignment_name: str | None = None,
+    feedback_pattern_id: str = "",
 ) -> dict:
     """Run the AI/packet workflow for a PowerGrader session.
 
@@ -136,7 +137,8 @@ def run_ai_workflow(
         rubric_text = context.load_rubric_text(rubric_name)
         persona = config.get_persona(persona_id)
         patterns = config.list_feedback_patterns()
-        fb_pattern = patterns[0] if patterns else None
+        fb_pattern = next((item for item in patterns if item.get("id") == feedback_pattern_id), None)
+        fb_pattern = fb_pattern or (patterns[0] if patterns else None)
         model = selected_model
 
         safe_dir, private_dir = privacy.feedback_artifact_dirs(

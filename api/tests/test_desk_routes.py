@@ -72,6 +72,29 @@ def test_desk_empty_render_is_local_and_honest(monkeypatch):
     assert 'name="canvasexpert-csrf-token"' in response.text
 
 
+def test_student_reports_has_a_direct_students_page_and_old_tab_redirect(monkeypatch):
+    _configure(monkeypatch)
+
+    redirected = _client().get("/course-expert?tab=students", follow_redirects=False)
+    response = _client().get("/students/reports")
+    roster = _client().get("/roster")
+    create = _client().get("/course-expert?tab=assignment")
+
+    assert redirected.status_code == 307
+    assert redirected.headers["location"] == "/students/reports"
+    assert response.status_code == 200
+    assert create.status_code == 200
+    assert 'id="ce-tab-assignment"' in create.text
+    for control in ("sr-course", "sr-student", "sr-generate", "nqp-file", "mp-generate"):
+        assert f'id="{control}"' in response.text
+    assert "/static/course_expert/student_reports.js" in response.text
+    assert "/static/course_expert/portfolio.js" in response.text
+    assert "/static/course_expert/student_reports.js" not in create.text
+    assert "/static/course_expert/portfolio.js" not in create.text
+    assert 'nav-section-manage' in response.text
+    assert 'href="/students/reports"' in roster.text
+
+
 def test_desk_populated_render_uses_registry_and_real_receipt_projection(monkeypatch):
     _configure(monkeypatch)
     job = finding(
@@ -149,3 +172,39 @@ def test_desk_populated_powergrader_row_uses_semantic_sidecar(monkeypatch):
     assert "24 students · 22 awaiting review · 2 approved, not posted" in response.text
     assert "Review &amp; post" in response.text
     assert "grade.powergrader · 24 items" not in response.text
+
+
+def test_desk_home_attention_render_is_aggregate_only(monkeypatch):
+    _configure(monkeypatch)
+    jobs = [
+        finding(
+            kind="grade.followup", course_id="course-1", assignment_id="assignment-1",
+            counts={"total": 2, "pending": 2, "affected": 2},
+            now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+        ),
+        finding(
+            kind="grade.staff_check", course_id="course-1", assignment_id="assignment-2",
+            counts={"total": 1, "pending": 1, "affected": 1},
+            now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+        ),
+        finding(
+            kind="grade.powergrader_ready", course_id="course-1", assignment_id="assignment-3",
+            counts={"total": 3, "pending": 3, "affected": 3},
+            now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+        ),
+    ]
+    monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: jobs)
+    monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
+    monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
+
+    response = _client().get("/")
+
+    assert response.status_code == 200
+    for text in (
+        "Student follow-up", "2 responses need a human check",
+        "Staff response check", "1 response needs a staff response check",
+        "PowerGrader-ready", "3 ungraded text entries ready for review",
+    ):
+        assert text in response.text
+    assert "synthetic-student" not in response.text
+    assert "submission_comments" not in response.text
