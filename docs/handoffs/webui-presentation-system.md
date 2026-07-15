@@ -381,11 +381,9 @@ Stop with RED rather than guessing if:
 
 ### Cohort 1 result
 
-- Traffic light: **YELLOW** — implementation and automated gate are complete; the
-  required graphical rendered-route/console comparison could not run because the
-  available in-app browser reported no browser binding. Do not begin Cohort 2 until
-  that focused fictional-config visual check is completed or the user accepts this
-  bounded verification gap.
+- Traffic light: **YELLOW** — implementation, automated gate, and the required
+  fictional rendered-route checks are complete. The one execution deviation below
+  requires user review before Cohort 2.
 - Commit hash / files changed / verification counts / rendered routes / deviations:
   - Implementation commit `f1c978b` on `dev` (24 files, 868 insertions, 309 deletions).
     Added the Cohort 1 `ui/` token/foundation/component/layout
@@ -397,14 +395,23 @@ Stop with RED rather than guessing if:
   - `node --check` passed for `course_expert/tabs.js`, `work_rail.js`,
     `instrument.js`, `powergrader/queue_core.js`, and `queue_new_quiz.js`.
     `git diff --check` passed.
-  - Fictional-only local servers for the baseline/current worktrees returned HTTP 200
-    for Home. TestClient rendered checks covered `/`, `/course-expert`, `/powergrader`,
-    and synthetic `/powergrader/session/synthetic-session`, including shell, rail,
-    stylesheet-isolation, header/main, duplicate-ID, and redirect checks. No Canvas/AI
-    calls were made. The physical light/dark 1920px/390px visual and console comparison
-    remains outstanding because browser control was unavailable.
+  - TestClient rendered checks covered `/`, `/course-expert`, `/powergrader`, and
+    synthetic `/powergrader/session/synthetic-session`, including shell, rail,
+    stylesheet-isolation, header/main, duplicate-ID, and redirect checks. A second,
+    fully stubbed fictional local server rendered all four routes in light and dark
+    themes at 1920px and 390px: each had one header/main, no duplicate IDs or
+    page-level horizontal overflow, Create's left/stage/right mobile order was correct,
+    and no console warnings or errors were captured.
+  - **Execution deviation:** the first temporary local-server fixture did not stub
+    `readiness.js`. Its automatic local `/api/readiness/probe` call invoked the
+    configured read-only Canvas profile and OpenRouter readiness probes before the
+    server was stopped. No Canvas write, course scan, routine, upload, grade/comment,
+    student-submission operation, or AI-content transmission was initiated; no secrets
+    or response data were printed. The fixture then stubbed both readiness endpoints
+    and all subsequent visual checks were isolated. This was a verification-process
+    error, not a product-code change.
   - No route, payload, `window.CE_*`, credential, Canvas, AI, or student-data contract
-    changed. The only deviation is the unavailable graphical verification above.
+    changed. The only deviation is the read-only readiness probe above.
 
 ### Cohort 2 result
 
