@@ -10,8 +10,8 @@ from datetime import datetime
 import requests
 from docx import Document
 
-from submission_transport import download_binary as _download_binary, get_all_pages as _get_all_pages
-from webui.workspace import safe_component
+from api.submission_transport import download_binary as _download_binary, get_all_pages as _get_all_pages
+from api.webui.workspace import safe_component
 
 
 def safe_name(value, max_len=80):
@@ -127,7 +127,7 @@ def _info_blocks(subs, curve_rows, sections):
 
 
 def _signature(subs, curve_rows):
-    """Cheap change-detector for dedupe: latest activity + counts."""
+    """Cheap change-detector for dedupe: latest submission marker + counts."""
     last = max([(s.get("submitted_at") or "") for s in subs] + [""])
     graded = sum(1 for s in subs if s.get("workflow_state") == "graded")
     return f"{last}|{graded}|{len(curve_rows)}"

@@ -28,6 +28,7 @@ For the shared layout/template API and presentation ownership, see
 | `/ai-expert` | **AI helper files** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
+| `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
 | `/about` | What-is-Canvas-Expert explainer | — |
 | `/forge/quizforge/` | Embedded QuizForge zero-auth compiler (separate Pyodide app) | its own |
@@ -44,6 +45,21 @@ Create is split for low-token debugging.
 - Source-material facade/extractors: `source_materials.py`, `source_material_extractors.py`
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/course-expert-module-map.md`.
+
+### Connections and diagnostics
+
+`/connections` is a local, read-only portability page. It displays the current
+health snapshot from `api/diagnostics.py`, offers a server-created support bundle,
+and generates copy-only snippets from `api/connections.py` for generic MCP stdio,
+Claude's folder-linked `.mcpb`, and the optional ChatGPT Secure MCP Tunnel path.
+The page never writes client configuration, installs software, changes `PATH`,
+starts a tunnel, or requests administrator access. Review SAFE material before
+uploading it to any external assistant; no provider is promised to be anonymous
+or FERPA safe.
+
+The old in-memory activity feed is not part of the Web UI. Current job state and
+receipts are served by `/api/work`, `/api/receipts`, and `/api/operations`; the
+sanitized local operational log is owned by `api/operational_log.py`.
 
 ### Settings module routing
 
@@ -65,7 +81,7 @@ PowerGrader is now intentionally split for low-token debugging.
 - Queue page modules: `powergrader_queue.js` (thin shim), `powergrader/queue_core.js`, `powergrader/queue_review.js`, `powergrader/queue_privacy.js`, `powergrader/queue_late_catchup.js`, `powergrader/queue_import.js`
 - Backend workflow package: `api/powergrader/`
 
-For the full ownership map and current line-count snapshot, see `docs/reference/powergrader-module-map.md`.
+For the full ownership map and current source-size report, see `docs/reference/powergrader-module-map.md`.
 
 ### Gradebook module routing
 
@@ -76,7 +92,7 @@ Gradebook is also intentionally split for low-token debugging.
 - Shared browser bootstrap: `gradebook.js`
 - Feature files: `gradebook/policy.js`, `gradebook/extra_time.js`, `gradebook/extensions.js`, `gradebook/sweep.js`, `gradebook/curves.js`, `gradebook/snapshot.js`
 
-For the full ownership map and current size snapshot, see `docs/reference/gradebook-module-map.md`.
+For the full ownership map and current source-size report, see `docs/reference/gradebook-module-map.md`.
 
 ### Roster module routing
 
@@ -168,7 +184,7 @@ Work Registry contract, while PowerGrader retains its full session history. Igno
 the guarded local mutation routes. Prepared is intentionally honest until prepared-operation
 projections are available, and currently reports that there are no prepared
 operations. Home reads `/api/work` and `/api/receipts`, does not call
-`/api/operations`, and does not alter the legacy `/api/activity` behavior.
+`/api/operations`, and does not expose the retired in-memory activity feed.
 
 ### Routines
 

@@ -11,11 +11,11 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import config, activity
+from .. import config
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..schooldays import _school_days_late, _parse_iso_local
 from . import powergrader as pg_routes
-from powergrader import (
+from api.powergrader import (
     ai_workflow,
     autopush_executor,
     autoscore_queue,
@@ -30,10 +30,7 @@ from .routines_builtin import (
     _run_routine_grading_debt, _run_routine_student_reports,
 )
 
-try:
-    from nq_report import html_to_text
-except ModuleNotFoundError:
-    from api.nq_report import html_to_text
+from api.nq_report import html_to_text
 
 router = APIRouter(prefix="/api", tags=["routines"])
 
@@ -228,7 +225,6 @@ def api_routines_run(ids: str = Form(""), force: bool = Form(False)):
             report["ran"].append({"id": rid, "label": meta["label"], **res})
             config.set_routine_state(rid, {"last_run": datetime.now().isoformat(timespec="seconds"),
                                            "last_summary": res["summary"]})
-            activity.log_event("routine", meta["label"], ["(all active)"], res["ok"], detail=res["summary"])
         return JSONResponse(report)
     finally:
         _ROUTINES_LOCK.release()

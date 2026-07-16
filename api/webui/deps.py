@@ -1,13 +1,9 @@
-"""Shared singletons & path constants for the Canvas Expert web app.
+"""Shared stable paths, call-time workspace facades, and templates.
 
 Sits BELOW the routers in the import graph: server.py and every future
-routes/*.py import from here, and this module imports nothing from them. Holds
-the repo/workspace paths, the per-Forge content-folder lists, small path
-helpers, and the Jinja2 templates instance — so splitting routers out of
-server.py never creates an import cycle.
-
-Import is cheap/side-effect-free except one trivial mkdir (TEMP_DIR); the heavy
-startup work lives in server.init_app.
+routes/*.py import from here, and this module imports nothing from them. Stable
+application paths remain available here; workspace-derived paths are delegated
+to ``runtime_paths`` at call time.
 """
 import glob as _glob
 import json as _json
@@ -22,6 +18,7 @@ def _sse(lines):
 
 from fastapi.templating import Jinja2Templates
 
+from api import __version__, runtime_paths
 from . import workspace
 
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -71,53 +68,23 @@ def _key_to_year(key: str) -> str:
 
 
 def _workspace_folder(name: str):
-    return workspace.folder(name)
+    return runtime_paths.workspace_folder(name)
 
 
 def _exports_dir():
     """Where printable (DOCX) versions land: the synced workspace Exports folder
     when OneDrive is present, else the repo-local Finished_Exports fallback."""
-    return _workspace_folder("Exports") or os.path.join(REPO_ROOT, "Finished_Exports")
+    return runtime_paths.exports_dir()
 
 
-# Workspace path is resolved at import (pure); directory creation + seeding
-# happens at server startup (server.init_app), so importing this module stays
-# side-effect-free and cheap (tests, tooling).
-WORKSPACE_ROOT = workspace.workspace_root()
-
-QUIZ_FOLDERS = [
-    os.path.join(API_DIR,   "qf_materials", "qf quiz examples"),
-    os.path.join(REPO_ROOT, "DropZone"),
-    os.path.join(REPO_ROOT, "Finished_Exports"),
-]
-if _workspace_folder("Quizzes"):
-    QUIZ_FOLDERS.append(_workspace_folder("Quizzes"))
-
-RUBRIC_FOLDERS = []
-if _workspace_folder("Rubrics"):
-    RUBRIC_FOLDERS.append(_workspace_folder("Rubrics"))
-RUBRIC_FOLDERS.append(os.path.join(API_DIR, "rubrics"))
-
-ASSIGNMENT_FOLDERS = [
-    os.path.join(API_DIR, "qf_materials", "assignment examples"),
-    os.path.join(API_DIR, "qf_materials", "qf quiz examples"),
-]
-if _workspace_folder("Assignments"):
-    ASSIGNMENT_FOLDERS.append(_workspace_folder("Assignments"))
-
-PAGE_FOLDERS = [os.path.join(API_DIR, "qf_materials", "qf quiz examples")]
-if _workspace_folder("Pages"):
-    PAGE_FOLDERS.append(_workspace_folder("Pages"))
-
-AI_TA_DIR = _workspace_folder("AI-TA") or os.path.join(REPO_ROOT, "AI-TA")
-
-TEMP_DIR = os.path.join(API_DIR, "temp")
-os.makedirs(TEMP_DIR, exist_ok=True)
+# Stable compatibility facade; workspace-derived paths remain call-time only.
+TEMP_DIR = str(runtime_paths.temp_dir())
 
 templates = Jinja2Templates(directory=os.path.join(WEBUI_DIR, "templates"))
 # Cache-bust static assets on every server restart so UI updates land without
 # a hard refresh.
 templates.env.globals["asset_v"] = str(int(time.time()))
+templates.env.globals["app_version"] = __version__
 
 
 # --------------------------------------------------------------------------
@@ -127,7 +94,7 @@ _CUSTOM_DIR = os.path.join(WEBUI_DIR, "..", "custom_routines")
 
 
 # --------------------------------------------------------------------------
-# File-listing helpers (pure; depend only on the folder constants above)
+# File-listing helpers (pure; resolve workspace folders at call time)
 # --------------------------------------------------------------------------
 
 def _list_txt_files(folders):
@@ -141,34 +108,39 @@ def _list_txt_files(folders):
             if abspath in seen:
                 continue
             seen.add(abspath)
+            try:
+                label = os.path.relpath(path, REPO_ROOT)
+            except ValueError:
+                label = os.path.basename(path)
             found.append({
-                "label": os.path.relpath(path, REPO_ROOT),
+                "label": label,
                 "path":  abspath,
             })
     return found
 
 
 def list_quiz_files():
-    return _list_txt_files(QUIZ_FOLDERS)
+    return _list_txt_files(runtime_paths.content_folders("quiz"))
 
 
 def list_assignment_files():
-    return _list_txt_files(ASSIGNMENT_FOLDERS)
+    return _list_txt_files(runtime_paths.content_folders("assignment"))
 
 
 def list_page_files():
-    return _list_txt_files(PAGE_FOLDERS)
+    return _list_txt_files(runtime_paths.content_folders("page"))
 
 
 def list_rubric_files():
-    return _list_txt_files(RUBRIC_FOLDERS)
+    return _list_txt_files(runtime_paths.rubric_folders())
 
 
 def list_ai_ta_files():
     found = []
-    if not os.path.isdir(AI_TA_DIR):
+    ai_ta_dir = runtime_paths.ai_ta_dir()
+    if not os.path.isdir(ai_ta_dir):
         return found
-    for path in sorted(_glob.glob(os.path.join(AI_TA_DIR, "*.txt"))):
+    for path in sorted(_glob.glob(os.path.join(ai_ta_dir, "*.txt"))):
         found.append({
             "label": os.path.basename(path),
             "path": os.path.abspath(path),

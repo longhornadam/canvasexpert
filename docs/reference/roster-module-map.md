@@ -44,23 +44,10 @@ browser scripts through `workspace_scripts` in this order:
 
 `window.CE_ROSTER` is defined in `roster.js` before the feature scripts load.
 
-## Current size snapshot
+## Source-size reports
 
-- `api/webui/routes/roster.py` - 467 lines
-- `api/webui/templates/roster.html` - 190 lines
-- `api/webui/static/roster_workbench.css` - 150 lines
-- `api/webui/static/roster.js` - 218 lines
-- `api/webui/static/roster/table.js` - 169 lines
-- `api/webui/static/roster/filters.js` - 131 lines
-- `api/webui/static/roster/inline_edit.js` - 202 lines
-- `api/webui/static/roster/group_state.js` - 73 lines
-- `api/webui/static/roster/bulk.js` - 136 lines
-- `api/webui/static/roster/groups.js` - 196 lines
-- `api/webui/static/roster/safety.js` - 129 lines
-- `api/webui/routes/roster_updates.py` - 267 lines
-- `api/webui/routes/roster_helpers.py` - 211 lines
-- `api/webui/routes/roster_canvas.py` - 165 lines
-- `api/webui/routes/roster_groups.py` - 149 lines
+Use [`tools/size_report.py`](../../tools/size_report.py) for current source-size
+reports; this map intentionally does not maintain line-count snapshots.
 
 ## Backend routing
 

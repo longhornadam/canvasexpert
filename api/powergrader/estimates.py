@@ -1,10 +1,10 @@
 """Estimate helpers for PowerGrader — student count, bundle estimation, cost labels.
 """
 
-import feedback_pipeline as fp
+from api import feedback_pipeline as fp
 
-from webui import source_materials
-from powergrader.context import apply_shared_context
+from api.webui import source_materials
+from api.powergrader.context import apply_shared_context
 
 
 def assignment_student_count(assignment: dict) -> tuple[int, str]:

@@ -10,37 +10,15 @@ from __future__ import annotations
 
 import re
 
-try:  # pragma: no cover - exercised via one or the other branch
-    from webui.routes.names import _fetch_students, _upsert_roster
-except ModuleNotFoundError:  # package/test context
-    from api.webui.routes.names import _fetch_students, _upsert_roster
-
-try:  # pragma: no cover - exercised via one or the other branch
-    import feedback_safety
-    import feedback_scrub
-    from nq_report import html_to_text
-except ModuleNotFoundError:  # package/test context
-    from api import feedback_safety, feedback_scrub
-    from api.nq_report import html_to_text
+from api.roster_service import fetch_students as _fetch_students
+from api import feedback_safety, feedback_scrub
+from api.nq_report import html_to_text
 
 
 # A scan_payload() hard violation for a leaked real id embeds the id value
 # itself in the message string ("real id '<value>' present at <path>"). Strip
 # it before any violation description can reach an MCP client.
 _REAL_ID_VIOLATION = re.compile(r"^real id '.*?' present at (.+)$")
-
-
-def sync_vault_for_course(vault, course_id: str):
-    """Fetch the current Canvas roster and upsert it into ``vault`` (assigns a
-    pseudonym to any newly-seen student, captures short_name as a nickname so
-    the scrub sees it too). Returns ``(users, err)``. Does not call
-    ``vault.save()`` — callers persist once after they finish using the vault
-    for the current tool call."""
-    users, err = _fetch_students(course_id)
-    if err:
-        return None, err
-    _upsert_roster(vault, users)
-    return users, None
 
 
 def _section_names_for_user(user: dict, section_map: dict) -> list[str]:
@@ -54,7 +32,7 @@ def _section_names_for_user(user: dict, section_map: dict) -> list[str]:
 
 def pseudonymize_roster(vault, users: list[dict], section_map: dict) -> list[dict]:
     """``[{pseudonym, section_names}]``, sorted by pseudonym. Assumes ``users``
-    have already been upserted into ``vault`` (via ``sync_vault_for_course``),
+    have already been upserted into ``vault`` (via ``roster_service``),
     so this only reads pseudonyms — it never assigns new ones."""
     rows = []
     for u in users or []:

@@ -1,18 +1,15 @@
-"""Minimal OpenRouter client for feedback tools scoring.
+"""Low-level OpenRouter request builders, parsers, and transport.
 
-Split into pure builders/parsers (offline-testable) and one thin live call. The
-caller MUST run feedback_safety.scan_payload() and confirm GREEN before invoking
-score() — this module assumes it is handed an already-pseudonymized bundle.
+Split into pure builders/parsers (offline-testable) and one thin live call.
+Actual scoring is authorized and invoked only through ``ai_transmission``;
+this module assumes it receives an already-verified pseudonymized bundle.
 """
 import json
 import base64
 import copy
 from json import JSONDecodeError
 
-try:
-    from feedback_pipeline import build_contract_text, parse_results, persona_signoff
-except ModuleNotFoundError:
-    from api.feedback_pipeline import build_contract_text, parse_results, persona_signoff
+from api.feedback_pipeline import build_contract_text, parse_results, persona_signoff
 
 ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models"
@@ -389,7 +386,7 @@ def score(bundle: dict, rubric_text: str, persona: dict, *, api_key: str,
           model: str, http_post=None, timeout: int = 120,
           feedback_pattern: dict | None = None, model_metadata: dict | None = None,
           http_get=None) -> list:
-    """Live call. `http_post` is injectable for tests. Returns parsed results list."""
+    """Low-level live transport; ``ai_transmission`` owns actual scoring authorization."""
     if not api_key:
         raise ValueError("No OpenRouter API key set.")
     if _media_count(bundle):

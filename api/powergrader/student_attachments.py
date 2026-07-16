@@ -12,10 +12,7 @@ import mimetypes
 import os
 from pathlib import Path
 
-try:
-    from webui.source_material_extractors import _collapse_ws, _decode_bytes
-except ModuleNotFoundError:  # package/test context
-    from api.webui.source_material_extractors import _collapse_ws, _decode_bytes
+from api.webui.source_material_extractors import _collapse_ws, _decode_bytes
 
 
 TRUSTED_TEXT_EXTS = {

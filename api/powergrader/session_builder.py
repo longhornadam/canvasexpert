@@ -2,10 +2,7 @@
 
 from datetime import datetime
 
-try:
-    from powergrader.student_attachments import eligibility_decision
-except ModuleNotFoundError:
-    from api.powergrader.student_attachments import eligibility_decision
+from api.powergrader.student_attachments import eligibility_decision
 
 
 def _attachment_metadata(attachment: dict) -> dict:

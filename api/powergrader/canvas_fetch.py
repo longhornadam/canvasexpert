@@ -14,14 +14,9 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-try:
-    from webui import config, workspace
-    from webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
-    from powergrader import student_attachments
-except ModuleNotFoundError:  # package/test context
-    from api.webui import config, workspace
-    from api.webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
-    from api.powergrader import student_attachments
+from api.webui import config, workspace
+from api.webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
+from api.powergrader import student_attachments
 
 
 REQUEST_TIMEOUT = 30
@@ -48,7 +43,7 @@ def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | N
         return None, None, assignment_err
     adata = adata or {}
     if adata.get("is_quiz_lti_assignment") is True:
-        from powergrader import new_quiz_fetch
+        from api.powergrader import new_quiz_fetch
         if evidence_path == "managed":
             def evidence_path(target, value, filename, attempt):
                 user = target.get("user") or {}

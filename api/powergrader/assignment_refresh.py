@@ -8,12 +8,8 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-try:
-    from powergrader import canvas_fetch
-    from webui import workspace
-except ModuleNotFoundError:
-    from api.powergrader import canvas_fetch
-    from api.webui import workspace
+from api.powergrader import canvas_fetch
+from api.webui import workspace
 
 
 REFRESH_BINARY_LIMIT = 10 * 1024 * 1024
@@ -74,10 +70,7 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
     root = workspace.workspace_root()
     if not root:
         return None, None, {"error": "No workspace configured — finish setup first."}
-    try:
-        from webui import config
-    except ModuleNotFoundError:
-        from api.webui import config
+    from api.webui import config
     course_name = config.course_display_name(course_id) or course_id
     # Use the immutable ID as the display component for new managed evidence so
     # the record is resolvable before and after the Canvas title response.

@@ -15,8 +15,8 @@ from datetime import datetime
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
-import feedback_scrub
-import feedback_vault
+from api import feedback_scrub, feedback_vault
+from api import roster_service
 from .. import config, workspace
 from ..canvas_client import _canvas_get_all
 
@@ -28,41 +28,9 @@ def _vault():
     return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
 
 
-def _fetch_students(course_id: str):
-    """Fetch enrolled students for a course. Returns (users, err)."""
-    return _canvas_get_all(
-        f"/api/v1/courses/{course_id}/users",
-        {"enrollment_type[]": ["student"], "include[]": ["enrollments"], "per_page": 100},
-    )
+_fetch_students = roster_service.fetch_students
+_upsert_roster = roster_service.upsert_roster
 
-
-def _upsert_roster(vault, users):
-    """Upsert Canvas users into the vault with collision-safe fake names, and capture
-    each student's preferred/short name as a nickname so it gets scrubbed too.
-
-    The short_name is the single most-overlooked leak vector: a student whose legal
-    `name` is "Joseph" may go by "Joey" (short_name) and sign their work that way. If
-    we don't record it, the scrub never sees it. We add it as a nickname unless it's
-    already covered by the legal-name tokens. roster_tokens spans name + sortable +
-    short so a fake name never collides with any form a real student uses."""
-    roster_tokens: set = set()
-    for u in (users or []):
-        for src in (u.get("name"), u.get("sortable_name"), u.get("short_name")):
-            for token in (src or "").split():
-                roster_tokens.add(token.lower())
-
-    for u in (users or []):
-        cid = str(u.get("id", ""))
-        if not cid:
-            continue
-        name = u.get("name") or u.get("sortable_name") or ""
-        sis = str(u.get("sis_user_id") or "")
-        vault.get_or_assign(cid, name, sis, roster_names=roster_tokens)
-        short = (u.get("short_name") or "").strip()
-        name_tokens = {t.lower() for t in name.split()}
-        if short and short.lower() != name.lower() and short.lower() not in name_tokens:
-            vault.add_nicknames(cid, [short])
-    vault.save()
 
 
 @names_router.get("/roster")
@@ -75,19 +43,21 @@ def names_roster(course_id: str = Query("")):
     users, err = _fetch_students(course_id)
     if err:
         # Maybe the user already has cached/offline entries
-        return JSONResponse({"ok": True, "entries": vault.entries(),
-                             "note": f"Canvas fetch failed: {err}"})
+        with vault.transaction():
+            return JSONResponse({"ok": True, "entries": vault.entries(),
+                                 "note": f"Canvas fetch failed: {err}"})
 
-    _upsert_roster(vault, users)
-    return JSONResponse({"ok": True, "entries": vault.entries()})
+    with vault.transaction():
+        _upsert_roster(vault, users)
+        return JSONResponse({"ok": True, "entries": vault.entries()})
 
 
 @names_router.post("/nickname")
 def set_nickname(canvas_id: str = Form(""), nicknames: str = Form("")):
     """Set nicknames for a student (comma-separated)."""
     vault = _vault()
-    vault.set_nicknames(canvas_id, [n.strip() for n in nicknames.split(",") if n.strip()])
-    vault.save()
+    with vault.transaction():
+        vault.set_nicknames(canvas_id, [n.strip() for n in nicknames.split(",") if n.strip()])
     return JSONResponse({"ok": True})
 
 
@@ -95,8 +65,8 @@ def set_nickname(canvas_id: str = Form(""), nicknames: str = Form("")):
 def set_pseudonym(canvas_id: str = Form(""), first: str = Form(""), last: str = Form("")):
     """Manual pseudonym override."""
     vault = _vault()
-    vault.set_pseudonym(canvas_id, first, last)
-    vault.save()
+    with vault.transaction():
+        vault.set_pseudonym(canvas_id, first, last)
     return JSONResponse({"ok": True})
 
 
@@ -104,9 +74,10 @@ def set_pseudonym(canvas_id: str = Form(""), first: str = Form(""), last: str = 
 def regenerate_pseudonym(canvas_id: str = Form("")):
     """Regenerate a random non-colliding fake name."""
     vault = _vault()
-    vault.regenerate_pseudonym(canvas_id)
-    vault.save()
-    return JSONResponse({"ok": True, "pseudonym": vault.get_or_assign(canvas_id)})
+    with vault.transaction():
+        vault.regenerate_pseudonym(canvas_id)
+        pseudonym = vault.get_or_assign(canvas_id)
+    return JSONResponse({"ok": True, "pseudonym": pseudonym})
 
 
 @names_router.get("/protected")
@@ -140,13 +111,14 @@ def get_collisions(course_id: str = Query("")):
     """Compute name collisions for the current vault. course_id is optional
     (used to sync roster first if empty vault)."""
     vault = _vault()
-    if not vault.entries() and course_id:
-        # Auto-sync if vault is empty and we have a course
-        users, err = _fetch_students(course_id)
-        if not err:
-            _upsert_roster(vault, users)
-    protected = config.active_protected_names()
-    collisions = feedback_scrub.find_collisions(vault.entries(), protected)
+    with vault.transaction():
+        if not vault.entries() and course_id:
+            # Auto-sync if vault is empty and we have a course
+            users, err = _fetch_students(course_id)
+            if not err:
+                _upsert_roster(vault, users)
+        protected = config.active_protected_names()
+        collisions = feedback_scrub.find_collisions(vault.entries(), protected)
     return JSONResponse({"ok": True, "collisions": collisions})
 
 

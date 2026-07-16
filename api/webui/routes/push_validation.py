@@ -1,16 +1,20 @@
 """Validation, physical-render, and dry-run preview routes used by the push UI."""
 import os
-import sys
 import uuid as _uuid
 
 from fastapi import File, Form, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .. import af, config, pf, rf, runner
-from ..deps import TEMP_DIR, REPO_ROOT, _exports_dir, _workspace_folder
+from api import runtime_paths
+from ..deps import TEMP_DIR, REPO_ROOT
 
 
-def register_validation_routes(router, exports_dir_func=_exports_dir, workspace_folder_func=_workspace_folder):
+def register_validation_routes(
+    router,
+    exports_dir_func=runtime_paths.exports_dir,
+    workspace_folder_func=runtime_paths.workspace_folder,
+):
     @router.post("/api/temp-upload")
     async def api_temp_upload(
         content: str = Form(default=""),
@@ -19,6 +23,7 @@ def register_validation_routes(router, exports_dir_func=_exports_dir, workspace_
         """Save pasted JSON text or an uploaded file to a temp location; return the path."""
         fname = f"temp_{_uuid.uuid4().hex}.json"
         path = os.path.join(TEMP_DIR, fname)
+        os.makedirs(TEMP_DIR, exist_ok=True)
         if file and file.filename:
             data = await file.read()
             with open(path, "wb") as fh:
@@ -44,7 +49,7 @@ def register_validation_routes(router, exports_dir_func=_exports_dir, workspace_
 
     @router.post("/api/validate")
     def api_validate(path: str = Form(...)):
-        import validate_qf
+        from api import validate_qf
         seen = set()
         try:
             problems = validate_qf.validate(path, seen)
@@ -55,8 +60,6 @@ def register_validation_routes(router, exports_dir_func=_exports_dir, workspace_
     @router.post("/api/physical/quiz")
     def api_physical_quiz(path: str = Form(...)):
         """Compile printable PDF + DOCX files from a <QUIZFORGE_JSON> file."""
-        if REPO_ROOT not in sys.path:
-            sys.path.insert(0, REPO_ROOT)
         try:
             from engine.importers import import_quiz_from_llm
             from engine.validation.point_calculator import calculate_points

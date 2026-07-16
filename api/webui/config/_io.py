@@ -5,9 +5,12 @@ Every other config/* module imports from here.
 """
 import json
 import os
+from copy import deepcopy
+from pathlib import Path
 
 import keyring
 
+from api.storage_support import atomic_write_json, interprocess_lock
 from .. import workspace
 
 SERVICE   = "quizforge-api"
@@ -151,8 +154,8 @@ def _machine_load():
 
 
 def _machine_save(state):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
+    with interprocess_lock(Path(CONFIG_PATH + ".lock")):
+        atomic_write_json(Path(CONFIG_PATH), state)
 
 
 def _workspace_settings_path() -> str | None:
@@ -181,8 +184,8 @@ def _workspace_save(state):
     # OneDrive sync is last-writer-wins here; conflict copies like settings-<PC>.json
     # are ignored by the app and left for the user to reconcile manually.
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
+    with interprocess_lock(Path(path + ".lock")):
+        atomic_write_json(Path(path), state)
 
 
 def _synced_state():
@@ -207,12 +210,77 @@ def _synced_state():
 
 
 def _save_synced_key(key, value):
+    _modify_synced(lambda state: state.__setitem__(key, value) or state)
+
+
+def _modify_machine(mutator) -> dict:
+    """Reload and atomically apply one machine-local JSON mutation."""
+    with interprocess_lock(Path(CONFIG_PATH + ".lock")):
+        state = _machine_load()
+        updated = mutator(state)
+        if updated is None:
+            updated = state
+        if not isinstance(updated, dict):
+            raise TypeError("machine mutator must return a dict or None")
+        atomic_write_json(Path(CONFIG_PATH), updated)
+        return deepcopy(updated)
+
+
+def _modify_workspace(mutator) -> dict | None:
+    """Reload and atomically apply one workspace-settings mutation."""
     path = _workspace_settings_path()
     if not path:
-        state = _machine_load()
-        state[key] = value
-        _machine_save(state)
-        return
-    ws = _workspace_load()
-    ws[key] = value
-    _workspace_save(ws)
+        return None
+    with interprocess_lock(Path(path + ".lock")):
+        state = _workspace_load()
+        updated = mutator(state)
+        if updated is None:
+            updated = state
+        if not isinstance(updated, dict):
+            raise TypeError("workspace mutator must return a dict or None")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        atomic_write_json(Path(path), updated)
+        return deepcopy(updated)
+
+
+def _modify_synced(mutator) -> dict:
+    """Reload the latest merged synced state and save it under its owner lock."""
+    path = _workspace_settings_path()
+    if not path:
+        return _modify_machine(mutator)
+
+    machine_lock = Path(CONFIG_PATH + ".lock")
+    workspace_lock = Path(path + ".lock")
+    with interprocess_lock(machine_lock):
+        with interprocess_lock(workspace_lock):
+            machine = _machine_load()
+            if not os.path.exists(path):
+                atomic_write_json(
+                    Path(path),
+                    {k: machine[k] for k in SYNCED_KEYS if k in machine},
+                )
+            ws = _workspace_load()
+            missing = {
+                k: machine[k] for k in SYNCED_KEYS
+                if k in machine and k not in ws
+            }
+            if missing:
+                ws.update(deepcopy(missing))
+                atomic_write_json(Path(path), ws)
+            merged = dict(machine)
+            merged.update(ws)
+            before = deepcopy(merged)
+            updated = mutator(merged)
+            if updated is None:
+                updated = merged
+            if not isinstance(updated, dict):
+                raise TypeError("synced mutator must return a dict or None")
+            for key in set(before) | set(updated):
+                if before.get(key) == updated.get(key):
+                    continue
+                if key in updated:
+                    ws[key] = deepcopy(updated[key])
+                else:
+                    ws.pop(key, None)
+            atomic_write_json(Path(path), ws)
+            return deepcopy(updated)

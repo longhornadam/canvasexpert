@@ -16,23 +16,25 @@ def get_roster_student_settings(course_id: str) -> dict:
 
 
 def set_roster_student_settings(course_id: str, settings: dict):
-    state = _io_mod._synced_state()
-    all_settings = state.setdefault("roster_student_settings", {})
-    all_settings[str(course_id)] = settings
-    _io_mod._save_synced_key("roster_student_settings", all_settings)
+    _io_mod._modify_synced(
+        lambda state: state.setdefault("roster_student_settings", {}).__setitem__(
+            str(course_id), settings
+        )
+    )
 
 
 def update_roster_student_settings(course_id: str, user_id: str, patch: dict):
-    state = _io_mod._synced_state()
-    all_settings = state.setdefault("roster_student_settings", {})
-    course_settings = all_settings.setdefault(str(course_id), {})
-    student = course_settings.setdefault(str(user_id), {})
-    for k, v in patch.items():
-        if v is None:
-            student.pop(k, None)
-        else:
-            student[k] = v
-    _io_mod._save_synced_key("roster_student_settings", all_settings)
+    def mutate(state):
+        all_settings = state.setdefault("roster_student_settings", {})
+        course_settings = all_settings.setdefault(str(course_id), {})
+        student = course_settings.setdefault(str(user_id), {})
+        for key, value in patch.items():
+            if value is None:
+                student.pop(key, None)
+            else:
+                student[key] = value
+
+    _io_mod._modify_synced(mutate)
 
 
 # --------------------------------------------------------------------------
@@ -98,10 +100,11 @@ def set_roster_tier_scheme(course_id: str, scheme: list[dict]):
     if err:
         raise ValueError(err)
     norm = _normalize_tier_scheme(scheme)
-    state = _io_mod._synced_state()
-    schemes = state.setdefault("roster_tier_schemes", {})
-    schemes[str(course_id)] = norm
-    _io_mod._save_synced_key("roster_tier_schemes", schemes)
+    _io_mod._modify_synced(
+        lambda state: state.setdefault("roster_tier_schemes", {}).__setitem__(
+            str(course_id), norm
+        )
+    )
 
 
 def roster_tier_by_id(course_id: str) -> dict:
@@ -152,10 +155,11 @@ def get_roster_group_scheme(course_id: str) -> dict:
 
 
 def set_roster_group_scheme(course_id: str, scheme: dict):
-    state = _io_mod._synced_state()
-    schemes = state.setdefault("roster_group_schemes", {})
-    schemes[str(course_id)] = scheme
-    _io_mod._save_synced_key("roster_group_schemes", schemes)
+    _io_mod._modify_synced(
+        lambda state: state.setdefault("roster_group_schemes", {}).__setitem__(
+            str(course_id), scheme
+        )
+    )
 
 
 def get_selected_group_category_id(course_id: str) -> str | None:
@@ -164,9 +168,12 @@ def get_selected_group_category_id(course_id: str) -> str | None:
 
 
 def set_selected_group_category_id(course_id: str, category_id: str | None):
-    scheme = get_roster_group_scheme(course_id)
-    scheme["selected_group_category_id"] = category_id
-    set_roster_group_scheme(course_id, scheme)
+    def mutate(state):
+        schemes = state.setdefault("roster_group_schemes", {})
+        scheme = schemes.setdefault(str(course_id), {})
+        scheme["selected_group_category_id"] = category_id
+
+    _io_mod._modify_synced(mutate)
 
 
 def get_group_label(course_id: str, group_id: str) -> dict | None:
@@ -175,16 +182,22 @@ def get_group_label(course_id: str, group_id: str) -> dict | None:
 
 
 def set_group_label(course_id: str, group_id: str, teacher_label: str, meaning: str = ""):
-    scheme = get_roster_group_scheme(course_id)
-    labels = scheme.setdefault("group_labels", {})
-    labels[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
-    set_roster_group_scheme(course_id, scheme)
+    def mutate(state):
+        schemes = state.setdefault("roster_group_schemes", {})
+        scheme = schemes.setdefault(str(course_id), {})
+        labels = scheme.setdefault("group_labels", {})
+        labels[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
+
+    _io_mod._modify_synced(mutate)
 
 
 def set_group_labels(course_id: str, labels: dict):
-    scheme = get_roster_group_scheme(course_id)
-    scheme["group_labels"] = labels
-    set_roster_group_scheme(course_id, scheme)
+    def mutate(state):
+        state.setdefault("roster_group_schemes", {}).setdefault(str(course_id), {})[
+            "group_labels"
+        ] = labels
+
+    _io_mod._modify_synced(mutate)
 
 
 def compute_group_display(teacher_label: str | None, group_name: str) -> str:

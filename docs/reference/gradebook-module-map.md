@@ -32,29 +32,10 @@ Facade include order:
 5. `gradebook_sweep.py`
 6. `gradebook_curves.py`
 
-## Current size snapshot
+## Source-size reports
 
-Backend:
-
-- `api/webui/gradebook_service.py` - 189 lines
-- `api/webui/routes/gradebook_curves.py` - 161 lines
-- `api/webui/routes/gradebook_snapshot.py` - 90 lines
-- `api/webui/routes/gradebook.py` - 87 lines
-- `api/webui/routes/gradebook_extensions.py` - 45 lines
-- `api/webui/routes/gradebook_sweep.py` - 45 lines
-- `api/webui/routes/gradebook_extra_time.py` - 39 lines
-- `api/webui/routes/gradebook_policy.py` - 38 lines
-- `api/webui/routes/gradebook_common.py` - 25 lines
-
-Browser:
-
-- `api/webui/static/gradebook.js` - 357 lines
-- `api/webui/static/gradebook/curves.js` - 271 lines
-- `api/webui/static/gradebook/sweep.js` - 140 lines
-- `api/webui/static/gradebook/extensions.js` - 112 lines
-- `api/webui/static/gradebook/policy.js` - 96 lines
-- `api/webui/static/gradebook/extra_time.js` - 93 lines
-- `api/webui/static/gradebook/snapshot.js` - 80 lines
+Use [`tools/size_report.py`](../../tools/size_report.py) for current source-size
+reports; this map intentionally does not maintain line-count snapshots.
 
 ## Backend route routing
 

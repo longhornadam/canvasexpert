@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from webui import config
-from webui.schooldays import _parse_iso_local, _school_days_late_detail
+from api.webui import config
+from api.webui.schooldays import _parse_iso_local, _school_days_late_detail
 
 
 def is_real_submission(sub: dict) -> bool:
@@ -162,4 +162,3 @@ def apply_lateness_to_submission_payload(payload: dict, student: dict) -> dict:
     submission["late_policy_status"] = "late"
     submission["seconds_late_override"] = override
     return payload
-

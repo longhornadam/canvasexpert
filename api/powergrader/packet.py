@@ -9,7 +9,7 @@ import json
 import os
 import zipfile
 
-import feedback_pipeline as fp
+from api import feedback_pipeline as fp
 
 
 def safe_ai_packet_name(assignment_name: str) -> str:

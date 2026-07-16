@@ -13,7 +13,6 @@ subprocesses (api/qf_pusher.py, push_tiers.py) with credentials injected via
 environment variables. See runner.py. Push logic is never touched by this UI.
 """
 import os
-import sys
 import threading
 from contextlib import asynccontextmanager
 
@@ -22,14 +21,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-_API_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_REPO_ROOT = os.path.dirname(_API_DIR)
-sys.path.insert(0, _API_DIR)
-sys.path.insert(0, _REPO_ROOT)
-import student_packet  # noqa: E402
+from api import student_packet
 
-from . import af, ai_ta, activity, config, pf, rf, runner
+from . import af, ai_ta, config, pf, rf, runner
 from . import workspace
+from api import runtime_paths
 from .canvas_client import _canvas_headers, _canvas_get, _canvas_get_all, _canvas_send
 from .schooldays import (
     _parse_iso_local, _is_school_day, _school_days_late,
@@ -38,8 +34,7 @@ from .schooldays import (
 
 from .deps import (
     WEBUI_DIR, API_DIR, REPO_ROOT,
-    _key_to_year, QUIZ_FOLDERS, WORKSPACE_ROOT, _workspace_folder, _exports_dir,
-    RUBRIC_FOLDERS, ASSIGNMENT_FOLDERS, PAGE_FOLDERS, AI_TA_DIR, TEMP_DIR, templates,
+    _key_to_year, templates,
     _CUSTOM_DIR, list_quiz_files, list_assignment_files, list_page_files,
     list_rubric_files, list_ai_ta_files,
 )
@@ -61,6 +56,8 @@ from .routes.settings import router as _settings_router
 from .routes.powergrader import router as _powergrader_router
 from .routes.readiness import router as _readiness_router
 from .routes.receipts import router as _receipts_router
+from .routes.connections import router as _connections_router
+from .routes.support import router as _support_router
 from .routes.work import router as _work_router
 from .routes.operations import router as _operations_router
 
@@ -74,7 +71,7 @@ async def _lifespan(app):
     except Exception as e:
         print(f"Workspace setup note: {e}")
     try:
-        ai_ta.build_library(AI_TA_DIR, rubric_folders=RUBRIC_FOLDERS)
+        ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
     except Exception as e:
         print(f"AI-TA library build failed: {e}")
     _load_custom_routines()
@@ -89,7 +86,7 @@ app.mount("/static", StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), n
 # If Canvas URL or token is not yet configured, redirect HTML page requests
 # to the /welcome wizard. Never gate API/static endpoints or the wizard itself.
 
-_ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/static", "/api", "/openapi.json", "/docs", "/redoc")
+_ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/connections", "/static", "/api", "/openapi.json", "/docs", "/redoc")
 
 
 @app.middleware("http")
@@ -121,5 +118,7 @@ app.include_router(_settings_router)
 app.include_router(_powergrader_router)
 app.include_router(_readiness_router)
 app.include_router(_receipts_router)
+app.include_router(_connections_router)
+app.include_router(_support_router)
 app.include_router(_work_router)
 app.include_router(_operations_router)

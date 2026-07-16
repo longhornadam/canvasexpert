@@ -3,38 +3,17 @@ import csv
 import json
 import os
 
-try:                                   # script context (run from api/)
-    from nq_report import constructed_responses, html_to_text, parse_student_analysis_file
-    from feedback_vault import Vault
-    import feedback_scrub
-    import feedback_safety
-    from powergrader import student_attachments
-except ModuleNotFoundError:            # package context (tests: api.feedback_artifacts)
-    from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
-    from api.feedback_vault import Vault
-    from api import feedback_scrub
-    from api import feedback_safety
-    from api.powergrader import student_attachments
-
-try:
-    from feedback_contract import (
-        CONTRACT_VERSION,
-        _REVIEW_NOTE,
-        _safe,
-        build_contract_text,
-    )
-except ModuleNotFoundError:
-    from api.feedback_contract import (
-        CONTRACT_VERSION,
-        _REVIEW_NOTE,
-        _safe,
-        build_contract_text,
-    )
-
-try:
-    from feedback_results import parse_results, reidentify, reidentified_csv
-except ModuleNotFoundError:
-    from api.feedback_results import parse_results, reidentify, reidentified_csv
+from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
+from api.feedback_vault import Vault
+from api import feedback_scrub, feedback_safety
+from api.powergrader import student_attachments
+from api.feedback_contract import (
+    CONTRACT_VERSION,
+    _REVIEW_NOTE,
+    _safe,
+    build_contract_text,
+)
+from api.feedback_results import parse_results, reidentify, reidentified_csv
 
 
 def _attachment_meta(attachment: dict) -> dict:
@@ -51,7 +30,7 @@ def _attachment_meta(attachment: dict) -> dict:
 def pseudonymize(parsed: dict, vault: Vault, quiz_title: str) -> dict:
     """Build an LLM-safe bundle: one entry per student (by pseudonym) with their
     constructed (written) responses only — no names, ids, or sections. Mutates the
-    vault (assigns pseudonyms); caller saves the vault."""
+    vault (assigns pseudonyms); caller wraps the operation in a vault transaction."""
     students = []
     for s in parsed.get("students", []):
         written = constructed_responses(s)
@@ -131,7 +110,7 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
 
     Each submission is keyed on the vault by canvas_id (student user_id). One entry
     per student with the assignment as a single response item. Mutates the vault;
-    caller saves.
+    caller wraps the operation in a vault transaction.
 
     Args:
         submissions: list of Canvas submission objects from /students/submissions
@@ -560,7 +539,8 @@ def write_safe_and_private(
 
 def process_inbox(inbox_dir, forllm_dir, archive_dir, vault, ai_ta_name="your teaching assistant"):
     """Generator of progress strings. Process every CSV in 1_Inbox -> pseudonymized
-    bundle in 2_ForLLM, then archive the original. Saves the vault."""
+    bundle in 2_ForLLM, then archive the original. Persists each vault mutation
+    transactionally with its bundle."""
     import glob
     import shutil
     os.makedirs(archive_dir, exist_ok=True)
@@ -571,14 +551,15 @@ def process_inbox(inbox_dir, forllm_dir, archive_dir, vault, ai_ta_name="your te
     for path in csvs:
         title = os.path.splitext(os.path.basename(path))[0]
         try:
-            parsed = parse_student_analysis_file(path)
-            bundle = pseudonymize(parsed, vault, title)
-            write_bundle(bundle, forllm_dir, ai_ta_name)
-            shutil.move(path, os.path.join(archive_dir, os.path.basename(path)))
-            yield f"✓ {title}: {len(bundle['students'])} student(s) pseudonymized → ForLLM"
+            with vault.transaction():
+                parsed = parse_student_analysis_file(path)
+                bundle = pseudonymize(parsed, vault, title)
+                write_bundle(bundle, forllm_dir, ai_ta_name)
+                shutil.move(path, os.path.join(archive_dir, os.path.basename(path)))
+                count = len(bundle["students"])
+            yield f"✓ {title}: {count} student(s) pseudonymized → ForLLM"
         except Exception as e:
             yield f"!! {title}: {e}"
-    vault.save()
     yield f"FOLDER: {forllm_dir}"
 
 

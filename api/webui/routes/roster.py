@@ -13,11 +13,12 @@ Does NOT write local tier_id.
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
-import feedback_scrub
+from api import feedback_scrub
+from api import roster_service
 from .. import config
 from ..canvas_client import _canvas_get_all, _canvas_headers, _canvas_send
 from .courses import load_group_categories
-from .names import _fetch_students, _upsert_roster, _vault
+from .names import _vault
 from . import roster_groups
 from . import roster_canvas
 from . import roster_updates
@@ -50,7 +51,11 @@ WARNING_CODES = (
 
 
 def _fetch_sections(course_id: str) -> dict:
-    return roster_canvas.fetch_sections(course_id, canvas_get_all=_canvas_get_all)
+    return roster_service.fetch_sections(course_id, canvas_get_all=_canvas_get_all)
+
+
+_fetch_students = roster_service.fetch_students
+_upsert_roster = roster_service.upsert_roster
 
 
 def _create_canvas_group(category_id: str, name: str) -> tuple[dict | None, str | None]:
@@ -125,7 +130,9 @@ def roster_get(course_id: str = Query("")):
     if err:
         return JSONResponse({"ok": False, "error": f"Canvas fetch failed: {err}"})
 
-    _upsert_roster(vault, users)
+    with vault.transaction():
+        _upsert_roster(vault, users)
+        vault_entries_list = vault.entries()
 
     # Sections
     section_map = _fetch_sections(course_id)
@@ -164,7 +171,6 @@ def roster_get(course_id: str = Query("")):
     protected_names = {p.lower() for p in config.active_protected_names()}
 
     # Build vault lookup by canvas_id
-    vault_entries_list = vault.entries()
     vault_by_id: dict[str, dict] = {}
     for ve in vault_entries_list:
         vault_by_id[ve["canvas_id"]] = ve

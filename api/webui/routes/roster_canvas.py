@@ -9,15 +9,6 @@ import requests
 from .roster_helpers import _user_id_set_from_canvas_groups
 
 
-def fetch_sections(course_id: str, *, canvas_get_all: Callable[..., tuple[list[dict] | None, str | None]]) -> dict:
-    """Return {section_id: section_name} for a course."""
-    sections, err = canvas_get_all(
-        f"/api/v1/courses/{course_id}/sections", {"per_page": 100})
-    if err or not sections:
-        return {}
-    return {str(s["id"]): s.get("name", f"Section {s['id']}") for s in sections}
-
-
 def create_canvas_group(
     category_id: str,
     name: str,

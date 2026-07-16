@@ -3,10 +3,10 @@
 
 import os
 
-import feedback_vault
+from api import feedback_vault
 
-from webui import source_materials, workspace
-from webui.deps import list_rubric_files
+from api.webui import source_materials, workspace
+from api.webui.deps import list_rubric_files
 
 
 def vault():

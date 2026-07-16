@@ -26,10 +26,11 @@ def list_protected_packs() -> list[dict]:
 
 
 def set_pack_enabled(pack_id: str, enabled: bool):
-    state = _io_mod._synced_state()
-    enabled_map = state.get("protected_packs_enabled", {})
-    enabled_map[pack_id] = enabled
-    _io_mod._save_synced_key("protected_packs_enabled", enabled_map)
+    def mutate(state):
+        enabled_map = state.setdefault("protected_packs_enabled", {})
+        enabled_map[pack_id] = enabled
+
+    _io_mod._modify_synced(mutate)
 
 
 def get_custom_protected_names() -> list[str]:
@@ -38,7 +39,9 @@ def get_custom_protected_names() -> list[str]:
 
 def set_custom_protected_names(names: list[str]):
     clean = sorted(set(n.strip() for n in names if n and n.strip()))
-    _io_mod._save_synced_key("protected_names_custom", clean)
+    _io_mod._modify_synced(
+        lambda state: state.__setitem__("protected_names_custom", clean) or state
+    )
 
 
 def active_protected_names() -> set[str]:

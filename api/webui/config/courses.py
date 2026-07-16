@@ -34,36 +34,43 @@ def course_display_name(course_id: str) -> str:
 
 def set_course_active(course_id: str, active: bool):
     """Move a saved course between the Current and Previous sets."""
-    state = _io_mod._synced_state()
-    for c in state.get("saved_courses", []):
-        if c["id"] == str(course_id):
-            c["active"] = active
-            break
-    _io_mod._save_synced_key("saved_courses", state.get("saved_courses", []))
+    wanted = str(course_id)
+
+    def mutate(state):
+        for course in state.get("saved_courses", []):
+            if course["id"] == wanted:
+                course["active"] = active
+                break
+
+    _io_mod._modify_synced(mutate)
 
 
 def bookmark_course(course_id: str, course_name: str, nickname: str = ""):
-    state = _io_mod._synced_state()
-    course_id = str(course_id)
-    courses = state.setdefault("saved_courses", [])
-    for c in courses:
-        if c["id"] == course_id:
-            c["name"] = course_name
-            c["nickname"] = nickname or course_name
-            c["active"] = True
-            _io_mod._save_synced_key("saved_courses", courses)
-            return
-    courses.append({
-        "id":       course_id,
-        "name":     course_name,
-        "nickname": nickname or course_name,
-        "active":   True,
-    })
-    _io_mod._save_synced_key("saved_courses", courses)
+    wanted = str(course_id)
+
+    def mutate(state):
+        courses = state.setdefault("saved_courses", [])
+        for course in courses:
+            if course["id"] == wanted:
+                course["name"] = course_name
+                course["nickname"] = nickname or course_name
+                course["active"] = True
+                return
+        courses.append({
+            "id":       wanted,
+            "name":     course_name,
+            "nickname": nickname or course_name,
+            "active":   True,
+        })
+
+    _io_mod._modify_synced(mutate)
 
 
 def remove_course(course_id: str):
-    state = _io_mod._synced_state()
-    state["saved_courses"] = [c for c in state.get("saved_courses", [])
-                               if c["id"] != str(course_id)]
-    _io_mod._save_synced_key("saved_courses", state.get("saved_courses", []))
+    wanted = str(course_id)
+    _io_mod._modify_synced(
+        lambda state: state.__setitem__(
+            "saved_courses",
+            [course for course in state.get("saved_courses", []) if course["id"] != wanted],
+        ) or state
+    )

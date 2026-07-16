@@ -8,7 +8,6 @@ import pytest
 
 from api.operation_ledger import receipts, storage
 from api.operation_ledger import paths
-from api.webui import activity
 from api.webui.routes.receipts import list_receipts as list_route
 
 
@@ -92,11 +91,3 @@ def test_list_is_pii_minimized_detail_hydrates_private_data(tmp_path, monkeypatc
     assert "Private Learner" not in text and "Private detail" not in text
     assert body["receipts"][0]["detail_url"] == "/api/receipts/safe-id"
     assert receipts.get_receipt("safe-id")["targets"][0]["private"]["real_name"] == "Private Learner"
-
-
-def test_activity_projection_is_content_free_and_io_independent():
-    projection = activity.receipt_projection(_receipt("activity-id"))
-    assert projection == {
-        "action": "receipt", "title": "Operation receipt", "courses": [], "ok": True,
-        "url": "/api/receipts/activity-id", "detail": None,
-    }

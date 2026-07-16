@@ -20,16 +20,10 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 import requests
 
-try:
-    from webui.canvas_client import _canvas_headers
-    from webui import workspace
-    from nq_report import html_to_text
-    from powergrader import student_attachments
-except ModuleNotFoundError:
-    from api.webui.canvas_client import _canvas_headers
-    from api.webui import workspace
-    from api.nq_report import html_to_text
-    from api.powergrader import student_attachments
+from api.webui.canvas_client import _canvas_headers
+from api.webui import workspace
+from api.nq_report import html_to_text
+from api.powergrader import student_attachments
 
 
 POLL_LIMIT = 20

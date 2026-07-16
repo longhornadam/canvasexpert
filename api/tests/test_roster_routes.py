@@ -1,5 +1,6 @@
 """Route-level tests for Roster Console API (V3: Canvas groups are source of truth)."""
 from fastapi.testclient import TestClient
+from contextlib import contextmanager
 import pytest
 
 from api.webui.server import app
@@ -23,6 +24,10 @@ class FakeVault:
             }
         }
         self.saved = False
+
+    @contextmanager
+    def transaction(self):
+        yield self
 
     def entries(self):
         return list(self.rows.values())

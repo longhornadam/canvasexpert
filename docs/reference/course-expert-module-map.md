@@ -19,31 +19,10 @@ mostly markup, data injection, and script includes.
 - Source-material facade/extraction: `api/webui/source_materials.py`,
   `api/webui/source_material_extractors.py`
 
-## Current Size Snapshot
+## Source-size reports
 
-- `api/webui/templates/course_expert.html` - Create-only tabs and shared push script includes
-- `api/webui/templates/student_reports.html` - dedicated Students presentation on
-  `layouts/document.html` (`document/wide`), with
-  `api/webui/static/pages/student_reports.css` owning presentation only
-- `api/webui/static/course_expert/tabs.js` - 114 lines
-- `api/webui/static/course_expert/student_reports.js` - 111 lines
-- `api/webui/static/course_expert/portfolio.js` - 110 lines
-- `api/webui/static/course_expert/quick_assignment.js` - 34 lines
-- `api/webui/static/course_expert/work_rail.js` - new Work rail sidebar (replaces legacy sidebar navigation)
-- `api/webui/source_materials.py` - 216 lines (facade)
-- `api/webui/source_material_extractors.py` - 244 lines (format decoding/normalization)
-- `api/webui/static/push/quiz.js` - 294 lines
-- `api/webui/static/push/core.js` - 207 lines
-- `api/webui/static/push/course_picker.js` - 180 lines
-- `api/webui/static/push/delivery.js` - 161 lines
-- `api/webui/static/push/file_sources.js` - 160 lines
-- `api/webui/routes/push_validation.py` - 172 lines (includes dry-run preview)
-- `api/webui/static/push/assignment.js` - 136 lines
-- `api/webui/routes/push.py` - 88 lines
-- `api/webui/static/push/page.js` - 57 lines
-- `api/webui/static/push/rubrics.js` - 54 lines
-- `api/webui/static/push/rubric.js` - 47 lines
-- `api/webui/static/push.js` - 8 lines
+Use [`tools/size_report.py`](../../tools/size_report.py) for current source-size
+reports; this map intentionally does not maintain line-count snapshots.
 
 ## Browser Routing
 

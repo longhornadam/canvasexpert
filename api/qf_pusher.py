@@ -16,10 +16,13 @@ import os
 import re
 import sys
 import time
+from pathlib import Path
 
-import codefmt
-import teks
-import transform
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from api import codefmt, teks, transform
 
 ENVELOPE = re.compile(r"<QUIZFORGE_JSON>(.*?)</QUIZFORGE_JSON>", re.DOTALL)
 STATE_PATH = ".experiment_state.json"
@@ -212,7 +215,7 @@ def find_assignment_group_id(course_id, name):
     Lets one category choice target many courses where the underlying ids differ —
     the same by-name philosophy used for tier groups in multi-course pushes.
     """
-    import canvas
+    from api import canvas
     st, groups = canvas.get(
         canvas.core(f"/courses/{course_id}/assignment_groups"),
         params={"per_page": 100},
@@ -231,7 +234,7 @@ def patch_assignment(quiz_id, course_id, settings):
     timezone offset (Canvas rejects naive datetimes). Non-fatal on failure —
     the quiz already exists; we just log the warning.
     """
-    import canvas
+    from api import canvas
     payload = {}
     for key in ("due_at", "unlock_at", "lock_at"):
         val = settings.get(key)
@@ -272,7 +275,7 @@ def patch_assignment(quiz_id, course_id, settings):
 
 def create_module(course_id, name):
     """Create a new Canvas module and return its id, or None on failure."""
-    import canvas
+    from api import canvas
     print(f"\n  [module] creating new module '{name}'…")
     st, resp = canvas.post(
         canvas.core(f"/courses/{course_id}/modules"),
@@ -292,7 +295,7 @@ def find_or_create_module(course_id, name):
     Find-or-create keeps multi-course pushes from spawning duplicate modules
     when the same module name already exists in some of the target courses.
     """
-    import canvas
+    from api import canvas
     st, mods = canvas.get(
         canvas.core(f"/courses/{course_id}/modules"),
         params={"per_page": 100, "search_term": name},
@@ -311,7 +314,7 @@ def add_to_module(quiz_id, course_id, module_id, title):
     New Quizzes are assignments under the hood, so type='Assignment' and
     content_id=quiz_id is the correct payload. Non-fatal on failure.
     """
-    import canvas
+    from api import canvas
     print(f"\n  [module] adding '{title}' to module #{module_id}…")
     st, resp = canvas.post(
         canvas.core(f"/courses/{course_id}/modules/{module_id}/items"),
@@ -356,8 +359,8 @@ def _post_item_with_retry(canvas, course_id, quiz_id, payload, max_attempts=4):
 
 
 def push_file(path, dry_run=False):
-    import canvas
-    from canvas import COURSE_ID
+    from api import canvas
+    from api.canvas import COURSE_ID
 
     # Optional assignment settings injected by the web UI via env var.
     # Parsed here so they're visible in --dry-run output too.

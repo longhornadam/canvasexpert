@@ -4,15 +4,8 @@ import io
 import json
 import re
 
-try:                                   # script context (run from api/)
-    from feedback_vault import Vault
-except ModuleNotFoundError:            # package context (tests: api.feedback_results)
-    from api.feedback_vault import Vault
-
-try:
-    from feedback_contract import CONTRACT_VERSION
-except ModuleNotFoundError:
-    from api.feedback_contract import CONTRACT_VERSION
+from api.feedback_vault import Vault
+from api.feedback_contract import CONTRACT_VERSION
 
 _SECTION_LABELS = (
     r"Score|Glows?|Grows?|Next(?:\s+step| steps?)?|Strategy|Overall|"

@@ -19,9 +19,9 @@ def get_canvas_base() -> str:
 
 
 def set_canvas_base(base_url: str):
-    state = _io_code._machine_load()
-    state["canvas_base"] = base_url.rstrip("/")
-    _io_code._machine_save(state)
+    _io_code._modify_machine(
+        lambda state: state.__setitem__("canvas_base", base_url.rstrip("/")) or state
+    )
 
 
 def get_token() -> str | None:
@@ -48,9 +48,9 @@ def get_download_root() -> str:
 
 
 def set_download_root(path: str):
-    state = _io_code._machine_load()
-    state["download_root"] = path
-    _io_code._machine_save(state)
+    _io_code._modify_machine(
+        lambda state: state.__setitem__("download_root", path) or state
+    )
 
 
 def save_canvas_account(base_url: str, token: str | None = None):
@@ -85,9 +85,9 @@ def get_openrouter_model() -> str:
 
 
 def set_openrouter_model(model: str):
-    state = _io_code._machine_load()
-    state["openrouter_model"] = (model or "").strip()
-    _io_code._machine_save(state)
+    _io_code._modify_machine(
+        lambda state: state.__setitem__("openrouter_model", (model or "").strip()) or state
+    )
 
 
 def openrouter_model_presets() -> list[dict]:
@@ -127,9 +127,9 @@ def get_workspace_path() -> str | None:
 
 
 def set_workspace_path(path: str):
-    state = _io_code._machine_load()
-    state["workspace_path"] = path.strip()
-    _io_code._machine_save(state)
+    _io_code._modify_machine(
+        lambda state: state.__setitem__("workspace_path", path.strip()) or state
+    )
 
 
 # --------------------------------------------------------------------------

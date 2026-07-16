@@ -4,14 +4,13 @@ import copy
 import json
 import os
 import shutil
-import tempfile
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import paths
-from .file_lock import interprocess_lock
+from api.storage_support import atomic_write_bytes, atomic_write_json, interprocess_lock
 
 
 VERSION = 1
@@ -23,40 +22,6 @@ def storage_lock():
     """Hold the process-wide lock used by all operation-ledger storage."""
     with _LOCK:
         yield
-
-
-def atomic_write_bytes(path: Path, payload: bytes) -> None:
-    """Write bytes through a flushed, same-directory atomic replacement."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(
-        prefix=f".{target.name}-", suffix=".tmp", dir=str(target.parent))
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            fd = None
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, target)
-    except Exception:
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
-
-
-def atomic_write_json(path: Path, document: dict) -> None:
-    """Serialize a JSON object and write it through ``atomic_write_bytes``."""
-    if not isinstance(document, dict):
-        raise TypeError("document must be a dict")
-    payload = json.dumps(document, indent=2, ensure_ascii=False).encode("utf-8")
-    atomic_write_bytes(Path(path), payload)
 
 
 class ReceiptConflictError(ValueError):

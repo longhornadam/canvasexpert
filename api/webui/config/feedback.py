@@ -137,25 +137,28 @@ def get_persona(persona_id: str = "") -> dict:
 def save_custom_persona(persona_id: str, name: str, personality: str):
     if any(p["id"] == persona_id for p in BUILTIN_PERSONAS):
         return
-    state = _io_mod._synced_state()
-    custom = state.setdefault("custom_personas", [])
-    for i, p in enumerate(custom):
-        if p.get("id") == persona_id:
-            custom[i] = {"id": persona_id, "name": name.strip(), "personality": personality.strip(),
-                         "signoff_policy": "none", "signoff_text": ""}
-            _io_mod._save_synced_key("custom_personas", custom)
-            return
-    custom.append({"id": persona_id, "name": name.strip(), "personality": personality.strip(),
-                   "signoff_policy": "none", "signoff_text": ""})
-    _io_mod._save_synced_key("custom_personas", custom)
+    def mutate(state):
+        custom = state.setdefault("custom_personas", [])
+        value = {"id": persona_id, "name": name.strip(), "personality": personality.strip(),
+                 "signoff_policy": "none", "signoff_text": ""}
+        for i, persona in enumerate(custom):
+            if persona.get("id") == persona_id:
+                custom[i] = value
+                return
+        custom.append(value)
+
+    _io_mod._modify_synced(mutate)
 
 
 def remove_custom_persona(persona_id: str):
     if any(p["id"] == persona_id for p in BUILTIN_PERSONAS):
         return
-    state = _io_mod._synced_state()
-    state["custom_personas"] = [p for p in state.get("custom_personas", []) if p.get("id") != persona_id]
-    _io_mod._save_synced_key("custom_personas", state["custom_personas"])
+    _io_mod._modify_synced(
+        lambda state: state.__setitem__(
+            "custom_personas",
+            [p for p in state.get("custom_personas", []) if p.get("id") != persona_id],
+        ) or state
+    )
 
 
 def get_ai_ta_persona() -> dict:
@@ -165,8 +168,12 @@ def get_ai_ta_persona() -> dict:
 
 
 def set_ai_ta_persona(name: str, personality: str = ""):
-    _io_mod._save_synced_key("ai_ta_persona",
-                     {"name": (name or "").strip(), "personality": (personality or "").strip()})
+    _io_mod._modify_synced(
+        lambda state: state.__setitem__(
+            "ai_ta_persona",
+            {"name": (name or "").strip(), "personality": (personality or "").strip()},
+        ) or state
+    )
 
 
 def list_feedback_patterns() -> list[dict]:
@@ -174,4 +181,6 @@ def list_feedback_patterns() -> list[dict]:
 
 
 def set_feedback_patterns(patterns: list[dict]):
-    _io_mod._save_synced_key("feedback_patterns", patterns)
+    _io_mod._modify_synced(
+        lambda state: state.__setitem__("feedback_patterns", patterns) or state
+    )

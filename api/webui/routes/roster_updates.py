@@ -53,23 +53,21 @@ def update_student(
 
     vault = vault_factory()
 
-    if "nicknames" in data:
-        nns = data["nicknames"]
-        if not isinstance(nns, list):
-            return {"ok": False, "error": "nicknames must be a list."}
-        vault.set_nicknames(user_id, nns)
-        vault.save()
+    with vault.transaction():
+        if "nicknames" in data:
+            nns = data["nicknames"]
+            if not isinstance(nns, list):
+                return {"ok": False, "error": "nicknames must be a list."}
+            vault.set_nicknames(user_id, nns)
 
-    if "pseudonym" in data:
-        p = data["pseudonym"]
-        if not isinstance(p, dict) or "first" not in p or "last" not in p:
-            return {"ok": False, "error": "pseudonym must be {first, last}."}
-        vault.set_pseudonym(user_id, p["first"], p["last"])
-        vault.save()
+        if "pseudonym" in data:
+            p = data["pseudonym"]
+            if not isinstance(p, dict) or "first" not in p or "last" not in p:
+                return {"ok": False, "error": "pseudonym must be {first, last}."}
+            vault.set_pseudonym(user_id, p["first"], p["last"])
 
-    if data.get("regenerate_pseudonym"):
-        vault.regenerate_pseudonym(user_id)
-        vault.save()
+        if data.get("regenerate_pseudonym"):
+            vault.regenerate_pseudonym(user_id)
 
     if "extra_time" in data:
         et = data["extra_time"]

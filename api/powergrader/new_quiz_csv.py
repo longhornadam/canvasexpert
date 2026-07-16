@@ -9,10 +9,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 
-try:
-    from nq_report import constructed_responses, html_to_text, parse_student_analysis
-except ModuleNotFoundError:  # pragma: no cover
-    from api.nq_report import constructed_responses, html_to_text, parse_student_analysis
+from api.nq_report import constructed_responses, html_to_text, parse_student_analysis
 
 
 class CsvProvenanceError(ValueError):

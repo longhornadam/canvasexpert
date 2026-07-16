@@ -13,10 +13,7 @@ from fastapi.responses import JSONResponse
 
 import requests
 
-import nq_report
-import portfolio
-import portfolio_service
-import student_packet
+from api import nq_report, portfolio, portfolio_service, student_packet
 from .. import config, workspace
 from ..canvas_client import _canvas_get_all, _canvas_headers
 from ..gradebook_service import _load_curve_events

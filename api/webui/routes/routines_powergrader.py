@@ -1,22 +1,20 @@
 """PowerGrader scheduled autoscore and late-catchup routine runners.
 
 Moved out of routines.py for maintainability.
-Dependencies are passed in explicitly so the module works under both the
-`api.webui...` test import path and the `webui...` runtime launcher path.
+Dependencies are passed in explicitly so the module stays easy to exercise
+through the canonical `api.webui...` package path.
 """
 import json
 import os
+import sys
 import uuid as _uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable
 
-try:
-    from powergrader import scheduled_autoscore_support as autoscore_support
-    from powergrader.push_context import build_scheduled_push_context
-except ModuleNotFoundError:  # pragma: no cover - package context
-    from api.powergrader import scheduled_autoscore_support as autoscore_support
-    from api.powergrader.push_context import build_scheduled_push_context
+from api.powergrader import scheduled_autoscore_support as autoscore_support
+from api.powergrader.push_context import build_scheduled_push_context
 
 _autoscore_job_label = autoscore_support.autoscore_job_label
 _autoscore_fetch_status = autoscore_support.autoscore_fetch_status
@@ -54,8 +52,15 @@ class PowerGraderRoutineDeps:
 # Scheduled autoscore
 # --------------------------------------------------------------------------
 
-def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutineDeps):
-    queue = deps.autoscore_queue.load_queue()
+def _queue_transactional(func):
+    @wraps(func)
+    def wrapped(params, deps):
+        with deps.autoscore_queue.queue_transaction() as queue:
+            return func(params, deps, queue)
+    return wrapped
+
+@_queue_transactional
+def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutineDeps, queue):
     jobs = deps.autoscore_queue.due_jobs(queue)
     if not jobs:
         return {"ok": True, "lines": ["· no scheduled PowerGrader jobs are due"], "summary": "0 scheduled jobs due"}
@@ -83,14 +88,17 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
         if not claimed or not job_ref:
             lines.append(f"· {label}: already claimed elsewhere")
             continue
-        deps.autoscore_queue.save_queue(queue)
         processed += 1
+        session_guard = None
         try:
             course_id = str(job_ref.get("course_id") or "")
             assignment_id = str(job_ref.get("assignment_id") or "")
             session_id = str(job_ref.get("session_id") or "")
             if not session_id:
                 session_id = str(_uuid.uuid4())
+            candidate_guard = deps.session_store.session_lock(session_id)
+            candidate_guard.__enter__()
+            session_guard = candidate_guard
 
             subs, adata, fetch_err = deps.canvas_fetch.fetch_submissions(course_id, assignment_id)
             if fetch_err:
@@ -331,7 +339,8 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                     lines.append(f"✓ {label}: loaded PowerGrader draft session")
         finally:
             deps.autoscore_queue.release_job(queue, job_id, worker_id=worker_id, now=now_dt)
-            deps.autoscore_queue.save_queue(queue)
+            if session_guard is not None:
+                session_guard.__exit__(*sys.exc_info())
 
     summary = f"{processed} scheduled job(s) processed; {paused} paused for Previous courses"
     return {"ok": ok, "lines": lines, "summary": summary}
@@ -369,13 +378,14 @@ def _run_routine_powergrader_late_catchup(params, deps: PowerGraderRoutineDeps):
         if str(summary.get("course_id") or "").strip() not in current_ids:
             paused += 1
             continue
-        session = deps.session_store.load_session(session_id)
-        if not session:
-            continue
-        late_watch = session.get("late_watch") or {}
-        if not late_watch.get("enabled") or not late_watch.get("supported"):
-            continue
-        result = deps.pg_routes._run_late_catchup_score(session)
+        with deps.session_store.session_lock(session_id):
+            session = deps.session_store.load_session(session_id)
+            if not session:
+                continue
+            late_watch = session.get("late_watch") or {}
+            if not late_watch.get("enabled") or not late_watch.get("supported"):
+                continue
+            result = deps.pg_routes._run_late_catchup_score(session)
         processed += 1
         label = f"{course_name.get(str(session.get('course_id')), session.get('course_id', ''))} / {session.get('assignment_name', '')}".strip(" /")
         if not result.get("ok"):

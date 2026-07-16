@@ -15,6 +15,14 @@ pushes content to live courses via the REST and New Quizzes APIs:
 
 Local-only, never served. See `AGENTS.md` Guardrails.
 
+The 0.75 beta version is `0.75.0-beta.0`. The supported launcher is
+`py qf_ui.py` from `api/` or `py api/qf_ui.py` from the repository root; it binds
+only to `127.0.0.1` and preserves the `--port` and `--no-browser` options.
+The `/connections` page reports the current interpreter and app-root paths and
+offers copy-only client snippets or a support bundle. It never edits client
+configuration, installs software, changes `PATH`, starts a tunnel, or requests
+administrator access.
+
 ## Contracts consumed
 
 | Contract | File | Role |
@@ -54,6 +62,7 @@ bundled Pandoc through `pypandoc-binary`.
 - **Quiz**: `py qf_pusher.py "<quiz.txt>"` → live New Quiz (unpublished)
 - **Tiers** (diff variants): `py push_tiers.py --manifest <manifest.json>`
 - **Validate**: `py validate_qf.py <file.txt>`
+- **New Quizzes diagnostic**: `py diagnose_newquizzes.py --course <id> [--assignment <nq_id>]`
 
 ## Web UI (recommended for day-to-day use)
 

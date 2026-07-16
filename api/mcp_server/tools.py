@@ -14,42 +14,47 @@ the outbound safety gate.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 
-try:  # pragma: no cover - exercised via one or the other branch
-    from webui import config, workspace
-    from webui.canvas_client import _canvas_get_all
-    from webui.routes.gradebook_common import (
-        _assignment,
-        _assignment_submissions,
-        _course_assignments,
-        _course_students,
-        _course_submissions,
-    )
-    from webui.routes.gradebook_snapshot import build_snapshot
-    from webui.routes.names import _upsert_roster
-    from webui.routes.roster_canvas import fetch_sections as _fetch_sections
-except ModuleNotFoundError:  # package/test context
-    from api.webui import config, workspace
-    from api.webui.canvas_client import _canvas_get_all
-    from api.webui.routes.gradebook_common import (
-        _assignment,
-        _assignment_submissions,
-        _course_assignments,
-        _course_students,
-        _course_submissions,
-    )
-    from api.webui.routes.gradebook_snapshot import build_snapshot
-    from api.webui.routes.names import _upsert_roster
-    from api.webui.routes.roster_canvas import fetch_sections as _fetch_sections
-
-try:  # pragma: no cover - exercised via one or the other branch
-    import feedback_vault
-    from course_catalog import public_projection, read_catalog
-except ModuleNotFoundError:  # package/test context
-    from api import feedback_vault
-    from api.course_catalog import public_projection, read_catalog
+from api import course_scope, gradebook_queries, gradebook_snapshot, roster_service
+from api.webui import config, workspace
+from api.webui.canvas_client import _canvas_get_all
+from api import feedback_vault
+from api.course_catalog import public_projection, read_catalog
 
 from . import pseudonym
+
+
+# Compatibility seams retained for existing route-style tests; the bound
+# implementations all live in root-level shared use-case modules.
+_course_students = gradebook_queries.course_students
+_course_assignments = gradebook_queries.course_assignments
+_course_submissions = gradebook_queries.course_submissions
+_assignment = gradebook_queries.assignment
+_assignment_submissions = gradebook_queries.assignment_submissions
+_fetch_sections = roster_service.fetch_sections
+_ORIGINAL_COURSE_STUDENTS = _course_students
+_ORIGINAL_COURSE_ASSIGNMENTS = _course_assignments
+_ORIGINAL_COURSE_SUBMISSIONS = _course_submissions
+_ORIGINAL_ASSIGNMENT = _assignment
+_ORIGINAL_ASSIGNMENT_SUBMISSIONS = _assignment_submissions
+_ORIGINAL_FETCH_SECTIONS = _fetch_sections
+_ORIGINAL_PSEUDONYM_FETCH_STUDENTS = pseudonym._fetch_students
+
+
+def _load_snapshot(course_id: str):
+    if (
+        _course_students is _ORIGINAL_COURSE_STUDENTS
+        and _course_assignments is _ORIGINAL_COURSE_ASSIGNMENTS
+        and _course_submissions is _ORIGINAL_COURSE_SUBMISSIONS
+    ):
+        return gradebook_snapshot.load_snapshot(course_id)
+    queries = type("McpQueries", (), {
+        "course_students": staticmethod(_course_students),
+        "course_assignments": staticmethod(_course_assignments),
+        "course_submissions": staticmethod(_course_submissions),
+    })
+    return gradebook_snapshot.load_snapshot(course_id, queries=queries)
 
 
 def _default_vault() -> feedback_vault.Vault:
@@ -63,13 +68,26 @@ def _default_vault() -> feedback_vault.Vault:
 _vault_factory = _default_vault
 
 
+@contextmanager
+def _vault_transaction(vault):
+    """Use the durable vault transaction, with a narrow test-double fallback."""
+    transaction = getattr(vault, "transaction", None)
+    if transaction is not None:
+        with transaction():
+            yield vault
+        return
+    try:
+        yield vault
+    finally:
+        save = getattr(vault, "save", None)
+        if save is not None:
+            save()
+
+
 def _course_gate_check(course_id: str) -> str | None:
     """Current-course scope check, same as the web UI. Returns an error
     string if ``course_id`` is not an active (Current) course, else None."""
-    allowed = {str(c.get("id", "")) for c in config.active_courses()}
-    if str(course_id) not in allowed:
-        return f"course_id '{course_id}' is not a Current course in CanvasExpert."
-    return None
+    return course_scope.current_course_error(course_id, config.active_courses())
 
 
 def list_courses() -> dict:
@@ -133,14 +151,24 @@ def get_roster(course_id: str) -> dict:
         return {"ok": False, "error": err}
 
     vault = _vault_factory()
-    users, fetch_err = pseudonym.sync_vault_for_course(vault, course_id)
-    if fetch_err:
-        return {"ok": False, "error": fetch_err}
-
-    section_map = _fetch_sections(course_id, canvas_get_all=_canvas_get_all)
-    roster = pseudonym.pseudonymize_roster(vault, users, section_map)
-    vault.save()
-    return pseudonym.gate({"roster": roster}, vault)
+    with _vault_transaction(vault):
+        fetch_override = None
+        if pseudonym._fetch_students is not _ORIGINAL_PSEUDONYM_FETCH_STUDENTS:
+            fetch_override = lambda cid: pseudonym._fetch_students(cid)
+        users, fetch_err = roster_service.sync_roster_for_course(
+            vault,
+            course_id,
+            canvas_get_all=_canvas_get_all,
+            fetch_students_override=fetch_override,
+        )
+        if fetch_err:
+            return {"ok": False, "error": fetch_err}
+        if _fetch_sections is _ORIGINAL_FETCH_SECTIONS:
+            section_map = roster_service.fetch_sections(course_id, canvas_get_all=_canvas_get_all)
+        else:
+            section_map = _fetch_sections(course_id, canvas_get_all=_canvas_get_all)
+        roster = pseudonym.pseudonymize_roster(vault, users, section_map)
+        return pseudonym.gate({"roster": roster}, vault)
 
 
 def get_submissions(course_id: str, assignment_id: str) -> dict:
@@ -154,29 +182,45 @@ def get_submissions(course_id: str, assignment_id: str) -> dict:
     vault = _vault_factory()
     # Sync the full roster first so the scrub map covers every enrolled
     # student, not just the ones who submitted this assignment.
-    _, fetch_err = pseudonym.sync_vault_for_course(vault, course_id)
-    if fetch_err:
-        return {"ok": False, "error": fetch_err}
+    with _vault_transaction(vault):
+        fetch_override = None
+        if pseudonym._fetch_students is not _ORIGINAL_PSEUDONYM_FETCH_STUDENTS:
+            fetch_override = lambda cid: pseudonym._fetch_students(cid)
+        _, fetch_err = roster_service.sync_roster_for_course(
+            vault,
+            course_id,
+            canvas_get_all=_canvas_get_all,
+            fetch_students_override=fetch_override,
+        )
+        if fetch_err:
+            return {"ok": False, "error": fetch_err}
+        assignment_reader = (
+            gradebook_queries.assignment
+            if _assignment is _ORIGINAL_ASSIGNMENT else _assignment
+        )
+        submission_reader = (
+            gradebook_queries.assignment_submissions
+            if _assignment_submissions is _ORIGINAL_ASSIGNMENT_SUBMISSIONS
+            else _assignment_submissions
+        )
+        assignment, a_err = assignment_reader(course_id, assignment_id)
+        if a_err:
+            return {"ok": False, "error": a_err}
+        subs, s_err = submission_reader(course_id, assignment_id)
+        if s_err:
+            return {"ok": False, "error": s_err}
 
-    assignment, a_err = _assignment(course_id, assignment_id)
-    if a_err:
-        return {"ok": False, "error": a_err}
-    subs, s_err = _assignment_submissions(course_id, assignment_id)
-    if s_err:
-        return {"ok": False, "error": s_err}
-
-    rows = pseudonym.pseudonymize_submission_rows(vault, subs)
-    vault.save()
-    payload = {
-        "assignment": {
-            "id": assignment.get("id"),
-            "title": assignment.get("name", ""),
-            "points_possible": assignment.get("points_possible"),
-            "due_at": assignment.get("due_at", ""),
-        },
-        "submissions": rows,
-    }
-    return pseudonym.gate(payload, vault)
+        payload = {
+            "assignment": {
+                "id": assignment.get("id"),
+                "title": assignment.get("name", ""),
+                "points_possible": assignment.get("points_possible"),
+                "due_at": assignment.get("due_at", ""),
+            },
+            "submissions": [],
+        }
+        payload["submissions"] = pseudonym.pseudonymize_submission_rows(vault, subs)
+        return pseudonym.gate(payload, vault)
 
 
 def get_gradebook_snapshot(course_id: str) -> dict:
@@ -187,22 +231,10 @@ def get_gradebook_snapshot(course_id: str) -> dict:
     if err:
         return {"ok": False, "error": err}
 
-    students, s_err = _course_students(course_id)
-    if s_err:
-        return {"ok": False, "error": s_err}
-    assignments, a_err = _course_assignments(course_id)
-    if a_err:
-        return {"ok": False, "error": a_err}
-    subs, sub_err = _course_submissions(course_id)
-    if sub_err:
-        return {"ok": False, "error": sub_err}
-
-    snapshot = build_snapshot(students, assignments, subs)
-
-    vault = _vault_factory()
-    _upsert_roster(vault, students)
-    student_rows = pseudonym.pseudonymize_gradebook_rows(vault, snapshot["students"])
-    vault.save()
+    snapshot, snapshot_error = _load_snapshot(course_id)
+    if snapshot_error:
+        return {"ok": False, "error": snapshot_error}
+    students = snapshot.get("students") or []
 
     assignment_rows = []
     for a in snapshot["assignments"]:
@@ -216,6 +248,13 @@ def get_gradebook_snapshot(course_id: str) -> dict:
         "total_missing": snapshot["total_missing"],
         "total_ungraded": snapshot["total_ungraded"],
         "assignments": assignment_rows,
-        "students": student_rows,
+        "students": [],
     }
-    return pseudonym.gate(payload, vault)
+    vault = _vault_factory()
+    with _vault_transaction(vault):
+        roster_service.upsert_roster(vault, [
+            {"id": row.get("user_id"), "name": row.get("name", "")}
+            for row in students
+        ])
+        payload["students"] = pseudonym.pseudonymize_gradebook_rows(vault, snapshot["students"])
+        return pseudonym.gate(payload, vault)

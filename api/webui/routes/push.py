@@ -5,15 +5,15 @@ One APIRouter for file validation, physical quiz output, and dry-run preview.
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from api import runtime_paths
 from ..canvas_client import _canvas_get
-from ..deps import _exports_dir, _workspace_folder
 from .push_validation import register_validation_routes
 
 router = APIRouter(tags=["push"])
 register_validation_routes(
     router,
-    exports_dir_func=lambda: _exports_dir(),
-    workspace_folder_func=lambda name: _workspace_folder(name),
+    exports_dir_func=runtime_paths.exports_dir,
+    workspace_folder_func=runtime_paths.workspace_folder,
 )
 
 

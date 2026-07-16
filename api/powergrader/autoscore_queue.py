@@ -7,18 +7,16 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from copy import deepcopy
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-try:
-    from webui import workspace
-except ModuleNotFoundError:  # pragma: no cover - package context
-    from api.webui import workspace
+from api.storage_support import atomic_write_json, interprocess_lock
 
-try:
-    from powergrader import autoscore_claims
-except ModuleNotFoundError:  # pragma: no cover - package context
-    from api.powergrader import autoscore_claims
+from api.webui import workspace
+from api.powergrader import autoscore_claims
 
 QUEUE_FILENAME = "autoscore_queue.json"
 QUEUE_VERSION = 1
@@ -38,6 +36,8 @@ UNSUPPORTED_TYPES = {
     "media_recording",
     "student_annotation",
 }
+
+_QUEUE_LOCK = threading.RLock()
 
 
 def queue_dir() -> str | None:
@@ -65,6 +65,14 @@ def _default_queue() -> dict:
 
 def load_queue() -> dict:
     path = queue_path()
+    if path:
+        with interprocess_lock(Path(path + ".lock")):
+            return _load_queue_unlocked(path)
+    return _load_queue_unlocked(path)
+
+
+def _load_queue_unlocked(path: str | None = None) -> dict:
+    path = path or queue_path()
     candidates = ([path] if path and os.path.isfile(path) else []) + _legacy_queue_paths()
     data = None
     for candidate in candidates:
@@ -95,8 +103,35 @@ def save_queue(queue: dict) -> None:
     jobs = payload.get("jobs")
     if not isinstance(jobs, list):
         payload["jobs"] = []
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, ensure_ascii=False)
+    with interprocess_lock(Path(path + ".lock")):
+        atomic_write_json(Path(path), payload)
+
+
+@contextmanager
+def queue_transaction():
+    """Reload, mutate, and save the queue under one process/OS lock."""
+    with _QUEUE_LOCK:
+        path = queue_path()
+        if path:
+            with interprocess_lock(Path(path + ".lock")):
+                queue = load_queue()
+                before = deepcopy(queue)
+                yield queue
+                if queue != before:
+                    save_queue(queue)
+        else:
+            queue = load_queue()
+            yield queue
+
+
+def _save_queue_unlocked(path: str, queue: dict) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = deepcopy(queue) if isinstance(queue, dict) else _default_queue()
+    payload.setdefault("version", QUEUE_VERSION)
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        payload["jobs"] = []
+    atomic_write_json(Path(path), payload)
 
 
 def _text(value) -> str:
@@ -317,42 +352,40 @@ def upsert_job(
     auto_push: bool = False,
     push_policy: dict | None = None,
 ) -> dict:
-    queue = load_queue()
-    job_id = make_job_id(course_id, assignment_id)
-    now_iso = _now_iso()
-    existing = _find_job(queue, job_id)
-    job = _build_job(
-        course_id=course_id,
-        course_name=course_name,
-        assignment_id=assignment_id,
-        assignment_name=assignment_name,
-        due_at=due_at,
-        delay_hours=delay_hours,
-        source=source,
-        settings=settings,
-        assignment=assignment,
-        auto_push=auto_push,
-        push_policy=push_policy,
-        created_at=(existing or {}).get("created_at") or now_iso,
-        updated_at=now_iso,
-    )
-    if existing:
-        preserve_status = existing.get("status") in TERMINAL_STATUSES
-        preserved = {
-            "session_id": existing.get("session_id", ""),
-            "last_error": existing.get("last_error", ""),
-        }
-        if preserve_status:
-            preserved["status"] = existing.get("status", job["status"])
-        existing.clear()
-        existing.update(job)
-        existing.update(preserved)
-        save_queue(queue)
-        return existing
+    with queue_transaction() as queue:
+        job_id = make_job_id(course_id, assignment_id)
+        now_iso = _now_iso()
+        existing = _find_job(queue, job_id)
+        job = _build_job(
+            course_id=course_id,
+            course_name=course_name,
+            assignment_id=assignment_id,
+            assignment_name=assignment_name,
+            due_at=due_at,
+            delay_hours=delay_hours,
+            source=source,
+            settings=settings,
+            assignment=assignment,
+            auto_push=auto_push,
+            push_policy=push_policy,
+            created_at=(existing or {}).get("created_at") or now_iso,
+            updated_at=now_iso,
+        )
+        if existing:
+            preserve_status = existing.get("status") in TERMINAL_STATUSES
+            preserved = {
+                "session_id": existing.get("session_id", ""),
+                "last_error": existing.get("last_error", ""),
+            }
+            if preserve_status:
+                preserved["status"] = existing.get("status", job["status"])
+            existing.clear()
+            existing.update(job)
+            existing.update(preserved)
+            return existing
 
-    queue.setdefault("jobs", []).append(job)
-    save_queue(queue)
-    return job
+        queue.setdefault("jobs", []).append(job)
+        return job
 
 
 def reconcile_due_date(job: dict, latest_assignment: dict, now=None) -> dict:

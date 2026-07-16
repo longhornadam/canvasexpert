@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from webui.source_materials import estimate_text_tokens
+from api.webui.source_materials import estimate_text_tokens
 
 from .packet import safe_ai_packet_name
 from . import copilot_packet_support as support

@@ -23,10 +23,14 @@ Run: py push_tiers.py
 import json
 import os
 import sys
+from pathlib import Path
 
-import canvas
-from canvas import COURSE_ID
-import qf_pusher
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from api import canvas, qf_pusher
+from api.canvas import COURSE_ID
 
 FOLDER = os.path.join("qf_materials", "qf quiz examples")
 TIERS = [

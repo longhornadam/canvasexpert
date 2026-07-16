@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import os
 
-try:
-    import feedback_pipeline as fp
-except ModuleNotFoundError:
-    from api import feedback_pipeline as fp
+from api import feedback_pipeline as fp
 
 
 def write_text(path: str, text: str) -> None:

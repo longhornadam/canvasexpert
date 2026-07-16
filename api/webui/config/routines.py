@@ -10,8 +10,9 @@ def get_routine_states() -> dict:
 
 
 def set_routine_state(routine_id: str, patch: dict):
-    state = _io_mod._machine_load()
-    routines = state.setdefault("routines", {})
-    cur = routines.setdefault(routine_id, {})
-    cur.update(patch)
-    _io_mod._machine_save(state)
+    def mutate(state):
+        routines = state.setdefault("routines", {})
+        cur = routines.setdefault(routine_id, {})
+        cur.update(patch)
+
+    _io_mod._modify_machine(mutate)

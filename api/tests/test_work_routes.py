@@ -172,8 +172,8 @@ def test_launcher_rendered_csrf_authorizes_stubbed_scan():
 
         from fastapi.testclient import TestClient
 
-        from webui import server
-        from webui.routes import pages, work
+        from api.webui import server
+        from api.webui.routes import pages, work
 
 
         class CsrfMetaParser(HTMLParser):
@@ -236,7 +236,7 @@ def test_launcher_rendered_csrf_authorizes_stubbed_scan():
     )
     result = subprocess.run(
         [sys.executable, "-c", script],
-        cwd=API_DIR,
+        cwd=API_DIR.parent,
         capture_output=True,
         text=True,
         timeout=30,

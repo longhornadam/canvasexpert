@@ -60,6 +60,16 @@ bookmarked courses, workspace/download paths, AI-TA library rebuilds, and academ
 calendar activation. Token handling remains credential-store only. For low-token
 debugging and file ownership, start with `docs/reference/settings-module-map.md`.
 
+**Connections and diagnostics** (`/connections`) owns the read-only health snapshot,
+support-bundle export, and copy-only connection snippets in `api/diagnostics.py`,
+`api/connections.py`, `api/webui/routes/connections.py`, and
+`api/webui/routes/support.py`. Generic MCP stdio configuration, Claude `.mcpb`
+packaging, and the optional ChatGPT tunnel snippet are generated from the current
+interpreter and unzipped app root. The app never edits client configuration, installs
+software, changes `PATH`, starts a tunnel, or requests elevation. The legacy in-memory
+activity feed is removed; current status belongs to Work, receipts, operations, and
+the sanitized operational log in `api/operational_log.py`.
+
 **Gradebook Expert** (`/gradebook`) handles single-course gradebook operations:
 late policy and school-day sweep, extra-time roster, due-date extensions, curves, and
 grade snapshots. Roster context and monitored-student state are private student data.

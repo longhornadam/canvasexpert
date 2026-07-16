@@ -17,12 +17,13 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import config, workspace
+from api import runtime_paths
 from ..local_request_guard import csrf_token
 from api.operation_ledger import operations as operation_store
 from api.operation_ledger import receipts as receipt_store
 from . import work as work_routes
 from ..deps import (
-    AI_TA_DIR, API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
+    API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
     list_ai_ta_files, list_assignment_files, list_calendar_files,
     list_page_files, list_quiz_files,
 )
@@ -136,7 +137,8 @@ def _push_base_ctx(request: Request) -> dict:
 @router.get("/ai-expert", response_class=HTMLResponse)
 def ai_expert_page(request: Request):
     ai_ta_files = list_ai_ta_files()
-    toolkit_dir = os.path.join(AI_TA_DIR, "MagicSchool Toolkit")
+    ai_ta_dir = runtime_paths.ai_ta_dir()
+    toolkit_dir = os.path.join(ai_ta_dir, "MagicSchool Toolkit")
     toolkit_files = []
     if os.path.isdir(toolkit_dir):
         toolkit_files = sorted(
@@ -147,7 +149,7 @@ def ai_expert_page(request: Request):
         "nav_section":    "help",
         "token_is_set":   config.token_is_set(),
         "ai_ta_files":    ai_ta_files,
-        "ai_ta_dir":      AI_TA_DIR,
+        "ai_ta_dir":      str(ai_ta_dir),
         "toolkit_files":  toolkit_files,
         "workspace_root": workspace.workspace_root(),
     })
@@ -248,7 +250,7 @@ def settings_page(request: Request):
         "previous_courses": [course for course in saved_courses if not course.get("active", True)],
         "base_default":  config.CANVAS_BASE_DEFAULT,
         "download_root": config.get_download_root(),
-        "ai_ta_dir":     AI_TA_DIR,
+        "ai_ta_dir":     str(runtime_paths.ai_ta_dir()),
         "calendars":     config.get_calendars(),
         "calendar_files": list_calendar_files(),
         "workspace_root": root,

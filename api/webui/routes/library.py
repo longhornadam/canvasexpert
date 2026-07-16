@@ -1,6 +1,6 @@
 """Library and AI-TA file routes for Canvas Expert.
 
-One APIRouter; 8 routes for file listing, AI-TA management, validation, and downloads.
+One APIRouter; 7 routes for file listing, AI-TA management, validation, and downloads.
 
 Routes: GET  /api/files
         GET  /api/rf/files
@@ -8,7 +8,6 @@ Routes: GET  /api/files
         GET  /api/ai-ta/file
         GET  /api/ai-ta/toolkit-file
         POST /api/ai-ta/rebuild
-        GET  /api/activity
         GET  /api/download-contract
 """
 import os
@@ -16,8 +15,9 @@ import os
 from fastapi import APIRouter, Form, Request, UploadFile, File
 from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 
-from .. import ai_ta, activity, config
-from ..deps import AI_TA_DIR, REPO_ROOT, list_ai_ta_files, list_quiz_files, list_rubric_files
+from .. import ai_ta
+from api import runtime_paths
+from ..deps import REPO_ROOT, list_ai_ta_files, list_quiz_files, list_rubric_files
 
 router = APIRouter(tags=["library"])
 
@@ -40,12 +40,13 @@ def api_ai_ta_files():
 @router.get("/api/ai-ta/file")
 def api_ai_ta_file(name: str):
     """Return the content of one AI-TA flat file by basename.
-    Validates the name is within AI_TA_DIR to prevent path traversal."""
+    Validates the name is within the current AI-TA directory to prevent path traversal."""
     if not name or os.sep in name or "/" in name or ".." in name:
         return JSONResponse({"error": "invalid name"}, status_code=400)
-    path = os.path.join(AI_TA_DIR, name)
+    ai_ta_dir = runtime_paths.ai_ta_dir()
+    path = os.path.join(ai_ta_dir, name)
     if not os.path.isfile(path) or not os.path.abspath(path).startswith(
-            os.path.abspath(AI_TA_DIR)):
+            os.path.abspath(ai_ta_dir)):
         return JSONResponse({"error": "file not found"}, status_code=404)
     with open(path, encoding="utf-8") as f:
         return PlainTextResponse(f.read())
@@ -56,7 +57,7 @@ def api_ai_ta_toolkit_file(name: str):
     """Return content of one MagicSchool Toolkit file by basename."""
     if not name or os.sep in name or "/" in name or ".." in name:
         return JSONResponse({"error": "invalid name"}, status_code=400)
-    toolkit_dir = os.path.join(AI_TA_DIR, "MagicSchool Toolkit")
+    toolkit_dir = os.path.join(runtime_paths.ai_ta_dir(), "MagicSchool Toolkit")
     path = os.path.join(toolkit_dir, name)
     if not os.path.isfile(path) or not os.path.abspath(path).startswith(
             os.path.abspath(toolkit_dir)):
@@ -68,19 +69,10 @@ def api_ai_ta_toolkit_file(name: str):
 @router.post("/api/ai-ta/rebuild")
 def api_ai_ta_rebuild():
     try:
-        files = ai_ta.build_library(AI_TA_DIR, rubric_folders=config.RUBRIC_FOLDERS)
+        files = ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
-    activity.log_event("ai_ta_rebuild", f"Rebuilt {len(files)} AI-TA files", [], True)
     return JSONResponse({"ok": True, "files": [os.path.basename(p) for p in files]})
-
-
-@router.get("/api/activity")
-def api_activity(limit: int = 50, action: str = "", course: str = ""):
-    events = activity.recent(limit=limit,
-                             action=action or None,
-                             course=course or None)
-    return JSONResponse({"events": events})
 
 
 @router.get("/api/download-contract")

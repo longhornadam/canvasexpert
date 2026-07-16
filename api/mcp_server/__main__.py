@@ -1,20 +1,18 @@
 """Entry point for the CanvasExpert read-only MCP server, run over stdio.
 
-Cwd-independent: mirrors the ``sys.path`` bootstrap in
-``api/webui/server.py`` so this works regardless of the caller's working
-directory (MCP clients typically launch it with an absolute path and an
-unpredictable cwd). No network bind — stdio transport only.
+Cwd-independent: resolves the repository root from this file so it works
+regardless of the caller's working directory (MCP clients typically launch it
+with an absolute path and an unpredictable cwd). No network bind — stdio
+transport only.
 """
-import os
 import sys
+from pathlib import Path
 
-_API_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_REPO_ROOT = os.path.dirname(_API_DIR)
-for _path in (_API_DIR, _REPO_ROOT):
-    if _path not in sys.path:
-        sys.path.insert(0, _path)
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from api.mcp_server.server import mcp  # noqa: E402
+from api.mcp_server.server import run_stdio  # noqa: E402
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    run_stdio()

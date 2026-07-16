@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import io
 import json
-import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from PIL import Image
 import requests
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.powergrader import ai_workflow
 from api.powergrader import canvas_fetch
@@ -172,10 +170,7 @@ def test_focused_refresh_budget_has_exact_ten_mib_boundary():
 
 def test_second_focused_refresh_reuses_manifest_in_saved_course_folder(tmp_path, monkeypatch):
     """The Canvas response name must not redirect a second refresh to a new folder."""
-    try:
-        from webui import config as refresh_config
-    except ModuleNotFoundError:
-        from api.webui import config as refresh_config
+    from api.webui import config as refresh_config
     monkeypatch.setattr(assignment_refresh.workspace, "workspace_root", lambda: str(tmp_path))
     monkeypatch.setattr(refresh_config, "course_display_name", lambda _course_id: "Saved Course")
     monkeypatch.setattr(canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
@@ -522,6 +517,10 @@ def test_mixed_scoring_keeps_text_group_and_isolates_media_failures(monkeypatch,
     pseudo_to_uid = {"P-T1": "user-1", "P-T2": "user-2", "P-M1": "user-3", "P-M2": "user-4"}
 
     class Vault:
+        @contextmanager
+        def transaction(self):
+            yield self
+
         def entries(self):
             return []
 
@@ -592,3 +591,33 @@ def test_mixed_scoring_keeps_text_group_and_isolates_media_failures(monkeypatch,
     assert calls == [["P-T1", "P-T2"], ["P-M1"], ["P-M2"]]
     assert set(result["ai_by_uid"]) == {"user-1", "user-2", "user-4"}
     assert result["ai_failures"] == {"user-3": "No AI draft was produced; manual grading is required."}
+
+    failure_calls = []
+    debug_file = tmp_path / "session-total-failure-debug.json"
+
+    def fail_score(one_bundle, *args, **kwargs):
+        failure_calls.append([student["pseudonym"] for student in one_bundle["students"]])
+        raise RuntimeError("synthetic total provider failure")
+
+    def write_debug(*args, **kwargs):
+        debug_file.write_text(json.dumps({"session_id": kwargs["session_id"]}), encoding="utf-8")
+        return str(debug_file)
+
+    monkeypatch.setattr(ai_workflow.orc, "score", fail_score)
+    monkeypatch.setattr(ai_workflow.privacy, "write_openrouter_debug_file", write_debug)
+
+    failed_result = ai_workflow.run_ai_workflow(
+        mode="assisted", submitted=[{"user_id": uid, "user": {"name": "Fictional Student"}, "body": "text"} for uid in pseudo_to_uid.values()],
+        assignment_name="Fictional Essay", artifact_assignment_name="Fictional Essay Total Failure",
+        assignment_description="", course_id="course-1", course_name="Fictional Biology",
+        assignment_id="assignment-1", session_id="session-total-failure", rubric_name="",
+        persona_id="sage", selected_model="synthetic-model", response_kind="scr",
+        source_text="", source_files_json="", source_uploads=None, has_openrouter_key=True,
+    )
+
+    assert failure_calls == [["P-T1", "P-T2"], ["P-M1"], ["P-M2"]]
+    assert failed_result["ok"] is False
+    assert failed_result["error"].startswith("OpenRouter error:")
+    assert any(step["id"] == "llm_send" and step["status"] == "failed" for step in failed_result["privacy_steps"])
+    assert failed_result["debug_path"] == str(debug_file)
+    assert debug_file.is_file()

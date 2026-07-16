@@ -6,7 +6,6 @@ from datetime import datetime
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import activity
 from ..canvas_client import _canvas_get, _canvas_send
 from ..gradebook_service import _apply_curve_model, _load_curve_events, _save_curve_events
 from .gradebook_common import _assignment, _assignment_submissions, _course_assignments, _course_students
@@ -133,8 +132,6 @@ def curve_apply(course_id: str = Form(...), assignment_id: str = Form(...),
     })
     _save_curve_events(events)
     all_ok = all(r["ok"] for r in push_results)
-    activity.log_event("curve_apply", a.get("name", assignment_id),
-                       [course_id], all_ok, detail=f"{curve_type}, {len(push_results)} students")
     return JSONResponse({"ok": all_ok, "event_id": event_id, "results": push_results})
 
 

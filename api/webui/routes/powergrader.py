@@ -7,16 +7,17 @@ from datetime import datetime
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-import openrouter_client as orc
+from api import openrouter_client as orc
 
 from .. import config, source_materials, workspace
+from api import course_scope
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
-from powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
-                         import_results, late_catchup, packet, privacy,
-                         new_quiz_csv, new_quiz_grader,
-                         session_actions, session_builder, session_store,
-                         start_workflow)
+from api.powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
+                             import_results, late_catchup, packet, privacy,
+                             new_quiz_csv, new_quiz_grader,
+                             session_actions, session_builder, session_store,
+                             start_workflow)
 from .powergrader_helpers import (
     build_late_preview_payload,
     build_late_watch_state,
@@ -35,10 +36,7 @@ from .powergrader_late import (
     _run_late_catchup_score as _run_late_catchup_score_impl,
 )
 
-try:
-    from nq_report import html_to_text
-except ModuleNotFoundError:
-    from api.nq_report import html_to_text
+from api.nq_report import html_to_text
 
 router = APIRouter(tags=["powergrader"])
 
@@ -59,8 +57,9 @@ def _powergrader_assignment_context(course_id: str, assignment_id: str):
     course_id, assignment_id = str(course_id or "").strip(), str(assignment_id or "").strip()
     if not course_id or not assignment_id:
         return None, "Select a course and assignment first."
-    if not any(str(course.get("id")) == course_id for course in config.active_courses()):
-        return None, "Select a saved current course first."
+    scope_error = course_scope.current_course_error(course_id, config.active_courses())
+    if scope_error:
+        return None, scope_error
     course_name = config.course_display_name(course_id) or course_id
     return (course_id, assignment_id, course_name), None
 
@@ -408,7 +407,7 @@ def pg_start(
     # For assisted mode with auto_post, run the initial trigger under the session lock
     auto_post_summary = None
     if auto_post_enabled and mode == "assisted":
-        from powergrader.interactive_autopush import run_interactive_autopush
+        from api.powergrader.interactive_autopush import run_interactive_autopush
         with session_store.session_lock(session_id):
             session = _load_session(session_id)
             if session:
@@ -547,7 +546,7 @@ def pg_late_score(session_id: str):
         appended_user_ids = result.get("appended_user_ids") or []
         # Auto-post trigger for assisted mode
         if appended_user_ids and (session.get("auto_post") or {}).get("enabled") and session.get("mode") == "assisted":
-            from powergrader.interactive_autopush import run_interactive_autopush
+            from api.powergrader.interactive_autopush import run_interactive_autopush
             trigger_result = run_interactive_autopush(
                 session=session,
                 trigger="assisted_late",
@@ -607,7 +606,7 @@ def pg_import_results(
         if payload.get("ok") and payload.get("updated", 0) > 0:
             session = _load_session(session_id)
             if session and (session.get("auto_post") or {}).get("enabled"):
-                from powergrader.interactive_autopush import run_interactive_autopush
+                from api.powergrader.interactive_autopush import run_interactive_autopush
                 updated_user_ids = set(payload.get("updated_user_ids") or [])
                 if updated_user_ids:
                     trigger_result = run_interactive_autopush(

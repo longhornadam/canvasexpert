@@ -4,11 +4,22 @@ import hashlib
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 
-from powergrader import late_catchup
+from api.powergrader import late_catchup
+from api.powergrader import session_store
 
 
 REVIEW_TTL = timedelta(minutes=15)
+
+
+def _session_locked(func):
+    """Keep injected-loader actions inside the authoritative session lock."""
+    @wraps(func)
+    def wrapped(session_id, *args, **kwargs):
+        with session_store.session_lock(session_id):
+            return func(session_id, *args, **kwargs)
+    return wrapped
 
 
 def _now() -> datetime:
@@ -52,6 +63,7 @@ def _new_quiz_decisions(raw: str) -> tuple[list[dict] | None, str | None]:
     return clean, None
 
 
+@_session_locked
 def review_new_quiz_finalization(session_id: str, *, user_id: str, decisions_json: str,
                                  load_session, save_session, preflight) -> tuple[dict, int]:
     session = load_session(session_id)
@@ -95,6 +107,7 @@ def review_new_quiz_finalization(session_id: str, *, user_id: str, decisions_jso
     return {"ok": True, "review_token": pending["token"], "expires_at": pending["expires_at"], "item_count": len(decisions)}, 200
 
 
+@_session_locked
 def resolve_new_quiz_csv_provenance(session_id: str, *, user_id: str,
                                     load_session, save_session, resolver) -> tuple[dict, int]:
     """Resolve one CSV row with the existing signed authoritative-read chain."""
@@ -140,6 +153,7 @@ def resolve_new_quiz_csv_provenance(session_id: str, *, user_id: str,
     return {"ok": True, "status": "resolved" if not student["speedgrader_required"] else "speedgrader_required"}, 200
 
 
+@_session_locked
 def finalize_new_quiz(session_id: str, *, user_id: str, review_token: str, decisions_json: str,
                       load_session, save_session, apply) -> tuple[dict, int]:
     session = load_session(session_id)
@@ -299,6 +313,7 @@ def _eligible_students(session: dict, *, comments_only: bool = False) -> dict[st
     }
 
 
+@_session_locked
 def review_push(
     session_id: str,
     *,
@@ -370,6 +385,7 @@ def review_push(
     }, 200
 
 
+@_session_locked
 def save_grade(
     session_id: str,
     *,
@@ -418,6 +434,7 @@ def _review_error(code: str) -> tuple[dict, int]:
     return {"ok": False, "code": code, "error": messages.get(code, "Push review is no longer valid.")}, 409
 
 
+@_session_locked
 def push_grades(
     session_id: str,
     *,

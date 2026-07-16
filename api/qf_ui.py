@@ -10,10 +10,17 @@ Run: py qf_ui.py [--port 8765] [--no-browser]
 import sys
 import threading
 import webbrowser
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from api import __version__
 
 import uvicorn
 
-from webui.server import app
+from api.webui.server import app
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -29,7 +36,7 @@ def main():
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
-    print(f"Canvas Expert: {url}  (Ctrl+C to stop)")
+    print(f"Canvas Expert {__version__}: {url}  (Ctrl+C to stop)")
     uvicorn.run(app, host=HOST, port=port, log_level="info")
 
 

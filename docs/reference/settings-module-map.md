@@ -14,23 +14,14 @@ changes again.
 - Feature files: `api/webui/static/settings/*.js`
 - Settings route owner: `api/webui/routes/settings.py`
 - Calendar routes: `api/webui/routes/calendar.py`
-- AI-TA file/rebuild routes: `api/webui/ai_ta.py`
+- AI-TA file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
 - Persistence facade: `api/webui/config/__init__.py`
 - Persistence modules: `api/webui/config/*.py`
 
-## Current Size Snapshot
+## Source-size reports
 
-- `api/webui/static/settings.js` - 21 lines
-- `api/webui/static/settings/account.js` - 79 lines
-- `api/webui/static/settings/openrouter.js` - 164 lines
-- `api/webui/static/settings/courses.js` - 106 lines
-- `api/webui/static/settings/workspace.js` - 83 lines
-- `api/webui/static/settings/calendars.js` - 225 lines
-- `api/webui/templates/settings.html` - 383 lines
-- `api/webui/routes/settings.py` - 229 lines
-- `api/webui/config/_io.py` - 233 lines
-- `api/webui/config/feedback.py` - 253 lines
-- `api/webui/config/roster.py` - 239 lines
+Use [`tools/size_report.py`](../../tools/size_report.py) for current source-size
+reports; this map intentionally does not maintain line-count snapshots.
 
 ## Browser Routing
 

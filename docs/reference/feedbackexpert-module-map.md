@@ -37,6 +37,8 @@ are not a teacher-facing alternate Canvas write path.
 - `api/feedback_results.py` — parse, validate, normalize, re-identify, CSV
 - `api/feedback_safety.py` / `api/feedback_scrub.py` — safety scanning/scrubbing
 - `api/feedback_vault.py` — local private vault
+- `api/ai_transmission.py` — the single authorization boundary for live OpenRouter sends
+- `api/operational_log.py` — sanitized local support/transport event log
 - `docs/contracts/feedback-scoring-contract.md` — scoring contract
 
 ## Guardrails

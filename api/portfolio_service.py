@@ -14,9 +14,9 @@ import tempfile
 
 import requests
 
-import portfolio
-from submission_transport import download_binary, get_all_pages
-from webui.workspace import safe_component
+from api import portfolio
+from api.submission_transport import download_binary, get_all_pages
+from api.webui.workspace import safe_component
 
 safe_name = safe_component
 _download_binary = download_binary

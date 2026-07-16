@@ -26,6 +26,10 @@ _FERPA_NOTICE = (
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
 
 
+def run_stdio() -> None:
+    mcp.run(transport="stdio")
+
+
 @mcp.tool()
 def list_courses() -> dict:
     """List every course CanvasExpert knows about (Current + Previous), with

@@ -5,16 +5,10 @@ from __future__ import annotations
 from collections import Counter
 import os
 
-try:
-    import feedback_scrub
-except ModuleNotFoundError:  # package-root test/import context
-    from api import feedback_scrub
+from api import feedback_scrub
 from api.webui import config
 from api.webui import workspace
-try:
-    import feedback_vault
-except ModuleNotFoundError:  # package-root test/import context
-    from api import feedback_vault
+from api import feedback_vault
 from api.webui.routes.roster_helpers import _compute_warnings
 
 from . import call_canvas_get_all, check_deadline, finding, text

@@ -7,12 +7,8 @@ import json
 import os
 import re
 
-try:                                   # script context (run from api/)
-    from nq_report import constructed_responses, html_to_text, parse_student_analysis_file
-    from feedback_vault import Vault
-except ModuleNotFoundError:            # package context (tests: api.feedback_contract)
-    from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
-    from api.feedback_vault import Vault
+from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
+from api.feedback_vault import Vault
 
 CONTRACT_VERSION = "1.0"
 _REVIEW_NOTE = ("Pseudonymized for privacy. Review the response text for any "

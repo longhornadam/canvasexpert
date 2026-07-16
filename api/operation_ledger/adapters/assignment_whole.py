@@ -393,11 +393,11 @@ def validate_printable_pdf(pdf_path: str, *, allowed_roots=None) -> tuple:
 
 
 def allowed_printable_roots():
-    from api.webui.deps import _exports_dir
+    from api import runtime_paths
 
     roots = []
     try:
-        roots.append(os.path.realpath(_exports_dir()))
+        roots.append(os.path.realpath(runtime_paths.exports_dir()))
     except Exception:
         pass
     try:

@@ -14,8 +14,16 @@ def isolated_roster_settings(monkeypatch):
     def fake_save_synced_key(key, value):
         state[key] = value
 
+    def fake_modify_synced(mutator):
+        updated = mutator(state)
+        if updated is not None:
+            state.clear()
+            state.update(updated)
+        return state
+
     monkeypatch.setattr(config._io, "_synced_state", fake_synced_state)
     monkeypatch.setattr(config._io, "_save_synced_key", fake_save_synced_key)
+    monkeypatch.setattr(config._io, "_modify_synced", fake_modify_synced)
 
 
 def test_get_returns_empty_for_unknown_course():

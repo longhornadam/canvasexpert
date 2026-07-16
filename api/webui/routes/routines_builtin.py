@@ -7,17 +7,14 @@ import json
 import uuid as _uuid
 from datetime import datetime, timedelta
 
-from .. import config, activity
+from .. import config
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
 from ..schooldays import _school_days_late, _parse_iso_local
-import student_packet
-from powergrader import assignment_refresh
+from api import student_packet
+from api.powergrader import assignment_refresh
 
-try:
-    from nq_report import html_to_text
-except ModuleNotFoundError:
-    from api.nq_report import html_to_text
+from api.nq_report import html_to_text
 
 
 # --------------------------------------------------------------------------
@@ -176,8 +173,6 @@ def _curve_apply_core(course_id, assignment_id, curve_type, settings, rows):
                    "reverted": False, "students": event_students})
     _save_curve_events(events)
     all_ok = all(r["ok"] for r in push_results)
-    activity.log_event("curve_apply", a.get("name", assignment_id), [course_id], all_ok,
-                       detail=f"{curve_type}, {len(push_results)} students")
     return all_ok, event_id, push_results
 
 

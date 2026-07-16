@@ -11,25 +11,27 @@ def get_calendars() -> dict:
 
 def set_calendar(key: str, label: str, dates: list,
                  periods: list | None = None) -> None:
-    state = _io_mod._synced_state()
-    state.setdefault("calendars", {})[key] = {
-        "label":          label,
-        "no_count_dates": sorted(set(dates)),
-        "grading_periods": periods or [],
-    }
-    _io_mod._save_synced_key("calendars", state.get("calendars", {}))
+    def mutate(state):
+        state.setdefault("calendars", {})[key] = {
+            "label":          label,
+            "no_count_dates": sorted(set(dates)),
+            "grading_periods": periods or [],
+        }
+
+    _io_mod._modify_synced(mutate)
 
 
 def remove_calendar(key: str) -> None:
-    state = _io_mod._synced_state()
-    state.setdefault("calendars", {}).pop(key, None)
-    _io_mod._save_synced_key("calendars", state.get("calendars", {}))
+    def mutate(state):
+        state.setdefault("calendars", {}).pop(key, None)
+
+    _io_mod._modify_synced(mutate)
 
 
 def clear_all_calendars() -> None:
-    state = _io_mod._synced_state()
-    state["calendars"] = {}
-    _io_mod._save_synced_key("calendars", state.get("calendars", {}))
+    _io_mod._modify_synced(
+        lambda state: state.__setitem__("calendars", {}) or state
+    )
 
 
 def get_combined_calendar_for_range(

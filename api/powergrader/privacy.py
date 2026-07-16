@@ -9,9 +9,9 @@ import os
 import traceback
 from datetime import datetime
 
-import feedback_pipeline as fp
-import openrouter_client as orc
-from webui import workspace
+from api import feedback_pipeline as fp
+from api import openrouter_client as orc
+from api.webui import workspace
 
 
 def privacy_step(step_id: str, label: str, status: str,

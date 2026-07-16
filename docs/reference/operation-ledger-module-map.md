@@ -68,13 +68,7 @@ support seams that those adapters now rely on.
 - `api/tests/test_operation_ledger.py`
 - `api/tests/test_operation_routes.py`
 
-## Size Snapshot
+## Source-size reports
 
-- `assignment.py` — 537 lines
-- `assignment_whole.py` — 461 lines
-- `assignment_tiered.py` — 405 lines
-- `quiz.py` — 520 lines
-- `quiz_steps.py` — 411 lines
-- `quiz_whole.py` — 149 lines
-- `quiz_differentiated.py` — 278 lines
-- Full `api/operation_ledger/adapters/` tree — 5,614 lines
+Use [`tools/size_report.py`](../../tools/size_report.py) for current source-size
+reports; this map intentionally does not maintain line-count snapshots.

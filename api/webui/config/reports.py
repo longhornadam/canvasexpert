@@ -22,9 +22,9 @@ def get_student_reports_root() -> str:
 
 
 def set_student_reports_root(path: str):
-    state = _io_mod._machine_load()
-    state["student_reports_root"] = path
-    _io_mod._machine_save(state)
+    _io_mod._modify_machine(
+        lambda state: state.__setitem__("student_reports_root", path) or state
+    )
 
 
 def get_monitored_students() -> dict:
@@ -32,14 +32,15 @@ def get_monitored_students() -> dict:
 
 
 def set_monitored_student(user_id: str, name: str, note: str = ""):
-    state = _io_mod._synced_state()
-    mon = state.setdefault("monitored_students", {})
-    mon[str(user_id)] = {"name": name, "note": note}
-    _io_mod._save_synced_key("monitored_students", mon)
+    _io_mod._modify_synced(
+        lambda state: state.setdefault("monitored_students", {}).__setitem__(
+            str(user_id), {"name": name, "note": note}
+        )
+    )
 
 
 def remove_monitored_student(user_id: str):
-    state = _io_mod._synced_state()
-    mon = state.setdefault("monitored_students", {})
-    mon.pop(str(user_id), None)
-    _io_mod._save_synced_key("monitored_students", mon)
+    def mutate(state):
+        state.setdefault("monitored_students", {}).pop(str(user_id), None)
+
+    _io_mod._modify_synced(mutate)

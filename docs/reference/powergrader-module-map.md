@@ -21,44 +21,46 @@ Current course in the background. Use this file as the first stop before reading
 `powergrader.py` remains the APIRouter owner only. Route-local support should move
 into nearby helper modules or the backend package when it becomes reusable.
 
-## Key file snapshot
+## Key files
+
+For current source sizes, use [`tools/size_report.py`](../../tools/size_report.py).
 
 - `api/webui/routes/powergrader.py` - route orchestration owner
 - `api/course_catalog.py` - Course Catalog v1 validation, acquisition, and storage owner
 - `api/webui/routes/course_catalog.py` - Current-course-gated disk-read/refresh routes
 - `api/webui/static/powergrader/setup_core.js` - local-first setup/catalog consumer
-- `api/webui/static/powergrader/setup_sessions.js` - 115 lines
-- `api/webui/static/powergrader/setup_autoscore.js` - 390 lines
-- `api/webui/static/powergrader_setup.css` - 527 lines
-- `api/webui/static/powergrader_queue.css` - 230 lines
-- `api/webui/templates/powergrader_setup.html` - 304 lines
-- `api/webui/templates/powergrader_queue.html` - 163 lines
-- `api/webui/static/powergrader/queue_core.js` - 332 lines
-- `api/webui/static/powergrader/queue_review.js` - 173 lines
-- `api/webui/static/powergrader/queue_import.js` - 261 lines
-- `api/webui/static/powergrader/queue_late_catchup.js` - 159 lines
-- `api/webui/static/powergrader/queue_privacy.js` - 63 lines
-- `api/webui/static/powergrader_setup.js` - 4 lines
-- `api/webui/static/powergrader_queue.js` - 4 lines
-- `api/powergrader/start_workflow.py` - 88 lines
-- `api/powergrader/ai_workflow.py` - 394 lines
-- `api/powergrader/ai_workflow_support.py` - 61 lines
-- `api/powergrader/autoscore_queue.py` - 427 lines
-- `api/powergrader/autoscore_claims.py` - 202 lines
-- `api/powergrader/autopush_policy.py` - 308 lines
-- `api/powergrader/autopush_policy_result.py` - 63 lines
+- `api/webui/static/powergrader/setup_sessions.js`
+- `api/webui/static/powergrader/setup_autoscore.js`
+- `api/webui/static/powergrader_setup.css`
+- `api/webui/static/powergrader_queue.css`
+- `api/webui/templates/powergrader_setup.html`
+- `api/webui/templates/powergrader_queue.html`
+- `api/webui/static/powergrader/queue_core.js`
+- `api/webui/static/powergrader/queue_review.js`
+- `api/webui/static/powergrader/queue_import.js`
+- `api/webui/static/powergrader/queue_late_catchup.js`
+- `api/webui/static/powergrader/queue_privacy.js`
+- `api/webui/static/powergrader_setup.js`
+- `api/webui/static/powergrader_queue.js`
+- `api/powergrader/start_workflow.py`
+- `api/powergrader/ai_workflow.py`
+- `api/powergrader/ai_workflow_support.py`
+- `api/powergrader/autoscore_queue.py`
+- `api/powergrader/autoscore_claims.py`
+- `api/powergrader/autopush_policy.py`
+- `api/powergrader/autopush_policy_result.py`
 - `api/powergrader/push_context.py` - scheduled and interactive authorization-context builders
 - `api/powergrader/interactive_autopush.py` - guarded fresh-state runner for one interactive trigger
-- `api/powergrader/copilot_packet.py` - 222 lines
-- `api/powergrader/copilot_packet_support.py` - 137 lines
-- `api/webui/routes/routines_powergrader.py` - 361 lines
-- `api/powergrader/scheduled_autoscore_support.py` - 127 lines
+- `api/powergrader/copilot_packet.py`
+- `api/powergrader/copilot_packet_support.py`
+- `api/webui/routes/routines_powergrader.py`
+- `api/powergrader/scheduled_autoscore_support.py`
 
 ## Source-material routing
 
-- `api/webui/source_materials.py` — 216 lines — workspace paths, source-material
+- `api/webui/source_materials.py` — workspace paths, source-material
   listing, context assembly, token estimation, warnings, response presets
-- `api/webui/source_material_extractors.py` — 244 lines — file-format decoding and
+- `api/webui/source_material_extractors.py` — file-format decoding and
   normalization (PDF, DOCX, PPTX, XLSX, ODT, HTML, RTF, plain text)
 
 ## Setup screen routing

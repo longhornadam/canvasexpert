@@ -3,12 +3,9 @@
 from datetime import datetime
 
 from .. import config
-from powergrader import ai_workflow, canvas_fetch, late_catchup, session_builder
+from api.powergrader import ai_workflow, canvas_fetch, late_catchup, session_builder
 
-try:
-    from nq_report import html_to_text
-except ModuleNotFoundError:
-    from api.nq_report import html_to_text
+from api.nq_report import html_to_text
 
 
 def _late_watch_error(session: dict, *, require_key: bool = False, require_source_context: bool = False) -> str | None:

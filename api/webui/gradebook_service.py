@@ -14,14 +14,8 @@ from . import config
 from .canvas_client import _canvas_get_all
 from .deps import WEBUI_DIR
 from .schooldays import _parse_iso_local, _add_school_days, _school_days_late_detail
-try:
-    from api.operation_ledger import paths as ledger_paths
-    from api.operation_ledger import storage as ledger_storage
-except ModuleNotFoundError as exc:
-    if exc.name != "api":
-        raise
-    from operation_ledger import paths as ledger_paths
-    from operation_ledger import storage as ledger_storage
+from api.operation_ledger import paths as ledger_paths
+from api.operation_ledger import storage as ledger_storage
 
 CURVE_EVENTS_PATH = os.path.join(WEBUI_DIR, "curve_events.json")
 LEGACY_CURVE_EVENTS_PATH = CURVE_EVENTS_PATH

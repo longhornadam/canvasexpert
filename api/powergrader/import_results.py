@@ -3,10 +3,21 @@
 import json
 import os
 from datetime import datetime
+from functools import wraps
 
-import feedback_pipeline as fp
+from api import feedback_pipeline as fp
+from api.powergrader import session_store
 
 
+def _session_locked(func):
+    @wraps(func)
+    def wrapped(session_id, *args, **kwargs):
+        with session_store.session_lock(session_id):
+            return func(session_id, *args, **kwargs)
+    return wrapped
+
+
+@_session_locked
 def import_results_into_session(
     session_id: str,
     results_text: str,

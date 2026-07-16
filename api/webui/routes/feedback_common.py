@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 
-import feedback_vault
+from api import feedback_vault
 
 from .. import config, workspace
 from ..deps import list_rubric_files

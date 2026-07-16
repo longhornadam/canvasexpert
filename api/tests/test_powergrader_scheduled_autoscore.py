@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -90,9 +91,17 @@ def test_scheduled_autoscore_reschedules_when_no_submitted_work(monkeypatch):
     )]}
     job = queue["jobs"][0]
 
-    monkeypatch.setattr(routines.autoscore_queue, "load_queue", lambda: queue)
+    @contextmanager
+    def queue_transaction():
+        yield queue
+
+    def unexpected_queue_io(*_args, **_kwargs):
+        raise AssertionError("the scheduled routine must use the queue yielded by queue_transaction")
+
+    monkeypatch.setattr(routines.autoscore_queue, "queue_transaction", queue_transaction)
+    monkeypatch.setattr(routines.autoscore_queue, "load_queue", unexpected_queue_io)
     monkeypatch.setattr(routines.autoscore_queue, "due_jobs", lambda q, now=None: q["jobs"])
-    monkeypatch.setattr(routines.autoscore_queue, "save_queue", lambda q: None)
+    monkeypatch.setattr(routines.autoscore_queue, "save_queue", unexpected_queue_io)
     monkeypatch.setattr(routines.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: ([
         {"user_id": "101", "workflow_state": "unsubmitted", "submission_type": None},
     ], {
@@ -110,6 +119,10 @@ def test_scheduled_autoscore_reschedules_when_no_submitted_work(monkeypatch):
     assert any("no submitted work" in line for line in result["lines"])
     assert job["status"] == "scheduled"
     assert job["last_error"] == "No submitted work found yet."
+    assert job["claimed_by"] == ""
+    assert job["machine_id"] == ""
+    assert job["claimed_at"] == ""
+    assert job["lease_until"] == ""
 
 
 def test_scheduled_autoscore_creates_draft_session_without_canvas_writeback(monkeypatch):
@@ -354,8 +367,13 @@ def test_scheduled_autoscore_runs_autopush_for_existing_session(monkeypatch):
     assert executor_calls
     assert job["status"] == "auto_pushed"
     assert job["push_summary"]["pushed"] == 1
-    assert len(save_calls) >= 2
-    assert save_calls[0][0]["claimed_by"]
+    assert len(save_calls) == 1
+    persisted_job = save_calls[0][0]
+    assert persisted_job["status"] == "auto_pushed"
+    assert persisted_job["claimed_by"] == ""
+    assert persisted_job["machine_id"] == ""
+    assert persisted_job["claimed_at"] == ""
+    assert persisted_job["lease_until"] == ""
 
 
 def test_scheduled_autoscore_marks_missing_assignment_as_failed(monkeypatch):

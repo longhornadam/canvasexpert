@@ -18,9 +18,9 @@ def get_extra_time(course_id: str) -> list[dict]:
 
 
 def set_extra_time(course_id: str, students: list[dict]):
-    state = _io_mod._synced_state()
-    state.setdefault("extra_time", {})[str(course_id)] = students
-    _io_mod._save_synced_key("extra_time", state.get("extra_time", {}))
+    _io_mod._modify_synced(
+        lambda state: state.setdefault("extra_time", {}).__setitem__(str(course_id), students)
+    )
 
 
 def get_tier_tags() -> dict:
@@ -30,7 +30,7 @@ def get_tier_tags() -> dict:
 
 def set_tier_tags(tags: dict):
     clean = {name: str(tags.get(name, "")).strip() for name in TIER_NAMES}
-    _io_mod._save_synced_key("tier_tags", clean)
+    _io_mod._modify_synced(lambda state: state.__setitem__("tier_tags", clean) or state)
 
 
 def get_sweep_settings() -> dict:
@@ -39,6 +39,9 @@ def get_sweep_settings() -> dict:
 
 
 def set_sweep_settings(settings: dict):
-    state = _io_mod._synced_state()
-    state["late_sweep"] = {k: settings[k] for k in SWEEP_DEFAULTS if k in settings}
-    _io_mod._save_synced_key("late_sweep", state.get("late_sweep", {}))
+    _io_mod._modify_synced(
+        lambda state: state.__setitem__(
+            "late_sweep",
+            {k: settings[k] for k in SWEEP_DEFAULTS if k in settings},
+        ) or state
+    )

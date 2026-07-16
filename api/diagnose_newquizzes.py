@@ -31,13 +31,15 @@ POST, which only enqueues a report (Canvas already generates these for the UI).
 import argparse
 import sys
 import time
+from pathlib import Path
 
 import requests
 
-try:                                  # running as a script from api/
-    from webui import config
-except ModuleNotFoundError:           # imported as api.diagnose_newquizzes (tests)
-    from api.webui import config
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from api.webui import config
 
 # Statuses that prove the request got past authentication/authorization.
 _AUTHORIZED = {200, 201, 202, 400, 409}

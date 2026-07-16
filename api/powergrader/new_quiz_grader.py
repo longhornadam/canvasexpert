@@ -15,10 +15,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-try:
-    from powergrader import new_quiz_fetch
-except ModuleNotFoundError:  # pragma: no cover - package context
-    from api.powergrader import new_quiz_fetch
+from api.powergrader import new_quiz_fetch
 
 
 TIMEOUT = 30

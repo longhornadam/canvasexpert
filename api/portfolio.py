@@ -16,10 +16,7 @@ from datetime import datetime
 from docx import Document
 from docx.shared import Inches
 
-try:                                   # script context (run from api/)
-    from nq_report import constructed_responses, html_to_text
-except ModuleNotFoundError:            # package context (tests: api.portfolio)
-    from api.nq_report import constructed_responses, html_to_text
+from api.nq_report import constructed_responses, html_to_text
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 

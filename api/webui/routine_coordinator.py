@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import config, activity
+from . import config
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
 from api.operation_ledger import models as ledger_models
@@ -223,13 +223,6 @@ def run_routine(
             detail=detail,
         )
 
-        # Log activity
-        activity.log_event(
-            "routine_run", routine_id, [],
-            receipt_status != "failed",
-            detail=f"{receipt_status}: {summary[:100]}",
-        )
-
         return {
             "ok": receipt_status not in ("failed", "attention"),
             "status": receipt_status,
@@ -242,10 +235,6 @@ def run_routine(
             routine_id,
             "failed",
             summary=str(exc),
-        )
-        activity.log_event(
-            "routine_run", routine_id, [],
-            False, detail=f"exception: {exc}",
         )
         return {
             "ok": False,

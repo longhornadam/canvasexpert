@@ -3,11 +3,11 @@
 import json
 import os
 import threading
+from pathlib import Path
 
-try:
-    from webui import workspace
-except ModuleNotFoundError:  # pragma: no cover - package context
-    from api.webui import workspace
+from api.storage_support import atomic_write_json, interprocess_lock
+
+from api.webui import workspace
 
 # Per-session lock registry for interactive auto-post serialization
 _session_locks: dict[str, threading.RLock] = {}
@@ -18,17 +18,47 @@ def safe_session_id(session_id: str) -> str:
     return "".join(c for c in session_id if c.isalnum() or c == "-")
 
 
-def session_lock(session_id: str):
-    """Return a context manager that acquires a per-session RLock.
+class _SessionLock:
+    """Context-manager view over a stable per-session RLock.
 
-    This is process-local serialization for the local app, not a distributed
-    lock.  The key is sanitized with safe_session_id.
+    The object deliberately delegates ``_is_owned`` so existing diagnostic and
+    test seams can inspect the process-local lock without acquiring it. The
+    interprocess lock is still held for the complete context-manager lifetime.
     """
-    key = safe_session_id(session_id) or "_"
-    with _session_lock_guard:
-        if key not in _session_locks:
-            _session_locks[key] = threading.RLock()
-        return _session_locks[key]
+
+    def __init__(self, session_id: str):
+        key = safe_session_id(session_id) or "_"
+        with _session_lock_guard:
+            if key not in _session_locks:
+                _session_locks[key] = threading.RLock()
+            self._local_lock = _session_locks[key]
+        self._session_id = session_id
+        self._interprocess = None
+
+    def _is_owned(self):
+        return self._local_lock._is_owned()
+
+    def __enter__(self):
+        self._local_lock.acquire()
+        path = session_path(self._session_id)
+        if path:
+            self._interprocess = interprocess_lock(Path(path + ".lock"))
+            self._interprocess.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            if self._interprocess is not None:
+                self._interprocess.__exit__(exc_type, exc_value, traceback)
+        finally:
+            self._interprocess = None
+            self._local_lock.release()
+        return False
+
+
+def session_lock(session_id: str):
+    """Serialize one session within and across local processes."""
+    return _SessionLock(session_id)
 
 
 def pg_dir() -> str | None:
@@ -71,6 +101,11 @@ def mode_label(mode: str) -> str:
 
 
 def load_session(session_id: str) -> dict | None:
+    with session_lock(session_id):
+        return _load_session_unlocked(session_id)
+
+
+def _load_session_unlocked(session_id: str) -> dict | None:
     path = session_path(session_id)
     if path and os.path.isfile(path):
         return _read_json(path)
@@ -82,11 +117,12 @@ def load_session(session_id: str) -> dict | None:
 
 
 def save_session(session: dict):
-    path = session_path(session["session_id"])
-    if not path:
-        return
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(session, f, indent=2, ensure_ascii=False)
+    session_id = session["session_id"]
+    with session_lock(session_id):
+        path = session_path(session_id)
+        if not path:
+            return
+        atomic_write_json(Path(path), session)
 
 
 def list_session_summaries() -> list[dict]:

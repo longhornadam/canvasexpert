@@ -5,11 +5,12 @@ This module does not call Canvas APIs.
 
 import json
 
-import feedback_pipeline as fp
-import feedback_safety as safety
-import openrouter_client as orc
-from webui import config, source_materials, workspace
-from powergrader import ai_workflow_support, context, copilot_packet, packet, privacy
+from api import ai_transmission
+from api import feedback_pipeline as fp
+from api import feedback_safety as safety
+from api import openrouter_client as orc
+from api.webui import config, source_materials, workspace
+from api.powergrader import ai_workflow_support, context, copilot_packet, packet, privacy
 
 
 def run_ai_workflow(
@@ -107,20 +108,20 @@ def run_ai_workflow(
     )
 
     vault = context.vault()
-    bundle = fp.pseudonymize_submissions(submitted, vault, artifact_name)
-    bundle = context.apply_shared_context(bundle, assignment_description, source_context)
+    with vault.transaction():
+        bundle = fp.pseudonymize_submissions(submitted, vault, artifact_name)
+        bundle = context.apply_shared_context(bundle, assignment_description, source_context)
+        verdict = safety.scan_payload(bundle, vault) if bundle["students"] else None
 
     if not bundle["students"]:
         # No students passed pseudonymization; fall through to session building
         pass
     else:
-        vault.save()
         privacy_steps.append(privacy.privacy_step(
             "pseudonymize", "Assigned pseudonyms and separated identities", "ok",
             f"{len(bundle['students'])} pseudonymized student bundle(s); real names remain in the local vault.",
         ))
 
-        verdict = safety.scan_payload(bundle, vault)
         if not verdict["green"]:
             privacy_steps.append(privacy.privacy_step(
                 "safety_scan", "Checked pseudonymized payload for real names", "warn",
@@ -300,102 +301,41 @@ def run_ai_workflow(
                 f"{safe_students} fake-name student response(s) selected for OpenRouter.",
             ))
 
-            budget_result = orc.teacher_workflow_budget(
-                llm_bundle,
-                rubric_text,
-                model,
-                student_count=safe_students,
-                persona=persona,
-                feedback_pattern=fb_pattern,
-                output_tokens_per_student=source_materials.response_preset(response_kind)["output_tokens_per_student"],
-            )
-
-            if not budget_result["ok"]:
-                estimate = budget_result.get("estimated_cost")
-                estimate_text = f" Estimated batch cost: ${estimate:.2f}." if estimate is not None else ""
-                privacy_steps.append(privacy.privacy_step(
-                    "price_check", "Verified model price before sending", "failed",
-                    "; ".join(budget_result.get("reasons") or ["cost could not be verified"]) + estimate_text,
-                ))
-                return ai_workflow_support.workflow_result(
-                    ok=False,
-                    error=(
-                        f"OpenRouter model '{model}' cannot be used for teacher auto-scoring. "
-                        + "; ".join(budget_result.get("reasons") or ["cost could not be verified"])
-                        + estimate_text
-                    ),
-                    privacy_steps=privacy_steps,
-                    privacy_artifacts=privacy_artifacts,
-                    ai_by_uid=ai_by_uid,
-                    budget=budget_result,
-                    copilot_packet=copilot_info,
-                    source_context=source_context,
-                )
-
-            estimate = budget_result.get("estimated_cost")
-            warning = "; ".join(budget_result.get("warnings") or [])
-            privacy_steps.append(privacy.privacy_step(
-                "price_check", "Verified model price before sending", "warn" if warning else "ok",
-                (
-                    f"Model {model}; estimated batch cost "
-                    + (f"${estimate:.2f}" if estimate is not None else "available after provider billing")
-                    + (f". {warning}" if warning else ".")
-                    + " Estimate assumes fresh input; provider prompt caching is not guaranteed."
-                ),
-            ))
-
             try:
-                all_students = list(llm_bundle.get("students") or [])
-                media_students = [
-                    student for student in all_students
-                    if any(response.get("media") for response in student.get("responses") or [])
-                ]
-                media_pseudonyms = {str(student.get("pseudonym") or "") for student in media_students}
-                text_students = [
-                    student for student in all_students
-                    if str(student.get("pseudonym") or "") not in media_pseudonyms
-                ]
-                results = []
-                isolated_failures: list[tuple[str, Exception]] = []
-                if text_students:
-                    text_bundle = {**llm_bundle, "students": text_students}
-                    try:
-                        results.extend(orc.score(
-                            text_bundle, rubric_text, persona,
-                            api_key=config.get_openrouter_key(), model=model,
-                            feedback_pattern=fb_pattern,
-                            model_metadata=budget_result.get("model_metadata"),
-                        ))
-                    except Exception as exc:
-                        if not media_students:
-                            raise
-                        for student in text_students:
-                            isolated_failures.append((str(student.get("pseudonym") or ""), exc))
-                # Keep each media-bearing request isolated so an image or
-                # provider failure cannot associate evidence with another
-                # pseudonym or discard the rest of the class.
-                for student in media_students:
-                    one_student_bundle = {**llm_bundle, "students": [student]}
-                    try:
-                        results.extend(orc.score(
-                            one_student_bundle, rubric_text, persona,
-                            api_key=config.get_openrouter_key(), model=model,
-                            feedback_pattern=fb_pattern,
-                            model_metadata=budget_result.get("model_metadata"),
-                        ))
-                    except Exception as exc:
-                        isolated_failures.append((str(student.get("pseudonym") or ""), exc))
+                transmission = ai_transmission.score_openrouter_bundle(
+                    llm_bundle,
+                    vault,
+                    rubric_text,
+                    persona,
+                    api_key=config.get_openrouter_key(),
+                    model=model,
+                    feedback_pattern=fb_pattern,
+                    output_tokens_per_student=source_materials.response_preset(response_kind)["output_tokens_per_student"],
+                )
+                budget_result = transmission["budget"]
+
+                estimate = budget_result.get("estimated_cost")
+                warning = "; ".join(budget_result.get("warnings") or [])
+                privacy_steps.append(privacy.privacy_step(
+                    "price_check", "Verified model price before sending", "warn" if warning else "ok",
+                    (
+                        f"Model {model}; estimated batch cost "
+                        + (f"${estimate:.2f}" if estimate is not None else "available after provider billing")
+                        + (f". {warning}" if warning else ".")
+                        + " Estimate assumes fresh input; provider prompt caching is not guaranteed."
+                    ),
+                ))
+
+                results = transmission["results"]
+                isolated_failures = transmission["failures"]
 
                 for pseudonym, _exc in isolated_failures:
                     who = vault.reverse(pseudonym)
                     if who and who.get("canvas_id"):
                         ai_failures[str(who["canvas_id"])] = ai_workflow_support.AI_MANUAL_REVIEW_MESSAGE
 
-                if not results and isolated_failures:
-                    raise isolated_failures[-1][1]
-
-                requested = len(all_students)
-                successful = len({str(row.get("pseudonym") or "") for row in results if row.get("pseudonym")})
+                requested = transmission["requested"]
+                successful = transmission["successful"]
                 failed = len({pseudo for pseudo, _ in isolated_failures if pseudo})
                 privacy_steps.append(privacy.privacy_step(
                     "llm_send", "Sent only the Safe AI Packet to OpenRouter", "ok",
@@ -417,6 +357,43 @@ def run_ai_workflow(
                         "ai_manual_review", "Marked isolated AI failures for teacher review", "warn",
                         f"{len(ai_failures)} student(s) received no AI draft; manual grading is required.",
                     ))
+            except ai_transmission.TransmissionBudgetBlocked as exc:
+                budget_result = exc.budget
+                estimate = budget_result.get("estimated_cost")
+                estimate_text = f" Estimated batch cost: ${estimate:.2f}." if estimate is not None else ""
+                privacy_steps.append(privacy.privacy_step(
+                    "price_check", "Verified model price before sending", "failed",
+                    "; ".join(budget_result.get("reasons") or ["cost could not be verified"]) + estimate_text,
+                ))
+                return ai_workflow_support.workflow_result(
+                    ok=False,
+                    error=(
+                        f"OpenRouter model '{model}' cannot be used for teacher auto-scoring. "
+                        + "; ".join(budget_result.get("reasons") or ["cost could not be verified"])
+                        + estimate_text
+                    ),
+                    privacy_steps=privacy_steps,
+                    privacy_artifacts=privacy_artifacts,
+                    ai_by_uid=ai_by_uid,
+                    budget=budget_result,
+                    copilot_packet=copilot_info,
+                    source_context=source_context,
+                )
+            except ai_transmission.TransmissionSafetyBlocked:
+                privacy_steps.append(privacy.privacy_step(
+                    "llm_send", "Sent only the Safe AI Packet to OpenRouter", "failed",
+                    "The final Safe AI Packet privacy check blocked this send. Nothing was sent.",
+                ))
+                return ai_workflow_support.workflow_result(
+                    ok=False,
+                    error="The Safe AI Packet failed the final privacy check — nothing was sent.",
+                    privacy_steps=privacy_steps,
+                    privacy_artifacts=privacy_artifacts,
+                    ai_by_uid=ai_by_uid,
+                    budget=budget_result,
+                    copilot_packet=copilot_info,
+                    source_context=source_context,
+                )
             except Exception as e:
                 debug_path = privacy.write_openrouter_debug_file(
                     private_dir,
