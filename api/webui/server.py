@@ -60,6 +60,8 @@ from .routes.connections import router as _connections_router
 from .routes.support import router as _support_router
 from .routes.work import router as _work_router
 from .routes.operations import router as _operations_router
+from .routes.mirror import router as _mirror_router
+from .mirror_service import _mirror_heartbeat
 
 
 @asynccontextmanager
@@ -76,6 +78,7 @@ async def _lifespan(app):
         print(f"AI-TA library build failed: {e}")
     _load_custom_routines()
     threading.Thread(target=_routines_heartbeat, daemon=True).start()
+    threading.Thread(target=_mirror_heartbeat, daemon=True).start()
     yield
 
 
@@ -122,3 +125,4 @@ app.include_router(_connections_router)
 app.include_router(_support_router)
 app.include_router(_work_router)
 app.include_router(_operations_router)
+app.include_router(_mirror_router)

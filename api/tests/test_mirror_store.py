@@ -1,0 +1,237 @@
+"""Offline tests for the CanvasMirror on-disk store.
+
+Every test passes an explicit ``root=tmp_path`` — no workspace monkeypatching
+needed because all store paths resolve at call time. Fabricated data uses
+generic names and large made-up Canvas IDs (test_mcp_server_tools convention).
+"""
+from __future__ import annotations
+
+import json
+import os
+
+from api.mirror import store
+
+COURSE = "111"
+
+USERS = [
+    {"id": 900001, "name": "Learner One", "sortable_name": "One, Learner",
+     "short_name": "Lee", "sis_user_id": "SIS-900001",
+     "email": "learner@example.invalid",  # must NOT be stored
+     "enrollments": [{"course_section_id": 800001}]},
+    {"id": 900002, "name": "Learner Two", "sortable_name": "Two, Learner",
+     "short_name": "Learner Two", "sis_user_id": "SIS-900002",
+     "enrollments": [{"course_section_id": 800002}]},
+]
+SECTIONS = {"800001": "Period 1", "800002": "Period 2"}
+
+ASSIGNMENTS = [
+    {"id": 700010, "name": "Essay 1", "due_at": "2026-07-01T23:59:00Z",
+     "points_possible": 10, "published": True,
+     "html_url": "https://example.invalid/700010",
+     "submission_types": ["online_text_entry"],
+     "updated_at": "2026-06-01T00:00:00Z",
+     "description": "must not be stored"},
+]
+
+
+def _submission_row(user_id=900001, attempt=1, body="First draft.",
+                    history=None, **overrides):
+    row = {
+        "assignment_id": 700010, "user_id": user_id,
+        "workflow_state": "submitted", "submitted_at": f"2026-07-0{attempt}T10:00:00Z",
+        "graded_at": None, "score": None, "grade": None,
+        "late": False, "missing": False, "excused": False,
+        "attempt": attempt, "grade_matches_current_submission": True,
+        "submission_type": "online_text_entry", "body": body,
+    }
+    if history is not None:
+        row["submission_history"] = history
+    row.update(overrides)
+    return row
+
+
+# --- roster ------------------------------------------------------------------
+
+def test_roster_round_trip_keeps_only_consumer_fields(tmp_path):
+    store.write_roster(COURSE, USERS, SECTIONS, root=str(tmp_path))
+    document = store.read_roster(COURSE, root=str(tmp_path))
+    assert document["state"] == "current"
+    assert set(document["students"]) == {"900001", "900002"}
+    student = document["students"]["900001"]
+    assert student["name"] == "Learner One"
+    assert student["enrollments"] == [{"course_section_id": "800001"}]
+    assert "email" not in student
+    assert document["sections"] == SECTIONS
+
+
+def test_roster_read_returns_none_for_missing_or_corrupt(tmp_path):
+    assert store.read_roster(COURSE, root=str(tmp_path)) is None
+    path = store.roster_path(COURSE, str(tmp_path))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("{not json")
+    assert store.read_roster(COURSE, root=str(tmp_path)) is None
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"schema_version": 99}, handle)
+    assert store.read_roster(COURSE, root=str(tmp_path)) is None
+
+
+def test_roster_course_id_mismatch_reads_as_absent(tmp_path):
+    store.write_roster(COURSE, USERS, SECTIONS, root=str(tmp_path))
+    other_path = store.roster_path("222", str(tmp_path))
+    os.makedirs(os.path.dirname(other_path), exist_ok=True)
+    os.replace(store.roster_path(COURSE, str(tmp_path)), other_path)
+    assert store.read_roster("222", root=str(tmp_path)) is None
+
+
+# --- assignments ---------------------------------------------------------------
+
+def test_assignments_round_trip_slim_shape(tmp_path):
+    store.write_assignments(COURSE, ASSIGNMENTS, root=str(tmp_path))
+    document = store.read_assignments(COURSE, root=str(tmp_path))
+    row = document["assignments"]["700010"]
+    assert row == {
+        "id": "700010", "name": "Essay 1", "due_at": "2026-07-01T23:59:00Z",
+        "points_possible": 10, "published": True,
+        "html_url": "https://example.invalid/700010",
+        "submission_types": ["online_text_entry"],
+        "updated_at": "2026-06-01T00:00:00Z",
+    }
+
+
+# --- submissions: merge semantics ------------------------------------------------
+
+def test_merge_submissions_records_current_and_attempts(tmp_path):
+    row = _submission_row(history=[
+        {"attempt": 1, "submitted_at": "2026-07-01T10:00:00Z",
+         "submission_type": "online_text_entry", "body": "First draft.",
+         "attachments": [{"filename": "draft.pdf"}]},
+    ])
+    store.merge_submissions(COURSE, "700010", [row], root=str(tmp_path))
+    document = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+    entry = document["submissions"]["900001"]
+    assert entry["current"]["workflow_state"] == "submitted"
+    assert entry["current"]["user_id"] == "900001"
+    assert entry["attempts"]["1"]["body"] == "First draft."
+    assert entry["attempts"]["1"]["attachment_names"] == ["draft.pdf"]
+
+
+def test_merge_is_idempotent(tmp_path):
+    rows = [_submission_row()]
+    first = store.merge_submissions(COURSE, "700010", rows, root=str(tmp_path),
+                                    attempted_at="2026-07-01T12:00:00Z")
+    second = store.merge_submissions(COURSE, "700010", rows, root=str(tmp_path),
+                                     attempted_at="2026-07-01T12:00:00Z")
+    assert first == second
+
+
+def test_attempts_are_append_only_across_deltas(tmp_path):
+    store.merge_submissions(COURSE, "700010", [_submission_row(attempt=1)],
+                            root=str(tmp_path))
+    # Second delta carries only attempt 2 (no history for attempt 1).
+    store.merge_submissions(COURSE, "700010",
+                            [_submission_row(attempt=2, body="Second draft.")],
+                            root=str(tmp_path))
+    entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
+    assert set(entry["attempts"]) == {"1", "2"}
+    assert entry["current"]["attempt"] == 2
+    assert entry["attempts"]["1"]["body"] == "First draft."
+    assert entry["attempts"]["2"]["body"] == "Second draft."
+
+
+def test_delta_merge_keeps_users_not_in_the_batch(tmp_path):
+    store.merge_submissions(COURSE, "700010", [
+        _submission_row(user_id=900001), _submission_row(user_id=900002),
+    ], root=str(tmp_path))
+    store.merge_submissions(COURSE, "700010",
+                            [_submission_row(user_id=900001, attempt=2)],
+                            root=str(tmp_path))
+    document = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+    assert set(document["submissions"]) == {"900001", "900002"}
+
+
+def test_replace_merge_prunes_dropped_users_but_keeps_attempts(tmp_path):
+    store.merge_submissions(COURSE, "700010", [
+        _submission_row(user_id=900001, attempt=1),
+        _submission_row(user_id=900002, attempt=1),
+    ], root=str(tmp_path))
+    store.merge_submissions(COURSE, "700010", [_submission_row(user_id=900001, attempt=2)],
+                            root=str(tmp_path), replace=True)
+    document = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+    assert set(document["submissions"]) == {"900001"}  # 900002 pruned
+    # attempt 1 survived the rewrite even though the new row only had attempt 2
+    assert set(document["submissions"]["900001"]["attempts"]) == {"1", "2"}
+
+
+def test_unsubmitted_rows_are_stored_without_attempts(tmp_path):
+    row = _submission_row(workflow_state="unsubmitted", submitted_at=None,
+                          attempt=None, missing=True, body="")
+    store.merge_submissions(COURSE, "700010", [row], root=str(tmp_path))
+    entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
+    assert entry["current"]["missing"] is True
+    assert entry["attempts"] == {}
+
+
+def test_prune_submission_files(tmp_path):
+    store.merge_submissions(COURSE, "700010", [_submission_row()], root=str(tmp_path))
+    store.merge_submissions(COURSE, "700020", [_submission_row(assignment_id=700020)],
+                            root=str(tmp_path))
+    removed = store.prune_submission_files(COURSE, ["700010"], root=str(tmp_path))
+    assert removed == ["700020"]
+    assert store.list_submission_assignment_ids(COURSE, root=str(tmp_path)) == ["700010"]
+
+
+# --- sync state -------------------------------------------------------------------
+
+def test_read_sync_defaults_when_missing(tmp_path):
+    document = store.read_sync(COURSE, root=str(tmp_path))
+    assert document["passes"]["full"]["state"] == "unavailable"
+    assert document["watermarks"] == {"submitted_since": "", "graded_since": ""}
+
+
+def test_record_pass_success_advances_watermarks(tmp_path):
+    document = store.record_pass(
+        COURSE, "delta", ok=True, attempted_at="2026-07-16T12:00:00Z",
+        watermarks={"submitted_since": "2026-07-16T11:50:00Z",
+                    "graded_since": "2026-07-16T11:50:00Z"},
+        root=str(tmp_path))
+    assert document["passes"]["delta"]["state"] == "current"
+    assert document["passes"]["delta"]["last_success_at"] == "2026-07-16T12:00:00Z"
+    assert document["watermarks"]["submitted_since"] == "2026-07-16T11:50:00Z"
+
+
+def test_record_pass_failure_degrades_stale_then_unavailable(tmp_path):
+    # Never succeeded -> unavailable, watermarks untouched.
+    document = store.record_pass(COURSE, "full", ok=False, error_code="canvas_unavailable",
+                                 root=str(tmp_path))
+    assert document["passes"]["full"]["state"] == "unavailable"
+    # Succeed once, then fail -> stale, last_success preserved.
+    store.record_pass(COURSE, "full", ok=True, attempted_at="2026-07-16T12:00:00Z",
+                      root=str(tmp_path))
+    document = store.record_pass(COURSE, "full", ok=False, error_code="canvas_unavailable",
+                                 attempted_at="2026-07-16T13:00:00Z", root=str(tmp_path))
+    assert document["passes"]["full"]["state"] == "stale"
+    assert document["passes"]["full"]["last_success_at"] == "2026-07-16T12:00:00Z"
+    assert document["passes"]["full"]["error_code"] == "canvas_unavailable"
+
+
+def test_failed_pass_never_advances_watermarks(tmp_path):
+    store.record_pass(COURSE, "delta", ok=True, watermarks={"submitted_since": "A"},
+                      root=str(tmp_path))
+    store.record_pass(COURSE, "delta", ok=False, error_code="x",
+                      root=str(tmp_path))
+    assert store.read_sync(COURSE, root=str(tmp_path))["watermarks"]["submitted_since"] == "A"
+
+
+# --- unconfigured workspace --------------------------------------------------------
+
+def test_writers_raise_without_workspace(monkeypatch):
+    from api.webui import workspace
+    monkeypatch.setattr(workspace, "workspace_root", lambda: None)
+    try:
+        store.write_roster(COURSE, USERS, SECTIONS)
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised
+    assert store.read_roster(COURSE) is None

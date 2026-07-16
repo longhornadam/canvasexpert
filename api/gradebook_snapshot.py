@@ -90,7 +90,22 @@ def build_snapshot(students, assignments, subs) -> dict:
 
 
 def load_snapshot(course_id: str, *, queries=None) -> tuple[dict | None, str | None]:
-    """Fetch the three gradebook datasets in the established order."""
+    """Load the three gradebook datasets in the established order.
+
+    Mirror-first (design law #4: freshness visible, never silent): when no
+    explicit ``queries`` override is given and the CanvasMirror is fresh
+    enough to serve, read from it — otherwise fall back to live Canvas. The
+    snapshot is labeled with ``source`` ("mirror" | "canvas") and
+    ``synced_at`` ("" when live) either way.
+    """
+    source, synced_at = "canvas", ""
+    if queries is None:
+        from api.mirror import queries as mirror_queries
+        mirror, synced_at = mirror_queries.snapshot_queries(course_id)
+        if mirror is not None:
+            queries, source = mirror, "mirror"
+        else:
+            synced_at = ""
     queries = queries or SimpleNamespace(
         course_students=gradebook_queries.course_students,
         course_assignments=gradebook_queries.course_assignments,
@@ -105,4 +120,7 @@ def load_snapshot(course_id: str, *, queries=None) -> tuple[dict | None, str | N
     subs, error = queries.course_submissions(course_id)
     if error:
         return None, error
-    return build_snapshot(students, assignments, subs), None
+    snapshot = build_snapshot(students, assignments, subs)
+    snapshot["source"] = source
+    snapshot["synced_at"] = synced_at
+    return snapshot, None

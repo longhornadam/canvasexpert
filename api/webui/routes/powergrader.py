@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from api import openrouter_client as orc
 
-from .. import config, source_materials, workspace
+from .. import config, mirror_service, source_materials, workspace
 from api import course_scope
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
@@ -696,6 +696,13 @@ def pg_push(
         canvas_send=_canvas_send,
         canvas_get=_canvas_get,
     )
+    if status_code == 200 and payload.get("pushed"):
+        try:
+            session = _load_session(session_id)
+            if session and session.get("course_id"):
+                mirror_service.notify_course_changed(session["course_id"])
+        except Exception:
+            pass
     return JSONResponse(payload, status_code=status_code)
 
 

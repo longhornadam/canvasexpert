@@ -77,6 +77,11 @@ def _assert_no_leaks(payload: dict):
         assert leak not in dumped, f"{leak!r} leaked into payload: {dumped}"
 
 
+def _rows(table: dict) -> list[dict]:
+    """Re-expand a token-lean {columns, rows} table into per-row dicts."""
+    return [dict(zip(table["columns"], row)) for row in table["rows"]]
+
+
 def _use_vault(monkeypatch, tmp_path) -> str:
     vault_path = str(tmp_path / "vault.json")
     monkeypatch.setattr(tools, "_vault_factory", lambda: Vault(vault_path))
@@ -153,10 +158,33 @@ def test_get_course_assignments_happy(monkeypatch):
     result = tools.get_course_assignments("111")
     assert result["ok"] is True
     assert result["course_name"] == "Test Course"
-    assert result["assignments"] == [{
+    assert _rows(result["assignments"]) == [{
         "id": 700010, "title": "Quiz 1", "description_text": "desc",
         "due_at": "2026-07-01T23:59:00Z", "points_possible": 10, "published": True,
     }]
+
+
+def test_get_course_assignments_trims_long_descriptions(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    long_description = "word " * 200  # 1000 chars, well past the preview cut
+    document = _catalog_document(
+        {"700010": {"id": 700010, "name": "Quiz 1",
+                    "description_text": long_description,
+                    "points_possible": 10, "due_at": "2026-07-01T23:59:00Z",
+                    "published": True}},
+        [],
+    )
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+
+    preview = _rows(tools.get_course_assignments("111")["assignments"])[0]["description_text"]
+    assert len(preview) < len(long_description)
+    assert preview.startswith(long_description[:tools._DESCRIPTION_PREVIEW_CHARS])
+    assert "truncated" in preview
+
+    full = _rows(tools.get_course_assignments("111", full_descriptions=True)
+                 ["assignments"])[0]["description_text"]
+    assert full == long_description
 
 
 def test_get_course_assignments_empty(monkeypatch):
@@ -166,7 +194,10 @@ def test_get_course_assignments_empty(monkeypatch):
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
 
     result = tools.get_course_assignments("111")
-    assert result == {"ok": True, "course_id": "111", "course_name": "Test Course", "assignments": []}
+    assert result["ok"] is True
+    assert result["course_id"] == "111"
+    assert result["course_name"] == "Test Course"
+    assert result["assignments"]["rows"] == []
 
 
 def test_get_course_assignments_catalog_missing(monkeypatch):
@@ -196,7 +227,8 @@ def test_get_roster_happy(monkeypatch, tmp_path):
 
     result = tools.get_roster("111")
     assert result["ok"] is True
-    roster = result["roster"]
+    assert result["roster"]["columns"] == ["pseudonym", "section_names"]
+    roster = _rows(result["roster"])
     assert len(roster) == 2
     pseudonyms = {row["pseudonym"] for row in roster}
     assert len(pseudonyms) == 2  # each student gets a distinct pseudonym
@@ -212,7 +244,9 @@ def test_get_roster_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: ([], None))
     monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: {})
 
-    assert tools.get_roster("111") == {"ok": True, "roster": []}
+    result = tools.get_roster("111")
+    assert result["ok"] is True
+    assert result["roster"]["rows"] == []
 
 
 def test_get_roster_failure(monkeypatch, tmp_path):
@@ -243,7 +277,7 @@ def test_get_submissions_happy_scrubs_real_name_and_short_name(monkeypatch, tmp_
     assert result["assignment"] == {
         "id": 700010, "title": "Essay 1", "points_possible": 10, "due_at": "2026-07-01T23:59:00Z",
     }
-    subs = result["submissions"]
+    subs = _rows(result["submissions"])
     assert len(subs) == 1
     row = subs[0]
     assert row["workflow_state"] == "graded"
@@ -256,6 +290,60 @@ def test_get_submissions_happy_scrubs_real_name_and_short_name(monkeypatch, tmp_
     _assert_no_leaks(result)
 
 
+def _submissions_fixture(monkeypatch, tmp_path, bodies_by_user=None):
+    bodies_by_user = bodies_by_user or {
+        900001: "<p>First essay body.</p>",
+        900002: "<p>Second essay body.</p>",
+    }
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
+    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
+        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""}, None))
+    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
+        {"user_id": uid, "workflow_state": "submitted",
+         "submitted_at": "2026-07-01T20:00:00Z", "body": body}
+        for uid, body in bodies_by_user.items()
+    ], None))
+
+
+def test_get_submissions_include_text_false_drops_text_column(monkeypatch, tmp_path):
+    _submissions_fixture(monkeypatch, tmp_path)
+    result = tools.get_submissions("111", "700010", include_text=False)
+    assert result["ok"] is True
+    assert "text" not in result["submissions"]["columns"]
+    assert len(result["submissions"]["rows"]) == 2
+    dumped = json.dumps(result)
+    assert "essay body" not in dumped
+
+
+def test_get_submissions_pseudonyms_filter_narrows_rows(monkeypatch, tmp_path):
+    _submissions_fixture(monkeypatch, tmp_path)
+    everyone = _rows(tools.get_submissions("111", "700010")["submissions"])
+    assert len(everyone) == 2
+    target = everyone[0]["pseudonym"]
+
+    # Case-insensitive, tolerant of spaces around the comma.
+    filtered = tools.get_submissions("111", "700010", pseudonyms=f" {target.upper()} ,")
+    rows = _rows(filtered["submissions"])
+    assert [row["pseudonym"] for row in rows] == [target]
+
+
+def test_get_submissions_max_text_chars_truncates_with_marker(monkeypatch, tmp_path):
+    long_body = "<p>" + ("sentence " * 100) + "</p>"  # ~900 chars of text
+    _submissions_fixture(monkeypatch, tmp_path, {900001: long_body})
+
+    result = tools.get_submissions("111", "700010", max_text_chars=100)
+    row = _rows(result["submissions"])[0]
+    assert len(row["text"]) < 200
+    assert "truncated" in row["text"]
+
+    untrimmed = tools.get_submissions("111", "700010", max_text_chars=0)
+    full_row = _rows(untrimmed["submissions"])[0]
+    assert "truncated" not in full_row["text"]
+    assert len(full_row["text"]) > 800
+
+
 def test_get_submissions_empty(monkeypatch, tmp_path):
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
@@ -266,7 +354,7 @@ def test_get_submissions_empty(monkeypatch, tmp_path):
 
     result = tools.get_submissions("111", "700010")
     assert result["ok"] is True
-    assert result["submissions"] == []
+    assert result["submissions"]["rows"] == []
 
 
 def test_get_submissions_failure(monkeypatch, tmp_path):
@@ -299,14 +387,12 @@ def test_get_gradebook_snapshot_happy(monkeypatch, tmp_path):
     assert result["ok"] is True
     assert result["class_avg"] == 90.0
     assert result["student_count"] == 2
-    assert result["assignments"] == [{
+    assert _rows(result["assignments"]) == [{
         "id": "700010", "title": "Quiz 1", "due_at": "2026-07-01",
         "points": 10, "submitted": 2, "graded": 1, "missing": 0, "late": 0, "avg_pct": 90,
     }]
-    students = result["students"]
-    assert len(students) == 2
-    for s in students:
-        assert set(s.keys()) == {"pseudonym", "missing", "late", "ungraded", "pct"}
+    assert result["students"]["columns"] == ["pseudonym", "missing", "late", "ungraded", "pct"]
+    assert len(result["students"]["rows"]) == 2
     _assert_no_leaks(result)
 
 
@@ -321,8 +407,8 @@ def test_get_gradebook_snapshot_empty(monkeypatch, tmp_path):
     assert result["ok"] is True
     assert result["class_avg"] is None
     assert result["student_count"] == 0
-    assert result["assignments"] == []
-    assert result["students"] == []
+    assert result["assignments"]["rows"] == []
+    assert result["students"]["rows"] == []
 
 
 def test_get_gradebook_snapshot_failure(monkeypatch, tmp_path):
@@ -351,7 +437,7 @@ def test_pseudonym_reverse_round_trip(monkeypatch, tmp_path):
 
     result = tools.get_roster("111")
     assert result["ok"] is True
-    pseudonym_value = result["roster"][0]["pseudonym"]
+    pseudonym_value = _rows(result["roster"])[0]["pseudonym"]
 
     fresh_vault = Vault(vault_path)  # re-open from disk, not the in-memory instance
     reversed_entry = fresh_vault.reverse(pseudonym_value)
@@ -426,6 +512,78 @@ def test_gate_passes_clean_payload_through(tmp_path):
     assert result == {"ok": True, **clean_payload}
 
 
+# --- roster fetch cache --------------------------------------------------------
+
+def test_cached_fetch_students_reuses_fresh_fetch(monkeypatch):
+    calls = []
+
+    def counting_fetch(course_id, *, canvas_get_all=None):
+        calls.append(course_id)
+        return list(FIXTURE_USERS), None
+
+    monkeypatch.setattr(tools.roster_service, "fetch_students", counting_fetch)
+    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
+
+    users_a, err_a = tools._cached_fetch_students("111")
+    users_b, err_b = tools._cached_fetch_students("111")
+    assert (err_a, err_b) == (None, None)
+    assert users_a == users_b
+    assert calls == ["111"]  # second call served from cache
+
+    # A different course is its own cache entry.
+    tools._cached_fetch_students("222")
+    assert calls == ["111", "222"]
+
+
+def test_cached_fetch_students_expires_after_ttl(monkeypatch):
+    calls = []
+
+    def counting_fetch(course_id, *, canvas_get_all=None):
+        calls.append(course_id)
+        return list(FIXTURE_USERS), None
+
+    monkeypatch.setattr(tools.roster_service, "fetch_students", counting_fetch)
+    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
+
+    tools._cached_fetch_students("111")
+    stamp, users = tools._roster_fetch_cache["111"]
+    tools._roster_fetch_cache["111"] = (
+        stamp - tools._ROSTER_CACHE_TTL_SECONDS - 1, users)
+    tools._cached_fetch_students("111")
+    assert calls == ["111", "111"]  # stale entry refetched
+
+
+def test_cached_fetch_students_never_caches_errors(monkeypatch):
+    responses = [(None, "Canvas fetch failed"), (list(FIXTURE_USERS), None)]
+
+    def flaky_fetch(course_id, *, canvas_get_all=None):
+        return responses.pop(0)
+
+    monkeypatch.setattr(tools.roster_service, "fetch_students", flaky_fetch)
+    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
+
+    users, err = tools._cached_fetch_students("111")
+    assert users is None and err == "Canvas fetch failed"
+    users, err = tools._cached_fetch_students("111")
+    assert err is None and len(users) == 2
+
+
+def test_monkeypatched_fetch_seams_bypass_the_cache(monkeypatch, tmp_path):
+    # The integration tests in this file patch pseudonym._fetch_students; that
+    # seam must never populate or read the cross-call cache.
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
+    monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: SECTION_MAP)
+    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
+    monkeypatch.setattr(tools, "_section_fetch_cache", {})
+
+    assert tools._cache_safe() is False
+    assert tools.get_roster("111")["ok"] is True
+    assert tools._roster_fetch_cache == {}
+    assert tools._section_fetch_cache == {}
+
+
 # --- server wiring -------------------------------------------------------------
 
 def test_server_registers_exactly_the_five_read_only_tools():
@@ -436,3 +594,15 @@ def test_server_registers_exactly_the_five_read_only_tools():
         "list_courses", "get_course_assignments", "get_roster",
         "get_submissions", "get_gradebook_snapshot",
     }
+
+
+def test_server_wrappers_return_compact_json(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools.config, "saved_courses", lambda: [
+        {"id": "111", "name": "Algebra I", "nickname": "", "active": True},
+    ])
+    wire = server.list_courses()
+    assert isinstance(wire, str)
+    assert "\n" not in wire and ": " not in wire and ", " not in wire
+    assert json.loads(wire) == tools.list_courses()

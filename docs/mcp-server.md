@@ -19,12 +19,14 @@ Canvas PAT and every write path.
 
 ## Tools
 
+Tool schema version 2.
+
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
-| `get_course_assignments(course_id)` | Assignments from the local course catalog (disk-only) | No |
-| `get_roster(course_id)` | `[{pseudonym, section_names}]` | Yes — pseudonymized |
-| `get_submissions(course_id, assignment_id)` | One assignment's submissions, scrubbed | Yes — pseudonymized |
+| `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
+| `get_roster(course_id)` | Table of `(pseudonym, section_names)` | Yes — pseudonymized |
+| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed | Yes — pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats | Yes — pseudonymized |
 
 `get_course_assignments` only reads the local course catalog written by the CanvasExpert
@@ -33,6 +35,27 @@ yet, refresh it from the web UI first, then retry.
 
 Every `course_id` tool is scoped to Current courses (`config.active_courses()`) — the same
 scope the web UI uses.
+
+### Token-lean results
+
+Tool results occupy the assistant's context window and are re-sent on every following
+turn of the conversation, so the wire format is deliberately compact:
+
+- Results are minified JSON (the server serializes itself rather than letting FastMCP
+  pretty-print).
+- List data is one `{"columns": [...], "rows": [[...]]}` table per section instead of
+  repeated per-row JSON keys.
+- `get_submissions` supports narrowing: `include_text=false` returns status/scores only;
+  `pseudonyms="Name A,Name B"` (comma-separated, case-insensitive) returns specific
+  students; `max_text_chars` (default 2000, `0` = full) trims each submission's text with
+  an explicit `…[truncated N more chars]` marker. The cheap pattern is status first, then
+  full text for only the students that matter.
+- The outbound safety scan always runs on the full row payload **before** tabulation and
+  truncation happens **before** the scan — the gate inspects exactly the bytes that leave
+  the machine.
+
+The server also caches roster/section fetches in memory for 5 minutes (never on disk), so
+back-to-back tool calls in one session don't each re-hit Canvas.
 
 ## Running it
 

@@ -12,10 +12,14 @@ from api.webui.routes import gradebook_snapshot as gradebook_route
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 1
+    assert contract.TOOL_SCHEMA_VERSION == 2
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
+    # v1 stays immutable and loadable for clients pinned to it.
+    v1 = contract.load_contract(1)
+    assert v1["schema_version"] == 1
+    assert [t["name"] for t in v1["tools"]] == [t["name"] for t in expected["tools"]]
     assert len(live["tools"]) == 5
     forbidden = ("write", "update", "comment", "push", "delete", "create", "canvas")
     assert all(not any(word in tool["name"].lower() for word in forbidden) for tool in live["tools"])
@@ -76,8 +80,9 @@ def test_http_and_mcp_share_use_cases_and_student_outputs_stay_green(tmp_path, m
     mcp_gradebook = tools.get_gradebook_snapshot("current")
     assert len(loader_calls) == 2
     assert "user_id" not in http_payload["students"][0]
-    assert all(set(row) == {"pseudonym", "missing", "late", "ungraded", "pct"}
-               for row in mcp_gradebook["students"])
+    assert mcp_gradebook["students"]["columns"] == [
+        "pseudonym", "missing", "late", "ungraded", "pct"]
+    assert len(mcp_gradebook["students"]["rows"]) == 1
 
     mcp_roster = tools.get_roster("current")
     mcp_submissions = tools.get_submissions("current", "700010")

@@ -60,6 +60,8 @@ EXPECTED = [
     ('/api/operation-batches/review', ('POST',)),
     ('/api/operation-batches/{batch_id}/apply', ('POST',)),
     ('/api/operations/{operation_id}/retry', ('POST',)),
+    ('/api/mirror/status', ('GET',)),
+    ('/api/mirror/sync-now', ('POST',)),
     ('/api/open-folder', ('POST',)),
     ('/api/open-path', ('POST',)),
     ('/api/pf/validate', ('POST',)),

@@ -33,6 +33,12 @@ from .courses import (
     set_course_active, bookmark_course, remove_course,
 )
 
+# --- CanvasMirror ---
+from .mirror import (
+    mirror_enabled, set_mirror_enabled,
+    mirror_serve_max_age_hours, set_mirror_serve_max_age_hours,
+)
+
 # --- Gradebook tools ---
 from .gradebook import (
     SWEEP_DEFAULTS, TIER_NAMES,
