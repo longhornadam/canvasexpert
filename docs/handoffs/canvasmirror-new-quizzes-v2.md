@@ -144,7 +144,8 @@ Stop and return RED/YELLOW instead of guessing if:
 ## Execution result
 
 Traffic light: GREEN  
-Commit: `d6840c6 feat: add CanvasMirror New Quizzes v2` (local only; not pushed)
+Commit: `d6840c6 feat: add CanvasMirror New Quizzes v2`; correction:
+`03e7d02 fix: preserve rich New Quiz mirror metadata` (local only; not pushed)
 Files changed:  
 - `api/mirror/new_quizzes.py` — versioned v2 metadata/response storage, validators,
   freshness reads, metadata sync, attempt/evidence normalization, and cache adapter.  
