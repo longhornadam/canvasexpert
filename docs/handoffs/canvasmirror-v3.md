@@ -1,6 +1,6 @@
 # CanvasMirror v3 — one source of reads, complete feedback data, safe on two machines
 
-Status: orchestration plan — not yet started
+Status: COMPLETE — all six slices done, 2026-07-16; final suite 879 passed, 1 skipped
 Risk: medium (read-path migration; no write-path changes anywhere)
 Owner/orchestrator: Claude (strong model, main session)
 Executors: one subagent per slice (weaker models acceptable — every slice spec
@@ -16,10 +16,10 @@ including a fresh one after a usage wall — resumes from this table alone.
 
 | Slice | Title | Status | Commit |
 |---|---|---|---|
-| 1 | Work-discovery providers read the mirror | in_progress (unblocked by slice 5; re-dispatched) | — |
-| 2 | Routine sweeps read the mirror (display reads only) | pending | — |
-| 3 | Curve listing reads the mirror (preview/apply stays live) | pending | — |
-| 4 | PowerGrader session creation: delta-then-disk | pending | — |
+| 1 | Work-discovery providers read the mirror | done | 1eb460b (+ db61247 author_role amendment) |
+| 2 | Routine sweeps read the mirror (display reads only) | done | c06d9b4 |
+| 3 | Curve listing reads the mirror (preview/apply stays live) | done | 5cbace3 |
+| 4 | PowerGrader session creation: delta-then-disk | done | b8b3b3d |
 | 5 | Submission comments in the mirror | done | f403a29 |
 | 6 | Vault multi-machine hardening | done | c31543b |
 
@@ -48,6 +48,28 @@ Statuses: `pending` → `in_progress` → `done` | `blocked: <one-line reason>`
   tests green; fail-closed check sits before any student data in all three
   MCP tools; vault assignment logic untouched. NQ v2 post-review hardening
   committed separately (470272c). Slice 1 retry still in flight.
+- 2026-07-16: Slice 1 done (1eb460b). Orchestrator amended the comment shape
+  first (db61247): author_role added via home_attention's own fallback chain
+  so staff comments stay provably staff from the mirror (agent had flagged
+  the unknown-role degradation; conservative but noisy). 66 targeted + full
+  suite 855/1 verified by orchestrator. Slice 2 dispatched.
+- 2026-07-16: Slice 2 done (c06d9b4; suite 868/1). Agent correctly kept
+  _sweep_compute and the sweep/curve write-feeding reads fully live: it
+  traced that /api/sweep/apply (routes/gradebook_sweep.py) writes
+  client-submitted preview entries with NO fresh re-read, unlike the
+  op-ledger sweep adapter which recomputes before executing. FUTURE
+  HARDENING CANDIDATE (pre-existing, not v3): make /api/sweep/apply re-read
+  or route through the op-ledger adapter. Slice 3 dispatched.
+- 2026-07-16: Slice 3 done (5cbace3; suite 872/1). Boundary comment now
+  guards the curves file against future "helpful" flips. Slice 4 (final)
+  dispatched.
+- 2026-07-16: Slice 4 done (b8b3b3d; suite 879/1). Delta-then-disk scoped
+  to text-entry-only assignments (mirror rows carry no attachment payload);
+  uploads/media/NQ and every failure mode stay live. session_builder needed
+  no changes (already str-id tolerant). v3 COMPLETE. Carried-forward
+  candidates for a future run: /api/sweep/apply re-read hardening (slice 2
+  log entry); deleted-comment persistence (slice 5 log entry); views layer
+  (regrade queue, revision chains) is v4.
 
 ---
 
