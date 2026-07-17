@@ -17,6 +17,7 @@ import requests
 from api.webui import config, workspace
 from api.webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
 from api.mirror import new_quizzes
+from api.mirror import queries as mirror_queries
 from api.powergrader import student_attachments
 
 
@@ -29,10 +30,119 @@ CANVAS_AUTH_HEADERS = {
 }
 
 
+def _text_only_submission_types(adata: dict) -> bool:
+    """True only when Canvas says the ONLY way to submit is typed text — the
+    one shape where no attachment payload can ever exist. Anything else
+    (uploads, media, url, quiz/LTI, unknown) must stay live so evidence isn't
+    silently dropped."""
+    types = {str(t) for t in (adata.get("submission_types") or [])}
+    return types == {"online_text_entry"}
+
+
+def _mirror_session_submissions(course_id: str, assignment_id: str):
+    """Delta-then-disk (locked decision 5): a synchronous delta must succeed
+    for this course before submission bodies are read from disk. Returns
+    ``(rows, None)`` when servable, or ``(None, reason)`` to signal the
+    caller must fall back to the existing live fetch. Never raises — any
+    failure here is just a fallback signal, not a user-facing error."""
+    try:
+        from api.webui import mirror_service
+    except Exception:
+        return None, "mirror_service_unavailable"
+    try:
+        summaries = mirror_service.sync_now(course_id) or []
+    except Exception:
+        return None, "sync_exception"
+    delta_ok = any(
+        str(summary.get("course_id")) == str(course_id) and summary.get("ok")
+        for summary in summaries
+    )
+    if not delta_ok:
+        return None, "delta_failed"
+    try:
+        rows, error = mirror_queries.assignment_submissions(course_id, assignment_id)
+    except Exception:
+        return None, "mirror_read_exception"
+    if error or rows is None:
+        return None, "mirror_read_error"
+    return rows, None
+
+
+def _enrich_mirror_rows(rows: list[dict], *, course_id: str, adata: dict) -> list[dict]:
+    """Reconstruct the ``include[]=assignment,user`` shape live Canvas
+    submissions normally carry. The on-disk mirror rows store neither nested
+    object (only ids), so downstream consumers (student display name,
+    per-item assignment description/points) would silently degrade without
+    this — rebuilt here from data already on hand, not from a widened
+    normalizer."""
+    assignment_stub = {
+        "id": str(adata.get("id") or ""),
+        "name": adata.get("name") or "",
+        "description": adata.get("description") or "",
+        "points_possible": adata.get("points_possible"),
+    }
+    roster_by_id: dict = {}
+    try:
+        students, error = mirror_queries.course_students(course_id)
+        if not error:
+            roster_by_id = {str(student.get("id")): student for student in (students or [])}
+    except Exception:
+        roster_by_id = {}
+    enriched = []
+    for row in rows or []:
+        row = dict(row)
+        row["assignment"] = assignment_stub
+        student = roster_by_id.get(str(row.get("user_id") or ""))
+        if student:
+            row["user"] = {
+                "id": student.get("id"),
+                "name": student.get("name"),
+                "sortable_name": student.get("sortable_name"),
+                "short_name": student.get("short_name"),
+                "sis_user_id": student.get("sis_user_id"),
+            }
+        enriched.append(row)
+    return enriched
+
+
+def _acquire_ordinary_submissions(course_id: str, assignment_id: str, adata: dict, *,
+                                  materialize_ordinary_files: bool | None):
+    """Ordinary (non-New-Quiz) submissions acquisition for session creation.
+
+    Delta-then-disk when safe: the caller did not request ordinary-attachment
+    materialization (or we can prove this assignment has no attachment
+    surface at all) AND a synchronous delta just refreshed this course.
+    Every other case — quiz/LTI, any upload-capable submission type, an
+    explicit materialize_ordinary_files=True, a failed delta, or a mirror
+    read error — falls back to the existing live paginated fetch, unchanged.
+    """
+    is_quiz_lti = adata.get("is_quiz_lti_assignment") is True
+    if materialize_ordinary_files is None:
+        needs_materialization = not _text_only_submission_types(adata)
+    else:
+        needs_materialization = materialize_ordinary_files
+    if not is_quiz_lti and not needs_materialization:
+        rows, _reason = _mirror_session_submissions(course_id, assignment_id)
+        if rows is not None:
+            return _enrich_mirror_rows(rows, course_id=course_id, adata=adata), None
+    return _canvas_get_all(
+        f"/api/v1/courses/{course_id}/students/submissions",
+        {"student_ids[]": ["all"], "assignment_ids[]": [assignment_id],
+         "include[]": ["assignment", "user"], "per_page": 100},
+    )
+
+
 def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | None = None,
                       new_quiz_files=True, byte_budget=None, evidence_path=None, reusable_records=None,
-                      cached_new_quiz=None):
-    """Fetch submissions for one assignment. Returns ``(subs, assignment, error)``."""
+                      cached_new_quiz=None, materialize_ordinary_files: bool | None = None):
+    """Fetch submissions for one assignment. Returns ``(subs, assignment, error)``.
+
+    ``materialize_ordinary_files`` lets a caller declare up front whether it
+    will materialize ordinary Canvas attachments from the result (as
+    ``assignment_refresh.refresh_assignment`` does for every non-quiz
+    assignment). ``None`` (default) infers this from the assignment's
+    ``submission_types`` — see ``_acquire_ordinary_submissions``.
+    """
     if cached_new_quiz is not None:
         # The response snapshot is already joined to the assignment.  The
         # native evidence path below remains live and may still refresh files.
@@ -41,17 +151,15 @@ def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | N
         adata.setdefault("id", str(assignment_id))
         adata["is_quiz_lti_assignment"] = True
     else:
-        subs, err = _canvas_get_all(
-            f"/api/v1/courses/{course_id}/students/submissions",
-            {"student_ids[]": ["all"], "assignment_ids[]": [assignment_id],
-             "include[]": ["assignment", "user"], "per_page": 100},
-        )
-        if err:
-            return None, None, err
         adata, assignment_err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
         if assignment_err:
             return None, None, assignment_err
         adata = adata or {}
+        subs, err = _acquire_ordinary_submissions(
+            course_id, assignment_id, adata, materialize_ordinary_files=materialize_ordinary_files,
+        )
+        if err:
+            return None, None, err
     if adata.get("is_quiz_lti_assignment") is True:
         from api.powergrader import new_quiz_fetch
         if evidence_path == "managed":
