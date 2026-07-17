@@ -238,6 +238,26 @@ def _course_gate_check(course_id: str) -> str | None:
     return course_scope.current_course_error(course_id, config.active_courses())
 
 
+_VAULT_CONFLICT_ERROR = (
+    "identity vault conflict detected — resolve in the CanvasExpert web UI "
+    "before pseudonymized reads continue"
+)
+
+
+def _vault_conflict_check(vault) -> str | None:
+    """Fail-closed guard: a forked vault.json (OneDrive conflict copy) can
+    assign a second pseudonym to the same student and silently break scrub
+    coverage, so refuse pseudonymized reads until a teacher resolves it in
+    the web UI. Test doubles without a ``conflicts()`` method (existing
+    ``_vault_factory`` monkeypatches) are treated as conflict-free."""
+    conflicts = getattr(vault, "conflicts", None)
+    if conflicts is None:
+        return None
+    if conflicts():
+        return _VAULT_CONFLICT_ERROR
+    return None
+
+
 def list_courses() -> dict:
     """All saved courses (Current + Previous). No Canvas call, no student
     data — no course gate, no safety gate."""
@@ -302,8 +322,12 @@ def get_roster(course_id: str) -> dict:
     if err:
         return {"ok": False, "error": err}
 
-    mirror_doc = _mirror_roster_doc(course_id)
     vault = _vault_factory()
+    conflict_err = _vault_conflict_check(vault)
+    if conflict_err:
+        return {"ok": False, "error": conflict_err}
+
+    mirror_doc = _mirror_roster_doc(course_id)
     with _vault_transaction(vault):
         if mirror_doc is not None:
             users = list(mirror_doc["students"].values())
@@ -336,8 +360,12 @@ def get_submissions(course_id: str, assignment_id: str,
     if err:
         return {"ok": False, "error": err}
 
-    bundle = _mirror_submission_bundle(course_id, assignment_id)
     vault = _vault_factory()
+    conflict_err = _vault_conflict_check(vault)
+    if conflict_err:
+        return {"ok": False, "error": conflict_err}
+
+    bundle = _mirror_submission_bundle(course_id, assignment_id)
     # Sync the full roster first so the scrub map covers every enrolled
     # student, not just the ones who submitted this assignment.
     with _vault_transaction(vault):
@@ -406,6 +434,11 @@ def get_gradebook_snapshot(course_id: str) -> dict:
     if err:
         return {"ok": False, "error": err}
 
+    vault = _vault_factory()
+    conflict_err = _vault_conflict_check(vault)
+    if conflict_err:
+        return {"ok": False, "error": conflict_err}
+
     snapshot, snapshot_error = _load_snapshot(course_id)
     if snapshot_error:
         return {"ok": False, "error": snapshot_error}
@@ -427,7 +460,6 @@ def get_gradebook_snapshot(course_id: str) -> dict:
         "assignments": assignment_rows,
         "students": [],
     }
-    vault = _vault_factory()
     with _vault_transaction(vault):
         roster_service.upsert_roster(vault, [
             {"id": row.get("user_id"), "name": row.get("name", "")}

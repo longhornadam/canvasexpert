@@ -12,12 +12,15 @@ sources, and years.
 v2 pseudonyms are realistic fake names like "Sparky McGee" drawn from a pool
 disjoint from real rosters. Pure stdlib; offline-testable.
 """
+import fnmatch
 import json
 import os
 import random
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
+from api.powergrader.autoscore_claims import machine_id
 from api.storage_support import atomic_write_json, interprocess_lock
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +44,7 @@ class Vault:
         self._by_id = {}          # canvas_id(str) -> {pseudonym, pseudo_first, pseudo_last,
                                   #                   real_name, sis_id, nicknames, first_seen}
         self._by_pseudo = {}      # pseudonym -> canvas_id(str)
+        self.conflict_files: list[str] = []
         self._load()
 
     def _load(self):
@@ -49,6 +53,30 @@ class Vault:
             with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
         self._apply_document(data)
+        self.conflict_files = self._scan_conflicts()
+
+    def _scan_conflicts(self) -> list[str]:
+        """OneDrive can fork this file across machines, naming copies like
+        ``vault-DESKTOP123.json`` or ``vault (1).json``. Find any such
+        artifact beside the canonical file (never the file itself or its
+        ``.lock`` companion) without touching or merging them."""
+        directory = os.path.dirname(self.path) or "."
+        if not os.path.isdir(directory):
+            return []
+        canonical = os.path.basename(self.path)
+        lock_name = canonical + ".lock"
+        found = []
+        for entry in sorted(os.listdir(directory)):
+            if entry in (canonical, lock_name):
+                continue
+            if fnmatch.fnmatch(entry, "vault*.json"):
+                found.append(entry)
+        return found
+
+    def conflicts(self) -> list[str]:
+        """Basenames of OneDrive conflict-copy artifacts found beside this
+        vault at last load. Empty means no fork detected."""
+        return list(self.conflict_files)
 
     def _apply_document(self, data: dict):
         """Replace in-memory maps with one freshly loaded document."""
@@ -86,7 +114,12 @@ class Vault:
         return path.with_name(path.name + ".lock")
 
     def _save_unlocked(self):
-        atomic_write_json(Path(self.path), {"by_canvas_id": self._by_id})
+        atomic_write_json(Path(self.path), {
+            "by_canvas_id": self._by_id,
+            "written_by": machine_id(),
+            "written_at": datetime.now().isoformat(timespec="seconds"),
+            "entry_count": len(self._by_id),
+        })
 
     @contextmanager
     def transaction(self):

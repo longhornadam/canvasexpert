@@ -20,6 +20,7 @@ from api.mirror import store, sync
 
 from . import config, workspace
 from .canvas_client import _canvas_get_all
+from .routes.names import _vault as _identity_vault
 
 
 LAUNCH_DELAY_SECONDS = 120        # after the routines heartbeat's 90 s
@@ -128,7 +129,19 @@ def status() -> dict:
         "workspace_configured": workspace.workspace_root() is not None,
         "serve_max_age_hours": config.mirror_serve_max_age_hours(),
         "courses": courses,
+        "vault_conflict": _vault_conflict_files(),
     }
+
+
+def _vault_conflict_files() -> list[str]:
+    """Basenames of any OneDrive vault conflict-copy artifacts, or [] when
+    there's no workspace configured / no conflict / the vault can't be read.
+    Never raises — a missing workspace must not break /api/mirror/status."""
+    try:
+        vault = _identity_vault()
+        return vault.conflicts()
+    except Exception:
+        return []
 
 
 def _mirror_heartbeat():

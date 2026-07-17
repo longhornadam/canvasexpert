@@ -45,11 +45,13 @@ def names_roster(course_id: str = Query("")):
         # Maybe the user already has cached/offline entries
         with vault.transaction():
             return JSONResponse({"ok": True, "entries": vault.entries(),
+                                 "vault_conflict": vault.conflicts(),
                                  "note": f"Canvas fetch failed: {err}"})
 
     with vault.transaction():
         _upsert_roster(vault, users)
-        return JSONResponse({"ok": True, "entries": vault.entries()})
+        return JSONResponse({"ok": True, "entries": vault.entries(),
+                             "vault_conflict": vault.conflicts()})
 
 
 @names_router.post("/nickname")
