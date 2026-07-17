@@ -9,6 +9,7 @@ import time
 from copy import deepcopy
 from datetime import datetime, timezone
 
+from api.mirror import queries as mirror_queries
 from api.work_registry.models import material_version, stable_fingerprint, validate_job
 
 
@@ -80,9 +81,67 @@ def _callback_accepts_deadline(callback) -> bool:
     )
 
 
+# Exactly the three course-scoped shapes the Work Registry providers request.
+# Any other path always goes live; recognized here with one compiled regex
+# per shape so course_id extraction stays unambiguous.
+_MIRROR_ASSIGNMENTS_RE = re.compile(r"^/api/v1/courses/(?P<course_id>[^/]+)/assignments/?$")
+_MIRROR_USERS_RE = re.compile(r"^/api/v1/courses/(?P<course_id>[^/]+)/users/?$")
+_MIRROR_SUBMISSIONS_RE = re.compile(
+    r"^/api/v1/courses/(?P<course_id>[^/]+)/students/submissions/?$"
+)
+_MIRROR_PATH_SHAPES = (
+    (_MIRROR_ASSIGNMENTS_RE, "assignments"),
+    (_MIRROR_USERS_RE, "users"),
+    (_MIRROR_SUBMISSIONS_RE, "submissions"),
+)
+
+
+def _mirror_shape(path: str) -> tuple[str, str] | tuple[None, None]:
+    """Return ``(kind, course_id)`` when ``path`` matches one of the three
+    recognized shapes, else ``(None, None)``."""
+    for pattern, kind in _MIRROR_PATH_SHAPES:
+        match = pattern.match(path)
+        if match:
+            return kind, match.group("course_id")
+    return None, None
+
+
+def _mirror_rows(kind: str, course_id: str) -> list | None:
+    """Return rows from the mirror only when fresh and error-free, else None
+    so the caller falls back to the existing live call unchanged."""
+    try:
+        if kind == "users":
+            if not mirror_queries.roster_freshness(course_id):
+                return None
+            rows, error = mirror_queries.course_students(course_id)
+        else:
+            if not mirror_queries.data_freshness(course_id):
+                return None
+            if kind == "assignments":
+                rows, error = mirror_queries.course_assignments(course_id)
+            else:
+                rows, error = mirror_queries.course_submissions(course_id)
+    except Exception:
+        return None
+    if error or not isinstance(rows, list):
+        return None
+    return rows
+
+
 def call_canvas_get_all(canvas_get_all, path: str, params: dict, deadline: float):
-    """Call an injected paginated GET while preserving test-friendly callbacks."""
+    """Call an injected paginated GET while preserving test-friendly callbacks.
+
+    Course-scoped assignment/user/submission reads are served from the
+    CanvasMirror when it is fresh; any other path, staleness, or mirror error
+    falls through to the existing live call, completely unchanged.
+    """
     check_deadline(deadline)
+    kind, course_id = _mirror_shape(path)
+    if kind:
+        rows = _mirror_rows(kind, course_id)
+        if rows is not None:
+            check_deadline(deadline)
+            return rows
     kwargs = {"params": params, "timeout": 10}
     if _callback_accepts_deadline(canvas_get_all):
         kwargs["deadline"] = deadline
