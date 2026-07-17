@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from .. import config
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
+from ..mirror_reads import assignments_or_live, students_or_live, submissions_or_live
 from ..schooldays import _school_days_late, _parse_iso_local
 from api import student_packet
 from api.powergrader import assignment_refresh
@@ -51,8 +52,7 @@ def _run_routine_sweep(params):
             ok = False
             continue
 
-        students, err = _canvas_get_all(f"/api/v1/courses/{cid}/users",
-                                        {"enrollment_type[]": "student", "per_page": 100})
+        students, err, _source = students_or_live(cid)
         if err:
             lines.append(f"✗ {c['nickname']}: {err}")
             ok = False
@@ -108,7 +108,7 @@ def _run_routine_download(params):
     DOWNLOADABLE = {"online_text_entry", "online_upload", "online_url", "discussion_topic"}
     lines, ok, total, current, incomplete, failed = [], True, 0, 0, 0, 0
     for c in config.active_courses():
-        asgns, err = _canvas_get_all(f"/api/v1/courses/{c['id']}/assignments", {"per_page": 100})
+        asgns, err, _source = assignments_or_live(c["id"])
         if err:
             lines.append("✗ assignment listing failed")
             ok = False
@@ -143,11 +143,14 @@ def _curve_apply_core(course_id, assignment_id, curve_type, settings, rows):
     a, err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
     if err:
         return False, None, [{"error": err}]
-    current_subs, _ = _canvas_get_all(
-        f"/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions",
-        {"per_page": 100})
+    # Audit-only baseline (recorded on the curve event as score_at_apply_time,
+    # not used to compute the curved value written below) — safe to serve
+    # from the mirror. course_submissions() returns all of the course's
+    # submissions, so filter down to this assignment.
+    current_subs, _current_err, _source = submissions_or_live(course_id)
     current_score_by_uid = {str(sub["user_id"]): sub.get("score")
-                            for sub in (current_subs or [])}
+                            for sub in (current_subs or [])
+                            if str(sub.get("assignment_id")) == str(assignment_id)}
     event_id = f"curve_{_uuid.uuid4().hex[:8]}"
     event_students, push_results = [], []
     for r in rows:
@@ -215,8 +218,7 @@ def _run_routine_curve(params):
             if mode != "apply":
                 lines.append(f"⚑ {c['nickname']}: \"{a.get('name','')}\" avg {avg_pct:.1f}% < {floor:g}%")
                 continue
-            students, err = _canvas_get_all(f"/api/v1/courses/{cid}/users",
-                                            {"enrollment_type[]": "student", "per_page": 100})
+            students, err, _source = students_or_live(cid)
             name_by_id = {str(st["id"]): (st.get("sortable_name") or st.get("name", ""))
                           for st in (students or [])}
             scored = [{"user_id": str(s_["user_id"]),
@@ -249,14 +251,13 @@ def _run_routine_grading_debt(params):
     lines, ok, total = [], True, 0
     for c in config.active_courses():
         cid = str(c["id"])
-        amap_raw, err = _canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
+        amap_raw, err, _source = assignments_or_live(cid)
         if err:
             lines.append(f"✗ {c['nickname']}: {err}")
             ok = False
             continue
         aname = {str(a["id"]): a.get("name", "") for a in (amap_raw or [])}
-        subs, err = _canvas_get_all(f"/api/v1/courses/{cid}/students/submissions",
-                                    {"student_ids[]": "all", "per_page": 100})
+        subs, err, _source = submissions_or_live(cid)
         if err:
             lines.append(f"✗ {c['nickname']}: {err}")
             ok = False
