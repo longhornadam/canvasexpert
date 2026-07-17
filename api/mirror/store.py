@@ -275,8 +275,15 @@ def _attempt_record(entry: dict) -> dict | None:
 
 
 def _comment_record(entry: dict) -> dict:
+    # author_role uses the same fallback chain as the work-registry
+    # classifier (home_attention._author_role) so staff-authored comments
+    # stay provably staff when served from the mirror. Role label only —
+    # still no names, avatars, or attachments.
+    author = entry.get("author") if isinstance(entry.get("author"), dict) else {}
     return {
         "author_id": str(entry.get("author_id") or ""),
+        "author_role": str(entry.get("author_role") or entry.get("author_type")
+                           or author.get("role") or author.get("type") or ""),
         "comment": str(entry.get("comment") or ""),
         "created_at": str(entry.get("created_at") or ""),
     }

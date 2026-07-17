@@ -121,7 +121,7 @@ mirror, so offline tests exercise the live path unchanged.
 ## v1 non-goals (deliberate)
 
 - Submission **comments** are captured by the nightly full pass (author id,
-  comment text, created_at only — no names/avatars/attachments), so
+  author role, comment text, created_at only — no names/avatars/attachments), so
   staleness is bounded to ~24h. Delta stays lean: comment timestamps bump
   neither `submitted_since` nor `graded_since`, so a comment-only change
   between full passes is still a blind spot until the next full pass.

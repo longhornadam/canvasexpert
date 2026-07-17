@@ -126,7 +126,7 @@ def test_full_pass_captures_submission_comments(tmp_path):
     assert result["ok"] is True
     entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
     assert entry["current"]["submission_comments"] == [
-        {"author_id": "900099", "comment": "Nice work.",
+        {"author_id": "900099", "author_role": "", "comment": "Nice work.",
          "created_at": "2026-07-01T11:00:00Z"},
     ]
     assert "author_name" not in entry["current"]["submission_comments"][0]
@@ -147,7 +147,7 @@ def test_delta_after_full_does_not_erase_stored_comments(tmp_path):
     assert result["ok"] is True
     entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
     assert entry["current"]["submission_comments"] == [
-        {"author_id": "900099", "comment": "Nice work.",
+        {"author_id": "900099", "author_role": "", "comment": "Nice work.",
          "created_at": "2026-07-01T11:00:00Z"},
     ]
     assert entry["current"]["attempt"] == 2
