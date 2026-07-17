@@ -33,6 +33,7 @@
 .ce-settings-input-row input { flex: 1; }
 .ce-settings-status { margin-top: var(--ce-space-2); }
 .ce-settings-inline-status { display: inline-block; align-self: center; margin: 0; }
+.ce-settings-version { margin: var(--ce-space-4) 0 0; color: var(--ce-ink-muted); font-size: 11px; }
 .ce-settings-files { margin-top: 14px; }
 .ce-settings-cal-list { margin-bottom: 14px; }
 .ce-settings-cal-meta { margin-left: var(--ce-space-2); font-size: 12.5px; }

@@ -12,10 +12,11 @@
       <span>{% for course in saved_courses %}{{ course.nickname or course.name }}{% if not loop.last %}, {% endif %}{% else %}None selected{% endfor %}</span>
       <a href="/settings#current-courses-card">Change in Settings</a>
     </p>
-    <div class="ce-desk-local-state">
-      <span id="desk-local-status">Showing saved work.</span>
-    </div>
-    <button type="button" id="desk-scan" class="ce-desk-button ce-desk-button--primary">Check active courses</button>
+    <p class="ce-desk-sync" id="desk-mirror" data-state="unknown" aria-live="polite">
+      <span class="ce-status-dot" data-mirror-dot></span>
+      <span id="desk-mirror-label">Checking Canvas sync…</span>
+    </p>
+    <button type="button" id="desk-sync" class="ce-desk-button ce-desk-button--primary">Sync now</button>
   </div>
 
   <div class="ce-desk-grid">
@@ -104,6 +105,8 @@
       </section>
     </section>
   </div>
+
+  <p class="ce-desk-version">CanvasExpert v{{ app_version }}</p>
 </div>
 {% endblock %}
 {% block workspace_scripts %}<script src="/static/desk.js?v={{ asset_v }}"></script>{% endblock %}

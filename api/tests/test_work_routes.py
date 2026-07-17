@@ -249,6 +249,9 @@ def test_get_work_is_local_pii_free_and_rejects_unknown_section(monkeypatch):
     job = _job()
     monkeypatch.setattr(work.adapters, "collect_local_jobs", lambda: [job])
     monkeypatch.setattr(work.adapters, "collect_start_sources", lambda: [{"kind": "create.assignment", "title": "Assignment source", "path": "Assignments/sample.txt"}])
+    monkeypatch.setattr(session_store, "list_session_summaries", lambda: [
+        {"session_id": "session-1", "assignment_name": "Fictional Reflection"},
+    ])
     response = _client().get("/api/work?section=attention")
     assert response.status_code == 200
     payload = response.json()
@@ -346,6 +349,20 @@ def test_scheduled_and_detected_presentations_are_semantic_and_private(monkeypat
             "grade": "Private Queue Grade",
         }],
     })
+    # Detected findings are relabeled with the mirror-resolved assignment name.
+    assignment_names = {
+        "assignment-debt": "Debt Essay",
+        "assignment-late": "Late Lab",
+        "assignment-follow-up": "Follow-up Reflection",
+        "assignment-staff-check": "Staff Check Task",
+        "assignment-ready": "Ready Journal",
+    }
+    monkeypatch.setattr(
+        "api.mirror.queries.course_assignments",
+        lambda course_id, **kwargs: (
+            [{"id": aid, "name": name} for aid, name in assignment_names.items()], None
+        ) if course_id == "course-1" else (None, "unavailable"),
+    )
 
     payload = _client().get("/api/work?section=all").json()
     presentations = payload["presentations"]
@@ -357,28 +374,32 @@ def test_scheduled_and_detected_presentations_are_semantic_and_private(monkeypat
         "action_label": "Open grading",
     }
     by_kind = {job["kind"]: presentations[job["job_id"]] for job in payload["jobs"]}
-    assert by_kind["grade.debt"]["title"] == "Grading needed"
+    # The title is now the assignment name; the aggregate summary is unchanged.
+    assert by_kind["grade.debt"]["title"] == "Debt Essay"
     assert by_kind["grade.debt"]["summary"] == "3 submissions awaiting grading"
     assert by_kind["grade.debt"]["action_label"] == "Open PowerGrader"
+    assert by_kind["late.work"]["title"] == "Late Lab"
     assert by_kind["late.work"]["summary"] == "2 late submissions"
     assert by_kind["late.work"]["action_label"] == "Open Gradebook"
+    # roster.warning is course-level (no assignment) and keeps its aggregate title.
+    assert by_kind["roster.warning"]["title"] == "Roster attention"
     assert by_kind["roster.warning"]["summary"] == "4 roster issues need review"
     assert by_kind["roster.warning"]["action_label"] == "Open Roster"
     assert by_kind["grade.followup"] == {
         "course_label": "Fictional Course",
-        "title": "Student follow-up",
+        "title": "Follow-up Reflection",
         "summary": "2 responses need a human check",
         "action_label": "Open PowerGrader",
     }
     assert by_kind["grade.staff_check"] == {
         "course_label": "Fictional Course",
-        "title": "Staff response check",
+        "title": "Staff Check Task",
         "summary": "1 response needs a staff response check",
         "action_label": "Open PowerGrader",
     }
     assert by_kind["grade.powergrader_ready"] == {
         "course_label": "Fictional Course",
-        "title": "PowerGrader-ready",
+        "title": "Ready Journal",
         "summary": "3 ungraded text entries ready for review",
         "action_label": "Open PowerGrader",
     }
@@ -512,6 +533,87 @@ def test_scan_is_guarded_merges_findings_and_get_stays_local(monkeypatch, tmp_pa
     assert response.json()["findings"] == 1
 
     monkeypatch.setattr(work.discovery, "scan_active_courses", lambda: (_ for _ in ()).throw(AssertionError("GET scanned Canvas")))
+    monkeypatch.setattr(
+        "api.mirror.queries.course_assignments",
+        lambda course_id, **kwargs: ([{"id": "assignment-1", "name": "Scanned Assignment"}], None),
+    )
     get_response = client.get("/api/work?section=attention")
     assert get_response.status_code == 200
     assert get_response.json()["jobs"][0]["kind"] == "grade.debt"
+    assert get_response.json()["presentations"][get_response.json()["jobs"][0]["job_id"]]["title"] == "Scanned Assignment"
+
+
+def test_blank_powergrader_and_nameless_scheduled_are_hidden(monkeypatch):
+    empty_session = _job(status="in_progress")
+    empty_session["counts"] = {"total": 0, "pending": 0, "affected": 0}
+
+    named_session = _job(status="in_progress")
+    named_session.update({
+        "job_id": "job-named-session",
+        "source_ref": {"type": "powergrader_session", "value": "session-named"},
+    })
+    named_session["counts"] = {"total": 3, "pending": 3, "affected": 0}
+
+    named_scheduled = _scheduled_job()
+    named_scheduled.update({
+        "job_id": "job-sched-named",
+        "source_ref": {"type": "autoscore_job", "value": "sched-named"},
+    })
+    nameless_scheduled = _scheduled_job()
+    nameless_scheduled.update({
+        "job_id": "job-sched-nameless",
+        "source_ref": {"type": "autoscore_job", "value": "sched-nameless"},
+    })
+
+    monkeypatch.setattr(work.adapters, "collect_local_jobs", lambda: [
+        empty_session, named_session, named_scheduled, nameless_scheduled,
+    ])
+    monkeypatch.setattr(session_store, "list_session_summaries", lambda: [
+        {"session_id": "session-named", "assignment_name": "Real Assignment"},
+    ])
+    monkeypatch.setattr(autoscore_queue, "load_queue", lambda: {
+        "version": 1,
+        "jobs": [
+            {"job_id": "sched-named", "assignment_name": "Scheduled Essay", "status": "session_ready"},
+            {"job_id": "sched-nameless", "assignment_name": "", "status": "claimed"},
+        ],
+    })
+
+    payload = _client().get("/api/work?section=all").json()
+    ids = {job["job_id"] for job in payload["jobs"]}
+
+    assert ids == {"job-named-session", "job-sched-named"}
+    assert set(payload["presentations"]) == ids
+    assert payload["presentations"]["job-named-session"]["title"] == "Real Assignment"
+    assert payload["presentations"]["job-sched-named"]["title"] == "Scheduled Essay"
+
+
+def test_detected_grading_cards_relabel_with_assignment_name(monkeypatch):
+    debt = finding(
+        kind="grade.debt", course_id="course-1", assignment_id="assignment-debt",
+        counts={"total": 5, "pending": 3, "affected": 3},
+        now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+    )
+    ready = finding(
+        kind="grade.powergrader_ready", course_id="course-1", assignment_id="assignment-ready",
+        counts={"total": 3, "pending": 3, "affected": 3},
+        now="2026-07-11T12:00:00+00:00", resumable_url="/powergrader",
+    )
+    monkeypatch.setattr(work.adapters, "collect_local_jobs", lambda: [debt, ready])
+    monkeypatch.setattr(
+        "api.mirror.queries.course_assignments",
+        lambda course_id, **kwargs: (
+            [
+                {"id": "assignment-debt", "name": "Chapter 5 Essay"},
+                {"id": "assignment-ready", "name": "Reflection Journal"},
+            ], None,
+        ) if course_id == "course-1" else (None, "unavailable"),
+    )
+
+    payload = _client().get("/api/work?section=all").json()
+    by_kind = {job["kind"]: payload["presentations"][job["job_id"]] for job in payload["jobs"]}
+
+    assert by_kind["grade.debt"]["title"] == "Chapter 5 Essay"
+    assert by_kind["grade.debt"]["summary"] == "3 submissions awaiting grading"
+    assert by_kind["grade.powergrader_ready"]["title"] == "Reflection Journal"
+    assert by_kind["grade.powergrader_ready"]["summary"] == "3 ungraded text entries ready for review"

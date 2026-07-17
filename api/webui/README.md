@@ -170,9 +170,11 @@ Home is the full-width local landing surface for Start, Continue, Attention,
 Prepared, and Receipts. Its top line lists active course names in saved order and links
 directly to the Current courses section in Settings. Its initial view is rendered from
 local Current-course configuration, the work registry, and real receipt
-projections. Readiness continues to come from `/api/readiness`; Home's
-asynchronous **Check active courses** action uses the guarded `POST /api/work/scan` route and never scans
-Canvas during an ordinary `GET /api/work`.
+projections. Readiness continues to come from `/api/readiness`. Home shows a
+CanvasMirror freshness line and a single **Sync now** action that refreshes the
+local mirror (`POST /api/mirror/sync-now`) and then recomputes the work lists via
+the guarded `POST /api/work/scan` route; an ordinary `GET /api/work` never scans
+Canvas.
 
 Start links are ordinary navigation and leave course choices to their destination pages.
 Continue and Attention show local work-registry items with a transient, non-persisted presentation sidecar:

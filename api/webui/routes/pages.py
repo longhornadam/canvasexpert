@@ -58,8 +58,7 @@ def _routines_template_context() -> dict:
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     courses = config.active_courses()
-    initial_jobs = work_routes._section_jobs("all") or []
-    initial_presentations = work_routes._presentations(initial_jobs)
+    initial_jobs, initial_presentations = work_routes.visible_work("all") or ([], {})
     initial_operations = [
         {
             "kind": operation.get("kind"),
@@ -233,11 +232,62 @@ def routines_page(request: Request):
     })
 
 
+def _mirror_relative(age_hours) -> str:
+    """Human 'synced N ago' from an age in hours (None → never synced)."""
+    if age_hours is None:
+        return "not yet"
+    minutes = int(age_hours * 60)
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return f"{minutes} min ago"
+    hours = int(age_hours)
+    if hours < 24:
+        return f"{hours} h ago"
+    return f"{int(age_hours // 24)} d ago"
+
+
+def _mirror_settings_context() -> dict:
+    """Read-only CanvasMirror freshness for the Settings panel. Never raises."""
+    default = {
+        "mirror_enabled": False, "mirror_configured": False,
+        "mirror_courses": [], "mirror_serve_max_age_hours": 6,
+    }
+    try:
+        from .. import mirror_service
+        from api.mirror import store as mirror_store
+        status = mirror_service.status()
+        now = mirror_store.now_iso()
+    except Exception:
+        return default
+    courses = []
+    for course in status.get("courses", []) if isinstance(status, dict) else []:
+        passes = course.get("passes", {}) if isinstance(course, dict) else {}
+        full = (passes.get("full") or {}).get("last_success_at", "")
+        delta = (passes.get("delta") or {}).get("last_success_at", "")
+        newest = max(full, delta)  # ISO-Z strings compare lexically
+        age = mirror_store.age_hours(newest, now) if newest else None
+        courses.append({
+            "name": course.get("course_name") or course.get("course_id") or "Course",
+            "synced_relative": _mirror_relative(age),
+        })
+    serve = status.get("serve_max_age_hours", 6)
+    if isinstance(serve, float) and serve.is_integer():
+        serve = int(serve)
+    return {
+        "mirror_enabled": bool(status.get("enabled")),
+        "mirror_configured": bool(status.get("workspace_configured")),
+        "mirror_courses": courses,
+        "mirror_serve_max_age_hours": serve,
+    }
+
+
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
     root = workspace.workspace_root()
     saved_courses = config.saved_courses()
     return templates.TemplateResponse(request, "settings.html", {
+        **_mirror_settings_context(),
         "nav_section":   "settings",
         "canvas_base":   config.get_canvas_base(),
         "token_is_set":  config.token_is_set(),

@@ -6,7 +6,9 @@
 .ce-desk-active-courses a { color: var(--ce-accent-canvas); font-weight: 700; white-space: nowrap; }
 .ce-desk-active-courses a:focus-visible, .ce-desk-button:focus-visible { outline: 2px solid var(--ce-accent-canvas); outline-offset: 2px; }
 .ce-desk-panel-note { color: var(--ce-ink-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.ce-desk-local-state { min-width: 0; overflow-wrap: anywhere; }
+.ce-desk-sync { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.ce-desk-button[disabled] { opacity: .6; cursor: default; }
+.ce-desk-version { margin: var(--ce-space-4) 0 0; text-align: right; color: var(--ce-ink-muted); font-size: 11px; }
 .ce-desk-button { min-height: 34px; padding: 6px 12px; border: 1px solid var(--ce-accent-canvas); background: var(--ce-accent-canvas); color: var(--ce-on-accent); font-size: 12px; font-weight: 700; }
 .ce-desk-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--ce-space-4); }
 .ce-desk-panel--start, .ce-desk-panel--rail { grid-column: 1 / -1; }

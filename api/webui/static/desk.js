@@ -23,9 +23,13 @@
   var attentionList = document.getElementById("desk-attention-list");
   var preparedList = document.getElementById("desk-prepared-list");
   var receiptsList = document.getElementById("desk-receipts-list");
-  var localStatus = document.getElementById("desk-local-status");
-  var scanButton = document.getElementById("desk-scan");
   var csrfMeta = document.querySelector('meta[name="canvasexpert-csrf-token"]');
+  var syncButton = document.getElementById("desk-sync");
+  var mirrorRoot = document.getElementById("desk-mirror");
+  var mirrorLabel = document.getElementById("desk-mirror-label");
+  var mirrorDot = mirrorRoot ? mirrorRoot.querySelector("[data-mirror-dot]") : null;
+  var syncing = false;
+  var mirrorCanSync = true;
 
   function element(tag, className, text) {
     var node = document.createElement(tag);
@@ -160,7 +164,14 @@
     });
   }
 
-  function refreshLocal(successMessage, failureMessage) {
+  // Transient message shown in the freshness line, then restored to real state.
+  function note(message) {
+    if (!mirrorLabel) return;
+    mirrorLabel.textContent = message;
+    setTimeout(loadMirror, 3000);
+  }
+
+  function refreshLocal() {
     return Promise.all([
       fetch("/api/work?section=all", { headers: { "Accept": "application/json" } }).then(responseJson),
       fetch("/api/operations", { headers: { "Accept": "application/json" } }).then(responseJson),
@@ -178,9 +189,8 @@
       state.operations = Array.isArray(operationResult.body.operations) ? operationResult.body.operations : [];
       state.receipts = Array.isArray(receiptResult.body.receipts) ? receiptResult.body.receipts : [];
       render();
-      if (localStatus) localStatus.textContent = successMessage || "Showing saved work.";
     }).catch(function () {
-      if (localStatus) localStatus.textContent = failureMessage || "Saved work could not be refreshed; showing the last saved work.";
+      // Keep the last rendered cards in place; the freshness line reports sync state.
     });
   }
 
@@ -203,9 +213,8 @@
       if (!result.response.ok || !result.body.ok) throw new Error("mutation_rejected");
       state.jobs = state.jobs.filter(function (item) { return item.job_id !== job.job_id; });
       render();
-      if (localStatus) localStatus.textContent = "Saved work updated.";
     }).catch(function () {
-      if (localStatus) localStatus.textContent = "Action could not be completed; local work is unchanged.";
+      note("That action could not be completed; work is unchanged.");
     });
   }
 
@@ -228,36 +237,99 @@
     var until = action === "snooze" ? snoozeUntil() : null;
     if (action === "snooze" && !until) return;
     button.disabled = true;
-    mutate(job, action, until).then(function () { scanButton && scanButton.focus(); });
+    mutate(job, action, until).then(function () { if (syncButton) syncButton.focus(); });
   });
 
-  if (scanButton) {
-    scanButton.addEventListener("click", function () {
-      scanButton.disabled = true;
-      if (localStatus) localStatus.textContent = "Checking active courses…";
-      fetch("/api/work/scan", {
+  function relativeTime(ms) {
+    var minutes = Math.floor(ms / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return minutes + (minutes === 1 ? " minute ago" : " minutes ago");
+    var hours = Math.floor(minutes / 60);
+    if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+    var days = Math.floor(hours / 24);
+    return days + (days === 1 ? " day ago" : " days ago");
+  }
+
+  function mirrorSummary(data) {
+    if (!data || data.ok === false) return { state: "", label: "Canvas sync status unavailable", sync: false };
+    if (!data.enabled) return { state: "", label: "Background Canvas sync is off", sync: false };
+    if (!data.workspace_configured) return { state: "", label: "No workspace — Canvas sync unavailable", sync: false };
+    var courses = Array.isArray(data.courses) ? data.courses : [];
+    if (!courses.length) return { state: "", label: "No active courses to sync", sync: false };
+    var oldest = null;
+    var neverCount = 0;
+    courses.forEach(function (course) {
+      var passes = course.passes || {};
+      var full = (passes.full || {}).last_success_at || "";
+      var delta = (passes.delta || {}).last_success_at || "";
+      var newest = full > delta ? full : delta; // ISO-Z strings compare lexically
+      if (!newest) { neverCount += 1; return; }
+      if (oldest === null || newest < oldest) oldest = newest;
+    });
+    if (neverCount === courses.length) {
+      return { state: "attention", label: "Canvas data not synced yet", sync: true };
+    }
+    if (neverCount > 0) {
+      return { state: "attention", label: neverCount + " of " + courses.length + " courses not synced yet", sync: true };
+    }
+    var ageMs = Date.now() - new Date(oldest).getTime();
+    var maxAgeMs = (Number(data.serve_max_age_hours) || 6) * 3600 * 1000;
+    return {
+      state: ageMs <= maxAgeMs ? "ready" : "attention",
+      label: "Canvas data synced " + relativeTime(ageMs),
+      sync: true,
+    };
+  }
+
+  function renderMirror(summary) {
+    if (!mirrorRoot) return;
+    mirrorRoot.dataset.state = summary.state || "unknown";
+    if (mirrorLabel) mirrorLabel.textContent = summary.label;
+    if (mirrorDot) {
+      mirrorDot.dataset.state = summary.state === "ready" ? "ready"
+        : summary.state === "attention" ? "attention" : "";
+    }
+    mirrorCanSync = !!summary.sync;
+    if (syncButton && !syncing) syncButton.disabled = !summary.sync;
+  }
+
+  function loadMirror() {
+    if (!mirrorRoot) return Promise.resolve();
+    return fetch("/api/mirror/status", { headers: { "Accept": "application/json" } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) { renderMirror(mirrorSummary(data)); })
+      .catch(function () { renderMirror({ state: "", label: "Canvas sync status unavailable", sync: false }); });
+  }
+
+  // One honest action: pull fresh Canvas data into the mirror, then recompute
+  // the work lists from it, then repaint the cards and freshness line.
+  if (syncButton) {
+    syncButton.addEventListener("click", function () {
+      if (syncing) return;
+      syncing = true;
+      syncButton.disabled = true;
+      renderMirror({ state: "", label: "Syncing Canvas data… you can keep working", sync: mirrorCanSync });
+      // keepalive lets both requests finish server-side even if the teacher
+      // navigates away (e.g. clicks a Start link) mid-sync.
+      fetch("/api/mirror/sync-now", {
         method: "POST",
-        headers: mutationHeaders(),
-      }).then(responseJson).then(function (result) {
-        if (!result.response.ok || !result.body.ok) {
-          throw new Error(result.body.error || "scan_unavailable");
-        }
-        var statusMessage = result.body.partial
-          ? "Some active courses could not be checked; saved work remains."
-          : "Checked active courses.";
-        return refreshLocal(
-          statusMessage,
-          "Active courses were checked, but saved work could not be refreshed."
-        );
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "",
+        keepalive: true,
+      }).then(responseJson).then(function () {
+        return fetch("/api/work/scan", { method: "POST", headers: mutationHeaders(), keepalive: true }).then(responseJson);
+      }).then(function () {
+        return Promise.all([loadMirror(), refreshLocal()]);
       }).catch(function () {
-        if (localStatus) localStatus.textContent = "Some active courses could not be checked; saved work remains.";
+        renderMirror({ state: "attention", label: "Canvas sync could not finish", sync: true });
       }).finally(function () {
-        scanButton.disabled = false;
-        scanButton.focus();
+        syncing = false;
+        if (syncButton) syncButton.disabled = !mirrorCanSync;
       });
     });
   }
 
   render();
   refreshLocal();
+  loadMirror();
 })();

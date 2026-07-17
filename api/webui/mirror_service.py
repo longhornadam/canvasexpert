@@ -90,6 +90,27 @@ def sync_now(course_id: str | None = None, *, canvas_get_all=None, now=None) -> 
     return summaries
 
 
+def refresh_work_findings() -> None:
+    """Recompute detected work findings from the (freshly synced) mirror and merge
+    them into the local work registry, so Home's Attention/Continue cards stay
+    current on the heartbeat instead of only on a manual Sync now.
+
+    Best-effort background step: gated on the same conditions as a sync pass,
+    reads mirror-first (cheap right after a pass), and never raises into the loop.
+    """
+    if not config.token_is_set() or not config.mirror_enabled():
+        return
+    if workspace.workspace_root() is None:
+        return
+    try:
+        from api.work_registry import discovery
+        result = discovery.scan_active_courses()
+        if result.get("ok"):
+            discovery.merge_into_registry(result)
+    except Exception:
+        pass
+
+
 def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECONDS):
     """Write-through hook: after CanvasExpert itself writes to Canvas, run a
     short-delay delta so the mirror learns its own actions without waiting
@@ -149,6 +170,7 @@ def _mirror_heartbeat():
     while True:
         try:
             run_heartbeat_pass()
+            refresh_work_findings()
         except Exception:
             pass
         time.sleep(TICK_SECONDS)

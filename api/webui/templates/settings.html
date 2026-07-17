@@ -14,6 +14,7 @@
       <a href="#openrouter-card">AI assistance</a>
       <a href="#tier-tags-card">Differentiation tags</a>
       <a href="#workspace-settings-card">Workspace</a>
+      <a href="#mirror-card">Canvas data</a>
       <a href="#current-courses-card">Courses</a>
       <a href="#download-root-card">Downloads</a>
       <a href="#ai-ta-card">AI-TA Library</a>
@@ -229,6 +230,34 @@
   </div>
 </section>
 
+<section class="ce-panel ce-settings-panel" id="mirror-card">
+  <h2>Canvas data <small class="lbl-hint">(local mirror)</small></h2>
+  <p class="ce-hint">
+    Canvas Expert keeps a private, local copy of your current courses' assignments,
+    roster, and submissions so Home and grading load instantly and work offline. It
+    refreshes automatically in the background about every 15 minutes — you rarely need
+    to touch it. Data older than {{ mirror_serve_max_age_hours }} h falls back to a live
+    Canvas read.
+  </p>
+  {% if not mirror_enabled %}
+  <div class="ce-notice ce-settings-notice">Background Canvas sync is turned off.</div>
+  {% elif not mirror_configured %}
+  <div class="ce-notice ce-settings-notice">No workspace is configured yet, so there's nothing to sync.</div>
+  {% elif mirror_courses %}
+  <ul class="ce-settings-list" id="mirror-course-list">
+    {% for course in mirror_courses %}
+    <li><strong>{{ course.name }}</strong> <span class="muted">— synced {{ course.synced_relative }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="ce-hint">No current courses to sync yet.</p>
+  {% endif %}
+  <div class="ce-actions">
+    <button type="button" id="btn-mirror-sync" class="primary small"{% if not mirror_enabled or not mirror_configured %} disabled{% endif %}>Sync now</button>
+    <span id="mirror-sync-status" class="status ce-settings-inline-status"></span>
+  </div>
+</section>
+
 <section class="ce-panel ce-settings-panel" id="current-courses-card">
   <h2>Current courses</h2>
   <p class="ce-hint">
@@ -440,6 +469,8 @@
   </details>
 </section>
 
+<p class="ce-settings-version">CanvasExpert v{{ app_version }}</p>
+
  </div>
 {% endblock %}
 
@@ -450,6 +481,29 @@
 <script src="/static/settings/courses.js?v={{ asset_v }}"></script>
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
 <script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
+
+<script>
+(function () {
+  var button = document.getElementById("btn-mirror-sync");
+  if (!button) return;
+  var status = document.getElementById("mirror-sync-status");
+  button.addEventListener("click", function () {
+    button.disabled = true;
+    if (status) status.textContent = "Syncing… (a first sync can take a minute)";
+    fetch("/api/mirror/sync-now", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "",
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) { if (status) status.textContent = "Synced. Reloading…"; window.location.reload(); }
+        else { if (status) status.textContent = "Some courses could not sync."; button.disabled = false; }
+      })
+      .catch(function () { if (status) status.textContent = "Sync could not run."; button.disabled = false; });
+  });
+})();
+</script>
 
 <script>
 (function () {

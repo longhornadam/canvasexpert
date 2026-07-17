@@ -10,7 +10,7 @@ from api.webui import config
 from api.webui.canvas_client import _canvas_get_all
 
 from . import storage
-from .models import validate_job
+from .models import validate_job, validate_registry_document
 from .providers import CourseTimeout, DiscoveryDeadline, CourseUnavailable, ProviderFailure
 from .providers import grading_debt, home_attention, late_work, roster_warnings
 
@@ -205,6 +205,29 @@ def scan_active_courses(now=None) -> dict:
     }
 
 
+def merge_into_registry(result: dict) -> dict:
+    """Replace canvas_finding jobs for the scanned courses with fresh findings.
+
+    Shared by the manual scan route and the background heartbeat so both refresh
+    detected work the same way. Returns the storage write result.
+    """
+    current = storage.read_registry()
+    scanned_courses = set((result.get("courses") or {}).keys())
+    current_jobs = []
+    for job in current.get("jobs", []):
+        source_ref = job.get("source_ref") if isinstance(job, dict) else {}
+        course_ids = set(job.get("course_ids") or []) if isinstance(job, dict) else set()
+        if source_ref.get("type") == "canvas_finding" and course_ids & scanned_courses:
+            continue
+        current_jobs.append(job)
+    for record in (result.get("courses") or {}).values():
+        current_jobs.extend(record.get("findings") or [])
+    current["jobs"] = current_jobs
+    current["updated_at"] = _now()
+    validate_registry_document(current)
+    return storage.write_registry(current)
+
+
 def cache_is_fresh(now=None) -> bool:
     document = storage.read_discovery_cache()
     updated = document.get("updated_at")
@@ -220,5 +243,5 @@ def cache_is_fresh(now=None) -> bool:
 
 __all__ = [
     "CACHE_TTL_SECONDS", "MAX_COURSE_WORKERS", "REQUEST_TIMEOUT_SECONDS",
-    "SCAN_TIMEOUT_SECONDS", "cache_is_fresh", "scan_active_courses",
+    "SCAN_TIMEOUT_SECONDS", "cache_is_fresh", "merge_into_registry", "scan_active_courses",
 ]

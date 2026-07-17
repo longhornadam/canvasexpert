@@ -291,8 +291,8 @@ def test_current_courses_are_the_only_operational_picker_scope():
     assert "reconcile(" not in desk
     assert "data-desk-start" not in dashboard
     for text in (
-        "Showing saved work.", "Checking active courses…", "Checked active courses.",
-        "Some active courses could not be checked; saved work remains.",
+        "Sync now", "Checking Canvas sync…", "Syncing Canvas data…",
+        "Canvas data synced ",
     ):
         assert text in dashboard or text in desk
     assert "authoritative: true" in course_picker
@@ -352,9 +352,7 @@ const elements = {
   "desk-continue-list": new Node("div", "desk-continue-list"),
   "desk-attention-list": new Node("div", "desk-attention-list"),
   "desk-prepared-list": new Node("div", "desk-prepared-list"),
-  "desk-receipts-list": new Node("div", "desk-receipts-list"),
-  "desk-local-status": new Node("span", "desk-local-status"),
-  "desk-scan": new Node("button", "desk-scan")
+  "desk-receipts-list": new Node("div", "desk-receipts-list")
 };
 
 global.window = {
@@ -388,7 +386,6 @@ vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"));
 const initialText = textOf(elements["desk-attention-list"]);
 await new Promise(resolve => setTimeout(resolve, 0));
 const refreshedText = textOf(elements["desk-attention-list"]);
-if (elements["desk-local-status"].textContent !== "Showing saved work.") process.exit(7);
 for (const rendered of [initialText, refreshedText]) {
   if (!rendered.includes("Fictional Course")) process.exit(2);
   if (!rendered.includes("Fictional Reflection")) process.exit(3);

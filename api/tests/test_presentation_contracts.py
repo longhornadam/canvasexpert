@@ -85,7 +85,7 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages.workspace, "ai_packets_root", lambda: "")
     monkeypatch.setattr(pages.workspace, "system_root", lambda: "")
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
-    monkeypatch.setattr(pages.work_routes, "_presentations", lambda jobs: {})
+    monkeypatch.setattr(pages.work_routes, "_presentations", lambda jobs, finding_names=None: {})
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
     monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
     monkeypatch.setattr(pages, "list_ai_ta_files", lambda: [])

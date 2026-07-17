@@ -67,8 +67,9 @@ def test_desk_empty_render_is_local_and_honest(monkeypatch):
     assert 'id="desk-course-field"' not in response.text
     assert "Active courses:" in response.text
     assert 'href="/settings#current-courses-card"' in response.text
-    assert "Showing saved work." in response.text
-    assert "Check active courses" in response.text
+    assert 'id="desk-sync"' in response.text
+    assert "Sync now" in response.text
+    assert "Checking Canvas sync…" in response.text
     assert "No open work." in response.text
     assert "No items need review." in response.text
     assert "No prepared operations." in response.text
@@ -167,12 +168,17 @@ def test_desk_populated_render_uses_registry_and_real_receipt_projection(monkeyp
         },
     ]
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [job])
+    monkeypatch.setattr(
+        pages.work_routes, "_finding_assignment_names",
+        lambda jobs: {("course-1", "assignment-1"): "Reflection Draft"},
+    )
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: operations)
     monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [receipt])
 
     response = _client().get("/")
 
     assert response.status_code == 200
+    assert "Reflection Draft" in response.text
     assert "1 submission awaiting grading" in response.text
     assert "gradebook.sweep" in response.text
     assert "/api/receipts/receipt-1" in response.text
@@ -228,16 +234,22 @@ def test_desk_home_attention_render_is_aggregate_only(monkeypatch):
         ),
     ]
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: jobs)
+    monkeypatch.setattr(pages.work_routes, "_finding_assignment_names", lambda jobs: {
+        ("course-1", "assignment-1"): "Reflection One",
+        ("course-1", "assignment-2"): "Reflection Two",
+        ("course-1", "assignment-3"): "Reflection Three",
+    })
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
     monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
 
     response = _client().get("/")
 
     assert response.status_code == 200
+    # Cards are titled by assignment name; the aggregate counts stay intact.
     for text in (
-        "Student follow-up", "2 responses need a human check",
-        "Staff response check", "1 response needs a staff response check",
-        "PowerGrader-ready", "3 ungraded text entries ready for review",
+        "Reflection One", "2 responses need a human check",
+        "Reflection Two", "1 response needs a staff response check",
+        "Reflection Three", "3 ungraded text entries ready for review",
     ):
         assert text in response.text
     assert "synthetic-student" not in response.text

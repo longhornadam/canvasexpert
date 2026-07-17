@@ -142,6 +142,38 @@ def test_mirror_sync_now_route(monkeypatch, tmp_path):
     assert payload["results"][0]["pass"] == "delta"
 
 
+# --- background findings refresh ------------------------------------------------------
+
+def test_refresh_work_findings_merges_when_configured(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    from api.work_registry import discovery
+    merged = []
+    monkeypatch.setattr(discovery, "scan_active_courses", lambda: {"ok": True, "courses": {}})
+    monkeypatch.setattr(discovery, "merge_into_registry", lambda result: merged.append(result) or {"ok": True})
+    mirror_service.refresh_work_findings()
+    assert merged == [{"ok": True, "courses": {}}]
+
+
+def test_refresh_work_findings_skips_partial_scan(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    from api.work_registry import discovery
+    merged = []
+    monkeypatch.setattr(discovery, "scan_active_courses", lambda: {"ok": False})
+    monkeypatch.setattr(discovery, "merge_into_registry", lambda result: merged.append(result))
+    mirror_service.refresh_work_findings()
+    assert merged == []
+
+
+def test_refresh_work_findings_gated_off_when_disabled(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: False)
+    from api.work_registry import discovery
+    called = []
+    monkeypatch.setattr(discovery, "scan_active_courses", lambda: called.append(1) or {"ok": True})
+    mirror_service.refresh_work_findings()
+    assert called == []
+
+
 # --- write-through notify -------------------------------------------------------------
 
 def test_notify_course_changed_runs_a_delta_after_delay(monkeypatch, tmp_path):

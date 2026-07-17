@@ -16,6 +16,20 @@ from ..local_request_guard import require_local_mutation
 
 router = APIRouter(prefix="/api", tags=["work"])
 
+# Fallback titles used when an assignment/session name cannot be resolved. A card
+# left with one of these has no useful detail and is hidden from Home.
+_POWERGRADER_FALLBACK_TITLE = "PowerGrader session"
+_SCHEDULED_FALLBACK_TITLE = "Scheduled PowerGrader"
+
+# Detected Canvas findings that point at a single assignment. Their cards are
+# relabeled with the real assignment name (resolved from the local mirror), and
+# hidden entirely when no name can be resolved — a card with no specifics is
+# just "go look at Canvas", which we deliberately do not surface.
+_NAMED_FINDING_KINDS = {
+    "grade.debt", "grade.powergrader_ready", "grade.followup", "grade.staff_check",
+    "late.work",
+}
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -121,6 +135,47 @@ def _scheduled_display_metadata() -> dict[str, tuple[str, str]]:
     return metadata
 
 
+def _finding_assignment_names(jobs: list[dict]) -> dict[tuple[str, str], str]:
+    """Resolve assignment titles for detected grading findings from the mirror.
+
+    Read-only label lookup: it never opens a PowerGrader session or scans Canvas.
+    A finding whose name cannot be resolved keeps its generic title rather than
+    disappearing, so real work is never hidden by a cold mirror.
+    """
+    wanted: dict[str, set[str]] = {}
+    for job in jobs:
+        if not isinstance(job, dict) or _text(job.get("kind")) not in _NAMED_FINDING_KINDS:
+            continue
+        course_id = _text(job.get("focused_course_id"))
+        assignment_id = _text(job.get("assignment_id"))
+        if course_id and assignment_id:
+            wanted.setdefault(course_id, set()).add(assignment_id)
+    if not wanted:
+        return {}
+    try:
+        from api.mirror import queries as mirror_queries
+    except Exception:
+        return {}
+    names: dict[tuple[str, str], str] = {}
+    for course_id, assignment_ids in wanted.items():
+        try:
+            rows, error = mirror_queries.course_assignments(course_id)
+        except Exception:
+            continue
+        if error or not isinstance(rows, list):
+            continue
+        by_id = {
+            _text(row.get("id")): _text(row.get("name"))
+            for row in rows
+            if isinstance(row, dict)
+        }
+        for assignment_id in assignment_ids:
+            name = by_id.get(assignment_id)
+            if name:
+                names[(course_id, assignment_id)] = name
+    return names
+
+
 def _course_label(job: dict, labels: dict[str, str]) -> str:
     focused = _text(job.get("focused_course_id"))
     if focused in labels:
@@ -214,13 +269,15 @@ def _aggregate_summary(job: dict) -> tuple[str, str, str]:
     return title, summary, "Continue"
 
 
-def _presentations(jobs: list[dict]) -> dict[str, dict[str, str]]:
+def _presentations(jobs: list[dict], finding_names: dict | None = None) -> dict[str, dict[str, str]]:
     labels = _current_course_labels()
     kinds = {_text(job.get("kind")) for job in jobs if isinstance(job, dict)}
     session_names = _session_assignment_names() if "grade.powergrader" in kinds else {}
     scheduled_metadata = (
         _scheduled_display_metadata() if "grade.powergrader.scheduled" in kinds else {}
     )
+    if finding_names is None:
+        finding_names = _finding_assignment_names(jobs) if kinds & _NAMED_FINDING_KINDS else {}
     presentations = {}
     for job in jobs:
         if not isinstance(job, dict):
@@ -232,16 +289,22 @@ def _presentations(jobs: list[dict]) -> dict[str, dict[str, str]]:
         source_ref = job.get("source_ref") if isinstance(job.get("source_ref"), dict) else {}
         source_value = _text(source_ref.get("value"))
         if kind == "grade.powergrader":
-            title = session_names.get(source_value) or "PowerGrader session"
+            title = session_names.get(source_value) or _POWERGRADER_FALLBACK_TITLE
             summary = _powergrader_summary(job.get("counts") or {})
             action_label = "Review & post" if _count((job.get("counts") or {}).get("affected")) else "Continue grading"
         elif kind == "grade.powergrader.scheduled":
             assignment_name, status = scheduled_metadata.get(source_value, ("", ""))
-            title = assignment_name or "Scheduled PowerGrader"
+            title = assignment_name or _SCHEDULED_FALLBACK_TITLE
             summary = _scheduled_summary(status)
             action_label = "Open grading"
         else:
             title, summary, action_label = _aggregate_summary(job)
+            if kind in _NAMED_FINDING_KINDS:
+                resolved = finding_names.get(
+                    (_text(job.get("focused_course_id")), _text(job.get("assignment_id")))
+                )
+                if resolved:
+                    title = resolved
         presentations[job_id] = {
             "course_label": _course_label(job, labels),
             "title": title,
@@ -249,6 +312,42 @@ def _presentations(jobs: list[dict]) -> dict[str, dict[str, str]]:
             "action_label": action_label,
         }
     return presentations
+
+
+def _card_is_visible(job: dict, presentation: dict, finding_names: dict) -> bool:
+    """Only surface a card that carries specifics — which assignment, how many.
+
+    Hidden: empty PowerGrader sessions (no students), sessions and scheduled jobs
+    whose assignment name never resolved, and detected findings we could not name.
+    A generic "go look at Canvas" prompt is a teacher's default state, not news.
+    """
+    kind = _text(job.get("kind"))
+    if kind == "grade.powergrader":
+        counts = job.get("counts") if isinstance(job.get("counts"), dict) else {}
+        return (
+            _count(counts.get("total")) > 0
+            and _text(presentation.get("title")) != _POWERGRADER_FALLBACK_TITLE
+        )
+    if kind == "grade.powergrader.scheduled":
+        return _text(presentation.get("title")) != _SCHEDULED_FALLBACK_TITLE
+    if kind in _NAMED_FINDING_KINDS:
+        key = (_text(job.get("focused_course_id")), _text(job.get("assignment_id")))
+        return key in finding_names
+    return True
+
+
+def visible_work(section: str) -> tuple[list[dict], dict] | None:
+    """Section jobs and their presentations with detail-free cards removed."""
+    jobs = _section_jobs(section)
+    if jobs is None:
+        return None
+    finding_names = _finding_assignment_names(jobs)
+    presentations = _presentations(jobs, finding_names)
+    kept = [
+        job for job in jobs
+        if _card_is_visible(job, presentations.get(job["job_id"], {}), finding_names)
+    ]
+    return kept, {job["job_id"]: presentations[job["job_id"]] for job in kept}
 
 
 def _section_jobs(section: str) -> list[dict] | None:
@@ -296,32 +395,19 @@ def _write_result(result: dict):
 
 
 def _merge_discovery(result: dict) -> dict:
-    current = storage.read_registry()
-    scanned_courses = set((result.get("courses") or {}).keys())
-    current_jobs = []
-    for job in current.get("jobs", []):
-        source_ref = job.get("source_ref") if isinstance(job, dict) else {}
-        course_ids = set(job.get("course_ids") or []) if isinstance(job, dict) else set()
-        if source_ref.get("type") == "canvas_finding" and course_ids & scanned_courses:
-            continue
-        current_jobs.append(job)
-    for record in (result.get("courses") or {}).values():
-        current_jobs.extend(record.get("findings") or [])
-    current["jobs"] = current_jobs
-    current["updated_at"] = _now()
-    validate_registry_document(current)
-    return storage.write_registry(current)
+    return discovery.merge_into_registry(result)
 
 
 @router.get("/work")
 def get_work(section: str = "continue"):
-    jobs = _section_jobs(section)
-    if jobs is None:
+    result = visible_work(section)
+    if result is None:
         return JSONResponse({"ok": False, "error": "unknown section"}, status_code=400)
+    jobs, presentations = result
     return JSONResponse({
         "ok": True,
         "jobs": jobs,
-        "presentations": _presentations(jobs),
+        "presentations": presentations,
         "start_sources": adapters.collect_start_sources(),
     })
 
