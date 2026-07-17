@@ -16,6 +16,7 @@ import requests
 
 from api.webui import config, workspace
 from api.webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
+from api.mirror import new_quizzes
 from api.powergrader import student_attachments
 
 
@@ -29,19 +30,28 @@ CANVAS_AUTH_HEADERS = {
 
 
 def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | None = None,
-                      new_quiz_files=True, byte_budget=None, evidence_path=None, reusable_records=None):
+                      new_quiz_files=True, byte_budget=None, evidence_path=None, reusable_records=None,
+                      cached_new_quiz=None):
     """Fetch submissions for one assignment. Returns ``(subs, assignment, error)``."""
-    subs, err = _canvas_get_all(
-        f"/api/v1/courses/{course_id}/students/submissions",
-        {"student_ids[]": ["all"], "assignment_ids[]": [assignment_id],
-         "include[]": ["assignment", "user"], "per_page": 100},
-    )
-    if err:
-        return None, None, err
-    adata, assignment_err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
-    if assignment_err:
-        return None, None, assignment_err
-    adata = adata or {}
+    if cached_new_quiz is not None:
+        # The response snapshot is already joined to the assignment.  The
+        # native evidence path below remains live and may still refresh files.
+        subs = []
+        adata = dict(cached_new_quiz.get("assignment") or {})
+        adata.setdefault("id", str(assignment_id))
+        adata["is_quiz_lti_assignment"] = True
+    else:
+        subs, err = _canvas_get_all(
+            f"/api/v1/courses/{course_id}/students/submissions",
+            {"student_ids[]": ["all"], "assignment_ids[]": [assignment_id],
+             "include[]": ["assignment", "user"], "per_page": 100},
+        )
+        if err:
+            return None, None, err
+        adata, assignment_err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
+        if assignment_err:
+            return None, None, assignment_err
+        adata = adata or {}
     if adata.get("is_quiz_lti_assignment") is True:
         from api.powergrader import new_quiz_fetch
         if evidence_path == "managed":
@@ -54,6 +64,16 @@ def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | N
                     user.get("sortable_name") or user.get("name") or target.get("user_id"), target.get("user_id"),
                     attempt, evidence_id, filename,
                 )
+        snapshot_callback = None
+        if cached_new_quiz is None:
+            snapshot_callback = lambda **payload: new_quizzes.write_fetch_snapshot(
+                course_id, assignment_id, assignment=adata,
+                items=payload.get("items") or [],
+                normalized_attempts=payload.get("normalized_attempts") or [],
+                latest=payload.get("latest") or [],
+                root=workspace.workspace_root(),
+                attempted_at=new_quizzes.now_iso(),
+            )
         normalized, nq_err = new_quiz_fetch.fetch(
             course_id,
             assignment_id,
@@ -65,6 +85,8 @@ def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | N
             byte_budget=byte_budget,
             evidence_path=evidence_path,
             reusable_records=reusable_records,
+            cached_snapshot=cached_new_quiz,
+            snapshot_callback=snapshot_callback,
         )
         return normalized, adata, nq_err
     if adata.get("quiz_id") or "online_quiz" in (adata.get("submission_types") or []):

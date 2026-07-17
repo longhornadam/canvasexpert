@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 # read the same across both mirrors of Canvas data.
 from api.course_catalog import _error_code
 
-from . import store
+from . import new_quizzes, store
 
 
 WATERMARK_OVERLAP_MINUTES = 10
@@ -128,10 +128,14 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
                       watermarks={"submitted_since": watermark,
                                   "graded_since": watermark},
                       root=root)
+    new_quiz_result = new_quizzes.sync_metadata(
+        course_id, assignments, canvas_get_all=canvas_get_all, root=root, now=started,
+    )
     return {"ok": True, "assignments": len(document["assignments"]),
             "students": len(students or []),
             "submission_rows": len(submissions or []),
-            "pruned_assignments": pruned}
+            "pruned_assignments": pruned,
+            "new_quizzes": new_quiz_result}
 
 
 def delta_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
@@ -175,9 +179,13 @@ def delta_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
                       watermarks={"submitted_since": watermark,
                                   "graded_since": watermark},
                       root=root)
+    new_quiz_result = new_quizzes.sync_metadata(
+        course_id, assignments, canvas_get_all=canvas_get_all, root=root, now=started,
+    )
     return {"ok": True, "assignments": len(assignments or []),
             "changed_rows": len(submitted or []) + len(graded or []),
-            "touched_assignments": sorted(grouped)}
+            "touched_assignments": sorted(grouped),
+            "new_quizzes": new_quiz_result}
 
 
 def roster_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:

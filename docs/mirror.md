@@ -35,6 +35,11 @@ fresh — and fall back to live Canvas, visibly labeled, when it isn't.
                                    (the authoring catalog stays the rich source)
   submissions/<assignment_id>.v1.json
                                    per-student current row + append-only attempts
+  new_quizzes/_sync.v2.json        New Quiz metadata/response freshness envelopes
+  new_quizzes/<assignment_id>/quiz.v2.json
+                                   assignment, quiz, and item catalog metadata
+  new_quizzes/<assignment_id>/students/<user_id>.v2.json
+                                   on-demand report attempts and URL-free evidence
 ```
 
 Per-assignment submission files keep OneDrive syncs small and localize any
@@ -85,6 +90,12 @@ Routes: `GET /api/mirror/status` (per-course pass envelopes + watermarks),
 `POST /api/mirror/sync-now` (manual delta; falls back to a full backfill for
 a never-synced course — the first one can take a minute).
 
+New Quiz metadata follows the same full/delta cadence without generating
+Student Analysis reports. PowerGrader's focused New Quiz acquisition writes
+the response snapshot on success. A fresh response snapshot can satisfy a
+later PowerGrader read without another ordinary submission/report read; native
+file evidence still uses the focused live transport.
+
 ## Mirror-first reads (`api/mirror/queries.py`)
 
 Implements the `gradebook_queries` interface (`course_students`,
@@ -108,8 +119,9 @@ mirror, so offline tests exercise the live path unchanged.
   neither `submitted_since` nor `graded_since`; future: reconcile-time or
   on-demand refresh).
 - **Attachment downloads** (names only, in attempt records).
-- **New Quizzes attempt history** (opaque LTI stubs in `submission_history`;
-  the existing NQ CSV/API path is the source for those).
+- New Quiz item-level grading or feedback writes. Mirror snapshots are
+  read-only; the existing live/native grader preflight remains mandatory before
+  any write.
 - Multi-machine conflict smarts beyond disposability. (`vault.json` — not a
   mirror file — remains the one cross-machine-conflict-sensitive artifact.)
 - Startup-item registration (separate slice; per-user Startup folder,

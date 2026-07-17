@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timezone
 
 from api.powergrader import canvas_fetch
+from api.mirror import new_quizzes
 from api.webui import workspace
 
 
@@ -77,11 +78,20 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
     evidence_assignment_name = str(assignment_id)
     existing = workspace.read_assignment_evidence_manifest(course_name, course_id, evidence_assignment_name, assignment_id, root)
     budget = RefreshBudget()
-    # Assignment name is learned from the authoritative assignment response.
-    subs, assignment, error = canvas_fetch.fetch_submissions(
-        course_id, assignment_id, session_id=session_id, byte_budget=budget, evidence_path="managed",
-        reusable_records=_existing_records(existing, root, course_id, assignment_id, "new_quiz"),
+    cached_new_quiz, _cache_state = new_quizzes.read_fresh_snapshot(
+        course_id, assignment_id, root=root,
+        max_age_hours=config.mirror_serve_max_age_hours(),
     )
+    # Assignment name is learned from the authoritative assignment response.
+    fetch_kwargs = {
+        "session_id": session_id,
+        "byte_budget": budget,
+        "evidence_path": "managed",
+        "reusable_records": _existing_records(existing, root, course_id, assignment_id, "new_quiz"),
+    }
+    if cached_new_quiz is not None:
+        fetch_kwargs["cached_new_quiz"] = cached_new_quiz
+    subs, assignment, error = canvas_fetch.fetch_submissions(course_id, assignment_id, **fetch_kwargs)
     if error:
         return None, None, {"error": error}
     assignment = assignment or {}

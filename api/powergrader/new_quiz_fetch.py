@@ -148,30 +148,82 @@ def _core_snapshot(core: dict) -> dict:
             if key not in {"attachments", "code_files"}}
 
 
-def normalize(core_submissions, report_rows, items, *, assignment_name: str = ""):
-    """Join latest report attempts to Core submissions without exposing identity in errors."""
-    latest = {}
-    for row in report_rows:
-        student = row.get("student_data") or {}
-        uid = str(student.get("id") or "")
-        try:
-            attempt = float(student.get("attempt") if student.get("attempt") is not None else row.get("attempt"))
-        except (TypeError, ValueError):
-            continue
-        if uid and (uid not in latest or attempt > latest[uid][0]):
-            latest[uid] = (attempt, row)
+def _safe_report_identity(row: dict) -> dict:
+    """Keep only stable result identity; never carry native transport fields."""
+    if not isinstance(row, dict):
+        return {}
+    nested = row.get("authoritative_result") if isinstance(row.get("authoritative_result"), dict) else {}
+    identity = {}
+    for key in ("quiz_session_id", "quiz_api_quiz_session_id", "quizSessionId"):
+        if row.get(key) not in (None, ""):
+            identity["quiz_session_id"] = str(row[key])
+            break
+    for key in ("result_id", "authoritative_result_id"):
+        if row.get(key) not in (None, ""):
+            identity["result_id"] = str(row[key])
+            break
+    if not identity.get("result_id"):
+        for key in ("result_id", "id"):
+            if nested.get(key) not in (None, ""):
+                identity["result_id"] = str(nested[key])
+                break
+    for key in ("result_version", "version"):
+        if row.get(key) not in (None, ""):
+            identity["result_version"] = str(row[key])
+            break
+    if not identity.get("result_version"):
+        for key in ("result_version", "version"):
+            if nested.get(key) not in (None, ""):
+                identity["result_version"] = str(nested[key])
+                break
+    return identity
+
+
+def _report_overall(row: dict) -> dict:
+    if not isinstance(row, dict):
+        return {}
+    keys = ("score", "overall_score", "points_possible", "overall_status", "status",
+            "workflow_state", "number_of_correct", "number_of_incorrect", "no_response")
+    return {key: row[key] for key in keys if row.get(key) not in (None, "")}
+
+
+def normalize_attempts(core_submissions, report_rows, items, *, assignment_name: str = "",
+                       include_empty: bool = False, include_unmatched: bool = False):
+    """Normalize every report attempt that can be joined by student identity.
+
+    The regular PowerGrader path asks for the latest, non-empty attempt.  The
+    mirror path opts into empty and unmatched rows so malformed or ambiguous
+    report data becomes an explicit incomplete cache state instead of being
+    silently discarded.
+    """
+    core_by_uid = {str(core.get("user_id")): core for core in (core_submissions or [])
+                   if isinstance(core, dict) and core.get("user_id") not in (None, "")}
     entries = _item_map(items)
     normalized = []
-    for core in core_submissions:
-        uid = str(core.get("user_id") or "")
-        selected = latest.get(uid)
-        if not uid or not selected or not core.get("submitted_at") or not _attempt_time(selected[1]):
+    for row in report_rows or []:
+        if not isinstance(row, dict):
             continue
-        attempt, row = selected
+        student = row.get("student_data") or {}
+        uid = str(student.get("id") or row.get("user_id") or "")
+        try:
+            raw_attempt = student.get("attempt") if student.get("attempt") is not None else row.get("attempt")
+            attempt_number = float(raw_attempt)
+        except (TypeError, ValueError):
+            continue
+        core = core_by_uid.get(uid)
+        if not uid or (core is None and not include_unmatched):
+            continue
+        if core is not None and not core.get("submitted_at"):
+            continue
+        reported_at = _attempt_time(row)
+        if not reported_at:
+            continue
         new_items = []
         attachments = []
-        selected_attempt = int(attempt) if attempt.is_integer() else attempt
+        selected_attempt = int(attempt_number) if attempt_number.is_integer() else attempt_number
         for answer in row.get("item_responses") or []:
+            if not isinstance(answer, dict):
+                continue
             item = entries.get(str(answer.get("item_id") or ""))
             # Keep the Student Analysis response visible even when the item
             # catalog is stale/malformed; the absent catalog entry becomes a
@@ -198,21 +250,49 @@ def normalize(core_submissions, report_rows, items, *, assignment_name: str = ""
                 "possible": (item.get("_outer_points_possible")
                              or item.get("points_possible") or item.get("points") or 0),
                 "earned_score": answer.get("score"),
+                "status": answer.get("status") or answer.get("response_status") or "",
                 "files": item_files,
             })
             attachments.extend(dict(file) for file in item_files)
-        if not new_items:
+        if not new_items and not include_empty:
             continue
         body = "\n\n".join(f"{html_to_text(x['prompt'])}\n{html_to_text(x['raw_html_answer'])}" for x in new_items)
+        base = _core_snapshot(core) if core is not None else {
+            "user_id": uid,
+            "user": {key: student.get(key) for key in ("name", "sortable_name") if student.get(key)},
+            "submission_type": "new_quiz",
+            "workflow_state": "submitted",
+            "submitted_at": reported_at,
+        }
         normalized.append({
-            **_core_snapshot(core), "body": body, "attachments": attachments,
+            **base, "body": body, "attachments": attachments,
             "expected_attachment_count": len(attachments),
             "new_quiz_items": new_items,
             "new_quiz_attempt": selected_attempt,
-            "new_quiz_reported_at": _attempt_time(row),
-            "assignment": core.get("assignment") or {"name": assignment_name},
+            "new_quiz_reported_at": reported_at,
+            "new_quiz_join_state": "unmatched" if core is None else "",
+            "new_quiz_join_error": "student_submission_missing" if core is None else "",
+            "new_quiz_overall": _report_overall(row),
+            "new_quiz_result_identity": _safe_report_identity(row),
+            "assignment": (core or {}).get("assignment") or {"name": assignment_name},
         })
     return normalized
+
+
+def normalize(core_submissions, report_rows, items, *, assignment_name: str = ""):
+    """Join the latest report attempt to Core submissions."""
+    attempts = normalize_attempts(core_submissions, report_rows, items,
+                                  assignment_name=assignment_name)
+    latest = {}
+    for submission in attempts:
+        uid = str(submission.get("user_id") or "")
+        try:
+            attempt = float(submission.get("new_quiz_attempt"))
+        except (TypeError, ValueError):
+            continue
+        if uid and (uid not in latest or attempt > latest[uid][0]):
+            latest[uid] = (attempt, submission)
+    return [value[1] for value in latest.values()]
 
 
 def _extract_json_after(text: str, marker: str):
@@ -552,6 +632,13 @@ def _native_file_transport(session, base, headers, course_id, assignment_id,
                 ))
                 continue
             candidate = candidates[0]
+            # This is the only stable result identity exposed by the native
+            # read chain.  Keep IDs only; quiz host and signed credentials
+            # remain process-local and are never put on the target.
+            target["new_quiz_result_identity"] = {
+                "quiz_session_id": candidate["quiz_session_id"],
+                "result_id": candidate["result_id"],
+            }
             try:
                 item_response = session.get(
                     candidate["quiz_host"].rstrip("/") + f"/api/quiz_sessions/{candidate['quiz_session_id']}/results/{candidate['result_id']}/session_item_results",
@@ -800,32 +887,45 @@ def _download_signed_url(url, dest, *, declared_size=None, http_session=None, fr
 
 def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=time.sleep,
           session_id=None, download=None, course_name="", assignment_name="", materialize_files=True,
-          byte_budget=None, evidence_path=None, reusable_records=None):
+          byte_budget=None, evidence_path=None, reusable_records=None,
+          cached_snapshot=None, snapshot_callback=None):
     headers, base = _canvas_headers()
     if not headers or not base:
         return None, "No Canvas token saved — go to Settings."
     session = session or requests.Session()
-    items_response = session.get(
-        f"{base}/api/quiz/v1/courses/{course_id}/quizzes/{assignment_id}/items",
-        headers=headers, timeout=REQUEST_TIMEOUT,
-    )
-    if items_response.status_code != 200:
-        return None, _error(items_response.status_code)
-    items = _json(items_response)
-    if not isinstance(items, list):
-        return None, _error()
-    rows, err = _create_report(session, base, course_id, assignment_id, headers, sleep)
-    if err:
-        return None, err
-    subs = normalize(core_submissions, rows, items, assignment_name=assignment_name)
-    stale = any(_parse_time(s.get("submitted_at")) is None or _parse_time(s.get("new_quiz_reported_at")) is None or _parse_time(s["submitted_at"]) > _parse_time(s["new_quiz_reported_at"]) for s in subs)
-    if stale:
+    rows = None
+    items = None
+    if cached_snapshot is not None:
+        cached_students = (cached_snapshot.get("students") if isinstance(cached_snapshot, dict)
+                           else cached_snapshot) or []
+        subs = [dict(student) for student in cached_students if isinstance(student, dict)]
+        all_attempts = []
+    else:
+        items_response = session.get(
+            f"{base}/api/quiz/v1/courses/{course_id}/quizzes/{assignment_id}/items",
+            headers=headers, timeout=REQUEST_TIMEOUT,
+        )
+        if items_response.status_code != 200:
+            return None, _error(items_response.status_code)
+        items = _json(items_response)
+        if not isinstance(items, list):
+            return None, _error()
         rows, err = _create_report(session, base, course_id, assignment_id, headers, sleep)
         if err:
             return None, err
         subs = normalize(core_submissions, rows, items, assignment_name=assignment_name)
-        if any(_parse_time(s.get("submitted_at")) is None or _parse_time(s.get("new_quiz_reported_at")) is None or _parse_time(s["submitted_at"]) > _parse_time(s["new_quiz_reported_at"]) for s in subs):
-            return None, "New Quiz report is still older than Canvas. Wait briefly and try again; no session was created."
+        stale = any(_parse_time(s.get("submitted_at")) is None or _parse_time(s.get("new_quiz_reported_at")) is None or _parse_time(s["submitted_at"]) > _parse_time(s["new_quiz_reported_at"]) for s in subs)
+        if stale:
+            rows, err = _create_report(session, base, course_id, assignment_id, headers, sleep)
+            if err:
+                return None, err
+            subs = normalize(core_submissions, rows, items, assignment_name=assignment_name)
+            if any(_parse_time(s.get("submitted_at")) is None or _parse_time(s.get("new_quiz_reported_at")) is None or _parse_time(s["submitted_at"]) > _parse_time(s["new_quiz_reported_at"]) for s in subs):
+                return None, "New Quiz report is still older than Canvas. Wait briefly and try again; no session was created."
+        all_attempts = normalize_attempts(
+            core_submissions, rows, items, assignment_name=assignment_name,
+            include_empty=True, include_unmatched=True,
+        )
 
     # Gate on the normalized snapshot, not the raw report: current Canvas
     # builds report uploads as filename-only answers with no file refs, and
@@ -858,4 +958,32 @@ def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=tim
         for sub in subs:
             if _target_has_files(sub):
                 _mark_expected_failure(sub, deferred)
+    if cached_snapshot is None:
+        # Native file resolution enriches the latest target with authoritative
+        # IDs and URL-free evidence metadata. Reflect that enrichment in the
+        # matching report attempt before handing the complete snapshot to the
+        # mirror; older attempts intentionally keep an unknown native identity.
+        for target in subs:
+            target_uid = str(target.get("user_id") or "")
+            target_attempt = str(target.get("new_quiz_attempt") or "")
+            for attempt in all_attempts:
+                if (str(attempt.get("user_id") or "") == target_uid
+                        and str(attempt.get("new_quiz_attempt") or "") == target_attempt):
+                    attempt["new_quiz_result_identity"] = dict(target.get("new_quiz_result_identity") or {})
+                    attempt["attachments"] = [dict(record) for record in target.get("attachments") or []]
+                    attempt["new_quiz_items"] = target.get("new_quiz_items") or []
+                    break
+    if snapshot_callback is not None and cached_snapshot is None:
+        try:
+            snapshot_callback(
+                core_submissions=core_submissions,
+                report_rows=rows or [],
+                items=items or [],
+                normalized_attempts=all_attempts,
+                latest=subs,
+            )
+        except Exception:
+            # A disposable local mirror must never turn a successful focused
+            # Canvas acquisition into a PowerGrader failure.
+            pass
     return subs, None
