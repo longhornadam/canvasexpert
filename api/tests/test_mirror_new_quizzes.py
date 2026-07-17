@@ -173,6 +173,37 @@ def test_metadata_sync_is_separate_and_prunes_only_after_complete_pass(tmp_path)
     ]
 
 
+def test_response_snapshot_does_not_downgrade_synced_quiz_metadata(tmp_path):
+    rich_quiz = {
+        "id": ASSIGNMENT, "title": "Rich Quiz Document", "quiz_type": "assignment",
+        "time_limit": 45, "allowed_attempts": 2, "workflow_state": "published",
+    }
+    new_items = [{
+        "id": "outer-new", "points_possible": 10,
+        "entry": {"id": "essay-new", "interaction_type_slug": "essay",
+                   "item_body": "New prompt."},
+    }]
+    new_assignment = {**_assignment(), "name": "Updated Assignment Name"}
+    new_quizzes.write_quiz_metadata(
+        COURSE, ASSIGNMENT, assignment=_assignment(), quiz=rich_quiz,
+        items=_items(), root=str(tmp_path), attempted_at=NOW,
+    )
+    row = _attempt(1, "response")
+    row["new_quiz_items"][0]["item_id"] = "essay-new"
+    row["new_quiz_items"][0]["prompt"] = "New prompt."
+    new_quizzes.write_fetch_snapshot(
+        COURSE, ASSIGNMENT, assignment=new_assignment, items=new_items,
+        normalized_attempts=[row], latest=[row], root=str(tmp_path), attempted_at=NOW,
+    )
+
+    document = new_quizzes.read_quiz(COURSE, ASSIGNMENT, root=str(tmp_path))
+    assert document["quiz"]["title"] == "Rich Quiz Document"
+    assert document["quiz"]["quiz_type"] == "assignment"
+    assert document["quiz"]["time_limit"] == 45
+    assert document["assignment"]["name"] == "Updated Assignment Name"
+    assert set(document["items"]) == {"essay-new"}
+
+
 def test_malformed_item_join_and_unmatched_attempt_are_explicit(tmp_path):
     malformed = _attempt(1, "answer")
     malformed["new_quiz_items"][0]["item_id"] = "item-not-in-catalog"

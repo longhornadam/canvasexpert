@@ -144,7 +144,7 @@ Stop and return RED/YELLOW instead of guessing if:
 ## Execution result
 
 Traffic light: GREEN  
-Commit: `28f76df feat: add CanvasMirror New Quizzes v2` (local only; not pushed)  
+Commit: `d6840c6 feat: add CanvasMirror New Quizzes v2` (local only; not pushed)
 Files changed:  
 - `api/mirror/new_quizzes.py` — versioned v2 metadata/response storage, validators,
   freshness reads, metadata sync, attempt/evidence normalization, and cache adapter.  
@@ -172,5 +172,12 @@ Verification:
 - Self-review confirmed no changes to `new_quiz_grader.py`, no mirror write path,
   no generic v1 New Quiz payload widening, and no credential/signed-URL persistence
   in the new v2 cache.  
+- Correction rerun: `py -m pytest api/tests/test_mirror_new_quizzes.py
+  api/tests/test_mirror_store.py api/tests/test_mirror_sync.py
+  api/tests/test_mirror_queries.py api/tests/test_mirror_service.py
+  api/tests/test_powergrader_new_quizzes.py` — **82 passed**.
+- Correction `git diff --check` — passed.
+- The previously recorded full API result (**826 passed, 1 skipped**) predates
+  this bounded mirror-only correction and was not rerun.
 Deviations: none recorded.  
 Unresolved decision: none — metadata-continuous/on-demand-response policy is locked.

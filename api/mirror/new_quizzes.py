@@ -224,6 +224,12 @@ _QUIZ_METADATA_FIELDS = (
     "updated_at", "item_count",
 )
 
+_REAL_QUIZ_FIELDS = {
+    "title", "quiz_type", "time_limit", "shuffle_answers", "hide_results",
+    "one_question_at_a_time", "allowed_attempts", "scoring_policy", "item_count",
+    "workflow_state",
+}
+
 
 def normalize_quiz(quiz: dict, assignment_id) -> dict:
     quiz = quiz if isinstance(quiz, dict) else {}
@@ -236,6 +242,14 @@ def normalize_quiz(quiz: dict, assignment_id) -> dict:
         if key in result:
             result[key] = _text(result[key])
     return result
+
+
+def _has_real_quiz_payload(quiz: dict | None) -> bool:
+    """Distinguish a quiz API document from the core assignment projection."""
+    return isinstance(quiz, dict) and bool(
+        quiz.get("id") not in (None, "")
+        and _REAL_QUIZ_FIELDS.intersection(quiz)
+    )
 
 
 def _choice(value):
@@ -494,7 +508,11 @@ def write_response_snapshot(course_id, assignment_id, *, assignment=None, quiz=N
 
     state = "incomplete" if collection_incomplete else "current"
     with store.course_lock(course_id):
-        write_quiz_metadata(course_id, assignment_id, assignment=assignment, quiz=quiz,
+        existing_quiz = read_quiz(course_id, assignment_id, root=root)
+        quiz_payload = quiz if _has_real_quiz_payload(quiz) else (
+            (existing_quiz or {}).get("quiz") or quiz or assignment or {}
+        )
+        write_quiz_metadata(course_id, assignment_id, assignment=assignment, quiz=quiz_payload,
                             items=items, root=root, attempted_at=attempted_at)
         existing_ids = set(list_student_ids(course_id, assignment_id, root=root))
         for uid, (current, records, latest_attempt) in current_rows.items():
@@ -592,7 +610,7 @@ def write_fetch_snapshot(course_id, assignment_id, *, assignment, items,
                          normalized_attempts, latest, root=None, attempted_at=None):
     """Adapter used by ``new_quiz_fetch.fetch`` after report/native work."""
     return write_response_snapshot(
-        course_id, assignment_id, assignment=assignment, quiz=assignment, items=items,
+        course_id, assignment_id, assignment=assignment, items=items,
         normalized_attempts=normalized_attempts, latest=latest, root=root,
         attempted_at=attempted_at,
     )
