@@ -342,7 +342,8 @@ def _scrub(value, *, relative_root=None):
                  "authorization", "cookie", "token", "jwt", "access_token", "accesstoken",
                  "result_token", "resulttoken", "workflow_jwt", "workflowjwt", "signature",
                  "quiz_host", "quizhost", "backend", "backend_url", "backendurl", "local_path",
-                 "localpath"}
+                 "localpath", "preview_url", "previewurl", "download_url", "downloadurl",
+                 "attachment_url", "attachmenturl", "href"}
     if isinstance(value, dict):
         result = {}
         for key, item in value.items():
@@ -388,6 +389,15 @@ def _cache_submission(normalized, root):
         item["files"] = [safe for safe in (_relative_evidence(record, root) for record in normalized.get("attachments") or [])
                          if safe and str(safe.get("item_id")) == str(item.get("item_id"))]
     return cached
+
+
+def _attempt_number(value) -> float:
+    """Attempt values come from report rows and are usually ints, but a
+    malformed row must degrade to 0, never crash the snapshot write."""
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _safe_identity(value):
@@ -468,7 +478,16 @@ def write_response_snapshot(course_id, assignment_id, *, assignment=None, quiz=N
 
     Duplicate student/attempt joins are retained as separate list entries and
     make the collection ``incomplete``; they are never silently collapsed.
+
+    Attempt history is append-preserving (mirror design law): attempts seen in
+    an earlier snapshot but absent from this fetch are carried forward, while
+    ``current``/``latest_attempt`` always reflect this fetch alone — Canvas is
+    truth for the present, the mirror is richer about the past.
+
+    ``latest`` is accepted for caller compatibility but unused — the
+    current/latest pointer is derived from ``normalized_attempts``.
     """
+    del latest
     _require_dir(course_id, root)
     attempted_at = attempted_at or now_iso()
     catalog = normalize_items(items or []) if isinstance(items, list) else (items or {})
@@ -494,13 +513,16 @@ def write_response_snapshot(course_id, assignment_id, *, assignment=None, quiz=N
     current_rows = {}
     collection_incomplete = missing_identity
     for uid, records in grouped.items():
-        records.sort(key=lambda item: (float(item.get("attempt") or 0), str(item.get("reported_at") or "")))
+        records.sort(key=lambda item: (_attempt_number(item.get("attempt")),
+                                       str(item.get("reported_at") or "")))
         for record in records:
             if record["join_state"] != "joined":
                 collection_incomplete = True
         candidates = [record for record in records if record["join_state"] == "joined"]
-        max_attempt = max((float(record.get("attempt") or 0) for record in candidates), default=None)
-        latest_candidates = [record for record in candidates if float(record.get("attempt") or 0) == max_attempt]
+        max_attempt = max((_attempt_number(record.get("attempt")) for record in candidates),
+                          default=None)
+        latest_candidates = [record for record in candidates
+                             if _attempt_number(record.get("attempt")) == max_attempt]
         current = latest_candidates[0] if len(latest_candidates) == 1 else None
         if current is None:
             collection_incomplete = True
@@ -516,6 +538,18 @@ def write_response_snapshot(course_id, assignment_id, *, assignment=None, quiz=N
                             items=items, root=root, attempted_at=attempted_at)
         existing_ids = set(list_student_ids(course_id, assignment_id, root=root))
         for uid, (current, records, latest_attempt) in current_rows.items():
+            # Append-preserving merge: carry forward previously captured
+            # attempts whose attempt number is absent from this fetch. New
+            # records (including deliberate ambiguous duplicates) are kept
+            # exactly as fetched, so replaying a snapshot stays idempotent.
+            prior = (read_student(course_id, assignment_id, uid, root=root)
+                     or {}).get("attempts") or []
+            fetched_numbers = {_text(record.get("attempt")) for record in records}
+            carried = [record for record in prior
+                       if _text(record.get("attempt")) not in fetched_numbers]
+            merged = sorted(carried + records,
+                            key=lambda item: (_attempt_number(item.get("attempt")),
+                                              str(item.get("reported_at") or "")))
             document = {
                 "schema_version": NEW_QUIZ_VERSION,
                 "course_id": str(course_id),
@@ -527,7 +561,7 @@ def write_response_snapshot(course_id, assignment_id, *, assignment=None, quiz=N
                 "error_code": "incomplete" if state == "incomplete" else "",
                 "latest_attempt": latest_attempt,
                 "current": current,
-                "attempts": records,
+                "attempts": merged,
             }
             _write_document(student_path(course_id, assignment_id, uid, root),
                             _validate_student(document, course_id, assignment_id))
@@ -607,26 +641,56 @@ def read_fresh_snapshot(course_id, assignment_id, *, root=None, max_age_hours=6.
 
 
 def write_fetch_snapshot(course_id, assignment_id, *, assignment, items,
-                         normalized_attempts, latest, root=None, attempted_at=None):
-    """Adapter used by ``new_quiz_fetch.fetch`` after report/native work."""
+                         normalized_attempts, latest=None, root=None,
+                         attempted_at=None):
+    """Adapter used by ``new_quiz_fetch.fetch`` after report/native work.
+    ``latest`` is accepted for callback compatibility but unused — the
+    current/latest pointer is derived from ``normalized_attempts``."""
+    del latest
     return write_response_snapshot(
         course_id, assignment_id, assignment=assignment, items=items,
-        normalized_attempts=normalized_attempts, latest=latest, root=root,
+        normalized_attempts=normalized_attempts, root=root,
         attempted_at=attempted_at,
     )
 
 
+METADATA_TRUEUP_HOURS = 24.0
+
+
+def _metadata_is_current(course_id, assignment, assignment_id, *, root, now) -> bool:
+    """True when the stored quiz doc already reflects this assignment row —
+    same assignment ``updated_at`` and less than a day old. Item edits inside
+    the LTI tool may not bump the assignment's ``updated_at``, so the daily
+    true-up bounds that staleness; the delta cadence itself stays free."""
+    existing = read_quiz(course_id, assignment_id, root=root)
+    if existing is None or existing.get("state") != "current":
+        return False
+    if existing["assignment"].get("updated_at") != _text(assignment.get("updated_at")):
+        return False
+    age = age_hours(existing.get("last_success_at") or "", now)
+    return age is not None and age < METADATA_TRUEUP_HOURS
+
+
 def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None):
-    """Refresh New Quiz assignment/quiz/item metadata without reports."""
+    """Refresh New Quiz assignment/quiz/item metadata without reports.
+
+    Runs on every mirror pass, but per-quiz Canvas fetches are skipped while
+    the stored metadata is current (unchanged ``updated_at``, under the daily
+    true-up age) — a stagnant quiz costs zero requests per tick."""
     _require_dir(course_id, root)
     attempted_at = now or now_iso()
     new_quizzes = [row for row in (assignments or [])
                    if isinstance(row, dict) and row.get("is_quiz_lti_assignment") is True]
     failures = []
     written = []
+    skipped = []
     for assignment in new_quizzes:
         assignment_id = str(assignment.get("id") or "")
         if not assignment_id:
+            continue
+        if _metadata_is_current(course_id, assignment, assignment_id,
+                                root=root, now=attempted_at):
+            skipped.append(assignment_id)
             continue
         quiz_rows, error = canvas_get_all(
             f"/api/quiz/v1/courses/{course_id}/quizzes/{assignment_id}", {"per_page": 100}
@@ -645,7 +709,8 @@ def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None
                             items=item_rows, root=root, attempted_at=attempted_at)
         written.append(assignment_id)
     complete = not failures
-    state = "current" if complete else ("incomplete" if written else "unavailable")
+    state = "current" if complete else (
+        "incomplete" if (written or skipped) else "unavailable")
     _record_sync(course_id, kind="metadata", state=state,
                  error_code="metadata_partial" if failures else "",
                  attempted_at=attempted_at, root=root)
@@ -659,4 +724,5 @@ def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None
                     shutil.rmtree(directory)
             except OSError:
                 pass
-    return {"ok": complete, "state": state, "quizzes": len(written), "failures": failures}
+    return {"ok": complete, "state": state, "quizzes": len(written),
+            "skipped": len(skipped), "failures": failures}

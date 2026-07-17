@@ -81,6 +81,60 @@ def test_snapshot_retains_attempts_identity_and_relative_evidence(tmp_path, monk
     assert snapshot["students"][0]["new_quiz_attempt"] == 2
 
 
+def test_attempts_are_append_preserving_across_snapshots(tmp_path):
+    # First snapshot captures attempts 1 and 2.
+    new_quizzes.write_response_snapshot(
+        COURSE, ASSIGNMENT, assignment=_assignment(), items=_items(),
+        normalized_attempts=[_attempt(1, "older"), _attempt(2, "middle")],
+        root=str(tmp_path), attempted_at=NOW,
+    )
+    # A later report only carries attempt 3 — earlier attempts must survive,
+    # while current/latest reflect the new fetch alone.
+    result = new_quizzes.write_response_snapshot(
+        COURSE, ASSIGNMENT, assignment=_assignment(), items=_items(),
+        normalized_attempts=[_attempt(3, "newest")],
+        root=str(tmp_path), attempted_at="2026-07-16T13:00:00Z",
+    )
+    assert result["ok"] is True
+    student = new_quizzes.read_student(COURSE, ASSIGNMENT, "student-synthetic", root=str(tmp_path))
+    assert [entry["attempt"] for entry in student["attempts"]] == [1, 2, 3]
+    assert student["current"]["attempt"] == 3
+    assert student["latest_attempt"] == 3
+    # Replaying the same snapshot stays idempotent.
+    new_quizzes.write_response_snapshot(
+        COURSE, ASSIGNMENT, assignment=_assignment(), items=_items(),
+        normalized_attempts=[_attempt(3, "newest")],
+        root=str(tmp_path), attempted_at="2026-07-16T13:00:00Z",
+    )
+    replayed = new_quizzes.read_student(COURSE, ASSIGNMENT, "student-synthetic", root=str(tmp_path))
+    assert replayed == student
+
+
+def test_malformed_attempt_value_degrades_instead_of_crashing(tmp_path):
+    broken = _attempt(1, "answer")
+    broken["new_quiz_attempt"] = "not-a-number"
+    result = new_quizzes.write_response_snapshot(
+        COURSE, ASSIGNMENT, assignment=_assignment(), items=_items(),
+        normalized_attempts=[broken], root=str(tmp_path), attempted_at=NOW,
+    )
+    assert result["state"] in {"current", "incomplete"}  # wrote, did not raise
+    student = new_quizzes.read_student(COURSE, ASSIGNMENT, "student-synthetic", root=str(tmp_path))
+    assert student is not None
+
+
+def test_scrub_removes_preview_and_download_urls(tmp_path):
+    leaky = _attempt(1, "answer")
+    leaky["preview_url"] = "https://tenant.invalid/preview?verifier=SECRET"
+    leaky["download_url"] = "https://tenant.invalid/files/1/download?verifier=SECRET"
+    new_quizzes.write_response_snapshot(
+        COURSE, ASSIGNMENT, assignment=_assignment(), items=_items(),
+        normalized_attempts=[leaky], root=str(tmp_path), attempted_at=NOW,
+    )
+    student = new_quizzes.read_student(COURSE, ASSIGNMENT, "student-synthetic", root=str(tmp_path))
+    raw = json.dumps(student)
+    assert "SECRET" not in raw and "preview_url" not in raw and "download_url" not in raw
+
+
 def test_duplicate_or_stale_snapshots_fail_closed(tmp_path):
     duplicate = _attempt(1, "one", result_id="result-1")
     duplicate_again = _attempt(1, "one-again", result_id="result-1b")
@@ -171,6 +225,45 @@ def test_metadata_sync_is_separate_and_prunes_only_after_complete_pass(tmp_path)
         f"/api/quiz/v1/courses/{COURSE}/quizzes/{ASSIGNMENT}",
         f"/api/quiz/v1/courses/{COURSE}/quizzes/{ASSIGNMENT}/items",
     ]
+
+
+def test_metadata_sync_skips_unchanged_quizzes_until_trueup(tmp_path):
+    calls = []
+
+    def canvas(path, params=None, timeout=30):
+        calls.append(path)
+        if path.endswith(f"/quizzes/{ASSIGNMENT}"):
+            return ([{"id": ASSIGNMENT, "title": "Fictional Quiz", "points_possible": 10}], None)
+        if path.endswith("/items"):
+            return (_items(), None)
+        raise AssertionError(path)
+
+    new_quizzes.sync_metadata(COURSE, [_assignment()], canvas_get_all=canvas,
+                              root=str(tmp_path), now=NOW)
+    assert len(calls) == 2
+
+    # Unchanged assignment updated_at, under the daily true-up: a delta tick
+    # costs zero Canvas requests, and the metadata envelope stays current.
+    result = new_quizzes.sync_metadata(COURSE, [_assignment()], canvas_get_all=canvas,
+                                       root=str(tmp_path), now="2026-07-16T12:15:00Z")
+    assert result == {"ok": True, "state": "current", "quizzes": 0,
+                      "skipped": 1, "failures": []}
+    assert len(calls) == 2
+    envelope = new_quizzes.read_sync(COURSE, root=str(tmp_path))["metadata"]
+    assert envelope["state"] == "current"
+    assert envelope["last_success_at"] == "2026-07-16T12:15:00Z"
+
+    # A changed assignment updated_at forces a refetch.
+    changed = dict(_assignment(), updated_at="2026-07-16T13:00:00Z")
+    new_quizzes.sync_metadata(COURSE, [changed], canvas_get_all=canvas,
+                              root=str(tmp_path), now="2026-07-16T13:05:00Z")
+    assert len(calls) == 4
+
+    # Past the daily true-up age, even unchanged metadata refetches (item
+    # edits inside the LTI tool may not bump the assignment's updated_at).
+    new_quizzes.sync_metadata(COURSE, [changed], canvas_get_all=canvas,
+                              root=str(tmp_path), now="2026-07-18T12:00:00Z")
+    assert len(calls) == 6
 
 
 def test_response_snapshot_does_not_downgrade_synced_quiz_metadata(tmp_path):

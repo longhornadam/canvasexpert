@@ -182,3 +182,28 @@ Verification:
   this bounded mirror-only correction and was not rerun.
 Deviations: none recorded.  
 Unresolved decision: none — metadata-continuous/on-demand-response policy is locked.
+
+## Post-review adjustments (2026-07-16, Claude review pass)
+
+Four bounded changes to `api/mirror/new_quizzes.py` after the v1+v2 review;
+full suite **831 passed, 1 skipped**. Locked decisions unchanged.
+
+1. **Metadata cadence gating** — `sync_metadata` now skips the per-quiz
+   quiz/items fetches while the stored doc is current (unchanged assignment
+   `updated_at`, under a 24 h true-up age). A stagnant New Quiz costs zero
+   requests per delta tick; the daily true-up bounds staleness from item
+   edits that don't bump the assignment timestamp. Result gains a `skipped`
+   count; partial failure with skips degrades to `incomplete`, not
+   `unavailable`.
+2. **Append-preserving attempts** — `write_response_snapshot` carries forward
+   previously captured attempts whose attempt number is absent from the new
+   fetch (mirror design law: append-only history). `current`/`latest_attempt`
+   still derive from the new fetch alone; ambiguous duplicates are still
+   retained uncollapsed; replaying a snapshot stays idempotent.
+3. **Malformed attempt values degrade instead of crashing** — attempt sorting
+   and latest-selection go through a safe numeric coercion (`_attempt_number`),
+   so a non-numeric report value can no longer abort the snapshot write.
+4. **Scrub blocklist widened** — `preview_url`, `download_url`,
+   `attachment_url`, `href` (and joined variants) added to the at-rest scrub.
+   `latest` params on the snapshot writers are documented as unused and
+   ignored (pointer derives from `normalized_attempts`).
