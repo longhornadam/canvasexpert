@@ -68,7 +68,9 @@ before one) and never touch collection files.
 resubmit accumulate `attempts` keyed by attempt number, which survive full-
 pass rewrites. This is the substrate for regrade queues, revision chains, and
 growth-over-time views. (Deleted submissions take their attempts with them —
-the mirror mirrors truth.)
+the mirror mirrors truth.) New Quiz response snapshots follow the same law:
+attempts captured earlier but absent from a later report are carried forward,
+while `current`/`latest_attempt` always reflect the newest fetch alone.
 
 ## Scheduling (`api/webui/mirror_service.py`)
 
@@ -91,7 +93,10 @@ Routes: `GET /api/mirror/status` (per-course pass envelopes + watermarks),
 a never-synced course — the first one can take a minute).
 
 New Quiz metadata follows the same full/delta cadence without generating
-Student Analysis reports. PowerGrader's focused New Quiz acquisition writes
+Student Analysis reports. Per-quiz metadata fetches are skipped while the
+stored doc is current (unchanged assignment `updated_at`, under a 24 h
+true-up age) — a stagnant quiz costs zero requests per tick; the daily
+true-up bounds staleness from item edits that don't bump `updated_at`. PowerGrader's focused New Quiz acquisition writes
 the response snapshot on success. A fresh response snapshot can satisfy a
 later PowerGrader read without another ordinary submission/report read; native
 file evidence still uses the focused live transport.
@@ -115,9 +120,11 @@ mirror, so offline tests exercise the live path unchanged.
 
 ## v1 non-goals (deliberate)
 
-- Submission **comments** (a delta blind spot — comment timestamps bump
-  neither `submitted_since` nor `graded_since`; future: reconcile-time or
-  on-demand refresh).
+- Submission **comments** are captured by the nightly full pass (author id,
+  comment text, created_at only — no names/avatars/attachments), so
+  staleness is bounded to ~24h. Delta stays lean: comment timestamps bump
+  neither `submitted_since` nor `graded_since`, so a comment-only change
+  between full passes is still a blind spot until the next full pass.
 - **Attachment downloads** (names only, in attempt records).
 - New Quiz item-level grading or feedback writes. Mirror snapshots are
   read-only; the existing live/native grader preflight remains mandatory before

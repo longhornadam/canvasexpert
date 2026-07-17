@@ -61,10 +61,16 @@ def _fetch_sections(course_id, canvas_get_all):
 
 
 def _fetch_submissions(course_id, canvas_get_all, *, submitted_since=None,
-                       graded_since=None, with_history=True):
+                       graded_since=None, with_history=True,
+                       with_comments=False):
     params = {"student_ids[]": "all", "per_page": 100}
+    include = []
     if with_history:
-        params["include[]"] = ["submission_history"]
+        include.append("submission_history")
+    if with_comments:
+        include.append("submission_comments")
+    if include:
+        params["include[]"] = include
     if submitted_since:
         params["submitted_since"] = submitted_since
     if graded_since:
@@ -106,7 +112,8 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
                           error_code=_error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
     sections, _s_err = _fetch_sections(course_id, canvas_get_all)
-    submissions, error = _fetch_submissions(course_id, canvas_get_all)
+    submissions, error = _fetch_submissions(course_id, canvas_get_all,
+                                            with_comments=True)
     if error:
         store.record_pass(course_id, "full", ok=False,
                           error_code=_error_code(error), attempted_at=started, root=root)

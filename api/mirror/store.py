@@ -274,6 +274,14 @@ def _attempt_record(entry: dict) -> dict | None:
     }
 
 
+def _comment_record(entry: dict) -> dict:
+    return {
+        "author_id": str(entry.get("author_id") or ""),
+        "comment": str(entry.get("comment") or ""),
+        "created_at": str(entry.get("created_at") or ""),
+    }
+
+
 def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
     """Map one Canvas submission row to ``(user_id, current, attempts)``.
 
@@ -300,6 +308,10 @@ def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
         "grade_matches_current_submission": row.get("grade_matches_current_submission"),
         "submission_type": str(row.get("submission_type") or ""),
         "body": row.get("body") if isinstance(row.get("body"), str) else "",
+        "submission_comments": [
+            _comment_record(entry) for entry in (row.get("submission_comments") or [])
+            if isinstance(entry, dict)
+        ],
     }
     attempts: dict[str, dict] = {}
     # The row itself first, then history — a history entry for the same
@@ -390,6 +402,13 @@ def merge_submissions(course_id, assignment_id, rows: list[dict], *,
             previous = entries.get(user_id) or existing_entries.get(user_id) or {}
             merged_attempts = dict(previous.get("attempts") or {})
             merged_attempts.update(attempts)
+            # A row fetched without submission_comments (delta; or a full
+            # pass that omitted the include) must not erase comments a prior
+            # pass already stored — carry them forward when this row is bare.
+            if not current.get("submission_comments"):
+                previous_current = previous.get("current") or {}
+                if previous_current.get("submission_comments"):
+                    current["submission_comments"] = previous_current["submission_comments"]
             entries[user_id] = {"current": current, "attempts": merged_attempts}
         document = {
             "schema_version": MIRROR_VERSION,

@@ -101,6 +101,71 @@ def test_assignments_round_trip_slim_shape(tmp_path):
 
 # --- submissions: merge semantics ------------------------------------------------
 
+def test_merge_submissions_stores_submission_comments_exact_shape(tmp_path):
+    row = _submission_row(submission_comments=[
+        {"author_id": 900099, "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z",
+         "author_name": "Teacher T", "avatar_path": "/x.png"},
+        {"comment": "Second note."},  # missing author_id/created_at
+        "not-a-dict",  # skipped
+    ])
+    store.merge_submissions(COURSE, "700010", [row], root=str(tmp_path))
+    entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
+    comments = entry["current"]["submission_comments"]
+    assert comments == [
+        {"author_id": "900099", "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+        {"author_id": "", "comment": "Second note.", "created_at": ""},
+    ]
+    for comment in comments:
+        assert set(comment) == {"author_id", "comment", "created_at"}
+
+
+def test_delta_merge_without_comments_preserves_previously_stored_comments(tmp_path):
+    row_with_comments = _submission_row(submission_comments=[
+        {"author_id": 900099, "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ])
+    store.merge_submissions(COURSE, "700010", [row_with_comments], root=str(tmp_path))
+    # Simulated delta row has no submission_comments key at all (as delta fetches omit it).
+    delta_row = _submission_row(attempt=2, body="Second draft.")
+    assert "submission_comments" not in delta_row
+    store.merge_submissions(COURSE, "700010", [delta_row], root=str(tmp_path))
+    entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
+    assert entry["current"]["submission_comments"] == [
+        {"author_id": "900099", "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ]
+    assert entry["current"]["attempt"] == 2  # other current fields still updated
+
+
+def test_replace_merge_without_comments_preserves_previously_stored_comments(tmp_path):
+    row_with_comments = _submission_row(submission_comments=[
+        {"author_id": 900099, "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ])
+    store.merge_submissions(COURSE, "700010", [row_with_comments], root=str(tmp_path))
+    bare_row = _submission_row(attempt=2, body="Second draft.")
+    store.merge_submissions(COURSE, "700010", [bare_row], root=str(tmp_path), replace=True)
+    entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
+    assert entry["current"]["submission_comments"] == [
+        {"author_id": "900099", "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ]
+
+
+def test_merge_submissions_is_idempotent_with_comments(tmp_path):
+    rows = [_submission_row(submission_comments=[
+        {"author_id": 900099, "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ])]
+    first = store.merge_submissions(COURSE, "700010", rows, root=str(tmp_path),
+                                    attempted_at="2026-07-01T12:00:00Z")
+    second = store.merge_submissions(COURSE, "700010", rows, root=str(tmp_path),
+                                     attempted_at="2026-07-01T12:00:00Z")
+    assert first == second
+
+
 def test_merge_submissions_records_current_and_attempts(tmp_path):
     row = _submission_row(history=[
         {"attempt": 1, "submitted_at": "2026-07-01T10:00:00Z",

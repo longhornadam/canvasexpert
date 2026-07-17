@@ -6,6 +6,8 @@ pattern). Clock is injected via ``now=``.
 """
 from __future__ import annotations
 
+import json
+
 from api.mirror import store, sync
 
 COURSE = "111"
@@ -93,6 +95,88 @@ def test_full_pass_writes_everything_and_sets_watermarks(tmp_path):
     assert state["passes"]["roster"]["state"] == "current"
     assert state["watermarks"] == {"submitted_since": NOW_MINUS_OVERLAP,
                                    "graded_since": NOW_MINUS_OVERLAP}
+
+
+def test_full_pass_requests_submission_comments_delta_does_not(tmp_path):
+    canvas = FakeCanvas(submissions=[_sub(700010)])
+    sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    full_submissions_call = next(
+        params for path, params in canvas.calls
+        if path.endswith("/students/submissions") and "submitted_since" not in params
+        and "graded_since" not in params)
+    assert full_submissions_call["include[]"] == ["submission_history", "submission_comments"]
+
+    delta_canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2)])
+    sync.delta_pass(COURSE, canvas_get_all=delta_canvas, root=str(tmp_path),
+                    now="2026-07-16T13:00:00Z")
+    submitted_call = next(p for path, p in delta_canvas.calls if "submitted_since" in p)
+    graded_call = next(p for path, p in delta_canvas.calls if "graded_since" in p)
+    assert "submission_comments" not in submitted_call.get("include[]", [])
+    assert "include[]" not in graded_call
+
+
+def test_full_pass_captures_submission_comments(tmp_path):
+    canvas = FakeCanvas(submissions=[
+        _sub(700010, submission_comments=[
+            {"author_id": 900099, "comment": "Nice work.",
+             "created_at": "2026-07-01T11:00:00Z", "author_name": "Teacher T"},
+        ]),
+    ])
+    result = sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    assert result["ok"] is True
+    entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
+    assert entry["current"]["submission_comments"] == [
+        {"author_id": "900099", "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ]
+    assert "author_name" not in entry["current"]["submission_comments"][0]
+
+
+def test_delta_after_full_does_not_erase_stored_comments(tmp_path):
+    canvas = FakeCanvas(submissions=[
+        _sub(700010, submission_comments=[
+            {"author_id": 900099, "comment": "Nice work.",
+             "created_at": "2026-07-01T11:00:00Z"},
+        ]),
+    ])
+    sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    # Delta fetches (lean, no submission_comments include) never carry comments.
+    delta_canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2, body="Second draft.")])
+    result = sync.delta_pass(COURSE, canvas_get_all=delta_canvas, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
+    assert entry["current"]["submission_comments"] == [
+        {"author_id": "900099", "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ]
+    assert entry["current"]["attempt"] == 2
+
+
+def test_mcp_get_submissions_never_leaks_comment_text(monkeypatch, tmp_path):
+    from api.feedback_vault import Vault
+    from api.mcp_server import tools
+    from api.webui import workspace
+
+    canvas = FakeCanvas(submissions=[
+        _sub(700010, submission_comments=[
+            {"author_id": 900099, "comment": "SECRET-FEEDBACK-TEXT",
+             "created_at": "2026-07-01T11:00:00Z"},
+        ]),
+    ])
+    # Real now_iso() (not the fixed NOW fixture) so the mirror-serve
+    # freshness gate — which compares against wall-clock time — passes.
+    sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=store.now_iso())
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(tools.config, "active_courses", lambda: [{"id": COURSE}])
+    monkeypatch.setattr(tools, "_vault_factory",
+                        lambda: Vault(str(tmp_path / "vault.json")))
+    result = tools.get_submissions(COURSE, "700010")
+    assert result["ok"] is True
+    dumped = json.dumps(result)
+    assert "SECRET-FEEDBACK-TEXT" not in dumped
+    assert "submission_comments" not in dumped
 
 
 def test_full_pass_prunes_deleted_assignments_and_dropped_students(tmp_path):
