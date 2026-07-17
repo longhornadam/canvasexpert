@@ -8,6 +8,8 @@ from api.webui.server import app
 import api.webui.routes.gradebook as gradebook
 import api.webui.routes.gradebook_curves as gradebook_curves
 import api.webui.routes.gradebook_snapshot as gradebook_snapshot
+from api.mirror import store as mirror_store
+from api.webui import mirror_reads, workspace
 
 client = TestClient(app)
 
@@ -137,3 +139,106 @@ def test_curve_list_and_revert_route_shapes_remain_compatible(monkeypatch):
     assert sent[0][0] == "PUT"
     assert sent[0][1].endswith("/courses/course-opaque-1/assignments/assignment-opaque-1/submissions/student-opaque-1")
     assert saved[0][0]["reverted"] is True
+
+
+# --- Slice 3: curve_assignments (picker list) is mirror-first; every other
+# curve route (preview/apply/revert/events) reads score baselines that feed a
+# Canvas write and must stay live no matter how fresh the mirror is. ---------
+
+COURSE_MC = "555301"
+ASSIGNMENTS_MC = [
+    {"id": 700301, "name": "Mirror Curve Assignment", "due_at": "2026-07-01T23:59:00Z",
+     "points_possible": 10, "published": True, "html_url": "u"},
+    {"id": 700302, "name": "Unpublished draft", "due_at": "2026-07-02T23:59:00Z",
+     "points_possible": 0, "published": False, "html_url": "u"},
+]
+
+
+def _populate_curve_mirror(root, *, fresh=True):
+    stamp = mirror_store.now_iso() if fresh else "2020-01-01T00:00:00Z"
+    mirror_store.write_assignments(COURSE_MC, ASSIGNMENTS_MC, root=root, attempted_at=stamp)
+    mirror_store.record_pass(COURSE_MC, "full", ok=True, attempted_at=stamp, root=root)
+
+
+def _explode(*_args, **_kwargs):
+    raise AssertionError("mirror/live seam invoked when it should not have been")
+
+
+def test_curve_assignments_serves_fresh_mirror_with_zero_live_calls(monkeypatch, tmp_path):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    _populate_curve_mirror(str(tmp_path))
+    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)
+
+    resp = client.get(f"/api/curve/assignments?course_id={COURSE_MC}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert [a["id"] for a in data["assignments"]] == ["700301"]
+
+
+def test_curve_assignments_monkeypatched_seam_still_uses_live_path(monkeypatch, tmp_path):
+    # A fresh mirror exists, but the test monkeypatches the seam directly —
+    # the route must honor that (existing-test compatibility, locked
+    # decision 4) instead of silently detouring through the mirror helper.
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    _populate_curve_mirror(str(tmp_path))
+    monkeypatch.setattr(mirror_reads, "assignments_or_live", _explode)
+
+    live_rows = [{"id": 999, "name": "Live-only Assignment", "points_possible": 5,
+                  "due_at": "2026-08-01T00:00:00Z", "published": True}]
+    monkeypatch.setattr(gradebook_curves, "_course_assignments", lambda course_id: (live_rows, None))
+
+    resp = client.get(f"/api/curve/assignments?course_id={COURSE_MC}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert [a["id"] for a in data["assignments"]] == ["999"]
+
+
+def test_curve_preview_never_consults_the_mirror(monkeypatch, tmp_path):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(mirror_reads, "assignments_or_live", _explode)
+    monkeypatch.setattr(mirror_reads, "students_or_live", _explode)
+    monkeypatch.setattr(mirror_reads, "submissions_or_live", _explode)
+
+    monkeypatch.setattr(gradebook_curves, "_assignment",
+                        lambda cid, aid: ({"id": aid, "name": "Quiz", "points_possible": 100}, None))
+    monkeypatch.setattr(gradebook_curves, "_course_students",
+                        lambda cid: ([{"id": 1, "sortable_name": "Smith, John"}], None))
+    monkeypatch.setattr(gradebook_curves, "_assignment_submissions",
+                        lambda cid, aid: ([{"user_id": 1, "score": 80, "workflow_state": "graded"}], None))
+
+    resp = client.post("/api/curve/preview", data={
+        "course_id": "42", "assignment_id": "10",
+        "curve_type": "flat_bump", "settings": json.dumps({"bump": 5}),
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["results"][0]["curved_score"] == 85
+
+
+def test_curve_apply_never_consults_the_mirror(monkeypatch, tmp_path):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(mirror_reads, "assignments_or_live", _explode)
+    monkeypatch.setattr(mirror_reads, "students_or_live", _explode)
+    monkeypatch.setattr(mirror_reads, "submissions_or_live", _explode)
+
+    monkeypatch.setattr(gradebook_curves, "_assignment",
+                        lambda cid, aid: ({"id": aid, "name": "Quiz", "points_possible": 100}, None))
+    monkeypatch.setattr(gradebook_curves, "_assignment_submissions",
+                        lambda cid, aid: ([{"user_id": 1, "score": 80, "workflow_state": "graded"}], None))
+    monkeypatch.setattr(gradebook_curves, "_canvas_send", lambda method, url, payload: ({}, None))
+    monkeypatch.setattr(gradebook_curves, "_load_curve_events", lambda: [])
+    monkeypatch.setattr(gradebook_curves, "_save_curve_events", lambda events: None)
+    monkeypatch.setattr(gradebook_curves.mirror_service, "notify_course_changed", lambda course_id: None)
+
+    rows = [{"user_id": "1", "student_name": "Smith, John",
+             "original_score": 80, "curved_score": 85, "changed": True}]
+    resp = client.post("/api/curve/apply", data={
+        "course_id": "42", "assignment_id": "10", "curve_type": "flat_bump",
+        "settings": json.dumps({"bump": 5}), "results": json.dumps(rows),
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True

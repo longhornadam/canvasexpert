@@ -1,4 +1,12 @@
-"""Gradebook curve routes."""
+"""Gradebook curve routes.
+
+Read-path boundary (locked decision 1, CanvasMirror v3): only the assignment
+picker list in ``curve_assignments`` may be mirror-served. ``curve_preview``,
+``curve_apply``, ``revert_curve``, ``list_curve_events``, and everything in
+``api/operation_ledger/adapters/curve.py`` read score baselines that feed a
+Canvas grade write (``posted_grade``) — those reads MUST stay live. Do not
+"helpfully" flip them to the mirror in a future edit.
+"""
 import json
 import uuid as _uuid
 from datetime import datetime
@@ -9,14 +17,25 @@ from fastapi.responses import JSONResponse
 from .. import mirror_service
 from ..canvas_client import _canvas_get, _canvas_send
 from ..gradebook_service import _apply_curve_model, _load_curve_events, _save_curve_events
+from ..mirror_reads import assignments_or_live
 from .gradebook_common import _assignment, _assignment_submissions, _course_assignments, _course_students
 
 router = APIRouter(tags=["gradebook"])
 
+# Test seam preserved (same pattern as gradebook_snapshot.py / mcp_server/tools.py):
+# the mirror-first path is only taken when the module-level seam is still the
+# original binding. A monkeypatched seam means a test wants the live path
+# exercised directly, so we honor that instead of silently detouring through
+# the mirror.
+_ORIGINAL_COURSE_ASSIGNMENTS = _course_assignments
+
 
 @router.get("/api/curve/assignments")
 def curve_assignments(course_id: str):
-    assignments, err = _course_assignments(course_id)
+    if _course_assignments is _ORIGINAL_COURSE_ASSIGNMENTS:
+        assignments, err, _source = assignments_or_live(course_id)
+    else:
+        assignments, err = _course_assignments(course_id)
     if err:
         return JSONResponse({"ok": False, "error": err})
     out = [{"id": str(a["id"]), "name": a.get("name", ""),
