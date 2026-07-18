@@ -20,6 +20,7 @@ from api.mirror import course_context, store, sync
 
 from . import config, workspace
 from .canvas_client import _canvas_get, _canvas_get_all, _canvas_get_all_complete
+from .routes.courses import load_group_categories
 from .routes.names import _vault as _identity_vault
 
 
@@ -46,8 +47,28 @@ _PASS_RUNNERS = {"full": sync.full_pass, "delta": sync.delta_pass,
                  "roster": sync.roster_pass}
 
 
+def _refresh_groups_on_maintenance(course_id: str, *, load_groups, now: str) -> dict:
+    """Best-effort private group refresh nested under roster/full maintenance."""
+    try:
+        categories, error, _message = load_groups(course_id)
+        if error:
+            document = store.mark_groups_stale(course_id, attempted_at=now)
+            return {"state": document["state"] if document else "unavailable",
+                    "error_code": "refresh_failed"}
+        store.write_groups(course_id, categories, attempted_at=now)
+        return {"state": "current", "error_code": ""}
+    except Exception:
+        try:
+            document = store.mark_groups_stale(course_id, attempted_at=now)
+        except Exception:
+            document = None
+        return {"state": document["state"] if document else "unavailable",
+                "error_code": "refresh_failed"}
+
+
 def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None,
-                       canvas_get_all_complete=None, now=None) -> list[dict]:
+                       canvas_get_all_complete=None, load_groups=None,
+                       now=None) -> list[dict]:
     """One tick: run whatever is due for every Current course. Never raises;
     per-course failures are recorded in that course's _sync envelope and
     reported in the returned summaries."""
@@ -58,6 +79,7 @@ def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None,
     canvas_get = canvas_get or _canvas_get
     canvas_get_all = canvas_get_all or _canvas_get_all
     canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
+    load_groups = load_groups or load_group_categories
     now_iso = now or store.now_iso()
     summaries = []
     for course in config.active_courses():
@@ -91,6 +113,9 @@ def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None,
                 result = _PASS_RUNNERS[pass_name](course_id, **kwargs)
             except Exception as e:
                 result = {"ok": False, "error": str(e)}
+            if result.get("ok") and pass_name in {"full", "roster"}:
+                result = {**result, "groups": _refresh_groups_on_maintenance(
+                    course_id, load_groups=load_groups, now=now_iso)}
             summaries.append({"course_id": course_id, "pass": pass_name, **result})
     return summaries
 

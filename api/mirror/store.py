@@ -733,6 +733,20 @@ def invalidate_groups(course_id, *, root=None, attempted_at: str | None = None) 
         return _write_document(groups_path(course_id, root), validate_groups(document, course_id))
 
 
+def mark_groups_stale(course_id, *, root=None, attempted_at: str | None = None) -> dict | None:
+    """Retain a last-good group snapshot but make a failed refresh honest."""
+    _require_dir(course_id, root)
+    attempted_at = attempted_at or now_iso()
+    with course_lock(course_id):
+        document = read_groups(course_id, root=root)
+        if document is None:
+            return None
+        document["state"] = "stale"
+        document["last_attempt_at"] = attempted_at
+        document["error_code"] = "refresh_failed"
+        return _write_document(groups_path(course_id, root), validate_groups(document, course_id))
+
+
 def read_assignments(course_id, *, root=None) -> dict | None:
     return _read_document(assignments_path(course_id, root),
                           lambda d: validate_assignments(d, course_id))

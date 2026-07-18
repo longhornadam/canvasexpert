@@ -113,6 +113,12 @@ heartbeat) ticks every 15 minutes for Current courses only:
 - first tick 2 minutes after launch (catch-up)
 - **full** when none has succeeded in 24 h (first-run backfill, then nightly)
 - otherwise **delta** every tick, plus **roster** daily
+- Every successful **full** or **roster** maintenance pass also makes one
+  best-effort private group-context read through Roster's existing normalized
+  loader. Its result is nested evidence on that pass, not a new cadence or
+  pass envelope: success replaces `groups.v1.json`; failure retains its
+  last-good categories and marks that snapshot stale without failing the core
+  maintenance pass. Ordinary deltas do not refresh groups.
 - `notify_course_changed(course_id)` — write-through hook: after CanvasExpert
   itself pushes grades (PowerGrader push, curve apply/revert), a short-delay
   `submissions.course_delta` refresh issues only the overlapping submitted and

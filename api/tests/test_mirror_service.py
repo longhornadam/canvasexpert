@@ -48,6 +48,7 @@ def _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course"},)
     monkeypatch.setattr(mirror_service.config, "token_is_set", lambda: True)
     monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: True)
     monkeypatch.setattr(mirror_service.config, "active_courses", lambda: list(courses))
+    monkeypatch.setattr(mirror_service, "load_group_categories", lambda _course_id: ([], None, ""))
 
 
 # --- due_passes cadence -----------------------------------------------------
@@ -81,6 +82,107 @@ def test_heartbeat_first_tick_backfills_active_courses(monkeypatch, tmp_path):
         canvas_get=canvas, canvas_get_all=canvas, canvas_get_all_complete=canvas.complete, now=NOW)
     assert [(s["course_id"], s["pass"], s["ok"]) for s in summaries] == [("111", "full", True)]
     assert store.read_sync("111")["passes"]["full"]["state"] == "current"
+
+
+def test_heartbeat_full_maintains_private_groups_with_its_timestamp(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    calls = []
+    categories = [{
+        "category_id": "500001", "category_name": "Teams",
+        "groups": [{"id": "600001", "name": "Blue",
+                    "memberships": [{"id": "700001", "user_id": "900001"}]}],
+    }]
+
+    result = mirror_service.run_heartbeat_pass(
+        canvas_get=FakeCanvas(), canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=FakeCanvas().complete,
+        load_groups=lambda course_id: calls.append(course_id) or (categories, None, ""), now=NOW)
+
+    assert calls == ["111"]
+    assert result[0]["groups"] == {"state": "current", "error_code": ""}
+    document = store.read_groups("111")
+    assert document["state"] == "current"
+    assert document["last_success_at"] == NOW
+    assert document["categories"] == categories
+
+
+def test_heartbeat_group_failure_preserves_last_good_snapshot_and_pass_success(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    categories = [{"category_id": "500001", "category_name": "Teams", "groups": []}]
+    store.write_groups("111", categories, attempted_at="2026-07-16T11:00:00Z")
+
+    result = mirror_service.run_heartbeat_pass(
+        canvas_get=FakeCanvas(), canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=FakeCanvas().complete,
+        load_groups=lambda _course_id: ([], "Canvas returned 403 with private detail", ""), now=NOW)
+
+    assert result[0]["ok"] is True
+    assert result[0]["groups"] == {"state": "stale", "error_code": "refresh_failed"}
+    document = store.read_groups("111")
+    assert document["categories"] == categories
+    assert document["last_success_at"] == "2026-07-16T11:00:00Z"
+    assert document["last_attempt_at"] == NOW
+    assert document["state"] == "stale"
+    assert document["error_code"] == "refresh_failed"
+    assert "private detail" not in str(result[0]["groups"])
+
+
+def test_heartbeat_roster_maintenance_refreshes_groups(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    store.record_pass("111", "full", ok=True, attempted_at=NOW)
+    store.record_pass("111", "roster", ok=True, attempted_at="2026-07-15T11:00:00Z")
+    calls = []
+
+    result = mirror_service.run_heartbeat_pass(
+        canvas_get=FakeCanvas(), canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=FakeCanvas().complete,
+        load_groups=lambda course_id: calls.append(course_id) or ([], None, ""), now=NOW)
+
+    assert [entry["pass"] for entry in result] == ["delta", "roster"]
+    assert result[1]["groups"] == {"state": "current", "error_code": ""}
+    assert calls == ["111"]
+
+
+def test_heartbeat_group_snapshot_write_failure_keeps_core_pass_success(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    categories = [{"category_id": "500001", "category_name": "Teams", "groups": []}]
+    store.write_groups("111", categories, attempted_at="2026-07-16T11:00:00Z")
+    monkeypatch.setattr(mirror_service.store, "write_groups",
+                        lambda *_a, **_k: (_ for _ in ()).throw(OSError("disk unavailable")))
+
+    result = mirror_service.run_heartbeat_pass(
+        canvas_get=FakeCanvas(), canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=FakeCanvas().complete,
+        load_groups=lambda _course_id: (categories, None, ""), now=NOW)
+
+    assert result[0]["ok"] is True
+    assert result[0]["groups"] == {"state": "stale", "error_code": "refresh_failed"}
+    document = store.read_groups("111")
+    assert document["categories"] == categories
+    assert document["last_success_at"] == "2026-07-16T11:00:00Z"
+    assert document["state"] == "stale"
+
+
+def test_heartbeat_skips_group_refresh_when_core_pass_fails_or_only_delta_is_due(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    called = []
+    monkeypatch.setitem(mirror_service._PASS_RUNNERS, "full", lambda *_a, **_k: {"ok": False})
+    first = mirror_service.run_heartbeat_pass(
+        canvas_get=FakeCanvas(), canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=FakeCanvas().complete,
+        load_groups=lambda _course_id: called.append(1) or ([], None, ""), now=NOW)
+    assert first[0]["ok"] is False
+    assert called == []
+
+    store.record_pass("111", "full", ok=True, attempted_at=NOW)
+    store.record_pass("111", "roster", ok=True, attempted_at=NOW)
+    second = mirror_service.run_heartbeat_pass(
+        canvas_get=FakeCanvas(), canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=FakeCanvas().complete,
+        load_groups=lambda _course_id: called.append(1) or ([], None, ""),
+        now="2026-07-16T12:15:00Z")
+    assert [entry["pass"] for entry in second] == ["delta"]
+    assert called == []
 
 
 def test_heartbeat_steady_state_runs_delta_only(monkeypatch, tmp_path):
