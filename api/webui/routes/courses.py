@@ -8,12 +8,17 @@ Routes: GET /api/courses
 """
 import requests
 
+from api.mirror import store as mirror_store
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
 
 router = APIRouter(tags=["courses"])
+
+
+GROUPS_MAX_AGE_HOURS = 24
 
 
 @router.get("/api/courses")
@@ -88,9 +93,21 @@ def course_detail(course_id: str):
 @router.get("/api/groups")
 def list_groups(course_id: str):
     """Group sets + groups + member IDs for a course (used by diff panel)."""
+    document = mirror_store.read_groups(course_id)
+    if mirror_store.groups_are_current(document, max_age_hours=GROUPS_MAX_AGE_HOURS):
+        return JSONResponse({
+            "ok": True,
+            "categories": mirror_store.groups_for_roster(document),
+            "message": "",
+        })
+
     categories, err, message = load_group_categories(course_id)
     if err:
         return JSONResponse({"ok": False, "error": err})
+    try:
+        mirror_store.write_groups(course_id, categories)
+    except (OSError, ValueError):
+        pass
     return JSONResponse({"ok": True, "categories": categories, "message": message})
 
 

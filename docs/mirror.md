@@ -73,6 +73,9 @@ names plus membership `{id,user_id}` pairs, never student names or raw Canvas fi
 Missing, corrupt, stale, or unavailable group snapshots follow the existing live group
 loader and a successful normalized live read replaces the snapshot. Roster membership and
 group/group-set writes always validate and execute live, then invalidate the snapshot.
+Create's differentiated-group endpoint and Home roster warnings reuse that same fresh
+snapshot; either retains its existing live fallback when it is unavailable. Local group
+data remains display/derived-warning input only and never authorizes a mutation.
 
 Watermarks advance only on success, to pass-start minus a 10-minute overlap;
 store merges are idempotent so overlap duplicates are harmless. Failures

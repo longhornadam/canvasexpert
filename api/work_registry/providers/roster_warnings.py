@@ -6,6 +6,7 @@ from collections import Counter
 import os
 
 from api import feedback_scrub
+from api.mirror import store as mirror_store
 from api.webui import config
 from api.webui import workspace
 from api import feedback_vault
@@ -130,6 +131,14 @@ def _fetch_groups(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
     return result
 
 
+def _groups_for_scan(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
+    """Use a current private group snapshot, retaining the live fallback."""
+    document = mirror_store.read_groups(course_id)
+    if mirror_store.groups_are_current(document, max_age_hours=24):
+        return mirror_store.groups_for_roster(document)
+    return _fetch_groups(course_id, deadline=deadline, canvas_get_all=canvas_get_all)
+
+
 def _group_map(categories: list[dict]) -> dict[str, list[dict]]:
     result: dict[str, list[dict]] = {}
     for category in categories:
@@ -174,7 +183,7 @@ def scan_course(course_id: str, *, now, deadline, canvas_get_all) -> list[dict]:
         {"enrollment_type[]": "student", "include[]": "enrollments", "per_page": 100},
         deadline,
     )
-    categories = _fetch_groups(course_id, deadline=deadline, canvas_get_all=canvas_get_all)
+    categories = _groups_for_scan(course_id, deadline=deadline, canvas_get_all=canvas_get_all)
     group_map = _group_map(categories)
     selected_category = None
     try:

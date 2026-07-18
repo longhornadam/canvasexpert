@@ -246,3 +246,30 @@ def test_roster_warnings_reads_users_from_mirror_groups_stay_live(monkeypatch, t
     # Both mirrored students get missing_pseudonym + group_unset;
     # only "900101" also gets extra_time_without_days.
     assert sum(item["counts"]["affected"] for item in findings) == 5
+
+
+def test_roster_warnings_uses_fresh_group_snapshot_without_live_group_calls(monkeypatch, tmp_path):
+    _mount(monkeypatch, tmp_path)
+    _populate(str(tmp_path))
+    store.write_groups(COURSE, [{
+        "category_id": "cat-1",
+        "category_name": "Teams",
+        "groups": [{
+            "id": "group-1",
+            "name": "Team 1",
+            "memberships": [{"id": "membership-1", "user_id": "900101"}],
+        }],
+    }])
+    monkeypatch.setattr(roster_warnings.config, "get_roster_group_scheme",
+                        lambda course_id: {"selected_group_category_id": "cat-1"})
+    monkeypatch.setattr(roster_warnings.config, "get_extra_time", lambda course_id: [])
+    monkeypatch.setattr(roster_warnings, "_vault_context",
+                        lambda: ({}, set(), {"literary": [], "dup_first": [], "common_word": []}))
+
+    findings = roster_warnings.scan_course(
+        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
+        canvas_get_all=_explode,
+    )
+
+    assert sorted(item["counts"]["affected"] for item in findings) == [1, 2]
+    assert all("user_id" not in item and "name" not in item for item in findings)
