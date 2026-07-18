@@ -7,6 +7,7 @@ cases pin old attempted_at stamps.
 from __future__ import annotations
 
 import json
+import os
 
 from api import gradebook_queries, gradebook_snapshot
 from api.feedback_vault import Vault
@@ -41,6 +42,18 @@ SUBMISSIONS = [
      "late": False, "missing": True, "excused": False, "attempt": None,
      "grade_matches_current_submission": None, "submission_type": "", "body": ""},
 ]
+
+
+# An orphan submission file: an assignment id that has a submissions/*.v1.json
+# file on disk but no entry in assignments.v1.json (1.0beta slice 01b).
+ORPHAN_ASSIGNMENT_ID = "999999"
+ORPHAN_ROW = [{
+    "assignment_id": 999999, "user_id": 900001, "workflow_state": "submitted",
+    "submitted_at": "2026-07-01T10:00:00Z", "graded_at": None, "score": None,
+    "grade": None, "late": False, "missing": False, "excused": False,
+    "attempt": 1, "grade_matches_current_submission": True,
+    "submission_type": "online_text_entry", "body": "orphan",
+}]
 
 
 def _populate(root, *, fresh=True):
@@ -89,6 +102,29 @@ def test_freshness_gates_on_serve_max_age(tmp_path):
     assert queries.data_freshness(COURSE, root=str(tmp_path)) == ""
     _populate(str(tmp_path), fresh=True)
     assert queries.data_freshness(COURSE, root=str(tmp_path)) != ""
+
+
+def test_course_submissions_filters_orphan_files_not_in_index(tmp_path):
+    """1.0beta slice 01b, locked design item 1: a submission file on disk for
+    an assignment id the committed index doesn't have must never surface in
+    the aggregate read, even though nothing has pruned the file yet."""
+    _populate(str(tmp_path))
+    store.merge_submissions(COURSE, ORPHAN_ASSIGNMENT_ID, ORPHAN_ROW, root=str(tmp_path))
+    assert store.read_submissions(COURSE, ORPHAN_ASSIGNMENT_ID, root=str(tmp_path)) is not None
+    rows, err = queries.course_submissions(COURSE, root=str(tmp_path))
+    assert err is None
+    assert {row["assignment_id"] for row in rows} == {"700010"}
+
+
+def test_assignment_submissions_filters_orphan_not_in_index(tmp_path):
+    _populate(str(tmp_path))
+    store.merge_submissions(COURSE, ORPHAN_ASSIGNMENT_ID, ORPHAN_ROW, root=str(tmp_path))
+    data, err = queries.assignment_submissions(COURSE, ORPHAN_ASSIGNMENT_ID, root=str(tmp_path))
+    assert data is None and err == queries.MIRROR_UNAVAILABLE
+    # A missing/corrupt index does not gate the read — last-good rules unchanged.
+    os.remove(store.assignments_path(COURSE, str(tmp_path)))
+    data, err = queries.assignment_submissions(COURSE, ORPHAN_ASSIGNMENT_ID, root=str(tmp_path))
+    assert err is None and len(data) == 1
 
 
 def test_snapshot_queries_requires_fresh_and_complete_mirror(tmp_path):

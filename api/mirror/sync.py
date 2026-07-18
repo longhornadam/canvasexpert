@@ -32,6 +32,16 @@ from . import new_quizzes, store
 
 WATERMARK_OVERLAP_MINUTES = 10
 
+# 1.0beta slice 01b — completeness gate (vision doc Sec 10.1, item 14): an
+# empty or drastically shrunken assignment collection still commits (Canvas
+# deletion is legitimate — `_canvas_get_all` is all-rows-or-error, so a
+# non-error fetch is already a complete collection), but submission-file
+# pruning for that shrink defers to the pass after this one. The next pass
+# compares against the now-smaller committed index, so a genuine shrink
+# prunes cleanly one pass later while a transient/truncated dip never prunes
+# based on it.
+LARGE_SHRINK_RATIO = 0.5
+
 
 def _overlapped(iso_z: str) -> str:
     moment = datetime.strptime(iso_z, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
@@ -94,6 +104,63 @@ def _guard(course_id, root):
     return None
 
 
+def _is_large_shrink(previous_count: int, new_count: int) -> bool:
+    """Empty or >50% shrink vs. the previous committed index (1.0beta slice
+    01b completeness gate). ``previous_count == 0`` (first sync, or a rebuilt
+    mirror) is never a shrink."""
+    if previous_count <= 0:
+        return False
+    if new_count == 0:
+        return True
+    return new_count < previous_count * (1 - LARGE_SHRINK_RATIO)
+
+
+def _commit_assignment_index(course_id, assignments, *, root, attempted_at) -> tuple[dict, dict]:
+    """Write the assignment index (1.0beta slice 01b, locked design item 2)
+    and prune orphan submission files (item 3), unless the collection just
+    underwent a large shrink (item 2's guard) — in which case pruning defers
+    to the next pass while the index still commits (deletion is legitimate).
+
+    Membership filtering at read time (``queries.course_submissions`` /
+    ``assignment_submissions``, item 1) already hides orphans from every
+    aggregate read regardless of whether this call prunes their files, so a
+    deferred prune only affects on-disk clutter, never correctness.
+
+    Returns ``(document, diagnostics)`` — sanitized assignment-id-only
+    counts/lists (item 4) suitable for the pass summary.
+    """
+    previous_document = store.read_assignments(course_id, root=root)
+    previous_rows = (previous_document or {}).get("assignments") or {}
+    previous_ids = set(previous_rows)
+
+    document = store.write_assignments(course_id, assignments, root=root,
+                                       attempted_at=attempted_at)
+    new_rows = document["assignments"]
+    new_ids = set(new_rows)
+
+    added = sorted(new_ids - previous_ids)
+    removed = sorted(previous_ids - new_ids)
+    changed = sorted(a for a in (new_ids & previous_ids) if new_rows[a] != previous_rows[a])
+
+    large_shrink = _is_large_shrink(len(previous_ids), len(new_ids))
+    existing_files = set(store.list_submission_assignment_ids(course_id, root=root))
+    orphans_filtered = sorted(existing_files - new_ids)
+
+    pruned: list[str] = []
+    if not large_shrink:
+        pruned = store.prune_submission_files(course_id, list(new_ids), root=root)
+
+    diagnostics = {
+        "added": added,
+        "changed": changed,
+        "removed": removed,
+        "large_shrink": len(removed) if large_shrink else 0,
+        "orphans_filtered": orphans_filtered,
+        "orphans_pruned": pruned,
+    }
+    return document, diagnostics
+
+
 def full_pass(course_id, *, canvas_get_all, root=None, now=None,
               bypass_new_quiz_cooldown: bool = False) -> dict:
     """Backfill / nightly reconcile: fetch everything first, then rewrite.
@@ -124,16 +191,14 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None,
                           error_code=_error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
 
-    document = store.write_assignments(course_id, assignments, root=root,
-                                       attempted_at=started)
+    document, diagnostics = _commit_assignment_index(
+        course_id, assignments, root=root, attempted_at=started)
     store.write_roster(course_id, students, sections, root=root, attempted_at=started)
     grouped = _group_by_assignment(submissions)
     for assignment_id in document["assignments"]:
         store.merge_submissions(course_id, assignment_id,
                                 grouped.get(assignment_id, []), root=root,
                                 attempted_at=started, replace=True)
-    pruned = store.prune_submission_files(
-        course_id, list(document["assignments"]), root=root)
     watermark = _overlapped(started)
     store.record_pass(course_id, "roster", ok=True, attempted_at=started, root=root)
     store.record_pass(course_id, "full", ok=True, attempted_at=started,
@@ -147,7 +212,8 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None,
     return {"ok": True, "assignments": len(document["assignments"]),
             "students": len(students or []),
             "submission_rows": len(submissions or []),
-            "pruned_assignments": pruned,
+            "pruned_assignments": diagnostics["orphans_pruned"],
+            "assignment_changes": diagnostics,
             "new_quizzes": new_quiz_result}
 
 
@@ -185,7 +251,8 @@ def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
                           error_code=_error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
 
-    store.write_assignments(course_id, assignments, root=root, attempted_at=started)
+    _document, diagnostics = _commit_assignment_index(
+        course_id, assignments, root=root, attempted_at=started)
     grouped = _group_by_assignment(list(submitted or []) + list(graded or []))
     for assignment_id, rows in grouped.items():
         store.merge_submissions(course_id, assignment_id, rows, root=root,
@@ -202,6 +269,7 @@ def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
     return {"ok": True, "assignments": len(assignments or []),
             "changed_rows": len(submitted or []) + len(graded or []),
             "touched_assignments": sorted(grouped),
+            "assignment_changes": diagnostics,
             "new_quizzes": new_quiz_result}
 
 

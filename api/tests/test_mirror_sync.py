@@ -284,6 +284,132 @@ def test_delta_pass_error_keeps_watermarks(tmp_path):
     assert state["watermarks"]["submitted_since"] == NOW_MINUS_OVERLAP  # unchanged
 
 
+# --- 1.0beta slice 01b: assignment deletion membership + safe pruning ------------
+
+EXTRA_ASSIGNMENTS = ASSIGNMENTS + [
+    {"id": 700030, "name": "Essay 3", "due_at": "", "points_possible": 10,
+     "published": True, "html_url": "u3", "submission_types": [], "updated_at": ""},
+    {"id": 700040, "name": "Essay 4", "due_at": "", "points_possible": 10,
+     "published": True, "html_url": "u4", "submission_types": [], "updated_at": ""},
+]
+
+
+def test_delta_removing_assignments_excludes_them_from_queries_before_any_prune(tmp_path):
+    """A >50% shrink defers pruning (the guard), but membership filtering
+    already hides the departed assignments' submissions from aggregate
+    reads immediately — before any file has been removed from disk."""
+    from api.mirror import queries
+
+    canvas = FakeCanvas(assignments=EXTRA_ASSIGNMENTS, submissions=[
+        _sub(700010), _sub(700020), _sub(700030), _sub(700040),
+    ])
+    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+                          now=NOW)["ok"] is True
+
+    later = FakeCanvas(assignments=[ASSIGNMENTS[0]])  # 4 -> 1: a 75% shrink
+    result = sync.delta_pass(COURSE, canvas_get_all=later, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    assert result["assignment_changes"]["removed"] == ["700020", "700030", "700040"]
+    assert result["assignment_changes"]["large_shrink"] == 3
+    assert result["assignment_changes"]["orphans_pruned"] == []  # deferred
+
+    for departed in ("700020", "700030", "700040"):
+        assert store.read_submissions(COURSE, departed, root=str(tmp_path)) is not None
+
+    rows, err = queries.course_submissions(COURSE, root=str(tmp_path))
+    assert err is None
+    assert {row["assignment_id"] for row in rows} == {"700010"}
+    data, err = queries.assignment_submissions(COURSE, "700020", root=str(tmp_path))
+    assert data is None and err == queries.MIRROR_UNAVAILABLE
+
+
+def test_delta_prune_removes_exactly_departed_ids(tmp_path):
+    canvas = FakeCanvas(assignments=EXTRA_ASSIGNMENTS, submissions=[
+        _sub(700010), _sub(700020), _sub(700030), _sub(700040),
+    ])
+    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+                          now=NOW)["ok"] is True
+
+    # Drop one of four (25% shrink) — below the guard, so this pass prunes.
+    later = FakeCanvas(assignments=EXTRA_ASSIGNMENTS[:3])  # 700040 removed
+    result = sync.delta_pass(COURSE, canvas_get_all=later, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    assert result["assignment_changes"]["removed"] == ["700040"]
+    assert result["assignment_changes"]["large_shrink"] == 0
+    assert result["assignment_changes"]["orphans_pruned"] == ["700040"]
+    assert store.read_submissions(COURSE, "700040", root=str(tmp_path)) is None
+    for kept in ("700010", "700020", "700030"):
+        assert store.read_submissions(COURSE, kept, root=str(tmp_path)) is not None
+
+
+def test_empty_complete_collection_commits_empty_index(tmp_path):
+    from api.mirror import queries
+
+    canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
+    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+                          now=NOW)["ok"] is True
+
+    empty_canvas = FakeCanvas(assignments=[])
+    result = sync.delta_pass(COURSE, canvas_get_all=empty_canvas, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    assert store.read_assignments(COURSE, root=str(tmp_path))["assignments"] == {}
+    assert result["assignment_changes"]["removed"] == ["700010", "700020"]
+    assert result["assignment_changes"]["large_shrink"] == 2
+    assert result["assignment_changes"]["orphans_pruned"] == []
+
+    assignments, err = queries.course_assignments(COURSE, root=str(tmp_path))
+    assert err is None and assignments == []
+    rows, err = queries.course_submissions(COURSE, root=str(tmp_path))
+    assert err is None and rows == []
+
+
+def test_large_shrink_commits_index_defers_prune_and_records_diagnostic(tmp_path):
+    canvas = FakeCanvas(assignments=EXTRA_ASSIGNMENTS, submissions=[
+        _sub(700010), _sub(700020), _sub(700030), _sub(700040),
+    ])
+    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+                          now=NOW)["ok"] is True
+
+    later = FakeCanvas(assignments=[ASSIGNMENTS[0]])  # 4 -> 1: a 75% shrink
+    result = sync.delta_pass(COURSE, canvas_get_all=later, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    assert set(store.read_assignments(COURSE, root=str(tmp_path))["assignments"]) == {"700010"}
+    assert result["assignment_changes"]["large_shrink"] == 3
+    assert result["assignment_changes"]["orphans_pruned"] == []
+    for departed in ("700020", "700030", "700040"):
+        assert store.read_submissions(COURSE, departed, root=str(tmp_path)) is not None
+
+    # The next delta compares against the now-smaller committed index (1), so
+    # an unchanged small collection is no longer a shrink and prunes cleanly —
+    # deferral is bounded to one pass, not indefinite.
+    again = FakeCanvas(assignments=[ASSIGNMENTS[0]])
+    result2 = sync.delta_pass(COURSE, canvas_get_all=again, root=str(tmp_path),
+                              now="2026-07-16T14:00:00Z")
+    assert result2["ok"] is True
+    assert result2["assignment_changes"]["large_shrink"] == 0
+    assert sorted(result2["assignment_changes"]["orphans_pruned"]) == [
+        "700020", "700030", "700040"]
+    for departed in ("700020", "700030", "700040"):
+        assert store.read_submissions(COURSE, departed, root=str(tmp_path)) is None
+
+
+def test_delta_fetch_error_changes_nothing(tmp_path):
+    _backfilled(tmp_path)
+    before = store.read_assignments(COURSE, root=str(tmp_path))
+    canvas = FakeCanvas(errors={"submissions": "HTTP 503: upstream"})
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is False
+    assert "assignment_changes" not in result
+    assert store.read_assignments(COURSE, root=str(tmp_path)) == before
+    state = store.read_sync(COURSE, root=str(tmp_path))
+    assert state["watermarks"]["submitted_since"] == NOW_MINUS_OVERLAP  # unchanged
+
+
 # --- roster pass ------------------------------------------------------------------
 
 def test_roster_pass_updates_roster_only(tmp_path):

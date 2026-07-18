@@ -64,10 +64,21 @@ def course_assignments(course_id, *, root=None):
 
 
 def course_submissions(course_id, *, root=None):
-    if store.read_assignments(course_id, root=root) is None:
+    """Enumerate submission files, then drop any ``assignment_id`` not
+    present in the committed assignment index (1.0beta slice 01b, locked
+    design item 1) — deletion is invisible to this read the moment the next
+    delta commits a smaller index, without waiting for orphan files to be
+    pruned from disk. A missing/corrupt index already returns unavailable
+    above (last-good rules unchanged); filtering only ever narrows the
+    directory listing, never invents rows for ids the index doesn't have."""
+    assignments = store.read_assignments(course_id, root=root)
+    if assignments is None:
         return None, MIRROR_UNAVAILABLE
+    valid_ids = set(assignments["assignments"])
     rows = []
     for assignment_id in store.list_submission_assignment_ids(course_id, root=root):
+        if assignment_id not in valid_ids:
+            continue
         document = store.read_submissions(course_id, assignment_id, root=root)
         if document is None:
             continue
@@ -85,6 +96,14 @@ def assignment(course_id, assignment_id, *, root=None):
 
 
 def assignment_submissions(course_id, assignment_id, *, root=None):
+    """Same membership filtering as ``course_submissions`` (item 1), applied
+    to a single assignment: a missing/corrupt assignment index behaves as
+    today (last-good rules — the index simply doesn't gate this read), but a
+    present index that no longer lists ``assignment_id`` reports unavailable
+    even if an orphan submission file is still on disk."""
+    assignments = store.read_assignments(course_id, root=root)
+    if assignments is not None and str(assignment_id) not in assignments["assignments"]:
+        return None, MIRROR_UNAVAILABLE
     document = store.read_submissions(course_id, assignment_id, root=root)
     if document is None:
         return None, MIRROR_UNAVAILABLE
