@@ -223,22 +223,36 @@ def validate_roster(document: dict, course_id) -> dict:
 def _validate_groups_categories(categories) -> None:
     if not isinstance(categories, list):
         raise ValueError("groups categories are invalid")
+    category_ids = set()
     for category in categories:
         _require_exact_keys(category, {"category_id", "category_name", "groups"}, "group category")
         if not isinstance(category["category_id"], str) or not isinstance(category["category_name"], str):
             raise ValueError("group category identity is invalid")
+        if category["category_id"] in category_ids:
+            raise ValueError("group category id is duplicated")
+        category_ids.add(category["category_id"])
         if not isinstance(category["groups"], list):
             raise ValueError("group category groups are invalid")
+        group_ids = set()
         for group in category["groups"]:
             _require_exact_keys(group, {"id", "name", "memberships"}, "group")
             if not isinstance(group["id"], str) or not isinstance(group["name"], str):
                 raise ValueError("group identity is invalid")
+            if group["id"] in group_ids:
+                raise ValueError("group id is duplicated")
+            group_ids.add(group["id"])
             if not isinstance(group["memberships"], list):
                 raise ValueError("group memberships are invalid")
+            membership_ids = set()
+            user_ids = set()
             for membership in group["memberships"]:
                 _require_exact_keys(membership, {"id", "user_id"}, "group membership")
                 if not isinstance(membership["id"], str) or not isinstance(membership["user_id"], str):
                     raise ValueError("group membership identity is invalid")
+                if membership["id"] in membership_ids or membership["user_id"] in user_ids:
+                    raise ValueError("group membership is duplicated")
+                membership_ids.add(membership["id"])
+                user_ids.add(membership["user_id"])
 
 
 def validate_groups(document: dict, course_id) -> dict:
@@ -393,28 +407,46 @@ def normalize_group_categories(categories: list[dict]) -> list[dict]:
     if not isinstance(categories, list):
         raise ValueError("live group categories are invalid")
     normalized_categories = []
+    category_ids = set()
     for category in categories:
         if not isinstance(category, dict) or category.get("category_id") in (None, ""):
             raise ValueError("live group category id is invalid")
         if not isinstance(category.get("category_name"), str) or not isinstance(category.get("groups"), list):
             raise ValueError("live group category is invalid")
+        category_id = str(category["category_id"])
+        if category_id in category_ids:
+            raise ValueError("live group category id is duplicated")
+        category_ids.add(category_id)
         normalized_groups = []
+        group_ids = set()
         for group in category["groups"]:
             if not isinstance(group, dict) or group.get("id") in (None, ""):
                 raise ValueError("live group id is invalid")
             if not isinstance(group.get("name"), str) or not isinstance(group.get("memberships"), list):
                 raise ValueError("live group is invalid")
+            group_id = str(group["id"])
+            if group_id in group_ids:
+                raise ValueError("live group id is duplicated")
+            group_ids.add(group_id)
             memberships = []
+            membership_ids = set()
+            user_ids = set()
             for membership in group["memberships"]:
                 if (not isinstance(membership, dict) or membership.get("id") in (None, "")
                         or membership.get("user_id") in (None, "")):
                     raise ValueError("live group membership is invalid")
-                memberships.append({"id": str(membership["id"]), "user_id": str(membership["user_id"])})
+                membership_id = str(membership["id"])
+                user_id = str(membership["user_id"])
+                if membership_id in membership_ids or user_id in user_ids:
+                    raise ValueError("live group membership is duplicated")
+                membership_ids.add(membership_id)
+                user_ids.add(user_id)
+                memberships.append({"id": membership_id, "user_id": user_id})
             normalized_groups.append({
-                "id": str(group["id"]), "name": group["name"], "memberships": memberships,
+                "id": group_id, "name": group["name"], "memberships": memberships,
             })
         normalized_categories.append({
-            "category_id": str(category["category_id"]),
+            "category_id": category_id,
             "category_name": category["category_name"],
             "groups": normalized_groups,
         })

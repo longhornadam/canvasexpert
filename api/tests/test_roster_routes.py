@@ -335,6 +335,38 @@ def test_private_group_snapshot_round_trip_has_only_allowlisted_fields(tmp_path)
     assert mirror_store.groups_are_current(stale, max_age_hours=24) is False
 
 
+def test_private_group_snapshot_rejects_ambiguous_duplicate_ids(tmp_path):
+    duplicate_category = [
+        {"category_id": "7", "category_name": "One", "groups": []},
+        {"category_id": "7", "category_name": "Two", "groups": []},
+    ]
+    duplicate_group = [{
+        "category_id": "7", "category_name": "One",
+        "groups": [
+            {"id": "8", "name": "Blue", "memberships": []},
+            {"id": "8", "name": "Green", "memberships": []},
+        ],
+    }]
+    duplicate_membership_id = [{
+        "category_id": "7", "category_name": "One",
+        "groups": [{
+            "id": "8", "name": "Blue",
+            "memberships": [{"id": "9", "user_id": "101"}, {"id": "9", "user_id": "102"}],
+        }],
+    }]
+    duplicate_user_id = [{
+        "category_id": "7", "category_name": "One",
+        "groups": [{
+            "id": "8", "name": "Blue",
+            "memberships": [{"id": "9", "user_id": "101"}, {"id": "10", "user_id": "101"}],
+        }],
+    }]
+
+    for categories in (duplicate_category, duplicate_group, duplicate_membership_id, duplicate_user_id):
+        with pytest.raises(ValueError):
+            mirror_store.write_groups("1", categories, root=tmp_path)
+
+
 @pytest.mark.parametrize(
     ("case", "roster_document"),
     [
