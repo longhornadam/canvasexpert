@@ -381,6 +381,35 @@ def _scope_failure(previous_scope: dict | None, attempted_at: str, error_code: s
     }
 
 
+def _incomplete_membership(
+    previous_scope: dict | None,
+    attempted_at: str,
+    error_code: str,
+    *,
+    valid_records,
+    empty_records,
+) -> dict:
+    """Keep last-good membership when a complete list contains invalid rows."""
+    previous_success_at = str(previous_scope.get("last_success_at") or "") if isinstance(previous_scope, dict) else ""
+    if _valid_iso(previous_success_at):
+        return {
+            "state": "incomplete",
+            "last_success_at": previous_success_at,
+            "last_attempt_at": attempted_at,
+            "error_code": error_code,
+            "records": copy.deepcopy(previous_scope["records"]),
+        }
+    if not valid_records:
+        return _scope_failure(previous_scope, attempted_at, error_code, empty_records=empty_records)
+    return {
+        "state": "incomplete",
+        "last_success_at": "",
+        "last_attempt_at": attempted_at,
+        "error_code": error_code,
+        "records": copy.deepcopy(valid_records),
+    }
+
+
 def _top_level_failure(error, complete, rows, previous_scope: dict | None, attempted_at: str, *, empty_records) -> dict | None:
     if error:
         error_code = str(error).strip()
@@ -413,21 +442,30 @@ def _acquire_assignments(
             "records": {},
         }
     records = {}
-    dropped = False
+    invalid_membership = False
     for row in rows:
         try:
             record = normalize_assignment(row)
         except ValueError:
-            dropped = True
+            invalid_membership = True
+            continue
+        if record["id"] in records:
+            invalid_membership = True
             continue
         records[record["id"]] = record
-    if not records:
-        return _scope_failure(previous_scope, attempted_at, "empty_response", empty_records={})
+    if invalid_membership:
+        return _incomplete_membership(
+            previous_scope,
+            attempted_at,
+            "invalid_assignment_record",
+            valid_records=records,
+            empty_records={},
+        )
     return {
-        "state": "incomplete" if dropped else "current",
+        "state": "current",
         "last_success_at": attempted_at,
         "last_attempt_at": attempted_at,
-        "error_code": "invalid_assignment_record" if dropped else "",
+        "error_code": "",
         "records": records,
     }
 
@@ -461,14 +499,25 @@ def _acquire_modules(
             "records": [],
         }
 
+    valid_rows = []
+    seen_module_ids: set[str] = set()
+    invalid_membership = False
+    for row in rows:
+        if not isinstance(row, dict):
+            invalid_membership = True
+            continue
+        module_id = _id(row.get("id"))
+        if not module_id or module_id in seen_module_ids:
+            invalid_membership = True
+            continue
+        seen_module_ids.add(module_id)
+        valid_rows.append(row)
+
     previous_by_id = _module_previous_by_id(previous_scope)
     modules: list[dict] = []
     missing_inline: list[tuple[int, str]] = []
     incomplete = False
-    for index, row in enumerate(rows):
-        if not isinstance(row, dict) or not _id(row.get("id")):
-            incomplete = True
-            continue
+    for row in valid_rows:
         module = {
             "id": _id(row.get("id")),
             "name": _normalize_text(row.get("name")) or "Untitled module",
@@ -478,9 +527,19 @@ def _acquire_modules(
         if "items" in row and isinstance(row.get("items"), list):
             module["items"], dropped = _normalized_items(row.get("items"))
             incomplete = incomplete or dropped
-        else:
+        elif not invalid_membership:
             missing_inline.append((len(modules), module["id"]))
         modules.append(module)
+
+    if invalid_membership:
+        modules.sort(key=lambda module: (module["position"], module["id"]))
+        return _incomplete_membership(
+            previous_scope,
+            attempted_at,
+            "invalid_module_record",
+            valid_records=modules,
+            empty_records=[],
+        )
 
     if not modules:
         return _scope_failure(previous_scope, attempted_at, "empty_response", empty_records=[])

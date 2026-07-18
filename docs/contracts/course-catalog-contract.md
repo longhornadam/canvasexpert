@@ -55,10 +55,13 @@ Allowed scope states are `current`, `stale`, `incomplete`, and `unavailable`:
   not acquire every omitted module-item list.
 - `unavailable`: no last-good records exist for the failed scope.
 
-The two scopes merge independently. Failed, incomplete, or invalid top-level collection
-reads retain last-good records; a proven-complete empty collection replaces them. A successful
-module-list acquisition may retain previous items for an individual module whose fallback item
-request fails; the module scope is then `incomplete`.
+The two scopes merge independently. Failed or incomplete top-level collection reads retain
+last-good records; a proven-complete empty collection replaces them. A complete collection
+with a missing/invalid top-level record or duplicate normalized ID is `incomplete` and also
+retains last-good membership. Before any successful scope exists, its valid unique subset may
+be stored as `incomplete`; a collection with no valid records remains `unavailable`. A
+successful module-list acquisition may retain previous items for an individual module whose
+fallback item request fails; the module scope is then `incomplete`.
 
 ## Assignment allowlist
 

@@ -156,6 +156,151 @@ def test_scope_failure_preserves_last_good_records_while_other_scope_updates(tmp
     assert "503" not in json.dumps(result)
 
 
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [_assignment("202"), {"name": "Missing assignment ID"}],
+        [_assignment("202"), _assignment(202)],
+    ],
+    ids=["missing-id", "duplicate-normalized-id"],
+)
+def test_invalid_assignment_membership_retains_last_good_records_and_allows_modules_update(tmp_path, rows):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    def invalid_assignments_complete(path, params):
+        if path.endswith("/assignments"):
+            return rows, None, True
+        if path.endswith("/modules"):
+            return [_module("20", position=2)], None, True
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=invalid_assignments_complete,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )["catalog"]
+
+    assert result["assignments"] == {
+        "state": "incomplete", "last_success_at": STAMP_1, "last_attempt_at": STAMP_2,
+        "error_code": "invalid_assignment_record", "records": first["assignments"]["records"],
+    }
+    assert result["modules"]["state"] == "current"
+    assert result["modules"]["records"][0]["id"] == "20"
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [_module("20", include_items=False), {"name": "Missing module ID"}],
+        [_module("20", include_items=False), _module(20, include_items=False)],
+    ],
+    ids=["missing-id", "duplicate-normalized-id"],
+)
+def test_invalid_module_membership_retains_last_good_records_without_item_fallback(tmp_path, rows):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+    item_calls = []
+
+    def no_item_fallback(path, params):
+        item_calls.append(path)
+        raise AssertionError(f"unexpected module-item fallback: {path}")
+
+    def invalid_modules_complete(path, params):
+        if path.endswith("/assignments"):
+            return [_assignment("202")], None, True
+        if path.endswith("/modules"):
+            return rows, None, True
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=no_item_fallback,
+        canvas_get_all_complete=invalid_modules_complete,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )["catalog"]
+
+    assert result["assignments"]["state"] == "current"
+    assert set(result["assignments"]["records"]) == {"202"}
+    assert result["modules"] == {
+        "state": "incomplete", "last_success_at": STAMP_1, "last_attempt_at": STAMP_2,
+        "error_code": "invalid_module_record", "records": first["modules"]["records"],
+    }
+    assert item_calls == []
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected_state", "expected_records"),
+    [
+        ([_assignment("202"), {"name": "Missing assignment ID"}], "incomplete", {"202"}),
+        ([{"name": "Missing assignment ID"}], "unavailable", set()),
+    ],
+    ids=["valid-subset", "all-invalid"],
+)
+def test_first_invalid_assignment_membership_exposes_only_valid_subset(tmp_path, rows, expected_state, expected_records):
+    def assignments_complete(path, params):
+        if path.endswith("/assignments"):
+            return rows, None, True
+        if path.endswith("/modules"):
+            return [], None, True
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=assignments_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]["assignments"]
+
+    assert result["state"] == expected_state
+    assert result["last_success_at"] == ""
+    assert result["last_attempt_at"] == STAMP_1
+    assert result["error_code"] == "invalid_assignment_record"
+    assert set(result["records"]) == expected_records
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected_state", "expected_ids"),
+    [
+        ([_module("20", include_items=False), {"name": "Missing module ID"}], "incomplete", ["20"]),
+        ([{"name": "Missing module ID"}], "unavailable", []),
+    ],
+    ids=["valid-subset", "all-invalid"],
+)
+def test_first_invalid_module_membership_exposes_only_valid_subset_without_item_fallback(
+    tmp_path, rows, expected_state, expected_ids,
+):
+    item_calls = []
+
+    def no_item_fallback(path, params):
+        item_calls.append(path)
+        raise AssertionError(f"unexpected module-item fallback: {path}")
+
+    def modules_complete(path, params):
+        if path.endswith("/assignments"):
+            return [], None, True
+        if path.endswith("/modules"):
+            return rows, None, True
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=no_item_fallback,
+        canvas_get_all_complete=modules_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]["modules"]
+
+    assert result["state"] == expected_state
+    assert result["last_success_at"] == ""
+    assert result["last_attempt_at"] == STAMP_1
+    assert result["error_code"] == "invalid_module_record"
+    assert [record["id"] for record in result["records"]] == expected_ids
+    assert item_calls == []
+
+
 def test_first_sync_partial_result_keeps_successful_scope(tmp_path):
     def module_failure(path, params):
         if path.endswith("/assignments"):
