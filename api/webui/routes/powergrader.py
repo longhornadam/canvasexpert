@@ -423,6 +423,7 @@ def pg_start(
                     session["auto_post_summary"] = trigger_result["summary"]
                     session.setdefault("auto_post_log", []).append(trigger_result["log_entry"])
                     _save_session(session)
+                    _notify_write_through(session, trigger_result["summary"].get("pushed"))
                     auto_post_summary = trigger_result["summary"]
 
     payload = build_start_success_payload(
@@ -559,6 +560,7 @@ def pg_late_score(session_id: str):
                 session["auto_post_summary"] = trigger_result["summary"]
                 session.setdefault("auto_post_log", []).append(trigger_result["log_entry"])
                 _save_session(session)
+                _notify_write_through(session, trigger_result["summary"].get("pushed"))
         else:
             _save_session(session)
     return JSONResponse({
@@ -621,6 +623,7 @@ def pg_import_results(
                         session["auto_post_summary"] = trigger_result["summary"]
                         session.setdefault("auto_post_log", []).append(trigger_result["log_entry"])
                         _save_session(session)
+                        _notify_write_through(session, trigger_result["summary"].get("pushed"))
                         payload["auto_post_summary"] = trigger_result["summary"]
     return JSONResponse(payload, status_code=status_code)
 
@@ -681,6 +684,21 @@ def pg_push_review(
     return JSONResponse(payload, status_code=status_code)
 
 
+def _notify_write_through(session, pushed) -> None:
+    """Converge the submission mirror after a verified grade-write batch.
+
+    Fires the delayed, fire-and-forget write-through refresh so mirror-backed
+    reads pick up the just-posted grades. Best-effort: mirror_service already
+    guards on token/mirror-enabled/workspace and swallows its own errors.
+    """
+    try:
+        course_id = (session or {}).get("course_id")
+        if course_id and pushed:
+            mirror_service.notify_course_changed(course_id)
+    except Exception:
+        pass
+
+
 @router.post("/api/powergrader/session/{session_id}/push")
 def pg_push(
     session_id: str,
@@ -697,12 +715,7 @@ def pg_push(
         canvas_get=_canvas_get,
     )
     if status_code == 200 and payload.get("pushed"):
-        try:
-            session = _load_session(session_id)
-            if session and session.get("course_id"):
-                mirror_service.notify_course_changed(session["course_id"])
-        except Exception:
-            pass
+        _notify_write_through(_load_session(session_id), payload.get("pushed"))
     return JSONResponse(payload, status_code=status_code)
 
 

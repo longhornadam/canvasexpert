@@ -216,6 +216,15 @@ class SweepAdapter:
         step = context.checkpoint_step(step)
         _replace_local_step(steps, step)
 
+        # Converge the submission mirror to the applied overrides once per batch
+        # (best-effort, guarded + fire-and-forget write-through refresh).
+        if any(r.get("state") != "failed" for r in results):
+            try:
+                from api.webui import mirror_service
+                mirror_service.notify_course_changed(course_id)
+            except Exception:
+                pass
+
         state = "applied" if all_applied else "partial"
         return _build_result(state, steps=steps)
 

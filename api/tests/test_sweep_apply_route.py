@@ -343,6 +343,23 @@ def test_per_student_cached_due_date_overrides_class_due(sweep_env):
     assert entry["seconds_override"] == 86400
 
 
+def test_apply_triggers_write_through_convergence(sweep_env, monkeypatch):
+    """A successful sweep apply converges the submission mirror exactly once
+    (write-through refresh), keyed to the swept course."""
+    client, canvas, _writes = sweep_env
+    canvas["assignments"][:] = [dict(WEEKEND_ASSIGNMENT)]
+    canvas["submissions"][:] = [dict(WEEKEND_SUBMISSION)]
+    import api.webui.mirror_service as mirror_service
+    notified = []
+    monkeypatch.setattr(mirror_service, "notify_course_changed",
+                        lambda course_id, **kw: notified.append(str(course_id)))
+    prep = _prepare(client).json()
+    reviewed = _review(client, prep["operation_id"]).json()
+    applied = _apply(client, reviewed["batch_id"], reviewed["review_digest"]).json()
+    assert applied["status"] == "applied"
+    assert notified == ["101"]
+
+
 def test_legacy_sweep_compute_is_deleted():
     import api.webui.gradebook_service as gradebook_service
     import api.webui.routes.gradebook as gradebook_facade

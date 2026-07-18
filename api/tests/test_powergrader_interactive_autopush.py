@@ -461,3 +461,28 @@ def test_guard_returns_have_summary_and_log_entry():
         if expected:
             assert result["summary"]["skipped_reason"] == expected, f"guard {expected} mismatch"
             assert result["log_entry"]["skipped_reason"] == expected, f"guard {expected} log mismatch"
+
+
+def test_notify_write_through_fires_only_on_a_real_push(monkeypatch):
+    """The post-push convergence helper fires the write-through refresh only
+    when there is a course_id AND a positive pushed count."""
+    from api.webui.routes import powergrader as pg
+    calls = []
+    monkeypatch.setattr(pg.mirror_service, "notify_course_changed",
+                        lambda course_id, **kw: calls.append(str(course_id)))
+    pg._notify_write_through({"course_id": "77"}, 3)   # fires
+    pg._notify_write_through({"course_id": "77"}, 0)   # nothing pushed
+    pg._notify_write_through({}, 5)                     # no course_id
+    pg._notify_write_through(None, 5)                   # no session
+    assert calls == ["77"]
+
+
+def test_notify_write_through_swallows_convergence_errors(monkeypatch):
+    """A convergence hiccup must never fail the grade write that just landed."""
+    from api.webui.routes import powergrader as pg
+
+    def boom(course_id, **kw):
+        raise RuntimeError("mirror down")
+
+    monkeypatch.setattr(pg.mirror_service, "notify_course_changed", boom)
+    pg._notify_write_through({"course_id": "77"}, 1)  # must not raise

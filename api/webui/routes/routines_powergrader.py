@@ -302,6 +302,14 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                         now=now_dt,
                     )
                     deps.session_store.save_session(session)
+                    # Converge the submission mirror to the just-posted grades
+                    # (write-through refresh; best-effort, guarded + fire-and-forget).
+                    if (autopush_result.get("pushed") or 0) and session.get("course_id"):
+                        try:
+                            from api.webui import mirror_service
+                            mirror_service.notify_course_changed(session["course_id"])
+                        except Exception:
+                            pass
                     status = autoscore_support.autoscore_status_from_summary(autopush_result, job_ref.get("status") or "session_ready")
                     last_error = ""
                     errors = autopush_result.get("errors") or []
