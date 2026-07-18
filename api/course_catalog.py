@@ -28,9 +28,11 @@ from api.assignment_collection import (
 from api.webui import workspace
 
 
-CATALOG_VERSION = 1
+CATALOG_VERSION = 2
+CATALOG_V1_VERSION = 1
 CATALOG_STATES = {"current", "stale", "incomplete", "unavailable"}
-ROOT_KEYS = {"version", "course_id", "course_name", "updated_at", "assignments", "modules"}
+ROOT_KEYS = {"version", "course_id", "course_name", "updated_at", "assignments", "modules", "assignment_groups"}
+V1_ROOT_KEYS = ROOT_KEYS - {"assignment_groups"}
 SCOPE_KEYS = {"state", "last_success_at", "last_attempt_at", "error_code", "records"}
 ASSIGNMENT_KEYS = {
     "id", "name", "description_text", "points_possible", "due_at", "unlock_at", "lock_at",
@@ -45,9 +47,11 @@ RUBRIC_SETTINGS_KEYS = {
 }
 MODULE_KEYS = {"id", "name", "position", "items"}
 MODULE_ITEM_KEYS = {"id", "type", "title", "position", "content_id"}
+ASSIGNMENT_GROUP_KEYS = {"id", "name", "position", "group_weight"}
 
 MODULES_PATH = "/api/v1/courses/{course_id}/modules"
 MODULE_ITEMS_PATH = "/api/v1/courses/{course_id}/modules/{module_id}/items"
+ASSIGNMENT_GROUPS_PATH = "/api/v1/courses/{course_id}/assignment_groups"
 MODULE_ITEM_CONCURRENCY = 3
 
 CanvasGetAll = Callable[[str, dict], tuple[list | None, str | None]]
@@ -217,11 +221,28 @@ def _validate_modules(records) -> None:
                 raise ValueError("module item position is invalid")
 
 
+def _validate_assignment_groups(records) -> None:
+    if not isinstance(records, list):
+        raise ValueError("assignment group records must be a list")
+    seen_ids: set[str] = set()
+    for group in records:
+        _require_exact_keys(group, ASSIGNMENT_GROUP_KEYS, "assignment group")
+        group_id = group["id"]
+        if not isinstance(group_id, str) or not group_id or group_id in seen_ids:
+            raise ValueError("assignment group stable id is invalid")
+        seen_ids.add(group_id)
+        if not isinstance(group["name"], str) or not isinstance(group["position"], int):
+            raise ValueError("assignment group fields are invalid")
+        if isinstance(group["group_weight"], bool) or not isinstance(group["group_weight"], (int, float)):
+            raise ValueError("assignment group weight is invalid")
+
+
 def validate_catalog(document: dict) -> dict:
-    """Validate the complete strict v1 document or raise ``ValueError``."""
-    _require_exact_keys(document, ROOT_KEYS, "catalog")
-    if document["version"] != CATALOG_VERSION:
+    """Validate a strict v1 compatibility or canonical v2 document."""
+    if not isinstance(document, dict) or document.get("version") not in {CATALOG_V1_VERSION, CATALOG_VERSION}:
         raise ValueError("catalog version is invalid")
+    version = document["version"]
+    _require_exact_keys(document, ROOT_KEYS if version == CATALOG_VERSION else V1_ROOT_KEYS, "catalog")
     if not isinstance(document["course_id"], str) or not document["course_id"]:
         raise ValueError("catalog course id is invalid")
     if not isinstance(document["course_name"], str) or not _valid_iso(document["updated_at"]):
@@ -244,6 +265,16 @@ def validate_catalog(document: dict) -> dict:
                 _validate_assignment(record, assignment_id)
         else:
             _validate_modules(scope["records"])
+    if version == CATALOG_VERSION:
+        scope = document["assignment_groups"]
+        _require_exact_keys(scope, SCOPE_KEYS, "assignment groups scope")
+        if scope["state"] not in CATALOG_STATES:
+            raise ValueError("assignment groups state is invalid")
+        if not _valid_iso(scope["last_success_at"], allow_empty=True) or not _valid_iso(scope["last_attempt_at"], allow_empty=True):
+            raise ValueError("assignment groups timestamps are invalid")
+        if not isinstance(scope["error_code"], str):
+            raise ValueError("assignment groups error code is invalid")
+        _validate_assignment_groups(scope["records"])
     return document
 
 
@@ -484,6 +515,74 @@ def _assignment_scope_from_receipt(
     }
 
 
+def normalize_assignment_group(row: dict) -> dict:
+    """Return the strict student-free assignment-group allowlist."""
+    if not isinstance(row, dict) or not _id(row.get("id")):
+        raise ValueError("assignment group has no stable id")
+    group_weight = _number(row.get("group_weight"))
+    if group_weight is None:
+        raise ValueError("assignment group weight is invalid")
+    return {
+        "id": _id(row.get("id")),
+        "name": _normalize_text(row.get("name")),
+        "position": _position(row.get("position")),
+        "group_weight": group_weight,
+    }
+
+
+def _assignment_group_scope_from_receipt(
+    rows,
+    error,
+    complete,
+    attempted_at: str,
+    previous_scope: dict | None,
+) -> dict:
+    failure = _top_level_failure(error, complete, rows, previous_scope, attempted_at, empty_records=[])
+    if failure is not None:
+        return failure
+    if not rows:
+        return {
+            "state": "current", "last_success_at": attempted_at, "last_attempt_at": attempted_at,
+            "error_code": "", "records": [],
+        }
+    records = []
+    seen_ids: set[str] = set()
+    invalid_membership = False
+    for row in rows:
+        try:
+            record = normalize_assignment_group(row)
+        except ValueError:
+            invalid_membership = True
+            continue
+        if record["id"] in seen_ids:
+            invalid_membership = True
+            continue
+        seen_ids.add(record["id"])
+        records.append(record)
+    records.sort(key=lambda group: (group["position"], group["id"]))
+    if invalid_membership:
+        return _incomplete_membership(
+            previous_scope, attempted_at, "invalid_assignment_group_record",
+            valid_records=records, empty_records=[],
+        )
+    return {
+        "state": "current", "last_success_at": attempted_at, "last_attempt_at": attempted_at,
+        "error_code": "", "records": records,
+    }
+
+
+def _acquire_assignment_groups(
+    course_id: str,
+    canvas_get_all_complete: CanvasGetAllComplete,
+    attempted_at: str,
+    previous_scope: dict | None,
+) -> dict:
+    rows, error, complete = canvas_get_all_complete(
+        ASSIGNMENT_GROUPS_PATH.format(course_id=course_id), {"per_page": 100},
+    )
+    return _assignment_group_scope_from_receipt(rows, error, complete, attempted_at, previous_scope)
+
+
 def _module_previous_by_id(previous_scope: dict | None) -> dict[str, dict]:
     if not isinstance(previous_scope, dict) or not isinstance(previous_scope.get("records"), list):
         return {}
@@ -603,9 +702,11 @@ def _catalog_conflicts(course_id: str, root=None) -> list[Path]:
     excluded = {
         Path(workspace.course_catalog_path(course_id, root)).resolve(),
         Path(workspace.course_catalog_previous_path(course_id, root)).resolve(),
+        Path(workspace.course_catalog_v2_path(course_id, root)).resolve(),
+        Path(workspace.course_catalog_v2_previous_path(course_id, root)).resolve(),
     }
     return sorted(
-        candidate for candidate in directory.glob("*catalog.v1*.json")
+        candidate for candidate in directory.glob("*catalog.v*.json")
         if candidate.resolve() not in excluded
     )
 
@@ -637,22 +738,27 @@ def _read_valid(path: Path) -> dict | None:
 
 
 def read_catalog(course_id: str, *, root=None) -> dict:
-    """Read canonical then previous without contacting Canvas."""
-    canonical_value = workspace.course_catalog_path(course_id, root)
-    previous_value = workspace.course_catalog_previous_path(course_id, root)
+    """Read validated v2 then v1 compatibility documents without contacting Canvas."""
+    versions = (
+        (CATALOG_VERSION, workspace.course_catalog_v2_path, workspace.course_catalog_v2_previous_path),
+        (CATALOG_V1_VERSION, workspace.course_catalog_path, workspace.course_catalog_previous_path),
+    )
     warnings = ["competing_catalog_files"] if _catalog_conflicts(course_id, root) else []
-    if not canonical_value or not previous_value:
+    if any(not path_fn(course_id, root) for _, *path_fns in versions for path_fn in path_fns):
         return {"catalog": None, "source": "none", "warnings": warnings + ["workspace_not_configured"]}
-    canonical = _read_valid(Path(canonical_value))
-    if canonical is not None and canonical["course_id"] == str(course_id):
-        return {"catalog": canonical, "source": "canonical", "warnings": warnings}
-    if canonical is not None:
-        _quarantine(Path(canonical_value))
-    previous = _read_valid(Path(previous_value))
-    if previous is not None and previous["course_id"] == str(course_id):
-        return {"catalog": previous, "source": "previous", "warnings": warnings + ["using_previous_catalog"]}
-    if previous is not None:
-        _quarantine(Path(previous_value))
+    for version, canonical_fn, previous_fn in versions:
+        canonical_path = Path(canonical_fn(course_id, root))
+        previous_path = Path(previous_fn(course_id, root))
+        canonical = _read_valid(canonical_path)
+        if canonical is not None and canonical["course_id"] == str(course_id):
+            return {"catalog": canonical, "source": "canonical", "warnings": warnings}
+        if canonical is not None:
+            _quarantine(canonical_path)
+        previous = _read_valid(previous_path)
+        if previous is not None and previous["course_id"] == str(course_id):
+            return {"catalog": previous, "source": "previous", "warnings": warnings + ["using_previous_catalog"]}
+        if previous is not None:
+            _quarantine(previous_path)
     return {"catalog": None, "source": "none", "warnings": warnings}
 
 
@@ -682,11 +788,13 @@ def _atomic_write(path: Path, document: dict) -> None:
 
 
 def write_catalog(document: dict, *, root=None) -> dict:
-    """Atomically replace canonical while preserving its validated last-good value."""
+    """Atomically replace v2 canonical while preserving its validated last-good value."""
     validate_catalog(document)
+    if document["version"] != CATALOG_VERSION:
+        raise ValueError("catalog_v2_required")
     course_id = document["course_id"]
-    canonical_value = workspace.course_catalog_path(course_id, root)
-    previous_value = workspace.course_catalog_previous_path(course_id, root)
+    canonical_value = workspace.course_catalog_v2_path(course_id, root)
+    previous_value = workspace.course_catalog_v2_previous_path(course_id, root)
     if not canonical_value or not previous_value:
         raise ValueError("workspace_not_configured")
     canonical_path = Path(canonical_value)
@@ -721,9 +829,13 @@ def refresh_catalog(
         timestamp = attempted_at or _now()
         previous_assignments = previous.get("assignments") if isinstance(previous, dict) else None
         previous_modules = previous.get("modules") if isinstance(previous, dict) else None
-        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="course-catalog") as executor:
+        previous_groups = previous.get("assignment_groups") if isinstance(previous, dict) and previous.get("version") == CATALOG_VERSION else None
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="course-catalog") as executor:
             module_future = executor.submit(
                 _acquire_modules, course_id, canvas_get_all, canvas_get_all_complete, timestamp, previous_modules,
+            )
+            group_future = executor.submit(
+                _acquire_assignment_groups, course_id, canvas_get_all_complete, timestamp, previous_groups,
             )
             if assignment_receipt is None:
                 assignment_future = executor.submit(
@@ -736,6 +848,7 @@ def refresh_catalog(
                     rows, error, complete, timestamp, previous_assignments,
                 )
             modules = module_future.result()
+            assignment_groups = group_future.result()
         document = {
             "version": CATALOG_VERSION,
             "course_id": course_id,
@@ -743,6 +856,7 @@ def refresh_catalog(
             "updated_at": timestamp,
             "assignments": assignments,
             "modules": modules,
+            "assignment_groups": assignment_groups,
         }
         validate_catalog(document)
         written = write_catalog(document, root=root)
@@ -765,9 +879,11 @@ def public_projection(read_result: dict, *, course_id: str) -> dict:
             "scopes": {
                 "assignments": {"state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": ""},
                 "modules": {"state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": ""},
+                "assignment_groups": {"state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": ""},
             },
             "assignments": [],
             "modules": [],
+            "assignment_groups": [],
         }
     assignments = list(document["assignments"]["records"].values())
     assignments.sort(key=lambda row: row["due_at"] or "0000-00-00", reverse=True)
@@ -777,13 +893,23 @@ def public_projection(read_result: dict, *, course_id: str) -> dict:
         module["assignment_ids"] = [item["content_id"] for item in module["items"] if item["type"].lower() == "assignment" and item["content_id"]]
         module["quiz_ids"] = [item["content_id"] for item in module["items"] if item["type"].lower() == "quiz" and item["content_id"]]
         modules.append(module)
+    assignment_groups = copy.deepcopy(document.get("assignment_groups", {}).get("records", []))
     scope_status = {
         name: {key: document[name][key] for key in ("state", "last_success_at", "last_attempt_at", "error_code")}
         for name in ("assignments", "modules")
     }
+    if document["version"] == CATALOG_VERSION:
+        scope_status["assignment_groups"] = {
+            key: document["assignment_groups"][key]
+            for key in ("state", "last_success_at", "last_attempt_at", "error_code")
+        }
+    else:
+        scope_status["assignment_groups"] = {
+            "state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": "",
+        }
     return {
         "ok": True,
-        "available": bool(assignments or modules),
+        "available": bool(assignments or modules or assignment_groups),
         "course_id": document["course_id"],
         "course_name": document["course_name"],
         "updated_at": document["updated_at"],
@@ -792,4 +918,5 @@ def public_projection(read_result: dict, *, course_id: str) -> dict:
         "scopes": scope_status,
         "assignments": assignments,
         "modules": modules,
+        "assignment_groups": assignment_groups,
     }

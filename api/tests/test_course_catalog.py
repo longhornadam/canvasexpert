@@ -59,6 +59,12 @@ def _module(module_id="10", *, items=None, include_items=True, position=1):
     return row
 
 
+def _assignment_group(group_id="44", **changes):
+    row = {"id": group_id, "name": "Projects", "position": 1, "group_weight": 25}
+    row.update(changes)
+    return row
+
+
 def _canvas_success(path, params):
     if path.endswith("/assignments"):
         return [_assignment()], None
@@ -72,7 +78,17 @@ def _canvas_success_complete(path, params):
         return [_assignment()], None, True
     if path.endswith("/modules"):
         return [_module()], None, True
+    if path.endswith("/assignment_groups"):
+        return [_assignment_group()], None, True
     raise AssertionError(f"unexpected Canvas call: {path}")
+
+
+def _with_assignment_groups(callback):
+    def wrapped(path, params):
+        if path.endswith("/assignment_groups"):
+            return [_assignment_group()], None, True
+        return callback(path, params)
+    return wrapped
 
 
 def test_assignment_normalization_is_strict_url_free_and_rejects_unknown_fields(tmp_path):
@@ -120,6 +136,98 @@ def test_refresh_succeeds_for_both_scopes_and_persists_projection(tmp_path):
     assert stored["catalog"] == document
 
 
+def test_v2_assignment_groups_are_sorted_strict_and_public(tmp_path):
+    groups = [
+        _assignment_group("20", name="  Later  ", position=2, group_weight=75, html_url="drop"),
+        _assignment_group("10", name=" Earlier ", position=1, group_weight=25, rules={"drop": True}),
+    ]
+
+    def complete(path, params):
+        if path.endswith("/assignment_groups"):
+            assert params == {"per_page": 100}
+            return groups, None, True
+        return _canvas_success_complete(path, params)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=complete, root=str(tmp_path), attempted_at=STAMP_1,
+    )
+    document = result["catalog"]
+    assert document["version"] == 2
+    assert document["assignment_groups"] == {
+        "state": "current", "last_success_at": STAMP_1, "last_attempt_at": STAMP_1,
+        "error_code": "", "records": [
+            {"id": "10", "name": "Earlier", "position": 1, "group_weight": 25},
+            {"id": "20", "name": "Later", "position": 2, "group_weight": 75},
+        ],
+    }
+    projection = course_catalog.public_projection(result, course_id="course-1")
+    assert projection["scopes"]["assignment_groups"]["state"] == "current"
+    assert projection["assignment_groups"] == document["assignment_groups"]["records"]
+    assert "html_url" not in json.dumps(document)
+
+
+@pytest.mark.parametrize(
+    ("rows", "state", "records"),
+    [
+        ([], "current", []),
+        ([_assignment_group("20"), {"name": "missing"}], "incomplete", [{"id": "44", "name": "Projects", "position": 1, "group_weight": 25}]),
+    ],
+)
+def test_assignment_group_membership_requires_complete_valid_collection(tmp_path, rows, state, records):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete, root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    def complete(path, params):
+        if path.endswith("/assignment_groups"):
+            return rows, None, True
+        return _canvas_success_complete(path, params)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=complete, root=str(tmp_path), attempted_at=STAMP_2,
+    )["catalog"]["assignment_groups"]
+    assert result["state"] == state
+    assert result["records"] == records
+    if state == "incomplete":
+        assert result["last_success_at"] == STAMP_1
+        assert result["error_code"] == "invalid_assignment_group_record"
+        assert result["records"] == first["assignment_groups"]["records"]
+
+
+def test_read_catalog_uses_v2_previous_then_v1_without_rewriting_v1(tmp_path):
+    document = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete, root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+    directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete, root=str(tmp_path), attempted_at=STAMP_2,
+    )
+    (directory / "catalog.v2.json").write_text("{broken", encoding="utf-8")
+    recovered = course_catalog.read_catalog("course-1", root=str(tmp_path))
+    assert recovered["source"] == "previous"
+    assert recovered["catalog"] == document
+
+    (directory / "catalog.v2.previous.json").unlink()
+    v1_document = dict(document)
+    v1_document.pop("assignment_groups")
+    v1_document["version"] = 1
+    v1_path = directory / "catalog.v1.json"
+    v1_path.write_text(json.dumps(v1_document), encoding="utf-8")
+    fallback = course_catalog.read_catalog("course-1", root=str(tmp_path))
+    assert fallback["source"] == "canonical"
+    assert fallback["catalog"] == v1_document
+    assert not (directory / "catalog.v2.json").exists()
+    assert v1_path.read_text(encoding="utf-8") == json.dumps(v1_document)
+    projection = course_catalog.public_projection(fallback, course_id="course-1")
+    assert projection["scopes"]["assignment_groups"]["state"] == "unavailable"
+    assert projection["assignment_groups"] == []
+
+
 def test_scope_failure_preserves_last_good_records_while_other_scope_updates(tmp_path):
     course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
@@ -143,7 +251,7 @@ def test_scope_failure_preserves_last_good_records_while_other_scope_updates(tmp
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=assignment_failure,
-        canvas_get_all_complete=assignment_failure_complete,
+        canvas_get_all_complete=_with_assignment_groups(assignment_failure_complete),
         root=str(tmp_path), attempted_at=STAMP_2,
     )
 
@@ -180,7 +288,7 @@ def test_invalid_assignment_membership_retains_last_good_records_and_allows_modu
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
-        canvas_get_all_complete=invalid_assignments_complete,
+        canvas_get_all_complete=_with_assignment_groups(invalid_assignments_complete),
         root=str(tmp_path), attempted_at=STAMP_2,
     )["catalog"]
 
@@ -221,7 +329,7 @@ def test_invalid_module_membership_retains_last_good_records_without_item_fallba
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=no_item_fallback,
-        canvas_get_all_complete=invalid_modules_complete,
+        canvas_get_all_complete=_with_assignment_groups(invalid_modules_complete),
         root=str(tmp_path), attempted_at=STAMP_2,
     )["catalog"]
 
@@ -252,7 +360,7 @@ def test_first_invalid_assignment_membership_exposes_only_valid_subset(tmp_path,
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
-        canvas_get_all_complete=assignments_complete,
+        canvas_get_all_complete=_with_assignment_groups(assignments_complete),
         root=str(tmp_path), attempted_at=STAMP_1,
     )["catalog"]["assignments"]
 
@@ -289,7 +397,7 @@ def test_first_invalid_module_membership_exposes_only_valid_subset_without_item_
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=no_item_fallback,
-        canvas_get_all_complete=modules_complete,
+        canvas_get_all_complete=_with_assignment_groups(modules_complete),
         root=str(tmp_path), attempted_at=STAMP_1,
     )["catalog"]["modules"]
 
@@ -318,7 +426,7 @@ def test_first_sync_partial_result_keeps_successful_scope(tmp_path):
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=module_failure,
-        canvas_get_all_complete=module_failure_complete,
+        canvas_get_all_complete=_with_assignment_groups(module_failure_complete),
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -335,7 +443,7 @@ def test_first_sync_partial_result_keeps_successful_scope(tmp_path):
     [
         ([], [_module()], True),
         ([_assignment()], [], True),
-        ([], [], False),
+        ([], [], True),
     ],
 )
 def test_proven_empty_scope_replaces_last_good_records(tmp_path, assignments, modules, available):
@@ -354,7 +462,7 @@ def test_proven_empty_scope_replaces_last_good_records(tmp_path, assignments, mo
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
-        canvas_get_all_complete=proven_empty_complete,
+        canvas_get_all_complete=_with_assignment_groups(proven_empty_complete),
         root=str(tmp_path), attempted_at=STAMP_2,
     )
     document = result["catalog"]
@@ -373,7 +481,7 @@ def test_proven_empty_scope_replaces_last_good_records(tmp_path, assignments, mo
         ]},
     ])
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    assert json.loads((directory / "catalog.v1.previous.json").read_text(encoding="utf-8")) == first
+    assert json.loads((directory / "catalog.v2.previous.json").read_text(encoding="utf-8")) == first
     assert course_catalog.public_projection(result, course_id="course-1")["available"] is available
 
 
@@ -396,7 +504,7 @@ def test_unproven_receipt_after_successful_empty_scope_is_stale(tmp_path, rows, 
 
     course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
-        canvas_get_all_complete=empty_assignments_complete,
+        canvas_get_all_complete=_with_assignment_groups(empty_assignments_complete),
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -409,7 +517,7 @@ def test_unproven_receipt_after_successful_empty_scope_is_stale(tmp_path, rows, 
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
-        canvas_get_all_complete=failed_assignments_complete,
+        canvas_get_all_complete=_with_assignment_groups(failed_assignments_complete),
         root=str(tmp_path), attempted_at=STAMP_2,
     )
     assignments_scope = result["catalog"]["assignments"]
@@ -436,7 +544,7 @@ def test_unproven_receipt_before_successful_scope_is_unavailable(tmp_path, rows,
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
-        canvas_get_all_complete=unproven_assignments_complete,
+        canvas_get_all_complete=_with_assignment_groups(unproven_assignments_complete),
         root=str(tmp_path), attempted_at=STAMP_1,
     )
     assert result["catalog"]["assignments"] == {
@@ -484,7 +592,7 @@ def test_inline_empty_items_are_complete_but_omitted_items_use_bounded_fallback(
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=canvas_get_all,
-        canvas_get_all_complete=canvas_get_all_complete,
+        canvas_get_all_complete=_with_assignment_groups(canvas_get_all_complete),
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -523,7 +631,7 @@ def test_partial_module_fallback_reuses_prior_items_and_marks_incomplete(tmp_pat
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=failed_items,
-        canvas_get_all_complete=modules_without_inline_items_complete,
+        canvas_get_all_complete=_with_assignment_groups(modules_without_inline_items_complete),
         root=str(tmp_path), attempted_at=STAMP_2,
     )
     modules = result["catalog"]["modules"]
@@ -555,12 +663,12 @@ def test_atomic_update_preserves_previous_and_leaves_no_temp_files(tmp_path):
 
     second = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=changed,
-        canvas_get_all_complete=changed_complete,
+        canvas_get_all_complete=_with_assignment_groups(changed_complete),
         root=str(tmp_path), attempted_at=STAMP_2,
     )["catalog"]
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    assert json.loads((directory / "catalog.v1.previous.json").read_text(encoding="utf-8")) == first
-    assert json.loads((directory / "catalog.v1.json").read_text(encoding="utf-8")) == second
+    assert json.loads((directory / "catalog.v2.previous.json").read_text(encoding="utf-8")) == first
+    assert json.loads((directory / "catalog.v2.json").read_text(encoding="utf-8")) == second
     assert not list(directory.glob("*.tmp"))
 
 
@@ -576,15 +684,15 @@ def test_corrupt_canonical_falls_back_to_previous_and_quarantines_bad_file(tmp_p
         root=str(tmp_path), attempted_at=STAMP_2,
     )
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    (directory / "catalog.v1.json").write_text("{broken", encoding="utf-8")
+    (directory / "catalog.v2.json").write_text("{broken", encoding="utf-8")
 
     result = course_catalog.read_catalog("course-1", root=str(tmp_path))
 
     assert result["source"] == "previous"
     assert result["catalog"]["updated_at"] == STAMP_1
     assert "using_previous_catalog" in result["warnings"]
-    assert not (directory / "catalog.v1.json").exists()
-    assert len(list((directory / "quarantine").glob("catalog.v1.json.*.corrupt"))) == 1
+    assert not (directory / "catalog.v2.json").exists()
+    assert len(list((directory / "quarantine").glob("catalog.v2.json.*.corrupt"))) == 1
 
 
 def test_corrupt_previous_without_canonical_is_unavailable(tmp_path):

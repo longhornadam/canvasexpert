@@ -18,6 +18,20 @@ def _catalog(*, state="current", records=None):
     }
 
 
+def _v2_catalog(*, state="current", records=None):
+    return {
+        "catalog": {
+            "version": 2,
+            "assignment_groups": {
+                "state": state,
+                "records": records if records is not None else [
+                    {"id": "3", "name": "Projects", "position": 1, "group_weight": 20},
+                ],
+            },
+        },
+    }
+
+
 def test_modules_uses_current_catalog_scope_without_canvas(monkeypatch):
     monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: _catalog())
     monkeypatch.setattr(
@@ -87,3 +101,37 @@ def test_assignment_groups_remains_live_when_catalog_modules_are_current(monkeyp
 
     assert response.json() == {"ok": True, "groups": [{"id": "3", "name": "Projects"}]}
     assert calls == [("/api/v1/courses/course-1/assignment_groups", None)]
+
+
+def test_assignment_groups_uses_exactly_current_v2_catalog_without_canvas(monkeypatch):
+    monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: _v2_catalog())
+    monkeypatch.setattr(
+        push, "_canvas_get",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Canvas must not be called")),
+    )
+
+    response = TestClient(app, base_url="http://127.0.0.1:8765").get("/api/assignment-groups?course_id=course-1")
+
+    assert response.json() == {"ok": True, "groups": [{"id": "3", "name": "Projects"}]}
+
+
+def test_assignment_groups_falls_back_live_for_noncurrent_or_malformed_v2_scope(monkeypatch):
+    catalogs = [
+        _v2_catalog(state="stale"),
+        _v2_catalog(records=[{"id": "3"}]),
+        _v2_catalog(records=[{"id": "3", "name": "Projects", "position": 1, "group_weight": 20, "url": "drop"}]),
+        {"catalog": {"version": 1}},
+    ]
+    calls = []
+
+    monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: catalogs.pop(0))
+    monkeypatch.setattr(
+        push, "_canvas_get",
+        lambda path, params=None: calls.append((path, params)) or ([{"id": 3, "name": "Live group"}], None),
+    )
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    for _ in range(4):
+        assert client.get("/api/assignment-groups?course_id=course-1").json() == {
+            "ok": True, "groups": [{"id": "3", "name": "Live group"}],
+        }
+    assert calls == [("/api/v1/courses/course-1/assignment_groups", None)] * 4

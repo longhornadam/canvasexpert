@@ -55,6 +55,27 @@ def get_modules(course_id: str):
 @router.get("/api/assignment-groups")
 def get_assignment_groups(course_id: str):
     """Grading categories (Canvas assignment groups) for a course."""
+    read_result = course_catalog.read_catalog(course_id)
+    catalog = read_result.get("catalog") if isinstance(read_result, dict) else None
+    group_scope = catalog.get("assignment_groups") if isinstance(catalog, dict) and catalog.get("version") == course_catalog.CATALOG_VERSION else None
+    records = group_scope.get("records") if isinstance(group_scope, dict) else None
+    if (
+        isinstance(group_scope, dict)
+        and group_scope.get("state") == "current"
+        and isinstance(records, list)
+        and all(
+            isinstance(group, dict)
+            and set(group) == course_catalog.ASSIGNMENT_GROUP_KEYS
+            and isinstance(group.get("id"), str)
+            and group["id"]
+            and isinstance(group.get("name"), str)
+            and isinstance(group.get("position"), int)
+            and not isinstance(group.get("group_weight"), bool)
+            and isinstance(group.get("group_weight"), (int, float))
+            for group in records
+        )
+    ):
+        return JSONResponse({"ok": True, "groups": [{"id": group["id"], "name": group["name"]} for group in records]})
     data, err = _canvas_get(f"/api/v1/courses/{course_id}/assignment_groups")
     if err:
         return JSONResponse({"ok": False, "error": err})

@@ -86,6 +86,13 @@ Create's module picker reads the Course Catalog only when its modules scope is e
 `current`; missing or non-current catalog state falls back to the existing live Canvas
 lookup. This display-only read never authorizes module placement or another write.
 
+Create's assignment-group picker likewise reads only an exactly-current Catalog v2
+assignment-group scope (`id`, name, position, and weight are the stored allowlist) and
+otherwise uses its existing live Canvas lookup. Catalog v1 remains a read-only
+assignments/modules compatibility fallback and deliberately reports assignment groups
+unavailable. Local picker data never authorizes a group mutation: operation preparation and
+execution resolve the selected group live and retain their existing drift/preflight checks.
+
 **Attempt history is append-only** within a living submission: students who
 resubmit accumulate `attempts` keyed by attempt number, which survive full-
 pass rewrites. This is the substrate for regrade queues, revision chains, and

@@ -225,6 +225,16 @@ def course_catalog_previous_path(course_id, root=None):
     return os.path.join(directory, "catalog.v1.previous.json") if directory else None
 
 
+def course_catalog_v2_path(course_id, root=None):
+    directory = course_catalog_dir(course_id, root)
+    return os.path.join(directory, "catalog.v2.json") if directory else None
+
+
+def course_catalog_v2_previous_path(course_id, root=None):
+    directory = course_catalog_dir(course_id, root)
+    return os.path.join(directory, "catalog.v2.previous.json") if directory else None
+
+
 def canvas_mirror_root(root=None):
     """Return the CanvasMirror root — the disposable local mirror of Canvas
     course facts. Everything under it is rebuildable by re-sync."""
