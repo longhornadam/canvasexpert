@@ -33,6 +33,8 @@ class FakeCanvas:
             return [], None
         if path.endswith("/students/submissions"):
             return [], None
+        if path == "/api/quiz/v1/courses/111/quizzes":
+            return [], None
         raise AssertionError(f"unexpected path {path}")
 
     def complete(self, path, params=None, timeout=30):
@@ -282,8 +284,6 @@ def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does
                 return {"workflow_state": "available", "concluded": False}, None
             if path.endswith("/enrollments"):
                 return [{"enrollment_state": "active"}], None
-            if "/quizzes/" in path:
-                quiz_calls.append(path)
             if path.endswith("/assignments"):
                 return [{"id": 700099, "name": "New Quiz",
                         "is_quiz_lti_assignment": True, "updated_at": ""}], None
@@ -291,9 +291,11 @@ def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does
                 return [{"id": 900001, "name": "Learner One"}], None
             if path.endswith("/sections") or path.endswith("/students/submissions"):
                 return [], None
-            if path.endswith("/quizzes/700099"):
+            if path.endswith("/quizzes"):
+                quiz_calls.append(path)
                 return [{"id": "700099", "title": "New Quiz"}], None
             if path.endswith("/quizzes/700099/items"):
+                quiz_calls.append(path)
                 return [], None
             raise AssertionError(f"unexpected path {path}")
 
@@ -315,13 +317,14 @@ def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does
     assert quiz_calls == []
     assert store.read_new_quiz_capability("111")["capability"] == "restricted"
 
-    # Manual sync now ignores the cooldown entirely and probes the quiz.
+    # Manual sync now ignores the cooldown and probes the metadata collection.
     manual = NewQuizCanvas()
     results = mirror_service.sync_now("111", canvas_get=manual, canvas_get_all=manual,
                                       canvas_get_all_complete=manual.complete,
                                       now="2026-07-16T12:20:00Z")
     assert results[0]["ok"] is True
-    assert "/api/quiz/v1/courses/111/quizzes/700099" in quiz_calls
+    assert quiz_calls == ["/api/quiz/v1/courses/111/quizzes",
+                          "/api/quiz/v1/courses/111/quizzes/700099/items"]
     assert store.read_new_quiz_capability("111")["capability"] == "supported"
 
 
@@ -342,11 +345,12 @@ def test_manual_sync_probes_new_quiz_even_when_lifecycle_is_concluded(monkeypatc
                 return [{"id": 900001, "name": "Synthetic Learner"}], None
             if path.endswith("/sections") or path.endswith("/students/submissions"):
                 return [], None
-            if "/api/quiz/v1/" in path:
+            if path.endswith("/quizzes"):
                 quiz_calls.append(path)
-                if path.endswith("/items"):
-                    return [], None
                 return [{"id": "700099", "title": "New Quiz"}], None
+            if path.endswith("/quizzes/700099/items"):
+                quiz_calls.append(path)
+                return [], None
             raise AssertionError(path)
 
         complete = FakeCanvas.complete
@@ -357,7 +361,8 @@ def test_manual_sync_probes_new_quiz_even_when_lifecycle_is_concluded(monkeypatc
         canvas_get_all_complete=canvas.complete, now=NOW)
     assert results[0]["ok"] is True
     assert store.read_course_context("111")["lifecycle"] == "concluded"
-    assert "/api/quiz/v1/courses/111/quizzes/700099" in quiz_calls
+    assert quiz_calls == ["/api/quiz/v1/courses/111/quizzes",
+                          "/api/quiz/v1/courses/111/quizzes/700099/items"]
 
 
 # --- routes ------------------------------------------------------------------------

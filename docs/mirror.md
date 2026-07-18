@@ -115,14 +115,15 @@ the response snapshot on success. A fresh response snapshot can satisfy a
 later PowerGrader read without another ordinary submission/report read; native
 file evidence still uses the focused live transport.
 
-### New Quiz capability gate (1.0beta slice 01a)
+### New Quiz capability gate (1.0beta slices 01a / 02b)
 
 New Quiz endpoints are gated on active enrollment (`api/README.md` ~205-213): the
 same token returns 200 in an actively-enrolled course and 403 in a
-concluded/past-enrollment course, deterministically, for every quiz. Design:
+concluded/past-enrollment course, deterministically, for the metadata scope. Design:
 **lifecycle predicts, probe confirms, circuit backstops**
-(`docs/reference/canvasmirror-1.0beta-information-spine.md` Sec 9.4) — this
-slice implements the probe/circuit half only; no lifecycle signal exists yet.
+(`docs/reference/canvasmirror-1.0beta-information-spine.md` Sec 9.4). Slice 01a
+implemented the probe/circuit half; slice 01d now supplies the student-free lifecycle
+predictor and suppresses normal concluded-course New Quiz metadata work.
 
 `sync_metadata` (`api/mirror/new_quizzes.py`) keeps a small, student-free
 capability record per course (`new_quiz_capability.v1.json`, via
@@ -133,26 +134,32 @@ a sanitized `evidence` (`forbidden` / `unauthorized` category + consecutive
 failure count). No status text, response bodies, URLs, or quiz titles are
 stored.
 
-Classification: 3 consecutive distinct-quiz `HTTP 403`/`HTTP 401` failures
-(parsed from the existing canvas_client error-string prefix) with zero
-successes in one `sync_metadata` run opens the circuit — `restricted`,
-`retry_after` = now + 24h. Any single success in a run clears it. A mixed run
-(some 200, some 403) stays `supported` — those failures are item-level noise.
+Slice 02b uses `GET /api/quiz/v1/courses/:id/quizzes` as the metadata scope
+probe and source for collection-matched records. Freshness is evaluated before
+that request, so an ordinary under-24-hour unchanged tick stays zero-call.
+When refresh is due, one successful collection proves the scope `supported`,
+clears any prior restriction, and each uniquely ID-matched stale assignment
+fetches only `/items`. A missing or duplicate collection match may make the
+existing narrow per-quiz metadata request as a record-level compatibility
+fallback.
+
+One collection `HTTP 403`/`HTTP 401` is sufficient active-enrollment scope
+evidence: it sets or renews `restricted` for 24 hours with only the sanitized
+category and count, and makes no item or per-quiz fan-out calls. Other
+collection failures are transient/invalid and neither open nor renew the
+circuit. A successful collection plus an item failure remains `supported` and
+reports incomplete metadata without replacing last-good quiz data.
 
 Gate: while restricted and the cooldown has not expired, `sync_metadata`
-skips the entire fan-out (zero Canvas calls) and records the run as
-skipped-restricted. Once the cooldown passes, the next run makes one bounded
-probe (the first quiz only) — a 403/401 renews the cooldown without touching
-the rest; a success clears the restriction and the remaining quizzes are
-processed normally in the same run. A transient probe failure (timeout, 5xx,
-connection, invalid response) never renews the cooldown — the record stays
-restricted with its expired `retry_after` unchanged, so each following pass
-costs exactly one bounded probe until Canvas answers definitively. Manual `sync_now(course_id)` bypasses the
-cooldown entirely and always runs a full probe; the 15-minute heartbeat never
-does. Skipped-restricted runs and circuit opens/clears are counted in
-`sync_metadata`'s existing return summary (`capability`, `skipped_restricted`,
-`circuit_opened`, `circuit_cleared`) so the effect is observable without
-exposing course names.
+skips the entire metadata pass (zero Canvas calls) and records the run as
+skipped-restricted. Once the cooldown expires, and for a manual
+`sync_now(course_id)` with at least one New Quiz assignment, it makes one
+collection probe. A successful probe can clear the restriction even when every
+local quiz document is fresh, without inventing metadata. An empty New Quiz
+assignment set remains zero-call. Skipped-restricted runs and circuit opens/clears are counted
+in `sync_metadata`'s existing return summary (`capability`,
+`skipped_restricted`, `circuit_opened`, `circuit_cleared`) so the effect is
+observable without exposing course names.
 
 ## Mirror-first reads (`api/mirror/queries.py`)
 

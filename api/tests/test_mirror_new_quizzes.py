@@ -208,7 +208,7 @@ def test_metadata_sync_is_separate_and_prunes_only_after_complete_pass(tmp_path)
 
     def canvas(path, params=None, timeout=30):
         calls.append(path)
-        if path.endswith(f"/quizzes/{ASSIGNMENT}"):
+        if path.endswith("/quizzes"):
             return ([{"id": ASSIGNMENT, "title": "Fictional Quiz", "points_possible": 10}], None)
         if path.endswith("/items"):
             return (_items(), None)
@@ -222,9 +222,31 @@ def test_metadata_sync_is_separate_and_prunes_only_after_complete_pass(tmp_path)
     assert quiz["quiz"]["title"] == "Fictional Quiz"
     assert quiz["items"]["essay-1"]["points_possible"] == 10
     assert calls == [
-        f"/api/quiz/v1/courses/{COURSE}/quizzes/{ASSIGNMENT}",
+        f"/api/quiz/v1/courses/{COURSE}/quizzes",
         f"/api/quiz/v1/courses/{COURSE}/quizzes/{ASSIGNMENT}/items",
     ]
+
+
+def test_metadata_sync_falls_back_narrowly_when_collection_has_no_matching_id(tmp_path):
+    calls = []
+
+    def canvas(path, params=None, timeout=30):
+        calls.append(path)
+        if path.endswith("/quizzes"):
+            return [], None
+        if path.endswith(f"/quizzes/{ASSIGNMENT}"):
+            return [{"id": ASSIGNMENT, "title": "Fallback Quiz"}], None
+        if path.endswith("/items"):
+            return _items(), None
+        raise AssertionError(path)
+
+    result = new_quizzes.sync_metadata(
+        COURSE, [_assignment()], canvas_get_all=canvas, root=str(tmp_path), now=NOW,
+    )
+    assert result["quizzes"] == 1
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes/{ASSIGNMENT}",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes/{ASSIGNMENT}/items"]
 
 
 def test_metadata_sync_skips_unchanged_quizzes_until_trueup(tmp_path):
@@ -232,7 +254,7 @@ def test_metadata_sync_skips_unchanged_quizzes_until_trueup(tmp_path):
 
     def canvas(path, params=None, timeout=30):
         calls.append(path)
-        if path.endswith(f"/quizzes/{ASSIGNMENT}"):
+        if path.endswith("/quizzes"):
             return ([{"id": ASSIGNMENT, "title": "Fictional Quiz", "points_possible": 10}], None)
         if path.endswith("/items"):
             return (_items(), None)
@@ -348,7 +370,7 @@ def _quiz_assignment(quiz_id):
     }
 
 
-def test_capability_circuit_opens_after_three_consecutive_403s_and_blocks_calls_during_cooldown(tmp_path):
+def test_collection_403_opens_restricted_circuit_without_item_or_detail_fanout(tmp_path):
     quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2"), _quiz_assignment("quiz-3")]
     calls = []
 
@@ -360,12 +382,12 @@ def test_capability_circuit_opens_after_three_consecutive_403s_and_blocks_calls_
                                        root=str(tmp_path), now=NOW)
     assert result["capability"] == "restricted"
     assert result["circuit_opened"] is True
-    assert len(result["failures"]) == 3
-    assert len(calls) == 3  # each quiz fails on its doc call — no items calls made
+    assert len(result["failures"]) == 1
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes"]
 
     capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
     assert capability["capability"] == "restricted"
-    assert capability["evidence"] == {"category": "forbidden", "consecutive_failures": 3}
+    assert capability["evidence"] == {"category": "forbidden", "consecutive_failures": 1}
     assert capability["retry_after"] > NOW
 
     # A later run inside the cooldown window makes zero Canvas calls at all —
@@ -381,23 +403,34 @@ def test_capability_circuit_opens_after_three_consecutive_403s_and_blocks_calls_
                        "circuit_cleared": False}
 
 
-def test_capability_mixed_run_of_successes_and_403s_stays_supported(tmp_path):
+def test_collection_success_item_failure_stays_supported_and_incomplete(tmp_path):
     quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2"), _quiz_assignment("quiz-3")]
+    calls = []
 
     def mixed(path, params=None, timeout=30):
-        if path.endswith("/quizzes/quiz-1"):
-            return [{"id": "quiz-1", "title": "Quiz One"}], None
+        calls.append(path)
+        if path.endswith("/quizzes"):
+            return ([{"id": "quiz-1", "title": "Quiz One"},
+                    {"id": "quiz-2", "title": "Quiz Two"},
+                    {"id": "quiz-3", "title": "Quiz Three"}], None)
         if path.endswith("/quizzes/quiz-1/items"):
             return [], None
-        if path.endswith("/quizzes/quiz-2") or path.endswith("/quizzes/quiz-3"):
+        if path.endswith("/quizzes/quiz-2/items"):
             return None, "HTTP 403: Forbidden"
+        if path.endswith("/quizzes/quiz-3/items"):
+            return [], None
         raise AssertionError(path)
 
     result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=mixed,
                                        root=str(tmp_path), now=NOW)
     assert result["capability"] == "supported"
     assert result["circuit_opened"] is False
-    assert len(result["failures"]) == 2
+    assert result["state"] == "incomplete"
+    assert len(result["failures"]) == 1
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes/quiz-1/items",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes/quiz-2/items",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes/quiz-3/items"]
     capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
     assert capability["capability"] == "supported"
     assert capability["evidence"] == {"category": "", "consecutive_failures": 0}
@@ -418,7 +451,7 @@ def test_capability_probe_after_cooldown_failure_renews_with_exactly_one_call(tm
 
     result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=forbidden,
                                        root=str(tmp_path), now="2026-07-16T13:00:00Z")
-    assert len(calls) == 1  # bounded probe: only the first quiz's doc call
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes"]
     assert result["circuit_opened"] is True
     capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
     assert capability["capability"] == "restricted"
@@ -443,7 +476,7 @@ def test_capability_transient_probe_failure_does_not_renew_cooldown(tmp_path):
     # restriction evidence: retry_after must stay expired (unchanged).
     result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=timing_out,
                                        root=str(tmp_path), now="2026-07-16T13:00:00Z")
-    assert len(calls) == 1  # still a bounded probe — one call only
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes"]
     assert result["circuit_opened"] is False
     capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
     assert capability["capability"] == "restricted"
@@ -454,7 +487,8 @@ def test_capability_transient_probe_failure_does_not_renew_cooldown(tmp_path):
     # once again instead of skipping the fan-out for 24h.
     result2 = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=timing_out,
                                         root=str(tmp_path), now="2026-07-16T13:15:00Z")
-    assert len(calls) == 2
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes"]
     assert result2["skipped_restricted"] is False
 
 
@@ -468,19 +502,70 @@ def test_capability_probe_after_cooldown_success_clears_and_proceeds_normally(tm
 
     def succeeding(path, params=None, timeout=30):
         calls.append(path)
+        if path.endswith("/quizzes"):
+            return ([{"id": "quiz-1", "title": "Quiz quiz-1"},
+                    {"id": "quiz-2", "title": "Quiz quiz-2"}], None)
         if path.endswith("/items"):
             return [], None
-        quiz_id = path.rsplit("/", 1)[-1]
-        return [{"id": quiz_id, "title": f"Quiz {quiz_id}"}], None
+        raise AssertionError(path)
 
     result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=succeeding,
                                        root=str(tmp_path), now="2026-07-16T13:00:00Z")
     assert result["capability"] == "supported"
     assert result["circuit_cleared"] is True
-    assert result["quizzes"] == 2  # probe quiz plus the remaining one, same run
+    assert result["quizzes"] == 2
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes/quiz-1/items",
+                     f"/api/quiz/v1/courses/{COURSE}/quizzes/quiz-2/items"]
     capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
     assert capability["capability"] == "supported"
     assert capability["retry_after"] == ""
+
+
+def test_manual_collection_probe_clears_restriction_without_rewriting_fresh_metadata(tmp_path):
+    assignment = _quiz_assignment("quiz-1")
+    new_quizzes.write_quiz_metadata(
+        COURSE, "quiz-1", assignment=assignment,
+        quiz={"id": "quiz-1", "title": "Last Good Quiz"}, items=[],
+        root=str(tmp_path), attempted_at=NOW,
+    )
+    store.write_new_quiz_capability(
+        COURSE, capability="restricted", last_probe_at=NOW,
+        retry_after="2099-01-01T00:00:00Z", evidence_category="forbidden",
+        consecutive_failures=1, root=str(tmp_path),
+    )
+    calls = []
+
+    def collection_only(path, params=None, timeout=30):
+        calls.append(path)
+        if path.endswith("/quizzes"):
+            return [{"id": "quiz-1", "title": "Collection Title"}], None
+        raise AssertionError(path)
+
+    result = new_quizzes.sync_metadata(
+        COURSE, [assignment], canvas_get_all=collection_only, root=str(tmp_path),
+        now="2026-07-16T12:15:00Z", bypass_cooldown=True,
+    )
+    assert result["capability"] == "supported"
+    assert result["circuit_cleared"] is True
+    assert result["skipped"] == 1 and result["quizzes"] == 0
+    assert calls == [f"/api/quiz/v1/courses/{COURSE}/quizzes"]
+    quiz = new_quizzes.read_quiz(COURSE, "quiz-1", root=str(tmp_path))
+    assert quiz["quiz"]["title"] == "Last Good Quiz"
+
+
+def test_manual_sync_with_no_new_quiz_assignments_makes_zero_canvas_calls(tmp_path):
+    def explode(path, params=None, timeout=30):
+        raise AssertionError(f"empty New Quiz set must not probe: {path}")
+
+    result = new_quizzes.sync_metadata(
+        COURSE, [], canvas_get_all=explode, root=str(tmp_path), now=NOW,
+        bypass_cooldown=True,
+    )
+    assert result == {"ok": True, "state": "current", "quizzes": 0,
+                      "skipped": 0, "failures": [], "capability": "unknown",
+                      "skipped_restricted": False, "circuit_opened": False,
+                      "circuit_cleared": False}
 
 
 def test_capability_envelope_has_no_forbidden_fields(tmp_path):
