@@ -16,10 +16,10 @@ from __future__ import annotations
 import threading
 import time
 
-from api.mirror import store, sync
+from api.mirror import course_context, store, sync
 
 from . import config, workspace
-from .canvas_client import _canvas_get_all
+from .canvas_client import _canvas_get, _canvas_get_all
 from .routes.names import _vault as _identity_vault
 
 
@@ -46,7 +46,7 @@ _PASS_RUNNERS = {"full": sync.full_pass, "delta": sync.delta_pass,
                  "roster": sync.roster_pass}
 
 
-def run_heartbeat_pass(*, canvas_get_all=None, now=None) -> list[dict]:
+def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None, now=None) -> list[dict]:
     """One tick: run whatever is due for every Current course. Never raises;
     per-course failures are recorded in that course's _sync envelope and
     reported in the returned summaries."""
@@ -54,6 +54,7 @@ def run_heartbeat_pass(*, canvas_get_all=None, now=None) -> list[dict]:
         return []
     if workspace.workspace_root() is None:
         return []
+    canvas_get = canvas_get or _canvas_get
     canvas_get_all = canvas_get_all or _canvas_get_all
     now_iso = now or store.now_iso()
     summaries = []
@@ -61,18 +62,37 @@ def run_heartbeat_pass(*, canvas_get_all=None, now=None) -> list[dict]:
         course_id = str(course.get("id") or "")
         if not course_id:
             continue
+        try:
+            context = course_context.ensure_course_context(
+                course_id, canvas_get=canvas_get, canvas_get_all=canvas_get_all,
+                now=now_iso)
+        except Exception:
+            # Context is advisory scheduling state; an unexpected local
+            # storage problem must degrade to ordinary mirror cadence, not
+            # stop the heartbeat for this or later configured courses.
+            context = store.read_course_context(course_id)
         state = store.read_sync(course_id)
-        for pass_name in due_passes(state, now_iso):
+        pass_names = due_passes(state, now_iso)
+        concluded = (context["lifecycle"] == "concluded"
+                     and context["state"] in {"current", "stale"})
+        if concluded and "full" not in pass_names:
+            # The daily full reconcile is the concluded course's only normal
+            # heartbeat work.  Explicit manual Sync remains a live diagnostic.
+            continue
+        for pass_name in pass_names:
             try:
-                result = _PASS_RUNNERS[pass_name](
-                    course_id, canvas_get_all=canvas_get_all, now=now_iso)
+                kwargs = {"canvas_get_all": canvas_get_all, "now": now_iso}
+                if concluded and pass_name == "full":
+                    kwargs["skip_new_quiz_metadata"] = True
+                result = _PASS_RUNNERS[pass_name](course_id, **kwargs)
             except Exception as e:
                 result = {"ok": False, "error": str(e)}
             summaries.append({"course_id": course_id, "pass": pass_name, **result})
     return summaries
 
 
-def sync_now(course_id: str | None = None, *, canvas_get_all=None, now=None) -> list[dict]:
+def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=None,
+             now=None) -> list[dict]:
     """Manual 'Sync now': a delta per requested course (falls back to a full
     pass automatically when the course has never been backfilled).
 
@@ -81,6 +101,7 @@ def sync_now(course_id: str | None = None, *, canvas_get_all=None, now=None) -> 
     The 15-minute heartbeat (``run_heartbeat_pass``) never does."""
     if not config.token_is_set():
         return [{"ok": False, "error": "No Canvas token saved — go to Settings."}]
+    canvas_get = canvas_get or _canvas_get
     canvas_get_all = canvas_get_all or _canvas_get_all
     courses = [c for c in config.active_courses()
                if not course_id or str(c.get("id")) == str(course_id)]
@@ -89,6 +110,14 @@ def sync_now(course_id: str | None = None, *, canvas_get_all=None, now=None) -> 
     summaries = []
     for course in courses:
         cid = str(course.get("id") or "")
+        # Manual sync is deliberately not cadence-limited.  Context is helpful
+        # status evidence, but its refresh failure must never suppress the
+        # existing full/delta fallback or the New Quiz cooldown override.
+        try:
+            course_context.refresh_course_context(
+                cid, canvas_get=canvas_get, canvas_get_all=canvas_get_all, now=now)
+        except Exception:
+            pass
         result = sync.delta_pass(cid, canvas_get_all=canvas_get_all, now=now,
                                  bypass_new_quiz_cooldown=True)
         summaries.append({"course_id": cid, "pass": "delta", **result})
@@ -148,6 +177,7 @@ def status() -> dict:
             "course_name": config.course_display_name(course_id),
             "passes": state["passes"],
             "watermarks": state["watermarks"],
+            "context": store.read_course_context(course_id),
         })
     return {
         "ok": True,

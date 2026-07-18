@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 
-from api.mirror import store
+from api.mirror import course_context, store
 
 COURSE = "111"
 
@@ -300,3 +300,81 @@ def test_writers_raise_without_workspace(monkeypatch):
         raised = True
     assert raised
     assert store.read_roster(COURSE) is None
+
+
+# --- course lifecycle context -------------------------------------------------
+
+def test_course_context_strict_allowlist_and_conservative_classification(tmp_path):
+    def canvas_get(path, params=None, timeout=20):
+        assert path == "/api/v1/courses/111"
+        assert params == {"include[]": "concluded"}
+        return {
+            "workflow_state": "completed", "concluded": True,
+            "end_at": "2026-07-15T00:00:00Z",
+            "term": {"end_at": "2026-07-16T00:00:00Z", "name": "Forbidden Term"},
+            "name": "Forbidden Course", "sis_course_id": "forbidden-sis",
+        }, None
+
+    def canvas_get_all(path, params=None, timeout=30):
+        assert path == "/api/v1/courses/111/enrollments"
+        assert params == {"user_id": "self", "per_page": 100,
+                          "state[]": ["active", "invited", "completed", "inactive"]}
+        return [{"enrollment_state": "completed", "user_id": "never-store"},
+                {"enrollment_state": "inactive", "role": "TeacherEnrollment"}], None
+
+    context = course_context.refresh_course_context(
+        COURSE, canvas_get=canvas_get, canvas_get_all=canvas_get_all,
+        root=str(tmp_path), now="2026-07-16T12:00:00Z")
+    assert set(context) == {
+        "schema_version", "course_id", "state", "last_success_at", "last_attempt_at",
+        "error_code", "lifecycle", "course_workflow_state", "course_concluded",
+        "course_end_at", "term_end_at", "enrollment_states",
+    }
+    assert context["lifecycle"] == "concluded"
+    assert context["enrollment_states"] == ["completed", "inactive"]
+    assert context["course_workflow_state"] == "completed"
+    raw = json.dumps(context)
+    assert "Forbidden" not in raw and "never-store" not in raw and "TeacherEnrollment" not in raw
+
+    assert course_context.classify_lifecycle(["active"]) == "current"
+    assert course_context.classify_lifecycle(["completed"]) == "concluded"
+    assert course_context.classify_lifecycle(["active", "completed"]) == "current"
+    assert course_context.classify_lifecycle([]) == "unknown"
+
+
+def test_course_context_invalid_file_is_absent_and_failure_preserves_last_good_only(tmp_path):
+    path = store.course_context_path(COURSE, str(tmp_path))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"schema_version": 1, "course_id": COURSE, "name": "forbidden"}, handle)
+    assert store.read_course_context(COURSE, root=str(tmp_path)) == store.default_course_context(COURSE)
+
+    good = store.record_course_context(
+        COURSE, ok=True, attempted_at="2026-07-16T12:00:00Z", lifecycle="concluded",
+        course_workflow_state="completed", course_concluded=True,
+        course_end_at="2026-07-15T00:00:00Z", term_end_at="2026-07-16T00:00:00Z",
+        enrollment_states=["completed"], root=str(tmp_path))
+    store.write_assignments(COURSE, ASSIGNMENTS, root=str(tmp_path))
+    store.record_pass(COURSE, "delta", ok=True, attempted_at="2026-07-16T12:00:00Z",
+                      watermarks={"submitted_since": "watermark", "graded_since": "watermark"},
+                      root=str(tmp_path))
+    store.write_new_quiz_capability(
+        COURSE, capability="restricted", last_probe_at="2026-07-16T12:00:00Z",
+        retry_after="2026-07-17T12:00:00Z", evidence_category="forbidden",
+        consecutive_failures=3, root=str(tmp_path))
+    assignments_before = store.read_assignments(COURSE, root=str(tmp_path))
+    sync_before = store.read_sync(COURSE, root=str(tmp_path))
+    capability_before = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+
+    stale = course_context.refresh_course_context(
+        COURSE, canvas_get=lambda *args, **kwargs: (None, "HTTP 403: raw private details"),
+        canvas_get_all=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("not reached")),
+        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+    assert stale["state"] == "stale"
+    assert stale["error_code"] == "forbidden"
+    for key in ("last_success_at", "lifecycle", "course_workflow_state", "course_concluded",
+                "course_end_at", "term_end_at", "enrollment_states"):
+        assert stale[key] == good[key]
+    assert store.read_assignments(COURSE, root=str(tmp_path)) == assignments_before
+    assert store.read_sync(COURSE, root=str(tmp_path)) == sync_before
+    assert store.read_new_quiz_capability(COURSE, root=str(tmp_path)) == capability_before

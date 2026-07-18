@@ -191,8 +191,18 @@ def _commit_assignment_index(course_id, assignments, *, root, attempted_at) -> t
     return document, diagnostics
 
 
+def _skipped_lifecycle_new_quizzes(course_id, *, root=None) -> dict:
+    """Return a read-only metadata summary when lifecycle skips the scope."""
+    capability = store.read_new_quiz_capability(course_id, root=root)["capability"]
+    return {"ok": True, "state": "skipped_lifecycle", "quizzes": 0, "skipped": 0,
+            "failures": [], "capability": capability, "skipped_restricted": False,
+            "skipped_lifecycle": True, "circuit_opened": False,
+            "circuit_cleared": False}
+
+
 def full_pass(course_id, *, canvas_get_all, root=None, now=None,
-              bypass_new_quiz_cooldown: bool = False) -> dict:
+              bypass_new_quiz_cooldown: bool = False,
+              skip_new_quiz_metadata: bool = False) -> dict:
     """Backfill / nightly reconcile: fetch everything first, then rewrite.
 
     ``bypass_new_quiz_cooldown`` plumbs the manual ``sync_now`` override down
@@ -235,10 +245,12 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None,
                       watermarks={"submitted_since": watermark,
                                   "graded_since": watermark},
                       root=root)
-    new_quiz_result = new_quizzes.sync_metadata(
-        course_id, assignments, canvas_get_all=canvas_get_all, root=root, now=started,
-        bypass_cooldown=bypass_new_quiz_cooldown,
-    )
+    new_quiz_result = (_skipped_lifecycle_new_quizzes(course_id, root=root)
+                       if skip_new_quiz_metadata else new_quizzes.sync_metadata(
+                           course_id, assignments, canvas_get_all=canvas_get_all,
+                           root=root, now=started,
+                           bypass_cooldown=bypass_new_quiz_cooldown,
+                       ))
     return {"ok": True, "assignments": len(document["assignments"]),
             "students": len(students or []),
             "submission_rows": len(submissions or []),
@@ -248,7 +260,8 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None,
 
 
 def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
-               bypass_new_quiz_cooldown: bool = False) -> dict:
+               bypass_new_quiz_cooldown: bool = False,
+               skip_new_quiz_metadata: bool = False) -> dict:
     """Incremental pass. Falls back to a full pass when no watermark exists
     yet (first run, or a rebuilt mirror). ``bypass_new_quiz_cooldown`` — see
     ``full_pass``."""
@@ -258,7 +271,8 @@ def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
     watermarks = store.read_sync(course_id, root=root)["watermarks"]
     if not watermarks["submitted_since"] or not watermarks["graded_since"]:
         return full_pass(course_id, canvas_get_all=canvas_get_all, root=root, now=now,
-                         bypass_new_quiz_cooldown=bypass_new_quiz_cooldown)
+                         bypass_new_quiz_cooldown=bypass_new_quiz_cooldown,
+                         skip_new_quiz_metadata=skip_new_quiz_metadata)
     started = now or store.now_iso()
 
     assignments, error = _fetch_assignments(course_id, canvas_get_all)
@@ -292,10 +306,12 @@ def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
                       watermarks={"submitted_since": watermark,
                                   "graded_since": watermark},
                       root=root)
-    new_quiz_result = new_quizzes.sync_metadata(
-        course_id, assignments, canvas_get_all=canvas_get_all, root=root, now=started,
-        bypass_cooldown=bypass_new_quiz_cooldown,
-    )
+    new_quiz_result = (_skipped_lifecycle_new_quizzes(course_id, root=root)
+                       if skip_new_quiz_metadata else new_quizzes.sync_metadata(
+                           course_id, assignments, canvas_get_all=canvas_get_all,
+                           root=root, now=started,
+                           bypass_cooldown=bypass_new_quiz_cooldown,
+                       ))
     return {"ok": True, "assignments": len(assignments or []),
             "changed_rows": len(submitted or []) + len(graded or []),
             "touched_assignments": sorted(grouped),

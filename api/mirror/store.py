@@ -40,6 +40,19 @@ ROSTER_FILENAME = "roster.v1.json"
 ASSIGNMENTS_FILENAME = "assignments.v1.json"
 SUBMISSIONS_DIRNAME = "submissions"
 
+# Course lifecycle is a narrow, student-free scheduling scope.  It deliberately
+# lives beside (rather than inside) _sync.v1.json: pass readers rely on that
+# file's exact schema, while lifecycle has independent refresh and last-good
+# semantics.
+COURSE_CONTEXT_VERSION = 1
+COURSE_CONTEXT_FILENAME = "course_context.v1.json"
+COURSE_CONTEXT_STATES = {"current", "stale", "unavailable"}
+LIFECYCLE_STATES = {"current", "concluded", "unknown"}
+ENROLLMENT_STATES = {"active", "invited", "completed", "inactive"}
+CONTEXT_ERROR_CODES = {"", "unauthorized", "forbidden", "not_found",
+                       "rate_limited", "timeout", "connection",
+                       "invalid_response", "storage"}
+
 # Collection files are written only on successful acquisition, so their state
 # is "current" (or "incomplete" when pagination dropped records). Failures are
 # recorded in _sync.v1.json pass envelopes; old collection files just age.
@@ -55,6 +68,11 @@ _ASSIGNMENTS_KEYS = {"schema_version", "course_id", "assignments"} | _ENVELOPE_K
 _SUBMISSIONS_KEYS = {"schema_version", "course_id", "assignment_id",
                      "submissions"} | _ENVELOPE_KEYS
 _SUBMISSION_ENTRY_KEYS = {"current", "attempts"}
+_COURSE_CONTEXT_KEYS = {
+    "schema_version", "course_id", "state", "last_success_at",
+    "last_attempt_at", "error_code", "lifecycle", "course_workflow_state",
+    "course_concluded", "course_end_at", "term_end_at", "enrollment_states",
+}
 
 # New Quiz metadata-scope capability record (1.0beta slice 01a). Student-free:
 # just enough to gate the sync_metadata fan-out per course. Kept as its own
@@ -139,6 +157,11 @@ def new_quiz_capability_path(course_id, root=None):
     return os.path.join(directory, NEW_QUIZ_CAPABILITY_FILENAME) if directory else None
 
 
+def course_context_path(course_id, root=None):
+    directory = course_dir(course_id, root)
+    return os.path.join(directory, COURSE_CONTEXT_FILENAME) if directory else None
+
+
 def _require_dir(course_id, root):
     directory = course_dir(course_id, root)
     if not directory:
@@ -168,6 +191,18 @@ def _validate_common(document: dict, keys: set[str], course_id, label: str) -> N
     if str(document.get("course_id")) != str(course_id):
         raise ValueError(f"{label} course_id mismatch")
     _validate_envelope(document, label, COLLECTION_STATES)
+
+
+def _valid_iso_z(value) -> bool:
+    if value == "":
+        return True
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return False
+    return True
 
 
 def validate_roster(document: dict, course_id) -> dict:
@@ -216,6 +251,36 @@ def validate_new_quiz_capability(document: dict, course_id) -> dict:
     failures = evidence.get("consecutive_failures")
     if not isinstance(failures, int) or isinstance(failures, bool) or failures < 0:
         raise ValueError("new quiz capability evidence consecutive_failures is invalid")
+    return document
+
+
+def validate_course_context(document: dict, course_id) -> dict:
+    """Validate the lifecycle scheduling record's exact student-free shape."""
+    _require_exact_keys(document, _COURSE_CONTEXT_KEYS, "course context")
+    if (not isinstance(document.get("schema_version"), int)
+            or isinstance(document.get("schema_version"), bool)
+            or document["schema_version"] != COURSE_CONTEXT_VERSION):
+        raise ValueError("course context schema_version is unsupported")
+    if not isinstance(document.get("course_id"), str) or document["course_id"] != str(course_id):
+        raise ValueError("course context course_id mismatch")
+    if document.get("state") not in COURSE_CONTEXT_STATES:
+        raise ValueError("course context state is invalid")
+    if document.get("error_code") not in CONTEXT_ERROR_CODES:
+        raise ValueError("course context error_code is invalid")
+    for key in ("last_success_at", "last_attempt_at", "course_end_at", "term_end_at"):
+        if not _valid_iso_z(document.get(key)):
+            raise ValueError(f"course context {key} is invalid")
+    if document.get("lifecycle") not in LIFECYCLE_STATES:
+        raise ValueError("course context lifecycle is invalid")
+    if not isinstance(document.get("course_workflow_state"), str):
+        raise ValueError("course context course_workflow_state is invalid")
+    if not isinstance(document.get("course_concluded"), bool):
+        raise ValueError("course context course_concluded is invalid")
+    enrollment_states = document.get("enrollment_states")
+    if (not isinstance(enrollment_states, list)
+            or any(state not in ENROLLMENT_STATES for state in enrollment_states)
+            or len(set(enrollment_states)) != len(enrollment_states)):
+        raise ValueError("course context enrollment_states are invalid")
     return document
 
 
@@ -530,6 +595,71 @@ def read_sync(course_id, *, root=None) -> dict:
     document = _read_document(sync_path(course_id, root),
                               lambda d: validate_sync(d, course_id))
     return document if document is not None else default_sync(course_id)
+
+
+def default_course_context(course_id) -> dict:
+    return {
+        "schema_version": COURSE_CONTEXT_VERSION,
+        "course_id": str(course_id),
+        "state": "unavailable",
+        "last_success_at": "",
+        "last_attempt_at": "",
+        "error_code": "",
+        "lifecycle": "unknown",
+        "course_workflow_state": "",
+        "course_concluded": False,
+        "course_end_at": "",
+        "term_end_at": "",
+        "enrollment_states": [],
+    }
+
+
+def read_course_context(course_id, *, root=None) -> dict:
+    """Return a valid lifecycle record, or the unavailable default.
+
+    Corrupt/foreign files are intentionally treated as absent, like every
+    other disposable mirror record.  This keeps a malformed lifecycle file
+    from authorizing cadence suppression.
+    """
+    document = _read_document(course_context_path(course_id, root),
+                              lambda d: validate_course_context(d, course_id))
+    return document if document is not None else default_course_context(course_id)
+
+
+def record_course_context(course_id, *, ok: bool, attempted_at: str | None = None,
+                          error_code: str = "", lifecycle: str = "unknown",
+                          course_workflow_state: str = "",
+                          course_concluded: bool = False, course_end_at: str = "",
+                          term_end_at: str = "", enrollment_states: list[str] | None = None,
+                          root=None) -> dict:
+    """Commit a lifecycle acquisition outcome without touching any other scope.
+
+    On failure this changes only the context envelope.  The prior successful
+    lifecycle proof remains available as stale context for conservative
+    concluded-course cadence suppression.
+    """
+    _require_dir(course_id, root)
+    attempted_at = attempted_at or now_iso()
+    with course_lock(course_id):
+        document = read_course_context(course_id, root=root)
+        document["last_attempt_at"] = attempted_at
+        if ok:
+            document.update({
+                "state": "current",
+                "last_success_at": attempted_at,
+                "error_code": "",
+                "lifecycle": lifecycle,
+                "course_workflow_state": course_workflow_state,
+                "course_concluded": course_concluded,
+                "course_end_at": course_end_at,
+                "term_end_at": term_end_at,
+                "enrollment_states": list(enrollment_states or []),
+            })
+        else:
+            document["state"] = "stale" if document["last_success_at"] else "unavailable"
+            document["error_code"] = error_code or "connection"
+        return _write_document(course_context_path(course_id, root),
+                               validate_course_context(document, course_id))
 
 
 def default_new_quiz_capability(course_id) -> dict:
