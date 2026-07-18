@@ -12,13 +12,15 @@ from ..local_request_guard import require_local_mutation
 from api.operation_ledger import (
     batches, executor, models, operations, registry,
 )
-from api.operation_ledger.adapters import PageAdapter, QuizAdapter
+from api.operation_ledger.adapters import PageAdapter, QuizAdapter, SweepAdapter
 
 # Ensure the adapter is registered (idempotent — __init__ also registers)
 if not registry.is_registered(PageAdapter.kind):
     registry.register(PageAdapter())
 if not registry.is_registered(QuizAdapter.kind):
     registry.register(QuizAdapter())
+if not registry.is_registered(SweepAdapter.kind):
+    registry.register(SweepAdapter())
 
 
 router = APIRouter(tags=["operations"])

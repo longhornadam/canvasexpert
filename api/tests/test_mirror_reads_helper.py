@@ -8,11 +8,11 @@ marks a pass fresh; a pinned old ISO string marks it stale.
 
 Slice-2 write-path finding (documented here, not just in the summary): tracing
 ``gradebook_service._sweep_compute``'s only consumer
-(``api/webui/routes/gradebook_sweep.py``'s ``/api/sweep/preview``) shows the
-paired ``/api/sweep/apply`` route writes straight from client-submitted
-``entries`` with **no fresh live re-read** before the ``_canvas_send`` PUT —
-unlike the operation-ledger sweep adapter, which always recomputes just before
-executing. A mirror-served preview could therefore feed a write built on
+(``api/webui/routes/gradebook_sweep.py``'s ``/api/sweep/preview``): the old
+direct-PUT ``/api/sweep/apply`` route (which wrote client-submitted ``entries``
+with no fresh live re-read) was removed in slice 00b — apply now goes through
+the operation-ledger sweep adapter, which always recomputes just before
+executing. A mirror-served preview must still never feed a write built on
 stale data, which locked decision 1 forbids. ``_sweep_compute`` is left fully
 live (unflipped); ``test_sweep_compute_is_not_flipped_and_stays_live`` locks
 that in. The same write-value analysis applies inside
@@ -278,12 +278,12 @@ def test_curve_apply_core_reads_audit_baseline_from_mirror(monkeypatch, tmp_path
 
 
 def test_sweep_compute_is_not_flipped_and_stays_live(monkeypatch, tmp_path):
-    """Locked decision: _sweep_compute feeds /api/sweep/preview, whose sibling
-    /api/sweep/apply writes client-submitted entries with no fresh live
-    re-read (api/webui/routes/gradebook_sweep.py). A stale mirror preview
-    could therefore seed a write. _sweep_compute must stay fully live even
-    when the mirror is fresh — this test fails loudly if a future edit
-    "helpfully" flips it without re-solving that gap."""
+    """Locked decision: _sweep_compute feeds /api/sweep/preview. The direct
+    /api/sweep/apply route is gone (slice 00b) and apply recomputes through
+    the operation-ledger sweep adapter, but the preview still frames the
+    teacher's review of a Canvas write, so _sweep_compute must stay fully
+    live even when the mirror is fresh — this test fails loudly if a future
+    edit "helpfully" flips it."""
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
     monkeypatch.setattr(routines_builtin.config, "get_combined_calendar_for_range",

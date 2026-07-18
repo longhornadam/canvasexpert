@@ -28,12 +28,32 @@
     };
   }
 
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="canvasexpert-csrf-token"]');
+    return meta ? meta.getAttribute("content") : "";
+  }
+
+  // Ledger mutation routes require the CSRF header (see routes/operations.py).
+  async function postJson(url, body) {
+    var r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CanvasExpert-CSRF": csrfToken(),
+      },
+      body: JSON.stringify(body),
+    });
+    var data = await r.json().catch(function () { return {}; });
+    if (!r.ok && !data.error) data.error = "HTTP " + r.status;
+    return data;
+  }
+
   function updateSweepApplyBtn() {
-    var n   = document.querySelectorAll(".sw-cb:checked").length;
+    var n   = gb.sweepEntries.length;
     var btn = document.getElementById("btn-sweep-apply");
     if (!btn) return;
     btn.hidden = n === 0;
-    btn.textContent = "Set lateness for " + n + " submission" + (n === 1 ? "" : "s") + "\u2026";
+    btn.textContent = "Set lateness for " + n + " late submission" + (n === 1 ? "" : "s") + "…";
   }
 
   // ── Sweep handlers ────────────────────────────────────────────────────
@@ -46,12 +66,12 @@
     var from = document.getElementById("sw-from")?.value;
     var to   = document.getElementById("sw-to")?.value;
     if (!from && !to) {
-      if (!confirm("No date range set \u2014 this will scan the entire course history and may be very slow. Continue?")) return;
+      if (!confirm("No date range set — this will scan the entire course history and may be very slow. Continue?")) return;
     }
     st.className = "status hint";
     st.textContent = from
-      ? "Scanning late work from " + from + " to " + (to || "now") + "\u2026"
-      : "Scanning all late work\u2026 (give it a moment)";
+      ? "Scanning late work from " + from + " to " + (to || "now") + "…"
+      : "Scanning all late work… (give it a moment)";
     this.disabled = true;
     document.getElementById("sw-table-wrap").hidden = true;
     gb.hideBanner(document.getElementById("sw-banner"));
@@ -62,91 +82,128 @@
       gb.sweepEntries = d.entries || [];
       if (!gb.sweepEntries.length) {
         st.className = "status ok";
-        st.textContent = "\u2713 No late submissions found in this date range \u2014 nothing to correct.";
+        st.textContent = "✓ No late submissions found in this date range — nothing to correct.";
         updateSweepApplyBtn();
         return;
       }
-      st.textContent = gb.sweepEntries.length + " late submission(s) found" +
-        " \u2014 uncheck rows you want to skip. No changes yet.";
+      st.textContent = gb.sweepEntries.length + " late submission(s) found. No changes yet — " +
+        "applying recomputes from current Canvas state and writes the whole set.";
       var tbody = document.getElementById("sw-tbody");
       tbody.innerHTML = "";
-      gb.sweepEntries.forEach(function (e, i) {
+      gb.sweepEntries.forEach(function (e) {
         var tr = document.createElement("tr");
         var excl = e.excluded || [];
         tr.title = excl.length
           ? "Excluded: " + excl.join(", ") + (e.extra_days ? " + " + e.extra_days + " extra-time day(s)" : "")
           : (e.extra_days ? "Extra-time: " + e.extra_days + " day(s) excused" : "");
         tr.innerHTML =
-          '<td><input type="checkbox" class="sw-cb" data-i="' + i + '" checked></td>' +
           '<td>' + gb.esc(e.student_name) + '</td>' +
           '<td>' + gb.esc(e.assignment_name) + '</td>' +
-          '<td class="muted">' + gb.esc(e.due) + ' \u2192 ' + gb.esc(e.submitted) + '</td>' +
+          '<td class="muted">' + gb.esc(e.due) + ' → ' + gb.esc(e.submitted) + '</td>' +
           '<td class="muted">' + e.canvas_days + '</td>' +
           '<td><strong>' + e.school_days + '</strong></td>' +
-          '<td class="muted" style="font-size:12px">' + (excl.length ? excl.join(", ") : "\u2014") + '</td>';
+          '<td class="muted" style="font-size:12px">' + (excl.length ? excl.join(", ") : "—") + '</td>';
         tbody.appendChild(tr);
       });
-      var all = document.getElementById("sw-check-all");
-      if (all) all.checked = true;
       document.getElementById("sw-table-wrap").hidden = false;
       updateSweepApplyBtn();
     } finally { this.disabled = false; }
   });
 
-  document.getElementById("sw-check-all")?.addEventListener("change", function () {
-    var checked = this.checked;
-    document.querySelectorAll(".sw-cb").forEach(function (cb) { cb.checked = checked; });
-    updateSweepApplyBtn();
-  });
-  document.getElementById("sw-tbody")?.addEventListener("change", function (e) {
-    if (e.target.classList.contains("sw-cb")) updateSweepApplyBtn();
-  });
-
   document.getElementById("btn-sweep-apply")?.addEventListener("click", async function () {
     if (!requireReady()) return;
-    var id   = gb.gbCourseId();
-    var rows = Array.from(document.querySelectorAll(".sw-cb:checked"))
-      .map(function (cb) { return gb.sweepEntries[+cb.dataset.i]; })
-      .filter(Boolean);
-    if (!rows.length) return;
-    var ok = await gb.canvasWriteReview({
-      title: "Review lateness override write",
-      action: "Set lateness overrides for " + rows.length + " selected submission(s).",
-      targets: typeof gb.gbTargets === "function" ? gb.gbTargets() : [{ id: id, name: gb.gbCourseName() }],
-      details: [
-        rows.length + " selected submission(s)",
-        "Date range: " + (document.getElementById("sw-from")?.value || "course start") + " to " +
-          (document.getElementById("sw-to")?.value || "now"),
-      ],
-      warnings: [
-        "This writes lateness overrides to Canvas.",
-        "Canvas recalculates each student's late penalty using the course late policy.",
-        "No direct score values are written by this action.",
-      ],
-      confirmText: "Set lateness overrides",
-    });
-    if (!ok) return;
+    var id = gb.gbCourseId();
+    if (!id) return alert("Pick a course first.");
+    var settings = sweepSettings();
     var log = gb.showLog(document.getElementById("sw-log"));
-    gb.hideBanner(document.getElementById("sw-banner"));
+    var banner = document.getElementById("sw-banner");
+    gb.hideBanner(banner);
     this.disabled = true;
-    log("Setting lateness override for " + rows.length + " submission(s)\u2026\n");
     try {
-      var d = await gb.postForm("/api/sweep/apply", { course_id: id, entries: JSON.stringify(rows) });
-      if (d.error && !d.results) {
-        log("ERROR: " + d.error);
-        gb.showBanner(document.getElementById("sw-banner"), "fail", "\u2717 " + gb.esc(d.error));
+      // 1. Prepare — the server recomputes the write set from current Canvas
+      //    state; the preview rows shown in the table are never sent.
+      log("Preparing sweep operation (server recomputes from current Canvas state)…");
+      var prep = await postJson("/api/operations/gradebook.sweep/prepare", {
+        payload: settings,
+        targets: [{ course_id: id }],
+      });
+      if (!prep.ok) {
+        log("ERROR: " + prep.error);
+        gb.showBanner(banner, "fail", "✗ " + gb.esc(prep.error || "prepare failed"));
         return;
       }
-      (d.results || []).forEach(function (r) {
-        log((r.ok ? "\u2713" : "\u2717") + " " + r.student + " \u2014 " + r.assignment + " \u2192 " + r.school_days + " school day(s) late" +
-        (r.ok ? "" : "  (" + r.error + ")"));
+      var frozen = (prep.review_summary && prep.review_summary.frozen_reviews || [])[0] || {};
+      var count = frozen.entry_count || 0;
+      log("Server found " + count + " late submission(s) to set" +
+          (frozen.skipped_count ? " (" + frozen.skipped_count + " skipped)" : "") + ".");
+      if (count !== gb.sweepEntries.length) {
+        log("⚠ Canvas changed since your preview: preview showed " + gb.sweepEntries.length +
+            ", the server now finds " + count + ".");
+      }
+      if (!count) {
+        gb.showBanner(banner, "ok", "✓ Nothing to write — no late submissions found at apply time.");
+        return;
+      }
+
+      // 2. Teacher review of the server-recomputed set.
+      var ok = await gb.canvasWriteReview({
+        title: "Review lateness override write",
+        action: "Set lateness overrides for " + count + " late submission(s) recomputed from current Canvas state.",
+        targets: typeof gb.gbTargets === "function" ? gb.gbTargets() : [{ id: id, name: gb.gbCourseName() }],
+        details: [
+          count + " late submission(s) found by the server just now",
+          "Date range: " + (settings.date_from || "course start") + " to " + (settings.date_to || "now"),
+        ],
+        warnings: [
+          "This writes lateness overrides to Canvas through the reviewed operation ledger.",
+          "The write set is recomputed on the server — the preview table is informational only.",
+          "Canvas recalculates each student's late penalty using the course late policy.",
+          "No direct score values are written by this action.",
+        ],
+        confirmText: "Set lateness overrides",
       });
-      var okCount = (d.results || []).filter(function (r) { return r.ok; }).length;
-      gb.showBanner(document.getElementById("sw-banner"), d.ok ? "ok" : "warn",
-        (d.ok ? "\u2713" : "\u26A0") + " " + okCount + "/" + rows.length + " lateness override(s) set \u2014 Canvas will apply its late policy.");
-      document.getElementById("sw-table-wrap").hidden = true;
-      gb.sweepEntries = [];
-      updateSweepApplyBtn();
+      if (!ok) { log("Cancelled — nothing written."); return; }
+
+      // 3. Freeze the review, then apply with the returned digest.
+      var rev = await postJson("/api/operation-batches/review",
+        { operation_ids: [prep.operation_id] });
+      if (!rev.ok) {
+        log("ERROR: " + rev.error);
+        gb.showBanner(banner, "fail", "✗ " + gb.esc(rev.error || "review failed"));
+        return;
+      }
+      log("Review frozen — applying…");
+      var applied = await postJson(
+        "/api/operation-batches/" + encodeURIComponent(rev.batch_id) + "/apply",
+        { review_digest: rev.review_digest });
+      if (applied.error && !applied.status) {
+        log("ERROR: " + applied.error);
+        gb.showBanner(banner, "fail", "✗ " + gb.esc(applied.error));
+        return;
+      }
+
+      var results = applied.target_results || [];
+      var drifted = results.some(function (t) { return t.error_code === "drift_detected"; });
+      results.forEach(function (t) {
+        log((t.state === "applied" ? "✓" : "✗") + " course target → " + t.state +
+            (t.error_code ? " (" + t.error_code + ")" : ""));
+      });
+      if (drifted) {
+        gb.showBanner(banner, "warn",
+          "⚠ Canvas changed between review and apply — nothing was written. Run preview again.");
+        return;
+      }
+      if (applied.status === "applied") {
+        gb.showBanner(banner, "ok",
+          "✓ Lateness override(s) set for " + count + " submission(s) — Canvas will apply its late policy.");
+        document.getElementById("sw-table-wrap").hidden = true;
+        gb.sweepEntries = [];
+        updateSweepApplyBtn();
+      } else {
+        gb.showBanner(banner, "warn",
+          "⚠ Sweep finished with status “" + gb.esc(applied.status || "unknown") +
+          "” — check Operations on the Home page for details.");
+      }
     } finally { this.disabled = false; }
   });
 

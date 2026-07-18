@@ -155,7 +155,6 @@
       <div id="sw-table-wrap" class="ce-gradebook-table-scroll" hidden>
         <table class="ce-table ce-gradebook-table">
           <thead><tr>
-            <th class="ce-gradebook-table-check"><input type="checkbox" id="sw-check-all" checked title="Toggle all"></th>
             <th>Student</th><th>Assignment</th><th>Due → Submitted</th>
             <th>Canvas days</th><th>School days</th><th>Excluded dates</th>
           </tr></thead>
@@ -163,6 +162,8 @@
         </table>
         <p class="ce-hint ce-gradebook-table-note">
           Hover a row for excluded date detail. "School days" is what will be sent to Canvas.
+          Applying recomputes the sweep from current Canvas state and writes every late
+          submission it finds — you review the recomputed count before anything is written.
         </p>
       </div>
       <pre id="sw-log" class="log" hidden></pre>

@@ -1,11 +1,19 @@
-"""Gradebook school-day sweep routes."""
+"""Gradebook school-day sweep routes.
+
+Preview only. Applying a sweep goes through the operation-ledger flow
+(``POST /api/operations/gradebook.sweep/prepare`` →
+``POST /api/operation-batches/review`` →
+``POST /api/operation-batches/{batch_id}/apply`` in
+``routes/operations.py``), where ``SweepAdapter`` recomputes the write set
+from authoritative Canvas state. Do not reintroduce a direct-PUT apply route
+that trusts browser-submitted entries.
+"""
 import json
 
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
 from .. import config
-from ..canvas_client import _canvas_send
 from ..gradebook_service import _sweep_compute
 
 router = APIRouter(tags=["gradebook"])
@@ -23,31 +31,3 @@ def sweep_preview(course_id: str = Form(...), settings: str = Form(...)):
     if err:
         return JSONResponse({"ok": False, "error": err})
     return JSONResponse({"ok": True, "entries": entries, "skipped": skipped})
-
-
-@router.post("/api/sweep/apply")
-def sweep_apply(course_id: str = Form(...), entries: str = Form(...)):
-    """Push seconds_late_override to Canvas for selected late submissions."""
-    try:
-        rows = json.loads(entries)
-    except json.JSONDecodeError as e:
-        return JSONResponse({"ok": False, "error": f"bad request: {e}"})
-    if not rows:
-        return JSONResponse({"ok": False, "error": "no rows selected"})
-
-    results = []
-    for r in rows:
-        _, err = _canvas_send(
-            "PUT",
-            f"/api/v1/courses/{course_id}/assignments/{r['assignment_id']}/submissions/{r['user_id']}",
-            {"submission": {
-                "late_policy_status": "late",
-                "seconds_late_override": r["seconds_override"],
-            }})
-        results.append({
-            "student": r.get("student_name", r["user_id"]),
-            "assignment": r.get("assignment_name", r["assignment_id"]),
-            "school_days": r["school_days"],
-            "ok": not err, "error": err,
-        })
-    return JSONResponse({"ok": all(x["ok"] for x in results), "results": results})

@@ -208,6 +208,7 @@ def gradebook_page(request: Request):
     all_gp.sort(key=lambda g: g["start"])
     return templates.TemplateResponse(request, "gradebook.html", {
         "nav_section":          "grade",
+        "csrf_token":           csrf_token(),
         "token_is_set":         config.token_is_set(),
         "canvas_base":          config.get_canvas_base(),
         "saved_courses":        config.active_courses(),

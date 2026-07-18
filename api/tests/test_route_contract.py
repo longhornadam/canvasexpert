@@ -84,7 +84,6 @@ EXPECTED = [
     ('/api/support-bundle', ('POST',)),
     ('/api/powergrader/refresh', ('POST',)),
     ('/api/powergrader/open-assignment-folder', ('POST',)),
-    ('/api/sweep/apply', ('POST',)),
     ('/api/sweep/preview', ('POST',)),
     ('/api/temp-upload', ('POST',)),
     ('/api/tier-tags', ('GET',)),

@@ -37,7 +37,6 @@ from .gradebook_policy import (
 from .gradebook_snapshot import api_gradebook, router as _snapshot_router
 from .gradebook_sweep import (
     router as _sweep_router,
-    sweep_apply,
     sweep_preview,
 )
 from ..gradebook_service import (
@@ -70,7 +69,6 @@ __all__ = [
     "save_tier_tags",
     "extend_due",
     "sweep_preview",
-    "sweep_apply",
     "curve_assignments",
     "curve_preview",
     "curve_apply",
