@@ -23,6 +23,7 @@ degrade the pass envelope (stale/unavailable) and never touch collections.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import time
 
 from api.assignment_collection import acquire_assignment_collection
 
@@ -136,6 +137,66 @@ def sync_assignment_submissions(course_id, assignment_id, *, canvas_get_all,
     return {"ok": True, "assignment_id": str(assignment_id),
             "submission_rows": len(rows or []),
             "submissions": len(document["submissions"])}
+
+
+def refresh_submissions_course_delta(course_id, *, canvas_get_all, root=None,
+                                     now=None) -> dict:
+    """Refresh the named ``submissions.course_delta`` scope only.
+
+    This deliberately reuses the last successful course-delta window without
+    advancing it.  A write-through refresh therefore converges private
+    submission facts promptly, while the ordinary delta pass remains the only
+    operation that can claim course-wide freshness for assignments and New
+    Quiz metadata.
+    """
+    started_monotonic = time.monotonic()
+
+    def _result(ok, *, logical_requests, changed_rows=0,
+                touched_assignments=None, **details):
+        return {
+            "ok": ok,
+            "scope": "submissions.course_delta",
+            "logical_requests": logical_requests,
+            "duration_ms": max(0, int((time.monotonic() - started_monotonic) * 1000)),
+            "changed_rows": changed_rows,
+            "touched_assignments": sorted(touched_assignments or []),
+            **details,
+        }
+
+    blocked = _guard(course_id, root)
+    if blocked:
+        return _result(False, logical_requests=0, error=blocked["error"])
+
+    watermarks = store.read_sync(course_id, root=root)["watermarks"]
+    if not watermarks["submitted_since"] or not watermarks["graded_since"]:
+        return _result(False, logical_requests=0, reason="requires_full")
+
+    started = now or store.now_iso()
+    try:
+        submitted, error = _fetch_submissions(
+            course_id, canvas_get_all,
+            submitted_since=watermarks["submitted_since"], with_history=True)
+    except Exception as exc:
+        return _result(False, logical_requests=1, error_code=_error_code(str(exc)))
+    if error:
+        return _result(False, logical_requests=1, error_code=_error_code(error))
+
+    try:
+        graded, error = _fetch_submissions(
+            course_id, canvas_get_all,
+            graded_since=watermarks["graded_since"], with_history=False)
+    except Exception as exc:
+        return _result(False, logical_requests=2, error_code=_error_code(str(exc)))
+    if error:
+        return _result(False, logical_requests=2, error_code=_error_code(error))
+
+    grouped = _group_by_assignment(list(submitted or []) + list(graded or []))
+    for assignment_id, rows in grouped.items():
+        store.merge_submissions(course_id, assignment_id, rows, root=root,
+                                attempted_at=started, replace=False)
+    return _result(True, logical_requests=2,
+                   changed_rows=len(submitted or []) + len(graded or []),
+                   touched_assignments=grouped)
 
 
 def _group_by_assignment(rows) -> dict[str, list[dict]]:

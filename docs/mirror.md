@@ -96,7 +96,11 @@ heartbeat) ticks every 15 minutes for Current courses only:
 - otherwise **delta** every tick, plus **roster** daily
 - `notify_course_changed(course_id)` — write-through hook: after CanvasExpert
   itself pushes grades (PowerGrader push, curve apply/revert), a short-delay
-  delta teaches the mirror its own actions without waiting for the next tick.
+  `submissions.course_delta` refresh issues only the overlapping submitted and
+  graded collection questions. It does not fetch assignment structure or New
+  Quiz metadata, and it deliberately leaves the general delta pass and
+  watermarks unchanged; the next ordinary delta remains the course-wide
+  freshness authority.
 
 Config (machine-local): `mirror_enabled` (default true),
 `mirror_serve_max_age_hours` (default 6 — older than this, readers fall back

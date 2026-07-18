@@ -153,10 +153,13 @@ def refresh_work_findings() -> None:
 
 def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECONDS,
                           canvas_get_all_complete=None):
-    """Write-through hook: after CanvasExpert itself writes to Canvas, run a
-    short-delay delta so the mirror learns its own actions without waiting
-    for the next tick. Fire-and-forget; never raises into the caller."""
-    canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
+    """Write-through hook for a narrow post-write submission refresh.
+
+    The ordinary heartbeat still owns the full delta pass.  This delayed,
+    fire-and-forget hook must not imply structure or New Quiz freshness.
+    ``canvas_get_all_complete`` remains an accepted compatibility seam for
+    existing callers, but targeted submission refresh does not use it.
+    """
 
     def _run():
         try:
@@ -164,8 +167,8 @@ def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECO
                 return
             if workspace.workspace_root() is None:
                 return
-            sync.delta_pass(str(course_id), canvas_get_all=_canvas_get_all,
-                            canvas_get_all_complete=canvas_get_all_complete)
+            sync.refresh_submissions_course_delta(
+                str(course_id), canvas_get_all=_canvas_get_all)
         except Exception:
             pass
 

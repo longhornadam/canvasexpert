@@ -433,24 +433,131 @@ def test_refresh_work_findings_gated_off_when_disabled(monkeypatch, tmp_path):
 
 # --- write-through notify -------------------------------------------------------------
 
-def test_notify_course_changed_runs_a_delta_after_delay(monkeypatch, tmp_path):
+def _seed_delta_watermarks():
+    store.record_pass(
+        "111", "delta", ok=True, attempted_at="2026-07-16T11:00:00Z",
+        watermarks={"submitted_since": "2026-07-16T10:50:00Z",
+                    "graded_since": "2026-07-16T10:50:00Z"},
+    )
+
+
+def _submission_row(*, assignment_id=700010, user_id=900001):
+    return {
+        "assignment_id": assignment_id, "user_id": user_id,
+        "workflow_state": "submitted", "submitted_at": NOW,
+        "graded_at": None, "score": None, "grade": None, "late": False,
+        "missing": False, "excused": False, "attempt": 1,
+        "grade_matches_current_submission": True,
+        "submission_type": "online_text_entry", "body": "Draft.",
+    }
+
+
+def test_notify_course_changed_runs_targeted_submission_delta_after_delay(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
-    ran = []
+    _seed_delta_watermarks()
+    before = store.read_sync("111")
+    canvas = FakeCanvas()
     receipt = lambda *args, **kwargs: ([], None, True)
-    monkeypatch.setattr(mirror_service.sync, "delta_pass",
-                        lambda cid, *, canvas_get_all, canvas_get_all_complete, now=None:
-                        ran.append((cid, canvas_get_all_complete)) or {"ok": True})
+    monkeypatch.setattr(mirror_service, "_canvas_get_all", canvas)
     timer = mirror_service.notify_course_changed(
         "111", delay_seconds=0.01, canvas_get_all_complete=receipt)
     timer.join(timeout=5)
-    assert ran == [("111", receipt)]
+    assert canvas.calls == [
+        "/api/v1/courses/111/students/submissions",
+        "/api/v1/courses/111/students/submissions",
+    ]
+    assert store.read_sync("111") == before
+
+
+def test_targeted_submission_delta_returns_sanitized_summary_without_advancing_pass(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    _seed_delta_watermarks()
+    before = store.read_sync("111")
+    calls = []
+
+    def canvas(path, params=None, timeout=30):
+        calls.append((path, dict(params or {})))
+        assert path.endswith("/students/submissions")
+        if "submitted_since" in params:
+            return [_submission_row()], None
+        assert "graded_since" in params
+        return [], None
+
+    result = mirror_service.sync.refresh_submissions_course_delta(
+        "111", canvas_get_all=canvas, now=NOW)
+
+    assert result == {
+        "ok": True,
+        "scope": "submissions.course_delta",
+        "logical_requests": 2,
+        "duration_ms": result["duration_ms"],
+        "changed_rows": 1,
+        "touched_assignments": ["700010"],
+    }
+    assert result["duration_ms"] >= 0
+    assert [params for _path, params in calls] == [
+        {"student_ids[]": "all", "per_page": 100,
+         "include[]": ["submission_history"],
+         "submitted_since": "2026-07-16T10:50:00Z"},
+        {"student_ids[]": "all", "per_page": 100,
+         "graded_since": "2026-07-16T10:50:00Z"},
+    ]
+    document = store.read_submissions("111", "700010")
+    assert document["submissions"]["900001"]["current"]["body"] == "Draft."
+    replay = mirror_service.sync.refresh_submissions_course_delta(
+        "111", canvas_get_all=canvas, now=NOW)
+    assert replay["ok"] is True
+    assert store.read_submissions("111", "700010") == document
+    assert store.read_sync("111") == before
+
+
+def test_targeted_submission_delta_requires_full_without_canvas_requests(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    called = []
+    result = mirror_service.sync.refresh_submissions_course_delta(
+        "111", canvas_get_all=lambda *args, **kwargs: called.append(1))
+
+    assert result["ok"] is False
+    assert result["scope"] == "submissions.course_delta"
+    assert result["reason"] == "requires_full"
+    assert result["logical_requests"] == 0
+    assert result["changed_rows"] == 0
+    assert result["touched_assignments"] == []
+    assert result["duration_ms"] >= 0
+    assert called == []
+
+
+def test_targeted_submission_delta_second_request_failure_does_not_merge_or_advance(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    _seed_delta_watermarks()
+    before = store.read_sync("111")
+    calls = []
+
+    def canvas(path, params=None, timeout=30):
+        calls.append(path)
+        if "submitted_since" in params:
+            return [_submission_row()], None
+        return None, "HTTP 503: upstream"
+
+    result = mirror_service.sync.refresh_submissions_course_delta(
+        "111", canvas_get_all=canvas, now=NOW)
+
+    assert result["ok"] is False
+    assert result["logical_requests"] == 2
+    assert result["error_code"] == "canvas_unavailable"
+    assert store.read_submissions("111", "700010") is None
+    assert store.read_sync("111") == before
+    assert calls == [
+        "/api/v1/courses/111/students/submissions",
+        "/api/v1/courses/111/students/submissions",
+    ]
 
 
 def test_notify_is_a_no_op_when_disabled(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
     monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: False)
     ran = []
-    monkeypatch.setattr(mirror_service.sync, "delta_pass",
+    monkeypatch.setattr(mirror_service.sync, "refresh_submissions_course_delta",
                         lambda *a, **k: ran.append(1) or {"ok": True})
     timer = mirror_service.notify_course_changed("111", delay_seconds=0.01)
     timer.join(timeout=5)
