@@ -14,13 +14,16 @@ operation-ledger sweep adapter) do not use this module — locked decision 1.
 from __future__ import annotations
 
 from api.mirror import queries as mirror_queries
+from api.mirror import read_service
 
 from .canvas_client import _canvas_get_all
 
 
 def students_or_live(course_id):
     """``(rows, error, source)`` — course roster, mirror-first."""
-    if mirror_queries.roster_freshness(course_id):
+    state = read_service.private_roster(
+        course_id, max_age_hours=mirror_queries._serve_max_age_hours())
+    if state["state"] == "current":
         rows, error = mirror_queries.course_students(course_id)
         if not error and isinstance(rows, list):
             return rows, None, "mirror"
@@ -32,7 +35,9 @@ def students_or_live(course_id):
 
 def assignments_or_live(course_id):
     """``(rows, error, source)`` — course assignment index, mirror-first."""
-    if mirror_queries.data_freshness(course_id):
+    state = read_service.private_assignments(
+        course_id, max_age_hours=mirror_queries._serve_max_age_hours())
+    if state["state"] == "current":
         rows, error = mirror_queries.course_assignments(course_id)
         if not error and isinstance(rows, list):
             return rows, None, "mirror"
@@ -43,7 +48,9 @@ def assignments_or_live(course_id):
 
 def submissions_or_live(course_id):
     """``(rows, error, source)`` — all course submissions, mirror-first."""
-    if mirror_queries.data_freshness(course_id):
+    state = read_service.private_submissions(
+        course_id, max_age_hours=mirror_queries._serve_max_age_hours())
+    if state["state"] == "current":
         rows, error = mirror_queries.course_submissions(course_id)
         if not error and isinstance(rows, list):
             return rows, None, "mirror"

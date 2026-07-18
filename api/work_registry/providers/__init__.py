@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 from api.mirror import queries as mirror_queries
+from api.mirror import read_service
 from api.work_registry.models import material_version, stable_fingerprint, validate_job
 
 
@@ -111,11 +112,16 @@ def _mirror_rows(kind: str, course_id: str) -> list | None:
     so the caller falls back to the existing live call unchanged."""
     try:
         if kind == "users":
-            if not mirror_queries.roster_freshness(course_id):
+            state = read_service.private_roster(
+                course_id, max_age_hours=mirror_queries._serve_max_age_hours())
+            if state["state"] != "current":
                 return None
             rows, error = mirror_queries.course_students(course_id)
         else:
-            if not mirror_queries.data_freshness(course_id):
+            scope = (read_service.private_assignments if kind == "assignments"
+                     else read_service.private_submissions)
+            state = scope(course_id, max_age_hours=mirror_queries._serve_max_age_hours())
+            if state["state"] != "current":
                 return None
             if kind == "assignments":
                 rows, error = mirror_queries.course_assignments(course_id)

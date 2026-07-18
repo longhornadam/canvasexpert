@@ -164,6 +164,30 @@ def test_get_course_assignments_happy(monkeypatch):
     }]
 
 
+def test_get_course_assignments_uses_catalog_read_scope(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    document = _catalog_document(
+        {"700010": {"id": 700010, "name": "Quiz 1", "description_text": "desc",
+                    "points_possible": 10, "due_at": "", "published": True}},
+        [],
+    )
+    read_result = {"catalog": document, "source": "canonical", "warnings": []}
+    calls = []
+    monkeypatch.setattr(tools, "read_catalog", lambda course_id: read_result)
+
+    def catalog_assignments(course_id, *, catalog_reader=None):
+        calls.append(course_id)
+        assert catalog_reader(course_id) is read_result
+        return {
+            "source": "catalog", "records": list(document["assignments"]["records"].values()),
+        }
+
+    monkeypatch.setattr(tools.read_service, "catalog_assignments", catalog_assignments)
+
+    assert tools.get_course_assignments("111")["ok"] is True
+    assert calls == ["111"]
+
+
 def test_get_course_assignments_trims_long_descriptions(monkeypatch):
     _set_active_courses(monkeypatch, ["111"])
     long_description = "word " * 200  # 1000 chars, well past the preview cut

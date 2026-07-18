@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from . import store
+from . import read_service, store
 
 MIRROR_UNAVAILABLE = "mirror unavailable for this course"
 
@@ -25,42 +25,40 @@ def _serve_max_age_hours() -> float:
         return 6.0
 
 
-def _fresh(synced_at: str, max_age_hours: float | None, now: str | None) -> str:
-    limit = max_age_hours if max_age_hours is not None else _serve_max_age_hours()
-    age = store.age_hours(synced_at, now)
-    return synced_at if age is not None and age < limit else ""
-
-
 def data_freshness(course_id, *, root=None, max_age_hours=None, now=None) -> str:
     """``synced_at`` of the newest successful data pass (full or delta) when
     within the serve threshold, else ''. ISO-Z strings compare lexically."""
-    passes = store.read_sync(course_id, root=root)["passes"]
-    synced_at = max(passes["full"]["last_success_at"],
-                    passes["delta"]["last_success_at"])
-    return _fresh(synced_at, max_age_hours, now)
+    result = read_service.private_submissions(
+        course_id, root=root,
+        max_age_hours=max_age_hours if max_age_hours is not None else _serve_max_age_hours(),
+        now=now,
+    )
+    return result["last_success_at"] if result["state"] == "current" else ""
 
 
 def roster_freshness(course_id, *, root=None, max_age_hours=None, now=None) -> str:
-    passes = store.read_sync(course_id, root=root)["passes"]
-    synced_at = max(passes["roster"]["last_success_at"],
-                    passes["full"]["last_success_at"])
-    return _fresh(synced_at, max_age_hours, now)
+    result = read_service.private_roster(
+        course_id, root=root,
+        max_age_hours=max_age_hours if max_age_hours is not None else _serve_max_age_hours(),
+        now=now,
+    )
+    return result["last_success_at"] if result["state"] == "current" else ""
 
 
 # --- the gradebook_queries interface, mirror-backed ---------------------------
 
 def course_students(course_id, *, root=None):
-    document = store.read_roster(course_id, root=root)
-    if document is None:
+    result = read_service.private_roster(course_id, root=root)
+    if result["source"] == "none":
         return None, MIRROR_UNAVAILABLE
-    return list(document["students"].values()), None
+    return result["records"], None
 
 
 def course_assignments(course_id, *, root=None):
-    document = store.read_assignments(course_id, root=root)
-    if document is None:
+    result = read_service.private_assignments(course_id, root=root)
+    if result["source"] == "none":
         return None, MIRROR_UNAVAILABLE
-    return list(document["assignments"].values()), None
+    return result["records"], None
 
 
 def course_submissions(course_id, *, root=None):
@@ -71,25 +69,15 @@ def course_submissions(course_id, *, root=None):
     pruned from disk. A missing/corrupt index already returns unavailable
     above (last-good rules unchanged); filtering only ever narrows the
     directory listing, never invents rows for ids the index doesn't have."""
-    assignments = store.read_assignments(course_id, root=root)
-    if assignments is None:
+    result = read_service.private_submissions(course_id, root=root)
+    if result["source"] == "none":
         return None, MIRROR_UNAVAILABLE
-    valid_ids = set(assignments["assignments"])
-    rows = []
-    for assignment_id in store.list_submission_assignment_ids(course_id, root=root):
-        if assignment_id not in valid_ids:
-            continue
-        document = store.read_submissions(course_id, assignment_id, root=root)
-        if document is None:
-            continue
-        rows.extend(entry["current"]
-                    for _, entry in sorted(document["submissions"].items()))
-    return rows, None
+    return result["records"], None
 
 
 def assignment(course_id, assignment_id, *, root=None):
-    document = store.read_assignments(course_id, root=root)
-    row = (document or {}).get("assignments", {}).get(str(assignment_id))
+    result = read_service.private_assignments(course_id, root=root)
+    row = next((entry for entry in result["records"] if str(entry.get("id")) == str(assignment_id)), None)
     if row is None:
         return None, MIRROR_UNAVAILABLE
     return row, None
@@ -101,14 +89,25 @@ def assignment_submissions(course_id, assignment_id, *, root=None):
     today (last-good rules — the index simply doesn't gate this read), but a
     present index that no longer lists ``assignment_id`` reports unavailable
     even if an orphan submission file is still on disk."""
-    assignments = store.read_assignments(course_id, root=root)
-    if assignments is not None and str(assignment_id) not in assignments["assignments"]:
+    assignments = read_service.private_assignments(course_id, root=root)
+    if assignments["source"] != "none" and not any(
+        str(entry.get("id")) == str(assignment_id) for entry in assignments["records"]
+    ):
         return None, MIRROR_UNAVAILABLE
-    document = store.read_submissions(course_id, assignment_id, root=root)
-    if document is None:
+    # The established single-assignment compatibility read remains useful when
+    # a missing/corrupt assignment index cannot prove membership either way.
+    # It deliberately does not turn a local read into a Canvas call.
+    if assignments["source"] == "none":
+        document = store.read_submissions(course_id, assignment_id, root=root)
+        if document is None:
+            return None, MIRROR_UNAVAILABLE
+        return [entry["current"]
+                for _, entry in sorted(document["submissions"].items())], None
+    submissions = read_service.private_submissions(course_id, root=root)
+    if submissions["source"] == "none":
         return None, MIRROR_UNAVAILABLE
-    return [entry["current"]
-            for _, entry in sorted(document["submissions"].items())], None
+    return [entry for entry in submissions["records"]
+            if str(entry.get("assignment_id")) == str(assignment_id)], None
 
 
 def snapshot_queries(course_id, *, root=None, max_age_hours=None, now=None):

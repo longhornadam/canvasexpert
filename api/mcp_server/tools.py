@@ -19,11 +19,12 @@ from contextlib import contextmanager
 
 from api import course_scope, gradebook_queries, gradebook_snapshot, roster_service
 from api.mirror import queries as mirror_queries
+from api.mirror import read_service
 from api.mirror import store as mirror_store
 from api.webui import config, workspace
 from api.webui.canvas_client import _canvas_get_all
 from api import feedback_vault
-from api.course_catalog import public_projection, read_catalog
+from api.course_catalog import read_catalog
 
 from . import pseudonym
 
@@ -285,8 +286,10 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> d
     if err:
         return {"ok": False, "error": err}
 
-    projection = public_projection(read_catalog(course_id), course_id=course_id)
-    if not projection.get("available"):
+    read_result = read_catalog(course_id)
+    scope = read_service.catalog_assignments(
+        course_id, catalog_reader=lambda _course_id: read_result)
+    if scope["source"] == "none":
         return {
             "ok": False,
             "error": ("No local course catalog found for this course. Refresh "
@@ -304,12 +307,12 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> d
             "points_possible": a.get("points_possible"),
             "published": a.get("published", True),
         }
-        for a in projection.get("assignments", [])
+        for a in scope["records"]
     ]
     return {
         "ok": True,
-        "course_id": str(projection.get("course_id") or course_id),
-        "course_name": projection.get("course_name", ""),
+        "course_id": str((read_result.get("catalog") or {}).get("course_id") or course_id),
+        "course_name": str((read_result.get("catalog") or {}).get("course_name") or ""),
         "assignments": _tabulate(assignments, _ASSIGNMENT_COLUMNS),
     }
 
