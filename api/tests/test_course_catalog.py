@@ -625,6 +625,9 @@ def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
     client = TestClient(app, base_url="http://127.0.0.1:8765")
     calls = []
     refresh_calls = []
+    mirror_calls = []
+    assignment_calls = []
+    receipt = ([{"id": "101"}], None, True)
     monkeypatch.setattr(course_catalog_routes.config, "active_courses", lambda: [{"id": "course-1", "name": "Fictional Course"}])
 
     def fake_read(course_id):
@@ -636,16 +639,24 @@ def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
         course_catalog_routes, "_canvas_get_all",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GET contacted Canvas")),
     )
-    monkeypatch.setattr(
-        course_catalog_routes, "_canvas_get_all_complete",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GET contacted complete Canvas")),
-    )
+    def complete_assignments(path, params):
+        assignment_calls.append((path, params))
+        return receipt
 
-    def fake_refresh(course_id, course_name, *, canvas_get_all, canvas_get_all_complete):
-        refresh_calls.append((course_id, course_name, canvas_get_all, canvas_get_all_complete))
+    monkeypatch.setattr(course_catalog_routes, "_canvas_get_all_complete", complete_assignments)
+
+    def fake_refresh(course_id, course_name, *, canvas_get_all, canvas_get_all_complete,
+                     assignment_receipt):
+        refresh_calls.append((course_id, course_name, canvas_get_all, canvas_get_all_complete,
+                              assignment_receipt))
         return {"catalog": None, "source": "none", "warnings": []}
 
     monkeypatch.setattr(course_catalog_routes.course_catalog, "refresh_catalog", fake_refresh)
+    monkeypatch.setattr(
+        course_catalog_routes.mirror_sync,
+        "apply_assignment_collection_receipt",
+        lambda course_id, received_receipt: mirror_calls.append((course_id, received_receipt)) or {"ok": True},
+    )
 
     allowed = client.get("/api/course-catalog", params={"course_id": "course-1"}).json()
     refreshed = client.post("/api/course-catalog/refresh", data={"course_id": "course-1"}).json()
@@ -659,5 +670,8 @@ def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
     assert refresh_calls[0][0:2] == ("course-1", "Fictional Course")
     assert refresh_calls[0][2] is course_catalog_routes._canvas_get_all
     assert refresh_calls[0][3] is course_catalog_routes._canvas_get_all_complete
+    assert refresh_calls[0][4] is receipt
+    assert assignment_calls == [("/api/v1/courses/course-1/assignments", {"per_page": 100})]
+    assert mirror_calls == [("course-1", receipt)]
     assert blocked_get == {"ok": False, "error": "Select a saved current course first."}
     assert blocked_post == blocked_get

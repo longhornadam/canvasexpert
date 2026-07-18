@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from api.assignment_collection import acquire_assignment_collection
+
 # Reuse the catalog's transport-error -> stable-code mapping so diagnostics
 # read the same across both mirrors of Canvas data.
 from api.course_catalog import _error_code
@@ -49,8 +51,7 @@ def _overlapped(iso_z: str) -> str:
 
 
 def _fetch_assignments(course_id, canvas_get_all_complete):
-    return canvas_get_all_complete(
-        f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
+    return acquire_assignment_collection(course_id, canvas_get_all_complete)
 
 
 def _assignment_receipt_error(rows, error, complete) -> str:
@@ -207,6 +208,35 @@ def _commit_assignment_index(course_id, assignments, *, root, attempted_at) -> t
         "orphans_pruned": pruned,
     }
     return document, diagnostics
+
+
+def apply_assignment_collection_receipt(
+    course_id,
+    receipt,
+    *,
+    root=None,
+    attempted_at=None,
+) -> dict:
+    """Apply an already-acquired receipt to mirror membership only.
+
+    This deliberately does not establish any sync-pass freshness, reconcile
+    submissions, or perform New Quiz work.
+    """
+    rows, error, complete = receipt
+    assignment_error = _assignment_receipt_error(rows, error, complete)
+    if assignment_error:
+        return {"ok": False, "error": assignment_error}
+    document, diagnostics = _commit_assignment_index(
+        course_id,
+        rows,
+        root=root,
+        attempted_at=attempted_at or store.now_iso(),
+    )
+    return {
+        "ok": True,
+        "assignments": len(document["assignments"]),
+        "assignment_changes": diagnostics,
+    }
 
 
 def _skipped_lifecycle_new_quizzes(course_id, *, root=None) -> dict:

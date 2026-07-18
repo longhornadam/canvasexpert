@@ -20,6 +20,11 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
 
+from api.assignment_collection import (
+    ASSIGNMENTS_PATH,
+    AssignmentCollectionReceipt,
+    acquire_assignment_collection,
+)
 from api.webui import workspace
 
 
@@ -41,7 +46,6 @@ RUBRIC_SETTINGS_KEYS = {
 MODULE_KEYS = {"id", "name", "position", "items"}
 MODULE_ITEM_KEYS = {"id", "type", "title", "position", "content_id"}
 
-ASSIGNMENTS_PATH = "/api/v1/courses/{course_id}/assignments"
 MODULES_PATH = "/api/v1/courses/{course_id}/modules"
 MODULE_ITEMS_PATH = "/api/v1/courses/{course_id}/modules/{module_id}/items"
 MODULE_ITEM_CONCURRENCY = 3
@@ -429,7 +433,17 @@ def _acquire_assignments(
     attempted_at: str,
     previous_scope: dict | None,
 ) -> dict:
-    rows, error, complete = canvas_get_all_complete(ASSIGNMENTS_PATH.format(course_id=course_id), {"per_page": 100})
+    rows, error, complete = acquire_assignment_collection(course_id, canvas_get_all_complete)
+    return _assignment_scope_from_receipt(rows, error, complete, attempted_at, previous_scope)
+
+
+def _assignment_scope_from_receipt(
+    rows,
+    error,
+    complete,
+    attempted_at: str,
+    previous_scope: dict | None,
+) -> dict:
     failure = _top_level_failure(error, complete, rows, previous_scope, attempted_at, empty_records={})
     if failure is not None:
         return failure
@@ -695,8 +709,9 @@ def refresh_catalog(
     canvas_get_all_complete: CanvasGetAllComplete,
     root=None,
     attempted_at: str | None = None,
+    assignment_receipt: AssignmentCollectionReceipt | None = None,
 ) -> dict:
-    """Acquire both scopes concurrently, merge independently, validate, and persist."""
+    """Refresh both scopes, optionally using one already-acquired assignment receipt."""
     course_id = str(course_id or "").strip()
     if not course_id:
         raise ValueError("course_id_required")
@@ -707,13 +722,19 @@ def refresh_catalog(
         previous_assignments = previous.get("assignments") if isinstance(previous, dict) else None
         previous_modules = previous.get("modules") if isinstance(previous, dict) else None
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="course-catalog") as executor:
-            assignment_future = executor.submit(
-                _acquire_assignments, course_id, canvas_get_all_complete, timestamp, previous_assignments,
-            )
             module_future = executor.submit(
                 _acquire_modules, course_id, canvas_get_all, canvas_get_all_complete, timestamp, previous_modules,
             )
-            assignments = assignment_future.result()
+            if assignment_receipt is None:
+                assignment_future = executor.submit(
+                    _acquire_assignments, course_id, canvas_get_all_complete, timestamp, previous_assignments,
+                )
+                assignments = assignment_future.result()
+            else:
+                rows, error, complete = assignment_receipt
+                assignments = _assignment_scope_from_receipt(
+                    rows, error, complete, timestamp, previous_assignments,
+                )
             modules = module_future.result()
         document = {
             "version": CATALOG_VERSION,

@@ -71,6 +71,13 @@ store merges are idempotent so overlap duplicates are harmless. Failures
 degrade the pass envelope (`stale` after a prior success, `unavailable`
 before one) and never touch collection files.
 
+The Current-course Course Catalog refresh can acquire one complete assignment
+collection and forward its in-memory receipt to the Catalog and this mirror's
+assignment-membership commit. The mirror applies the existing complete-receipt
+validation and membership writer only: it does not update a pass envelope or
+watermark, reconcile submissions, or perform New Quiz work. The two local
+projection commits are independent rather than transactional.
+
 **Attempt history is append-only** within a living submission: students who
 resubmit accumulate `attempts` keyed by attempt number, which survive full-
 pass rewrites. This is the substrate for regrade queues, revision chains, and

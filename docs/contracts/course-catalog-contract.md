@@ -101,12 +101,16 @@ module-item keys before storage.
 
 ## Acquisition and writes
 
-A refresh concurrently requests the complete assignment collection and the complete module
-collection. Only a successful, complete list receipt may replace top-level membership; a
-transport failure, incomplete pagination, or invalid collection root leaves last-good records
-in place. Modules request `include[]=items`; modules that omit the field use a fixed,
-small-concurrency module-items fallback. Refresh never performs assignment-detail N+1
-requests and never performs a Canvas mutation.
+A standalone Catalog refresh concurrently requests the complete assignment collection and
+the complete module collection. The Current-course Catalog refresh acquires the assignment
+collection once and forwards that in-memory receipt to the Catalog and private mirror
+assignment-membership projections. Each validates and commits independently: this is not a
+transaction, and a local failure in one does not roll back the other. Only a successful,
+complete list receipt may replace top-level membership; a transport failure, incomplete
+pagination, or invalid collection root leaves last-good records in place. Modules request
+`include[]=items`; modules that omit the field use a fixed, small-concurrency module-items
+fallback. Refresh never performs assignment-detail N+1 requests and never performs a Canvas
+mutation.
 
 `GET /api/course-catalog?course_id=...` is disk-only. `POST
 /api/course-catalog/refresh` performs the read-only acquisition. Both routes enforce the
