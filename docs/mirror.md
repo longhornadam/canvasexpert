@@ -105,6 +105,17 @@ Course Info's assignments, students, and group sets each read their local projec
 current/fresh, independently falling back to its own existing live Canvas call otherwise —
 email stays a removed, live-only-if-ever-added field; modules stay live.
 
+Gradebook's late-policy panel reads a small student-free `late_policy.v1.json` projection
+(1.0beta-04a; seven allowlisted Canvas `late_policy` fields only, via
+`api/mirror/store.py`'s `read_late_policy`/`write_late_policy`/`late_policy_is_current`,
+its own file rather than widening the Course Catalog contract) with acquire-on-read
+semantics (mirroring `list_groups`): serve it when its own `state` is `current`, otherwise
+live-fetch and seed it. Applying a late policy stays fully live and, after a verified
+success, invalidates only that course's projection (never blind-refreshes from the
+submitted payload) so a failed reconcile leaves the scope stale rather than falsely
+current. The extra-time student list (`GET /api/students/list`) reads the same roster
+mirror as Course Info's student list, live only when the roster is not `current`.
+
 **Attempt history is append-only** within a living submission: students who
 resubmit accumulate `attempts` keyed by attempt number, which survive full-
 pass rewrites. This is the substrate for regrade queues, revision chains, and

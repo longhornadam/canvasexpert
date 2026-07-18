@@ -5,16 +5,22 @@ from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
 from .. import config
-from .gradebook_common import _course_students
+from .gradebook_common import _course_students, _roster_students_or_none
 
 router = APIRouter(tags=["gradebook"])
 
 
 @router.get("/api/students/list")
 def list_students(course_id: str):
-    students, err = _course_students(course_id)
-    if err:
-        return JSONResponse({"ok": False, "error": err})
+    """Roster-mirror-first student list (no live call when the roster mirror
+    is current); falls back to the existing live ``_course_students`` call
+    otherwise. No ``email`` field either way — the mirror never stores it,
+    and this route never selected it out of the live rows."""
+    students = _roster_students_or_none(course_id)
+    if students is None:
+        students, err = _course_students(course_id)
+        if err:
+            return JSONResponse({"ok": False, "error": err})
     out = sorted(
         ({"id": str(s["id"]),
           "name": s.get("sortable_name") or s.get("name", "")} for s in students),
