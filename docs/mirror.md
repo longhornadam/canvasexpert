@@ -82,6 +82,10 @@ validation and membership writer only: it does not update a pass envelope or
 watermark, reconcile submissions, or perform New Quiz work. The two local
 projection commits are independent rather than transactional.
 
+Create's module picker reads the Course Catalog only when its modules scope is exactly
+`current`; missing or non-current catalog state falls back to the existing live Canvas
+lookup. This display-only read never authorizes module placement or another write.
+
 **Attempt history is append-only** within a living submission: students who
 resubmit accumulate `attempts` keyed by attempt number, which survive full-
 pass rewrites. This is the substrate for regrade queues, revision chains, and
