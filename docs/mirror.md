@@ -66,6 +66,10 @@ cross-machine conflict to a single disposable file.
   costs zero requests forever.
 - **roster** — students + sections; rosters rarely change, so daily.
 
+Roster uses the private roster document only when its state is exactly `current` for
+student and section reads; Canvas groups remain live. Missing, corrupt, or non-current
+mirror state follows the existing live student/section path.
+
 Watermarks advance only on success, to pass-start minus a 10-minute overlap;
 store merges are idempotent so overlap duplicates are harmless. Failures
 degrade the pass envelope (`stale` after a prior success, `unavailable`

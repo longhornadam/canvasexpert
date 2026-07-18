@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from api import feedback_scrub
 from api import roster_service
+from api.mirror import store as mirror_store
 from .. import config
 from ..canvas_client import _canvas_get_all, _canvas_headers, _canvas_send
 from .courses import load_group_categories
@@ -125,17 +126,21 @@ def roster_get(course_id: str = Query("")):
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
 
-    vault = _vault()
-    users, err = _fetch_students(course_id)
-    if err:
-        return JSONResponse({"ok": False, "error": f"Canvas fetch failed: {err}"})
+    roster_document = mirror_store.read_roster(course_id)
+    if roster_document is not None and roster_document.get("state") == "current":
+        users = list(roster_document["students"].values())
+        section_map = roster_document["sections"]
+    else:
+        users, err = _fetch_students(course_id)
+        if err:
+            return JSONResponse({"ok": False, "error": f"Canvas fetch failed: {err}"})
+        section_map = _fetch_sections(course_id)
 
+    vault = _vault()
     with vault.transaction():
         _upsert_roster(vault, users)
         vault_entries_list = vault.entries()
 
-    # Sections
-    section_map = _fetch_sections(course_id)
     enrollment_secs = _enrollment_section_ids(users)
 
     # Groups (V3: now used for tier/group assignment)

@@ -191,6 +191,82 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     assert "Groups" not in str(data.get("groups", ""))
 
 
+def test_roster_get_uses_current_mirror_before_live_students_and_sections(
+    monkeypatch, isolated_roster,
+):
+    roster_document = {
+        "state": "current",
+        "students": {
+            "101": {
+                "id": "101",
+                "name": "Ada Lovelace",
+                "sortable_name": "Lovelace, Ada",
+                "short_name": "Ada",
+                "sis_user_id": "SIS-SECRET",
+                "enrollments": [{"course_section_id": "44"}],
+            }
+        },
+        "sections": {"44": "Period 1"},
+    }
+    group_calls = []
+
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: roster_document)
+    monkeypatch.setattr(roster_routes, "_fetch_students",
+                        lambda course_id: pytest.fail("students must use the mirror"))
+    monkeypatch.setattr(roster_routes, "_fetch_sections",
+                        lambda course_id: pytest.fail("sections must use the mirror"))
+    monkeypatch.setattr(
+        roster_routes,
+        "load_group_categories",
+        lambda course_id: (group_calls.append(course_id) or [], None, ""),
+    )
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["students"][0]["id"] == "101"
+    assert data["students"][0]["sections"] == [{"id": "44", "name": "Period 1"}]
+    assert "sis_id" not in data["students"][0]
+    assert group_calls == ["1"]
+
+
+@pytest.mark.parametrize(
+    ("case", "roster_document"),
+    [
+        ("missing", None),
+        # read_roster returns None for a corrupt or invalid on-disk document.
+        ("corrupt", None),
+        ("stale", {"state": "stale", "students": {}, "sections": {}}),
+    ],
+)
+def test_roster_get_falls_back_live_when_mirror_is_not_current(
+    monkeypatch, isolated_roster, case, roster_document,
+):
+    users = [{
+        "id": 101,
+        "name": "Live Ada",
+        "sortable_name": "Ada, Live",
+        "short_name": "Ada",
+        "enrollments": [{"course_section_id": 44}],
+    }]
+    calls = []
+
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: roster_document)
+    monkeypatch.setattr(roster_routes, "_fetch_students",
+                        lambda course_id: (calls.append("students") or (users, None)))
+    monkeypatch.setattr(roster_routes, "_fetch_sections",
+                        lambda course_id: (calls.append("sections") or {"44": "Live section"}))
+    monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: ([], None, ""))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True, case
+    assert data["students"][0]["display_name"] == "Live Ada"
+    assert calls == ["students", "sections"]
+
+
 def test_roster_get_handles_student_without_canvas_group(monkeypatch, isolated_roster):
     isolated_roster["group_schemes"] = {
         "1": {"selected_group_category_id": "7", "group_labels": {}}
