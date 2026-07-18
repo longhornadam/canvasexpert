@@ -11,9 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
-from .canvas_client import _canvas_get_all
 from .deps import WEBUI_DIR
-from .schooldays import _parse_iso_local, _add_school_days, _school_days_late_detail
+from .schooldays import _parse_iso_local, _add_school_days
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
 
@@ -286,64 +285,7 @@ def _expand_variants_extra_time(course_id, entries, settings):
     return entries
 
 
-def _sweep_compute(course_id, settings):
-    """Core late-work sweep computation."""
-    skip_we = settings.get("skip_weekends", True)
-    hols = set(settings.get("holidays", []))
-    hols.update(config.get_combined_calendar_for_range().get("no_count_dates") or [])
-
-    assignments, err = _canvas_get_all(
-        f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
-    if err:
-        return [], [], err
-
-    subs, err = _canvas_get_all(
-        f"/api/v1/courses/{course_id}/students/submissions",
-        {"student_ids[]": "all", "per_page": 100}, timeout=60)
-    if err:
-        return [], [], err
-
-    students, err = _canvas_get_all(
-        f"/api/v1/courses/{course_id}/users",
-        {"enrollment_type[]": "student", "per_page": 100})
-    if err:
-        return [], [], err
-
-    name_by_id = {str(s["id"]): (s.get("sortable_name") or s.get("name", ""))
-                  for s in students}
-    amap = {a["id"]: a for a in assignments if a.get("published", True)}
-
-    entries, skipped = [], []
-    for sub in subs:
-        if sub.get("excused") or not sub.get("submitted_at"):
-            continue
-        aid = sub.get("assignment_id")
-        a = amap.get(aid)
-        if not a:
-            continue
-        uid = sub.get("user_id")
-        if sub.get("workflow_state", "") != "late":
-            continue
-
-        due = _parse_iso_local(a.get("due_at"))
-        subd = _parse_iso_local(sub.get("submitted_at"))
-        if not due or not subd:
-            continue
-
-        canvas_days, school_days, extra_days, excluded = _school_days_late_detail(
-            due, subd, skip_we, hols)
-        if excluded:
-            skipped.append({"student_name": name_by_id.get(str(uid), uid),
-                            "assignment_name": a.get("name", aid),
-                            "reason": "excluded"})
-            continue
-
-        entries.append({
-            "user_id": uid, "student_name": name_by_id.get(str(uid), uid),
-            "assignment_id": aid, "assignment_name": a.get("name", aid),
-            "due": due.strftime("%m/%d"), "submitted": subd.strftime("%m/%d"),
-            "canvas_days": canvas_days, "school_days": school_days,
-            "extra_days": extra_days,
-            "seconds_override": school_days * 86400,
-        })
-    return entries, skipped, None
+# The legacy _sweep_compute was deleted in slice 00c: it unpacked four values
+# from schooldays._school_days_late_detail (which returns two) and crashed on
+# any late submission. The single sweep-compute owner is
+# api/operation_ledger/adapters/sweep.py::_compute_sweep.

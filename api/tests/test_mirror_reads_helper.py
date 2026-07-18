@@ -6,16 +6,16 @@ to ``tmp_path`` and the mirror is populated with ``store.write_*`` writers +
 ``store.record_pass(course_id, "full"/"roster", ok=True)``. ``store.now_iso()``
 marks a pass fresh; a pinned old ISO string marks it stale.
 
-Slice-2 write-path finding (documented here, not just in the summary): tracing
-``gradebook_service._sweep_compute``'s only consumer
-(``api/webui/routes/gradebook_sweep.py``'s ``/api/sweep/preview``): the old
-direct-PUT ``/api/sweep/apply`` route (which wrote client-submitted ``entries``
-with no fresh live re-read) was removed in slice 00b — apply now goes through
-the operation-ledger sweep adapter, which always recomputes just before
-executing. A mirror-served preview must still never feed a write built on
-stale data, which locked decision 1 forbids. ``_sweep_compute`` is left fully
-live (unflipped); ``test_sweep_compute_is_not_flipped_and_stays_live`` locks
-that in. The same write-value analysis applies inside
+Slice-2 write-path finding (documented here, not just in the summary): the
+single sweep compute is now the operation-ledger adapter's ``_compute_sweep``
+(``api/operation_ledger/adapters/sweep.py``) — it feeds ``/api/sweep/preview``
+AND the baseline/drift/execute path behind apply (slice 00b removed the
+direct-PUT apply route; slice 00c deleted the broken
+``gradebook_service._sweep_compute``). A mirror-served sweep compute could
+feed a write built on stale data, which locked decision 1 forbids, so the
+compute stays fully live (unflipped);
+``test_sweep_compute_is_not_flipped_and_stays_live`` locks that in. The same
+write-value analysis applies inside
 ``routines_builtin._run_routine_sweep`` (assignments/submissions feed the
 ``seconds_late_override`` it writes in the same pass) and
 ``_run_routine_curve`` (assignments/submissions feed the ``posted_grade`` it
@@ -29,8 +29,8 @@ routine with no write path at all, fully flipped).
 from __future__ import annotations
 
 from api.mirror import store
+from api.operation_ledger.adapters.sweep import _compute_sweep
 from api.webui import mirror_reads, workspace
-from api.webui.gradebook_service import _sweep_compute
 from api.webui.routes import routines_builtin
 
 COURSE = "555201"
@@ -189,8 +189,8 @@ def test_grading_debt_falls_back_live_when_stale(monkeypatch, tmp_path):
 
 
 def test_grading_debt_output_identical_mirror_served_vs_live_served(monkeypatch, tmp_path):
-    """Substitutes for the spec's '_sweep_compute identical output' bullet:
-    _sweep_compute is deliberately left live (see module docstring), so this
+    """Substitutes for the spec's 'sweep compute identical output' bullet:
+    the sweep compute is deliberately left live (see module docstring), so this
     equivalence check runs against the sibling routine that was safely and
     fully flipped instead — same fixture served from the mirror, then from an
     equivalent live stand-in, must produce the same report."""
@@ -278,16 +278,18 @@ def test_curve_apply_core_reads_audit_baseline_from_mirror(monkeypatch, tmp_path
 
 
 def test_sweep_compute_is_not_flipped_and_stays_live(monkeypatch, tmp_path):
-    """Locked decision: _sweep_compute feeds /api/sweep/preview. The direct
-    /api/sweep/apply route is gone (slice 00b) and apply recomputes through
-    the operation-ledger sweep adapter, but the preview still frames the
-    teacher's review of a Canvas write, so _sweep_compute must stay fully
-    live even when the mirror is fresh — this test fails loudly if a future
-    edit "helpfully" flips it."""
+    """Locked decision: the adapter's _compute_sweep feeds /api/sweep/preview
+    AND the write set behind apply (single owner since slice 00c), so it must
+    stay fully live even when the mirror is fresh — this test fails loudly if
+    a future edit "helpfully" flips it to mirror reads."""
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(routines_builtin.config, "get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
+        lambda: {"no_count_dates": []})
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.sweep.config.get_extra_time",
+        lambda course_id: [])
 
     live_calls = []
 
@@ -295,8 +297,9 @@ def test_sweep_compute_is_not_flipped_and_stays_live(monkeypatch, tmp_path):
         live_calls.append(path)
         return [], None
 
-    import api.webui.gradebook_service as gradebook_service
-    monkeypatch.setattr(gradebook_service, "_canvas_get_all", fake_get_all)
-    entries, skipped, err = _sweep_compute(COURSE, {})
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all",
+        fake_get_all)
+    entries, skipped, err = _compute_sweep(COURSE, {})
     assert err is None
-    assert live_calls  # mirror was fresh, but _sweep_compute went live anyway
+    assert live_calls  # mirror was fresh, but _compute_sweep went live anyway

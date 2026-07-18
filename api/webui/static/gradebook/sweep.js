@@ -92,7 +92,7 @@
       tbody.innerHTML = "";
       gb.sweepEntries.forEach(function (e) {
         var tr = document.createElement("tr");
-        var excl = e.excluded || [];
+        var excl = e.excluded_dates || [];
         tr.title = excl.length
           ? "Excluded: " + excl.join(", ") + (e.extra_days ? " + " + e.extra_days + " extra-time day(s)" : "")
           : (e.extra_days ? "Extra-time: " + e.extra_days + " day(s) excused" : "");

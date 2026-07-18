@@ -17,7 +17,9 @@ client = TestClient(app)
 def test_gradebook_facade_reexports_snapshot_route():
     assert gradebook.api_gradebook is gradebook_snapshot.api_gradebook
     assert gradebook.router is not None
-    assert gradebook._sweep_compute is not None
+    # Slice 00c: the broken gradebook_service._sweep_compute is deleted; the
+    # single sweep-compute owner is the operation-ledger sweep adapter.
+    assert not hasattr(gradebook, "_sweep_compute")
 
 
 def test_gradebook_snapshot_route_aggregates_mocked_canvas_data(monkeypatch):

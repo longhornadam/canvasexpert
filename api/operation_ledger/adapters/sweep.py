@@ -273,12 +273,21 @@ class SweepAdapter:
 def _compute_sweep(course_id: str, settings: dict):
     """Compute late-work sweep entries from current Canvas state.
 
-    Returns (entries, skipped, error).  Follows the same logic as
-    gradebook_service._sweep_compute but with correct unpacking of
-    _school_days_late_detail (which returns 2 values, not 4).
+    Single sweep-compute owner: ``/api/sweep/preview`` and the ledger
+    baseline/drift/execute path all call this, so preview shows exactly what
+    apply will write. Semantics match the healthy
+    ``_school_days_late_detail`` consumers (PowerGrader late catch-up, the
+    work-registry late-work provider, the routine sweep): the first return
+    value is the school-day count with weekends/holidays already excluded;
+    ``excluded`` is display detail only, never a reason to drop a row.
+
+    Returns (entries, skipped, error).
     """
     skip_we = settings.get("skip_weekends", True)
     hols = set(settings.get("holidays", []))
+    honor_extra = bool(settings.get("honor_extra_time", True))
+    date_from = str(settings.get("date_from") or "").strip()
+    date_to = str(settings.get("date_to") or "").strip()
 
     # Merge calendar holidays
     try:
@@ -305,6 +314,17 @@ def _compute_sweep(course_id: str, settings: dict):
     if err:
         return [], [], err
 
+    # Roster extra-time settings (same source as the routine sweep).
+    extra_by_uid: dict[str, int] = {}
+    if honor_extra:
+        try:
+            extra_by_uid = {
+                str(e.get("id")): int(e.get("days", 1))
+                for e in (config.get_extra_time(course_id) or [])
+            }
+        except Exception:
+            extra_by_uid = {}
+
     name_by_id = {str(s["id"]): (s.get("sortable_name") or s.get("name", ""))
                   for s in students}
     amap = {a["id"]: a for a in assignments if a.get("published", True)}
@@ -326,13 +346,22 @@ def _compute_sweep(course_id: str, settings: dict):
         if not due or not subd:
             continue
 
+        due_day = due.date().isoformat()
+        if date_from and due_day < date_from:
+            continue
+        if date_to and due_day > date_to:
+            continue
+
         school_days, excluded = _school_days_late_detail(
             due, subd, skip_we, hols)
-        if excluded:
+        extra_days = min(extra_by_uid.get(str(uid), 0), school_days)
+        effective_days = school_days - extra_days
+        if effective_days <= 0:
             skipped.append({
                 "student_name": name_by_id.get(str(uid), uid),
                 "assignment_name": a.get("name", aid),
-                "reason": "; ".join(excluded),
+                "reason": ("covered by extra time" if extra_days
+                           else "0 school days late"),
             })
             continue
 
@@ -341,8 +370,13 @@ def _compute_sweep(course_id: str, settings: dict):
             "student_name": name_by_id.get(str(uid), uid),
             "assignment_id": aid,
             "assignment_name": a.get("name", aid),
-            "school_days": school_days,
-            "seconds_override": school_days * 86400,
+            "due": due.strftime("%m/%d"),
+            "submitted": subd.strftime("%m/%d"),
+            "canvas_days": (subd.date() - due.date()).days,
+            "school_days": effective_days,
+            "extra_days": extra_days,
+            "excluded_dates": excluded,
+            "seconds_override": effective_days * 86400,
         })
 
     return entries, skipped, None

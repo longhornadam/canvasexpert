@@ -9,6 +9,7 @@ prove browser-submitted entries can never become the write set.
 All Canvas data below is fictional.
 """
 import copy
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -42,6 +43,14 @@ def sweep_env(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
         lambda: {"no_count_dates": []},
+    )
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.sweep.config.get_extra_time",
+        lambda course_id: [],
+    )
+    monkeypatch.setattr(
+        "api.webui.routes.gradebook_sweep.config.set_sweep_settings",
+        lambda s: None,
     )
 
     canvas = {
@@ -185,3 +194,143 @@ def test_drift_between_review_and_apply_blocks_the_write(sweep_env):
     assert body["target_results"][0]["state"] == "blocked"
     assert body["target_results"][0]["error_code"] == "drift_detected"
     assert writes == []
+
+
+# ── Slice 00c: single compute owner, corrected semantics ─────────────────
+
+# Due Friday, submitted Monday: crosses a weekend → 1 school day late,
+# 3 calendar days late, 2 weekend dates excluded from the count.
+WEEKEND_ASSIGNMENT = {
+    "id": 20, "name": "Weekend Crossing Lab", "published": True,
+    "due_at": "2026-06-05T17:00:00Z",
+}
+WEEKEND_SUBMISSION = {
+    "assignment_id": 20, "user_id": 1,
+    "submitted_at": "2026-06-08T17:00:00Z",
+    "workflow_state": "late",
+}
+
+
+def _preview(client, settings=None):
+    return client.post(
+        "/api/sweep/preview",
+        data={"course_id": "101",
+              "settings": json.dumps(settings or {"skip_weekends": True})},
+    )
+
+
+def test_preview_returns_200_and_counts_weekend_crossing_row(sweep_env):
+    """The old skip-on-excluded branch silently dropped this row; the old
+    gradebook_service compute crashed (HTTP 500). Now: counted correctly."""
+    client, canvas, _writes = sweep_env
+    canvas["assignments"][:] = [dict(WEEKEND_ASSIGNMENT)]
+    canvas["submissions"][:] = [dict(WEEKEND_SUBMISSION)]
+    response = _preview(client)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert len(body["entries"]) == 1
+    entry = body["entries"][0]
+    assert entry["school_days"] == 1
+    assert entry["seconds_override"] == 86400
+    assert entry["canvas_days"] == 3
+    assert len(entry["excluded_dates"]) == 2
+    assert all("(weekend)" in d for d in entry["excluded_dates"])
+    assert body["skipped"] == []
+
+
+def test_apply_write_set_includes_weekend_crossing_row(sweep_env):
+    """Proves the skip-branch removal reaches real writes, not just preview."""
+    client, canvas, writes = sweep_env
+    canvas["assignments"][:] = [dict(WEEKEND_ASSIGNMENT)]
+    canvas["submissions"][:] = [dict(WEEKEND_SUBMISSION)]
+    prep = _prepare(client).json()
+    reviewed = _review(client, prep["operation_id"]).json()
+    applied = _apply(client, reviewed["batch_id"], reviewed["review_digest"]).json()
+    assert applied["status"] == "applied"
+    assert len(writes) == 1
+    assert "/assignments/20/submissions/1" in writes[0]["path"]
+    assert writes[0]["payload"]["submission"]["seconds_late_override"] == 86400
+
+
+def test_date_range_bounds_filter_assignments(sweep_env):
+    client, canvas, _writes = sweep_env
+    canvas["assignments"][:] = [
+        dict(FAKE_ASSIGNMENTS[0]),  # due 2026-06-01
+        {"id": 30, "name": "Later Fictional Quiz", "published": True,
+         "due_at": "2026-06-15T17:00:00Z"},
+    ]
+    canvas["submissions"][:] = [
+        dict(FAKE_SUBMISSIONS[0]),
+        {"assignment_id": 30, "user_id": 1,
+         "submitted_at": "2026-06-17T17:00:00Z", "workflow_state": "late"},
+    ]
+    both = _preview(client).json()
+    assert {e["assignment_id"] for e in both["entries"]} == {10, 30}
+    lower_bounded = _preview(client, {
+        "skip_weekends": True, "date_from": "2026-06-10",
+        "date_to": "2026-06-30"}).json()
+    assert {e["assignment_id"] for e in lower_bounded["entries"]} == {30}
+    upper_bounded = _preview(client, {
+        "skip_weekends": True, "date_to": "2026-06-10"}).json()
+    assert {e["assignment_id"] for e in upper_bounded["entries"]} == {10}
+
+
+def test_preview_and_apply_agree_on_identical_fixture(sweep_env):
+    """Single compute owner: what preview shows is exactly what apply writes."""
+    client, canvas, writes = sweep_env
+    canvas["assignments"].append(dict(WEEKEND_ASSIGNMENT))
+    canvas["submissions"].append(dict(WEEKEND_SUBMISSION))
+    preview = _preview(client).json()
+    expected = {(e["user_id"], e["assignment_id"], e["seconds_override"])
+                for e in preview["entries"]}
+    assert len(expected) == 2
+
+    prep = _prepare(client).json()
+    reviewed = _review(client, prep["operation_id"]).json()
+    applied = _apply(client, reviewed["batch_id"], reviewed["review_digest"]).json()
+    assert applied["status"] == "applied"
+
+    written = set()
+    for w in writes:
+        parts = w["path"].split("/")
+        written.add((int(parts[-1]), int(parts[-3]),
+                     w["payload"]["submission"]["seconds_late_override"]))
+    assert written == expected
+
+
+def test_extra_time_reduces_or_skips_rows(sweep_env, monkeypatch):
+    client, canvas, _writes = sweep_env
+    canvas["assignments"][:] = [dict(WEEKEND_ASSIGNMENT)]  # 1 school day late
+    canvas["submissions"][:] = [dict(WEEKEND_SUBMISSION)]
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.sweep.config.get_extra_time",
+        lambda course_id: [{"id": 1, "days": 2}],
+    )
+    covered = _preview(client).json()
+    assert covered["entries"] == []
+    assert covered["skipped"][0]["reason"] == "covered by extra time"
+
+    ignored = _preview(client, {"skip_weekends": True,
+                                "honor_extra_time": False}).json()
+    assert len(ignored["entries"]) == 1
+    assert ignored["entries"][0]["school_days"] == 1
+
+    # Partial subtraction: 2 school days late minus 1 extra-time day.
+    canvas["assignments"][:] = [dict(FAKE_ASSIGNMENTS[0])]
+    canvas["submissions"][:] = [dict(FAKE_SUBMISSIONS[0])]
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.sweep.config.get_extra_time",
+        lambda course_id: [{"id": 1, "days": 1}],
+    )
+    partial = _preview(client).json()
+    assert partial["entries"][0]["school_days"] == 1
+    assert partial["entries"][0]["extra_days"] == 1
+    assert partial["entries"][0]["seconds_override"] == 86400
+
+
+def test_legacy_sweep_compute_is_deleted():
+    import api.webui.gradebook_service as gradebook_service
+    import api.webui.routes.gradebook as gradebook_facade
+    assert not hasattr(gradebook_service, "_sweep_compute")
+    assert not hasattr(gradebook_facade, "_sweep_compute")

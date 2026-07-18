@@ -62,6 +62,8 @@ def test_baseline_canvas_error_detects_drift(monkeypatch):
                         lambda *a, **kw: ([], None))
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
                         lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
+                        lambda course_id: [])
     adapter = SweepAdapter()
     assert adapter.check_drift({}, {"course_id": "42"}, {"canvas_error": "timeout"}) is True
     assert adapter.check_drift({}, {"course_id": "42"}, {"entries": []}) is False
@@ -107,6 +109,8 @@ def test_execute_applies_sweep(tmp_path, monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
                         lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
+                        lambda course_id: [])
 
     adapter = SweepAdapter()
     payload = adapter.build_payload({"skip_weekends": True})
@@ -148,6 +152,8 @@ def test_execute_no_late_subs(tmp_path, monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
                         lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
+                        lambda course_id: [])
 
     adapter = SweepAdapter()
     payload = adapter.build_payload({"skip_weekends": True})
@@ -189,6 +195,8 @@ def test_pipeline_with_mocks(tmp_path, monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
                         lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
+                        lambda course_id: [])
 
     adapter = registry.get_adapter("gradebook.sweep")
     assert adapter is not None

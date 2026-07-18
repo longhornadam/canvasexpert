@@ -46,7 +46,6 @@ from ..gradebook_service import (
     _load_curve_events,
     _save_curve_events,
     _split_for_extra_time,
-    _sweep_compute,
 )
 
 router = APIRouter(tags=["gradebook"])
@@ -85,5 +84,4 @@ __all__ = [
     "_apply_curve_model",
     "_split_for_extra_time",
     "_expand_variants_extra_time",
-    "_sweep_compute",
 ]
