@@ -49,6 +49,7 @@ WARNING_CODES = (
     "group_unset", "multiple_groups_in_selected_set",
     "nickname_collision", "protected_name_collision",
 )
+ROSTER_MAX_AGE_HOURS = 24
 
 
 def _fetch_sections(course_id: str) -> dict:
@@ -61,6 +62,32 @@ _upsert_roster = roster_service.upsert_roster
 
 def _create_canvas_group(category_id: str, name: str) -> tuple[dict | None, str | None]:
     return roster_canvas.create_canvas_group(category_id, name, canvas_send=_canvas_send)
+
+
+def _invalidate_group_snapshot(course_id: str) -> None:
+    """A successful Canvas group write makes the display snapshot stale.
+
+    The live write is already authoritative; local storage trouble must not
+    rewrite that result into a failed Canvas mutation.
+    """
+    try:
+        mirror_store.invalidate_groups(course_id)
+    except (OSError, ValueError):
+        pass
+
+
+def _group_categories_for_roster(course_id: str) -> tuple[list[dict], str | None, str]:
+    document = mirror_store.read_groups(course_id)
+    if mirror_store.groups_are_current(document, max_age_hours=ROSTER_MAX_AGE_HOURS):
+        return mirror_store.groups_for_roster(document), None, ""
+
+    categories, group_err, group_msg = load_group_categories(course_id)
+    if group_err is None:
+        try:
+            mirror_store.write_groups(course_id, categories)
+        except (OSError, ValueError):
+            pass
+    return categories, group_err, group_msg
 
 
 # --------------------------------------------------------------------------
@@ -144,7 +171,7 @@ def roster_get(course_id: str = Query("")):
     enrollment_secs = _enrollment_section_ids(users)
 
     # Groups (V3: now used for tier/group assignment)
-    categories, group_err, group_msg = load_group_categories(course_id)
+    categories, group_err, group_msg = _group_categories_for_roster(course_id)
     _annotate_group_labels(course_id, categories)
     user_groups = _user_id_set_from_canvas_groups(categories)
 
@@ -324,6 +351,7 @@ def roster_student_update(
         as_int=_as_int,
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,
+        invalidate_groups=_invalidate_group_snapshot,
         allowed_keys=ALLOWED_STUDENT_PATCH_KEYS,
         obsolete_keys=OBSOLETE_PATCH_KEYS,
     ))
@@ -356,6 +384,7 @@ def roster_bulk_update(
         value_name=_value_name,
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,
+        invalidate_groups=_invalidate_group_snapshot,
     ))
 
 
@@ -395,6 +424,7 @@ def create_group_set(
         canvas_send=_canvas_send,
         create_canvas_group=_create_canvas_group,
         set_selected_group_category_id=config.set_selected_group_category_id,
+        invalidate_groups=_invalidate_group_snapshot,
     ))
 
 
@@ -415,6 +445,7 @@ def create_groups(
         group_names,
         validate_canvas_group_target=_validate_canvas_group_target,
         create_canvas_group=_create_canvas_group,
+        invalidate_groups=_invalidate_group_snapshot,
     ))
 
 

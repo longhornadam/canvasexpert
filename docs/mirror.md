@@ -67,8 +67,12 @@ cross-machine conflict to a single disposable file.
 - **roster** — students + sections; rosters rarely change, so daily.
 
 Roster uses the private roster document only when its state is exactly `current` for
-student and section reads; Canvas groups remain live. Missing, corrupt, or non-current
-mirror state follows the existing live student/section path.
+student and section reads. Roster also uses its separate private `groups.v1.json` only
+when it is exactly `current` and under 24 hours old; it stores category/group IDs and
+names plus membership `{id,user_id}` pairs, never student names or raw Canvas fields.
+Missing, corrupt, stale, or unavailable group snapshots follow the existing live group
+loader and a successful normalized live read replaces the snapshot. Roster membership and
+group/group-set writes always validate and execute live, then invalidate the snapshot.
 
 Watermarks advance only on success, to pass-start minus a 10-minute overlap;
 store merges are idempotent so overlap duplicates are harmless. Failures

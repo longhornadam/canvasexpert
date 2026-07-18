@@ -4,6 +4,7 @@ Layout, under ``_System/Canvas Mirror/<course_id>/`` in the synced workspace:
 
   _sync.v1.json                    pass envelopes + delta watermarks
   roster.v1.json                   students + sections
+  groups.v1.json                   private group categories/memberships
   assignments.v1.json              slim Canvas-shaped assignment index
   submissions/<assignment_id>.v1.json   per-student current row + attempts
 
@@ -37,6 +38,7 @@ from api.webui import workspace
 MIRROR_VERSION = 1
 SYNC_FILENAME = "_sync.v1.json"
 ROSTER_FILENAME = "roster.v1.json"
+GROUPS_FILENAME = "groups.v1.json"
 ASSIGNMENTS_FILENAME = "assignments.v1.json"
 SUBMISSIONS_DIRNAME = "submissions"
 
@@ -64,6 +66,7 @@ _ENVELOPE_KEYS = {"state", "last_success_at", "last_attempt_at", "error_code"}
 _SYNC_KEYS = {"schema_version", "course_id", "passes", "watermarks"}
 _WATERMARK_KEYS = {"submitted_since", "graded_since"}
 _ROSTER_KEYS = {"schema_version", "course_id", "students", "sections"} | _ENVELOPE_KEYS
+_GROUPS_KEYS = {"schema_version", "course_id", "categories"} | _ENVELOPE_KEYS
 _ASSIGNMENTS_KEYS = {"schema_version", "course_id", "assignments"} | _ENVELOPE_KEYS
 _SUBMISSIONS_KEYS = {"schema_version", "course_id", "assignment_id",
                      "submissions"} | _ENVELOPE_KEYS
@@ -133,6 +136,11 @@ def sync_path(course_id, root=None):
 def roster_path(course_id, root=None):
     directory = course_dir(course_id, root)
     return os.path.join(directory, ROSTER_FILENAME) if directory else None
+
+
+def groups_path(course_id, root=None):
+    directory = course_dir(course_id, root)
+    return os.path.join(directory, GROUPS_FILENAME) if directory else None
 
 
 def assignments_path(course_id, root=None):
@@ -209,6 +217,38 @@ def validate_roster(document: dict, course_id) -> dict:
     _validate_common(document, _ROSTER_KEYS, course_id, "roster")
     if not isinstance(document.get("students"), dict) or not isinstance(document.get("sections"), dict):
         raise ValueError("roster collections are invalid")
+    return document
+
+
+def _validate_groups_categories(categories) -> None:
+    if not isinstance(categories, list):
+        raise ValueError("groups categories are invalid")
+    for category in categories:
+        _require_exact_keys(category, {"category_id", "category_name", "groups"}, "group category")
+        if not isinstance(category["category_id"], str) or not isinstance(category["category_name"], str):
+            raise ValueError("group category identity is invalid")
+        if not isinstance(category["groups"], list):
+            raise ValueError("group category groups are invalid")
+        for group in category["groups"]:
+            _require_exact_keys(group, {"id", "name", "memberships"}, "group")
+            if not isinstance(group["id"], str) or not isinstance(group["name"], str):
+                raise ValueError("group identity is invalid")
+            if not isinstance(group["memberships"], list):
+                raise ValueError("group memberships are invalid")
+            for membership in group["memberships"]:
+                _require_exact_keys(membership, {"id", "user_id"}, "group membership")
+                if not isinstance(membership["id"], str) or not isinstance(membership["user_id"], str):
+                    raise ValueError("group membership identity is invalid")
+
+
+def validate_groups(document: dict, course_id) -> dict:
+    _require_exact_keys(document, _GROUPS_KEYS, "groups")
+    if document.get("schema_version") != MIRROR_VERSION:
+        raise ValueError("groups schema_version is unsupported")
+    if str(document.get("course_id")) != str(course_id):
+        raise ValueError("groups course_id mismatch")
+    _validate_envelope(document, "groups", PASS_STATES)
+    _validate_groups_categories(document["categories"])
     return document
 
 
@@ -344,6 +384,43 @@ def normalize_student(user: dict) -> dict | None:
     }
 
 
+def normalize_group_categories(categories: list[dict]) -> list[dict]:
+    """Copy only the private group fields Roster needs from its live loader.
+
+    Group membership is FERPA-protected, so this deliberately rejects a
+    malformed live result rather than keeping arbitrary Canvas response data.
+    """
+    if not isinstance(categories, list):
+        raise ValueError("live group categories are invalid")
+    normalized_categories = []
+    for category in categories:
+        if not isinstance(category, dict) or category.get("category_id") in (None, ""):
+            raise ValueError("live group category id is invalid")
+        if not isinstance(category.get("category_name"), str) or not isinstance(category.get("groups"), list):
+            raise ValueError("live group category is invalid")
+        normalized_groups = []
+        for group in category["groups"]:
+            if not isinstance(group, dict) or group.get("id") in (None, ""):
+                raise ValueError("live group id is invalid")
+            if not isinstance(group.get("name"), str) or not isinstance(group.get("memberships"), list):
+                raise ValueError("live group is invalid")
+            memberships = []
+            for membership in group["memberships"]:
+                if (not isinstance(membership, dict) or membership.get("id") in (None, "")
+                        or membership.get("user_id") in (None, "")):
+                    raise ValueError("live group membership is invalid")
+                memberships.append({"id": str(membership["id"]), "user_id": str(membership["user_id"])})
+            normalized_groups.append({
+                "id": str(group["id"]), "name": group["name"], "memberships": memberships,
+            })
+        normalized_categories.append({
+            "category_id": str(category["category_id"]),
+            "category_name": category["category_name"],
+            "groups": normalized_groups,
+        })
+    return normalized_categories
+
+
 def normalize_assignment(row: dict) -> dict | None:
     """Slim Canvas-shaped index — exactly what build_snapshot and the mirror
     queries need. The authoring catalog stays the rich source."""
@@ -464,6 +541,23 @@ def write_roster(course_id, users: list[dict], sections: dict, *,
                                validate_roster(document, course_id))
 
 
+def write_groups(course_id, categories: list[dict], *, root=None,
+                 attempted_at: str | None = None, state: str = "current") -> dict:
+    """Atomically replace the strict private group snapshot after a live read."""
+    _require_dir(course_id, root)
+    if state not in PASS_STATES:
+        raise ValueError("groups state is invalid")
+    attempted_at = attempted_at or now_iso()
+    document = {
+        "schema_version": MIRROR_VERSION,
+        "course_id": str(course_id),
+        **_envelope(state, attempted_at),
+        "categories": normalize_group_categories(categories),
+    }
+    with course_lock(course_id):
+        return _write_document(groups_path(course_id, root), validate_groups(document, course_id))
+
+
 def write_assignments(course_id, rows: list[dict], *, root=None,
                       attempted_at: str | None = None,
                       state: str = "current") -> dict:
@@ -558,6 +652,53 @@ def prune_submission_files(course_id, keep_assignment_ids, *, root=None) -> list
 def read_roster(course_id, *, root=None) -> dict | None:
     return _read_document(roster_path(course_id, root),
                           lambda d: validate_roster(d, course_id))
+
+
+def read_groups(course_id, *, root=None) -> dict | None:
+    return _read_document(groups_path(course_id, root),
+                          lambda d: validate_groups(d, course_id))
+
+
+def groups_are_current(document: dict | None, *, max_age_hours: float) -> bool:
+    """A group snapshot is display-only and usable only while strictly fresh."""
+    if not document or document.get("state") != "current":
+        return False
+    age = age_hours(document.get("last_success_at", ""))
+    return age is not None and 0 <= age < max_age_hours
+
+
+def groups_for_roster(document: dict) -> list[dict]:
+    """Restore Roster's legacy convenience list without duplicating it at rest."""
+    return [
+        {
+            "category_id": category["category_id"],
+            "category_name": category["category_name"],
+            "groups": [
+                {
+                    "id": group["id"],
+                    "name": group["name"],
+                    "memberships": [dict(membership) for membership in group["memberships"]],
+                    "student_ids": [membership["user_id"] for membership in group["memberships"]],
+                }
+                for group in category["groups"]
+            ],
+        }
+        for category in document["categories"]
+    ]
+
+
+def invalidate_groups(course_id, *, root=None, attempted_at: str | None = None) -> dict | None:
+    """Mark an existing group snapshot stale after a confirmed Canvas write."""
+    _require_dir(course_id, root)
+    attempted_at = attempted_at or now_iso()
+    with course_lock(course_id):
+        document = read_groups(course_id, root=root)
+        if document is None:
+            return None
+        document["state"] = "stale"
+        document["last_attempt_at"] = attempted_at
+        document["error_code"] = "invalidated"
+        return _write_document(groups_path(course_id, root), validate_groups(document, course_id))
 
 
 def read_assignments(course_id, *, root=None) -> dict | None:

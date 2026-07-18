@@ -23,6 +23,7 @@ def update_student(
     update_student_canvas_group: Callable[
         [str, str, str, str | None, list[dict] | None], tuple[bool, str | None]
     ],
+    invalidate_groups: Callable[[str], None],
     allowed_keys: set[str],
     obsolete_keys: set[str],
 ) -> dict:
@@ -121,6 +122,7 @@ def update_student(
         )
         if not ok:
             return {"ok": False, "error": err}
+        invalidate_groups(course_id)
 
     return {"ok": True}
 
@@ -143,6 +145,7 @@ def update_bulk(
     update_student_canvas_group: Callable[
         [str, str, str, str | None, list[dict] | None], tuple[bool, str | None]
     ],
+    invalidate_groups: Callable[[str], None],
 ) -> dict:
     """Apply a bulk roster action."""
     if not course_id or not user_ids or not action:
@@ -164,6 +167,7 @@ def update_bulk(
     updated = 0
     failed = 0
     errors: list[str] = []
+    group_membership_changed = False
 
     if action == "set_extra_time":
         if not isinstance(val, dict):
@@ -212,6 +216,7 @@ def update_bulk(
             )
             if ok:
                 updated += 1
+                group_membership_changed = True
             else:
                 failed += 1
                 errors.append(f"User {uid}: {err}")
@@ -229,6 +234,7 @@ def update_bulk(
             ok, err = update_student_canvas_group(course_id, str(uid), category_id, None, categories)
             if ok:
                 updated += 1
+                group_membership_changed = True
             else:
                 failed += 1
                 errors.append(f"User {uid}: {err}")
@@ -251,6 +257,9 @@ def update_bulk(
 
     else:
         return {"ok": False, "error": f"Unknown action '{action}'."}
+
+    if group_membership_changed:
+        invalidate_groups(course_id)
 
     result = {"ok": True, "updated": updated}
     if failed > 0:

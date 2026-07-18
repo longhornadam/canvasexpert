@@ -27,6 +27,7 @@ def create_group_set(
     canvas_send: Callable[[str, str, dict], tuple[dict | None, str | None]],
     create_canvas_group: Callable[[str, str], tuple[dict | None, str | None]],
     set_selected_group_category_id: Callable[[str, str | None], None],
+    invalidate_groups: Callable[[str], None],
 ) -> dict:
     """Create a Canvas group category and optionally seed groups inside it."""
     set_name = (name or "").strip()
@@ -48,6 +49,8 @@ def create_group_set(
     category_id = str(category.get("id", "") if isinstance(category, dict) else "")
     if not category_id:
         return {"ok": False, "error": "Canvas did not return a group set id."}
+
+    invalidate_groups(course_id)
 
     created_groups = []
     for group_name in names:
@@ -78,6 +81,7 @@ def create_groups(
         [str, str, str | None], tuple[list[dict], dict | None, str | None]
     ],
     create_canvas_group: Callable[[str, str], tuple[dict | None, str | None]],
+    invalidate_groups: Callable[[str], None],
 ) -> dict:
     """Create Canvas groups inside an existing group category."""
     names, parse_err = _parse_group_names(group_names)
@@ -109,6 +113,7 @@ def create_groups(
                 "created_groups": created_groups,
             }
         created_groups.append(group)
+        invalidate_groups(course_id)
 
     return {"ok": True, "created_groups": created_groups}
 

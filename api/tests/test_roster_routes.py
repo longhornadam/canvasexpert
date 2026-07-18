@@ -1,10 +1,12 @@
 """Route-level tests for Roster Console API (V3: Canvas groups are source of truth)."""
+import json
 from fastapi.testclient import TestClient
 from contextlib import contextmanager
 import pytest
 
 from api.webui.server import app
 import api.webui.routes.roster as roster_routes
+from api.mirror import store as mirror_store
 
 client = TestClient(app)
 
@@ -231,6 +233,108 @@ def test_roster_get_uses_current_mirror_before_live_students_and_sections(
     assert group_calls == ["1"]
 
 
+def _current_roster_document():
+    return {
+        "state": "current",
+        "students": {
+            "101": {
+                "id": "101", "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada",
+                "short_name": "Ada", "sis_user_id": "", "enrollments": [],
+            }
+        },
+        "sections": {},
+    }
+
+
+def _groups_snapshot(state="current"):
+    return {
+        "state": state,
+        "last_success_at": mirror_store.now_iso(),
+        "categories": [{
+            "category_id": "7", "category_name": "Reading groups",
+            "groups": [{"id": "8", "name": "Blue", "memberships": [{"id": "9", "user_id": "101"}]}],
+        }],
+    }
+
+
+def test_roster_get_uses_fresh_private_groups_without_live_loader(monkeypatch, isolated_roster):
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: _current_roster_document())
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups",
+                        lambda course_id: _groups_snapshot())
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: pytest.fail("fresh group snapshot must avoid the live loader"))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["groups"][0]["groups"][0]["student_ids"] == ["101"]
+    assert data["students"][0]["canvas_groups"][0]["group_name"] == "Blue"
+
+
+@pytest.mark.parametrize("snapshot", [None, _groups_snapshot("stale")])
+def test_roster_get_falls_back_live_for_missing_or_stale_groups(monkeypatch, isolated_roster, snapshot):
+    live_categories = [{
+        "category_id": "7", "category_name": "Live groups",
+        "groups": [{"id": "8", "name": "Blue", "memberships": [{"id": "9", "user_id": "101"}]}],
+    }]
+    writes = []
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: _current_roster_document())
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: snapshot)
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: (live_categories, None, ""))
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups",
+                        lambda course_id, categories: writes.append((course_id, categories)))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["groups"][0]["category_name"] == "Live groups"
+    assert writes == [("1", live_categories)]
+
+
+def test_roster_live_group_failure_does_not_replace_snapshot(monkeypatch, isolated_roster):
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: _current_roster_document())
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups",
+                        lambda course_id: _groups_snapshot("stale"))
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: ([], "forbidden", ""))
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups",
+                        lambda *args: pytest.fail("failed live read must preserve last-good snapshot"))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["groups"] == []
+
+
+def test_private_group_snapshot_round_trip_has_only_allowlisted_fields(tmp_path):
+    mirror_store.write_groups("1", [{
+        "category_id": 7, "category_name": "Reading groups", "ignored": "not persisted",
+        "groups": [{
+            "id": 8, "name": "Blue", "other": "not persisted",
+            "memberships": [{"id": 9, "user_id": 101, "user_name": "not persisted"}],
+        }],
+    }], root=tmp_path, attempted_at="2026-07-18T00:00:00Z")
+
+    with open(mirror_store.groups_path("1", root=tmp_path), encoding="utf-8") as handle:
+        document = json.load(handle)
+
+    assert set(document) == {
+        "schema_version", "course_id", "state", "last_success_at", "last_attempt_at", "error_code", "categories",
+    }
+    assert document["categories"] == [{
+        "category_id": "7", "category_name": "Reading groups",
+        "groups": [{"id": "8", "name": "Blue", "memberships": [{"id": "9", "user_id": "101"}]}],
+    }]
+    stale = mirror_store.invalidate_groups("1", root=tmp_path, attempted_at="2026-07-18T01:00:00Z")
+    assert stale["state"] == "stale"
+    assert stale["categories"] == document["categories"]
+    assert mirror_store.groups_are_current(stale, max_age_hours=24) is False
+
+
 @pytest.mark.parametrize(
     ("case", "roster_document"),
     [
@@ -299,6 +403,7 @@ def test_roster_get_handles_student_without_canvas_group(monkeypatch, isolated_r
 
 def test_create_group_set_with_groups(monkeypatch, isolated_roster):
     calls = []
+    invalidations = []
 
     def fake_canvas_send(method, path, payload):
         calls.append((method, path, payload))
@@ -309,6 +414,8 @@ def test_create_group_set_with_groups(monkeypatch, isolated_roster):
         return None, "unexpected call"
 
     monkeypatch.setattr(roster_routes, "_canvas_send", fake_canvas_send)
+    monkeypatch.setattr(roster_routes, "_invalidate_group_snapshot",
+                        lambda course_id: invalidations.append(course_id))
 
     resp = client.post("/api/roster/group-set", data={
         "course_id": "1",
@@ -326,6 +433,7 @@ def test_create_group_set_with_groups(monkeypatch, isolated_roster):
         ("POST", "/api/v1/group_categories/7/groups", {"name": "Blue"}),
         ("POST", "/api/v1/group_categories/7/groups", {"name": "Green"}),
     ]
+    assert invalidations == ["1"]
 
 
 def test_create_groups_rejects_existing_name(monkeypatch):
@@ -453,6 +561,35 @@ def test_roster_student_accepts_canvas_group(monkeypatch, isolated_roster):
     assert calls[0][:4] == ("1", "101", "7", "8")
 
 
+def test_roster_group_membership_write_invalidates_only_after_success(monkeypatch, isolated_roster):
+    invalidations = []
+    monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: ([{
+        "category_id": "7", "category_name": "Differentiation",
+        "groups": [{"id": "8", "name": "Blue", "student_ids": [], "memberships": []}],
+    }], None, ""))
+    monkeypatch.setattr(roster_routes, "_invalidate_group_snapshot",
+                        lambda course_id: invalidations.append(course_id))
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
+                        lambda *args: (False, "Canvas denied"))
+
+    failed = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": '{"canvas_group": {"category_id": "7", "group_id": "8"}}',
+    }).json()
+
+    assert failed["ok"] is False
+    assert invalidations == []
+
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group", lambda *args: (True, None))
+    succeeded = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": '{"canvas_group": {"category_id": "7", "group_id": "8"}}',
+    }).json()
+
+    assert succeeded["ok"] is True
+    assert invalidations == ["1"]
+
+
 def test_roster_student_rejects_canvas_group_outside_category(monkeypatch, isolated_roster):
     monkeypatch.setattr(roster_routes, "load_group_categories",
                         lambda course_id: ([{
@@ -549,6 +686,7 @@ def test_roster_bulk_rejects_obsolete_set_tier(isolated_roster):
 def test_roster_bulk_set_canvas_group(monkeypatch, isolated_roster):
     """V3: set_canvas_group writes Canvas membership for every selected user."""
     calls = []
+    invalidations = []
     monkeypatch.setattr(roster_routes, "load_group_categories",
                         lambda course_id: ([{
                             "category_id": "7",
@@ -557,6 +695,8 @@ def test_roster_bulk_set_canvas_group(monkeypatch, isolated_roster):
                         }], None, ""))
     monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
                         lambda *args: calls.append(args) or (True, None))
+    monkeypatch.setattr(roster_routes, "_invalidate_group_snapshot",
+                        lambda course_id: invalidations.append(course_id))
     resp = client.post("/api/roster/bulk", data={
         "course_id": "1", "user_ids": '["101", "102"]',
         "action": "set_canvas_group", "value": '{"category_id": "7", "group_id": "8"}'
@@ -569,6 +709,7 @@ def test_roster_bulk_set_canvas_group(monkeypatch, isolated_roster):
         ("1", "101", "7", "8"),
         ("1", "102", "7", "8"),
     ]
+    assert invalidations == ["1"]
 
 
 def test_roster_bulk_rejects_canvas_group_outside_category(monkeypatch, isolated_roster):
