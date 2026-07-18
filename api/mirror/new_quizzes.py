@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from api.storage_support import atomic_write_json
@@ -671,50 +671,200 @@ def _metadata_is_current(course_id, assignment, assignment_id, *, root, now) -> 
     return age is not None and age < METADATA_TRUEUP_HOURS
 
 
-def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None):
+# --- New Quiz metadata-scope capability gate (1.0beta slice 01a) -------------
+#
+# The New Quiz enrollment gate makes 403/401 course-level, not item-level
+# (api/README.md ~205-213): a concluded/past-enrollment course fails every
+# quiz deterministically. Design: lifecycle predicts, probe confirms, circuit
+# backstops (vision doc Sec 9.4). This slice only does the "probe confirms" /
+# "circuit backstops" half — no lifecycle signal exists yet.
+#
+# Locked classification rule: 3 consecutive distinct-quiz HTTP 403/401
+# failures with zero successes in one sync_metadata run opens the circuit
+# (capability="restricted", retry_after = now + 24h). Any single success in
+# a run clears it. Mixed runs (some 200, some 403) stay "supported" — those
+# failures are item-level noise, not scope evidence.
+CAPABILITY_FAILURE_THRESHOLD = 3
+CAPABILITY_COOLDOWN_HOURS = 24.0
+
+
+def _classify_http_error(error) -> str:
+    """Map the canvas_client error string's ``HTTP {status}`` prefix to a
+    sanitized capability-evidence category. Returns "" for anything else
+    (transient transport failures are item-level noise, not scope evidence).
+    Does not rewrite canvas_client error handling — only reads its shape."""
+    if not isinstance(error, str):
+        return ""
+    if error.startswith("HTTP 403"):
+        return "forbidden"
+    if error.startswith("HTTP 401"):
+        return "unauthorized"
+    return ""
+
+
+def _retry_after_iso(attempted_at: str, hours: float = CAPABILITY_COOLDOWN_HOURS) -> str:
+    moment = datetime.strptime(attempted_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    return (moment + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _cooldown_active(capability_doc: dict, attempted_at: str) -> bool:
+    """True while a restricted scope's cooldown has not yet expired."""
+    if capability_doc.get("capability") != "restricted":
+        return False
+    retry_after = capability_doc.get("retry_after") or ""
+    if not retry_after:
+        return False
+    remaining = age_hours(retry_after, attempted_at)
+    return remaining is not None and remaining < 0
+
+
+def _fetch_one_quiz(course_id, assignment, *, canvas_get_all, root, attempted_at, force=False):
+    """Refresh one New Quiz's metadata. Returns a dict describing the outcome
+    so the caller can drive both the ordinary fan-out and the bounded probe
+    with the same code: ``assignment_id``, ``skipped`` (freshness shortcut,
+    no Canvas call), ``ok``, ``error`` (raw canvas_client string or None),
+    ``calls`` (Canvas calls actually made — 0, 1, or 2)."""
+    assignment_id = str(assignment.get("id") or "")
+    if not assignment_id:
+        return {"assignment_id": "", "skipped": True, "ok": False, "error": None, "calls": 0}
+    if not force and _metadata_is_current(course_id, assignment, assignment_id,
+                                         root=root, now=attempted_at):
+        return {"assignment_id": assignment_id, "skipped": True, "ok": True,
+                "error": None, "calls": 0}
+    quiz_rows, error = canvas_get_all(
+        f"/api/quiz/v1/courses/{course_id}/quizzes/{assignment_id}", {"per_page": 100}
+    )
+    if error:
+        return {"assignment_id": assignment_id, "skipped": False, "ok": False,
+                "error": error, "calls": 1}
+    item_rows, item_error = canvas_get_all(
+        f"/api/quiz/v1/courses/{course_id}/quizzes/{assignment_id}/items", {"per_page": 100}
+    )
+    if item_error or not isinstance(item_rows, list):
+        return {"assignment_id": assignment_id, "skipped": False, "ok": False,
+                "error": item_error or "items_malformed", "calls": 2}
+    quiz = next((row for row in (quiz_rows or []) if isinstance(row, dict)), {})
+    write_quiz_metadata(course_id, assignment_id, assignment=assignment, quiz=quiz,
+                        items=item_rows, root=root, attempted_at=attempted_at)
+    return {"assignment_id": assignment_id, "skipped": False, "ok": True,
+            "error": None, "calls": 2}
+
+
+def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None,
+                  bypass_cooldown=False):
     """Refresh New Quiz assignment/quiz/item metadata without reports.
 
     Runs on every mirror pass, but per-quiz Canvas fetches are skipped while
     the stored metadata is current (unchanged ``updated_at``, under the daily
-    true-up age) — a stagnant quiz costs zero requests per tick."""
+    true-up age) — a stagnant quiz costs zero requests per tick.
+
+    Capability gate: a restricted course whose cooldown has not expired skips
+    the whole fan-out (zero Canvas calls). Once the cooldown passes, exactly
+    one quiz (the first) is probed; a 403/401 renews the cooldown without
+    touching the rest, a success clears the restriction and the remaining
+    quizzes are processed normally. ``bypass_cooldown=True`` (manual
+    ``sync_now``) ignores any stored restriction and always runs the full
+    fan-out; the 15-minute heartbeat never passes it."""
     _require_dir(course_id, root)
     attempted_at = now or now_iso()
     new_quizzes = [row for row in (assignments or [])
                    if isinstance(row, dict) and row.get("is_quiz_lti_assignment") is True]
+
+    capability_doc = store.read_new_quiz_capability(course_id, root=root)
+    skipped_restricted = False
+    circuit_opened = False
+    circuit_cleared = False
+
+    if not bypass_cooldown and _cooldown_active(capability_doc, attempted_at):
+        prior_metadata = read_sync(course_id, root=root)["metadata"]
+        state = "stale" if prior_metadata.get("last_success_at") else "unavailable"
+        _record_sync(course_id, kind="metadata", state=state,
+                     error_code="capability_restricted", attempted_at=attempted_at, root=root)
+        return {"ok": True, "state": state, "quizzes": 0, "skipped": 0, "failures": [],
+                "capability": "restricted", "skipped_restricted": True,
+                "circuit_opened": False, "circuit_cleared": False}
+
+    probing = not bypass_cooldown and capability_doc.get("capability") == "restricted"
+    plan = new_quizzes[:1] if probing else new_quizzes
+
     failures = []
     written = []
     skipped = []
-    for assignment in new_quizzes:
-        assignment_id = str(assignment.get("id") or "")
+    consecutive_failures = 0
+    saw_success = False
+    evidence_category = ""
+
+    for assignment in plan:
+        outcome = _fetch_one_quiz(course_id, assignment, canvas_get_all=canvas_get_all,
+                                  root=root, attempted_at=attempted_at, force=probing)
+        assignment_id = outcome["assignment_id"]
         if not assignment_id:
             continue
-        if _metadata_is_current(course_id, assignment, assignment_id,
-                                root=root, now=attempted_at):
+        if outcome["skipped"]:
             skipped.append(assignment_id)
             continue
-        quiz_rows, error = canvas_get_all(
-            f"/api/quiz/v1/courses/{course_id}/quizzes/{assignment_id}", {"per_page": 100}
-        )
-        if error:
-            failures.append({"assignment_id": assignment_id, "error": error})
-            continue
-        item_rows, item_error = canvas_get_all(
-            f"/api/quiz/v1/courses/{course_id}/quizzes/{assignment_id}/items", {"per_page": 100}
-        )
-        if item_error or not isinstance(item_rows, list):
-            failures.append({"assignment_id": assignment_id, "error": item_error or "items_malformed"})
-            continue
-        quiz = next((row for row in (quiz_rows or []) if isinstance(row, dict)), {})
-        write_quiz_metadata(course_id, assignment_id, assignment=assignment, quiz=quiz,
-                            items=item_rows, root=root, attempted_at=attempted_at)
-        written.append(assignment_id)
+        if outcome["ok"]:
+            written.append(assignment_id)
+            saw_success = True
+            consecutive_failures = 0
+        else:
+            failures.append({"assignment_id": assignment_id, "error": outcome["error"]})
+            category = _classify_http_error(outcome["error"])
+            if category:
+                consecutive_failures += 1
+                evidence_category = category
+
+    examined_full_list = True
+    if probing:
+        if saw_success:
+            circuit_cleared = True
+            store.write_new_quiz_capability(course_id, capability="supported",
+                last_probe_at=attempted_at, retry_after="", evidence_category="",
+                consecutive_failures=0, root=root)
+            # A cleared probe proceeds normally: process the remaining quizzes
+            # in this same run instead of waiting another tick to catch up.
+            for assignment in new_quizzes[1:]:
+                outcome = _fetch_one_quiz(course_id, assignment, canvas_get_all=canvas_get_all,
+                                          root=root, attempted_at=attempted_at)
+                assignment_id = outcome["assignment_id"]
+                if not assignment_id:
+                    continue
+                if outcome["skipped"]:
+                    skipped.append(assignment_id)
+                elif outcome["ok"]:
+                    written.append(assignment_id)
+                else:
+                    failures.append({"assignment_id": assignment_id, "error": outcome["error"]})
+        else:
+            # Bounded probe failure (classified or not) renews the cooldown
+            # without touching the remaining quizzes.
+            circuit_opened = True
+            examined_full_list = False
+            store.write_new_quiz_capability(course_id, capability="restricted",
+                last_probe_at=attempted_at, retry_after=_retry_after_iso(attempted_at),
+                evidence_category=evidence_category or capability_doc["evidence"]["category"],
+                consecutive_failures=1, root=root)
+    else:
+        if saw_success:
+            if capability_doc.get("capability") == "restricted":
+                circuit_cleared = True
+            store.write_new_quiz_capability(course_id, capability="supported",
+                last_probe_at=attempted_at, retry_after="", evidence_category="",
+                consecutive_failures=0, root=root)
+        elif consecutive_failures >= CAPABILITY_FAILURE_THRESHOLD and evidence_category:
+            circuit_opened = True
+            store.write_new_quiz_capability(course_id, capability="restricted",
+                last_probe_at=attempted_at, retry_after=_retry_after_iso(attempted_at),
+                evidence_category=evidence_category, consecutive_failures=consecutive_failures,
+                root=root)
+
     complete = not failures
     state = "current" if complete else (
         "incomplete" if (written or skipped) else "unavailable")
     _record_sync(course_id, kind="metadata", state=state,
                  error_code="metadata_partial" if failures else "",
                  attempted_at=attempted_at, root=root)
-    if complete:
+    if complete and examined_full_list:
         keep = set(str(row.get("id")) for row in new_quizzes if row.get("id") not in (None, ""))
         for assignment_id in set(list_assignment_ids(course_id, root=root)) - keep:
             try:
@@ -724,5 +874,8 @@ def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None
                     shutil.rmtree(directory)
             except OSError:
                 pass
+    capability_now = store.read_new_quiz_capability(course_id, root=root)["capability"]
     return {"ok": complete, "state": state, "quizzes": len(written),
-            "skipped": len(skipped), "failures": failures}
+            "skipped": len(skipped), "failures": failures,
+            "capability": capability_now, "skipped_restricted": skipped_restricted,
+            "circuit_opened": circuit_opened, "circuit_cleared": circuit_cleared}

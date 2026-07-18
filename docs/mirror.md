@@ -40,6 +40,8 @@ fresh — and fall back to live Canvas, visibly labeled, when it isn't.
                                    (the authoring catalog stays the rich source)
   submissions/<assignment_id>.v1.json
                                    per-student current row + append-only attempts
+  new_quiz_capability.v1.json      New Quiz metadata-scope capability record
+                                   (student-free; see "New Quiz capability gate" below)
   new_quizzes/_sync.v2.json        New Quiz metadata/response freshness envelopes
   new_quizzes/<assignment_id>/quiz.v2.json
                                    assignment, quiz, and item catalog metadata
@@ -105,6 +107,42 @@ true-up bounds staleness from item edits that don't bump `updated_at`. PowerGrad
 the response snapshot on success. A fresh response snapshot can satisfy a
 later PowerGrader read without another ordinary submission/report read; native
 file evidence still uses the focused live transport.
+
+### New Quiz capability gate (1.0beta slice 01a)
+
+New Quiz endpoints are gated on active enrollment (`api/README.md` ~205-213): the
+same token returns 200 in an actively-enrolled course and 403 in a
+concluded/past-enrollment course, deterministically, for every quiz. Design:
+**lifecycle predicts, probe confirms, circuit backstops**
+(`docs/reference/canvasmirror-1.0beta-information-spine.md` Sec 9.4) — this
+slice implements the probe/circuit half only; no lifecycle signal exists yet.
+
+`sync_metadata` (`api/mirror/new_quizzes.py`) keeps a small, student-free
+capability record per course (`new_quiz_capability.v1.json`, via
+`api/mirror/store.py`'s course_dir/course_lock/atomic-write conventions —
+its own file rather than widening `_sync.v1.json`'s schema): `capability`
+(`supported` / `restricted` / `unknown`), `last_probe_at`, `retry_after`, and
+a sanitized `evidence` (`forbidden` / `unauthorized` category + consecutive
+failure count). No status text, response bodies, URLs, or quiz titles are
+stored.
+
+Classification: 3 consecutive distinct-quiz `HTTP 403`/`HTTP 401` failures
+(parsed from the existing canvas_client error-string prefix) with zero
+successes in one `sync_metadata` run opens the circuit — `restricted`,
+`retry_after` = now + 24h. Any single success in a run clears it. A mixed run
+(some 200, some 403) stays `supported` — those failures are item-level noise.
+
+Gate: while restricted and the cooldown has not expired, `sync_metadata`
+skips the entire fan-out (zero Canvas calls) and records the run as
+skipped-restricted. Once the cooldown passes, the next run makes one bounded
+probe (the first quiz only) — a 403/401 renews the cooldown without touching
+the rest; a success clears the restriction and the remaining quizzes are
+processed normally in the same run. Manual `sync_now(course_id)` bypasses the
+cooldown entirely and always runs a full probe; the 15-minute heartbeat never
+does. Skipped-restricted runs and circuit opens/clears are counted in
+`sync_metadata`'s existing return summary (`capability`, `skipped_restricted`,
+`circuit_opened`, `circuit_cleared`) so the effect is observable without
+exposing course names.
 
 ## Mirror-first reads (`api/mirror/queries.py`)
 

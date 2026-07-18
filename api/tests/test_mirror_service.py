@@ -119,6 +119,48 @@ def test_sync_now_scopes_to_current_courses(monkeypatch, tmp_path):
     assert results[0]["course_id"] == "111"
 
 
+def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    quiz_calls = []
+
+    class NewQuizCanvas:
+        def __call__(self, path, params=None, timeout=30):
+            if "/quizzes/" in path:
+                quiz_calls.append(path)
+            if path.endswith("/assignments"):
+                return [{"id": 700099, "name": "New Quiz",
+                        "is_quiz_lti_assignment": True, "updated_at": ""}], None
+            if path.endswith("/users"):
+                return [{"id": 900001, "name": "Learner One"}], None
+            if path.endswith("/sections") or path.endswith("/students/submissions"):
+                return [], None
+            if path.endswith("/quizzes/700099"):
+                return [{"id": "700099", "title": "New Quiz"}], None
+            if path.endswith("/quizzes/700099/items"):
+                return [], None
+            raise AssertionError(f"unexpected path {path}")
+
+    # Seed the course as restricted, with a far-future cooldown, before any
+    # sync has ever run — so the first heartbeat sees an already-open circuit.
+    store.write_new_quiz_capability(
+        "111", capability="restricted", last_probe_at=NOW,
+        retry_after="2099-01-01T00:00:00Z", evidence_category="forbidden",
+        consecutive_failures=3)
+
+    # The heartbeat (first-run backfill) must still skip the New Quiz
+    # fan-out entirely — it never bypasses the cooldown.
+    mirror_service.run_heartbeat_pass(canvas_get_all=NewQuizCanvas(), now=NOW)
+    assert quiz_calls == []
+    assert store.read_new_quiz_capability("111")["capability"] == "restricted"
+
+    # Manual sync now ignores the cooldown entirely and probes the quiz.
+    results = mirror_service.sync_now("111", canvas_get_all=NewQuizCanvas(),
+                                      now="2026-07-16T12:20:00Z")
+    assert results[0]["ok"] is True
+    assert "/api/quiz/v1/courses/111/quizzes/700099" in quiz_calls
+    assert store.read_new_quiz_capability("111")["capability"] == "supported"
+
+
 # --- routes ------------------------------------------------------------------------
 
 def test_mirror_status_route(monkeypatch, tmp_path):

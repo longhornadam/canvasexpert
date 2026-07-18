@@ -94,8 +94,13 @@ def _guard(course_id, root):
     return None
 
 
-def full_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
-    """Backfill / nightly reconcile: fetch everything first, then rewrite."""
+def full_pass(course_id, *, canvas_get_all, root=None, now=None,
+              bypass_new_quiz_cooldown: bool = False) -> dict:
+    """Backfill / nightly reconcile: fetch everything first, then rewrite.
+
+    ``bypass_new_quiz_cooldown`` plumbs the manual ``sync_now`` override down
+    to the New Quiz metadata capability gate (1.0beta slice 01a) — the
+    15-minute heartbeat never passes it."""
     blocked = _guard(course_id, root)
     if blocked:
         return blocked
@@ -137,6 +142,7 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
                       root=root)
     new_quiz_result = new_quizzes.sync_metadata(
         course_id, assignments, canvas_get_all=canvas_get_all, root=root, now=started,
+        bypass_cooldown=bypass_new_quiz_cooldown,
     )
     return {"ok": True, "assignments": len(document["assignments"]),
             "students": len(students or []),
@@ -145,15 +151,18 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
             "new_quizzes": new_quiz_result}
 
 
-def delta_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
+def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
+               bypass_new_quiz_cooldown: bool = False) -> dict:
     """Incremental pass. Falls back to a full pass when no watermark exists
-    yet (first run, or a rebuilt mirror)."""
+    yet (first run, or a rebuilt mirror). ``bypass_new_quiz_cooldown`` — see
+    ``full_pass``."""
     blocked = _guard(course_id, root)
     if blocked:
         return blocked
     watermarks = store.read_sync(course_id, root=root)["watermarks"]
     if not watermarks["submitted_since"] or not watermarks["graded_since"]:
-        return full_pass(course_id, canvas_get_all=canvas_get_all, root=root, now=now)
+        return full_pass(course_id, canvas_get_all=canvas_get_all, root=root, now=now,
+                         bypass_new_quiz_cooldown=bypass_new_quiz_cooldown)
     started = now or store.now_iso()
 
     assignments, error = _fetch_assignments(course_id, canvas_get_all)
@@ -188,6 +197,7 @@ def delta_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
                       root=root)
     new_quiz_result = new_quizzes.sync_metadata(
         course_id, assignments, canvas_get_all=canvas_get_all, root=root, now=started,
+        bypass_cooldown=bypass_new_quiz_cooldown,
     )
     return {"ok": True, "assignments": len(assignments or []),
             "changed_rows": len(submitted or []) + len(graded or []),

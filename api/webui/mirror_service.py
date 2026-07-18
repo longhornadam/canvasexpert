@@ -74,7 +74,11 @@ def run_heartbeat_pass(*, canvas_get_all=None, now=None) -> list[dict]:
 
 def sync_now(course_id: str | None = None, *, canvas_get_all=None, now=None) -> list[dict]:
     """Manual 'Sync now': a delta per requested course (falls back to a full
-    pass automatically when the course has never been backfilled)."""
+    pass automatically when the course has never been backfilled).
+
+    This is the manual-diagnostic override (vision doc Sec 9.3): it bypasses
+    any New Quiz metadata capability cooldown and always runs a full probe.
+    The 15-minute heartbeat (``run_heartbeat_pass``) never does."""
     if not config.token_is_set():
         return [{"ok": False, "error": "No Canvas token saved — go to Settings."}]
     canvas_get_all = canvas_get_all or _canvas_get_all
@@ -85,7 +89,8 @@ def sync_now(course_id: str | None = None, *, canvas_get_all=None, now=None) -> 
     summaries = []
     for course in courses:
         cid = str(course.get("id") or "")
-        result = sync.delta_pass(cid, canvas_get_all=canvas_get_all, now=now)
+        result = sync.delta_pass(cid, canvas_get_all=canvas_get_all, now=now,
+                                 bypass_new_quiz_cooldown=True)
         summaries.append({"course_id": cid, "pass": "delta", **result})
     return summaries
 

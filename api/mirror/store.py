@@ -56,6 +56,20 @@ _SUBMISSIONS_KEYS = {"schema_version", "course_id", "assignment_id",
                      "submissions"} | _ENVELOPE_KEYS
 _SUBMISSION_ENTRY_KEYS = {"current", "attempts"}
 
+# New Quiz metadata-scope capability record (1.0beta slice 01a). Student-free:
+# just enough to gate the sync_metadata fan-out per course. Kept as its own
+# small file (same course_dir/course_lock/atomic-write conventions as the rest
+# of this module) instead of widening _sync.v1.json, so this slice never has
+# to bump MIRROR_VERSION or touch the exact-key validation every other reader
+# of _sync.v1.json depends on.
+NEW_QUIZ_CAPABILITY_VERSION = 1
+NEW_QUIZ_CAPABILITY_FILENAME = "new_quiz_capability.v1.json"
+CAPABILITY_STATES = {"supported", "restricted", "unknown"}  # "unsupported" reserved, unused
+_CAPABILITY_KEYS = {"schema_version", "course_id", "capability", "last_probe_at",
+                    "retry_after", "evidence"}
+_EVIDENCE_KEYS = {"category", "consecutive_failures"}
+_EVIDENCE_CATEGORIES = {"", "forbidden", "unauthorized"}
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -120,6 +134,11 @@ def submission_path(course_id, assignment_id, root=None):
     return os.path.join(directory, f"{workspace.safe_id(assignment_id)}.v1.json")
 
 
+def new_quiz_capability_path(course_id, root=None):
+    directory = course_dir(course_id, root)
+    return os.path.join(directory, NEW_QUIZ_CAPABILITY_FILENAME) if directory else None
+
+
 def _require_dir(course_id, root):
     directory = course_dir(course_id, root)
     if not directory:
@@ -176,6 +195,27 @@ def validate_submissions(document: dict, course_id, assignment_id) -> dict:
         _require_exact_keys(entry, _SUBMISSION_ENTRY_KEYS, f"submission {user_id}")
         if not isinstance(entry["current"], dict) or not isinstance(entry["attempts"], dict):
             raise ValueError(f"submission {user_id} shape is invalid")
+    return document
+
+
+def validate_new_quiz_capability(document: dict, course_id) -> dict:
+    _require_exact_keys(document, _CAPABILITY_KEYS, "new quiz capability")
+    if document.get("schema_version") != NEW_QUIZ_CAPABILITY_VERSION:
+        raise ValueError("new quiz capability schema_version is unsupported")
+    if str(document.get("course_id")) != str(course_id):
+        raise ValueError("new quiz capability course_id mismatch")
+    if document.get("capability") not in CAPABILITY_STATES:
+        raise ValueError("new quiz capability state is invalid")
+    for key in ("last_probe_at", "retry_after"):
+        if not isinstance(document.get(key), str):
+            raise ValueError(f"new quiz capability {key} is invalid")
+    evidence = document.get("evidence")
+    _require_exact_keys(evidence, _EVIDENCE_KEYS, "new quiz capability evidence")
+    if evidence.get("category") not in _EVIDENCE_CATEGORIES:
+        raise ValueError("new quiz capability evidence category is invalid")
+    failures = evidence.get("consecutive_failures")
+    if not isinstance(failures, int) or isinstance(failures, bool) or failures < 0:
+        raise ValueError("new quiz capability evidence consecutive_failures is invalid")
     return document
 
 
@@ -490,6 +530,45 @@ def read_sync(course_id, *, root=None) -> dict:
     document = _read_document(sync_path(course_id, root),
                               lambda d: validate_sync(d, course_id))
     return document if document is not None else default_sync(course_id)
+
+
+def default_new_quiz_capability(course_id) -> dict:
+    return {
+        "schema_version": NEW_QUIZ_CAPABILITY_VERSION,
+        "course_id": str(course_id),
+        "capability": "unknown",
+        "last_probe_at": "",
+        "retry_after": "",
+        "evidence": {"category": "", "consecutive_failures": 0},
+    }
+
+
+def read_new_quiz_capability(course_id, *, root=None) -> dict:
+    document = _read_document(new_quiz_capability_path(course_id, root),
+                              lambda d: validate_new_quiz_capability(d, course_id))
+    return document if document is not None else default_new_quiz_capability(course_id)
+
+
+def write_new_quiz_capability(course_id, *, capability: str, last_probe_at: str,
+                              retry_after: str = "", evidence_category: str = "",
+                              consecutive_failures: int = 0, root=None) -> dict:
+    """Persist the New Quiz metadata-scope capability record. Student-free:
+    only the fields the locked design allows (capability, probe/retry
+    timestamps, a sanitized evidence category + count) — never status text,
+    response bodies, URLs, or quiz titles."""
+    _require_dir(course_id, root)
+    document = {
+        "schema_version": NEW_QUIZ_CAPABILITY_VERSION,
+        "course_id": str(course_id),
+        "capability": capability,
+        "last_probe_at": last_probe_at,
+        "retry_after": retry_after,
+        "evidence": {"category": evidence_category,
+                     "consecutive_failures": int(consecutive_failures)},
+    }
+    with course_lock(course_id):
+        return _write_document(new_quiz_capability_path(course_id, root),
+                               validate_new_quiz_capability(document, course_id))
 
 
 def record_pass(course_id, pass_name: str, *, ok: bool, error_code: str = "",

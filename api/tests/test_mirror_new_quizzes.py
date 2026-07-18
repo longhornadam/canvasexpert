@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 
-from api.mirror import new_quizzes
+from api.mirror import new_quizzes, store
 from api.powergrader import assignment_refresh, canvas_fetch, new_quiz_fetch
 from api.webui import config, workspace
 
@@ -247,7 +247,9 @@ def test_metadata_sync_skips_unchanged_quizzes_until_trueup(tmp_path):
     result = new_quizzes.sync_metadata(COURSE, [_assignment()], canvas_get_all=canvas,
                                        root=str(tmp_path), now="2026-07-16T12:15:00Z")
     assert result == {"ok": True, "state": "current", "quizzes": 0,
-                      "skipped": 1, "failures": []}
+                      "skipped": 1, "failures": [], "capability": "supported",
+                      "skipped_restricted": False, "circuit_opened": False,
+                      "circuit_cleared": False}
     assert len(calls) == 2
     envelope = new_quizzes.read_sync(COURSE, root=str(tmp_path))["metadata"]
     assert envelope["state"] == "current"
@@ -333,3 +335,132 @@ def test_cached_new_quiz_path_skips_core_and_report_reads(monkeypatch, tmp_path)
     assert error is None and assignment["is_quiz_lti_assignment"] is True
     assert subs[0]["new_quiz_attempt"] == 2
     assert subs[0]["body"] == "cached"
+
+
+# --- New Quiz capability gate (1.0beta slice 01a) ----------------------------
+
+def _quiz_assignment(quiz_id):
+    return {
+        "id": quiz_id, "name": f"Fictional Quiz {quiz_id}", "description": "Explain.",
+        "points_possible": 10, "published": True,
+        "is_quiz_lti_assignment": True, "submission_types": ["external_tool"],
+        "updated_at": "",
+    }
+
+
+def test_capability_circuit_opens_after_three_consecutive_403s_and_blocks_calls_during_cooldown(tmp_path):
+    quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2"), _quiz_assignment("quiz-3")]
+    calls = []
+
+    def forbidden(path, params=None, timeout=30):
+        calls.append(path)
+        return None, "HTTP 403: Forbidden"
+
+    result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=forbidden,
+                                       root=str(tmp_path), now=NOW)
+    assert result["capability"] == "restricted"
+    assert result["circuit_opened"] is True
+    assert len(result["failures"]) == 3
+    assert len(calls) == 3  # each quiz fails on its doc call — no items calls made
+
+    capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    assert capability["capability"] == "restricted"
+    assert capability["evidence"] == {"category": "forbidden", "consecutive_failures": 3}
+    assert capability["retry_after"] > NOW
+
+    # A later run inside the cooldown window makes zero Canvas calls at all —
+    # the whole fan-out is skipped, not just individually retried.
+    def explode(path, params=None, timeout=30):
+        raise AssertionError(f"no Canvas call expected during cooldown: {path}")
+
+    result2 = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=explode,
+                                        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+    assert result2 == {"ok": True, "state": "unavailable", "quizzes": 0, "skipped": 0,
+                       "failures": [], "capability": "restricted",
+                       "skipped_restricted": True, "circuit_opened": False,
+                       "circuit_cleared": False}
+
+
+def test_capability_mixed_run_of_successes_and_403s_stays_supported(tmp_path):
+    quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2"), _quiz_assignment("quiz-3")]
+
+    def mixed(path, params=None, timeout=30):
+        if path.endswith("/quizzes/quiz-1"):
+            return [{"id": "quiz-1", "title": "Quiz One"}], None
+        if path.endswith("/quizzes/quiz-1/items"):
+            return [], None
+        if path.endswith("/quizzes/quiz-2") or path.endswith("/quizzes/quiz-3"):
+            return None, "HTTP 403: Forbidden"
+        raise AssertionError(path)
+
+    result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=mixed,
+                                       root=str(tmp_path), now=NOW)
+    assert result["capability"] == "supported"
+    assert result["circuit_opened"] is False
+    assert len(result["failures"]) == 2
+    capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    assert capability["capability"] == "supported"
+    assert capability["evidence"] == {"category": "", "consecutive_failures": 0}
+
+
+def test_capability_probe_after_cooldown_failure_renews_with_exactly_one_call(tmp_path):
+    quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2"), _quiz_assignment("quiz-3")]
+    store.write_new_quiz_capability(
+        COURSE, capability="restricted", last_probe_at="2026-07-15T12:00:00Z",
+        retry_after="2026-07-16T12:00:00Z", evidence_category="forbidden",
+        consecutive_failures=3, root=str(tmp_path))
+
+    calls = []
+
+    def forbidden(path, params=None, timeout=30):
+        calls.append(path)
+        return None, "HTTP 403: Forbidden"
+
+    result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=forbidden,
+                                       root=str(tmp_path), now="2026-07-16T13:00:00Z")
+    assert len(calls) == 1  # bounded probe: only the first quiz's doc call
+    assert result["circuit_opened"] is True
+    capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    assert capability["capability"] == "restricted"
+    assert capability["retry_after"] > "2026-07-16T12:00:00Z"
+
+
+def test_capability_probe_after_cooldown_success_clears_and_proceeds_normally(tmp_path):
+    quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2")]
+    store.write_new_quiz_capability(
+        COURSE, capability="restricted", last_probe_at="2026-07-15T12:00:00Z",
+        retry_after="2026-07-16T12:00:00Z", evidence_category="forbidden",
+        consecutive_failures=3, root=str(tmp_path))
+    calls = []
+
+    def succeeding(path, params=None, timeout=30):
+        calls.append(path)
+        if path.endswith("/items"):
+            return [], None
+        quiz_id = path.rsplit("/", 1)[-1]
+        return [{"id": quiz_id, "title": f"Quiz {quiz_id}"}], None
+
+    result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=succeeding,
+                                       root=str(tmp_path), now="2026-07-16T13:00:00Z")
+    assert result["capability"] == "supported"
+    assert result["circuit_cleared"] is True
+    assert result["quizzes"] == 2  # probe quiz plus the remaining one, same run
+    capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    assert capability["capability"] == "supported"
+    assert capability["retry_after"] == ""
+
+
+def test_capability_envelope_has_no_forbidden_fields(tmp_path):
+    def forbidden(path, params=None, timeout=30):
+        return None, "HTTP 403: Forbidden — course concluded, contact registrar"
+
+    new_quizzes.sync_metadata(
+        COURSE, [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2"), _quiz_assignment("quiz-3")],
+        canvas_get_all=forbidden, root=str(tmp_path), now=NOW,
+    )
+    capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    assert set(capability) == {"schema_version", "course_id", "capability",
+                               "last_probe_at", "retry_after", "evidence"}
+    assert set(capability["evidence"]) == {"category", "consecutive_failures"}
+    raw = json.dumps(capability)
+    assert "concluded" not in raw and "registrar" not in raw and "Forbidden" not in raw
