@@ -100,6 +100,11 @@ assignments/modules compatibility fallback and deliberately reports assignment g
 unavailable. Local picker data never authorizes a group mutation: operation preparation and
 execution resolve the selected group live and retain their existing drift/preflight checks.
 
+Course Info's assignments, students, and group sets each read their local projection
+(Course Catalog, `roster.v1.json`, `groups.v1.json`) only when that scope is exactly
+current/fresh, independently falling back to its own existing live Canvas call otherwise —
+email stays a removed, live-only-if-ever-added field; modules stay live.
+
 **Attempt history is append-only** within a living submission: students who
 resubmit accumulate `attempts` keyed by attempt number, which survive full-
 pass rewrites. This is the substrate for regrade queues, revision chains, and
