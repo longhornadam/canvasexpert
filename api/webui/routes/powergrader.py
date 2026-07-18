@@ -761,10 +761,29 @@ def pg_new_quiz_review(session_id: str, user_id: str = Form(""), item_decisions:
     return JSONResponse(payload, status_code=status_code)
 
 
+def _converge_new_quiz_after_finalize(session, user_id) -> None:
+    """After a verified New Quiz finalize, converge both freshness surfaces:
+    the gradebook submission (write-through refresh) and the separate New Quiz
+    response snapshot (stale-invalidate so the next read re-fetches live via the
+    existing native chain). Best-effort; never fails the finalize that landed.
+    """
+    _notify_write_through(session, [user_id])
+    try:
+        course_id = (session or {}).get("course_id")
+        assignment_id = (session or {}).get("assignment_id")
+        if course_id and assignment_id:
+            from api.mirror import new_quizzes
+            new_quizzes.invalidate_responses(course_id, assignment_id)
+    except Exception:
+        pass
+
+
 @router.post("/api/powergrader/session/{session_id}/new-quiz-finalize")
 def pg_new_quiz_finalize(session_id: str, user_id: str = Form(""), review_token: str = Form(""), item_decisions: str = Form("")):
     payload, status_code = session_actions.finalize_new_quiz(
         session_id, user_id=user_id, review_token=review_token, decisions_json=item_decisions,
         load_session=_load_session, save_session=_save_session, apply=_new_quiz_apply,
     )
+    if status_code == 200 and payload.get("status") == "finalized":
+        _converge_new_quiz_after_finalize(_load_session(session_id), user_id)
     return JSONResponse(payload, status_code=status_code)

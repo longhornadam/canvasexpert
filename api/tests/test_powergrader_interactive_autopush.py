@@ -486,3 +486,19 @@ def test_notify_write_through_swallows_convergence_errors(monkeypatch):
 
     monkeypatch.setattr(pg.mirror_service, "notify_course_changed", boom)
     pg._notify_write_through({"course_id": "77"}, 1)  # must not raise
+
+
+def test_converge_new_quiz_after_finalize_hits_both_surfaces(monkeypatch):
+    """A verified New Quiz finalize converges the gradebook submission (write-
+    through refresh) and stale-invalidates the separate New Quiz response cache."""
+    from api.webui.routes import powergrader as pg
+    from api.mirror import new_quizzes
+    notified, invalidated = [], []
+    monkeypatch.setattr(pg.mirror_service, "notify_course_changed",
+                        lambda course_id, **kw: notified.append(str(course_id)))
+    monkeypatch.setattr(new_quizzes, "invalidate_responses",
+                        lambda course_id, assignment_id, **kw:
+                        invalidated.append((str(course_id), str(assignment_id))))
+    pg._converge_new_quiz_after_finalize({"course_id": "55", "assignment_id": "900"}, "u1")
+    assert notified == ["55"]
+    assert invalidated == [("55", "900")]
