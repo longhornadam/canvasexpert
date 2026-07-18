@@ -415,10 +415,11 @@ The setup page uses a wide responsive workspace with:
 
 New Quizzes are selectable for written-response review in all three modes. Each
 session is a local Student Analysis JSON snapshot: file-upload entries are filename-only,
-and current PowerGrader does not yet offer New Quiz posting, late catch-up, scheduled
-scoring, or item-level write-back. The posting limit is current product state, not a Canvas
-PAT limitation; the verified first-party transport is documented in
-`docs/reference/new-quizzes-grading-transport.md`. Classic Quizzes remain unavailable.
+and New Quiz sessions support manual item-score and grader-feedback finalization through
+a reviewed lane. Assignment-level comment posting is also available. Late catch-up and
+scheduled scoring remain unimplemented. The implementation details and capability boundaries
+are documented in `docs/reference/new-quizzes-grading-transport.md`. Classic Quizzes remain
+unavailable.
 
 After a course is selected, the assignment picker groups work by Canvas course
 module and immediately shows the final three modules in course order. The Modules

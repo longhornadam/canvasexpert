@@ -14,8 +14,8 @@ Quizzes item write-back is blocked by personal access tokens.
 | New Quiz list and report APIs | An actively enrolled teacher's PAT can reach `/api/quiz/v1/...`; concluded enrollment may return `403` | Diagnostic and Student Analysis report paths exist |
 | Constructed responses | Student Analysis JSON/CSV exposes item responses; the UI CSV remains a fallback | PowerGrader uses JSON snapshots; CSV remains a manual fallback |
 | Native file evidence | Canvas's signed native/LTI result path exposes current attempt item evidence | PowerGrader has a focused signed-file acquisition path; unsupported or failed evidence remains teacher-review-only |
-| Per-item manual score | Canvas's first-party grader accepts an independent score for each manual item | Technically verified but not yet exposed; current PowerGrader routes still block New Quiz write-back |
-| Per-item grader feedback | The same result update accepts one grader-feedback value per item ("Additional Comments") | Technically verified but not yet exposed |
+| Per-item manual score | Canvas's first-party grader accepts an independent score for each manual item | Exposed: New Quiz sessions post teacher-reviewed item scores and per-item feedback through a reviewed, receipt-backed finalization lane (preflight freeze, result-version drift detection, idempotency, post-write verification; concluded enrollment may return `403`) |
+| Per-item grader feedback | The same result update accepts one grader-feedback value per item ("Additional Comments") | Exposed through the same finalization lane |
 | Assignment-level submission comments | The ordinary Submissions API accepts comment writes on a New Quiz submission without touching the quiz-engine score (write + delete verified live 2026-07-14) | Exposed: New Quiz sessions post teacher-reviewed feedback as assignment comments through the frozen manual push review (comment-only; never a score) |
 | Assignment total | Canvas derives the New Quiz result total from item scores and fudge points | Do not replace item grading with a forced ordinary-assignment total write |
 
@@ -93,19 +93,26 @@ check so Canvas drift does not weaken review or write safety.
 ## Current implementation facts
 
 - PowerGrader can select New Quizzes and build local written-response sessions.
-- New Quiz sessions support a **comment-only manual push** (2026-07-14): teacher-approved
-  feedback posts as ordinary assignment-level submission comments through the same frozen
-  review/drift/idempotency flow as ordinary pushes, and the payload never contains a
-  `submission`/`posted_grade` key. Item scores and per-item "Additional Comments" remain
-  blocked pending the reviewed item-grading adapter; legacy New Quiz sessions without the
-  `comment_writeback_supported` flag stay fully blocked.
+- New Quiz sessions support two manual write lanes:
+  - **Comment-only push** (2026-07-14): teacher-approved assignment-level feedback posts
+    as ordinary submission comments through frozen review/drift/idempotency flow; payload
+    excludes `submission`/`posted_grade`. Legacy sessions without `comment_writeback_supported` 
+    stay fully blocked.
+  - **Item-finalization lane** (2026-07-14): teacher-reviewed item scores and per-item
+    grader feedback finalize through a gated two-phase route: `POST .../new-quiz-review`
+    (preflight freeze → 15-minute review token) then `POST .../new-quiz-finalize` (verification
+    and application). Sessions with `new_quiz_item_finalization_supported=true` are eligible;
+    the route validates result-version stability (drift check against cached state digest),
+    applies an idempotency key (keyed on user/state/decision digests), re-fetches and
+    verifies the authoritative result post-write, and logs content-minimized receipts.
+    Concluded enrollment may return `403`.
 - `api/powergrader/new_quiz_fetch.py` uses native result acquisition; the live participant
   result key `quiz_api_quiz_session_id` is normalized alongside older/synthetic
   `quiz_session_id` shapes (fixed 2026-07-14, live-verified: file evidence downloads).
 - The sessionless result credential is deliberately **not** a production write credential:
   its Phase A full-result POST was rejected without changing the authoritative result.
-  The future grader adapter must acquire the web-session/GraphQL signed grader launch for
-  each deliberate finalization, keeping all launch/session/result credentials in memory.
+  The current item-finalization adapter acquires the web-session/GraphQL signed grader launch
+  for each deliberate finalization, keeping all launch/session/result credentials in memory.
 - Live report shape (verified 2026-07-14): upload answers arrive as filename-only strings
   with no file refs — `normalize()` seeds the expected file record from the answer so the
   native transport can materialize the upload. `item_responses[].item_type` carries the

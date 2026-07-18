@@ -220,9 +220,8 @@ def _writeback_mode(session: dict) -> str:
 
     "full" — grades and comments through the Submissions API.
     "comments_only" — assignment-level comments only (New Quiz sessions:
-    scores belong to the quiz engine, which has no reviewed write transport
-    yet, but submission comments are ordinary Canvas data — verified live
-    2026-07-14).
+    item scores finalize through the gated two-phase review lane; assignment
+    comments are ordinary Canvas data — verified live 2026-07-14).
     "none" — legacy New Quiz sessions created before the comment lane.
     """
     if session.get("canvas_writeback_supported", True):

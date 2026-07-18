@@ -232,11 +232,12 @@ ANTHROPIC_KEY=
   Regardless of the API, the **Student Analysis CSV downloads fine from the New Quizzes UI**
   (full responses included) — the always-available manual fallback, and the only option for
   courses where your enrollment has concluded.
-- **PowerGrader New Quiz sessions are currently read-only snapshots.** They use the Student
-  Analysis JSON report for written responses, and current Canvas Expert route/session gates
-  do not yet expose item score or grader-feedback write-back. This is an implementation and
-  review-safety limit, not a Canvas PAT capability limit. New Quiz late catch-up and
-  scheduled scoring also remain unimplemented.
+- **PowerGrader New Quiz sessions support manual grading and two write lanes.** They use the
+  Student Analysis JSON report for written responses. New Quiz sessions can post assignment-level
+  teacher feedback through a reviewed comment-only lane, and item scores + per-item grader
+  feedback through a gated item-finalization lane (two-phase review→finalize route pair with
+  preflight freeze, drift detection, idempotency, and post-write verification). Concluded
+  enrollment may return `403`. New Quiz late catch-up and scheduled scoring remain unimplemented.
 - **Common Cartridge import is the zero-auth power path** (Settings → Import Course
   Content). Vanilla CC 1.x carries only the portable common subset, but a **Canvas-flavored
   export package** (CC + Canvas extensions: `canvas_export.txt`, `course_settings/*.xml`)
