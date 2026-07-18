@@ -1,66 +1,82 @@
-# <Slice name — one vertical teacher-visible improvement>
+# <One vertical teacher-visible improvement>
 
-Status: **<QUEUED | READY | ACTIVE | GREEN; completed | RED; stopped>**
+Status: **<READY | ACTIVE | YELLOW; decision needed | RED; stopped | GREEN; completed>**
 
-Risk: **<low | medium | high>** (one line saying why — FERPA persistence, write boundary,
-shared coordinator semantics, or display-only)
+Risk: **<low | medium | high>** - <one sentence naming the actual boundary>
 
-Depends on: <prior slice name(s), or "nothing beyond current `dev`">
+Depends on: <accepted commit/current `dev`, or nothing beyond current `dev`>
+
+Keep this brief slice-specific, normally under 100 lines. Record decisions here; link
+durable contracts and route cards instead of copying their narrative. A long reference
+must be routed by exact heading/numbered section, never assigned wholesale.
 
 ## Teacher-visible result
 
-<2–5 sentences. What the teacher sees or is protected from after this slice. If the change
-is invisible (safety/instrumentation), say what evidence proves it happened.>
+<What the teacher sees or is protected from. For invisible safety/performance work, name
+the observable evidence.>
 
-## Read only these references
+## Acceptance criteria
 
-- <exact files and docs the executor may read>
+- [ ] <Independently checkable outcome the senior will use to accept this brief.>
+- [ ] <Required safety/compatibility fact, if applicable.>
+- [ ] The named acceptance gate below passes.
 
-<One line naming anything the executor must NOT read (stale handoffs, superseded docs).>
+The executor reports evidence; it does not redefine, narrow, or self-accept these criteria.
 
-## Preflight — stop if these facts are false
+## Explicit non-goals
 
-```powershell
-<rg commands proving each insertion point still exists on current dev>
-```
+- <Adjacent behavior deliberately not changed, and its current owner/future decision.>
 
-Expected facts:
+## Locked decisions
 
-- <fact the rg output must show, one per assumption this brief depends on>
-
-If any expected fact is false, return RED without writing code.
-
-## Locked design for this slice
-
-<The one projection/read/write decision this slice implements, plus exact symbols,
-schema allowlists (fields permitted at rest / forbidden material), and behavior that must
-remain live. Vocabulary note where relevant: state whether "pass" (current contract) or
-"scope" (target contract) terms are in use.>
+- <Exact behavior, owner, schema allowlist, and live-vs-local boundary.>
+- <Compatibility or vocabulary decision the executor must not rediscover.>
+- <Privacy/write rule, if applicable.>
 
 ## Scope
 
-- <in-scope changes>
+- <Exact files/symbols or narrowly bounded ownership areas allowed to change.>
 
-## Out of scope
+## Read only these references
 
-- <adjacent work explicitly deferred, with the slice or program that owns it>
+- `AGENTS.md`
+- <small module route card or exact contract/reference heading>
+- <exact implementation/test files needed after preflight>
 
-## Verification
+Do not read: `docs/handoffs/archive/`, unrelated module maps, or whole vision documents.
+
+## Preflight - stop if these facts are false
 
 ```powershell
-<exact pytest commands>
+<small rg commands proving named insertion points on current dev>
 ```
 
-- <rendered browser route checks with zero-new-console-error requirement, when a route
-  changed>
-- <performance evidence (request counts / durations), when the slice claims a perf effect>
+- <Expected fact, one per assumption.>
+
+If any fact is false, return RED without implementation changes.
+
+## Known baseline (only when relevant)
+
+`<known HEAD>`: `<exact broad/focused command>` -> `<pre-existing result and reproduction state>`.
+This brief neither fixes nor re-litigates that baseline; report only a change to it.
+
+## Named acceptance gate
+
+```powershell
+<the focused test set and any rendered/behavior check required to accept this brief>
+```
+
+- This named set is the slice gate. Run a broad matrix only when this brief explicitly
+  declares an integration/release checkpoint.
+- <Rendered-route, failure/idempotency/receipt, or performance evidence when required.>
 
 ## Stop conditions
 
-- RED: <contradictory Canvas behavior, missing field, or failed preflight — stop, report>
-- YELLOW: <ambiguity the executor may resolve only by narrowing scope, never by widening>
+- **RED:** <contradiction, missing seam, guardrail gap, or required contract expansion.>
+- **YELLOW:** <one bounded decision/check that can be resolved without widening scope.>
 
 ## Execution result
 
-<Executor fills in: traffic light, commit hash, files changed, verification counts,
-deviations from the brief, and any unresolved decision for the senior.>
+<Executor records traffic light against the pre-authored acceptance criteria, commit hash if
+any, changed files, named-gate commands/counts, deviations, and unresolved decisions. The
+same compact report is returned to the senior.>

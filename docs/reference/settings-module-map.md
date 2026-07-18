@@ -1,7 +1,8 @@
 # Settings Module Map
 
-Purpose: give future agents a low-token routing map for Settings without reading the
-large browser script or persistence package first.
+Routing scope: open this map only when the active handoff touches Settings, then use the
+relevant section. It is not global executor context and does not replace the handoff's
+exact file/symbol list.
 
 As of 2026-07-08, Settings browser logic is split into plain feature files loaded
 from a small shared bootstrap. Keep this map current if the load order or ownership

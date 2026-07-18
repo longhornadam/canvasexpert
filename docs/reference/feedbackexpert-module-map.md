@@ -1,5 +1,9 @@
 # FeedbackExpert Compatibility Module Map
 
+Routing scope: open this map only when the active handoff touches FeedbackExpert
+compatibility, imports, or the shared scoring/privacy engines. It is not global executor
+context.
+
 FeedbackExpert is retired as a teacher-facing page. `/feedback-expert` returns a
 307 redirect to `/powergrader?advanced=import`; existing `FeedbackExpert/` workspace
 artifacts remain compatibility-read data and are never automatically copied or deleted.

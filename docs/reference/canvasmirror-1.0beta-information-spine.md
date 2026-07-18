@@ -4,10 +4,15 @@ Status: **grand vision and migration authority; not an execution brief**
 
 Target: **Canvas Expert 1.0 beta**
 
-As of: **2026-07-17**
+As of: **2026-07-18**
 
 Audience: the senior developer who will turn this program into bounded implementation
 briefs for one executor at a time
+
+**Execution routing rule:** this document is senior design authority, not executor
+prerequisite reading. Never assign or read it wholesale for an implementation slice. The
+active handoff must cite only the exact numbered sections needed; the executor reads those
+sections and no others.
 
 This document defines the destination, invariants, migration order, and release gates for
 making CanvasMirror the essential information spine of Canvas Expert. It is intentionally
@@ -20,7 +25,7 @@ permission to redesign the repository.
 state. When the target becomes current behavior, the implementation batch must update the
 current contract and module maps in the same change.
 
-## Reading map
+## Reading map (senior routing only)
 
 - Sections 1–5 lock the product decision, evidence, existing foundation, and design laws.
 - Sections 6–10 define the target architecture, projection/read contracts, coordinator,
@@ -154,6 +159,34 @@ The benchmark is not evidence that “Canvas is just slow.” It exposes four de
 
 These are information-spine concerns, not isolated New Quiz bugs.
 
+### 3.3 Test baseline and slice gates
+
+The broad suite is an integration/release instrument, not an automatic toll for every
+bounded slice. At each declared integration checkpoint, record the known commit, exact
+command, pass/fail/deselection result, and reproduction state of any pre-existing failure in
+this vision or the current brief. A later slice cites that one record; it does not rerun,
+re-explain, or silently absorb an unrelated failure.
+
+Every implementation brief instead names the focused tests and any behavior/render evidence
+that form its acceptance gate before execution. A slice confined to its declared surface is
+accepted when its pre-authored criteria and named gate hold; it does not owe the broad matrix.
+The full API/engine suites and the section 19 matrix run only at an explicitly declared
+integration/release checkpoint, after genuinely cross-cutting coupling, or when focused
+evidence exposes unexpected coupling.
+
+**Current API baseline (integration checkpoint, source HEAD `5059b26`, 2026-07-18):**
+`py -m pytest api/tests -q` -> **937 passed, 5 failed, 1 skipped** in 108.59 seconds. The
+five failures are the known starting state for subsequent slices; this record does not claim
+their root cause or that they predate this head:
+
+- `test_autoscore_failure_is_partial_and_retry_upserts_once`
+- `test_delta_after_full_does_not_erase_stored_comments`
+- `test_ordinary_ingestion_preserves_all_formats_and_routes_shared_gate`
+- `test_apply_creates_quiz_and_items`
+- `test_execute_creates_groups`
+
+Later slices name their own focused gate and report only evidence that this baseline changed.
+
 ---
 
 ## 4. Existing foundation: preserve it, do not rebuild it
@@ -194,11 +227,13 @@ The 1.0-beta program begins from substantial completed work.
 
 - Operation-ledger adapters own most content and gradebook mutation workflows.
 - PowerGrader has explicit review, live preflight, idempotency, and receipt rules.
-- New Quiz item-finalization route/transport machinery exists around specialized short-lived
-  native transport and verification. The lane was deliberately shipped (commit `4a4309a`,
-  2026-07-14) with preflight, idempotency, receipts, and tests; the durable New Quiz
-  capability docs still describe it as blocked. Program 0's first outcome updates those
-  docs to match the shipped code before any later brief touches this boundary.
+- PowerGrader's separate live-course New Quiz item-finalization lane uses Canvas's
+  first-party, short-lived signed grader transport for teacher-reviewed item scores and
+  per-item feedback. It preserves preflight freeze, result-version drift detection,
+  idempotency, verification, receipts, and fail-closed SpeedGrader fallback. Active/current
+  instructor enrollment is required; concluded, closed, past-enrollment, or otherwise
+  restricted courses can return `403`. New Quiz scheduled, late-catch-up, and interactive
+  automatic posting remain unavailable.
 
 The migration must converge these pieces. It must not replace them with a database, a new
 job platform, a raw-response cache, or a second write system.
@@ -633,7 +668,7 @@ the backstop for failures lifecycle cannot predict. The target behavior is:
 One bad item must not poison a whole supported scope. The acquisition contract must state
 when a failure is scope-level and when it is record-level. For the New Quiz metadata scope,
 the enrollment gate makes the classification course-level: consecutive 403s across distinct
-quizzes in one course are scope evidence, not item noise. Program 0 must also test whether
+quizzes in one course are scope evidence, not item noise. The foundation batch must also test whether
 the New Quiz collection endpoint (`GET /api/quiz/v1/courses/:id/quizzes`) can serve as a
 one-call scope probe — and potentially replace the per-quiz metadata fan-out outright for
 accessible courses.
@@ -1146,40 +1181,63 @@ is still incorrect.
 
 ---
 
-## 17. Migration program to 1.0 beta
+## 17. Batched execution plan to 1.0 beta
 
-This is an ordered program, not a set of executor-ready slices. The senior must create one
-current handoff at a time with exact symbols, locked schema decisions, tests, risk, and stop
-conditions.
+This is an ordered **batch plan**, not a micro-slice queue. The senior creates one current,
+executor-ready brief at a time, but a brief should normally deliver the whole vertical batch
+below: its shared contract, immediate consumers, migration, and named acceptance gate. Do not
+pre-split a batch into speculative handoffs. If repository truth makes a locked batch too
+large or unsafe, return YELLOW/RED and revise that one brief; do not silently revive a
+30–50-item implementation queue.
 
-Scale note: at the half-day-to-two-day slice size in section 18.1, these eleven programs
-imply roughly 30–50 sequential slices under the one-executor policy. Programs 0–6 are
-beta-blocking. Programs 7 and 8 may accept explicit, teacher-visible beta exceptions if the
-schedule demands it; Programs 9–11 are beta-blocking again because they close write-safety
-and regression enforcement. Compatibility shims created in Program 1 live until Program 10 —
-every brief touching one must name its owner and removal condition.
+The plan deliberately keeps live Canvas at the decision boundary. A batch may strengthen
+routine local reads and targeted reconciliation, but no cached fact authorizes a write,
+preflight, verification, native evidence action, or focused diagnostic read.
 
-### Program 0 — freeze current truth and establish the release benchmark
+### 17.1 Authoritative execution batches
+
+| Order | Vertical batch | Included outcome | Boundary that remains live | Status / dependency |
+|---|---|---|---|---|
+| 0 | Foundation truth and safety | Keep the call-owner inventory, broad baseline, New Quiz live-course documentation, sweep hardening, lifecycle/capability policy, deletion safety, and focused assignment refresh as regression boundaries. Finish only missing per-scope observability or benchmark-harness work when it has an immediate batch consumer. | All commands and specialized New Quiz grading transport. | Substantially delivered; not a standalone queue. |
+| 1 | Typed Canvas read spine | Versioned envelope and read intents; adapters for the existing Catalog, private mirror, roster/groups, submissions, and Work compatibility seams; source/state/time contract tests. | `authoritative-live` intent, commands, diagnostics, focused evidence. | GREEN (`6705490`); runtime-only v1 is the common boundary for later batches. |
+| 2 | People context completion | Complete Course Info and remaining Roster/Create/Home local people context; make group mutations reconcile the exact group scope promptly. | Group/member writes and verification; email remains explicit live if retained. | Decision-gated: Course Info must not reintroduce Catalog-forbidden `html_url`, and the email action must be explicitly designed. |
+| 3 | Gradebook local read spine | Acquire the consumed private due/late and gradebook-config facts, then migrate gradebook lists, snapshots, standing, and report inputs behind the typed service with focused invalidation. | Curve, sweep, extension, late-policy, override, and all other grade writes. | Beta-blocking. Conditional grading periods stay out without a real consumer. |
+| 4 | Precision grading | Finish exact ordinary-assignment post-write convergence, comment/currentness policy, and late-catch-up behavior; finish equivalent New Quiz freshness without widening its transport. | Ordinary and New Quiz preflight, writes, verification, receipts, native evidence. | Beta-blocking; ordinary and New Quiz acceptance evidence remain separately named within one brief only if the seams prove shared. |
+| 5 | Student reports and portfolios | Build report/portfolio metadata from typed local reads, fetch attachment bytes only through focused evidence, and emit a private provenance manifest. | Evidence acquisition when a selected report requires it. | Beta-blocking unless the user accepts a visible limitation. |
+| 6 | Home, Work, Routines, MCP, and derived views | Replace remaining routine compatibility readers; set bounded comment freshness; give report routines/custom routines a supported read interface; preserve MCP allowlists and generation-based invalidation. | Mutation routines' final compute/execute and explicit live refreshes. | May accept a teacher-visible beta exception only by explicit decision. |
+| 7 | Mutation reconciliation coverage | Inventory every mutation owner; declare exact affected scopes, coalesced refreshes, pending/failed local convergence states, preflight yielding, and retry/idempotency proof. | Every live preflight, mutation, verification, and receipt. | Beta-blocking. Do not default to whole-course sync. |
+| 8 | Transport ownership and beta acceptance | Retire only proven-unused shims; enforce direct-transport ownership; then run the deliberate full suite, rendered routes, benchmark, privacy scan, offline/current/concluded, and OneDrive release matrix. | Named specialized transports documented at their owners. | Final beta checkpoint. |
+
+Batch 1 is accepted. Batch 2 may be prepared only as senior design; it is not
+implementation-ready until its Course Info response and email boundaries are locked. The
+next implementation batch is selected from this table only when its dependencies and
+decision seams are ready.
+
+### 17.2 Retained requirements crosswalk
+
+The former program headings below preserve the detailed requirements and exit gates that
+each batch inherits. They are **not** an implementation order or a list of separate briefs.
+Use the batch table above to select work; use only the applicable requirements below when
+authoring that batch's direct handoff. Completed requirements remain regression boundaries.
+
+#### Former Program 0 — freeze current truth and establish the release benchmark
 
 **Purpose:** prevent implementation from optimizing against an inaccurate map.
 
 Required outcomes:
 
-- **First outcome — reconcile New Quiz item-finalization truth.** The write lane is
-  implemented, routed, and enabled (commit `4a4309a`, 2026-07-14, with tests), while
-  `docs/reference/new-quizzes-grading-transport.md`, `api/README.md`, `api/webui/README.md`,
-  and a stale code comment still describe it as blocked. The code is the deliberate current
-  state; update the canonical safety documentation to describe the shipped lane, its gates,
-  and its verification rules. A live grade-write path whose safety docs deny its existence
-  outranks every performance item in this program.
+- **First outcome — preserve New Quiz item-finalization truth.** The write lane is
+  implemented, routed, and enabled (commit `4a4309a`, 2026-07-14, with tests), and canonical
+  safety documentation describes the shipped live-course lane, its signed grader transport,
+  active/current enrollment prerequisite, safeguards, `403` fallback, and unavailable
+  automatic-post variants. Any future change to this high-risk boundary must keep that
+  documentation accurate before later performance work proceeds.
 - Re-run a static Canvas call-site inventory and classify every call as routine read,
   focused read, preflight, write, verify, binary/native, or diagnostic.
 - Record current owners and direct `requests` bypasses.
 - The July 2026 benchmark scripts are **not in the repository**. Obtain them from the
   benchmark author or rebuild an equivalent sanitized harness outside private data roots;
   a brief that says "preserve the scripts" without a location will stall.
-- Create `docs/handoffs/HANDOFF_TEMPLATE.md` codifying the established handoff skeleton
-  (section 18.1); `AGENTS.md` mandates the template but the file does not yet exist.
 - Specify which Canvas lifecycle fields the `course_context` scope persists (course
   `workflow_state`, course/term `end_at`, enrollment state), and which field gates New Quiz
   capability — concluded *enrollment* is the documented 403 gate and is not the same thing
@@ -1189,12 +1247,14 @@ Required outcomes:
 - Define how a test course is identified without committing course names/IDs.
 - Add a durable Canvas read-spine contract derived from this vision before public scope
   shapes change.
-- Establish current focused and full API test baselines.
+- Establish and record the current focused and full API test baseline at this program's
+  declared integration checkpoint, including known-head reproduction state for any
+  pre-existing failure; later slices cite rather than re-litigate it.
 
 Exit gate: every Canvas call family has an intended 1.0-beta owner; benchmark methodology is
 repeatable; no behavior changes yet.
 
-### Program 1 — correctness and performance foundation
+#### Former Program 1 — correctness and performance foundation
 
 **Purpose:** fix the spine before routing more consumers through it.
 
@@ -1210,16 +1270,16 @@ Required outcomes:
 - Fix authoritative empty-collection semantics in a versioned contract, covering both
   directions from section 10.1 (catalog retains-forever; mirror trusts-any-empty).
 - Harden `/api/sweep/apply` to authoritative recompute or route it through the existing
-  operation-ledger sweep adapter. This is independent of every spine change and should run
-  as the first standalone slice; do not leave a client-authored write path live while
-  performance work proceeds.
+  operation-ledger sweep adapter. This is independent of every spine change and is already a
+  regression boundary; do not reintroduce a client-authored write path while performance work
+  proceeds.
 - Preserve old read APIs as compatibility shims during migration.
 
 Exit gate: the original change test detects create/update/delete correctly for mirrored
 scopes; a concluded New Quiz restriction costs a bounded probe rather than per-quiz fan-out;
 PowerGrader can request submissions without unrelated scopes.
 
-### Program 2 — unify course structure acquisition
+#### Former Program 2 — unify course structure acquisition
 
 **Purpose:** make one acquisition feed the student-free and private projections.
 
@@ -1240,7 +1300,7 @@ Exit gate: Course Catalog and private mirror do not independently fetch the same
 collection during a coordinated refresh; existing PowerGrader catalog behavior remains
 compatible.
 
-### Program 3 — establish the typed read service
+#### Former Program 3 — establish the typed read service
 
 **Purpose:** replace endpoint-shaped shims with one explicit information boundary.
 
@@ -1257,7 +1317,7 @@ Required outcomes:
 Exit gate: one consumer from each major projection can read through the service; no
 consumer loses explicit source/freshness behavior.
 
-### Program 4 — complete roster and group context
+#### Former Program 4 — complete roster and group context
 
 **Purpose:** remove repeated roster/group N+1 reads and give Students/Create one shared
 people context.
@@ -1275,7 +1335,7 @@ Required outcomes:
 Exit gate: revisiting Roster/Course Info makes zero Canvas calls when scopes are usable;
 group changes reconcile locally without a course-wide sync.
 
-### Program 5 — make Gradebook a complete local read consumer
+#### Former Program 5 — make Gradebook a complete local read consumer
 
 **Purpose:** route gradebook information through the spine while strengthening writes.
 
@@ -1286,7 +1346,7 @@ Required outcomes:
 - Add assignment groups/weights and late-policy display to gradebook config.
 - Conditionally add Canvas grading periods only if the actual Gradebook consumer is built.
 - Migrate student/assignment lists, grade snapshots, standing, and report inputs.
-- Confirm the sweep-apply hardening delivered in Program 1 still holds under the new
+- Confirm the sweep-apply hardening still holds under the new
   gradebook read paths.
 - Keep curve, sweep, extension, late-policy, and override write boundaries live.
 - Add targeted post-write refresh mappings.
@@ -1294,7 +1354,7 @@ Required outcomes:
 Exit gate: Gradebook display works from disk/offline with honest freshness; no gradebook
 write can consume a stale or browser-submitted mirror plan as authority.
 
-### Program 6 — finish focused grading acquisition
+#### Former Program 6 — finish focused grading acquisition
 
 **Purpose:** make PowerGrader the model for precise freshness.
 
@@ -1312,7 +1372,7 @@ Exit gate: opening one text assignment cannot trigger New Quiz metadata for the 
 opening one New Quiz cannot generate reports for other quizzes; every push remains live
 verified.
 
-### Program 7 — migrate Student Reports and portfolios
+#### Former Program 7 — migrate Student Reports and portfolios
 
 **Purpose:** eliminate duplicate large metadata fetches from report generation.
 
@@ -1329,7 +1389,7 @@ Required outcomes:
 Exit gate: text-only reports can generate from current local state with zero Canvas calls;
 attachment reports issue only evidence-specific calls.
 
-### Program 8 — converge Home, Work, Routines, MCP, and derived views
+#### Former Program 8 — converge Home, Work, Routines, MCP, and derived views
 
 **Purpose:** remove remaining duplicate readers and build useful local concepts once.
 
@@ -1346,7 +1406,7 @@ Required outcomes:
 Exit gate: background/display features do not independently call core assignment, roster,
 or submissions collections; derived views state their source generation/freshness.
 
-### Program 9 — complete mutation reconciliation coverage
+#### Former Program 9 — complete mutation reconciliation coverage
 
 **Purpose:** make local truth converge promptly after every CanvasExpert action.
 
@@ -1362,7 +1422,7 @@ Required outcomes:
 Exit gate: every supported Canvas mutation has a tested post-write local convergence path;
 no mutation triggers a default whole-course sync.
 
-### Program 10 — enforce transport ownership and remove dead paths
+#### Former Program 10 — enforce transport ownership and remove dead paths
 
 **Purpose:** keep the architecture from regressing before beta.
 
@@ -1380,7 +1440,7 @@ Required outcomes:
 Exit gate: routine UI/business modules cannot introduce a new direct Canvas read without a
 test failure or explicit architecture change.
 
-### Program 11 — 1.0-beta acceptance
+#### Former Program 11 — 1.0-beta acceptance
 
 **Purpose:** prove the product, not just the units. `AGENTS.md` remains the authority for
 suite selection and evidence rules.
@@ -1402,16 +1462,19 @@ limitation accepted by the user.
 
 ---
 
-## 18. How the senior should turn this into executor slices
+## 18. How the senior should turn batches into executor briefs
 
-The program is intentionally too broad for a single executor. The senior owns all decisions
-that cross privacy, persistence, read intent, or write safety.
+The program is intentionally too broad for one implementation pass, not for one capable
+executor. The senior owns decisions that cross privacy, persistence, read intent, or write
+safety; the executor owns implementation of the selected vertical batch.
 
-### 18.1 A good slice
+### 18.1 A good batch brief
 
 This section, together with `docs/handoffs/HANDOFF_TEMPLATE.md`, is the operative handoff
-template. A good handoff normally delivers one vertical teacher-visible improvement in
-roughly half a day to two days. It contains:
+template. A good handoff normally delivers one whole batch in roughly half a day to two days.
+It may include contract, acquisition, immediate consumer migration, and cleanup when they
+share one teacher outcome and one focused gate. It does not turn unrelated risk boundaries
+into a convenience bundle. It contains:
 
 - the exact teacher outcome;
 - one locked projection/read/write decision;
@@ -1426,21 +1489,26 @@ roughly half a day to two days. It contains:
 - stop conditions for contradictory Canvas behavior or missing fields;
 - an execution-result section updated by the executor.
 
-Examples of appropriately bounded slices:
+Examples of appropriately bounded batch briefs:
 
-- concluded-course New Quiz capability circuit plus metrics and one status consumer;
-- assignment deletion membership filtering plus orphan cleanup and change diagnostics;
-- Roster display migration after the group projection contract is locked;
-- Gradebook late-policy display from a new config scope while apply remains live;
-- PowerGrader named assignment refresh replacing whole `sync_now` for text entries.
+- the typed envelope, its adapters for existing projections, and one contract-tested reader
+  from each projection family;
+- private Gradebook config/due facts, Gradebook display migration, focused invalidation, and
+  unchanged live write paths;
+- report/portfolio local metadata assembly, evidence-only attachment reads, and private
+  provenance manifest;
+- ordinary PowerGrader post-write convergence and its exact comment/currentness gate while
+  New Quiz transport remains untouched.
 
-Examples of bad slices:
+Examples of bad batch briefs:
 
 - “migrate every GET to CanvasMirror”;
 - “make sync faster” without a request/time acceptance target;
 - “mirror all Canvas objects”;
 - “refactor networking” without an immediate consumer;
-- a schema expansion and five consumer migrations in one weak-agent brief;
+- a schema expansion and five unrelated consumer migrations;
+- Gradebook write work combined with New Quiz native transport changes;
+- Routines/MCP privacy work bundled with an unrelated Home layout migration;
 - a read migration that says “keep writes safe” without tracing the write call chain.
 
 ### 18.2 Senior-only decisions
@@ -1465,16 +1533,21 @@ ever disagrees with it, `AGENTS.md` wins. Spine-specific guidance:
 - Private roster/submission/evidence changes are high risk because of FERPA persistence.
 - Any change touching grades, comments, credentials, New Quiz native transport, or
   scheduled writes is high risk.
-- A slice that changes shared coordinator/query semantics should run affected mirror,
-  consumer, and service suites; the full API suite belongs at cross-cutting integration
-  boundaries and the final beta gate.
+- A slice that changes shared coordinator/query semantics should name affected mirror,
+  consumer, and service suites as its focused acceptance gate; the full API suite belongs at
+  an explicitly declared cross-cutting integration boundary and the final beta gate.
+- Every brief states independently checkable acceptance criteria and explicit non-goals
+  before execution. The senior accepts against those criteria and the named gate, rather than
+  an executor-defined claim of completion.
 - Browser routes require rendered checks; source-text tests are not substitutes.
 
-### 18.4 One executor at a time
+### 18.4 One executor, one active batch at a time
 
 Follow the repository execution model. Do not send this vision to a swarm. The senior writes
-one durable handoff, one executor implements and self-reviews it, and the senior accepts or
-redirects before the next dependent slice.
+one durable handoff, one executor implements and self-reviews the active batch, and the
+senior accepts or redirects before the next dependent batch. A GREEN brief is archived with
+its evidence; a YELLOW correction returns to the same executor instead of becoming a new
+micro-slice.
 
 ---
 
@@ -1636,18 +1709,15 @@ source/freshness, and any Canvas rate-limit evidence. Never record private respo
 These are current, concrete seams discovered during the architecture/performance audit.
 They are not speculative feature requests.
 
-1. **Assignment deletion consistency:** delta rewrites the assignment index, but aggregate
-   submission reads can still read orphan per-assignment files, and the live change test did
-   not surface the deletion.
-2. **PowerGrader refresh scope:** `_mirror_session_submissions()` calls whole-course
-   `mirror_service.sync_now(course_id)`, which includes unrelated New Quiz metadata.
-3. **Concluded-course New Quiz retry storm:** unavailable metadata documents retry every
-   heartbeat, producing dozens of sequential 403s. Root cause is known: the endpoints are
-   gated on active enrollment (`api/README.md`), so retired/expired/closed courses fail
-   deterministically while current courses succeed — a lifecycle gate, not a per-quiz
-   probe problem.
-4. **Lifecycle model:** configured “active courses” can include concluded Canvas courses,
-   but scheduling does not distinguish them.
+1. **Assignment deletion consistency (resolved by 01b/01e):** complete collection receipts
+   now gate private membership replacement; aggregate reads hide orphans and cleanup remains
+   last-good-safe.
+2. **PowerGrader refresh scope (resolved by 01c):** focused assignment refresh no longer
+   invokes whole-course `mirror_service.sync_now(course_id)` or unrelated New Quiz metadata.
+3. **Concluded-course New Quiz retry storm (resolved by 01a/01d):** the circuit provides
+   bounded probes while lifecycle context suppresses normal concluded-course metadata work.
+4. **Lifecycle model (resolved by 01d):** student-free course context distinguishes current,
+   concluded, and unknown scheduling state without becoming a write preflight.
 5. **Duplicate structure acquisition:** Course Catalog and private mirror independently
    acquire assignments.
 6. **Roster/Course Info bypass:** Roster and Course Info still fetch users, sections,
@@ -1656,8 +1726,8 @@ They are not speculative feature requests.
    routes even though relevant structure is or should be local.
 8. **Gradebook configuration bypass:** late policy and related config display are live; the
    private submission projection omits report-used personalized due fields.
-9. **Sweep safety seam:** direct sweep apply can write client-submitted preview entries
-   without authoritative recomputation.
+9. **Sweep safety seam (resolved by 00b/00c):** apply uses authoritative recomputation and
+   the reviewed operation-ledger path rather than client-submitted preview entries.
 10. **Student Report/portfolio bypass:** metadata assembly uses direct HTTP sessions rather
     than shared projections.
 11. **Comment-only blind spot:** nightly full capture bounds staleness but cannot support a
@@ -1665,21 +1735,18 @@ They are not speculative feature requests.
     empty ambiguity.
 12. **Transport ownership drift:** specialized and accidental direct HTTP calls are not yet
     enforced by an architecture boundary.
-13. **New Quiz write-status documentation drift:** route code enables an item-finalization
-    lane (deliberately shipped in commit `4a4309a`, 2026-07-14, with tests) while canonical
-    safety references still describe it as blocked. The docs must be updated to match the
-    shipped code before any brief touches that high-risk boundary.
-14. **Mirror trusts unproven-complete collections:** the private mirror writes any
-    non-error empty collection as authoritative membership, and the full pass prunes
-    submission files from it. A truncated or transiently empty response is potentially
-    destructive. (Distinct from the Course Catalog, which has the opposite behavior — see
-    section 10.1.)
+13. **New Quiz write-status documentation drift (resolved):** route code enables an
+    item-finalization lane (deliberately shipped in commit `4a4309a`, 2026-07-14, with tests),
+    and canonical safety references describe the live-course signed grader transport,
+    enrollment gate, safeguards, and `403`/SpeedGrader fallback. Future work must preserve
+    that current-state documentation before touching the high-risk boundary.
+14. **Mirror collection completeness (resolved by 01e):** the private mirror requires a
+    proven complete receipt before destructive assignment membership changes; complete empty
+    collections remain authoritative and transport/validation failures retain last-good data.
 
-The first senior briefs should begin with item 13 (a live write lane contradicting its
-safety docs) and item 9 (a client-authored write path) — both are independent of spine
-work — then items 1–4 plus the minimum instrumentation needed to prove them, with item 14
-folded into the item-1 work. Routing more surfaces through the mirror before fixing those
-seams would increase the blast radius of stale or slow behavior.
+The next senior brief begins with item 5: duplicate Course Catalog/private-mirror assignment
+acquisition. The completed safety seams above remain regression boundaries; routing more
+surfaces through the mirror must not reintroduce them.
 
 ---
 

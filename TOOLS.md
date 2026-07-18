@@ -1,157 +1,37 @@
 # Tool Registry
 
-This registry helps agents decide when to use project-local tooling before spending LLM
-context on large raw inputs. Tool manifests live in `tools/manifests/`.
+This is a conditional route card, not mandatory executor reading. Open it only when a
+handoff requires a tool or before manually consuming a large/repetitive input. Read only
+the relevant file under `tools/manifests/` for invocation details.
 
-Tools should return compact, structured output rather than large raw dumps. Preserve
-source URLs, file paths, commands, timestamps, and IDs when they matter for review or
-traceability.
+`planned` means unavailable: do not attempt it or let it block the task.
 
-## Choosing Tools
+| Tool | Status | Use when |
+|---|---|---|
+| `repo-indexer` | planned | An authorized task needs compact architecture, symbol, call-site, or ownership discovery. Skip when the handoff already names the seam. |
+| `test-failure-summarizer` | planned | Test/CI output is too large or noisy to inspect directly. |
+| `change-risk-summarizer` | planned | A large authorized diff needs compact risk and test routing. |
+| `size-report` | available | File sizes are needed without reading source contents. |
+| `canvas-docs-scraper` | planned | Current official Canvas endpoint behavior must be verified. |
+| `canvas-api-inspector` | planned | Authorized live/fixture Canvas data needs normalized object relationships. Never expose secrets or student data. |
 
-Check this file and `tools/manifests/` before brute-force reading of large docs, logs,
-diffs, API responses, scraped HTML, or repeated repository searches.
-
-Use tools for retrieval, parsing, validation, summarization, and normalization. Use LLM
-reasoning for architecture, tradeoffs, planning, reviewing summarized output, and writing
-specs.
-
-## repo-indexer
-
-Status: `planned`
-
-Use when:
-
-- Discovering local architecture
-- Locating implementation points
-- Finding call sites or imports
-- Understanding project layout before making changes
-
-Avoid when:
-
-- The needed file or symbol is already known
-- The task only requires reading one small file
-
-Expected output:
-
-- Compact map of files, symbols, routes, services, and tests
-- Source file paths
-- Relevant commands used
-
-## test-failure-summarizer
-
-Status: `planned`
-
-Use when:
-
-- Tests fail
-- CI logs are large
-- The user asks what broke
-- Raw command output is too noisy for direct LLM inspection
-
-Avoid when:
-
-- The failure output is already short and specific
-- The task is to design tests rather than inspect failures
-
-Expected output:
-
-- Failing command
-- File and line when available
-- Failure message
-- Likely affected area
-
-## change-risk-summarizer
-
-Status: `planned`
-
-Use when:
-
-- Reviewing large changes
-- Preparing PRs
-- Deciding which tests to run
-- Assessing behavioral risk
-
-Avoid when:
-
-- The diff is tiny and already visible
-- The user asked for a specific file-level explanation
-
-Expected output:
-
-- Changed files
-- Public API or schema changes
-- Behavioral risk notes
-- Suggested tests or checks
-
-## size-report
-
-Status: `available`
-
-Use when:
-
-- Picking the next refactor target by file size
-- Checking whether a split reduced large `.py` or `.js` files
-- Producing a compact line-count report without reading file contents into LLM context
-
-Avoid when:
-
-- You need complexity, ownership, or call graph analysis rather than line counts
-- You are scanning private output folders; the script skips common output/private dirs by default
-
-Command:
+Run the available size report from the repository root:
 
 ```powershell
 py tools/size_report.py
 ```
 
-Expected output:
+Tool output should be compact and structured. Preserve source URLs, file paths, commands,
+timestamps, and IDs only when they matter for review; keep credentials and student data
+out of output. Use tools for retrieval, parsing, validation, summarization, and
+normalization. Use reasoning for architecture, tradeoffs, review, and specifications.
 
-- Files at or above 300 lines by default
-- `warn` for 300+ lines and `large` for 500+ lines
-- Relative source paths and line counts
+Canvas-specific priority when a relevant tool becomes available:
 
-## canvas-docs-scraper
+- API documentation: `canvas-docs-scraper`
+- Canvas objects and relationships: `canvas-api-inspector`
+- unfamiliar local architecture: `repo-indexer`
+- large test output: `test-failure-summarizer`
+- large diffs: `change-risk-summarizer`
 
-Status: `planned`
-
-Use when:
-
-- Canvas API behavior is needed
-- Endpoint paths, params, auth, pagination, or response shapes are needed
-- Current official documentation should be verified
-
-Avoid when:
-
-- The task only concerns local implementation
-- The relevant official docs are already present in context
-
-Expected output:
-
-- Matching endpoints
-- Required and optional params
-- Response shape summary
-- Source URLs
-- Retrieval timestamp
-
-## canvas-api-inspector
-
-Status: `planned`
-
-Use when:
-
-- Course, module, assignment, quiz, rubric, user, or enrollment metadata is needed
-- Relationships between Canvas objects matter
-- Raw Canvas API responses are too large or noisy
-
-Avoid when:
-
-- Live Canvas access is not available and no fixture is supplied
-- The task only needs static documentation
-
-Expected output:
-
-- Normalized JSON summary
-- IDs, names, dates, and relationships
-- Source endpoint or fixture path
-- Retrieval timestamp when live data is used
+Tool use never widens the active handoff's file, data, or side-effect scope.

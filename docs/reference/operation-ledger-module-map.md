@@ -1,8 +1,8 @@
 # Operation Ledger Module Map
 
-Use this map first when working on content operation-ledger adapters. It covers the
-facade/leaf ownership split for high-risk Canvas write flows and the small shared
-support seams that those adapters now rely on.
+Routing scope: open this map only when the active handoff touches a content
+operation-ledger adapter, then use the relevant section. It is not global executor context.
+These are high-risk Canvas write flows.
 
 ## Facades
 

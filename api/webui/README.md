@@ -353,11 +353,15 @@ packets for just this cohort, skipping courses whose data hasn't changed (dedupe
 into any packet.
 
 **New Quizzes status:** Enrollment-gated personal access tokens can retrieve constructed
-responses through the Student Analysis JSON report. Canvas's first-party grader can also
-write item scores and grader feedback through a short-lived signed grading launch. Student
-Reports does not yet consume the response path, and current PowerGrader routes do not yet
-expose the write path. New Quiz scores still appear in the Submissions API and are reported
-in the Info document. See `docs/reference/new-quizzes-grading-transport.md`.
+responses through the Student Analysis JSON report. PowerGrader's separate, teacher-reviewed
+item-finalization lane uses Canvas's first-party, short-lived signed grader launch to write
+item scores and per-item grader feedback; it does not use the ordinary assignment-total
+`PUT`. Active/current instructor enrollment is the prerequisite, not PAT-versus-OAuth;
+concluded, closed, past-enrollment, or otherwise restricted courses may return `403`. The
+lane preserves preflight freeze, result-version drift detection, idempotency, post-write
+verification, receipt, and fail-closed SpeedGrader fallback. Student Reports does not yet
+consume the response path. New Quiz scores still appear in the Submissions API and are
+reported in the Info document. See `docs/reference/new-quizzes-grading-transport.md`.
 
 ---
 
@@ -415,11 +419,15 @@ The setup page uses a wide responsive workspace with:
 
 New Quizzes are selectable for written-response review in all three modes. Each
 session is a local Student Analysis JSON snapshot: file-upload entries are filename-only,
-and New Quiz sessions support manual item-score and grader-feedback finalization through
-a reviewed lane. Assignment-level comment posting is also available. Late catch-up and
-scheduled scoring remain unimplemented. The implementation details and capability boundaries
-are documented in `docs/reference/new-quizzes-grading-transport.md`. Classic Quizzes remain
-unavailable.
+and active/current instructor enrollments can use the separate teacher-reviewed
+item-finalization lane for manual item scores and per-item grader feedback through Canvas's
+short-lived signed grader transport. The lane has preflight freeze, result-version drift,
+idempotency, post-write verification, receipt, and fail-closed safeguards; closed,
+concluded, past-enrollment, or otherwise restricted courses may return `403` and require
+the SpeedGrader fallback. Assignment-level comment posting is also available. New Quiz
+late catch-up, scheduled scoring, and interactive automatic posting remain unavailable. The
+implementation details and capability boundaries are documented in
+`docs/reference/new-quizzes-grading-transport.md`. Classic Quizzes remain unavailable.
 
 After a course is selected, the assignment picker groups work by Canvas course
 module and immediately shows the final three modules in course order. The Modules

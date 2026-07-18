@@ -1,7 +1,8 @@
 # Gradebook Module Map
 
-Purpose: give future debugging sessions a low-token routing map for Gradebook so
-they can jump directly to the owning module instead of re-mapping the screen.
+Routing scope: open this map only when the active handoff touches Gradebook, then use the
+relevant section. It is not global executor context and does not replace the handoff's
+exact file/symbol list.
 
 As of 2026-07-08, Gradebook is split on both sides:
 

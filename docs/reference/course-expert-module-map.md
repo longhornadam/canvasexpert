@@ -1,8 +1,8 @@
 # Create Module Map
 
-Purpose: route Create debugging without re-reading the page template,
-shared push modules, and the feature scripts that own the remaining browser
-workflows.
+Routing scope: open this map only when the active handoff touches Create/Course Expert,
+then use the relevant section. It is not global executor context and does not replace the
+handoff's exact file/symbol list.
 
 As of 2026-07-15, Create browser behavior is split into small shared
 push modules plus page-specific feature scripts. `course_expert.html` is now

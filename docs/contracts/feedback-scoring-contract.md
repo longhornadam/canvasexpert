@@ -115,12 +115,17 @@ for any Canvas write.
        comment[text_comment]    = <feedback>   # may include a persona signoff
    ```
 
-   This ordinary Submissions API path works on Assignments today. New Quizzes require a
-   separate reviewed item-result adapter: Canvas capability is verified, but current Canvas
-   Expert write-back remains parked until that high-risk transport is implemented. It must
-   not reuse this assignment-total `PUT`; see
-   `docs/reference/new-quizzes-grading-transport.md`. Late penalties stay in gradebook
-   tools' late-sweep, by design.
+   This ordinary Submissions API path works on Assignments today. New Quizzes use a
+   separate reviewed item-result adapter: PowerGrader's live-course item-finalization lane
+   uses Canvas's first-party, short-lived signed grader transport for teacher-reviewed item
+   scores and per-item feedback. It never reuses this assignment-total `PUT`. Active/current
+   instructor enrollment is the prerequisite, not PAT-versus-OAuth; concluded, closed,
+   past-enrollment, or otherwise restricted courses may return `403`. The lane preserves
+   preflight freeze, result-version drift detection, idempotency, post-write verification,
+   content-minimized receipts, and fail-closed SpeedGrader fallback; New Quiz scheduled,
+   late-catch-up, and interactive automatic posting remain unavailable. See
+   `docs/reference/new-quizzes-grading-transport.md`. Late penalties stay in gradebook tools'
+   late-sweep, by design.
 6. An audit line per push lands in `_audit/` - content-free (counts only), never names/scores.
 
 Ordinarily, the teacher explicitly confirms a PowerGrader push because it changes real grades
