@@ -591,6 +591,12 @@ def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
         "late": bool(row.get("late")),
         "missing": bool(row.get("missing")),
         "excused": bool(row.get("excused")),
+        # Per-student due/late facts (Batch 4): cached_due_date reflects the
+        # student's overridden due date, seconds_late the raw lateness. Their
+        # real consumers (late-catchup, sweep) live in the precision-grading
+        # batch; kept nullable so a row that omits them stores None, not 0.
+        "cached_due_date": row.get("cached_due_date"),
+        "seconds_late": row.get("seconds_late"),
         "attempt": row.get("attempt"),
         "grade_matches_current_submission": row.get("grade_matches_current_submission"),
         "submission_type": str(row.get("submission_type") or ""),

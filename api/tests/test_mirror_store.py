@@ -181,6 +181,24 @@ def test_merge_submissions_records_current_and_attempts(tmp_path):
     assert entry["attempts"]["1"]["attachment_names"] == ["draft.pdf"]
 
 
+def test_current_carries_per_student_due_and_late_fields(tmp_path):
+    row = _submission_row(cached_due_date="2026-07-02T23:59:00Z",
+                          seconds_late=172800)
+    store.merge_submissions(COURSE, "700010", [row], root=str(tmp_path))
+    current = store.read_submissions(
+        COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]["current"]
+    assert current["cached_due_date"] == "2026-07-02T23:59:00Z"
+    assert current["seconds_late"] == 172800
+
+
+def test_current_late_fields_default_to_none_when_absent(tmp_path):
+    store.merge_submissions(COURSE, "700010", [_submission_row()], root=str(tmp_path))
+    current = store.read_submissions(
+        COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]["current"]
+    assert current["cached_due_date"] is None
+    assert current["seconds_late"] is None
+
+
 def test_merge_is_idempotent(tmp_path):
     rows = [_submission_row()]
     first = store.merge_submissions(COURSE, "700010", rows, root=str(tmp_path),

@@ -341,7 +341,9 @@ def _compute_sweep(course_id: str, settings: dict):
         if sub.get("workflow_state", "") != "late":
             continue
 
-        due = _parse_iso_local(a.get("due_at"))
+        # Per-student due date wins over the whole-class due_at so overrides
+        # and section/individual due dates compute lateness correctly.
+        due = _parse_iso_local(sub.get("cached_due_date") or a.get("due_at"))
         subd = _parse_iso_local(sub.get("submitted_at"))
         if not due or not subd:
             continue

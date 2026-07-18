@@ -329,6 +329,20 @@ def test_extra_time_reduces_or_skips_rows(sweep_env, monkeypatch):
     assert partial["entries"][0]["seconds_override"] == 86400
 
 
+def test_per_student_cached_due_date_overrides_class_due(sweep_env):
+    """A later per-student due date must reduce computed lateness: the sweep
+    resolves due from the submission's cached_due_date over the class due_at.
+    Class due Mon 2026-06-01, submitted Wed 2026-06-03 → 2 school days late;
+    a per-student override to Tue 2026-06-02 makes it 1 school day late."""
+    client, canvas, _writes = sweep_env
+    canvas["assignments"][:] = [dict(FAKE_ASSIGNMENTS[0])]
+    canvas["submissions"][:] = [dict(FAKE_SUBMISSIONS[0],
+                                     cached_due_date="2026-06-02T23:59:00Z")]
+    entry = _preview(client).json()["entries"][0]
+    assert entry["school_days"] == 1
+    assert entry["seconds_override"] == 86400
+
+
 def test_legacy_sweep_compute_is_deleted():
     import api.webui.gradebook_service as gradebook_service
     import api.webui.routes.gradebook as gradebook_facade
