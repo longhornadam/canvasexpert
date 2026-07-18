@@ -142,6 +142,10 @@ The benchmark is not evidence that “Canvas is just slow.” It exposes four de
    Canvas. Configuration membership and Canvas lifecycle are currently conflated.
 2. **Capability ignorance.** A scope that returns a durable 401/403 is retried per object and
    per heartbeat instead of being recorded as restricted with a bounded reprobe policy.
+   For New Quizzes the root cause is already known and documented (`api/README.md`): the
+   gate is **active enrollment** — the same token and endpoint return 200 in an
+   actively-enrolled course and 403 once the enrollment is concluded/retired. The failure
+   is course-level and predictable from lifecycle, not a per-quiz mystery.
 3. **Oversized refresh semantics.** `sync_now(course_id)` means “run the whole delta,” even
    when PowerGrader only needs submissions for one assignment.
 4. **Incomplete deletion semantics.** The current assignment index can change while orphan
@@ -191,9 +195,10 @@ The 1.0-beta program begins from substantial completed work.
 - Operation-ledger adapters own most content and gradebook mutation workflows.
 - PowerGrader has explicit review, live preflight, idempotency, and receipt rules.
 - New Quiz item-finalization route/transport machinery exists around specialized short-lived
-  native transport and verification. Current code and the durable New Quiz capability docs
-  disagree about whether that write lane is exposed; Program 0 must reconcile that truth
-  before a later brief treats it as shipped or changes its feature gate.
+  native transport and verification. The lane was deliberately shipped (commit `4a4309a`,
+  2026-07-14) with preflight, idempotency, receipts, and tests; the durable New Quiz
+  capability docs still describe it as blocked. Program 0's first outcome updates those
+  docs to match the shipped code before any later brief touches this boundary.
 
 The migration must converge these pieces. It must not replace them with a database, a new
 job platform, a raw-response cache, or a second write system.
@@ -478,12 +483,17 @@ result includes:
   "retry_after": "ISO-8601 or empty",
   "generation": "opaque local generation",
   "error_code": "sanitized stable code or empty",
-  "data": []
+  "records": []
 }
 ```
 
 This is illustrative, not a command to widen every current file. The durable contract must
-define which fields persist and which are computed at read time.
+define which fields persist and which are computed at read time. Two decisions are locked
+now to prevent drift: the payload key is `records`, matching the existing Course Catalog
+contract (do not introduce a parallel `data` key); and adding envelope fields to the Course
+Catalog requires a versioned schema bump with a validator update, because the catalog
+contract rejects unknown keys — a brief must never loosen unknown-field rejection to
+smuggle envelope fields in.
 
 ### 8.3 State and capability are separate
 
@@ -497,6 +507,13 @@ Persisted data state should converge on:
 
 Runtime `queued` and `refreshing` states may be presented by the coordinator but should not
 replace the last-good persisted state.
+
+This four-state enum is not new everywhere: the Course Catalog contract already uses
+exactly these four states, while the private mirror currently persists only a two-state
+degradation (`stale` after a prior success, `unavailable` before one) and has no
+`incomplete`. The migration is therefore "the private mirror adopts the catalog's existing
+enum," not a fresh invention — briefs must say so, or an executor reading only
+`docs/mirror.md` will believe `incomplete` is novel.
 
 Capability should separately express:
 
@@ -543,6 +560,13 @@ Quiz metadata, roster, modules, or every course.
 “Full sync” becomes an orchestration plan over scopes, not one inseparable function. This
 allows independent failure, retry, progress, and lifecycle policies.
 
+Vocabulary warning for brief authors: today's contract (`docs/mirror.md`) is written in
+terms of **passes** (`full`, `delta`, `roster`), while this document is written in terms of
+**scopes**. The words overlap — there is a roster *pass* today and a `roster` *scope*
+tomorrow, and today's delta pass covers what becomes `submissions.course_delta` plus
+`new_quizzes.metadata`. Every brief must state which vocabulary it uses and map between
+them explicitly; an executor must never treat "pass" and "scope" as synonyms.
+
 ### 9.2 Priority order
 
 The coordinator should enforce this order:
@@ -588,7 +612,13 @@ Exact intervals are tuneable parameters, not reasons to change the architecture.
 ### 9.4 Capability circuit and error policy
 
 The current New Quiz behavior performs a per-quiz call even after repeated 403s prove the
-scope is unavailable. The target behavior is:
+scope is unavailable. The root cause of those 403s is documented in `api/README.md` and
+confirmed in production use: New Quiz endpoints are gated on **active enrollment**, so a
+current course succeeds while a retired/expired/closed course fails deterministically. The
+design is therefore **lifecycle predicts, probe confirms, circuit backstops**: the
+course-context lifecycle signal downgrades the New Quiz scope before any fan-out, one
+bounded probe per cooldown confirms the classification, and the generic circuit below is
+the backstop for failures lifecycle cannot predict. The target behavior is:
 
 1. classify failures into stable sanitized categories (`unauthorized`, `forbidden`,
    `not_found`, `rate_limited`, `timeout`, `connection`, `invalid_response`, `storage`);
@@ -601,7 +631,12 @@ scope is unavailable. The target behavior is:
    successful CanvasExpert mutation.
 
 One bad item must not poison a whole supported scope. The acquisition contract must state
-when a failure is scope-level and when it is record-level.
+when a failure is scope-level and when it is record-level. For the New Quiz metadata scope,
+the enrollment gate makes the classification course-level: consecutive 403s across distinct
+quizzes in one course are scope evidence, not item noise. Program 0 must also test whether
+the New Quiz collection endpoint (`GET /api/quiz/v1/courses/:id/quizzes`) can serve as a
+one-call scope probe — and potentially replace the per-quiz metadata fan-out outright for
+accessible courses.
 
 ### 9.5 Pagination, rate limits, and timeouts
 
@@ -634,9 +669,18 @@ must preserve evidence that all pages completed and all accepted records validat
 then may the new ID set replace the old set.
 
 A fully successful, fully paginated empty response can be authoritative. A timeout, partial
-pagination, invalid root, or rejected record cannot. This distinction may require a new
-contract version because current “empty result retains last-good” behavior cannot represent
-the legitimate deletion of the last object.
+pagination, invalid root, or rejected record cannot.
+
+Current behavior splits in two directions, and briefs must target the right owner:
+
+- The **Course Catalog** (`api/course_catalog.py`) treats a successful empty response as a
+  failure and retains last-good records, so it cannot represent the legitimate deletion of
+  the last object. Fixing it may require a new catalog contract version.
+- The **private mirror** (`api/mirror/sync.py` + `store.py`) has the inverse hazard: it
+  writes any non-error empty collection as authoritative membership, and the full pass then
+  prunes submission files from it. A truncated or transiently empty response is therefore
+  potentially destructive. The mirror must prove pagination completeness before an empty
+  (or shrunken) collection may drive deletion or pruning.
 
 ### 10.2 Assignment deletion behavior
 
@@ -1108,20 +1152,40 @@ This is an ordered program, not a set of executor-ready slices. The senior must 
 current handoff at a time with exact symbols, locked schema decisions, tests, risk, and stop
 conditions.
 
+Scale note: at the half-day-to-two-day slice size in section 18.1, these eleven programs
+imply roughly 30–50 sequential slices under the one-executor policy. Programs 0–6 are
+beta-blocking. Programs 7 and 8 may accept explicit, teacher-visible beta exceptions if the
+schedule demands it; Programs 9–11 are beta-blocking again because they close write-safety
+and regression enforcement. Compatibility shims created in Program 1 live until Program 10 —
+every brief touching one must name its owner and removal condition.
+
 ### Program 0 — freeze current truth and establish the release benchmark
 
 **Purpose:** prevent implementation from optimizing against an inaccurate map.
 
 Required outcomes:
 
+- **First outcome — reconcile New Quiz item-finalization truth.** The write lane is
+  implemented, routed, and enabled (commit `4a4309a`, 2026-07-14, with tests), while
+  `docs/reference/new-quizzes-grading-transport.md`, `api/README.md`, `api/webui/README.md`,
+  and a stale code comment still describe it as blocked. The code is the deliberate current
+  state; update the canonical safety documentation to describe the shipped lane, its gates,
+  and its verification rules. A live grade-write path whose safety docs deny its existence
+  outranks every performance item in this program.
 - Re-run a static Canvas call-site inventory and classify every call as routine read,
   focused read, preflight, write, verify, binary/native, or diagnostic.
 - Record current owners and direct `requests` bypasses.
-- Reconcile the current New Quiz item-finalization route gate with
-  `docs/reference/new-quizzes-grading-transport.md` and `AGENTS.md`; do not let a write
-  capability remain contradictory across code and canonical safety documentation.
-- Preserve the July 2026 benchmark scripts or convert them into a sanitized supported
-  benchmark harness outside private data roots.
+- The July 2026 benchmark scripts are **not in the repository**. Obtain them from the
+  benchmark author or rebuild an equivalent sanitized harness outside private data roots;
+  a brief that says "preserve the scripts" without a location will stall.
+- Create `docs/handoffs/HANDOFF_TEMPLATE.md` codifying the established handoff skeleton
+  (section 18.1); `AGENTS.md` mandates the template but the file does not yet exist.
+- Specify which Canvas lifecycle fields the `course_context` scope persists (course
+  `workflow_state`, course/term `end_at`, enrollment state), and which field gates New Quiz
+  capability — concluded *enrollment* is the documented 403 gate and is not the same thing
+  as course `workflow_state`.
+- Test whether `GET /api/quiz/v1/courses/:id/quizzes` (collection) can serve as a one-call
+  New Quiz scope probe and/or bulk metadata source replacing per-quiz fan-out.
 - Define how a test course is identified without committing course names/IDs.
 - Add a durable Canvas read-spine contract derived from this vision before public scope
   shapes change.
@@ -1143,7 +1207,12 @@ Required outcomes:
 - Add per-scope request/time/byte/change instrumentation.
 - Prove complete pagination before destructive membership changes.
 - Fix assignment deletion visibility and safe orphan projection cleanup.
-- Fix authoritative empty-collection semantics in a versioned contract.
+- Fix authoritative empty-collection semantics in a versioned contract, covering both
+  directions from section 10.1 (catalog retains-forever; mirror trusts-any-empty).
+- Harden `/api/sweep/apply` to authoritative recompute or route it through the existing
+  operation-ledger sweep adapter. This is independent of every spine change and should run
+  as the first standalone slice; do not leave a client-authored write path live while
+  performance work proceeds.
 - Preserve old read APIs as compatibility shims during migration.
 
 Exit gate: the original change test detects create/update/delete correctly for mirrored
@@ -1217,7 +1286,8 @@ Required outcomes:
 - Add assignment groups/weights and late-policy display to gradebook config.
 - Conditionally add Canvas grading periods only if the actual Gradebook consumer is built.
 - Migrate student/assignment lists, grade snapshots, standing, and report inputs.
-- Harden `/api/sweep/apply` to live recompute or operation-ledger execution.
+- Confirm the sweep-apply hardening delivered in Program 1 still holds under the new
+  gradebook read paths.
 - Keep curve, sweep, extension, late-policy, and override write boundaries live.
 - Add targeted post-write refresh mappings.
 
@@ -1312,7 +1382,8 @@ test failure or explicit architecture change.
 
 ### Program 11 — 1.0-beta acceptance
 
-**Purpose:** prove the product, not just the units.
+**Purpose:** prove the product, not just the units. `AGENTS.md` remains the authority for
+suite selection and evidence rules.
 
 Required outcomes:
 
@@ -1338,11 +1409,15 @@ that cross privacy, persistence, read intent, or write safety.
 
 ### 18.1 A good slice
 
-A good handoff normally delivers one vertical teacher-visible improvement in roughly half a
-day to two days. It contains:
+This section, together with `docs/handoffs/HANDOFF_TEMPLATE.md`, is the operative handoff
+template. A good handoff normally delivers one vertical teacher-visible improvement in
+roughly half a day to two days. It contains:
 
 - the exact teacher outcome;
 - one locked projection/read/write decision;
+- a "read only these references" list that scopes the executor's context;
+- a preflight section — "stop if these facts are false" — with runnable checks proving the
+  insertion points still exist on current `dev`;
 - exact files, symbols, and insertion points verified against current `dev`;
 - allowed schema fields and forbidden material;
 - explicit current behavior that must remain live;
@@ -1382,6 +1457,9 @@ A weaker executor must stop rather than decide:
 - whether a mutation's verification or receipt rules may change.
 
 ### 18.3 Verification proportionality
+
+`AGENTS.md` is the authority for risk tiers and verification requirements; if this list
+ever disagrees with it, `AGENTS.md` wins. Spine-specific guidance:
 
 - Read-only student-free projection changes are usually medium risk.
 - Private roster/submission/evidence changes are high risk because of FERPA persistence.
@@ -1564,7 +1642,10 @@ They are not speculative feature requests.
 2. **PowerGrader refresh scope:** `_mirror_session_submissions()` calls whole-course
    `mirror_service.sync_now(course_id)`, which includes unrelated New Quiz metadata.
 3. **Concluded-course New Quiz retry storm:** unavailable metadata documents retry every
-   heartbeat, producing dozens of sequential 403s.
+   heartbeat, producing dozens of sequential 403s. Root cause is known: the endpoints are
+   gated on active enrollment (`api/README.md`), so retired/expired/closed courses fail
+   deterministically while current courses succeed — a lifecycle gate, not a per-quiz
+   probe problem.
 4. **Lifecycle model:** configured “active courses” can include concluded Canvas courses,
    but scheduling does not distinguish them.
 5. **Duplicate structure acquisition:** Course Catalog and private mirror independently
@@ -1585,12 +1666,20 @@ They are not speculative feature requests.
 12. **Transport ownership drift:** specialized and accidental direct HTTP calls are not yet
     enforced by an architecture boundary.
 13. **New Quiz write-status documentation drift:** route code enables an item-finalization
-    lane while canonical safety references still describe it as blocked. The senior must
-    establish and document current truth before touching that high-risk boundary.
+    lane (deliberately shipped in commit `4a4309a`, 2026-07-14, with tests) while canonical
+    safety references still describe it as blocked. The docs must be updated to match the
+    shipped code before any brief touches that high-risk boundary.
+14. **Mirror trusts unproven-complete collections:** the private mirror writes any
+    non-error empty collection as authoritative membership, and the full pass prunes
+    submission files from it. A truncated or transiently empty response is potentially
+    destructive. (Distinct from the Course Catalog, which has the opposite behavior — see
+    section 10.1.)
 
-The first senior brief should normally begin with items 1–4 plus the minimum instrumentation
-needed to prove them. Routing more surfaces through the mirror before fixing those seams
-would increase the blast radius of stale or slow behavior.
+The first senior briefs should begin with item 13 (a live write lane contradicting its
+safety docs) and item 9 (a client-authored write path) — both are independent of spine
+work — then items 1–4 plus the minimum instrumentation needed to prove them, with item 14
+folded into the item-1 work. Routing more surfaces through the mirror before fixing those
+seams would increase the blast radius of stale or slow behavior.
 
 ---
 
