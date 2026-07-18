@@ -1,8 +1,9 @@
 """CanvasMirror sync engine — the deterministic passes that keep the mirror fresh.
 
-Three passes, all taking an injected ``canvas_get_all`` (catalog pattern —
+The passes take an injected legacy ``canvas_get_all`` (catalog pattern —
 this module never imports the Canvas client) and an optional ``now=`` clock
-for deterministic tests:
+for deterministic tests. ``full_pass`` and ``delta_pass`` additionally take
+the complete-only assignment receipt before replacing membership:
 
   full_pass    backfill == nightly reconcile: fetch everything, rewrite
                collections with attempt-preserving replace merges, prune
@@ -32,14 +33,12 @@ from . import new_quizzes, store
 
 WATERMARK_OVERLAP_MINUTES = 10
 
-# 1.0beta slice 01b — completeness gate (vision doc Sec 10.1, item 14): an
-# empty or drastically shrunken assignment collection still commits (Canvas
-# deletion is legitimate — `_canvas_get_all` is all-rows-or-error, so a
-# non-error fetch is already a complete collection), but submission-file
-# pruning for that shrink defers to the pass after this one. The next pass
-# compares against the now-smaller committed index, so a genuine shrink
-# prunes cleanly one pass later while a transient/truncated dip never prunes
-# based on it.
+# An assignment collection may alter private mirror membership only after the
+# complete-client receipt and the existing normalizer both accept it. An empty
+# or drastically shrunken authoritative collection still commits, but
+# submission-file pruning for that shrink defers to the pass after this one.
+# The next pass compares against the now-smaller committed index, so a genuine
+# shrink prunes cleanly one pass later.
 LARGE_SHRINK_RATIO = 0.5
 
 
@@ -49,9 +48,28 @@ def _overlapped(iso_z: str) -> str:
         "%Y-%m-%dT%H:%M:%SZ")
 
 
-def _fetch_assignments(course_id, canvas_get_all):
-    return canvas_get_all(f"/api/v1/courses/{course_id}/assignments",
-                          {"per_page": 100})
+def _fetch_assignments(course_id, canvas_get_all_complete):
+    return canvas_get_all_complete(
+        f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
+
+
+def _assignment_receipt_error(rows, error, complete) -> str:
+    """Validate the receipt before it can replace assignment membership."""
+    if error:
+        if error in {"pagination_incomplete", "invalid_response"}:
+            return error
+        return _error_code(error)
+    if not complete:
+        return "pagination_incomplete"
+    if not isinstance(rows, list):
+        return "invalid_response"
+    assignment_ids = set()
+    for row in rows:
+        normalized = store.normalize_assignment(row)
+        if normalized is None or normalized["id"] in assignment_ids:
+            return "invalid_response"
+        assignment_ids.add(normalized["id"])
+    return ""
 
 
 def _fetch_students(course_id, canvas_get_all):
@@ -200,7 +218,7 @@ def _skipped_lifecycle_new_quizzes(course_id, *, root=None) -> dict:
             "circuit_cleared": False}
 
 
-def full_pass(course_id, *, canvas_get_all, root=None, now=None,
+def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, now=None,
               bypass_new_quiz_cooldown: bool = False,
               skip_new_quiz_metadata: bool = False) -> dict:
     """Backfill / nightly reconcile: fetch everything first, then rewrite.
@@ -213,11 +231,12 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None,
         return blocked
     started = now or store.now_iso()
 
-    assignments, error = _fetch_assignments(course_id, canvas_get_all)
-    if error:
+    assignments, error, complete = _fetch_assignments(course_id, canvas_get_all_complete)
+    assignment_error = _assignment_receipt_error(assignments, error, complete)
+    if assignment_error:
         store.record_pass(course_id, "full", ok=False,
-                          error_code=_error_code(error), attempted_at=started, root=root)
-        return {"ok": False, "error": error}
+                          error_code=assignment_error, attempted_at=started, root=root)
+        return {"ok": False, "error": error or assignment_error}
     students, error = _fetch_students(course_id, canvas_get_all)
     if error:
         store.record_pass(course_id, "full", ok=False,
@@ -259,7 +278,7 @@ def full_pass(course_id, *, canvas_get_all, root=None, now=None,
             "new_quizzes": new_quiz_result}
 
 
-def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
+def delta_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, now=None,
                bypass_new_quiz_cooldown: bool = False,
                skip_new_quiz_metadata: bool = False) -> dict:
     """Incremental pass. Falls back to a full pass when no watermark exists
@@ -270,16 +289,18 @@ def delta_pass(course_id, *, canvas_get_all, root=None, now=None,
         return blocked
     watermarks = store.read_sync(course_id, root=root)["watermarks"]
     if not watermarks["submitted_since"] or not watermarks["graded_since"]:
-        return full_pass(course_id, canvas_get_all=canvas_get_all, root=root, now=now,
+        return full_pass(course_id, canvas_get_all=canvas_get_all,
+                         canvas_get_all_complete=canvas_get_all_complete, root=root, now=now,
                          bypass_new_quiz_cooldown=bypass_new_quiz_cooldown,
                          skip_new_quiz_metadata=skip_new_quiz_metadata)
     started = now or store.now_iso()
 
-    assignments, error = _fetch_assignments(course_id, canvas_get_all)
-    if error:
+    assignments, error, complete = _fetch_assignments(course_id, canvas_get_all_complete)
+    assignment_error = _assignment_receipt_error(assignments, error, complete)
+    if assignment_error:
         store.record_pass(course_id, "delta", ok=False,
-                          error_code=_error_code(error), attempted_at=started, root=root)
-        return {"ok": False, "error": error}
+                          error_code=assignment_error, attempted_at=started, root=root)
+        return {"ok": False, "error": error or assignment_error}
     submitted, error = _fetch_submissions(
         course_id, canvas_get_all,
         submitted_since=watermarks["submitted_since"], with_history=True)

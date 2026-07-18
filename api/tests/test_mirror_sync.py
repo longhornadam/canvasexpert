@@ -79,12 +79,18 @@ class FakeCanvas:
             return self.submissions, None
         raise AssertionError(f"unexpected path {path}")
 
+    def complete(self, path, params=None, timeout=30):
+        """Explicit all-pages receipt used only for assignment membership."""
+        rows, error = self(path, params, timeout)
+        return rows, error, error is None
+
 
 # --- full pass ---------------------------------------------------------------
 
 def test_full_pass_writes_everything_and_sets_watermarks(tmp_path):
     canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
-    result = sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     assert result["ok"] is True
     assert result["assignments"] == 2
     assert store.read_roster(COURSE, root=str(tmp_path))["students"]["900001"]["name"] == "Learner One"
@@ -99,7 +105,8 @@ def test_full_pass_writes_everything_and_sets_watermarks(tmp_path):
 
 def test_full_pass_requests_submission_comments_delta_does_not(tmp_path):
     canvas = FakeCanvas(submissions=[_sub(700010)])
-    sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    sync.full_pass(COURSE, canvas_get_all=canvas,
+                   canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     full_submissions_call = next(
         params for path, params in canvas.calls
         if path.endswith("/students/submissions") and "submitted_since" not in params
@@ -107,7 +114,8 @@ def test_full_pass_requests_submission_comments_delta_does_not(tmp_path):
     assert full_submissions_call["include[]"] == ["submission_history", "submission_comments"]
 
     delta_canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2)])
-    sync.delta_pass(COURSE, canvas_get_all=delta_canvas, root=str(tmp_path),
+    sync.delta_pass(COURSE, canvas_get_all=delta_canvas,
+                    canvas_get_all_complete=delta_canvas.complete, root=str(tmp_path),
                     now="2026-07-16T13:00:00Z")
     submitted_call = next(p for path, p in delta_canvas.calls if "submitted_since" in p)
     graded_call = next(p for path, p in delta_canvas.calls if "graded_since" in p)
@@ -122,7 +130,8 @@ def test_full_pass_captures_submission_comments(tmp_path):
              "created_at": "2026-07-01T11:00:00Z", "author_name": "Teacher T"},
         ]),
     ])
-    result = sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     assert result["ok"] is True
     entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
     assert entry["current"]["submission_comments"] == [
@@ -139,10 +148,12 @@ def test_delta_after_full_does_not_erase_stored_comments(tmp_path):
              "created_at": "2026-07-01T11:00:00Z"},
         ]),
     ])
-    sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    sync.full_pass(COURSE, canvas_get_all=canvas,
+                   canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     # Delta fetches (lean, no submission_comments include) never carry comments.
     delta_canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2, body="Second draft.")])
-    result = sync.delta_pass(COURSE, canvas_get_all=delta_canvas, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=delta_canvas,
+                             canvas_get_all_complete=delta_canvas.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is True
     entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
@@ -166,7 +177,8 @@ def test_mcp_get_submissions_never_leaks_comment_text(monkeypatch, tmp_path):
     ])
     # Real now_iso() (not the fixed NOW fixture) so the mirror-serve
     # freshness gate — which compares against wall-clock time — passes.
-    sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=store.now_iso())
+    sync.full_pass(COURSE, canvas_get_all=canvas,
+                   canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=store.now_iso())
 
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
     monkeypatch.setattr(tools.config, "active_courses", lambda: [{"id": COURSE}])
@@ -181,12 +193,14 @@ def test_mcp_get_submissions_never_leaks_comment_text(monkeypatch, tmp_path):
 
 def test_full_pass_prunes_deleted_assignments_and_dropped_students(tmp_path):
     canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
-    sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    sync.full_pass(COURSE, canvas_get_all=canvas,
+                   canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     # Canvas now says: assignment 700020 gone; 900001 no longer has a row on 700010.
     later = FakeCanvas(assignments=[ASSIGNMENTS[0]], submissions=[
         _sub(700010, user_id=900002),
     ])
-    result = sync.full_pass(COURSE, canvas_get_all=later, root=str(tmp_path),
+    result = sync.full_pass(COURSE, canvas_get_all=later,
+                            canvas_get_all_complete=later.complete, root=str(tmp_path),
                             now="2026-07-17T03:00:00Z")
     assert result["pruned_assignments"] == ["700020"]
     assert store.read_submissions(COURSE, "700020", root=str(tmp_path)) is None
@@ -196,7 +210,8 @@ def test_full_pass_prunes_deleted_assignments_and_dropped_students(tmp_path):
 
 def test_full_pass_fetch_error_records_failure_and_writes_nothing(tmp_path):
     canvas = FakeCanvas(errors={"submissions": "HTTP 503: upstream"})
-    result = sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     assert result["ok"] is False
     state = store.read_sync(COURSE, root=str(tmp_path))
     assert state["passes"]["full"]["state"] == "unavailable"
@@ -209,13 +224,15 @@ def test_full_pass_fetch_error_records_failure_and_writes_nothing(tmp_path):
 def _backfilled(tmp_path, submissions=None):
     canvas = FakeCanvas(submissions=submissions if submissions is not None
                         else [_sub(700010)])
-    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    assert sync.full_pass(COURSE, canvas_get_all=canvas,
+                          canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                           now=NOW)["ok"] is True
 
 
 def test_delta_pass_without_watermarks_falls_back_to_full(tmp_path):
     canvas = FakeCanvas(submissions=[_sub(700010)])
-    result = sync.delta_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     assert result["ok"] is True
     assert "submission_rows" in result  # full-pass result shape
     assert store.read_sync(COURSE, root=str(tmp_path))["passes"]["full"]["state"] == "current"
@@ -230,7 +247,8 @@ def test_delta_pass_sends_watermarks_and_merges_new_attempt(tmp_path):
         ]),
     ])
     later = "2026-07-16T13:00:00Z"
-    result = sync.delta_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=later)
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=later)
     assert result["ok"] is True
     assert result["touched_assignments"] == ["700010"]
 
@@ -253,7 +271,8 @@ def test_delta_pass_is_idempotent_on_replay(tmp_path):
     delta = [_sub(700010, attempt=2, body="Second draft.")]
     for stamp in ("2026-07-16T13:00:00Z", "2026-07-16T13:00:00Z"):
         canvas = FakeCanvas(delta_submitted=list(delta))
-        sync.delta_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=stamp)
+        sync.delta_pass(COURSE, canvas_get_all=canvas,
+                        canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=stamp)
     entry = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]
     assert set(entry["attempts"]) == {"1", "2"}
     assert entry["current"]["attempt"] == 2
@@ -265,7 +284,8 @@ def test_delta_pass_graded_only_change_updates_current(tmp_path):
         _sub(700010, workflow_state="graded", score=9, grade="9",
              graded_at="2026-07-16T12:30:00Z"),
     ])
-    result = sync.delta_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is True
     current = store.read_submissions(COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]["current"]
@@ -276,7 +296,8 @@ def test_delta_pass_graded_only_change_updates_current(tmp_path):
 def test_delta_pass_error_keeps_watermarks(tmp_path):
     _backfilled(tmp_path)
     canvas = FakeCanvas(errors={"submissions": "HTTP 503: upstream"})
-    result = sync.delta_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is False
     state = store.read_sync(COURSE, root=str(tmp_path))
@@ -303,11 +324,13 @@ def test_delta_removing_assignments_excludes_them_from_queries_before_any_prune(
     canvas = FakeCanvas(assignments=EXTRA_ASSIGNMENTS, submissions=[
         _sub(700010), _sub(700020), _sub(700030), _sub(700040),
     ])
-    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    assert sync.full_pass(COURSE, canvas_get_all=canvas,
+                          canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                           now=NOW)["ok"] is True
 
     later = FakeCanvas(assignments=[ASSIGNMENTS[0]])  # 4 -> 1: a 75% shrink
-    result = sync.delta_pass(COURSE, canvas_get_all=later, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=later,
+                             canvas_get_all_complete=later.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is True
     assert result["assignment_changes"]["removed"] == ["700020", "700030", "700040"]
@@ -328,12 +351,14 @@ def test_delta_prune_removes_exactly_departed_ids(tmp_path):
     canvas = FakeCanvas(assignments=EXTRA_ASSIGNMENTS, submissions=[
         _sub(700010), _sub(700020), _sub(700030), _sub(700040),
     ])
-    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    assert sync.full_pass(COURSE, canvas_get_all=canvas,
+                          canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                           now=NOW)["ok"] is True
 
     # Drop one of four (25% shrink) — below the guard, so this pass prunes.
     later = FakeCanvas(assignments=EXTRA_ASSIGNMENTS[:3])  # 700040 removed
-    result = sync.delta_pass(COURSE, canvas_get_all=later, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=later,
+                             canvas_get_all_complete=later.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is True
     assert result["assignment_changes"]["removed"] == ["700040"]
@@ -348,11 +373,13 @@ def test_empty_complete_collection_commits_empty_index(tmp_path):
     from api.mirror import queries
 
     canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
-    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    assert sync.full_pass(COURSE, canvas_get_all=canvas,
+                          canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                           now=NOW)["ok"] is True
 
     empty_canvas = FakeCanvas(assignments=[])
-    result = sync.delta_pass(COURSE, canvas_get_all=empty_canvas, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=empty_canvas,
+                             canvas_get_all_complete=empty_canvas.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is True
     assert store.read_assignments(COURSE, root=str(tmp_path))["assignments"] == {}
@@ -370,11 +397,13 @@ def test_large_shrink_commits_index_defers_prune_and_records_diagnostic(tmp_path
     canvas = FakeCanvas(assignments=EXTRA_ASSIGNMENTS, submissions=[
         _sub(700010), _sub(700020), _sub(700030), _sub(700040),
     ])
-    assert sync.full_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    assert sync.full_pass(COURSE, canvas_get_all=canvas,
+                          canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                           now=NOW)["ok"] is True
 
     later = FakeCanvas(assignments=[ASSIGNMENTS[0]])  # 4 -> 1: a 75% shrink
-    result = sync.delta_pass(COURSE, canvas_get_all=later, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=later,
+                             canvas_get_all_complete=later.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is True
     assert set(store.read_assignments(COURSE, root=str(tmp_path))["assignments"]) == {"700010"}
@@ -387,7 +416,8 @@ def test_large_shrink_commits_index_defers_prune_and_records_diagnostic(tmp_path
     # an unchanged small collection is no longer a shrink and prunes cleanly —
     # deferral is bounded to one pass, not indefinite.
     again = FakeCanvas(assignments=[ASSIGNMENTS[0]])
-    result2 = sync.delta_pass(COURSE, canvas_get_all=again, root=str(tmp_path),
+    result2 = sync.delta_pass(COURSE, canvas_get_all=again,
+                              canvas_get_all_complete=again.complete, root=str(tmp_path),
                               now="2026-07-16T14:00:00Z")
     assert result2["ok"] is True
     assert result2["assignment_changes"]["large_shrink"] == 0
@@ -401,13 +431,77 @@ def test_delta_fetch_error_changes_nothing(tmp_path):
     _backfilled(tmp_path)
     before = store.read_assignments(COURSE, root=str(tmp_path))
     canvas = FakeCanvas(errors={"submissions": "HTTP 503: upstream"})
-    result = sync.delta_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path),
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path),
                              now="2026-07-16T13:00:00Z")
     assert result["ok"] is False
     assert "assignment_changes" not in result
     assert store.read_assignments(COURSE, root=str(tmp_path)) == before
     state = store.read_sync(COURSE, root=str(tmp_path))
     assert state["watermarks"]["submitted_since"] == NOW_MINUS_OVERLAP  # unchanged
+
+
+def test_incomplete_assignment_receipt_preserves_last_good_mirror_and_skips_new_quizzes(
+        monkeypatch, tmp_path):
+    _backfilled(tmp_path, submissions=[_sub(700010), _sub(700020)])
+    store.write_new_quiz_capability(
+        COURSE, capability="restricted", last_probe_at=NOW,
+        retry_after="2099-01-01T00:00:00Z", evidence_category="forbidden",
+        consecutive_failures=3, root=str(tmp_path))
+    before_assignments = store.read_assignments(COURSE, root=str(tmp_path))
+    before_state = store.read_sync(COURSE, root=str(tmp_path))
+    before_capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    monkeypatch.setattr(sync.new_quizzes, "sync_metadata",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(
+                            AssertionError("an incomplete assignment receipt must stop first")))
+
+    result = sync.delta_pass(
+        COURSE, canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=lambda *args, **kwargs: ([], None, False),
+        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+
+    assert result == {"ok": False, "error": "pagination_incomplete"}
+    assert store.read_assignments(COURSE, root=str(tmp_path)) == before_assignments
+    assert store.read_sync(COURSE, root=str(tmp_path))["watermarks"] == before_state["watermarks"]
+    assert store.read_sync(COURSE, root=str(tmp_path))["passes"]["delta"] == {
+        "state": "unavailable", "last_success_at": "",
+        "last_attempt_at": "2026-07-16T13:00:00Z", "error_code": "pagination_incomplete",
+    }
+    assert store.read_submissions(COURSE, "700010", root=str(tmp_path)) is not None
+    assert store.read_submissions(COURSE, "700020", root=str(tmp_path)) is not None
+    assert store.read_new_quiz_capability(COURSE, root=str(tmp_path)) == before_capability
+
+
+def test_invalid_duplicate_assignment_receipt_preserves_last_good_mirror_and_skips_new_quizzes(
+        monkeypatch, tmp_path):
+    _backfilled(tmp_path, submissions=[_sub(700010), _sub(700020)])
+    store.write_new_quiz_capability(
+        COURSE, capability="restricted", last_probe_at=NOW,
+        retry_after="2099-01-01T00:00:00Z", evidence_category="forbidden",
+        consecutive_failures=3, root=str(tmp_path))
+    before_assignments = store.read_assignments(COURSE, root=str(tmp_path))
+    before_state = store.read_sync(COURSE, root=str(tmp_path))
+    before_capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    monkeypatch.setattr(sync.new_quizzes, "sync_metadata",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(
+                            AssertionError("an invalid assignment receipt must stop first")))
+
+    duplicate_rows = [ASSIGNMENTS[0], dict(ASSIGNMENTS[0])]
+    result = sync.delta_pass(
+        COURSE, canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=lambda *args, **kwargs: (duplicate_rows, None, True),
+        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+
+    assert result == {"ok": False, "error": "invalid_response"}
+    assert store.read_assignments(COURSE, root=str(tmp_path)) == before_assignments
+    assert store.read_sync(COURSE, root=str(tmp_path))["watermarks"] == before_state["watermarks"]
+    assert store.read_sync(COURSE, root=str(tmp_path))["passes"]["delta"] == {
+        "state": "unavailable", "last_success_at": "",
+        "last_attempt_at": "2026-07-16T13:00:00Z", "error_code": "invalid_response",
+    }
+    assert store.read_submissions(COURSE, "700010", root=str(tmp_path)) is not None
+    assert store.read_submissions(COURSE, "700020", root=str(tmp_path)) is not None
+    assert store.read_new_quiz_capability(COURSE, root=str(tmp_path)) == before_capability
 
 
 # --- roster pass ------------------------------------------------------------------
@@ -438,7 +532,9 @@ def test_roster_pass_failure_degrades(tmp_path):
 def test_passes_report_unconfigured_workspace(monkeypatch):
     from api.webui import workspace
     monkeypatch.setattr(workspace, "workspace_root", lambda: None)
-    result = sync.full_pass(COURSE, canvas_get_all=FakeCanvas())
+    canvas = FakeCanvas()
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete)
     assert result == {"ok": False, "error": "workspace not configured"}
 
 

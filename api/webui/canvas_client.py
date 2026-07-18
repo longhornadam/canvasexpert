@@ -55,38 +55,81 @@ def _canvas_get(path, params=None, timeout=20):
     return data, None
 
 
-def _canvas_get_all(path, params=None, timeout=30):
-    """GET with Link-header pagination — returns the concatenated list."""
+def _next_canvas_page_url(response) -> str | None:
+    """Return Canvas's opaque ``rel=next`` URL, if this page has one."""
+    for part in response.headers.get("Link", "").split(","):
+        if 'rel="next"' in part:
+            return part.split(";")[0].strip().strip("<>")
+    return None
+
+
+def _canvas_get_all_pages(path, params=None, timeout=30, *, complete_only: bool):
+    """Fetch one Canvas collection with the shared Link-header traversal.
+
+    The legacy public wrapper deliberately keeps its historical behavior.
+    ``complete_only`` adds the stricter receipt needed before a caller lets a
+    collection replace an existing membership index.
+    """
     started = time.monotonic()
     hdrs, base = _canvas_headers()
+    event = "canvas.get_all_complete" if complete_only else "canvas.get_all"
     if not hdrs:
-        _emit_canvas("canvas.get_all", started, "unconfigured")
-        return None, "No Canvas token saved — go to Settings."
+        _emit_canvas(event, started, "unconfigured")
+        return None, "No Canvas token saved — go to Settings.", False
     out, url = [], f"{base}{path}"
+    visited_urls = set()
     while url:
+        if complete_only:
+            visited_urls.add(url)
         try:
             r = requests.get(url, headers=hdrs, params=params, timeout=timeout)
         except requests.RequestException as e:
-            _emit_canvas("canvas.get_all", started, "failed", error_class=type(e))
-            return None, str(e)
-        if r.status_code != 200:
-            _emit_canvas("canvas.get_all", started, "failed", status_code=r.status_code)
+            _emit_canvas(event, started, "failed", error_class=type(e))
+            # RequestException text can include a configured URL.  The
+            # complete receipt stays safe to return and persist as a code.
+            return None, "connection" if complete_only else str(e), False
+        successful = 200 <= r.status_code < 300 if complete_only else r.status_code == 200
+        if not successful:
+            _emit_canvas(event, started, "failed", status_code=r.status_code)
+            if complete_only:
+                return None, f"HTTP {r.status_code}", False
             hint = " (Token missing or expired on this machine — mint a fresh one in Settings)" if r.status_code == 401 else ""
-            return None, f"HTTP {r.status_code}: {r.text[:200]}{hint}"
+            return None, f"HTTP {r.status_code}: {r.text[:200]}{hint}", False
         try:
             data = r.json()
         except Exception as e:
-            _emit_canvas("canvas.get_all", started, "failed", status_code=r.status_code, error_class=type(e))
+            _emit_canvas(event, started, "failed", status_code=r.status_code, error_class=type(e))
+            if complete_only:
+                return None, "invalid_response", False
             raise
+        if complete_only and not isinstance(data, list):
+            _emit_canvas(event, started, "failed", status_code=r.status_code)
+            return None, "invalid_response", False
         out.extend(data if isinstance(data, list) else [data])
         params = None
-        url = None
-        for part in r.headers.get("Link", "").split(","):
-            if 'rel="next"' in part:
-                url = part.split(";")[0].strip().strip("<>")
-                break
-    _emit_canvas("canvas.get_all", started, "ok", status_code=200, count=len(out))
-    return out, None
+        url = _next_canvas_page_url(r)
+        if complete_only and url in visited_urls:
+            _emit_canvas(event, started, "failed", status_code=r.status_code)
+            return None, "pagination_incomplete", False
+    _emit_canvas(event, started, "ok", status_code=200, count=len(out))
+    return out, None, True
+
+
+def _canvas_get_all(path, params=None, timeout=30):
+    """GET with Link-header pagination — returns the concatenated list."""
+    rows, error, _complete = _canvas_get_all_pages(
+        path, params=params, timeout=timeout, complete_only=False)
+    return rows, error
+
+
+def _canvas_get_all_complete(path, params=None, timeout=30):
+    """GET a proven-complete Canvas list for destructive membership callers.
+
+    Returns ``(rows, error, complete)``.  ``complete`` is true only for a
+    fully traversed sequence of successful JSON-list pages.
+    """
+    return _canvas_get_all_pages(path, params=params, timeout=timeout,
+                                 complete_only=True)
 
 
 def _canvas_send(method, path, payload, timeout=30):

@@ -4,8 +4,8 @@ and the status payload for the mirror routes.
 The heartbeat mirrors ``_routines_heartbeat``'s shape (daemon thread, launch
 delay, try/except-never-die, gate on token) and is started from the server
 lifespan. All real work lives in plain pass functions that tests drive
-directly with an injected ``canvas_get_all`` and ``now=`` — the thread is
-never started in tests.
+directly with injected legacy and complete-only collection clients plus
+``now=`` — the thread is never started in tests.
 
 Cadence (per Current course): a full pass when none has succeeded in
 FULL_MAX_AGE_HOURS (this is both first-run backfill and the nightly
@@ -19,7 +19,7 @@ import time
 from api.mirror import course_context, store, sync
 
 from . import config, workspace
-from .canvas_client import _canvas_get, _canvas_get_all
+from .canvas_client import _canvas_get, _canvas_get_all, _canvas_get_all_complete
 from .routes.names import _vault as _identity_vault
 
 
@@ -46,7 +46,8 @@ _PASS_RUNNERS = {"full": sync.full_pass, "delta": sync.delta_pass,
                  "roster": sync.roster_pass}
 
 
-def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None, now=None) -> list[dict]:
+def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None,
+                       canvas_get_all_complete=None, now=None) -> list[dict]:
     """One tick: run whatever is due for every Current course. Never raises;
     per-course failures are recorded in that course's _sync envelope and
     reported in the returned summaries."""
@@ -56,6 +57,7 @@ def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None, now=None) -> lis
         return []
     canvas_get = canvas_get or _canvas_get
     canvas_get_all = canvas_get_all or _canvas_get_all
+    canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
     now_iso = now or store.now_iso()
     summaries = []
     for course in config.active_courses():
@@ -82,6 +84,8 @@ def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None, now=None) -> lis
         for pass_name in pass_names:
             try:
                 kwargs = {"canvas_get_all": canvas_get_all, "now": now_iso}
+                if pass_name in {"full", "delta"}:
+                    kwargs["canvas_get_all_complete"] = canvas_get_all_complete
                 if concluded and pass_name == "full":
                     kwargs["skip_new_quiz_metadata"] = True
                 result = _PASS_RUNNERS[pass_name](course_id, **kwargs)
@@ -92,7 +96,7 @@ def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None, now=None) -> lis
 
 
 def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=None,
-             now=None) -> list[dict]:
+             canvas_get_all_complete=None, now=None) -> list[dict]:
     """Manual 'Sync now': a delta per requested course (falls back to a full
     pass automatically when the course has never been backfilled).
 
@@ -103,6 +107,7 @@ def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=No
         return [{"ok": False, "error": "No Canvas token saved — go to Settings."}]
     canvas_get = canvas_get or _canvas_get
     canvas_get_all = canvas_get_all or _canvas_get_all
+    canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
     courses = [c for c in config.active_courses()
                if not course_id or str(c.get("id")) == str(course_id)]
     if not courses:
@@ -118,7 +123,8 @@ def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=No
                 cid, canvas_get=canvas_get, canvas_get_all=canvas_get_all, now=now)
         except Exception:
             pass
-        result = sync.delta_pass(cid, canvas_get_all=canvas_get_all, now=now,
+        result = sync.delta_pass(cid, canvas_get_all=canvas_get_all,
+                                 canvas_get_all_complete=canvas_get_all_complete, now=now,
                                  bypass_new_quiz_cooldown=True)
         summaries.append({"course_id": cid, "pass": "delta", **result})
     return summaries
@@ -145,17 +151,21 @@ def refresh_work_findings() -> None:
         pass
 
 
-def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECONDS):
+def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECONDS,
+                          canvas_get_all_complete=None):
     """Write-through hook: after CanvasExpert itself writes to Canvas, run a
     short-delay delta so the mirror learns its own actions without waiting
     for the next tick. Fire-and-forget; never raises into the caller."""
+    canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
+
     def _run():
         try:
             if not config.token_is_set() or not config.mirror_enabled():
                 return
             if workspace.workspace_root() is None:
                 return
-            sync.delta_pass(str(course_id), canvas_get_all=_canvas_get_all)
+            sync.delta_pass(str(course_id), canvas_get_all=_canvas_get_all,
+                            canvas_get_all_complete=canvas_get_all_complete)
         except Exception:
             pass
 
