@@ -47,6 +47,7 @@ MODULE_ITEMS_PATH = "/api/v1/courses/{course_id}/modules/{module_id}/items"
 MODULE_ITEM_CONCURRENCY = 3
 
 CanvasGetAll = Callable[[str, dict], tuple[list | None, str | None]]
+CanvasGetAllComplete = Callable[[str, dict], tuple[object, str | None, bool]]
 
 _LOCKS_GUARD = threading.Lock()
 _COURSE_LOCKS: dict[str, threading.RLock] = {}
@@ -369,20 +370,48 @@ def _error_code(error) -> str:
 
 def _scope_failure(previous_scope: dict | None, attempted_at: str, error_code: str, *, empty_records):
     previous_records = copy.deepcopy(previous_scope.get("records")) if isinstance(previous_scope, dict) else empty_records
-    has_previous = bool(previous_records)
+    previous_success_at = str(previous_scope.get("last_success_at") or "") if isinstance(previous_scope, dict) else ""
+    has_previous = _valid_iso(previous_success_at)
     return {
         "state": "stale" if has_previous else "unavailable",
-        "last_success_at": str(previous_scope.get("last_success_at") or "") if isinstance(previous_scope, dict) else "",
+        "last_success_at": previous_success_at,
         "last_attempt_at": attempted_at,
         "error_code": error_code,
         "records": previous_records,
     }
 
 
-def _acquire_assignments(course_id: str, canvas_get_all: CanvasGetAll, attempted_at: str, previous_scope: dict | None) -> dict:
-    rows, error = canvas_get_all(ASSIGNMENTS_PATH.format(course_id=course_id), {"per_page": 100})
-    if error or not isinstance(rows, list) or not rows:
-        return _scope_failure(previous_scope, attempted_at, _error_code(error or "empty response"), empty_records={})
+def _top_level_failure(error, complete, rows, previous_scope: dict | None, attempted_at: str, *, empty_records) -> dict | None:
+    if error:
+        error_code = str(error).strip()
+        if error_code not in {"pagination_incomplete", "invalid_response"}:
+            error_code = _error_code(error)
+        return _scope_failure(previous_scope, attempted_at, error_code, empty_records=empty_records)
+    if complete is not True:
+        return _scope_failure(previous_scope, attempted_at, "pagination_incomplete", empty_records=empty_records)
+    if not isinstance(rows, list):
+        return _scope_failure(previous_scope, attempted_at, "invalid_response", empty_records=empty_records)
+    return None
+
+
+def _acquire_assignments(
+    course_id: str,
+    canvas_get_all_complete: CanvasGetAllComplete,
+    attempted_at: str,
+    previous_scope: dict | None,
+) -> dict:
+    rows, error, complete = canvas_get_all_complete(ASSIGNMENTS_PATH.format(course_id=course_id), {"per_page": 100})
+    failure = _top_level_failure(error, complete, rows, previous_scope, attempted_at, empty_records={})
+    if failure is not None:
+        return failure
+    if not rows:
+        return {
+            "state": "current",
+            "last_success_at": attempted_at,
+            "last_attempt_at": attempted_at,
+            "error_code": "",
+            "records": {},
+        }
     records = {}
     dropped = False
     for row in rows:
@@ -409,13 +438,28 @@ def _module_previous_by_id(previous_scope: dict | None) -> dict[str, dict]:
     return {str(record.get("id")): record for record in previous_scope["records"] if isinstance(record, dict)}
 
 
-def _acquire_modules(course_id: str, canvas_get_all: CanvasGetAll, attempted_at: str, previous_scope: dict | None) -> dict:
-    rows, error = canvas_get_all(
+def _acquire_modules(
+    course_id: str,
+    canvas_get_all: CanvasGetAll,
+    canvas_get_all_complete: CanvasGetAllComplete,
+    attempted_at: str,
+    previous_scope: dict | None,
+) -> dict:
+    rows, error, complete = canvas_get_all_complete(
         MODULES_PATH.format(course_id=course_id),
         {"per_page": 100, "include[]": "items"},
     )
-    if error or not isinstance(rows, list) or not rows:
-        return _scope_failure(previous_scope, attempted_at, _error_code(error or "empty response"), empty_records=[])
+    failure = _top_level_failure(error, complete, rows, previous_scope, attempted_at, empty_records=[])
+    if failure is not None:
+        return failure
+    if not rows:
+        return {
+            "state": "current",
+            "last_success_at": attempted_at,
+            "last_attempt_at": attempted_at,
+            "error_code": "",
+            "records": [],
+        }
 
     previous_by_id = _module_previous_by_id(previous_scope)
     modules: list[dict] = []
@@ -589,6 +633,7 @@ def refresh_catalog(
     course_name: str,
     *,
     canvas_get_all: CanvasGetAll,
+    canvas_get_all_complete: CanvasGetAllComplete,
     root=None,
     attempted_at: str | None = None,
 ) -> dict:
@@ -604,10 +649,10 @@ def refresh_catalog(
         previous_modules = previous.get("modules") if isinstance(previous, dict) else None
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="course-catalog") as executor:
             assignment_future = executor.submit(
-                _acquire_assignments, course_id, canvas_get_all, timestamp, previous_assignments,
+                _acquire_assignments, course_id, canvas_get_all_complete, timestamp, previous_assignments,
             )
             module_future = executor.submit(
-                _acquire_modules, course_id, canvas_get_all, timestamp, previous_modules,
+                _acquire_modules, course_id, canvas_get_all, canvas_get_all_complete, timestamp, previous_modules,
             )
             assignments = assignment_future.result()
             modules = module_future.result()

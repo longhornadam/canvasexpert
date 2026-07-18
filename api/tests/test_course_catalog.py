@@ -67,6 +67,14 @@ def _canvas_success(path, params):
     raise AssertionError(f"unexpected Canvas call: {path}")
 
 
+def _canvas_success_complete(path, params):
+    if path.endswith("/assignments"):
+        return [_assignment()], None, True
+    if path.endswith("/modules"):
+        return [_module()], None, True
+    raise AssertionError(f"unexpected Canvas call: {path}")
+
+
 def test_assignment_normalization_is_strict_url_free_and_rejects_unknown_fields(tmp_path):
     normalized = course_catalog.normalize_assignment(_assignment())
 
@@ -80,6 +88,7 @@ def test_assignment_normalization_is_strict_url_free_and_rejects_unknown_fields(
 
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
     document = result["catalog"]
@@ -95,6 +104,7 @@ def test_assignment_normalization_is_strict_url_free_and_rejects_unknown_fields(
 def test_refresh_succeeds_for_both_scopes_and_persists_projection(tmp_path):
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -113,6 +123,7 @@ def test_refresh_succeeds_for_both_scopes_and_persists_projection(tmp_path):
 def test_scope_failure_preserves_last_good_records_while_other_scope_updates(tmp_path):
     course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -123,8 +134,16 @@ def test_scope_failure_preserves_last_good_records_while_other_scope_updates(tmp
             return [_module("20", position=2)], None
         raise AssertionError(path)
 
+    def assignment_failure_complete(path, params):
+        if path.endswith("/assignments"):
+            return None, "HTTP 503: do not expose this", True
+        if path.endswith("/modules"):
+            return [_module("20", position=2)], None, True
+        raise AssertionError(path)
+
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=assignment_failure,
+        canvas_get_all_complete=assignment_failure_complete,
         root=str(tmp_path), attempted_at=STAMP_2,
     )
 
@@ -145,8 +164,16 @@ def test_first_sync_partial_result_keeps_successful_scope(tmp_path):
             return None, "HTTP 403 private detail"
         raise AssertionError(path)
 
+    def module_failure_complete(path, params):
+        if path.endswith("/assignments"):
+            return [_assignment()], None, True
+        if path.endswith("/modules"):
+            return None, "HTTP 403 private detail", True
+        raise AssertionError(path)
+
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=module_failure,
+        canvas_get_all_complete=module_failure_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -158,30 +185,124 @@ def test_first_sync_partial_result_keeps_successful_scope(tmp_path):
     assert course_catalog.public_projection(result, course_id="course-1")["available"] is True
 
 
-def test_empty_scope_response_never_erases_last_good_records(tmp_path):
-    course_catalog.refresh_catalog(
+@pytest.mark.parametrize(
+    ("assignments", "modules", "available"),
+    [
+        ([], [_module()], True),
+        ([_assignment()], [], True),
+        ([], [], False),
+    ],
+)
+def test_proven_empty_scope_replaces_last_good_records(tmp_path, assignments, modules, available):
+    first = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
-    )
+    )["catalog"]
 
-    def empty_assignments(path, params):
+    def proven_empty_complete(path, params):
         if path.endswith("/assignments"):
-            return [], None
+            return assignments, None, True
         if path.endswith("/modules"):
-            return [_module()], None
+            return modules, None, True
         raise AssertionError(path)
 
     result = course_catalog.refresh_catalog(
-        "course-1", "Fictional Course", canvas_get_all=empty_assignments,
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=proven_empty_complete,
         root=str(tmp_path), attempted_at=STAMP_2,
     )
-    assert result["catalog"]["assignments"]["state"] == "stale"
-    assert set(result["catalog"]["assignments"]["records"]) == {"101"}
-    assert result["catalog"]["assignments"]["error_code"] == "empty_response"
+    document = result["catalog"]
+    assert document["assignments"]["state"] == "current"
+    assert document["modules"]["state"] == "current"
+    assert all(
+        document[scope][key] == STAMP_2
+        for scope in ("assignments", "modules")
+        for key in ("last_success_at", "last_attempt_at")
+    )
+    assert all(document[scope]["error_code"] == "" for scope in ("assignments", "modules"))
+    assert document["assignments"]["records"] == ({} if not assignments else {"101": course_catalog.normalize_assignment(_assignment())})
+    assert document["modules"]["records"] == ([] if not modules else [
+        {"id": "10", "name": "Module 10", "position": 1, "items": [
+            {"id": "item-10", "type": "Assignment", "title": "Fictional Reflection", "position": 1, "content_id": "101"},
+        ]},
+    ])
+    directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
+    assert json.loads((directory / "catalog.v1.previous.json").read_text(encoding="utf-8")) == first
+    assert course_catalog.public_projection(result, course_id="course-1")["available"] is available
+
+
+@pytest.mark.parametrize(
+    ("rows", "error", "complete", "error_code"),
+    [
+        ([], None, False, "pagination_incomplete"),
+        (None, "pagination_incomplete", False, "pagination_incomplete"),
+        (None, "invalid_response", False, "invalid_response"),
+        (None, "HTTP 503: private detail", True, "canvas_unavailable"),
+    ],
+)
+def test_unproven_receipt_after_successful_empty_scope_is_stale(tmp_path, rows, error, complete, error_code):
+    def empty_assignments_complete(path, params):
+        if path.endswith("/assignments"):
+            return [], None, True
+        if path.endswith("/modules"):
+            return [_module()], None, True
+        raise AssertionError(path)
+
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=empty_assignments_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    def failed_assignments_complete(path, params):
+        if path.endswith("/assignments"):
+            return rows, error, complete
+        if path.endswith("/modules"):
+            return [_module()], None, True
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=failed_assignments_complete,
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )
+    assignments_scope = result["catalog"]["assignments"]
+    assert assignments_scope == {
+        "state": "stale", "last_success_at": STAMP_1, "last_attempt_at": STAMP_2,
+        "error_code": error_code, "records": {},
+    }
+
+
+@pytest.mark.parametrize(
+    ("rows", "complete", "error_code"),
+    [
+        ([], False, "pagination_incomplete"),
+        ({"unexpected": "root"}, True, "invalid_response"),
+    ],
+)
+def test_unproven_receipt_before_successful_scope_is_unavailable(tmp_path, rows, complete, error_code):
+    def unproven_assignments_complete(path, params):
+        if path.endswith("/assignments"):
+            return rows, None, complete
+        if path.endswith("/modules"):
+            return [_module()], None, True
+        raise AssertionError(path)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=unproven_assignments_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+    assert result["catalog"]["assignments"] == {
+        "state": "unavailable", "last_success_at": "", "last_attempt_at": STAMP_1,
+        "error_code": error_code, "records": {},
+    }
 
 
 def test_inline_empty_items_are_complete_but_omitted_items_use_bounded_fallback(tmp_path):
     calls = []
+    top_level_calls = []
     active = 0
     peak = 0
     guard = threading.Lock()
@@ -206,8 +327,19 @@ def test_inline_empty_items_are_complete_but_omitted_items_use_bounded_fallback(
             return [{"id": f"item-{module_id}", "type": "Assignment", "title": "Work", "position": 1, "content_id": "101"}], None
         raise AssertionError(path)
 
+    def canvas_get_all_complete(path, params):
+        top_level_calls.append((path, dict(params)))
+        if path.endswith("/assignments"):
+            return [_assignment()], None, True
+        if path.endswith("/modules"):
+            return [_module("empty", items=[])] + [
+                _module(str(index), include_items=False, position=index + 1) for index in range(5)
+            ], None, True
+        raise AssertionError(path)
+
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=canvas_get_all,
+        canvas_get_all_complete=canvas_get_all_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -217,13 +349,14 @@ def test_inline_empty_items_are_complete_but_omitted_items_use_bounded_fallback(
     assert len(item_calls) == 5
     assert not any("/modules/empty/items" in path for path in item_calls)
     assert not any("/assignments/" in path for path, _ in calls)
-    module_params = next(params for path, params in calls if path.endswith("/modules"))
+    module_params = next(params for path, params in top_level_calls if path.endswith("/modules"))
     assert module_params == {"per_page": 100, "include[]": "items"}
 
 
 def test_partial_module_fallback_reuses_prior_items_and_marks_incomplete(tmp_path):
     course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
 
@@ -236,8 +369,16 @@ def test_partial_module_fallback_reuses_prior_items_and_marks_incomplete(tmp_pat
             return None, "timeout with private host"
         raise AssertionError(path)
 
+    def modules_without_inline_items_complete(path, params):
+        if path.endswith("/assignments"):
+            return [_assignment()], None, True
+        if path.endswith("/modules"):
+            return [_module("10", include_items=False)], None, True
+        raise AssertionError(path)
+
     result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=failed_items,
+        canvas_get_all_complete=modules_without_inline_items_complete,
         root=str(tmp_path), attempted_at=STAMP_2,
     )
     modules = result["catalog"]["modules"]
@@ -249,6 +390,7 @@ def test_partial_module_fallback_reuses_prior_items_and_marks_incomplete(tmp_pat
 def test_atomic_update_preserves_previous_and_leaves_no_temp_files(tmp_path):
     first = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )["catalog"]
 
@@ -259,8 +401,16 @@ def test_atomic_update_preserves_previous_and_leaves_no_temp_files(tmp_path):
             return [_module()], None
         raise AssertionError(path)
 
+    def changed_complete(path, params):
+        if path.endswith("/assignments"):
+            return [_assignment(name="Updated Reflection")], None, True
+        if path.endswith("/modules"):
+            return [_module()], None, True
+        raise AssertionError(path)
+
     second = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=changed,
+        canvas_get_all_complete=changed_complete,
         root=str(tmp_path), attempted_at=STAMP_2,
     )["catalog"]
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
@@ -272,10 +422,12 @@ def test_atomic_update_preserves_previous_and_leaves_no_temp_files(tmp_path):
 def test_corrupt_canonical_falls_back_to_previous_and_quarantines_bad_file(tmp_path):
     course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
     course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_2,
     )
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
@@ -305,6 +457,7 @@ def test_corrupt_previous_without_canonical_is_unavailable(tmp_path):
 def test_onedrive_conflict_warns_but_is_never_modified_or_deleted(tmp_path):
     course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_1,
     )
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
@@ -314,6 +467,7 @@ def test_onedrive_conflict_warns_but_is_never_modified_or_deleted(tmp_path):
     read_result = course_catalog.read_catalog("course-1", root=str(tmp_path))
     refresh_result = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
         root=str(tmp_path), attempted_at=STAMP_2,
     )
 
@@ -325,6 +479,7 @@ def test_onedrive_conflict_warns_but_is_never_modified_or_deleted(tmp_path):
 def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
     client = TestClient(app, base_url="http://127.0.0.1:8765")
     calls = []
+    refresh_calls = []
     monkeypatch.setattr(course_catalog_routes.config, "active_courses", lambda: [{"id": "course-1", "name": "Fictional Course"}])
 
     def fake_read(course_id):
@@ -336,12 +491,28 @@ def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
         course_catalog_routes, "_canvas_get_all",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GET contacted Canvas")),
     )
+    monkeypatch.setattr(
+        course_catalog_routes, "_canvas_get_all_complete",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GET contacted complete Canvas")),
+    )
+
+    def fake_refresh(course_id, course_name, *, canvas_get_all, canvas_get_all_complete):
+        refresh_calls.append((course_id, course_name, canvas_get_all, canvas_get_all_complete))
+        return {"catalog": None, "source": "none", "warnings": []}
+
+    monkeypatch.setattr(course_catalog_routes.course_catalog, "refresh_catalog", fake_refresh)
 
     allowed = client.get("/api/course-catalog", params={"course_id": "course-1"}).json()
+    refreshed = client.post("/api/course-catalog/refresh", data={"course_id": "course-1"}).json()
     blocked_get = client.get("/api/course-catalog", params={"course_id": "previous-course"}).json()
     blocked_post = client.post("/api/course-catalog/refresh", data={"course_id": "previous-course"}).json()
 
     assert allowed["ok"] is True and allowed["available"] is False
+    assert refreshed["ok"] is True and refreshed["available"] is False
     assert calls == ["course-1"]
+    assert len(refresh_calls) == 1
+    assert refresh_calls[0][0:2] == ("course-1", "Fictional Course")
+    assert refresh_calls[0][2] is course_catalog_routes._canvas_get_all
+    assert refresh_calls[0][3] is course_catalog_routes._canvas_get_all_complete
     assert blocked_get == {"ok": False, "error": "Select a saved current course first."}
     assert blocked_post == blocked_get

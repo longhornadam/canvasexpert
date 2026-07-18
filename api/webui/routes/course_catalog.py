@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from api import course_catalog
 
 from .. import config
-from ..canvas_client import _canvas_get_all
+from ..canvas_client import _canvas_get_all, _canvas_get_all_complete
 
 
 router = APIRouter(tags=["course-catalog"])
@@ -48,6 +48,7 @@ def refresh_course_catalog(course_id: str = Form("")):
             course_id,
             course_name,
             canvas_get_all=_canvas_get_all,
+            canvas_get_all_complete=_canvas_get_all_complete,
         )
     except (OSError, ValueError):
         return JSONResponse({"ok": False, "error": "The course list could not be synchronized."})

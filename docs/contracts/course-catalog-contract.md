@@ -47,16 +47,18 @@ Every persisted document has exactly these root keys:
 
 Allowed scope states are `current`, `stale`, `incomplete`, and `unavailable`:
 
-- `current`: the latest requested scope acquisition completed.
+- `current`: the latest requested scope acquisition completed. A fully successful, fully
+  paginated empty top-level assignment or module collection is current and authoritative.
 - `stale`: last-good records remain usable after a scope acquisition failed or returned an
-  unusable empty result.
+  unproven collection result.
 - `incomplete`: acquisition produced useful records but rejected an invalid record or could
   not acquire every omitted module-item list.
 - `unavailable`: no last-good records exist for the failed scope.
 
-The two scopes merge independently. Failure or an empty response never erases last-good
-records. A successful module-list acquisition may retain previous items for an individual
-module whose fallback item request fails; the module scope is then `incomplete`.
+The two scopes merge independently. Failed, incomplete, or invalid top-level collection
+reads retain last-good records; a proven-complete empty collection replaces them. A successful
+module-list acquisition may retain previous items for an individual module whose fallback item
+request fails; the module scope is then `incomplete`.
 
 ## Assignment allowlist
 
@@ -97,7 +99,9 @@ module-item keys before storage.
 ## Acquisition and writes
 
 A refresh concurrently requests the complete assignment collection and the complete module
-collection. Modules request `include[]=items`; modules that omit the field use a fixed,
+collection. Only a successful, complete list receipt may replace top-level membership; a
+transport failure, incomplete pagination, or invalid collection root leaves last-good records
+in place. Modules request `include[]=items`; modules that omit the field use a fixed,
 small-concurrency module-items fallback. Refresh never performs assignment-detail N+1
 requests and never performs a Canvas mutation.
 
