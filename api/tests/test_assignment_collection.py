@@ -13,6 +13,8 @@ STAMP_2 = "2026-07-18T13:00:00+00:00"
 
 def _catalog_from_receipt(receipt, root, attempted_at):
     def module_receipt(path, params):
+        if path.endswith("/assignment_groups"):
+            return [], None, True
         assert path.endswith("/modules")
         assert params == {"per_page": 100, "include[]": "items"}
         return [], None, True
