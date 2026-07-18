@@ -130,6 +130,16 @@ only: focused submissions/evidence and every Canvas write still require their ex
 paths and safeguards. Do not add student data, raw HTML, URLs, credentials, or private paths
 to catalog records, and do not treat it as a write preflight.
 
+**CanvasMirror** is the disposable private projection for roster, assignment, submission,
+attempt, comment, grade/status, and New Quiz read data. Current behavior and safety laws are
+documented in `docs/mirror.md`. The durable 1.0-beta architectural direction is
+`docs/reference/canvasmirror-1.0beta-information-spine.md`: CanvasMirror becomes the logical
+default read spine through typed scopes and shared acquisition, while the student-free
+Course Catalog, private mirror, and focused evidence remain separate privacy projections.
+That vision is not blanket authorization to cache every Canvas object or move live
+preflight/write/verification reads onto disk; future implementation still requires one
+senior-authored bounded handoff at a time.
+
 PowerGrader modes:
 
 - **Grade Myself** - fetch submitted work into one local session; no AI packet and no

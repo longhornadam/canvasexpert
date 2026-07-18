@@ -1,5 +1,10 @@
 # CanvasMirror
 
+This file documents current implemented behavior. The 1.0-beta target architecture and
+migration program live in
+`docs/reference/canvasmirror-1.0beta-information-spine.md`; that vision does not supersede
+the current contracts until its individual implementation briefs are completed.
+
 A disposable local mirror of Canvas course facts, kept fresh by deterministic
 background sync, living in the synced workspace at `_System/Canvas Mirror/`.
 Reads that used to cost live Canvas round trips (gradebook snapshot, MCP
