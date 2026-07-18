@@ -18,6 +18,7 @@ from api.webui import config, workspace
 from api.webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
 from api.mirror import new_quizzes
 from api.mirror import queries as mirror_queries
+from api.mirror import sync as mirror_sync
 from api.powergrader import student_attachments
 
 
@@ -40,31 +41,36 @@ def _text_only_submission_types(adata: dict) -> bool:
 
 
 def _mirror_session_submissions(course_id: str, assignment_id: str):
-    """Delta-then-disk (locked decision 5): a synchronous delta must succeed
-    for this course before submission bodies are read from disk. Returns
-    ``(rows, None)`` when servable, or ``(None, reason)`` to signal the
-    caller must fall back to the existing live fetch. Never raises — any
-    failure here is just a fallback signal, not a user-facing error."""
+    """Focused-refresh-then-disk for one text-entry assignment.
+
+    A nonempty result is servable only when every row can regain its display
+    name from the local roster. Otherwise the unchanged live fallback keeps
+    Canvas's nested ``user`` objects authoritative. Never raises: every
+    failure is only a fallback signal, not a user-facing error.
+    """
     try:
-        from api.webui import mirror_service
-    except Exception:
-        return None, "mirror_service_unavailable"
-    try:
-        summaries = mirror_service.sync_now(course_id) or []
+        result = mirror_sync.sync_assignment_submissions(
+            course_id, assignment_id, canvas_get_all=_canvas_get_all)
     except Exception:
         return None, "sync_exception"
-    delta_ok = any(
-        str(summary.get("course_id")) == str(course_id) and summary.get("ok")
-        for summary in summaries
-    )
-    if not delta_ok:
-        return None, "delta_failed"
+    if not result.get("ok"):
+        return None, "focused_refresh_failed"
     try:
         rows, error = mirror_queries.assignment_submissions(course_id, assignment_id)
     except Exception:
         return None, "mirror_read_exception"
     if error or rows is None:
         return None, "mirror_read_error"
+    if rows:
+        try:
+            students, roster_error = mirror_queries.course_students(course_id)
+        except Exception:
+            return None, "roster_read_exception"
+        if roster_error or students is None:
+            return None, "roster_read_error"
+        roster_ids = {str(student.get("id") or "") for student in students}
+        if any(str(row.get("user_id") or "") not in roster_ids for row in rows):
+            return None, "roster_incomplete"
     return rows, None
 
 

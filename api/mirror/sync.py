@@ -89,6 +89,36 @@ def _fetch_submissions(course_id, canvas_get_all, *, submitted_since=None,
         f"/api/v1/courses/{course_id}/students/submissions", params, timeout=60)
 
 
+def sync_assignment_submissions(course_id, assignment_id, *, canvas_get_all,
+                                root=None, now=None) -> dict:
+    """Refresh one assignment without claiming course-delta coverage.
+
+    This focused-current acquisition deliberately leaves course pass envelopes
+    and delta watermarks untouched: one assignment cannot establish freshness
+    for the entire course. A transport failure leaves its last-good document
+    untouched and returns an in-memory signal for the caller's live fallback.
+    """
+    blocked = _guard(course_id, root)
+    if blocked:
+        return blocked
+    started = now or store.now_iso()
+    try:
+        rows, error = canvas_get_all(
+            f"/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions",
+            {"per_page": 100, "include[]": ["submission_history"]},
+        )
+    except Exception as exc:
+        error = str(exc)
+        rows = None
+    if error:
+        return {"ok": False, "error": error, "error_code": _error_code(error)}
+    document = store.merge_submissions(course_id, assignment_id, rows or [],
+                                       root=root, attempted_at=started)
+    return {"ok": True, "assignment_id": str(assignment_id),
+            "submission_rows": len(rows or []),
+            "submissions": len(document["submissions"])}
+
+
 def _group_by_assignment(rows) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {}
     for row in rows or []:

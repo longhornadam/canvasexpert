@@ -440,3 +440,73 @@ def test_passes_report_unconfigured_workspace(monkeypatch):
     monkeypatch.setattr(workspace, "workspace_root", lambda: None)
     result = sync.full_pass(COURSE, canvas_get_all=FakeCanvas())
     assert result == {"ok": False, "error": "workspace not configured"}
+
+
+# --- focused assignment submissions -----------------------------------------------
+
+def test_focused_assignment_refresh_only_calls_one_endpoint_and_keeps_course_state(tmp_path):
+    """This named scope is narrower than a delta, so it must not claim a
+    successful pass or advance either course watermark."""
+    store.merge_submissions(COURSE, "700010", [_sub(700010)], root=str(tmp_path), replace=True)
+    store.record_pass(
+        COURSE, "delta", ok=True, attempted_at=NOW,
+        watermarks={"submitted_since": NOW_MINUS_OVERLAP,
+                    "graded_since": NOW_MINUS_OVERLAP}, root=str(tmp_path),
+    )
+    before_state = store.read_sync(COURSE, root=str(tmp_path))
+    calls = []
+
+    def focused_canvas(path, params=None, timeout=30):
+        calls.append((path, dict(params or {})))
+        assert path == f"/api/v1/courses/{COURSE}/assignments/700010/submissions"
+        return [_sub(700010, attempt=2, body="Focused second draft.", submission_history=[
+            {"attempt": 2, "submitted_at": "2026-07-02T10:00:00Z",
+             "submission_type": "online_text_entry", "body": "Focused second draft."},
+        ])], None
+
+    result = sync.sync_assignment_submissions(
+        COURSE, "700010", canvas_get_all=focused_canvas, root=str(tmp_path), now=NOW,
+    )
+
+    assert result["ok"] is True
+    assert calls == [(
+        f"/api/v1/courses/{COURSE}/assignments/700010/submissions",
+        {"per_page": 100, "include[]": ["submission_history"]},
+    )]
+    assert not any("/api/quiz/v1/" in path or path.endswith("/assignments")
+                   or path.endswith("/students/submissions") or path.endswith("/users")
+                   for path, _params in calls)
+    document = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+    assert document["submissions"]["900001"]["current"]["attempt"] == 2
+    assert set(document["submissions"]["900001"]["attempts"]) == {"1", "2"}
+    assert store.read_sync(COURSE, root=str(tmp_path)) == before_state
+
+    replay = sync.sync_assignment_submissions(
+        COURSE, "700010", canvas_get_all=focused_canvas, root=str(tmp_path), now=NOW,
+    )
+    assert replay["ok"] is True
+    replayed = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+    assert replayed == document
+
+
+def test_focused_assignment_refresh_failure_preserves_last_good_without_pass_mutation(tmp_path):
+    store.merge_submissions(COURSE, "700010", [_sub(700010, body="Last good body.")],
+                            root=str(tmp_path), replace=True)
+    store.record_pass(
+        COURSE, "delta", ok=True, attempted_at=NOW,
+        watermarks={"submitted_since": NOW_MINUS_OVERLAP,
+                    "graded_since": NOW_MINUS_OVERLAP}, root=str(tmp_path),
+    )
+    before_document = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+    before_state = store.read_sync(COURSE, root=str(tmp_path))
+
+    result = sync.sync_assignment_submissions(
+        COURSE, "700010",
+        canvas_get_all=lambda *_args, **_kwargs: (None, "HTTP 503: upstream"),
+        root=str(tmp_path), now="2026-07-16T13:00:00Z",
+    )
+
+    assert result["ok"] is False
+    assert result["error_code"]
+    assert store.read_submissions(COURSE, "700010", root=str(tmp_path)) == before_document
+    assert store.read_sync(COURSE, root=str(tmp_path)) == before_state
