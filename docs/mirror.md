@@ -137,7 +137,10 @@ skips the entire fan-out (zero Canvas calls) and records the run as
 skipped-restricted. Once the cooldown passes, the next run makes one bounded
 probe (the first quiz only) — a 403/401 renews the cooldown without touching
 the rest; a success clears the restriction and the remaining quizzes are
-processed normally in the same run. Manual `sync_now(course_id)` bypasses the
+processed normally in the same run. A transient probe failure (timeout, 5xx,
+connection, invalid response) never renews the cooldown — the record stays
+restricted with its expired `retry_after` unchanged, so each following pass
+costs exactly one bounded probe until Canvas answers definitively. Manual `sync_now(course_id)` bypasses the
 cooldown entirely and always runs a full probe; the 15-minute heartbeat never
 does. Skipped-restricted runs and circuit opens/clears are counted in
 `sync_metadata`'s existing return summary (`capability`, `skipped_restricted`,

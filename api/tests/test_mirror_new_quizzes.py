@@ -425,6 +425,39 @@ def test_capability_probe_after_cooldown_failure_renews_with_exactly_one_call(tm
     assert capability["retry_after"] > "2026-07-16T12:00:00Z"
 
 
+def test_capability_transient_probe_failure_does_not_renew_cooldown(tmp_path):
+    quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2"), _quiz_assignment("quiz-3")]
+    expired_retry_after = "2026-07-16T12:00:00Z"
+    store.write_new_quiz_capability(
+        COURSE, capability="restricted", last_probe_at="2026-07-15T12:00:00Z",
+        retry_after=expired_retry_after, evidence_category="forbidden",
+        consecutive_failures=3, root=str(tmp_path))
+
+    calls = []
+
+    def timing_out(path, params=None, timeout=30):
+        calls.append(path)
+        return None, "Request timed out"
+
+    # A timeout-style probe failure is transient transport noise, not
+    # restriction evidence: retry_after must stay expired (unchanged).
+    result = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=timing_out,
+                                       root=str(tmp_path), now="2026-07-16T13:00:00Z")
+    assert len(calls) == 1  # still a bounded probe — one call only
+    assert result["circuit_opened"] is False
+    capability = store.read_new_quiz_capability(COURSE, root=str(tmp_path))
+    assert capability["capability"] == "restricted"
+    assert capability["retry_after"] == expired_retry_after
+    assert capability["evidence"] == {"category": "forbidden", "consecutive_failures": 3}
+
+    # Because the cooldown is still expired, the following run probes exactly
+    # once again instead of skipping the fan-out for 24h.
+    result2 = new_quizzes.sync_metadata(COURSE, quizzes, canvas_get_all=timing_out,
+                                        root=str(tmp_path), now="2026-07-16T13:15:00Z")
+    assert len(calls) == 2
+    assert result2["skipped_restricted"] is False
+
+
 def test_capability_probe_after_cooldown_success_clears_and_proceeds_normally(tmp_path):
     quizzes = [_quiz_assignment("quiz-1"), _quiz_assignment("quiz-2")]
     store.write_new_quiz_capability(

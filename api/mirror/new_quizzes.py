@@ -836,14 +836,26 @@ def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None
                 else:
                     failures.append({"assignment_id": assignment_id, "error": outcome["error"]})
         else:
-            # Bounded probe failure (classified or not) renews the cooldown
-            # without touching the remaining quizzes.
-            circuit_opened = True
+            # Bounded probe failure: only a classified 403/401 renews the
+            # 24h cooldown. A transient transport failure (timeout, 5xx,
+            # connection, invalid response) is not evidence of durable
+            # restriction (vision doc Sec 9.4) — keep the record restricted
+            # with its already-expired retry_after unchanged, so the next
+            # pass performs another single bounded probe. Either way the
+            # remaining quizzes stay untouched.
             examined_full_list = False
-            store.write_new_quiz_capability(course_id, capability="restricted",
-                last_probe_at=attempted_at, retry_after=_retry_after_iso(attempted_at),
-                evidence_category=evidence_category or capability_doc["evidence"]["category"],
-                consecutive_failures=1, root=root)
+            if evidence_category:
+                circuit_opened = True
+                store.write_new_quiz_capability(course_id, capability="restricted",
+                    last_probe_at=attempted_at, retry_after=_retry_after_iso(attempted_at),
+                    evidence_category=evidence_category, consecutive_failures=1, root=root)
+            else:
+                store.write_new_quiz_capability(course_id, capability="restricted",
+                    last_probe_at=attempted_at,
+                    retry_after=capability_doc.get("retry_after") or "",
+                    evidence_category=capability_doc["evidence"]["category"],
+                    consecutive_failures=capability_doc["evidence"]["consecutive_failures"],
+                    root=root)
     else:
         if saw_success:
             if capability_doc.get("capability") == "restricted":
