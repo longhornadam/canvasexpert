@@ -107,6 +107,89 @@ def test_wrapper_serves_fresh_mirror_for_all_three_shapes_with_zero_live_calls(m
     assert {s["user_id"] for s in submissions} == {"900101", "900102", "900103", "900104"}
 
 
+def test_wrapper_serves_fresh_comment_scope_with_zero_live_calls(monkeypatch, tmp_path):
+    """Fresh comment sidecar state serves the rich read entirely from the mirror."""
+    _mount(monkeypatch, tmp_path)
+    _populate(str(tmp_path))
+    store.record_submission_comments_state(COURSE, ok=True, attempted_at=store.now_iso(), root=str(tmp_path))
+    reads = _reads(_explode)
+
+    submissions = reads.submissions(include_comments=True)
+    assert {s["assignment_id"] for s in submissions} == {"700100", "700101"}
+
+
+def test_wrapper_rich_read_falls_back_live_when_comment_sidecar_is_stale(monkeypatch, tmp_path):
+    """Stale comment sidecar state (old timestamp) triggers exactly one rich live call."""
+    _mount(monkeypatch, tmp_path)
+    _populate(str(tmp_path))
+    store.record_submission_comments_state(
+        COURSE, ok=True, attempted_at="2026-01-01T00:00:00Z", root=str(tmp_path))
+    calls = []
+    live_rows = [{"id": "live-1", "assignment_id": "live-1", "user_id": "live-user",
+                  "submission_comments": [{"author_id": "x", "comment": "hi"}]}]
+
+    def fake_get(path, params=None, timeout=None, deadline=None):
+        calls.append((path, dict(params or {})))
+        return live_rows, None
+
+    reads = _reads(fake_get)
+    result = reads.submissions(include_comments=True)
+    assert result == live_rows
+    assert len(calls) == 1
+    path, params = calls[0]
+    assert path == f"/api/v1/courses/{COURSE}/students/submissions"
+    assert params.get("include[]") == "submission_comments"
+
+
+def test_wrapper_rich_read_falls_back_live_when_comment_sidecar_is_corrupt(monkeypatch, tmp_path):
+    """A corrupt/missing comment sidecar (never recorded) also triggers exactly one rich live call."""
+    _mount(monkeypatch, tmp_path)
+    _populate(str(tmp_path))  # comment sidecar never recorded -> unavailable, not "current"
+    calls = []
+    live_rows = [{"id": "live-1", "assignment_id": "live-1", "user_id": "live-user",
+                  "submission_comments": []}]
+
+    def fake_get(path, params=None, timeout=None, deadline=None):
+        calls.append(path)
+        return live_rows, None
+
+    reads = _reads(fake_get)
+    result = reads.submissions(include_comments=True)
+    assert result == live_rows
+    assert calls == [f"/api/v1/courses/{COURSE}/students/submissions"]
+
+
+def test_wrapper_plain_then_rich_keeps_separate_caches_and_still_acquires_rich(monkeypatch, tmp_path):
+    """Plain read (fresh mirror) must never satisfy a later rich request; the
+    rich request still performs its own dedicated acquisition even though the
+    plain result is already cached."""
+    _mount(monkeypatch, tmp_path)
+    _populate(str(tmp_path))
+    # Comment sidecar is never recorded here, so the rich scope is unavailable
+    # and must fall back live even though the plain mirror scope is current.
+    calls = []
+
+    def fake_get(path, params=None, timeout=None, deadline=None):
+        calls.append((path, dict(params or {})))
+        return [{"id": "live-rich", "assignment_id": "live-rich", "user_id": "live-user",
+                 "submission_comments": [{"author_id": "x", "comment": "hi"}]}], None
+
+    reads = _reads(fake_get)
+    plain = reads.submissions()
+    assert {s["assignment_id"] for s in plain} == {"700100", "700101"}
+    assert calls == []  # plain mirror scope was fresh; no live call yet
+
+    rich = reads.submissions(include_comments=True)
+    assert calls  # the rich request performed its own live acquisition
+    assert calls[0][1].get("include[]") == "submission_comments"
+    assert rich != plain
+    assert rich[0]["id"] == "live-rich"
+
+    # Calling plain again still returns the original mirror-backed result,
+    # not the rich live result.
+    assert reads.submissions() == plain
+
+
 def test_wrapper_falls_back_live_when_mirror_is_stale(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path), fresh=False)
@@ -209,6 +292,11 @@ def test_late_work_scan_course_reads_mirror_with_zero_live_calls(monkeypatch, tm
 def test_grading_debt_and_home_attention_read_mirror_with_comment_shape(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
+    # The rich (include_comments=True) read is bounded by its own comment
+    # sidecar freshness, separate from the plain submissions scope; record it
+    # fresh here so this fixture continues to serve entirely from the mirror.
+    store.record_submission_comments_state(
+        COURSE, ok=True, attempted_at=store.now_iso(), root=str(tmp_path))
     monkeypatch.setattr(grading_debt, "powergrader_evidence", lambda: {})
 
     reads = _reads(_explode)

@@ -50,6 +50,7 @@ class WorkCourseReads:
         self._assignments_cache: list[dict] | None = None
         self._students_cache: list[dict] | None = None
         self._submissions_cache: list[dict] | None = None
+        self._rich_submissions_cache: list[dict] | None = None
 
     def assignments(self) -> list[dict]:
         """Read assignments from mirror when current, else live."""
@@ -91,11 +92,23 @@ class WorkCourseReads:
     def submissions(self, include_comments=False) -> list[dict]:
         """Read submissions from mirror when current, else live.
 
-        When *include_comments* is true the live fallback requests
-        ``submission_comments``; the mirror always includes them when
-        present so the parameter only affects the live path.
+        Plain (``include_comments=False``) reads are bounded by the private
+        submissions scope; rich (``include_comments=True``) reads are bounded
+        by the dedicated, separately-freshened comment scope and always make
+        a live request that carries ``submission_comments`` when the mirror
+        is not current. The two results are cached separately: a rich result
+        may seed the plain cache, but a plain result never seeds the rich
+        cache, so calling plain then rich still performs the rich read.
         """
+        if include_comments:
+            return self._submissions_with_comments()
+        return self._plain_submissions()
+
+    def _plain_submissions(self) -> list[dict]:
         if self._submissions_cache is not None:
+            return self._submissions_cache
+        if self._rich_submissions_cache is not None:
+            self._submissions_cache = self._rich_submissions_cache
             return self._submissions_cache
         check_deadline(self._deadline)
         state = read_service.private_submissions(
@@ -103,16 +116,33 @@ class WorkCourseReads:
         if state["state"] == "current":
             self._submissions_cache = state["records"]
             return self._submissions_cache
-        params = {"student_ids[]": "all", "per_page": 100}
-        if include_comments:
-            params["include[]"] = "submission_comments"
         self._submissions_cache = _call_live_get_all(
             self._live_reader,
             f"/api/v1/courses/{self._course_id}/students/submissions",
-            params,
+            {"student_ids[]": "all", "per_page": 100},
             self._deadline,
         )
         return self._submissions_cache
+
+    def _submissions_with_comments(self) -> list[dict]:
+        if self._rich_submissions_cache is not None:
+            return self._rich_submissions_cache
+        check_deadline(self._deadline)
+        state = read_service.private_submission_comments(
+            self._course_id, max_age_hours=self._max_age_hours)
+        if state["state"] == "current":
+            self._rich_submissions_cache = state["records"]
+        else:
+            self._rich_submissions_cache = _call_live_get_all(
+                self._live_reader,
+                f"/api/v1/courses/{self._course_id}/students/submissions",
+                {"student_ids[]": "all", "per_page": 100,
+                 "include[]": "submission_comments"},
+                self._deadline,
+            )
+        if self._submissions_cache is None:
+            self._submissions_cache = self._rich_submissions_cache
+        return self._rich_submissions_cache
 
     def live_call(self, path: str, params: dict) -> list[dict]:
         """Call the live reader for non-mirror-owned paths (groups etc.)."""
