@@ -1,4 +1,4 @@
-"""Shared local-read/join helpers for Student Reports.
+"""Shared local-read/join helpers for Student Reports and merged portfolios.
 
 Assembles one course's joined assignment+submission records from the typed
 private-mirror read service (`api/mirror/read_service.py`) into the same nested
@@ -7,9 +7,10 @@ fetch, and resolves the comment-author display rule the private mirror already
 applies everywhere else (comments have never stored author names — see
 `api/mirror/store.py::_comment_record`).
 
-This module has one consumer today (`build_packet`); the deferred
-`portfolio_service.py::build_merged_portfolios` migration is expected to reuse
-the same joining logic for a multi-student cohort.
+Two consumers share the one underlying join pass (`_joined_course_records`):
+`build_packet` (single-student, multi-course — filters to one student) and
+`portfolio_service.py::build_merged_portfolios` (single-course, multi-student —
+groups by every student).
 """
 from __future__ import annotations
 
@@ -20,6 +21,43 @@ from api.work_registry.providers.home_attention import _PROVEN_STAFF_ROLES, _aut
 # administrator, instructor, staff, ta, teacher, teaching_assistant) — the report
 # does not distinguish among them.
 STAFF_LABEL = "Instructor"
+
+
+def _joined_course_records(course_id, *, root=None) -> list[dict] | None:
+    """Join one course's local assignments+submissions for every student.
+
+    Returns ``None`` (meaning: use the existing live fallback for this course)
+    unless both the ``private_assignments`` and ``private_submissions`` envelopes
+    report ``state == "current"`` — the local path is never used with
+    incomplete/stale data. Otherwise returns a list of every student's submission
+    records in the exact nested shape downstream report code already expects
+    (``s["assignment"]["name"]``, ``s["score"]``, ``s.get("assignment", {}).get(...)``).
+
+    This is the one shared read+join pass behind both
+    ``local_course_submissions`` (filtered to one student) and
+    ``local_course_submissions_by_user`` (grouped by every student) — no
+    duplicated read/join logic between the two public functions.
+    """
+    assignments = read_service.private_assignments(course_id, root=root, max_age_hours=None)
+    submissions = read_service.private_submissions(course_id, root=root, max_age_hours=None)
+    if assignments["state"] != "current" or submissions["state"] != "current":
+        return None
+    assignments_by_id = {a["id"]: a for a in assignments["records"]}
+    joined = []
+    for sub in submissions["records"]:
+        assignment = assignments_by_id.get(str(sub.get("assignment_id") or ""))
+        if assignment is None:
+            continue
+        record = dict(sub)
+        record["assignment"] = {
+            "id": assignment.get("id"),
+            "name": assignment.get("name"),
+            "due_at": assignment.get("due_at"),
+            "points_possible": assignment.get("points_possible"),
+            "description": assignment.get("description"),
+        }
+        joined.append(record)
+    return joined
 
 
 def local_course_submissions(course_id, user_id, *, root=None) -> list[dict] | None:
@@ -35,29 +73,31 @@ def local_course_submissions(course_id, user_id, *, root=None) -> list[dict] | N
     An empty list is a legitimate "current, but this student has no submissions
     in this course" result — distinct from ``None``, which means "not current."
     """
-    assignments = read_service.private_assignments(course_id, root=root, max_age_hours=None)
-    submissions = read_service.private_submissions(course_id, root=root, max_age_hours=None)
-    if assignments["state"] != "current" or submissions["state"] != "current":
+    joined = _joined_course_records(course_id, root=root)
+    if joined is None:
         return None
-    assignments_by_id = {a["id"]: a for a in assignments["records"]}
     wanted = str(user_id)
-    joined = []
-    for sub in submissions["records"]:
-        if str(sub.get("user_id") or "") != wanted:
-            continue
-        assignment = assignments_by_id.get(str(sub.get("assignment_id") or ""))
-        if assignment is None:
-            continue
-        record = dict(sub)
-        record["assignment"] = {
-            "id": assignment.get("id"),
-            "name": assignment.get("name"),
-            "due_at": assignment.get("due_at"),
-            "points_possible": assignment.get("points_possible"),
-            "description": assignment.get("description"),
-        }
-        joined.append(record)
-    return joined
+    return [record for record in joined if str(record.get("user_id") or "") == wanted]
+
+
+def local_course_submissions_by_user(course_id, *, root=None) -> dict[str, list[dict]] | None:
+    """Join one course's local assignments+submissions for every student, grouped.
+
+    Returns ``None`` under the identical not-current gate as
+    ``local_course_submissions``. Otherwise returns a dict keyed by ``user_id``
+    (string) of every student's joined records for the course, in the identical
+    per-record nested shape. Reads and joins the whole course exactly once —
+    callers with several students to serve should call this once, not per
+    student (see `portfolio_service.py::build_merged_portfolios`).
+    """
+    joined = _joined_course_records(course_id, root=root)
+    if joined is None:
+        return None
+    grouped: dict[str, list[dict]] = {}
+    for record in joined:
+        key = str(record.get("user_id") or "")
+        grouped.setdefault(key, []).append(record)
+    return grouped
 
 
 def comment_author_label(author_id, author_role, report_user_id, report_student_name):
