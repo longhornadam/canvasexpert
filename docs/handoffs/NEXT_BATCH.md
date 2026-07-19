@@ -4,13 +4,24 @@ Read only this file and the sections it names below — not the whole vision doc
 
 ## Current authoritative next batch
 
-**Batch 5 — Student reports and portfolios** (spine §17.1 row 5).
+**Batch 5 — Student reports and portfolios** (spine §17.1 row 5) is underway, split into
+sequential slices (same pattern as the earlier 03-series/04-series batches):
 
-Batches 0-4 are all GREEN and archived. 1.0beta-05a (`docs/handoffs/archive/`) closed Batch 2's
-last outcome (targeted post-write group reconciliation), so Batch 2 is now fully closed too —
-nothing remains before Batch 5 per the spine's own dependency order (§17.1 lines 1211-1214: the
-next implementation batch is selected only when its dependencies and decision seams are ready;
-Batch 5 has none outstanding).
+- **1.0beta-06a** (`docs/handoffs/1.0beta-06a-student-reports-local-metadata.md`, Status:
+  READY) — migrates `api/student_packet.py::build_packet` (the per-student, multi-course
+  packet) to the typed read service, with live fallback when a course's mirror isn't current.
+  This is the current executor-ready work.
+- **Planned next (not yet spec'd):** the parallel migration of
+  `api/portfolio_service.py::build_merged_portfolios` (the multi-student cohort portfolio),
+  reusing 06a's new shared module (`api/report_local_reads.py` or wherever it lands) and its
+  new `submission_transport.fetch_submission`. Spec this only after 06a is GREEN — do not spec
+  or start it early, and do not let 06a's executor touch `portfolio_service.py`.
+- **Also planned, later, not yet spec'd:** migrating `list_assignments_full`'s assignment-picker
+  endpoint (needs its own investigation — no equivalent shape exists yet in either
+  `private_assignments` or Course Catalog), and the private source/freshness provenance
+  manifest the vision doc names for this batch.
+
+Batches 0-4 are all GREEN and archived; Batch 2 fully closed via 1.0beta-03i + 1.0beta-05a.
 
 Read only these two sections before authoring the next brief:
 - Spine §17.1 row 5: *"Build report/portfolio metadata from typed local reads, fetch
