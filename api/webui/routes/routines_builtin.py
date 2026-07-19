@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 from .. import config
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
-from ..mirror_reads import assignments_or_live, students_or_live, submissions_or_live
+from ..mirror_reads import students_or_live, submissions_or_live
 from ..schooldays import _school_days_late, _parse_iso_local
-from api import student_packet
+from api import routine_reads, student_packet
 from api.powergrader import assignment_refresh
 
 from api.nq_report import html_to_text
@@ -108,11 +108,13 @@ def _run_routine_download(params):
     DOWNLOADABLE = {"online_text_entry", "online_upload", "online_url", "discussion_topic"}
     lines, ok, total, current, incomplete, failed = [], True, 0, 0, 0, 0
     for c in config.active_courses():
-        asgns, err, _source = assignments_or_live(c["id"])
-        if err:
+        asgns_result = routine_reads.read_scope(
+            "assignments", c["id"], live_reader=_canvas_get_all)
+        if not asgns_result["ok"]:
             lines.append("✗ assignment listing failed")
             ok = False
             continue
+        asgns = asgns_result["records"]
         ids = [str(a["id"]) for a in (asgns or [])
                if (a.get("due_at") or "")[:10] >= cutoff
                and set(a.get("submission_types") or []) & DOWNLOADABLE]
@@ -251,17 +253,20 @@ def _run_routine_grading_debt(params):
     lines, ok, total = [], True, 0
     for c in config.active_courses():
         cid = str(c["id"])
-        amap_raw, err, _source = assignments_or_live(cid)
-        if err:
-            lines.append(f"✗ {c['nickname']}: {err}")
+        asgns_result = routine_reads.read_scope(
+            "assignments", cid, live_reader=_canvas_get_all)
+        if not asgns_result["ok"]:
+            lines.append(f"✗ {c['nickname']}: {asgns_result['error']}")
             ok = False
             continue
-        aname = {str(a["id"]): a.get("name", "") for a in (amap_raw or [])}
-        subs, err, _source = submissions_or_live(cid)
-        if err:
-            lines.append(f"✗ {c['nickname']}: {err}")
+        aname = {str(a["id"]): a.get("name", "") for a in (asgns_result["records"] or [])}
+        subs_result = routine_reads.read_scope(
+            "submissions", cid, live_reader=_canvas_get_all)
+        if not subs_result["ok"]:
+            lines.append(f"✗ {c['nickname']}: {subs_result['error']}")
             ok = False
             continue
+        subs = subs_result["records"]
         debts = []
         for s_ in (subs or []):
             if s_.get("workflow_state") != "submitted" or not s_.get("submitted_at"):

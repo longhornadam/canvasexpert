@@ -182,7 +182,7 @@ def test_grading_debt_falls_back_live_when_stale(monkeypatch, tmp_path):
                  "workflow_state": "submitted",
                  "submitted_at": "2020-01-01T09:00:00Z"}], None
 
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", fake_get)
+    monkeypatch.setattr(routines_builtin, "_canvas_get_all", fake_get)
     result = routines_builtin._run_routine_grading_debt({"school_days": 3})
     assert result["ok"] is True
     assert "1 ungraded" in result["summary"]
@@ -212,7 +212,7 @@ def test_grading_debt_output_identical_mirror_served_vs_live_served(monkeypatch,
             return [dict(ASSIGNMENTS[0])], None
         return [dict(row) for row in SUBMISSIONS], None
 
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", fake_get)
+    monkeypatch.setattr(routines_builtin, "_canvas_get_all", fake_get)
     live_served = routines_builtin._run_routine_grading_debt({"school_days": 3})
 
     assert mirror_served == live_served
