@@ -10,23 +10,27 @@ sequential slices (same pattern as the earlier 03-series/04-series batches):
 - **1.0beta-06a is GREEN and archived** (`docs/handoffs/archive/`, commit `e595c47`) —
   `api/student_packet.py::build_packet` now reads standing/due/text-body/comment facts from
   the typed read service when a course's mirror is current, with live fallback unchanged
-  otherwise. Established two reusable pieces the next slice should build on:
-  `api/report_local_reads.py` (local-read/join + comment-display helpers) and
-  `api/submission_transport.py::fetch_submission` (focused single-submission live fetch for
-  attachments).
-- **Next to spec:** the parallel migration of `api/portfolio_service.py::build_merged_portfolios`
-  (the multi-student cohort portfolio) — reuse `report_local_reads.py`'s joining/comment-display
-  helpers and `fetch_submission` rather than re-deriving them; note `build_merged_portfolios`
-  currently does one live paginated fetch *per student* even within a single course, so a
-  local-current course collapses that to one local read total (bigger win than 06a's
-  per-course-once shape). `report_local_reads.local_course_submissions` takes one `user_id`
-  today (06a's own scope decision, per its "not yet a collection" deviation) — decide during
-  specing whether to extend it for multi-student use or have the portfolio brief filter a
-  per-course join result to each student in memory.
-- **Also planned, later, not yet spec'd:** migrating `list_assignments_full`'s assignment-picker
-  endpoint (needs its own investigation — no equivalent shape exists yet in either
-  `private_assignments` or Course Catalog), and the private source/freshness provenance
-  manifest the vision doc names for this batch.
+  otherwise. Established `api/report_local_reads.py` and
+  `api/submission_transport.py::fetch_submission`.
+- **1.0beta-06b is GREEN and archived** (`docs/handoffs/archive/`, commit `b046d5b`) —
+  `api/portfolio_service.py::build_merged_portfolios` now calls the new
+  `report_local_reads.local_course_submissions_by_user` once per course (was: one live
+  paginated fetch per student) when the mirror is current. `report_local_reads.py` now shares
+  one `_joined_course_records` helper between both consumers.
+- **1.0beta-06c is READY, spec'd, not yet executed**
+  (`docs/handoffs/1.0beta-06c-assignment-picker-local-metadata.md`) — migrates
+  `api/webui/routes/reports.py::list_assignments_full` (the report/download assignment picker)
+  to read Course Catalog's `catalog_assignments`/`catalog_assignment_groups` when current,
+  falling back to today's live pagination otherwise. Independent of 06a/06b (different files:
+  `reports.py`, not `student_packet.py`/`portfolio_service.py`/`report_local_reads.py`).
+  Investigation already confirmed Course Catalog's schema needs no changes — this is the
+  current executor-ready work.
+- **Also planned, later, not yet spec'd:** the private source/freshness provenance manifest
+  the vision doc names for this batch (§17.1 row 5's third named outcome). Spec this only
+  after 06c lands — its exact shape should capture the same local-vs-live signal 06a/06b/06c
+  now each produce (`used_local`-style booleans and the envelopes' own `state`/`source`/
+  `last_success_at` fields), so it's easier to design accurately once all three are settled
+  rather than guessed at in isolation.
 
 Batches 0-4 are all GREEN and archived; Batch 2 fully closed via 1.0beta-03i + 1.0beta-05a.
 
