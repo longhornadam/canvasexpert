@@ -6,49 +6,37 @@
 
 ## Current state
 
-Batch 6 — Home, Work, Routines, MCP, and derived views — is **complete**. Units 01–06 are all
-GREEN, accepted, committed, and archived:
+Batch 6 is complete (units 01–06 accepted; `6103fca`, `f482042`, `5bc929c`, `ae69f26`,
+`047e882`, `1d85660`). **Batch 7 — mutation reconciliation coverage — is now active.** Its
+immediate unit is **01 — catalog structure reconciliation** (senior-authored from unit 06's
+machine map). The brief in `CURRENT.md` is the sole implementation authority.
 
-- 01 comment freshness foundation — `6103fca`
-- 02 Home comment-aware reads — `f482042`
-- 03 report provenance and atomicity — `5bc929c`
-- 04 routine typed-read SDK — `ae69f26`
-- 05 MCP typed local reads — `047e882`
-- 06 mutation ownership checkpoint — `1d85660`
+## Batch 7 remaining units (author after each acceptance)
 
-`CURRENT.md` holds no active brief. The DeepSeek V4 Flash packet deliberately stops after 06.
+Sequenced from the reconciliation map, live paths only (dead ledger adapters are Batch 8):
 
-## Next: author Batch 7 (senior)
+1. **Catalog structure** (current) — whole-scope stale-mark after ledger assignment/quiz/module
+   writes, via a central executor+recovery hook.
+2. **Grades/curves** — wire the two live curve writers (`gradebook_curves.py`,
+   `routines_builtin.py _curve_apply_core`) to `mirror_service.notify_course_changed`.
+3. **Per-student assignment overrides** (`private.assignments`) — decide the reconciliation shape
+   for tier/quiz/extension overrides; no invalidate covers that scope yet.
 
-Batch 7 (mutation reconciliation) is authored from unit 06's machine map, not pre-authored:
+(Late sweep is CanvasExpert-owned `n/a`, not a Batch 7 unit. Groups and late policy already
+reconcile on their live routes.)
 
-- `docs/contracts/canvas-transport-owners.json` — machine authority (56 owners; 31 with
-  reconciliation `none` are the candidate gaps)
-- `docs/reference/mutation-reconciliation-map.md` — grouped vertical families and named gaps
+## Then Batch 8 — transport ownership + beta acceptance
 
-Gating decision — RESOLVED 2026-07-19 (dead-path trace): the four duplicate ledger adapters
-(`operation_ledger/adapters/roster_membership.py`, `roster_group_set.py`, `late_policy.py`,
-`curve.py`) are **dead** — no non-test producer emits their KINDs (the generic
-`/api/operations/{kind}/prepare` endpoint is only ever called with `gradebook.sweep` and the
-`content.*` KINDs). Their live siblings are the direct webui routes / the `_curve_apply_core`
-routine; groups and late policy already reconcile. Consequences:
-
-- **Batch 7** reconciles only live paths. Concretely: catalog structure (19 owners, largest;
-  use the `merge_group_category` template), the two live curve writers, and per-student
-  assignment overrides. It must NOT touch the dead ledger adapters.
-- **Batch 8** retires the four dead adapters (Former Program 10), removing each adapter and its
-  contract entry together (the ownership test fails on a listed owner no longer present). Also
-  consider kind-allowlisting the generic operations endpoint. Details in the map's
-  "Batch 8 hygiene note".
-
-Recommended first Batch 7 brief: the catalog-structure invalidate/merge (family 2) — largest,
-uniform, and has a proven template.
+Retire the four dead ledger adapters (`curve.py`, `late_policy.py`, `roster_membership.py`,
+`roster_group_set.py`) with their contract entries, consider kind-allowlisting the generic
+operations endpoint, then run the full acceptance matrix (spine §19 + §16.1 targets). See the
+map's "Batch 8 hygiene note".
 
 ## Batch table status
 
-- Batches 0–6: delivered/accepted to their recorded scope.
-- Batch 7: not yet authored; seed from 06's map after the duplicate-path decision.
-- Batch 8: not active and must not start early.
+- Batches 0–6: delivered/accepted.
+- Batch 7: active; unit 01 (catalog structure reconciliation) is current.
+- Batch 8: not started; final beta checkpoint.
 
 ---
 

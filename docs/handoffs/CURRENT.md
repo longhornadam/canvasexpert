@@ -1,33 +1,137 @@
-# No active executor brief — Batch 6 complete
+# Reconcile the CanvasMirror catalog projection after ledger structure writes
 
-Status: **NO CURRENT WORK** — do not implement from this file.
+> **DEEPSEEK EXECUTION AUTHORITY.** Read `AGENTS.md`, this file, and only the references
+> routed below. Do not read `NEXT_BATCH.md`, `HANDOFF_TEMPLATE.md`, or `archive/`.
 
-Batch 6 (Home, Work, Routines, MCP, and derived views) is fully accepted. The DeepSeek V4 Flash
-execution packet deliberately stops after unit 06. There is no promoted implementation brief.
+Status: **READY**
 
-## Accepted Batch 6 units
+Risk: **medium** - adds a cheap whole-scope stale-mark after successful structure operations. No
+Canvas write, transport, adapter compute, receipt, or read-path behavior changes; a wrongly-fresh
+catalog projection becomes honestly stale instead.
 
-| Unit | Brief | Impl commit |
-|------|-------|-------------|
-| 01 | comment freshness foundation | `6103fca` |
-| 02 | Home comment-aware reads | `f482042` |
-| 03 | report provenance and atomicity | `5bc929c` |
-| 04 | routine typed-read SDK | `ae69f26` |
-| 05 | MCP typed local reads | `047e882` |
-| 06 | mutation ownership checkpoint | `1d85660` |
+Depends on: commit `d0be78f` (Batch 6 accepted; ledger dead-path resolution). This is Batch 7
+unit 01 (spine §17.1 row 7 / §17.2 Former Program 9; §14.1 step-9 debt).
 
-Archived briefs live in `docs/handoffs/archive/1.0beta-0{1..6}-*.md`.
+## Teacher-visible result
 
-## What happens next (senior action, not executor)
+After the operation ledger creates or patches an assignment, quiz, or module placement, the
+Course Catalog no longer serves silently-stale navigation/search data as if current. The affected
+catalog scope is marked stale so the next catalog read (or heartbeat/manual refresh) refetches it
+from Canvas. No new UI.
 
-Batch 7 (mutation reconciliation) must be authored by the senior from unit 06's machine map:
+## Acceptance criteria
 
-- `docs/contracts/canvas-transport-owners.json` (machine authority)
-- `docs/reference/mutation-reconciliation-map.md` (grouped Batch 7 families + gaps)
+- [ ] New `course_catalog.invalidate_scope(course_id, scope_key, *, root=None, attempted_at=None)`
+      marks one catalog scope (`assignments|modules|assignment_groups`) `state="stale"` with
+      `error_code="invalidated"` and an updated `last_attempt_at`, mirroring
+      `mirror_store.invalidate_groups` exactly: it no-ops (no write, returns None) when no catalog
+      document exists, never fabricates a document, re-validates, and writes atomically.
+- [ ] A single shared helper maps op **kind** to the catalog scopes that kind can affect and calls
+      `invalidate_scope` for each, once per successfully-applied operation. The mapping is
+      conservative (the union of scopes a kind *can* touch), and over-invalidation is accepted.
+- [ ] The helper is invoked on **both** ledger success paths: the normal apply path
+      (`executor._execute_target` after a target's `execute()` succeeds) and the crash-recovery
+      apply path (`recovery._apply_recovered`). A failed/aborted operation never invalidates.
+- [ ] `content.rubric` and bare `content.page` (no module) invalidate nothing (rubric library and
+      page bodies are not catalog scopes); `content.page` attached to a module invalidates
+      `catalog.modules` only.
+- [ ] The 19 catalog-structure owners' `reconciliation` in
+      `docs/contracts/canvas-transport-owners.json` change from `none` to `invalidate` with a
+      reason naming the central hook; `docs/reference/mutation-reconciliation-map.md` family 2 and
+      Batch 7 seed 2 are marked covered. No other owner changes.
+- [ ] The named acceptance gate passes, including the mutation-ownership scan.
 
-Before writing Batch 7 briefs, the senior must resolve the duplicate-implementation questions
-06 surfaced (gap family 4: group membership/category and late-policy paths that exist both as a
-reconciled direct route and an unreconciled ledger adapter) — confirm whether the ledger paths
-still have live callers before deciding to reconcile or retire them.
+## Explicit non-goals
 
-Do not promote a new candidate into this file until the senior authors the next brief.
+- No per-record catalog **merge** (whole-scope stale-mark only; a targeted merge is a later
+  refinement, not this brief). No new catalog scope for pages or rubrics.
+- No change to `refresh_catalog`/`refresh_catalog_assignments_only`, adapter write/verify/receipt
+  logic, `executor`/`recovery` control flow beyond the one hook call, or the read service.
+- No reconciliation for grades/curves, per-student overrides, groups, or late policy (other Batch
+  7 units). Do not touch the dead ledger adapters (`curve.py`, `late_policy.py`,
+  `roster_membership.py`, `roster_group_set.py`).
+
+## Locked decisions
+
+- Kind → catalog scopes (conservative union; unlisted kinds invalidate nothing):
+  - `content.assignment` → `{catalog.assignments, catalog.modules}`
+  - `content.quiz` → `{catalog.assignments, catalog.modules}`
+  - `content.quick_assignment` → `{catalog.assignments}`
+  - `content.page` → `{catalog.modules}`
+  - `content.rubric` → `{}` (no invalidate)
+- Whole-scope stale-mark, not merge: catalog scopes already refresh wholesale
+  (`refresh_catalog_assignments_only` refetches the entire collection), so an `invalidate_scope`
+  that flips `state`→`stale` is the honest, minimal fix; the next read surfaces stale instead of
+  wrong, and existing refresh repairs it. Over-invalidating a possibly-unaffected scope is safe
+  under "Canvas is truth; projections are disposable" and is explicitly accepted.
+- The helper fires once per applied operation at the ledger core, not per adapter and not per
+  created row, to avoid mid-bulk thrash and to cover all owners plus the recovery path uniformly.
+- `invalidate_scope` lives in `course_catalog.py` and reuses its existing validate + atomic-write
+  helpers; the kind→scopes helper lives in the operation-ledger package. No generic registry.
+
+## Scope
+
+- `api/course_catalog.py` (add `invalidate_scope`)
+- `api/operation_ledger/executor.py` (call the shared helper on apply success)
+- `api/operation_ledger/recovery.py` (call the shared helper on recovery-apply success)
+- `api/operation_ledger/` shared helper for the kind→scopes map + invalidation loop (new small
+  function; place it where `executor` and `recovery` can both import it, e.g. the package
+  `__init__` or a new `catalog_reconcile.py`)
+- `api/tests/test_course_catalog.py`, `api/tests/test_operation_ledger.py`, and the affected
+  per-adapter operation tests only where an assertion belongs
+- `docs/contracts/canvas-transport-owners.json` (19 catalog owners: `none`→`invalidate`)
+- `docs/reference/mutation-reconciliation-map.md` (family 2 + Batch 7 seed 2: covered)
+
+## Read only these references
+
+- `AGENTS.md`; this promoted brief
+- `api/course_catalog.py`: `ROOT_KEYS`, `SCOPE_KEYS`, `CATALOG_STATES`, the validate/atomic-write
+  helpers, and `refresh_catalog_assignments_only` for the write/validate pattern to mirror
+- `api/mirror/store.py`: `invalidate_groups` (the exact shape to mirror) and, for the template
+  only, `merge_group_category`
+- `api/operation_ledger/executor.py` (`_execute_target`) and `recovery.py` (`_apply_recovered`):
+  the two success seams
+- `docs/reference/mutation-reconciliation-map.md`: family 2 and the Batch 8 hygiene note
+- the exact files under Scope
+
+Do not read archived handoffs, unrelated adapters' internals beyond their kind/course_id, or the
+whole 1.0beta spine.
+
+## Preflight - stop if these facts are false
+
+```powershell
+rg -n "ROOT_KEYS|SCOPE_KEYS|CATALOG_STATES|def refresh_catalog_assignments_only|def _write" api/course_catalog.py
+rg -n "def invalidate_groups" api/mirror/store.py
+rg -n "def _execute_target|\.execute\(" api/operation_ledger/executor.py
+rg -n "def _apply_recovered|def recover_pending_operations" api/operation_ledger/recovery.py
+```
+
+- No `invalidate_scope`/catalog-invalidate function exists yet; the catalog store has only
+  whole-refetch writers.
+- `_execute_target` runs every normal apply; `_apply_recovered` runs the crash-recovery apply; both
+  have `op["kind"]` and `target["course_id"]` at the success point.
+
+## Named acceptance gate
+
+```powershell
+py -m pytest api/tests/test_course_catalog.py api/tests/test_operation_ledger.py api/tests/test_assignment_operation.py api/tests/test_assignment_tier_operation.py api/tests/test_quick_assignment_operation.py api/tests/test_quiz_operation.py api/tests/test_quiz_tier_operation.py api/tests/test_page_operation.py api/tests/test_rubric_operation.py api/tests/test_canvas_mutation_ownership.py -q
+```
+
+- Add: `invalidate_scope` marks exactly one scope stale / no-ops without a document / leaves other
+  scopes and records intact / is atomic; a successful assignment op marks `catalog.assignments`
+  (and `catalog.modules`) stale; a quiz op likewise; a quick-assignment op marks only
+  `catalog.assignments`; a bare page and a rubric op invalidate nothing; a failed op invalidates
+  nothing; the recovery-apply path invalidates too. Model new store tests on
+  `test_mirror_store.py`'s group-category reconciliation tests. No broad suite.
+
+## Stop conditions
+
+- **RED:** honest reconciliation would require a per-record merge, a read-service change, or an
+  adapter compute/receipt change — i.e. the whole-scope stale-mark cannot express it.
+- **YELLOW:** `executor`/`recovery` do not expose `kind`+`course_id` at a single post-success
+  point without control-flow changes; report the exact seam before restructuring.
+
+## Execution result
+
+Record traffic light, changed files, focused command/count, the per-kind scopes proven, whether
+the recovery path was covered, deviations, unresolved decisions, and commit hash if created.
