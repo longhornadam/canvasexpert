@@ -1,80 +1,74 @@
-# Remove the last endpoint-shaped fallback from Work typed reads
+# Make Home discovery honor bounded comment freshness
 
 > **DEEPSEEK EXECUTION AUTHORITY.** Read `AGENTS.md`, this file, and only the references
 > routed below. Do not read `NEXT_BATCH.md`, `HANDOFF_TEMPLATE.md`, or `archive/`.
 
 Status: **READY**
 
-Risk: **low** - internal Work discovery acquisition only; no response, persistence,
-privacy, or Canvas-write behavior changes.
+Risk: **medium** - private comments are transiently reduced into aggregate Home findings;
+registry persistence and Canvas writes remain untouched.
 
-Depends on: the existing uncommitted 1.0beta-07a Work typed-read worktree based on
-`1b3a2c1`; preserve every unrelated/user change exactly.
+Depends on: commit `6103fca` (accepted 01 comment-freshness foundation)
 
 ## Teacher-visible result
 
-Home and Work findings remain byte-for-byte compatible, but the new typed Work context no
-longer re-enters URL-regex mirror ownership when a typed scope needs its bounded live fallback.
+Home comment-follow-up findings use local comments only while their dedicated freshness scope
+is current. Older/missing comment state triggers the existing bounded live request, so a recent
+comment-free submission delta can no longer hide a student reply.
 
 ## Acceptance criteria
 
-- [ ] `WorkCourseReads` consults each named typed scope once and calls a pure live helper on
-      non-current state; `_mirror_shape`/`_mirror_rows` are never reached by that fallback.
-- [ ] `call_canvas_get_all` retains its existing compatibility behavior and tests, delegating
-      only its final live call/error translation to the same pure helper.
-- [ ] Current local reads remain zero-live-call; stale/missing/corrupt reads preserve deadline,
-      timeout, structured-error, shared-cache, rich-comment, and live-only group behavior.
-- [ ] No provider order, finding shape, registry/cache persistence, or privacy behavior changes.
-- [ ] The named acceptance gate below passes.
-
-The executor reports evidence; it does not redefine, narrow, or self-accept these criteria.
+- [ ] `WorkCourseReads.submissions(include_comments=False)` uses `PRIVATE_SUBMISSIONS`; the
+      `True` path uses `PRIVATE_SUBMISSION_COMMENTS`, both with the configured serve-age bound.
+- [ ] Fresh comment state produces zero live calls; stale/missing/corrupt comment state makes
+      exactly one rich live submission call containing `submission_comments`.
+- [ ] Plain submissions may reuse a rich result, but a plain live result is never reused as a
+      rich result; calling plain then rich performs the required rich acquisition.
+- [ ] Grading-debt/Home comment reductions and provider order remain aggregate-only and
+      unchanged; late-work can keep the plain scope.
+- [ ] Deadline, timeout, last-good discovery-cache, and structured-error behavior remain intact.
+- [ ] The named acceptance gate passes.
 
 ## Explicit non-goals
 
-- Comment freshness policy, report provenance, Routines, MCP, derived views, or mutation
-  reconciliation.
-- Removing the compatibility matcher; Batch 8 may retire it only after caller proof.
-- Editing any already-modified provider/discovery file except where an import must follow the
-  helper rename; prefer no changes outside the two authorized files below.
+- Report generation/provenance, comment scheduler cadence, write-triggered invalidation,
+Routines, MCP, registry schema, or any new derived view.
 
 ## Locked decisions
 
-- Extract the deadline/callback/timeout/error-normalization portion of
-  `call_canvas_get_all` into `_call_live_get_all(canvas_get_all, path, params, deadline)`.
-- `WorkCourseReads.assignments`, `.students`, `.submissions`, and `.live_call` invoke
-  `_call_live_get_all` for live work. `call_canvas_get_all` keeps endpoint matching, then
-  invokes `_call_live_get_all` only after no current compatibility read was available.
-- Preserve exact live endpoints/params and the separate comment-bearing request. Do not make a
-  local read authorize a write or persist any returned row.
+- Use `mirror_queries._serve_max_age_hours()` as the beta comment bound; do not add a setting.
+- Keep separate plain and rich submission caches inside `WorkCourseReads`. A rich result may
+  seed the plain cache; never do the reverse.
+- Live fallback remains the existing course submissions endpoint and is transient only. Do not
+  persist comments, identities, or source envelopes into Work Registry/discovery cache/logs.
+- No provider signature or finding-vocabulary changes are allowed.
 
 ## Scope
 
 - `api/work_registry/providers/__init__.py`
 - `api/tests/test_work_providers_mirror.py`
-- `api/tests/test_work_discovery.py` only if the pure-helper proof belongs at that seam
+- `api/tests/test_work_discovery.py` only for an aggregate/provider-order assertion
 
 ## Read only these references
 
-- `AGENTS.md`
-- this brief
-- `docs/contracts/work-registry-contract.md`: “Persistence boundary” and “Detected findings”
-- the three files under Scope
+- `AGENTS.md`; this promoted brief
+- `docs/contracts/work-registry-contract.md`: "Persistence boundary" and "Detected findings"
+- `docs/reference/workbench-canonical-flow-map.md`: Home row and safety boundary
+- `api/mirror/read_service.py`: the two private submission scope constants/readers
+- the exact files under Scope
 
-Do not read: archived handoffs, unrelated module maps, or the whole 1.0beta spine.
+Do not read archived handoffs, unrelated providers, or the whole 1.0beta spine.
 
 ## Preflight - stop if these facts are false
 
 ```powershell
-git status --short
-rg -n "class WorkCourseReads|def call_canvas_get_all|_mirror_shape|_mirror_rows" api/work_registry/providers/__init__.py
-rg -n "call_canvas_get_all|WorkCourseReads|zero_live|falls_back" api/tests/test_work_providers_mirror.py api/tests/test_work_discovery.py
+rg -n "class WorkCourseReads|def submissions|include_comments|_submissions_cache" api/work_registry/providers/__init__.py
+rg -n "PRIVATE_SUBMISSION_COMMENTS|def private_submission_comments" api/mirror/read_service.py
+rg -n "reads.submissions" api/work_registry/providers -g "*.py"
 ```
 
-- The worktree still contains the reported 07a files and no unknown overlapping edit.
-- `WorkCourseReads` still calls `call_canvas_get_all` from its typed fallback methods.
-- The endpoint-matching compatibility seam still has an explicit regression test.
-
-If any fact is false, return RED without implementation changes.
+- 07a's pure live helper is present and Home/grading debt request rich comments explicitly.
+- The dedicated comment scope exists and returns the same normalized row shape.
 
 ## Named acceptance gate
 
@@ -82,20 +76,16 @@ If any fact is false, return RED without implementation changes.
 py -m pytest api/tests/test_work_providers_mirror.py api/tests/test_work_discovery.py api/tests/test_work_registry.py api/tests/test_desk_routes.py -q
 ```
 
-- Add one test that makes `_mirror_shape` raise if a `WorkCourseReads` live fallback touches it,
-  while proving the live callback still runs and returns the expected rows.
-- Existing compatibility and aggregate/privacy assertions must remain green.
-- The 07a report records `1101 passed, 1 skipped`; do not rerun the broad suite.
+- Add zero-live, stale-rich-fallback, corrupt-rich-fallback, and plain-then-rich cache tests.
+- No full suite or rendered route check unless a route/template unexpectedly changes (stop RED).
 
 ## Stop conditions
 
-- **RED:** preserving compatibility requires changing provider output, registry persistence, or
-  the typed read-service contract.
-- **YELLOW:** an existing test requires endpoint matching from `WorkCourseReads`; report the
-  exact caller instead of preserving the architectural loop silently.
+- **RED:** the dedicated scope cannot preserve the existing aggregate finding shape/privacy.
+- **YELLOW:** the provider order makes a plain live result precede the rich request in production;
+  preserve correctness with separate caches and report the exact order.
 
 ## Execution result
 
-Record traffic light, changed files, command/counts, deviations, unresolved decisions, and
-commit hash if one is created. Do not modify `NEXT_BATCH.md` or archive/commit other worktree
-files in this repair.
+Record traffic light, changed files, focused command/count, deviations, unresolved decisions,
+and commit hash if created.
