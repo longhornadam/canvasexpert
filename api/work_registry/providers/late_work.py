@@ -7,7 +7,7 @@ from collections import defaultdict
 from api.webui import config
 from api.webui.schooldays import _parse_iso_local, _school_days_late_detail
 
-from . import call_canvas_get_all, check_deadline, finding, text
+from . import WorkCourseReads, check_deadline, finding, text
 
 
 def _int(value, default=0) -> int:
@@ -27,21 +27,11 @@ def _holidays() -> set[str]:
     return holidays
 
 
-def scan_course(course_id: str, *, now, deadline, canvas_get_all) -> list[dict]:
-    check_deadline(deadline)
-    assignments = call_canvas_get_all(
-        canvas_get_all,
-        f"/api/v1/courses/{course_id}/assignments",
-        {"per_page": 100},
-        deadline,
-    )
-    check_deadline(deadline)
-    submissions = call_canvas_get_all(
-        canvas_get_all,
-        f"/api/v1/courses/{course_id}/students/submissions",
-        {"student_ids[]": "all", "per_page": 100},
-        deadline,
-    )
+def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
+    check_deadline(reads._deadline)
+    assignments = reads.assignments()
+    check_deadline(reads._deadline)
+    submissions = reads.submissions()
     settings = config.get_sweep_settings()
     skip_weekends = bool(settings.get("skip_weekends", True))
     extra_days = {

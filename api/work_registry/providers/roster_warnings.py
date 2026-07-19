@@ -12,7 +12,7 @@ from api.webui import workspace
 from api import feedback_vault
 from api.webui.routes.roster_helpers import _compute_warnings
 
-from . import call_canvas_get_all, check_deadline, finding, text
+from . import WorkCourseReads, check_deadline, finding, text
 
 
 _WARNING_CODES = {
@@ -41,13 +41,11 @@ def _groups_from_categories(categories: list[dict]) -> list[dict]:
     return groups
 
 
-def _fetch_groups(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
+def _fetch_groups(course_id: str, *, reads: WorkCourseReads) -> list[dict]:
     """Read Canvas groups, using the same permission-tolerant shape as Roster."""
-    categories = call_canvas_get_all(
-        canvas_get_all,
+    categories = reads.live_call(
         f"/api/v1/courses/{course_id}/group_categories",
         {"per_page": 50},
-        deadline,
     )
     if categories:
         result = []
@@ -55,11 +53,9 @@ def _fetch_groups(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
             category_id = text(category.get("id")) if isinstance(category, dict) else ""
             if not category_id:
                 continue
-            groups = call_canvas_get_all(
-                canvas_get_all,
+            groups = reads.live_call(
                 f"/api/v1/group_categories/{category_id}/groups",
                 {"per_page": 100},
-                deadline,
             )
             normalized = []
             for group in groups:
@@ -68,11 +64,9 @@ def _fetch_groups(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
                 group_id = text(group.get("id"))
                 if not group_id:
                     continue
-                memberships = call_canvas_get_all(
-                    canvas_get_all,
+                memberships = reads.live_call(
                     f"/api/v1/groups/{group_id}/memberships",
                     {"per_page": 200},
-                    deadline,
                 )
                 normalized.append({
                     "id": group_id,
@@ -89,11 +83,9 @@ def _fetch_groups(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
                 "groups": normalized,
             })
         return result
-    groups = call_canvas_get_all(
-        canvas_get_all,
+    groups = reads.live_call(
         f"/api/v1/courses/{course_id}/groups",
         {"per_page": 100},
-        deadline,
     )
     buckets: dict[str, list[dict]] = {}
     for group in groups:
@@ -108,11 +100,9 @@ def _fetch_groups(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
             group_id = text(group.get("id"))
             if not group_id:
                 continue
-            memberships = call_canvas_get_all(
-                canvas_get_all,
+            memberships = reads.live_call(
                 f"/api/v1/groups/{group_id}/memberships",
                 {"per_page": 200},
-                deadline,
             )
             normalized.append({
                 "id": group_id,
@@ -131,12 +121,12 @@ def _fetch_groups(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
     return result
 
 
-def _groups_for_scan(course_id: str, *, deadline, canvas_get_all) -> list[dict]:
+def _groups_for_scan(course_id: str, *, reads: WorkCourseReads) -> list[dict]:
     """Use a current private group snapshot, retaining the live fallback."""
     document = mirror_store.read_groups(course_id)
     if mirror_store.groups_are_current(document, max_age_hours=24):
         return mirror_store.groups_for_roster(document)
-    return _fetch_groups(course_id, deadline=deadline, canvas_get_all=canvas_get_all)
+    return _fetch_groups(course_id, reads=reads)
 
 
 def _group_map(categories: list[dict]) -> dict[str, list[dict]]:
@@ -175,15 +165,10 @@ def _vault_context() -> tuple[dict, set[str], dict]:
     return by_id, protected, collisions
 
 
-def scan_course(course_id: str, *, now, deadline, canvas_get_all) -> list[dict]:
-    check_deadline(deadline)
-    users = call_canvas_get_all(
-        canvas_get_all,
-        f"/api/v1/courses/{course_id}/users",
-        {"enrollment_type[]": "student", "include[]": "enrollments", "per_page": 100},
-        deadline,
-    )
-    categories = _groups_for_scan(course_id, deadline=deadline, canvas_get_all=canvas_get_all)
+def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
+    check_deadline(reads._deadline)
+    users = reads.students()
+    categories = _groups_for_scan(course_id, reads=reads)
     group_map = _group_map(categories)
     selected_category = None
     try:

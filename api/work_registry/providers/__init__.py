@@ -30,6 +30,96 @@ class ProviderFailure(RuntimeError):
     """A provider could not reduce its source to an aggregate projection."""
 
 
+class WorkCourseReads:
+    """Typed read context for one course's Work discovery providers.
+
+    Each named method serves from the CanvasMirror when the local scope is
+    current, falling back to the injected live reader with the existing
+    deadline, timeout, and structured-error behavior.  Group-category, group,
+    and membership reads are not mirror-owned and use ``live_call`` instead.
+
+    Results are cached by kind within the instance so that multiple providers
+    sharing the same reads context never issue duplicate live Canvas calls.
+    """
+
+    def __init__(self, course_id: str, *, deadline: float, live_reader):
+        self._course_id = course_id
+        self._deadline = deadline
+        self._live_reader = live_reader
+        self._max_age_hours = mirror_queries._serve_max_age_hours()
+        self._assignments_cache: list[dict] | None = None
+        self._students_cache: list[dict] | None = None
+        self._submissions_cache: list[dict] | None = None
+
+    def assignments(self) -> list[dict]:
+        """Read assignments from mirror when current, else live."""
+        if self._assignments_cache is not None:
+            return self._assignments_cache
+        check_deadline(self._deadline)
+        state = read_service.private_assignments(
+            self._course_id, max_age_hours=self._max_age_hours)
+        if state["state"] == "current":
+            self._assignments_cache = state["records"]
+            return self._assignments_cache
+        self._assignments_cache = _call_live_get_all(
+            self._live_reader,
+            f"/api/v1/courses/{self._course_id}/assignments",
+            {"per_page": 100},
+            self._deadline,
+        )
+        return self._assignments_cache
+
+    def students(self) -> list[dict]:
+        """Read roster from mirror when current, else live."""
+        if self._students_cache is not None:
+            return self._students_cache
+        check_deadline(self._deadline)
+        state = read_service.private_roster(
+            self._course_id, max_age_hours=self._max_age_hours)
+        if state["state"] == "current":
+            self._students_cache = state["records"]
+            return self._students_cache
+        self._students_cache = _call_live_get_all(
+            self._live_reader,
+            f"/api/v1/courses/{self._course_id}/users",
+            {"enrollment_type[]": "student", "include[]": "enrollments",
+             "per_page": 100},
+            self._deadline,
+        )
+        return self._students_cache
+
+    def submissions(self, include_comments=False) -> list[dict]:
+        """Read submissions from mirror when current, else live.
+
+        When *include_comments* is true the live fallback requests
+        ``submission_comments``; the mirror always includes them when
+        present so the parameter only affects the live path.
+        """
+        if self._submissions_cache is not None:
+            return self._submissions_cache
+        check_deadline(self._deadline)
+        state = read_service.private_submissions(
+            self._course_id, max_age_hours=self._max_age_hours)
+        if state["state"] == "current":
+            self._submissions_cache = state["records"]
+            return self._submissions_cache
+        params = {"student_ids[]": "all", "per_page": 100}
+        if include_comments:
+            params["include[]"] = "submission_comments"
+        self._submissions_cache = _call_live_get_all(
+            self._live_reader,
+            f"/api/v1/courses/{self._course_id}/students/submissions",
+            params,
+            self._deadline,
+        )
+        return self._submissions_cache
+
+    def live_call(self, path: str, params: dict) -> list[dict]:
+        """Call the live reader for non-mirror-owned paths (groups etc.)."""
+        return _call_live_get_all(
+            self._live_reader, path, params, self._deadline)
+
+
 _SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -134,20 +224,14 @@ def _mirror_rows(kind: str, course_id: str) -> list | None:
     return rows
 
 
-def call_canvas_get_all(canvas_get_all, path: str, params: dict, deadline: float):
-    """Call an injected paginated GET while preserving test-friendly callbacks.
+def _call_live_get_all(canvas_get_all, path: str, params: dict, deadline: float) -> list[dict]:
+    """Call a paginated GET with deadline, timeout, and structured-error handling.
 
-    Course-scoped assignment/user/submission reads are served from the
-    CanvasMirror when it is fresh; any other path, staleness, or mirror error
-    falls through to the existing live call, completely unchanged.
+    Pure live-request helper: no mirror fallback logic, no endpoint-shape
+    matching.  ``call_canvas_get_all`` delegates here after its mirror check;
+    ``WorkCourseReads`` typed methods call this directly for live work.
     """
     check_deadline(deadline)
-    kind, course_id = _mirror_shape(path)
-    if kind:
-        rows = _mirror_rows(kind, course_id)
-        if rows is not None:
-            check_deadline(deadline)
-            return rows
     kwargs = {"params": params, "timeout": 10}
     if _callback_accepts_deadline(canvas_get_all):
         kwargs["deadline"] = deadline
@@ -173,6 +257,23 @@ def call_canvas_get_all(canvas_get_all, path: str, params: dict, deadline: float
         raise ProviderFailure() from None
     check_deadline(deadline)
     return result
+
+
+def call_canvas_get_all(canvas_get_all, path: str, params: dict, deadline: float):
+    """Call an injected paginated GET while preserving test-friendly callbacks.
+
+    Course-scoped assignment/user/submission reads are served from the
+    CanvasMirror when it is fresh; any other path, staleness, or mirror error
+    falls through to ``_call_live_get_all``, completely unchanged.
+    """
+    check_deadline(deadline)
+    kind, course_id = _mirror_shape(path)
+    if kind:
+        rows = _mirror_rows(kind, course_id)
+        if rows is not None:
+            check_deadline(deadline)
+            return rows
+    return _call_live_get_all(canvas_get_all, path, params, deadline)
 
 
 def finding(
@@ -236,6 +337,7 @@ def finding(
 
 __all__ = [
     "CourseTimeout", "CourseUnavailable", "DiscoveryDeadline", "ProviderFailure",
+    "WorkCourseReads",
     "as_datetime", "call_canvas_get_all", "check_deadline", "finding", "iso_now",
     "safe_id", "text",
 ]

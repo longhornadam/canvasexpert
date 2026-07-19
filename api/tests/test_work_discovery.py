@@ -9,7 +9,7 @@ import pytest
 
 from api.work_registry import discovery, storage
 from api.work_registry.models import material_version, stable_fingerprint
-from api.work_registry.providers import CourseTimeout, call_canvas_get_all, finding
+from api.work_registry.providers import CourseTimeout, WorkCourseReads, call_canvas_get_all, finding
 from api.work_registry.providers import grading_debt, home_attention, late_work, roster_warnings
 
 
@@ -24,6 +24,13 @@ def _job(kind="grade.debt", course_id="course-1", assignment_id="assignment-1"):
         latest_attempt_number=1,
         due_at="2026-07-10T11:00:00+00:00",
         resumable_url="/powergrader",
+    )
+
+
+def _reads(live_reader, deadline=None):
+    """Build a WorkCourseReads with a test live_reader."""
+    return WorkCourseReads(
+        "course-1", deadline=deadline or time.monotonic() + 5, live_reader=live_reader,
     )
 
 
@@ -248,9 +255,9 @@ def test_grading_debt_counts_zero_as_graded_and_teacher_comment_as_touched(monke
              "submission_comments": []},
         ], None
 
+    reads = _reads(fake_get)
     findings = grading_debt.scan_course(
-        "course-1", now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=fake_get,
+        "course-1", now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     assert len(findings) == 1
     assert findings[0]["counts"] == {"total": 3, "pending": 1, "affected": 1}
@@ -266,9 +273,9 @@ def test_late_work_uses_school_day_and_extra_time(monkeypatch):
         return [{"assignment_id": 1, "user_id": "u-1", "workflow_state": "late",
                  "submitted_at": "2026-07-11T11:00:00+00:00"}], None
 
+    reads = _reads(fake_get)
     findings = late_work.scan_course(
-        "course-1", now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=fake_get,
+        "course-1", now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     assert len(findings) == 1
     assert findings[0]["kind"] == "late.work"
@@ -363,17 +370,16 @@ def test_powergrader_ready_is_text_only_and_comment_scan_stays_aggregate_only():
     def fake_get(path, params=None, timeout=None):
         return (assignments if path.endswith("/assignments") else submissions), None
 
+    reads = _reads(fake_get)
     ready = home_attention.scan_powergrader_ready(
-        "course-1", now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=fake_get,
+        "course-1", now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     assert [(job["assignment_id"], job["counts"]) for job in ready] == [
         ("text", {"total": 2, "pending": 2, "affected": 2}),
     ]
 
     follow_up = home_attention.scan_comment_follow_up(
-        "course-1", now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=fake_get,
+        "course-1", now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     assert follow_up == []
     serialized = json.dumps([*ready, *follow_up])
@@ -391,9 +397,9 @@ def test_roster_warning_provider_aggregates_without_writing_vault(monkeypatch):
             return [{"id": "u-1"}], None
         return [], None
 
+    reads = _reads(fake_get)
     findings = roster_warnings.scan_course(
-        "course-1", now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=fake_get,
+        "course-1", now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     kinds = {item["kind"] for item in findings}
     assert kinds == {"roster.warning"}

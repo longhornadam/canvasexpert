@@ -11,7 +11,8 @@ from api.webui.canvas_client import _canvas_get_all
 
 from . import storage
 from .models import validate_job, validate_registry_document
-from .providers import CourseTimeout, DiscoveryDeadline, CourseUnavailable, ProviderFailure
+from .providers import (CourseTimeout, DiscoveryDeadline, CourseUnavailable,
+                         ProviderFailure, WorkCourseReads)
 from .providers import grading_debt, home_attention, late_work, roster_warnings
 
 
@@ -51,37 +52,7 @@ def _scan_course(course: dict, *, now: str, deadline: float, canvas_get_all=None
     if not course_id:
         raise ProviderFailure()
     source_get_all = _canvas_get_all if canvas_get_all is None else canvas_get_all
-    assignments_path = f"/api/v1/courses/{course_id}/assignments"
-    submissions_path = f"/api/v1/courses/{course_id}/students/submissions"
-    assignments_params = {"per_page": 100}
-    rich_submissions_params = {
-        "student_ids[]": "all",
-        "include[]": "submission_comments",
-        "per_page": 100,
-    }
-    late_submissions_params = {"student_ids[]": "all", "per_page": 100}
-    shared_reads = {}
-
-    def course_get_all(path, params=None, timeout=REQUEST_TIMEOUT_SECONDS):
-        if path == assignments_path and params == assignments_params and "assignments" in shared_reads:
-            return shared_reads["assignments"], None
-        if (
-            path == submissions_path
-            and params in (rich_submissions_params, late_submissions_params)
-            and "submissions" in shared_reads
-        ):
-            return shared_reads["submissions"], None
-
-        result = source_get_all(path, params=params, timeout=timeout)
-        if isinstance(result, tuple) and len(result) == 2:
-            rows, error = result
-            if isinstance(rows, list) and error is None:
-                if path == assignments_path and params == assignments_params:
-                    shared_reads["assignments"] = rows
-                elif path == submissions_path and params == rich_submissions_params:
-                    shared_reads["submissions"] = rows
-        return result
-
+    reads = WorkCourseReads(course_id, deadline=deadline, live_reader=source_get_all)
     findings = []
     errors = []
     providers = (
@@ -93,12 +64,7 @@ def _scan_course(course: dict, *, now: str, deadline: float, canvas_get_all=None
     )
     for provider in providers:
         try:
-            findings.extend(provider(
-                course_id,
-                now=now,
-                deadline=deadline,
-                canvas_get_all=course_get_all,
-            ))
+            findings.extend(provider(course_id, now=now, reads=reads))
         except Exception as exc:
             errors.append(_error_code(exc))
     for finding in findings:

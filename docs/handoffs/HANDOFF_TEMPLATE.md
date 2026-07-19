@@ -1,3 +1,6 @@
+> **SENIOR-ONLY TEMPLATE — NOT AN IMPLEMENTATION BRIEF.** Copy and complete this as
+> `docs/handoffs/CURRENT.md`; an executor must never implement directly from this file.
+
 # <One vertical teacher-visible improvement>
 
 Status: **<READY | ACTIVE | YELLOW; decision needed | RED; stopped | GREEN; completed>**

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from . import as_datetime, call_canvas_get_all, check_deadline, finding, text
+from . import as_datetime, WorkCourseReads, check_deadline, finding, text
 
 
 _TA_MARKER = "TA SCORE + FEEDBACK"
@@ -99,25 +99,11 @@ def classify_comment_follow_up(submission: dict) -> str:
     return "none"
 
 
-def _submission_rows(course_id: str, *, deadline, canvas_get_all) -> tuple[dict[str, dict], list[dict]]:
-    check_deadline(deadline)
-    assignments = call_canvas_get_all(
-        canvas_get_all,
-        f"/api/v1/courses/{course_id}/assignments",
-        {"per_page": 100},
-        deadline,
-    )
-    check_deadline(deadline)
-    submissions = call_canvas_get_all(
-        canvas_get_all,
-        f"/api/v1/courses/{course_id}/students/submissions",
-        {
-            "student_ids[]": "all",
-            "include[]": "submission_comments",
-            "per_page": 100,
-        },
-        deadline,
-    )
+def _submission_rows(course_id: str, *, reads: WorkCourseReads) -> tuple[dict[str, dict], list[dict]]:
+    check_deadline(reads._deadline)
+    assignments = reads.assignments()
+    check_deadline(reads._deadline)
+    submissions = reads.submissions(include_comments=True)
     return _assignment_map(assignments), submissions
 
 
@@ -153,9 +139,9 @@ def _eligible_submission(submission: dict) -> bool:
     )
 
 
-def scan_comment_follow_up(course_id: str, *, now, deadline, canvas_get_all) -> list[dict]:
+def scan_comment_follow_up(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
     """Project definite and uncertain student-response follow-up counts by assignment."""
-    assignments, submissions = _submission_rows(course_id, deadline=deadline, canvas_get_all=canvas_get_all)
+    assignments, submissions = _submission_rows(course_id, reads=reads)
     aggregates = {
         "definite": defaultdict(_aggregate_row),
         "uncertain": defaultdict(_aggregate_row),
@@ -195,9 +181,9 @@ def _is_text_entry_assignment(assignment: dict) -> bool:
     return not any(assignment.get(key) for key in ("quiz_id", "quiz_type", "is_quiz", "is_quiz_assignment"))
 
 
-def scan_powergrader_ready(course_id: str, *, now, deadline, canvas_get_all) -> list[dict]:
+def scan_powergrader_ready(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
     """Project text-entry assignments with ungraded submitted work for PowerGrader."""
-    assignments, submissions = _submission_rows(course_id, deadline=deadline, canvas_get_all=canvas_get_all)
+    assignments, submissions = _submission_rows(course_id, reads=reads)
     aggregates = defaultdict(_aggregate_row)
     for submission in submissions:
         if not _eligible_submission(submission) or submission.get("score") is not None:

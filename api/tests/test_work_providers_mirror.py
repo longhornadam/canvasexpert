@@ -11,7 +11,7 @@ import time
 
 from api.mirror import store
 from api.webui import workspace
-from api.work_registry.providers import call_canvas_get_all
+from api.work_registry.providers import WorkCourseReads, call_canvas_get_all
 from api.work_registry.providers import grading_debt, home_attention, late_work, roster_warnings
 
 COURSE = "555001"
@@ -80,25 +80,27 @@ def _mount(monkeypatch, tmp_path):
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
 
 
+def _reads(live_reader, deadline=None):
+    """Build a WorkCourseReads with a test live_reader."""
+    return WorkCourseReads(
+        COURSE, deadline=deadline or time.monotonic() + 5, live_reader=live_reader,
+    )
+
+
 # --- the shared wrapper itself --------------------------------------------------
 
 def test_wrapper_serves_fresh_mirror_for_all_three_shapes_with_zero_live_calls(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    deadline = time.monotonic() + 5
+    reads = _reads(_explode)
 
-    assignments = call_canvas_get_all(
-        _explode, f"/api/v1/courses/{COURSE}/assignments", {"per_page": 100}, deadline)
+    assignments = reads.assignments()
     assert {a["id"] for a in assignments} == {"700100", "700101"}
 
-    users = call_canvas_get_all(
-        _explode, f"/api/v1/courses/{COURSE}/users",
-        {"enrollment_type[]": "student", "include[]": "enrollments", "per_page": 100}, deadline)
+    users = reads.students()
     assert {u["id"] for u in users} == {"900101", "900102"}
 
-    submissions = call_canvas_get_all(
-        _explode, f"/api/v1/courses/{COURSE}/students/submissions",
-        {"student_ids[]": "all", "per_page": 100}, deadline)
+    submissions = reads.submissions()
     assert {s["assignment_id"] for s in submissions} == {"700100", "700101"}
     # str-id rows: user ids stored either as int or str at write time both
     # come back as strings from the mirror.
@@ -108,45 +110,79 @@ def test_wrapper_serves_fresh_mirror_for_all_three_shapes_with_zero_live_calls(m
 def test_wrapper_falls_back_live_when_mirror_is_stale(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path), fresh=False)
-    deadline = time.monotonic() + 5
     live_rows = [{"id": 1, "name": "Live Assignment"}]
 
     def fake_get(path, params=None, timeout=None, deadline=None):
         return live_rows, None
 
-    result = call_canvas_get_all(
-        fake_get, f"/api/v1/courses/{COURSE}/assignments", {"per_page": 100}, deadline)
+    reads = _reads(fake_get)
+    result = reads.assignments()
     assert result == live_rows
 
 
 def test_wrapper_never_consults_mirror_for_a_non_matching_path(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))  # fresh mirror present, but path isn't one of the 3 shapes
-    deadline = time.monotonic() + 5
     calls = []
 
     def fake_get(path, params=None, timeout=None, deadline=None):
         calls.append(path)
         return [], None
 
-    call_canvas_get_all(
-        fake_get, f"/api/v1/courses/{COURSE}/group_categories", {"per_page": 50}, deadline)
+    reads = _reads(fake_get)
+    reads.live_call(f"/api/v1/courses/{COURSE}/group_categories", {"per_page": 50})
     assert calls == [f"/api/v1/courses/{COURSE}/group_categories"]
 
 
 def test_wrapper_falls_back_live_when_mirror_read_errors(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    from api.work_registry.providers import mirror_queries
-    monkeypatch.setattr(mirror_queries, "course_assignments", lambda course_id: (None, "boom"))
-    deadline = time.monotonic() + 5
+    from api.mirror import store as mirror_store
+    monkeypatch.setattr(mirror_store, "read_assignments", lambda course_id, **kwargs: None)
     live_rows = [{"id": 1}]
 
     def fake_get(path, params=None, timeout=None, deadline=None):
         return live_rows, None
 
-    result = call_canvas_get_all(
-        fake_get, f"/api/v1/courses/{COURSE}/assignments", {"per_page": 100}, deadline)
+    reads = _reads(fake_get)
+    result = reads.assignments()
+    assert result == live_rows
+
+
+def test_call_canvas_get_all_still_serves_fresh_mirror_for_backward_compat(monkeypatch, tmp_path):
+    """Verify the old call_canvas_get_all entry point still works unchanged."""
+    _mount(monkeypatch, tmp_path)
+    _populate(str(tmp_path))
+    deadline = time.monotonic() + 5
+
+    assignments = call_canvas_get_all(
+        _explode, f"/api/v1/courses/{COURSE}/assignments", {"per_page": 100}, deadline)
+    assert {a["id"] for a in assignments} == {"700100", "700101"}
+
+
+def test_work_course_reads_live_fallback_never_touches_mirror_shape(monkeypatch, tmp_path):
+    """Prove WorkCourseReads live fallback bypasses _mirror_shape entirely.
+
+    When the mirror is stale, the typed read calls ``_call_live_get_all``
+    directly; monkeypatching ``_mirror_shape`` to raise proves the fallback
+    path never re-enters the URL-regex matching logic.
+    """
+    _mount(monkeypatch, tmp_path)
+    _populate(str(tmp_path), fresh=False)
+
+    def raise_on_mirror_shape(*_args, **_kwargs):
+        raise AssertionError("_mirror_shape reached from WorkCourseReads live fallback")
+    monkeypatch.setattr(
+        "api.work_registry.providers._mirror_shape", raise_on_mirror_shape)
+
+    live_rows = [{"id": "live-1", "name": "Live from test"}]
+
+    def fake_get(path, params=None, timeout=None, deadline=None):
+        return live_rows, None
+
+    reads = WorkCourseReads(
+        COURSE, deadline=time.monotonic() + 5, live_reader=fake_get)
+    result = reads.assignments()
     assert result == live_rows
 
 
@@ -159,9 +195,9 @@ def test_late_work_scan_course_reads_mirror_with_zero_live_calls(monkeypatch, tm
                         lambda: {"skip_weekends": False, "holidays": []})
     monkeypatch.setattr(late_work.config, "get_extra_time", lambda course_id: [])
 
+    reads = _reads(_explode)
     findings = late_work.scan_course(
-        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=_explode,
+        COURSE, now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     assert len(findings) == 1
     assert findings[0]["kind"] == "late.work"
@@ -175,9 +211,9 @@ def test_grading_debt_and_home_attention_read_mirror_with_comment_shape(monkeypa
     _populate(str(tmp_path))
     monkeypatch.setattr(grading_debt, "powergrader_evidence", lambda: {})
 
+    reads = _reads(_explode)
     debt_findings = grading_debt.scan_course(
-        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=_explode,
+        COURSE, now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     # Assignment 700100/user 900101: submitted, no score, no comments -> debt.
     # Assignment 700101/user 900102: no score but a staff comment -> touched,
@@ -186,8 +222,7 @@ def test_grading_debt_and_home_attention_read_mirror_with_comment_shape(monkeypa
     assert debt_by_assignment == {"700100": {"total": 1, "pending": 1, "affected": 1}}
 
     followups = home_attention.scan_comment_follow_up(
-        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=_explode,
+        COURSE, now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     definite = [item for item in followups if item["kind"] == "grade.followup"]
     assert len(definite) == 1
@@ -195,8 +230,7 @@ def test_grading_debt_and_home_attention_read_mirror_with_comment_shape(monkeypa
     assert definite[0]["counts"] == {"total": 1, "pending": 1, "affected": 1}
 
     ready = home_attention.scan_powergrader_ready(
-        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=_explode,
+        COURSE, now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     ready_ids = {item["assignment_id"] for item in ready}
     assert ready_ids == {"700100", "700101"}
@@ -215,9 +249,9 @@ def test_grading_debt_falls_back_live_when_mirror_is_stale(monkeypatch, tmp_path
              "submitted_at": "2026-07-11T11:00:00+00:00", "score": None, "submission_comments": []},
         ], None
 
+    reads = _reads(fake_get)
     findings = grading_debt.scan_course(
-        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=fake_get,
+        COURSE, now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     assert len(findings) == 1
     assert findings[0]["assignment_id"] == "live-1"
@@ -238,9 +272,9 @@ def test_roster_warnings_reads_users_from_mirror_groups_stay_live(monkeypatch, t
             raise AssertionError("live users read attempted; mirror should have served it")
         return [], None  # group_categories / groups / memberships stay live and empty
 
+    reads = _reads(fake_get)
     findings = roster_warnings.scan_course(
-        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=fake_get,
+        COURSE, now="2026-07-11T12:00:00+00:00", reads=reads,
     )
     assert {item["kind"] for item in findings} == {"roster.warning"}
     # Both mirrored students get missing_pseudonym + group_unset;
@@ -266,9 +300,9 @@ def test_roster_warnings_uses_fresh_group_snapshot_without_live_group_calls(monk
     monkeypatch.setattr(roster_warnings, "_vault_context",
                         lambda: ({}, set(), {"literary": [], "dup_first": [], "common_word": []}))
 
+    reads = _reads(_explode)
     findings = roster_warnings.scan_course(
-        COURSE, now="2026-07-11T12:00:00+00:00", deadline=time.monotonic() + 5,
-        canvas_get_all=_explode,
+        COURSE, now="2026-07-11T12:00:00+00:00", reads=reads,
     )
 
     assert sorted(item["counts"]["affected"] for item in findings) == [1, 2]

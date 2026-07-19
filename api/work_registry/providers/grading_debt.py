@@ -8,7 +8,7 @@ from . import (
     CourseTimeout,
     DiscoveryDeadline,
     ProviderFailure,
-    call_canvas_get_all,
+    WorkCourseReads,
     check_deadline,
     finding,
     text,
@@ -51,26 +51,11 @@ def _normalize_assignment_map(assignments: list[dict]) -> dict[str, dict]:
     }
 
 
-def scan_course(course_id: str, *, now, deadline, canvas_get_all) -> list[dict]:
+def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
     """Find submitted/pending-review work lacking teacher evidence."""
-    check_deadline(deadline)
-    assignments = call_canvas_get_all(
-        canvas_get_all,
-        f"/api/v1/courses/{course_id}/assignments",
-        {"per_page": 100},
-        deadline,
-    )
-    check_deadline(deadline)
-    submissions = call_canvas_get_all(
-        canvas_get_all,
-        f"/api/v1/courses/{course_id}/students/submissions",
-        {
-            "student_ids[]": "all",
-            "include[]": "submission_comments",
-            "per_page": 100,
-        },
-        deadline,
-    )
+    check_deadline(reads._deadline)
+    assignments = reads.assignments()
+    submissions = reads.submissions(include_comments=True)
     assignment_map = _normalize_assignment_map(assignments)
     evidence = powergrader_evidence()
     aggregates: dict[str, dict] = defaultdict(lambda: {
