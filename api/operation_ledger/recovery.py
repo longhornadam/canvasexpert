@@ -8,6 +8,7 @@ For every target in ``claimed`` or ``sent_unknown`` state:
 5. If reconcile cannot prove either: target stays sent_unknown (Attention).
 """
 from . import claims, models, operations, registry, storage
+from .catalog_reconcile import reconcile_catalog_after_apply
 
 
 def recover_pending_operations() -> dict:
@@ -92,6 +93,8 @@ def _apply_recovered(operation_id: str, target_key: str, result: dict,
     attempt cannot acquire the target between claim reconciliation and the
     recovered target write.
     """
+    reconcile_context: dict = {}
+
     def _transaction(operations_doc, claims_doc):
         if expired_claim_id:
             for item in claims_doc["claims"]:
@@ -105,6 +108,9 @@ def _apply_recovered(operation_id: str, target_key: str, result: dict,
             return operations_doc, claims_doc
         for t in op.get("targets", []):
             if t.get("target_key") == target_key:
+                reconcile_context["kind"] = op.get("kind")
+                reconcile_context["course_id"] = t.get("course_id")
+                reconcile_context["payload"] = op.get("normalized_payload")
                 t["state"] = "applied"
                 if result.get("returned_object_id"):
                     t["returned_object_id"] = result["returned_object_id"]
@@ -137,6 +143,11 @@ def _apply_recovered(operation_id: str, target_key: str, result: dict,
                 break
         return operations_doc, claims_doc
     storage.modify_ledger(_transaction)
+    if reconcile_context.get("kind") and reconcile_context.get("course_id"):
+        reconcile_catalog_after_apply(
+            reconcile_context["kind"], reconcile_context["course_id"],
+            payload=reconcile_context.get("payload"),
+        )
 
 
 def _reset_to_pending(operation_id: str, target_key: str,

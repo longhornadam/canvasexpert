@@ -13,9 +13,11 @@ import time
 
 import pytest
 
+from api import course_catalog
 from api.operation_ledger import (
-    claims, executor, models, operations, paths, registry, storage,
+    batches, claims, executor, models, operations, paths, registry, storage,
 )
+from api.operation_ledger.catalog_reconcile import reconcile_catalog_after_apply
 
 
 def _root(tmp_path, monkeypatch):
@@ -524,3 +526,126 @@ def test_recovery_atomicity_no_gap_for_new_attempt(tmp_path, monkeypatch):
         if claim_reconciled:
             assert target_state == "applied", (
                 "claim reconciled before target was written — gap exists")
+
+
+# ── Catalog reconciliation hook (Batch 7 unit 01) ───────────────────────
+
+def _spy_invalidate_scope(monkeypatch):
+    calls = []
+
+    def fake_invalidate_scope(course_id, scope_key, **kwargs):
+        calls.append((course_id, scope_key))
+        return None
+
+    monkeypatch.setattr(course_catalog, "invalidate_scope", fake_invalidate_scope)
+    return calls
+
+
+def test_successful_apply_invalidates_the_kinds_mapped_catalog_scopes(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    calls = _spy_invalidate_scope(monkeypatch)
+
+    class FakeAdapter:
+        kind = "content.assignment"
+        def capture_baseline(self, payload, target):
+            return {}
+        def check_drift(self, payload, target, baseline):
+            return False
+        def execute(self, payload, target, baseline, claim, context):
+            return {"state": "applied", "returned_object_id": "999"}
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: FakeAdapter())
+
+    op = _make_operation("op-catalog-1", targets=[models.new_target(
+        target_key="tk-catalog-1", idempotency_key="ik-catalog-1", course_id="101")])
+    op["kind"] = "content.assignment"
+    operations.create_operation(op)
+    batch = batches.freeze_batch(["op-catalog-1"], {"op-catalog-1": [{}]})
+    operations.set_operation_review("op-catalog-1", batch)
+
+    result = executor.apply_operation("op-catalog-1", batch["batch_id"], batch["review_digest"])
+
+    assert result["status"] == "applied"
+    assert set(calls) == {("101", "assignments"), ("101", "modules")}
+
+
+def test_failed_apply_never_invalidates_catalog(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    calls = _spy_invalidate_scope(monkeypatch)
+
+    class FakeAdapter:
+        kind = "content.assignment"
+        def capture_baseline(self, payload, target):
+            return {}
+        def check_drift(self, payload, target, baseline):
+            return False
+        def execute(self, payload, target, baseline, claim, context):
+            return {"state": "failed", "error_code": "canvas_rejected"}
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: FakeAdapter())
+
+    op = _make_operation("op-catalog-2", targets=[models.new_target(
+        target_key="tk-catalog-2", idempotency_key="ik-catalog-2", course_id="101")])
+    op["kind"] = "content.assignment"
+    operations.create_operation(op)
+    batch = batches.freeze_batch(["op-catalog-2"], {"op-catalog-2": [{}]})
+    operations.set_operation_review("op-catalog-2", batch)
+
+    result = executor.apply_operation("op-catalog-2", batch["batch_id"], batch["review_digest"])
+
+    assert result["status"] == "failed"
+    assert calls == []
+
+
+def test_recovery_apply_invalidates_catalog_scopes(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    from api.operation_ledger import recovery
+    calls = _spy_invalidate_scope(monkeypatch)
+
+    target = models.new_target(
+        target_key="tk-recover-catalog", idempotency_key="ik-recover-catalog", course_id="202")
+    target["state"] = "sent_unknown"
+    target["attempt_id"] = "attempt-old"
+    op = _make_operation("op-recover-catalog", targets=[target])
+    op["kind"] = "content.quiz"
+    operations.create_operation(op)
+
+    claim = models.new_claim(
+        claim_id="tk-recover-catalog:attempt-old",
+        target_key="tk-recover-catalog",
+        operation_id="op-recover-catalog",
+        attempt_id="attempt-old",
+        owner_pid=99999,
+        owner_started_at="2020-01-01T00:00:00+00:00",
+        payload_digest="digest")
+    claim["lease_expires_at"] = "2020-01-01T00:00:01+00:00"
+    storage.upsert_claim(claim)
+    claims.detect_expired_claims()
+
+    class FakeAdapter:
+        kind = "content.quiz"
+        def reconcile(self, payload, target, baseline):
+            return {"state": "applied", "returned_object_id": "quiz-1"}
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: FakeAdapter())
+
+    summary = recovery.recover_pending_operations()
+
+    assert summary["recovered"] == 1
+    assert set(calls) == {("202", "assignments"), ("202", "modules")}
+
+
+@pytest.mark.parametrize(
+    ("kind", "payload", "expected_scopes"),
+    [
+        ("content.quick_assignment", {}, {"assignments"}),
+        ("content.page", {}, set()),
+        ("content.page", {"module_name": "Unit 1"}, {"modules"}),
+        ("content.rubric", {}, set()),
+    ],
+)
+def test_catalog_reconcile_kind_mapping_respects_page_and_rubric_boundaries(
+    monkeypatch, kind, payload, expected_scopes,
+):
+    calls = _spy_invalidate_scope(monkeypatch)
+
+    reconcile_catalog_after_apply(kind, "303", payload=payload)
+
+    assert set(calls) == {("303", scope) for scope in expected_scopes}

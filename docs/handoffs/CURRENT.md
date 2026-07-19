@@ -35,10 +35,13 @@ from Canvas. No new UI.
 - [ ] `content.rubric` and bare `content.page` (no module) invalidate nothing (rubric library and
       page bodies are not catalog scopes); `content.page` attached to a module invalidates
       `catalog.modules` only.
-- [ ] The 19 catalog-structure owners' `reconciliation` in
-      `docs/contracts/canvas-transport-owners.json` change from `none` to `invalidate` with a
-      reason naming the central hook; `docs/reference/mutation-reconciliation-map.md` family 2 and
-      Batch 7 seed 2 are marked covered. No other owner changes.
+- [ ] The 10 catalog-structure call owners whose declared catalog scope is
+      actually invalidated by this unit change `reconciliation` in
+      `docs/contracts/canvas-transport-owners.json` from `none` to `invalidate`
+      with a reason naming the central hook. The page-body owner, both rubric
+      owners, and `quiz_steps.ensure_item` remain `none`;
+      `docs/reference/mutation-reconciliation-map.md` family 2 and Batch 7 seed
+      2 are marked covered for catalog scopes only. No other owner changes.
 - [ ] The named acceptance gate passes, including the mutation-ownership scan.
 
 ## Explicit non-goals
@@ -79,7 +82,7 @@ from Canvas. No new UI.
   `__init__` or a new `catalog_reconcile.py`)
 - `api/tests/test_course_catalog.py`, `api/tests/test_operation_ledger.py`, and the affected
   per-adapter operation tests only where an assertion belongs
-- `docs/contracts/canvas-transport-owners.json` (19 catalog owners: `none`→`invalidate`)
+- `docs/contracts/canvas-transport-owners.json` (10 catalog owners: `none`→`invalidate`)
 - `docs/reference/mutation-reconciliation-map.md` (family 2 + Batch 7 seed 2: covered)
 
 ## Read only these references
@@ -133,5 +136,24 @@ py -m pytest api/tests/test_course_catalog.py api/tests/test_operation_ledger.py
 
 ## Execution result
 
-Record traffic light, changed files, focused command/count, the per-kind scopes proven, whether
-the recovery path was covered, deviations, unresolved decisions, and commit hash if created.
+**GREEN — 2026-07-19.** Senior corrected the contract boundary from an
+ambiguous 19-scope headline to ten honest call-owner transitions. Every
+acceptance criterion now holds.
+
+- Changed files: `api/course_catalog.py`,
+  `api/operation_ledger/catalog_reconcile.py`,
+  `api/operation_ledger/executor.py`, `api/operation_ledger/recovery.py`,
+  `api/tests/test_course_catalog.py`, `api/tests/test_operation_ledger.py`,
+  `docs/contracts/canvas-transport-owners.json`, and
+  `docs/reference/mutation-reconciliation-map.md`. An earlier partial edit to
+  `api/tests/test_assignment_operation.py` was removed as unused.
+- Gate: `py -m pytest api/tests/test_course_catalog.py api/tests/test_operation_ledger.py api/tests/test_assignment_operation.py api/tests/test_assignment_tier_operation.py api/tests/test_quick_assignment_operation.py api/tests/test_quiz_operation.py api/tests/test_quiz_tier_operation.py api/tests/test_page_operation.py api/tests/test_rubric_operation.py api/tests/test_canvas_mutation_ownership.py -q`
+  → **241 passed**.
+- Proven scopes: assignment and quiz → assignments/modules; quick assignment
+  → assignments only; bare page and rubric → none; module-attached page →
+  modules. Failed normal apply makes no call; recovery apply is covered.
+- Senior correction/deviation: the original 19-owner wording counted scope
+  occurrences, including unreconciled `new_quiz.metadata`, rather than honest
+  call-owner transitions. The corrected ten-owner boundary excludes the page
+  body, both rubric calls, and `quiz_steps.ensure_item`; no unresolved
+  decisions remain. No commit created.

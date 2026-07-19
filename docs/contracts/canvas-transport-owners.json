@@ -55,8 +55,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", path, request) [tiered assignment create]",
       "classification": "canvas_mutation",
       "scopes": ["catalog.assignments"],
-      "reconciliation": "none",
-      "reason": "reconcile() (module-level, below execute) only verifies via canvas_client._canvas_get; no mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates applicable catalog scopes after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/assignment_tiered.py",
@@ -77,8 +77,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", path_create, request)",
       "classification": "canvas_mutation",
       "scopes": ["catalog.assignments"],
-      "reconciliation": "none",
-      "reason": "reconcile() (module-level) verifies via canvas_client._canvas_get only; no mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates applicable catalog scopes after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/assignment_whole.py",
@@ -110,8 +110,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", path, request) [quick assignment create]",
       "classification": "canvas_mutation",
       "scopes": ["catalog.assignments"],
-      "reconciliation": "none",
-      "reason": "reconcile() verifies via canvas_client._canvas_get only; no mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates applicable catalog scopes after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/sweep.py",
@@ -133,7 +133,7 @@
       "classification": "canvas_mutation",
       "scopes": ["none"],
       "reconciliation": "none",
-      "reason": "Page bodies are explicitly out of 1.0-beta mirror scope (spine 7.1); no catalog.pages scope exists in the allowed vocabulary."
+      "reason": "Page-body creation has no catalog scope. The central hook only invalidates catalog.modules when content.page has a module placement."
     },
     {
       "path": "api/operation_ledger/adapters/page.py",
@@ -143,8 +143,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", module_path, module_request) [create module for page placement]",
       "classification": "canvas_mutation",
       "scopes": ["catalog.modules"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call after module creation. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates catalog.modules after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/page.py",
@@ -154,8 +154,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", item_path, item_request) [attach page as module item]",
       "classification": "canvas_mutation",
       "scopes": ["catalog.modules"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call after module-item attach. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates catalog.modules after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/rubric.py",
@@ -166,7 +166,7 @@
       "classification": "canvas_mutation",
       "scopes": ["catalog.assignments"],
       "reconciliation": "none",
-      "reason": "No dedicated rubric scope exists in the allowed vocabulary; closest is catalog.assignments per spine 14.2 ('Rubric index; affected assignment catalog'). No mirror invalidate call exists. Former Program 9 gap."
+      "reason": "content.rubric intentionally maps to no catalog invalidate in this unit; rubric-library reconciliation remains outside the catalog hook."
     },
     {
       "path": "api/operation_ledger/adapters/rubric.py",
@@ -177,7 +177,7 @@
       "classification": "canvas_mutation",
       "scopes": ["none"],
       "reconciliation": "none",
-      "reason": "Same page-body-out-of-scope reasoning as PageAdapter's create-page call; no module attach happens here."
+      "reason": "content.rubric intentionally maps to no catalog invalidate in this unit; optional page bodies have no catalog scope."
     },
     {
       "path": "api/operation_ledger/adapters/late_policy.py",
@@ -198,8 +198,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", path_create, quiz_payload)",
       "classification": "canvas_mutation",
       "scopes": ["new_quiz.metadata", "catalog.assignments"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call after quiz creation. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates catalog.assignments and catalog.modules after the confirmed operation succeeds; new_quiz.metadata remains unreconciled in this unit."
     },
     {
       "path": "api/operation_ledger/adapters/quiz_steps.py",
@@ -209,8 +209,8 @@
       "call_form": "canvas_client._canvas_send(\"PUT\", restrict_path, restrict_payload)",
       "classification": "canvas_mutation",
       "scopes": ["catalog.assignments"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates applicable catalog scopes after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/quiz_steps.py",
@@ -232,7 +232,7 @@
       "classification": "canvas_mutation",
       "scopes": ["new_quiz.metadata"],
       "reconciliation": "none",
-      "reason": "No mirror invalidate call after item creation. Former Program 9 gap."
+      "reason": "This unit invalidates only catalog.assignments and catalog.modules; new_quiz.metadata has no invalidate here."
     },
     {
       "path": "api/operation_ledger/adapters/quiz_steps.py",
@@ -242,8 +242,8 @@
       "call_form": "canvas_client._canvas_send(\"PUT\", patch_path, request)",
       "classification": "canvas_mutation",
       "scopes": ["catalog.assignments"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates applicable catalog scopes after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/module_placement.py",
@@ -253,8 +253,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", <modules_path>, module_request) [create module]",
       "classification": "canvas_mutation",
       "scopes": ["catalog.modules"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call after module creation. Former Program 9 gap."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates catalog.modules after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/module_placement.py",
@@ -264,8 +264,8 @@
       "call_form": "canvas_client._canvas_send(\"POST\", item_path, item_request)",
       "classification": "canvas_mutation",
       "scopes": ["catalog.modules"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call. Former Program 9 gap. Shared by Assignment and Quiz module-attach flows only, per operation-ledger module map."
+      "reconciliation": "invalidate",
+      "reason": "The central operation-ledger post-apply hook invalidates catalog.modules after the confirmed operation succeeds."
     },
     {
       "path": "api/operation_ledger/adapters/extension.py",

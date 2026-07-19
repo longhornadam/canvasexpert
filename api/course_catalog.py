@@ -809,6 +809,47 @@ def write_catalog(document: dict, *, root=None) -> dict:
     return {"catalog": copy.deepcopy(document), "warnings": ["competing_catalog_files"] if _catalog_conflicts(course_id, root) else []}
 
 
+INVALIDATABLE_SCOPES = {"assignments", "modules", "assignment_groups"}
+
+
+def invalidate_scope(
+    course_id: str,
+    scope_key: str,
+    *,
+    root=None,
+    attempted_at: str | None = None,
+) -> dict | None:
+    """Mark one catalog scope stale after a confirmed ledger-applied Canvas write.
+
+    Mirrors ``mirror_store.invalidate_groups`` exactly: no-op (no write,
+    returns ``None``) when no v2 catalog document exists yet, never
+    fabricates a document, flips only the named scope's ``state`` to
+    ``"stale"`` with ``error_code="invalidated"`` and a fresh
+    ``last_attempt_at``, leaves every other scope and every record
+    byte-identical, re-validates, and writes atomically via the existing
+    ``write_catalog`` helper. Canvas remains truth; the next catalog read or
+    refresh repairs the stale scope wholesale.
+    """
+    if scope_key not in INVALIDATABLE_SCOPES:
+        raise ValueError("invalid catalog scope key")
+    course_id = str(course_id or "").strip()
+    if not course_id:
+        raise ValueError("course_id_required")
+    attempted_at = attempted_at or _now()
+    with _course_lock(course_id):
+        document = read_catalog(course_id, root=root).get("catalog")
+        if document is None or document.get("version") != CATALOG_VERSION or scope_key not in document:
+            return None
+        document[scope_key] = {
+            **document[scope_key],
+            "state": "stale",
+            "last_attempt_at": attempted_at,
+            "error_code": "invalidated",
+        }
+        written = write_catalog(document, root=root)
+        return written["catalog"]
+
+
 def refresh_catalog(
     course_id: str,
     course_name: str,

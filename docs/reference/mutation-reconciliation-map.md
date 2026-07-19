@@ -20,7 +20,7 @@ the suite.
 - By classification: `canvas_mutation` 44, `canvas_read_acquisition` 5,
   `canvas_upload` 2, `generic_transport_internal` 2, `canvas_mutation_native` 1,
   `diagnostic_probe` 1, `external` 1.
-- By reconciliation state: `none` 29, `n/a` 19, `targeted` 7, `invalidate` 1.
+- By reconciliation state: `none` 19, `n/a` 19, `targeted` 7, `invalidate` 11.
 - By scope (an owner may touch more than one): `private.submissions` 9,
   `catalog.assignments` 8, `private.groups` 8, `private.assignments` 7,
   `none` 7, `catalog.modules` 6, `focused_evidence` 6, `new_quiz.metadata` 5,
@@ -72,15 +72,18 @@ dead ledger adapter (Former Program 10). Do not reconcile the ledger adapter.
 
 ### 2. Assignment/Quiz/Module structure (`catalog.assignments`, `catalog.modules`, `new_quiz.metadata`)
 
-**Gap — no reconciliation, uniformly:** every assignment, quiz, page, rubric,
-quick-assignment, and module-placement create/patch call in
-`operation_ledger/adapters/` (`assignment_whole.py`, `assignment_tiered.py`,
-`quick_assignment.py`, `page.py`, `rubric.py`, `quiz_steps.py`,
-`module_placement.py`) verifies against live Canvas via `_canvas_get` inside
-its own `reconcile()` step, but none calls a CanvasMirror invalidate/merge
-function for the catalog projection. This is the largest single Former
-Program 9 gap by owner count (19 entries) and the core of the operation
-ledger's step-9 debt described in spine 14.1.
+**Covered (invalidate):** after each successfully-applied ledger operation,
+the central `operation_ledger.catalog_reconcile` hook marks the affected
+whole catalog scope stale through `course_catalog.invalidate_scope`. The
+kind-to-scope mapping is deliberately conservative: assignments and quizzes
+invalidate `catalog.assignments` plus `catalog.modules`, quick assignments
+invalidate assignments, and a page invalidates modules only when it has a
+module placement. Rubrics and bare pages invalidate no catalog scope. This
+whole-scope stale-mark is intentional; Canvas remains truth and the next
+catalog refresh refetches the collection. The ownership contract records ten
+honest `none` → `invalidate` call-owner transitions for these catalog scopes.
+It deliberately leaves `new_quiz.metadata` (including `ensure_item`) and
+both rubric owners at `none`; neither has an invalidate in this unit.
 
 **No catalog scope exists (by design, not a gap):** page bodies
 (`PageAdapter.execute` create-page call, `RubricAdapter.execute`
@@ -183,10 +186,11 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
    PowerGrader already uses. The ledger `curve.py` adapter is dead (see family 1)
    — do not reconcile it. The late sweep is out of scope — CanvasExpert-owned
    (`n/a`), not a reconciliation gap.
-2. **Catalog structure** (family 2): the largest gap by count (19 owners).
-   Needs a targeted assignment/module/quiz-metadata invalidate or merge
-   function analogous to `merge_group_category`, then wiring into each
-   adapter's `reconcile()`.
+2. **Catalog structure** (family 2): **covered 2026-07-19** for
+   `catalog.assignments` and `catalog.modules` by the central ledger post-apply
+   stale-mark hook (ten `none` → `invalidate` contract transitions). Rubric
+   library and `new_quiz.metadata` reconciliation remain outside this unit; a
+   per-record merge remains a later refinement, not Batch 7 work.
 3. **Per-student assignment facts** (family 3): decide the reconciliation
    shape for overrides/extensions (`private.assignments`) — no existing
    invalidate function covers this scope yet.

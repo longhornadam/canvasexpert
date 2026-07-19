@@ -878,3 +878,65 @@ def test_refresh_catalog_assignments_only_bad_receipt_with_no_previous_catalog_i
     assert result["assignments"]["records"] == {}
     assert "503" not in json.dumps(result)
     course_catalog.validate_catalog(result)
+
+
+# ── invalidate_scope ─────────────────────────────────────────────────────
+
+def test_invalidate_scope_marks_exactly_one_scope_stale_and_leaves_others_intact(tmp_path):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    result = course_catalog.invalidate_scope(
+        "course-1", "assignments", root=str(tmp_path), attempted_at=STAMP_2,
+    )
+
+    assert result["assignments"]["state"] == "stale"
+    assert result["assignments"]["error_code"] == "invalidated"
+    assert result["assignments"]["last_attempt_at"] == STAMP_2
+    assert result["assignments"]["last_success_at"] == first["assignments"]["last_success_at"]
+    assert result["assignments"]["records"] == first["assignments"]["records"]
+    # Other scopes and every other record stay byte-identical.
+    assert result["modules"] == first["modules"]
+    assert result["assignment_groups"] == first["assignment_groups"]
+    stored = course_catalog.read_catalog("course-1", root=str(tmp_path))
+    assert stored["catalog"] == result
+
+
+def test_invalidate_scope_no_ops_without_a_catalog_document(tmp_path):
+    result = course_catalog.invalidate_scope(
+        "course-1", "modules", root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    assert result is None
+    assert course_catalog.read_catalog("course-1", root=str(tmp_path))["catalog"] is None
+
+
+def test_invalidate_scope_rejects_unknown_scope_key(tmp_path):
+    course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+
+    with pytest.raises(ValueError):
+        course_catalog.invalidate_scope("course-1", "bogus_scope", root=str(tmp_path))
+
+
+def test_invalidate_scope_is_atomic_and_preserves_previous(tmp_path):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    second = course_catalog.invalidate_scope(
+        "course-1", "modules", root=str(tmp_path), attempted_at=STAMP_2,
+    )
+
+    directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
+    assert json.loads((directory / "catalog.v2.previous.json").read_text(encoding="utf-8")) == first
+    assert json.loads((directory / "catalog.v2.json").read_text(encoding="utf-8")) == second
+    assert not list(directory.glob("*.tmp"))

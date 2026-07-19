@@ -3,6 +3,7 @@
 import copy
 
 from . import claims, models, operations, registry, storage
+from .catalog_reconcile import reconcile_catalog_after_apply
 from .receipts import create_receipt, new_receipt
 
 
@@ -234,6 +235,10 @@ def _execute_target(adapter, operation: dict, payload: dict, target: dict) -> di
         except LostClaimError:
             return {"target_key": target_key, "state": "sent_unknown",
                     "error_code": "lost_claim"}
+        if result.get("state") == "applied":
+            reconcile_catalog_after_apply(
+                operation["kind"], target["course_id"], payload=payload,
+            )
         return {
             "target_key": target_key,
             "state": result.get("state", "failed"),
