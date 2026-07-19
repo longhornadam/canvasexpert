@@ -20,7 +20,7 @@ the suite.
 - By classification: `canvas_mutation` 44, `canvas_read_acquisition` 5,
   `canvas_upload` 2, `generic_transport_internal` 2, `canvas_mutation_native` 1,
   `diagnostic_probe` 1, `external` 1.
-- By reconciliation state: `none` 31, `n/a` 17, `targeted` 7, `invalidate` 1.
+- By reconciliation state: `none` 29, `n/a` 19, `targeted` 7, `invalidate` 1.
 - By scope (an owner may touch more than one): `private.submissions` 9,
   `catalog.assignments` 8, `private.groups` 8, `private.assignments` 7,
   `none` 7, `catalog.modules` 6, `focused_evidence` 6, `new_quiz.metadata` 5,
@@ -40,15 +40,25 @@ which calls `mirror_service.notify_course_changed` (a narrow per-course
 submissions delta refresh). This is the only submissions-scope family with a
 real, tested targeted reconciliation path today.
 
-**Gap — no reconciliation:** every grade-curve and late-sweep owner
-(`operation_ledger/adapters/curve.py`, `operation_ledger/adapters/sweep.py`,
-`webui/routes/gradebook_curves.py` (`curve_apply`, `revert_curve`),
-`webui/routes/routines_builtin.py` (`_run_routine_sweep`,
-`_curve_apply_core`)) writes `posted_grade`/`seconds_late_override` directly
-and never calls a mirror invalidate/refresh function. These are Former
-Program 9's most direct exit-gate targets: curves and sweeps share the exact
-scope PowerGrader already reconciles, so the fix is likely "point them at the
-same `mirror_service.notify_course_changed` hook," not new machinery.
+**Gap — no reconciliation:** every grade-curve owner
+(`operation_ledger/adapters/curve.py`, `webui/routes/gradebook_curves.py`
+(`curve_apply`, `revert_curve`), `webui/routes/routines_builtin.py`
+(`_curve_apply_core`)) writes `posted_grade` directly and never calls a mirror
+invalidate/refresh function. This is a Former Program 9 exit-gate target:
+curves write the exact grade scope PowerGrader already reconciles, so the fix
+is likely "point them at the same `mirror_service.notify_course_changed` hook,"
+not new machinery.
+
+**Not a gap — late sweep is CanvasExpert-owned:** the late-sweep owners
+(`operation_ledger/adapters/sweep.py SweepAdapter.execute` and
+`webui/routes/routines_builtin.py _run_routine_sweep`) write
+`seconds_late_override` per student, but late-work identification is entirely
+internal to CanvasExpert — `work_registry/providers/late_work.py` recomputes
+affected students from `due_at`/`submitted_at` with the school-day calculation
+and uses the mirror `late` flag only as a prefilter (which the sweep does not
+change: it overrides seconds on already-timestamp-late submissions). No mirror
+consumer reads `seconds_late_override`, so no submissions-projection
+reconciliation is owed. Recorded `n/a`, not a Former Program 9 gap.
 
 **Gap — duplicate implementation:** `operation_ledger/adapters/curve.py`
 (ledger path) and `webui/routes/gradebook_curves.py` (direct route) both
@@ -162,10 +172,11 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
 
 ## Batch 7 seeds (named gaps, in priority order)
 
-1. **Submissions/comments** (family 1): wire grade-curve and late-sweep
-   writes to the same `mirror_service.notify_course_changed` targeted refresh
-   PowerGrader already uses. Resolve the curve duplicate-implementation
-   question first (ledger `curve.py` vs. direct `gradebook_curves.py`).
+1. **Submissions/comments** (family 1): wire grade-curve writes to the same
+   `mirror_service.notify_course_changed` targeted refresh PowerGrader already
+   uses. Resolve the curve duplicate-implementation question first (ledger
+   `curve.py` vs. direct `gradebook_curves.py`). The late sweep is out of scope
+   here — it is CanvasExpert-owned (`n/a`), not a reconciliation gap.
 2. **Catalog structure** (family 2): the largest gap by count (19 owners).
    Needs a targeted assignment/module/quiz-metadata invalidate or merge
    function analogous to `merge_group_category`, then wiring into each

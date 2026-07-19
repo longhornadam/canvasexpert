@@ -121,8 +121,8 @@
       "call_form": "canvas_client._canvas_send(\"PUT\", <submission_path>, request) [seconds_late_override per student]",
       "classification": "canvas_mutation",
       "scopes": ["private.submissions"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call after the per-student late-override PUT. Former Program 9 gap."
+      "reconciliation": "n/a",
+      "reason": "Writes seconds_late_override to Canvas, but late-work identification is entirely CanvasExpert-internal: work_registry/providers/late_work.py recomputes affected students from due_at/submitted_at via the school-day calculation and uses the mirror 'late' flag only as a prefilter, which the sweep does not alter (it overrides seconds on already-timestamp-late submissions). No mirror consumer reads seconds_late_override, so no submissions-projection reconciliation is owed. Not a Former Program 9 gap."
     },
     {
       "path": "api/operation_ledger/adapters/page.py",
@@ -429,8 +429,8 @@
       "call_form": "_canvas_send(\"PUT\", <submission_path>, request) [routine-triggered late sweep]",
       "classification": "canvas_mutation",
       "scopes": ["private.submissions"],
-      "reconciliation": "none",
-      "reason": "Scheduled-routine code path; no mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "n/a",
+      "reason": "Scheduled-routine late sweep; same as SweepAdapter.execute. Writes seconds_late_override, which no mirror consumer reads; late-work identification is recomputed inside CanvasExpert from timestamps (work_registry/providers/late_work.py). No submissions-projection reconciliation is owed. Not a Former Program 9 gap."
     },
     {
       "path": "api/webui/routes/routines_builtin.py",
