@@ -110,6 +110,69 @@ def test_catalog_scopes_adapt_only_catalog_records_without_forbidden_fields():
     assert catalog_result["catalog"]["assignments"]["records"]["assignment-1"]["name"] == "Practice"
 
 
+# --- private.submission_comments (1.0beta Batch 6) ------------------------------
+
+def test_private_submission_comments_envelope_comes_from_sidecar_not_full_delta(tmp_path):
+    _populate(str(tmp_path))  # full/delta passes current as of STAMP
+    comment_stamp = "2026-07-18T15:00:00Z"  # the comment sidecar succeeds later, separately
+    store.record_submission_comments_state(COURSE, ok=True, attempted_at=comment_stamp,
+                                           root=str(tmp_path))
+
+    submissions = read_service.private_submissions(COURSE, root=str(tmp_path))
+    comments = read_service.private_submission_comments(COURSE, root=str(tmp_path))
+
+    assert comments["scope"] == read_service.PRIVATE_SUBMISSION_COMMENTS
+    assert comments["state"] == "current"
+    assert comments["last_success_at"] == comment_stamp
+    assert comments["last_success_at"] != submissions["last_success_at"]
+    assert comments["generation"] != submissions["generation"]
+    assert comments["records"] == submissions["records"]  # reuses the same normalized rows
+
+
+def test_private_submission_comments_max_age_hours_ages_current_to_stale(tmp_path):
+    _populate(str(tmp_path))
+    store.record_submission_comments_state(COURSE, ok=True, attempted_at=STAMP, root=str(tmp_path))
+
+    result = read_service.private_submission_comments(
+        COURSE, root=str(tmp_path), max_age_hours=1, now="2026-07-18T14:00:00Z")
+
+    assert result["state"] == "stale"
+    assert result["records"]
+
+
+def test_private_submission_comments_missing_sidecar_is_unavailable_with_records_intact(tmp_path):
+    _populate(str(tmp_path))  # sidecar never recorded
+
+    result = read_service.private_submission_comments(COURSE, root=str(tmp_path))
+
+    assert result["state"] == "unavailable"
+    assert result["last_success_at"] == ""
+    assert result["records"]  # reused submission records are unaffected by the sidecar
+
+
+def test_private_submission_comments_corrupt_sidecar_is_unavailable_with_records_intact(tmp_path):
+    _populate(str(tmp_path))
+    store.record_submission_comments_state(COURSE, ok=True, attempted_at=STAMP, root=str(tmp_path))
+    path = store.submission_comments_state_path(COURSE, str(tmp_path))
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("{not json")
+
+    result = read_service.private_submission_comments(COURSE, root=str(tmp_path))
+
+    assert result["state"] == "unavailable"
+    assert result["records"]
+
+
+def test_read_dispatches_private_submission_comments(tmp_path):
+    _populate(str(tmp_path))
+    store.record_submission_comments_state(COURSE, ok=True, attempted_at=STAMP, root=str(tmp_path))
+
+    result = read_service.read(read_service.PRIVATE_SUBMISSION_COMMENTS, COURSE, root=str(tmp_path))
+
+    assert result["scope"] == read_service.PRIVATE_SUBMISSION_COMMENTS
+    assert result["state"] == "current"
+
+
 def test_only_local_display_and_offline_intents_are_implemented(tmp_path):
     _populate(str(tmp_path))
 

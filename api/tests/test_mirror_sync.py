@@ -628,6 +628,87 @@ def test_catalog_write_failure_does_not_affect_delta_pass_result(monkeypatch, tm
     assert result["ok"] is True
 
 
+# --- submission comments freshness sidecar (1.0beta Batch 6) ---------------------
+
+def test_full_pass_with_comments_marks_sidecar_current(tmp_path):
+    canvas = FakeCanvas(submissions=[_sub(700010, submission_comments=[
+        {"author_id": 900099, "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ])])
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
+    assert result["ok"] is True
+    sidecar = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert sidecar["state"] == "current"
+    assert sidecar["last_success_at"] == NOW
+
+
+def test_full_pass_fetch_error_degrades_sidecar(tmp_path):
+    canvas = FakeCanvas(errors={"submissions": "HTTP 503: upstream"})
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
+    assert result["ok"] is False
+    sidecar = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert sidecar["state"] == "unavailable"  # never succeeded
+    assert sidecar["last_attempt_at"] == NOW
+
+
+def test_delta_pass_never_advances_or_claims_comment_freshness(tmp_path):
+    canvas = FakeCanvas(submissions=[_sub(700010, submission_comments=[
+        {"author_id": 900099, "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ])])
+    sync.full_pass(COURSE, canvas_get_all=canvas,
+                   canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
+    before = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+
+    delta_canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2, body="Second draft.")])
+    result = sync.delta_pass(COURSE, canvas_get_all=delta_canvas,
+                             canvas_get_all_complete=delta_canvas.complete, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    after = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert after == before  # unchanged: delta never claims comment freshness
+
+
+def test_focused_assignment_refresh_never_advances_or_claims_comment_freshness(tmp_path):
+    store.merge_submissions(COURSE, "700010", [_sub(700010)], root=str(tmp_path), replace=True)
+    before = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert before["state"] == "unavailable"  # sidecar has never been touched
+
+    def focused_canvas(path, params=None, timeout=30):
+        return [_sub(700010, attempt=2, body="Focused second draft.")], None
+
+    result = sync.sync_assignment_submissions(
+        COURSE, "700010", canvas_get_all=focused_canvas, root=str(tmp_path), now=NOW,
+    )
+    assert result["ok"] is True
+    after = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert after == before
+
+
+def test_refresh_submissions_course_delta_never_advances_or_claims_comment_freshness(tmp_path):
+    _backfilled(tmp_path)  # full_pass already marked the sidecar current
+    before = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert before["state"] == "current"
+
+    canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2)])
+    result = sync.refresh_submissions_course_delta(
+        COURSE, canvas_get_all=canvas, root=str(tmp_path), now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    after = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert after == before
+
+
+def test_roster_pass_never_advances_or_claims_comment_freshness(tmp_path):
+    canvas = FakeCanvas()
+    before = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    result = sync.roster_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    assert result["ok"] is True
+    after = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert after == before  # roster does not touch the comment sidecar at all
+
+
 # --- roster pass ------------------------------------------------------------------
 
 def test_roster_pass_updates_roster_only(tmp_path):

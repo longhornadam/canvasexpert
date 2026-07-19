@@ -26,6 +26,7 @@ PRIVATE_ROSTER = "private.roster"
 PRIVATE_GROUPS = "private.groups"
 PRIVATE_ASSIGNMENTS = "private.assignments"
 PRIVATE_SUBMISSIONS = "private.submissions"
+PRIVATE_SUBMISSION_COMMENTS = "private.submission_comments"
 CATALOG_ASSIGNMENTS = "catalog.assignments"
 CATALOG_MODULES = "catalog.modules"
 CATALOG_ASSIGNMENT_GROUPS = "catalog.assignment_groups"
@@ -147,6 +148,23 @@ def private_submissions(course_id, *, root=None, max_age_hours=None, now=None) -
     )
 
 
+def private_submission_comments(course_id, *, root=None, max_age_hours=None, now=None) -> dict:
+    """Reuse normalized submission records, but derive freshness only from the
+    comment sidecar (never from the full/delta pass envelopes and never from Canvas)."""
+    submissions = private_submissions(course_id, root=root, max_age_hours=None, now=now)
+    sidecar = store.read_submission_comments_state(course_id, root=root)
+    return _envelope(
+        course_id, PRIVATE_SUBMISSION_COMMENTS,
+        state=sidecar.get("state", "unavailable"), source="mirror",
+        last_success_at=sidecar.get("last_success_at", ""),
+        last_attempt_at=sidecar.get("last_attempt_at", ""),
+        error_code=sidecar.get("error_code", ""),
+        records=submissions["records"],
+        generation_version=f"v{sidecar.get('schema_version', 1)}",
+        max_age_hours=max_age_hours, now=now,
+    )
+
+
 def _catalog_scope(course_id, scope: str, scope_key: str, *, catalog_reader=None, root=None,
                    max_age_hours=None, now=None) -> dict:
     if catalog_reader is None:
@@ -201,6 +219,7 @@ def read(scope: str, course_id, *, intent: str = LOCAL_DISPLAY, root=None,
         PRIVATE_GROUPS: private_groups,
         PRIVATE_ASSIGNMENTS: private_assignments,
         PRIVATE_SUBMISSIONS: private_submissions,
+        PRIVATE_SUBMISSION_COMMENTS: private_submission_comments,
     }
     if scope in readers:
         return readers[scope](course_id, root=root, max_age_hours=max_age_hours, now=now)

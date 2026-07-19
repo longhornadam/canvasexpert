@@ -104,6 +104,20 @@ _EVIDENCE_CATEGORIES = {"", "forbidden", "unauthorized"}
 LATE_POLICY_VERSION = 1
 LATE_POLICY_FILENAME = "late_policy.v1.json"
 LATE_POLICY_STATES = {"current", "stale", "unavailable"}
+
+# Submission comments freshness sidecar (1.0beta Batch 6 / 01). Kept as its
+# own separate file rather than inside _sync.v1.json because comment freshness
+# has a different cadence and boundary than pass envelopes: only the
+# comment-bearing full pass can advance this state; delta, focused, roster, and
+# group passes must never touch it. Follows the existing capability/late-policy
+# sidecar pattern and course_lock / atomic_write conventions.
+SUBMISSION_COMMENTS_STATE_VERSION = 1
+SUBMISSION_COMMENTS_STATE_FILENAME = "submission_comments_state.v1.json"
+SUBMISSION_COMMENTS_STATE_KEYS = {
+    "schema_version", "course_id", "state",
+    "last_success_at", "last_attempt_at", "error_code",
+}
+SUBMISSION_COMMENTS_STATES = {"current", "stale", "unavailable"}
 LATE_POLICY_ALLOWED_FIELDS = {
     "late_submission_deduction_enabled",
     "late_submission_deduction",
@@ -200,6 +214,11 @@ def late_policy_path(course_id, root=None):
 def course_context_path(course_id, root=None):
     directory = course_dir(course_id, root)
     return os.path.join(directory, COURSE_CONTEXT_FILENAME) if directory else None
+
+
+def submission_comments_state_path(course_id, root=None):
+    directory = course_dir(course_id, root)
+    return os.path.join(directory, SUBMISSION_COMMENTS_STATE_FILENAME) if directory else None
 
 
 def _require_dir(course_id, root):
@@ -401,6 +420,30 @@ def validate_late_policy(document: dict, course_id) -> dict:
     policy = document.get("policy")
     if not isinstance(policy, dict) or set(policy) - LATE_POLICY_ALLOWED_FIELDS:
         raise ValueError("late policy fields are invalid")
+    return document
+
+
+def validate_submission_comments_state(document: dict, course_id) -> dict:
+    """Validate the submission comments freshness sidecar (1.0beta Batch 6)."""
+    _require_exact_keys(document, SUBMISSION_COMMENTS_STATE_KEYS,
+                        "submission comments state")
+    if (not isinstance(document.get("schema_version"), int)
+            or isinstance(document.get("schema_version"), bool)
+            or document["schema_version"] != SUBMISSION_COMMENTS_STATE_VERSION):
+        raise ValueError("submission comments state schema_version is unsupported")
+    if not isinstance(document.get("course_id"), str) or document["course_id"] != str(course_id):
+        raise ValueError("submission comments state course_id mismatch")
+    if document.get("state") not in SUBMISSION_COMMENTS_STATES:
+        raise ValueError("submission comments state is invalid")
+    # error_code is a free-form sanitized string, not a closed set: this sidecar's
+    # only writer (full_pass) reuses the same course_catalog._error_code() value
+    # that also feeds the unrestricted-string full/delta pass envelope (record_pass /
+    # _validate_envelope), so a narrower allowlist here would reject legitimate codes.
+    if not isinstance(document.get("error_code"), str):
+        raise ValueError("submission comments state error_code is invalid")
+    for key in ("last_success_at", "last_attempt_at"):
+        if not _valid_iso_z(document.get(key)):
+            raise ValueError(f"submission comments state {key} is invalid")
     return document
 
 
@@ -1103,3 +1146,51 @@ def record_pass(course_id, pass_name: str, *, ok: bool, error_code: str = "",
             entry["error_code"] = error_code or "sync_failed"
         return _write_document(sync_path(course_id, root),
                                validate_sync(document, course_id))
+
+
+def default_submission_comments_state(course_id) -> dict:
+    return {
+        "schema_version": SUBMISSION_COMMENTS_STATE_VERSION,
+        "course_id": str(course_id),
+        "state": "unavailable",
+        "last_success_at": "",
+        "last_attempt_at": "",
+        "error_code": "",
+    }
+
+
+def read_submission_comments_state(course_id, *, root=None) -> dict:
+    document = _read_document(
+        submission_comments_state_path(course_id, root),
+        lambda d: validate_submission_comments_state(d, course_id))
+    return document if document is not None else default_submission_comments_state(course_id)
+
+
+def record_submission_comments_state(course_id, *, ok: bool,
+                                     attempted_at: str | None = None,
+                                     error_code: str = "",
+                                     root=None) -> dict:
+    """Record a submission-comments acquisition outcome.
+
+    On failure this changes only the sidecar envelope (state degrades from
+    current to stale, or stays unavailable).  Last-good submission files are
+    never touched — only the sidecar timestamp is updated.
+    """
+    _require_dir(course_id, root)
+    attempted_at = attempted_at or now_iso()
+    with course_lock(course_id):
+        document = read_submission_comments_state(course_id, root=root)
+        document["last_attempt_at"] = attempted_at
+        if ok:
+            document.update({
+                "state": "current",
+                "last_success_at": attempted_at,
+                "error_code": "",
+            })
+        else:
+            document["state"] = ("stale" if document["last_success_at"]
+                                 else "unavailable")
+            document["error_code"] = error_code or "sync_failed"
+        return _write_document(
+            submission_comments_state_path(course_id, root),
+            validate_submission_comments_state(document, course_id))

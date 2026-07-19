@@ -40,6 +40,12 @@ fresh — and fall back to live Canvas, visibly labeled, when it isn't.
                                    (the authoring catalog stays the rich source)
   submissions/<assignment_id>.v1.json
                                    per-student current row + append-only attempts
+  submission_comments_state.v1.json
+                                   private, course-level freshness sidecar for
+                                   comment-bearing submission acquisition only
+                                   (schema, course id, state, last success/attempt
+                                   timestamps, sanitized error code — no comment
+                                   content; see the submission-comments paragraph below)
   new_quiz_capability.v1.json      New Quiz metadata-scope capability record
                                    (student-free; see "New Quiz capability gate" below)
   new_quizzes/_sync.v2.json        New Quiz metadata/response freshness envelopes
@@ -55,16 +61,31 @@ cross-machine conflict to a single disposable file.
 ## Sync passes (`api/mirror/sync.py`)
 
 - **full** — backfill and nightly reconcile are the *same code path*: fetch
-  everything (with `submission_history`), rewrite collections with
-  attempt-preserving replace merges, prune assignments/students that no
-  longer exist, reset watermarks. The full pass is also the only thing that
-  can fix `missing`-flag drift: Canvas flips `missing` when a due date passes
-  with no student action, which no delta can ever observe.
+  everything (with `submission_history` and, only on this pass,
+  `submission_comments`), rewrite collections with attempt-preserving replace
+  merges, prune assignments/students that no longer exist, reset watermarks.
+  The full pass is also the only thing that can fix `missing`-flag drift:
+  Canvas flips `missing` when a due date passes with no student action, which
+  no delta can ever observe. Because this is the only pass that ever requests
+  comments, it is also the only writer of `submission_comments_state.v1.json`:
+  a successful comment-inclusive fetch that merges cleanly marks the sidecar
+  `current`; an attempted comment fetch that fails degrades it (`stale` after a
+  prior success, `unavailable` before one) without touching any submission
+  file. A failure earlier in the pass (assignments, students) never attempts
+  the comment fetch and so never touches this sidecar at all.
 - **delta** — two course-level questions since the last watermark:
   `submitted_since` (with history — catches resubmissions as new attempts)
   and `graded_since`. Near-empty for stagnant courses; a stagnant assignment
-  costs zero requests forever.
-- **roster** — students + sections; rosters rarely change, so daily.
+  costs zero requests forever. Delta never requests `submission_comments` and
+  never reads or writes the comment sidecar, so a newer comment-free delta can
+  never be mistaken for comment freshness.
+- **roster** — students + sections; rosters rarely change, so daily. Roster
+  also never touches the comment sidecar.
+
+Every other submission-refresh path — the focused single-assignment refresh, the
+`submissions.course_delta` write-through refresh, and group/roster
+reconciliation — is narrower than a full pass and likewise never advances or
+claims comment freshness; only a comment-inclusive full pass may do so.
 
 Roster uses the private roster document only when its state is exactly `current` for
 student and section reads. Roster also uses its separate private `groups.v1.json` only
@@ -240,11 +261,20 @@ mirror, so offline tests exercise the live path unchanged.
 
 ## v1 non-goals (deliberate)
 
-- Submission **comments** are captured by the nightly full pass (author id,
-  author role, comment text, created_at only — no names/avatars/attachments), so
-  staleness is bounded to ~24h. Delta stays lean: comment timestamps bump
-  neither `submitted_since` nor `graded_since`, so a comment-only change
-  between full passes is still a blind spot until the next full pass.
+- Submission **comments** are captured only by the nightly full pass (author
+  id, author role, comment text, created_at only — no names/avatars/
+  attachments). Delta stays lean: a comment-only change between full passes is
+  still a blind spot until the next full pass, but that staleness is no longer
+  silently inferred from the full/delta pass envelopes. A dedicated, private
+  `submission_comments_state.v1.json` sidecar (`store.read_submission_comments_state`
+  / `store.record_submission_comments_state`) tracks only the comment-inclusive
+  fetch's own state/last-success/last-attempt/error, so `current`, `stale`, and
+  `unavailable` describe comment freshness honestly instead of borrowing a
+  newer comment-free delta's freshness. `read_service.private_submission_comments`
+  reuses the normal submission records but reports this sidecar's envelope, and
+  a missing or corrupt sidecar reads as `unavailable` without ever touching the
+  last-good submission files. This slice is read-service-only: no Home/Work
+  consumer, report fallback, or write-triggered invalidation is wired to it yet.
 - **Attachment downloads** (names only, in attempt records).
 - New Quiz item-level grading or feedback writes. Mirror snapshots are
   read-only; the existing live/native grader preflight remains mandatory before

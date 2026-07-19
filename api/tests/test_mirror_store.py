@@ -349,6 +349,77 @@ def test_failed_pass_never_advances_watermarks(tmp_path):
     assert store.read_sync(COURSE, root=str(tmp_path))["watermarks"]["submitted_since"] == "A"
 
 
+# --- submission comments freshness sidecar (1.0beta Batch 6) ---------------------
+
+def test_read_submission_comments_state_defaults_when_absent(tmp_path):
+    document = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert document == store.default_submission_comments_state(COURSE)
+    assert document["state"] == "unavailable"
+    assert document["last_success_at"] == ""
+    assert document["last_attempt_at"] == ""
+    assert document["error_code"] == ""
+
+
+def test_record_submission_comments_state_success_marks_current(tmp_path):
+    document = store.record_submission_comments_state(
+        COURSE, ok=True, attempted_at="2026-07-18T12:00:00Z", root=str(tmp_path))
+    assert document["state"] == "current"
+    assert document["last_success_at"] == "2026-07-18T12:00:00Z"
+    assert document["last_attempt_at"] == "2026-07-18T12:00:00Z"
+    assert document["error_code"] == ""
+    assert store.read_submission_comments_state(COURSE, root=str(tmp_path)) == document
+
+
+def test_record_submission_comments_state_failure_after_success_degrades_to_stale(tmp_path):
+    store.record_submission_comments_state(
+        COURSE, ok=True, attempted_at="2026-07-18T12:00:00Z", root=str(tmp_path))
+    document = store.record_submission_comments_state(
+        COURSE, ok=False, error_code="timeout", attempted_at="2026-07-18T13:00:00Z",
+        root=str(tmp_path))
+    assert document["state"] == "stale"
+    assert document["last_success_at"] == "2026-07-18T12:00:00Z"  # preserved
+    assert document["last_attempt_at"] == "2026-07-18T13:00:00Z"
+    assert document["error_code"] == "timeout"
+
+
+def test_record_submission_comments_state_failure_with_no_prior_success_is_unavailable(tmp_path):
+    document = store.record_submission_comments_state(
+        COURSE, ok=False, error_code="connection", attempted_at="2026-07-18T13:00:00Z",
+        root=str(tmp_path))
+    assert document["state"] == "unavailable"
+    assert document["last_success_at"] == ""
+    assert document["last_attempt_at"] == "2026-07-18T13:00:00Z"
+    assert document["error_code"] == "connection"
+
+
+def test_read_submission_comments_state_corrupt_file_reads_as_default_unavailable(tmp_path):
+    path = store.submission_comments_state_path(COURSE, str(tmp_path))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("{not json")
+    document = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert document == store.default_submission_comments_state(COURSE)
+
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"schema_version": 99}, handle)
+    document = store.read_submission_comments_state(COURSE, root=str(tmp_path))
+    assert document == store.default_submission_comments_state(COURSE)
+
+
+def test_submission_comments_state_failure_leaves_last_good_submission_files_untouched(tmp_path):
+    store.merge_submissions(COURSE, "700010", [_submission_row(submission_comments=[
+        {"author_id": 900099, "comment": "Nice work.",
+         "created_at": "2026-07-01T11:00:00Z"},
+    ])], root=str(tmp_path))
+    before = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+
+    store.record_submission_comments_state(
+        COURSE, ok=False, error_code="timeout", root=str(tmp_path))
+
+    after = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+    assert after == before
+
+
 # --- unconfigured workspace --------------------------------------------------------
 
 def test_writers_raise_without_workspace(monkeypatch):

@@ -350,6 +350,10 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
     submissions, error = _fetch_submissions(course_id, canvas_get_all,
                                             with_comments=True)
     if error:
+        store.record_submission_comments_state(
+            course_id, ok=False,
+            error_code=_error_code(error),
+            attempted_at=started, root=root)
         store.record_pass(course_id, "full", ok=False,
                           error_code=_error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
@@ -362,6 +366,8 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
         store.merge_submissions(course_id, assignment_id,
                                 grouped.get(assignment_id, []), root=root,
                                 attempted_at=started, replace=True)
+    store.record_submission_comments_state(
+        course_id, ok=True, attempted_at=started, root=root)
     watermark = _overlapped(started)
     store.record_pass(course_id, "roster", ok=True, attempted_at=started, root=root)
     store.record_pass(course_id, "full", ok=True, attempted_at=started,
