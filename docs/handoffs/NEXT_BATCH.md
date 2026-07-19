@@ -26,11 +26,23 @@ Batch 7 (mutation reconciliation) is authored from unit 06's machine map, not pr
   reconciliation `none` are the candidate gaps)
 - `docs/reference/mutation-reconciliation-map.md` — grouped vertical families and named gaps
 
-Open senior decision that gates Batch 7 authoring: the duplicate-implementation questions 06
-surfaced (group membership/category, and late policy) — a reconciled direct route coexists with an
-unreconciled ledger adapter. Confirm whether the ledger paths still have live callers before
-deciding to reconcile vs retire them (Former Program 10 territory). Do not write a Batch 7 brief
-that fixes reconciliation in a dead code path.
+Gating decision — RESOLVED 2026-07-19 (dead-path trace): the four duplicate ledger adapters
+(`operation_ledger/adapters/roster_membership.py`, `roster_group_set.py`, `late_policy.py`,
+`curve.py`) are **dead** — no non-test producer emits their KINDs (the generic
+`/api/operations/{kind}/prepare` endpoint is only ever called with `gradebook.sweep` and the
+`content.*` KINDs). Their live siblings are the direct webui routes / the `_curve_apply_core`
+routine; groups and late policy already reconcile. Consequences:
+
+- **Batch 7** reconciles only live paths. Concretely: catalog structure (19 owners, largest;
+  use the `merge_group_category` template), the two live curve writers, and per-student
+  assignment overrides. It must NOT touch the dead ledger adapters.
+- **Batch 8** retires the four dead adapters (Former Program 10), removing each adapter and its
+  contract entry together (the ownership test fails on a listed owner no longer present). Also
+  consider kind-allowlisting the generic operations endpoint. Details in the map's
+  "Batch 8 hygiene note".
+
+Recommended first Batch 7 brief: the catalog-structure invalidate/merge (family 2) — largest,
+uniform, and has a proven template.
 
 ## Batch table status
 

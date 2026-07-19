@@ -60,10 +60,15 @@ change: it overrides seconds on already-timestamp-late submissions). No mirror
 consumer reads `seconds_late_override`, so no submissions-projection
 reconciliation is owed. Recorded `n/a`, not a Former Program 9 gap.
 
-**Gap — duplicate implementation:** `operation_ledger/adapters/curve.py`
-(ledger path) and `webui/routes/gradebook_curves.py` (direct route) both
-apply curves independently; neither reconciles. Batch 7 should decide which
-one is canonical before wiring reconciliation into both.
+**Duplicate implementation — resolved 2026-07-19 (dead ledger path):** the
+ledger adapter `operation_ledger/adapters/curve.py` (`gradebook.curve` KIND) is
+**dead** — no non-test producer emits that KIND (the generic
+`/api/operations/{kind}/prepare` endpoint is only ever called with
+`gradebook.sweep` and the content KINDs). The live curve writers are
+`webui/routes/gradebook_curves.py` (direct route) and
+`routines_builtin.py _curve_apply_core` (scheduled routine); neither reconciles.
+Batch 7 wires reconciliation into those two live paths only; Batch 8 retires the
+dead ledger adapter (Former Program 10). Do not reconcile the ledger adapter.
 
 ### 2. Assignment/Quiz/Module structure (`catalog.assignments`, `catalog.modules`, `new_quiz.metadata`)
 
@@ -107,13 +112,12 @@ the one changed category (`mirror_store.merge_group_category`) and falls back
 to a whole-document `invalidate_groups` stale-mark only on failure. This is
 the most complete reconciliation family in the codebase today.
 
-**Gap — duplicate, unreconciled implementation:** the operation-ledger path
-for the identical operations — `operation_ledger/adapters/roster_membership.py`
-and `operation_ledger/adapters/roster_group_set.py` — has no mirror
-invalidate call at all. Two independent implementations of the same Canvas
-writes exist; only one reconciles. Batch 7 should confirm whether the
-ledger-path adapters are still live callers or dead code before deciding
-whether to delete or reconcile them (Former Program 10 concern, not just 9).
+**Duplicate implementation — resolved 2026-07-19 (dead ledger path):** the
+operation-ledger adapters `operation_ledger/adapters/roster_membership.py`
+(`roster.membership`) and `operation_ledger/adapters/roster_group_set.py`
+(`roster.group_set`) are **dead** — no non-test producer emits those KINDs. The
+live, already-reconciled path is the direct route above. Nothing for Batch 7
+here; Batch 8 retires both dead adapters (Former Program 10).
 
 ### 5. Gradebook configuration (`gradebook.late_policy`)
 
@@ -122,10 +126,11 @@ apply_late_policy` calls `mirror_store.invalidate_late_policy` after a
 verified apply — a whole-scope stale-mark, not a precise merge, hence
 reconciliation state `invalidate` rather than `targeted`.
 
-**Gap — duplicate, unreconciled implementation:** the ledger-path
-`operation_ledger/adapters/late_policy.py LatePolicyAdapter` implements the
-same `gradebook.late_policy` KIND with no invalidate call. Same
-duplicate-implementation question as family 4.
+**Duplicate implementation — resolved 2026-07-19 (dead ledger path):** the
+ledger adapter `operation_ledger/adapters/late_policy.py LatePolicyAdapter`
+(`gradebook.late_policy` KIND) is **dead** — no non-test producer emits that
+KIND. The live path is the direct route above, which already reconciles via
+`invalidate`. Nothing for Batch 7 here; Batch 8 retires the dead adapter.
 
 ### 6. New Quiz native grading (`new_quiz.responses`, `focused_evidence`)
 
@@ -172,11 +177,12 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
 
 ## Batch 7 seeds (named gaps, in priority order)
 
-1. **Submissions/comments** (family 1): wire grade-curve writes to the same
-   `mirror_service.notify_course_changed` targeted refresh PowerGrader already
-   uses. Resolve the curve duplicate-implementation question first (ledger
-   `curve.py` vs. direct `gradebook_curves.py`). The late sweep is out of scope
-   here — it is CanvasExpert-owned (`n/a`), not a reconciliation gap.
+1. **Submissions/comments** (family 1): wire the two live grade-curve writers —
+   `webui/routes/gradebook_curves.py` and `routines_builtin.py _curve_apply_core`
+   — to the same `mirror_service.notify_course_changed` targeted refresh
+   PowerGrader already uses. The ledger `curve.py` adapter is dead (see family 1)
+   — do not reconcile it. The late sweep is out of scope — CanvasExpert-owned
+   (`n/a`), not a reconciliation gap.
 2. **Catalog structure** (family 2): the largest gap by count (19 owners).
    Needs a targeted assignment/module/quiz-metadata invalidate or merge
    function analogous to `merge_group_category`, then wiring into each
@@ -184,11 +190,22 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
 3. **Per-student assignment facts** (family 3): decide the reconciliation
    shape for overrides/extensions (`private.assignments`) — no existing
    invalidate function covers this scope yet.
-4. **Groups duplicate implementation** (family 4) and **late-policy
-   duplicate implementation** (family 5): confirm live-caller status of the
-   ledger-path adapters (`roster_membership.py`, `roster_group_set.py`,
-   `late_policy.py`); either delete the dead path (Former Program 10) or
-   reconcile it to match its already-working sibling.
+4. **Resolved 2026-07-19 — no Batch 7 work.** The duplicate ledger adapters
+   (`roster_membership.py`, `roster_group_set.py`, `late_policy.py`, and
+   `curve.py`) are confirmed dead: no non-test producer emits their KINDs, and
+   their live direct-route/routine siblings already exist (groups and late policy
+   already reconcile). These are **Batch 8** retirements (Former Program 10), not
+   Batch 7 reconciliation targets.
+
+## Batch 8 hygiene note (from the 2026-07-19 dead-path trace)
+
+- Retire the four dead ledger adapters above and remove their contract entries in
+  the same change (the ownership test fails on a listed owner no longer present,
+  so adapter deletion and JSON pruning must land together).
+- The generic `/api/operations/{kind}/prepare` endpoint accepts any registered
+  KIND (gated only by `require_local_mutation`, not a kind allowlist). After the
+  dead adapters are removed, consider allowlisting the KINDs the UI actually
+  submits (`gradebook.sweep`, `content.*`) so a stale KIND cannot be hand-invoked.
 
 No entry in this document is `unknown`-scoped; the JSON contract carries zero
 `unknown`-scope owners today (grep it directly rather than trusting this
