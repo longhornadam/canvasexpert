@@ -11,8 +11,17 @@ Two consumers share the one underlying join pass (`_joined_course_records`):
 `build_packet` (single-student, multi-course — filters to one student) and
 `portfolio_service.py::build_merged_portfolios` (single-course, multi-student —
 groups by every student).
+
+Also provides `local_course_freshness`/`write_source_manifest`: a private,
+non-rendered per-course source/freshness disclosure, written by both report
+generators into a `_source_manifest.json` sidecar. This is a separate concern
+from `student_packet.py`'s existing `_manifest.json` (a change-detection dedupe
+cache keyed by content signature) — the two files/concerns never mix.
 """
 from __future__ import annotations
+
+import json
+import os
 
 from api.mirror import read_service
 from api.work_registry.providers.home_attention import _PROVEN_STAFF_ROLES, _author_role
@@ -150,3 +159,54 @@ def apply_comment_display(subs, report_user_id, report_student_name):
             relabeled.append(comment)
         sub["submission_comments"] = relabeled
     return subs
+
+
+def local_course_freshness(course_id, *, root=None) -> dict:
+    """Report one course's source/freshness for private disclosure only.
+
+    Reads `private_assignments`/`private_submissions` independently (the same
+    two envelopes `_joined_course_records` reads, but not through it and not
+    for their records — purely for freshness metadata). Returns
+    ``{"source": "mirror", "synced_at": <min of both envelopes'
+    last_success_at>}`` exactly when both envelopes report ``state ==
+    "current"`` — i.e. exactly when `local_course_submissions`/
+    `local_course_submissions_by_user` would return non-``None`` for this
+    course. Otherwise returns ``{"source": "canvas", "synced_at": ""}``.
+
+    Never calls Canvas; never duplicates or depends on
+    `_joined_course_records`'s return value.
+    """
+    assignments = read_service.private_assignments(course_id, root=root, max_age_hours=None)
+    submissions = read_service.private_submissions(course_id, root=root, max_age_hours=None)
+    if assignments["state"] != "current" or submissions["state"] != "current":
+        return {"source": "canvas", "synced_at": ""}
+    synced_at = min(assignments["last_success_at"], submissions["last_success_at"])
+    return {"source": "mirror", "synced_at": synced_at}
+
+
+def write_source_manifest(dest_dir, entries):
+    """Atomically write/merge a private `_source_manifest.json` sidecar.
+
+    Keyed by ``course_id``; each value is
+    ``{"course_name", "source", "synced_at", "generated_at"}``. Merging updates
+    only the course ids present in ``entries`` — any other course's prior
+    entry is left untouched, matching `_manifest.json`'s existing
+    merge-by-course-id convention. Tolerates a missing/corrupt existing file
+    exactly like `student_packet.py::build_packet`'s existing `_manifest.json`
+    try/except pattern.
+
+    This is a distinct, private, never-rendered sidecar file — a separate
+    concern from `_manifest.json`'s change-detection dedupe cache. Contains no
+    signed URLs and no absolute filesystem paths.
+    """
+    path = os.path.join(dest_dir, "_source_manifest.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            manifest = json.load(f)
+        if not isinstance(manifest, dict):
+            manifest = {}
+    except Exception:
+        manifest = {}
+    manifest.update(entries)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)

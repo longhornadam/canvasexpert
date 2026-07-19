@@ -12,6 +12,9 @@ degrading into a "skipped" line.
 """
 from __future__ import annotations
 
+import json
+import os
+
 import pytest
 
 from api import report_local_reads, student_packet
@@ -298,3 +301,102 @@ def test_build_packet_live_fallback_never_relabels_comments(monkeypatch, tmp_pat
         "https://canvas.test", "tok", str(tmp_path / "reports"), [], skip_unchanged=False))
 
     assert any("Info document written" in line for line in lines)  # no AssertionError raised
+
+
+# --- 1.0beta-06d: private source/freshness manifest --------------------------------
+
+def test_build_packet_writes_source_manifest_entry_per_processed_course(tmp_path):
+    _seed_local_current_course()
+    lines = list(student_packet.build_packet(
+        USER_ID, STUDENT_NAME, ["standing"], [_course_dict()],
+        "https://canvas.test", "tok", str(tmp_path / "reports"), [], skip_unchanged=False))
+    stu_root = next(line for line in lines if line.startswith("FOLDER:")).split("FOLDER: ", 1)[1]
+
+    with open(os.path.join(stu_root, "_source_manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert set(manifest.keys()) == {COURSE_ID}
+    entry = manifest[COURSE_ID]
+    assert entry["course_name"] == "Sample Course"
+    assert entry["source"] == "mirror"
+    assert entry["synced_at"] == STAMP
+    assert entry["generated_at"]
+
+    # Fully separate file/concern from `_manifest.json`'s dedupe cache.
+    with open(os.path.join(stu_root, "_manifest.json"), encoding="utf-8") as f:
+        dedupe = json.load(f)
+    assert set(dedupe[COURSE_ID].keys()) == {"signature", "last_run"}
+
+
+def test_build_packet_writes_source_manifest_even_when_skip_unchanged_skips_the_course(tmp_path):
+    _seed_local_current_course()
+    reports_root = str(tmp_path / "reports")
+    # First run establishes the `_manifest.json` dedupe signature.
+    list(student_packet.build_packet(
+        USER_ID, STUDENT_NAME, ["standing"], [_course_dict()],
+        "https://canvas.test", "tok", reports_root, [], skip_unchanged=True))
+
+    # Second run against unchanged data: skip_unchanged skips Info/work output
+    # for the course, but the source/freshness disclosure is independent of
+    # that dedupe outcome and must still be written.
+    lines = list(student_packet.build_packet(
+        USER_ID, STUDENT_NAME, ["standing"], [_course_dict()],
+        "https://canvas.test", "tok", reports_root, [], skip_unchanged=True))
+    assert any("no change since last packet" in line for line in lines)
+
+    stu_root = os.path.join(reports_root, student_packet.safe_name(STUDENT_NAME))
+    with open(os.path.join(stu_root, "_source_manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert manifest[COURSE_ID]["source"] == "mirror"
+    assert manifest[COURSE_ID]["synced_at"] == STAMP
+
+
+def test_build_packet_writes_canvas_source_for_a_live_fallback_course(monkeypatch, tmp_path):
+    def fake_get_all_pages(session, url, params):
+        return [{
+            "assignment_id": ASSIGNMENT_ID, "user_id": USER_ID,
+            "workflow_state": "submitted", "submitted_at": STAMP, "score": 9,
+            "submission_type": "online_text_entry", "body": "", "submission_comments": [],
+            "assignment": {"id": ASSIGNMENT_ID, "name": "Essay 1", "points_possible": 10},
+        }]
+    monkeypatch.setattr(student_packet, "_get_all_pages", fake_get_all_pages)
+
+    lines = list(student_packet.build_packet(
+        USER_ID, STUDENT_NAME, ["standing"], [_course_dict()],
+        "https://canvas.test", "tok", str(tmp_path / "reports"), [], skip_unchanged=False))
+    stu_root = next(line for line in lines if line.startswith("FOLDER:")).split("FOLDER: ", 1)[1]
+
+    with open(os.path.join(stu_root, "_source_manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
+    entry = manifest[COURSE_ID]
+    assert entry["course_name"] == "Sample Course"
+    assert entry["source"] == "canvas"
+    assert entry["synced_at"] == ""
+    assert entry["generated_at"]
+
+
+def test_build_packet_writes_no_manifest_entry_for_a_course_the_student_is_not_in(tmp_path):
+    # Local-current course, but only some *other* student has a submission in
+    # it -- local_course_submissions(cid, USER_ID) returns [], not None, and
+    # the course is skipped as "student not in this course". Per this brief's
+    # default assumption, a course producing no output gets no manifest entry.
+    store.write_assignments(COURSE_ID, [{
+        "id": ASSIGNMENT_ID, "name": "Essay 1", "due_at": "", "points_possible": 10,
+        "published": True, "submission_types": ["online_text_entry"],
+    }], attempted_at=STAMP)
+    store.merge_submissions(COURSE_ID, ASSIGNMENT_ID, [{
+        "assignment_id": ASSIGNMENT_ID, "user_id": "someone_else", "workflow_state": "submitted",
+        "submitted_at": STAMP, "score": 9, "submission_type": "online_text_entry",
+    }], attempted_at=STAMP, replace=True)
+    store.record_pass(COURSE_ID, "full", ok=True, attempted_at=STAMP)
+    assert report_local_reads.local_course_submissions(COURSE_ID, USER_ID) == []
+
+    reports_root = str(tmp_path / "reports")
+    lines = list(student_packet.build_packet(
+        USER_ID, STUDENT_NAME, ["standing"], [_course_dict()],
+        "https://canvas.test", "tok", reports_root, [], skip_unchanged=False))
+    assert any("student not found in any selected course" in line for line in lines)
+
+    stu_root = os.path.join(reports_root, student_packet.safe_name(STUDENT_NAME))
+    with open(os.path.join(stu_root, "_source_manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert manifest == {}

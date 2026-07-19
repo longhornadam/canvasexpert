@@ -11,6 +11,7 @@ Student Reports root. NEVER writes student data into the repo.
 import os
 import shutil
 import tempfile
+from datetime import datetime
 
 import requests
 
@@ -83,6 +84,9 @@ def build_merged_portfolios(course, students, parsed_nq, quiz_title,
     # student then falls back to today's existing per-student live fetch.
     local_by_user = report_local_reads.local_course_submissions_by_user(cid)
     used_local = local_by_user is not None
+    # Private, non-rendered source/freshness disclosure for this single course
+    # — read once, independent of `local_by_user`'s own gate/return value.
+    freshness = report_local_reads.local_course_freshness(cid)
     nq_map = {}
     if parsed_nq:
         nq_map = {str(s.get("canvas_id")): s for s in parsed_nq.get("students", [])}
@@ -126,6 +130,16 @@ def build_merged_portfolios(course, students, parsed_nq, quiz_title,
             dest = os.path.join(stu_dir, f"{safe_name(name)} - Writing Portfolio.docx")
             portfolio.render_merged_docx(name, entries, dest)
             made += 1
+            # Only for a student whose portfolio was actually produced — not
+            # for a "no writing found" skip, which yields no output at all.
+            report_local_reads.write_source_manifest(stu_dir, {
+                cid: {
+                    "course_name": course.get("name", ""),
+                    "source": freshness["source"],
+                    "synced_at": freshness["synced_at"],
+                    "generated_at": datetime.now().isoformat(timespec="seconds"),
+                },
+            })
             yield f"✓ {name}: {len(entries)} item(s)"
     finally:
         shutil.rmtree(work_root, ignore_errors=True)

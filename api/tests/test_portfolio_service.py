@@ -16,6 +16,9 @@ line.
 """
 from __future__ import annotations
 
+import json
+import os
+
 import pytest
 
 from api import portfolio_service, report_local_reads
@@ -232,3 +235,87 @@ def test_local_course_submissions_by_user_matches_per_student_reads(tmp_path):
     assert grouped is not None
     for uid in ("900001", "900002"):
         assert grouped.get(uid, []) == report_local_reads.local_course_submissions(COURSE_ID, uid)
+
+
+# --- 1.0beta-06d: private source/freshness manifest --------------------------------
+
+def test_build_merged_portfolios_writes_source_manifest_for_produced_portfolio(tmp_path):
+    rows = [
+        {"assignment_id": ASSIGNMENT_TEXT, "user_id": "900001", "workflow_state": "submitted",
+         "submitted_at": STAMP, "score": 9, "submission_type": "online_text_entry", "body": "Essay text"},
+    ]
+    _seed_local_current_course(rows)
+
+    reports_root = str(tmp_path / "reports")
+    students = _students(("900001", "Learner One"))
+    lines = list(portfolio_service.build_merged_portfolios(
+        _course_dict(), students, None, None,
+        "https://canvas.test", "tok", reports_root))
+    assert any(line.startswith("✓ Learner One") for line in lines)
+
+    stu_dir = os.path.join(reports_root, "Learner One")
+    with open(os.path.join(stu_dir, "_source_manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
+    entry = manifest[COURSE_ID]
+    assert entry["course_name"] == "Sample Course"
+    assert entry["source"] == "mirror"
+    assert entry["synced_at"] == STAMP
+    assert entry["generated_at"]
+
+
+def test_build_merged_portfolios_skips_source_manifest_for_no_writing_found(tmp_path, monkeypatch):
+    # "Learner Absent" has no local records in this course at all -> the
+    # per-student loop produces zero entries and takes the "no writing
+    # found" branch, writing no DOCX. Per this brief's default assumption
+    # (no manifest for a course that produced no output), the sidecar must
+    # not be written for this student either.
+    rows = [
+        {"assignment_id": ASSIGNMENT_UPLOAD, "user_id": "900002", "workflow_state": "submitted",
+         "submitted_at": STAMP, "score": 8, "submission_type": "online_upload", "body": ""},
+    ]
+    _seed_local_current_course(rows)
+    _forbid_canvas_calls(monkeypatch)
+
+    reports_root = str(tmp_path / "reports")
+    students = _students(("900099", "Learner Absent"))
+    lines = list(portfolio_service.build_merged_portfolios(
+        _course_dict(), students, None, None,
+        "https://canvas.test", "tok", reports_root))
+    assert any("no writing found" in line for line in lines)
+
+    stu_dir = os.path.join(reports_root, "Learner Absent")
+    assert not os.path.exists(os.path.join(stu_dir, "_source_manifest.json"))
+
+
+def test_build_merged_portfolios_writes_canvas_source_when_course_not_current(tmp_path, monkeypatch):
+    # Assignments exist, but no "full"/"delta" pass was ever recorded for
+    # submissions -> the course falls back to the live per-student fetch, and
+    # the manifest for a produced portfolio must still record source="canvas".
+    store.write_assignments(COURSE_ID, [{
+        "id": ASSIGNMENT_TEXT, "name": "Essay 1", "due_at": "", "points_possible": 10,
+        "published": True, "submission_types": ["online_text_entry"],
+    }], attempted_at=STAMP)
+    assert report_local_reads.local_course_submissions_by_user(COURSE_ID) is None
+
+    def fake_get_all_pages(session, url, params):
+        return [{
+            "assignment_id": ASSIGNMENT_TEXT, "user_id": params["student_ids[]"],
+            "workflow_state": "submitted", "submitted_at": STAMP, "score": 9,
+            "submission_type": "online_text_entry", "body": "Essay text",
+            "assignment": {"id": ASSIGNMENT_TEXT, "name": "Essay 1", "points_possible": 10},
+        }]
+    monkeypatch.setattr(portfolio_service, "_get_all_pages", fake_get_all_pages)
+
+    reports_root = str(tmp_path / "reports")
+    students = _students(("900001", "Learner One"))
+    lines = list(portfolio_service.build_merged_portfolios(
+        _course_dict(), students, None, None,
+        "https://canvas.test", "tok", reports_root))
+    assert any(line.startswith("✓ Learner One") for line in lines)
+
+    stu_dir = os.path.join(reports_root, "Learner One")
+    with open(os.path.join(stu_dir, "_source_manifest.json"), encoding="utf-8") as f:
+        manifest = json.load(f)
+    entry = manifest[COURSE_ID]
+    assert entry["source"] == "canvas"
+    assert entry["synced_at"] == ""

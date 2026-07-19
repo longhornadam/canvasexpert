@@ -11,6 +11,8 @@ acceptance gate for proof the refactor left it byte-for-byte unchanged.
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from api import report_local_reads
@@ -124,3 +126,131 @@ def test_both_public_functions_delegate_to_the_one_shared_join_pass(monkeypatch)
     report_local_reads.local_course_submissions_by_user(COURSE_ID)
 
     assert calls == [COURSE_ID, COURSE_ID]
+
+
+# --- 1.0beta-06d: local_course_freshness -------------------------------------------
+
+def test_local_course_freshness_reports_mirror_with_min_synced_at_when_current():
+    # Assignments and submissions become "current" via two independent stamps
+    # (write_assignments' attempted_at vs. record_pass' attempted_at) — the
+    # earlier of the two must win, proving this reads both envelopes
+    # independently rather than reusing one shared timestamp.
+    stamp_assignments = "2026-07-10T08:00:00Z"
+    stamp_submissions = "2026-07-15T09:00:00Z"
+    store.write_assignments(COURSE_ID, [{
+        "id": ASSIGNMENT_ID, "name": "Essay 1", "due_at": "", "points_possible": 10,
+        "published": True, "submission_types": ["online_text_entry"],
+    }], attempted_at=stamp_assignments)
+    store.merge_submissions(COURSE_ID, ASSIGNMENT_ID, [{
+        "assignment_id": ASSIGNMENT_ID, "user_id": "900001", "workflow_state": "submitted",
+        "submitted_at": stamp_submissions, "score": 9, "submission_type": "online_text_entry",
+    }], attempted_at=stamp_submissions, replace=True)
+    store.record_pass(COURSE_ID, "full", ok=True, attempted_at=stamp_submissions)
+
+    assert report_local_reads.local_course_freshness(COURSE_ID) == {
+        "source": "mirror", "synced_at": stamp_assignments,
+    }
+
+
+def test_local_course_freshness_reports_canvas_when_no_local_document_exists():
+    assert report_local_reads.local_course_freshness(COURSE_ID) == {
+        "source": "canvas", "synced_at": "",
+    }
+
+
+def test_local_course_freshness_reports_canvas_when_submissions_pass_never_recorded():
+    # Same not-current gate as local_course_submissions/_by_user: assignments
+    # exist, but no "full"/"delta" pass was ever recorded for submissions.
+    store.write_assignments(COURSE_ID, [{
+        "id": ASSIGNMENT_ID, "name": "Essay 1", "due_at": "", "points_possible": 10,
+        "published": True, "submission_types": ["online_text_entry"],
+    }], attempted_at=STAMP)
+    assert report_local_reads.local_course_submissions_by_user(COURSE_ID) is None
+    assert report_local_reads.local_course_freshness(COURSE_ID) == {
+        "source": "canvas", "synced_at": "",
+    }
+
+
+def test_local_course_freshness_does_not_change_when_joined_records_would_fail():
+    # A submission whose assignment isn't in the local set at all still leaves
+    # both envelopes "current" -- local_course_freshness reads envelope state
+    # only, never the join, so it must still report "mirror" here even though
+    # `_joined_course_records` would drop that one submission.
+    store.write_assignments(COURSE_ID, [{
+        "id": ASSIGNMENT_ID, "name": "Essay 1", "due_at": "", "points_possible": 10,
+        "published": True, "submission_types": ["online_text_entry"],
+    }], attempted_at=STAMP)
+    store.merge_submissions(COURSE_ID, "999999", [{
+        "assignment_id": "999999", "user_id": "900003", "workflow_state": "submitted",
+        "submitted_at": STAMP, "score": 5, "submission_type": "online_text_entry",
+    }], attempted_at=STAMP, replace=True)
+    store.record_pass(COURSE_ID, "full", ok=True, attempted_at=STAMP)
+
+    assert report_local_reads.local_course_submissions_by_user(COURSE_ID) == {}
+    assert report_local_reads.local_course_freshness(COURSE_ID) == {
+        "source": "mirror", "synced_at": STAMP,
+    }
+
+
+# --- 1.0beta-06d: write_source_manifest --------------------------------------------
+
+def test_write_source_manifest_merges_by_course_id_leaving_other_courses_untouched(tmp_path):
+    dest = tmp_path / "student_folder"
+    dest.mkdir()
+    report_local_reads.write_source_manifest(str(dest), {
+        "111": {"course_name": "Course One", "source": "mirror",
+                "synced_at": STAMP, "generated_at": STAMP},
+    })
+    report_local_reads.write_source_manifest(str(dest), {
+        "222": {"course_name": "Course Two", "source": "canvas",
+                "synced_at": "", "generated_at": STAMP},
+    })
+
+    with open(dest / "_source_manifest.json", encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert manifest["111"] == {"course_name": "Course One", "source": "mirror",
+                              "synced_at": STAMP, "generated_at": STAMP}
+    assert manifest["222"] == {"course_name": "Course Two", "source": "canvas",
+                              "synced_at": "", "generated_at": STAMP}
+
+    # Re-running for course "111" only updates that one entry.
+    later = "2026-07-19T00:00:00Z"
+    report_local_reads.write_source_manifest(str(dest), {
+        "111": {"course_name": "Course One", "source": "mirror",
+                "synced_at": later, "generated_at": later},
+    })
+    with open(dest / "_source_manifest.json", encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert manifest["111"]["synced_at"] == later
+    assert manifest["222"]["synced_at"] == ""  # untouched by the re-run
+
+
+def test_write_source_manifest_tolerates_a_missing_or_corrupt_existing_file(tmp_path):
+    dest = tmp_path / "student_folder"
+    dest.mkdir()
+    manifest_path = dest / "_source_manifest.json"
+    manifest_path.write_text("{not valid json", encoding="utf-8")
+
+    report_local_reads.write_source_manifest(str(dest), {
+        "111": {"course_name": "Course One", "source": "mirror",
+                "synced_at": STAMP, "generated_at": STAMP},
+    })
+
+    with open(manifest_path, encoding="utf-8") as f:
+        manifest = json.load(f)
+    assert manifest == {"111": {"course_name": "Course One", "source": "mirror",
+                                "synced_at": STAMP, "generated_at": STAMP}}
+
+
+def test_write_source_manifest_content_has_no_signed_url_or_absolute_path(tmp_path):
+    dest = tmp_path / "student_folder"
+    dest.mkdir()
+    report_local_reads.write_source_manifest(str(dest), {
+        "111": {"course_name": "Course One", "source": "mirror",
+                "synced_at": STAMP, "generated_at": STAMP},
+    })
+
+    raw_text = (dest / "_source_manifest.json").read_text(encoding="utf-8")
+    assert "http://" not in raw_text and "https://" not in raw_text
+    assert str(dest) not in raw_text  # no absolute filesystem path in content
+    assert str(tmp_path) not in raw_text

@@ -174,10 +174,12 @@ def build_packet(user_id, student_name, sections, courses, base, token,
 
     yield f"Student: {student_name}"
     any_course = False
+    manifest_entries: dict = {}
     for c in courses:
         cid, cname = str(c["id"]), c["name"]
         local_subs = report_local_reads.local_course_submissions(cid, user_id)
         used_local = local_subs is not None
+        freshness = report_local_reads.local_course_freshness(cid)
         if used_local:
             subs = local_subs
         else:
@@ -198,6 +200,15 @@ def build_packet(user_id, student_name, sections, courses, base, token,
         if not subs:
             continue                         # student not in this course
         any_course = True
+        # Private, non-rendered source/freshness disclosure — a separate
+        # concern from `_manifest.json`'s dedupe cache below; recorded for
+        # every processed course regardless of the skip_unchanged outcome.
+        manifest_entries[cid] = {
+            "course_name": cname,
+            "source": freshness["source"],
+            "synced_at": freshness["synced_at"],
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }
         if used_local:
             # Local-mirror comments never stored a real author name to begin
             # with — this recovers a usable label. Live-fallback subs come
@@ -292,4 +303,5 @@ def build_packet(user_id, student_name, sections, courses, base, token,
         yield "· student not found in any selected course"
     with open(man_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
+    report_local_reads.write_source_manifest(stu_root, manifest_entries)
     yield f"FOLDER: {stu_root}"
