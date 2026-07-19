@@ -17,23 +17,22 @@ sequential slices (same pattern as the earlier 03-series/04-series batches):
   `report_local_reads.local_course_submissions_by_user` once per course (was: one live
   paginated fetch per student) when the mirror is current. `report_local_reads.py` now shares
   one `_joined_course_records` helper between both consumers.
-- **1.0beta-06c is executing now** (`docs/handoffs/1.0beta-06c-assignment-picker-local-metadata.md`,
-  Status: READY, dispatched to an executor) — migrates
-  `api/webui/routes/reports.py::list_assignments_full` (the report/download assignment picker)
-  to read Course Catalog's `catalog_assignments`/`catalog_assignment_groups` when current,
-  falling back to today's live pagination otherwise. Independent of 06a/06b (different files).
-- **1.0beta-06d is spec'd and queued behind 06c**
-  (`docs/handoffs/1.0beta-06d-report-source-manifest.md`, Status: READY, not yet dispatched) —
-  the private source/freshness provenance manifest the vision doc names for this batch (§17.1
-  row 5's third named outcome). Adds `local_course_freshness`/`write_source_manifest` to
+- **1.0beta-06c is GREEN and archived** (`docs/handoffs/archive/`, commit `29ed736`) —
+  `api/webui/routes/reports.py::list_assignments_full` now reads Course Catalog's
+  `catalog_assignments`/`catalog_assignment_groups` when current, falling back to today's live
+  pagination otherwise. Notable finding from execution: this route's real production consumer
+  today is Gradebook's Extra Time dropdown (`gradebook/extensions.js`), not a Student Reports
+  "download picker" (that UI was already retired) — doesn't affect the migration, just corrects
+  the route's docstring/framing.
+- **1.0beta-06d is the current executor-ready work**
+  (`docs/handoffs/1.0beta-06d-report-source-manifest.md`, Status: READY) — the private
+  source/freshness provenance manifest the vision doc names for this batch (§17.1 row 5's
+  third named outcome). Adds `local_course_freshness`/`write_source_manifest` to
   `report_local_reads.py`, called from both `build_packet` and `build_merged_portfolios` at
-  their existing local-vs-live decision points. Independent of 06c's file (`reports.py`), but
-  held until 06c is accepted so only one brief is executing at a time, per AGENTS.md's
-  one-active-executor default — dispatch this one next once 06c lands.
-- This is a deliberate, temporary exception to "at most one current direct brief" in
-  `docs/handoffs/`: both 06c and 06d exist as fully-written, ready briefs right now so the next
-  senior turn never idles between slices. Once 06c is accepted and archived, archive nothing
-  else yet — dispatch 06d, and do not draft a further slice beyond 06d until it lands.
+  their existing local-vs-live decision points. This is the last planned Batch 5 slice — once
+  it's GREEN, Batch 5 is fully closed (its exit gate: text-only reports make zero Canvas calls,
+  attachment reports issue only evidence-specific calls, source/freshness disclosed) and the
+  next senior should move to Batch 6 (Home/Work/Routines/MCP/derived views, spine §17.1 row 6).
 
 Batches 0-4 are all GREEN and archived; Batch 2 fully closed via 1.0beta-03i + 1.0beta-05a.
 
