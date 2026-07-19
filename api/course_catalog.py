@@ -864,6 +864,67 @@ def refresh_catalog(
         return {"catalog": written["catalog"], "source": "canonical", "warnings": warnings}
 
 
+def refresh_catalog_assignments_only(
+    course_id: str,
+    *,
+    assignment_receipt: AssignmentCollectionReceipt,
+    root=None,
+    attempted_at: str | None = None,
+    course_name: str | None = None,
+) -> dict:
+    """Coordinated-receipt path for the private mirror's pass-driven callers.
+
+    Applies an already-acquired assignment receipt (no Canvas call of its
+    own) to Catalog's assignment scope only. Modules and assignment groups
+    are never live-fetched here: they pass through byte-identical to their
+    previously-committed value, falling back to the same unavailable/empty-
+    records stub this file already uses for a scope with no previous data
+    when there is no previous catalog at all (or no previous v2 groups
+    scope). The manual ``POST /api/course-catalog/refresh`` route continues
+    to use ``refresh_catalog`` for a full three-scope refresh.
+    """
+    course_id = str(course_id or "").strip()
+    if not course_id:
+        raise ValueError("course_id_required")
+    with _course_lock(course_id):
+        previous_read = read_catalog(course_id, root=root)
+        previous = previous_read.get("catalog")
+        timestamp = attempted_at or _now()
+        previous_assignments = previous.get("assignments") if isinstance(previous, dict) else None
+        previous_modules = previous.get("modules") if isinstance(previous, dict) else None
+        previous_groups = previous.get("assignment_groups") if isinstance(previous, dict) and previous.get("version") == CATALOG_VERSION else None
+
+        rows, error, complete = assignment_receipt
+        assignments = _assignment_scope_from_receipt(
+            rows, error, complete, timestamp, previous_assignments,
+        )
+        modules = (
+            copy.deepcopy(previous_modules) if previous_modules is not None
+            else _scope_failure(None, timestamp, "", empty_records=[])
+        )
+        assignment_groups = (
+            copy.deepcopy(previous_groups) if previous_groups is not None
+            else _scope_failure(None, timestamp, "", empty_records=[])
+        )
+
+        previous_course_name = previous.get("course_name") if isinstance(previous, dict) else None
+        resolved_name = _normalize_text(course_name) or _normalize_text(previous_course_name) or course_id
+
+        document = {
+            "version": CATALOG_VERSION,
+            "course_id": course_id,
+            "course_name": resolved_name,
+            "updated_at": timestamp,
+            "assignments": assignments,
+            "modules": modules,
+            "assignment_groups": assignment_groups,
+        }
+        validate_catalog(document)
+        written = write_catalog(document, root=root)
+        warnings = sorted(set(previous_read.get("warnings", []) + written.get("warnings", [])))
+        return {"catalog": written["catalog"], "source": "canonical", "warnings": warnings}
+
+
 def public_projection(read_result: dict, *, course_id: str) -> dict:
     """Return PowerGrader-ready data without paths, raw failures, or transport fields."""
     document = read_result.get("catalog") if isinstance(read_result, dict) else None

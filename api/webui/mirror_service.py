@@ -108,6 +108,7 @@ def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None,
                 kwargs = {"canvas_get_all": canvas_get_all, "now": now_iso}
                 if pass_name in {"full", "delta"}:
                     kwargs["canvas_get_all_complete"] = canvas_get_all_complete
+                    kwargs["course_name"] = course.get("name")
                 if concluded and pass_name == "full":
                     kwargs["skip_new_quiz_metadata"] = True
                 result = _PASS_RUNNERS[pass_name](course_id, **kwargs)
@@ -150,7 +151,8 @@ def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=No
             pass
         result = sync.delta_pass(cid, canvas_get_all=canvas_get_all,
                                  canvas_get_all_complete=canvas_get_all_complete, now=now,
-                                 bypass_new_quiz_cooldown=True)
+                                 bypass_new_quiz_cooldown=True,
+                                 course_name=course.get("name"))
         summaries.append({"course_id": cid, "pass": "delta", **result})
     return summaries
 

@@ -28,7 +28,10 @@ import time
 from api.assignment_collection import acquire_assignment_collection
 
 # Reuse the catalog's transport-error -> stable-code mapping so diagnostics
-# read the same across both mirrors of Canvas data.
+# read the same across both mirrors of Canvas data, and forward each pass's
+# already-acquired assignment receipt to Catalog's assignment scope only
+# (1.0beta slice 02c) — no second Canvas call is made on Catalog's behalf.
+from api import course_catalog
 from api.course_catalog import _error_code
 
 from . import new_quizzes, store
@@ -311,12 +314,15 @@ def _skipped_lifecycle_new_quizzes(course_id, *, root=None) -> dict:
 
 def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, now=None,
               bypass_new_quiz_cooldown: bool = False,
-              skip_new_quiz_metadata: bool = False) -> dict:
+              skip_new_quiz_metadata: bool = False,
+              course_name: str | None = None) -> dict:
     """Backfill / nightly reconcile: fetch everything first, then rewrite.
 
     ``bypass_new_quiz_cooldown`` plumbs the manual ``sync_now`` override down
     to the New Quiz metadata capability gate (1.0beta slice 01a) — the
-    15-minute heartbeat never passes it."""
+    15-minute heartbeat never passes it. ``course_name`` is forwarded to
+    Course Catalog's coordinated-receipt refresh only (1.0beta slice 02c);
+    it never affects this pass's own behavior."""
     blocked = _guard(course_id, root)
     if blocked:
         return blocked
@@ -324,6 +330,13 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
 
     assignments, error, complete = _fetch_assignments(course_id, canvas_get_all_complete)
     assignment_error = _assignment_receipt_error(assignments, error, complete)
+    try:
+        course_catalog.refresh_catalog_assignments_only(
+            course_id, assignment_receipt=(assignments, error, complete),
+            course_name=course_name, root=root, attempted_at=started,
+        )
+    except Exception:
+        pass
     if assignment_error:
         store.record_pass(course_id, "full", ok=False,
                           error_code=assignment_error, attempted_at=started, root=root)
@@ -371,10 +384,12 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
 
 def delta_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, now=None,
                bypass_new_quiz_cooldown: bool = False,
-               skip_new_quiz_metadata: bool = False) -> dict:
+               skip_new_quiz_metadata: bool = False,
+               course_name: str | None = None) -> dict:
     """Incremental pass. Falls back to a full pass when no watermark exists
     yet (first run, or a rebuilt mirror). ``bypass_new_quiz_cooldown`` — see
-    ``full_pass``."""
+    ``full_pass``. ``course_name`` — see ``full_pass``; also forwarded to the
+    full-pass fallback below."""
     blocked = _guard(course_id, root)
     if blocked:
         return blocked
@@ -383,11 +398,19 @@ def delta_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None,
         return full_pass(course_id, canvas_get_all=canvas_get_all,
                          canvas_get_all_complete=canvas_get_all_complete, root=root, now=now,
                          bypass_new_quiz_cooldown=bypass_new_quiz_cooldown,
-                         skip_new_quiz_metadata=skip_new_quiz_metadata)
+                         skip_new_quiz_metadata=skip_new_quiz_metadata,
+                         course_name=course_name)
     started = now or store.now_iso()
 
     assignments, error, complete = _fetch_assignments(course_id, canvas_get_all_complete)
     assignment_error = _assignment_receipt_error(assignments, error, complete)
+    try:
+        course_catalog.refresh_catalog_assignments_only(
+            course_id, assignment_receipt=(assignments, error, complete),
+            course_name=course_name, root=root, attempted_at=started,
+        )
+    except Exception:
+        pass
     if assignment_error:
         store.record_pass(course_id, "delta", ok=False,
                           error_code=assignment_error, attempted_at=started, root=root)

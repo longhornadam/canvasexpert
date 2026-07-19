@@ -130,6 +130,17 @@ pagination, or invalid collection root leaves last-good records in place. Module
 fallback. Refresh never performs assignment-detail N+1 requests and never performs a Canvas
 mutation.
 
+The private mirror's `full_pass` and `delta_pass` — the 15-minute heartbeat, the nightly
+reconcile, and manual "Sync now" alike — also forward their own already-acquired assignment
+receipt to Catalog, via `course_catalog.refresh_catalog_assignments_only`, so Catalog stays
+fresh without an extra Canvas call on its behalf. This coordinated-receipt path updates only
+Catalog's assignment scope; modules and assignment-groups are never live-fetched here and pass
+through unchanged from their previously-committed value (or the same unavailable/empty-records
+shape used elsewhere when there is no previous catalog at all). It applies regardless of
+whether the mirror pass itself continues or aborts, and a failure while updating Catalog is
+absorbed and never affects the mirror pass's own result. The manual `POST
+/api/course-catalog/refresh` route is unchanged and continues to refresh all three scopes.
+
 `GET /api/course-catalog?course_id=...` is disk-only. `POST
 /api/course-catalog/refresh` performs the read-only acquisition. Both routes enforce the
 Current-course boundary and return sanitized state/warnings without filesystem paths or raw

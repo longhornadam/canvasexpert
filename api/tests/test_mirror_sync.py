@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from api import course_catalog
 from api.mirror import store, sync
 
 COURSE = "111"
@@ -502,6 +503,129 @@ def test_invalid_duplicate_assignment_receipt_preserves_last_good_mirror_and_ski
     assert store.read_submissions(COURSE, "700010", root=str(tmp_path)) is not None
     assert store.read_submissions(COURSE, "700020", root=str(tmp_path)) is not None
     assert store.read_new_quiz_capability(COURSE, root=str(tmp_path)) == before_capability
+
+
+# --- coordinated Catalog receipt (1.0beta 02c) ------------------------------------
+
+def _seed_catalog_with_modules_and_groups(tmp_path, *, course_id=COURSE, course_name="Fictional Course"):
+    """Give ``course_id`` a previous Catalog document with populated modules
+    and assignment-groups scopes, so coordination tests can prove those
+    scopes pass through unchanged."""
+    def refuses_legacy_get(path, params=None, timeout=30):
+        raise AssertionError(f"unexpected canvas_get_all call: {path}")
+
+    def complete(path, params=None, timeout=30):
+        if path.endswith("/assignments"):
+            return [{"id": "900", "name": "Old assignment", "published": True}], None, True
+        if path.endswith("/modules"):
+            return [{"id": "10", "name": "Module 1", "position": 1, "items": []}], None, True
+        if path.endswith("/assignment_groups"):
+            return [{"id": "44", "name": "Projects", "position": 1, "group_weight": 25}], None, True
+        raise AssertionError(f"unexpected canvas_get_all_complete call: {path}")
+
+    return course_catalog.refresh_catalog(
+        course_id, course_name, canvas_get_all=refuses_legacy_get,
+        canvas_get_all_complete=complete, root=str(tmp_path), attempted_at=NOW,
+    )["catalog"]
+
+
+def test_full_pass_forwards_valid_receipt_to_catalog_leaving_modules_groups_unchanged(tmp_path):
+    previous_catalog = _seed_catalog_with_modules_and_groups(tmp_path)
+    canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
+
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW,
+                            course_name="Fresh Name")
+
+    assert result["ok"] is True
+    catalog = course_catalog.read_catalog(COURSE, root=str(tmp_path))["catalog"]
+    assert catalog["assignments"]["state"] == "current"
+    assert set(catalog["assignments"]["records"]) == {"700010", "700020"}
+    assert catalog["modules"] == previous_catalog["modules"]
+    assert catalog["assignment_groups"] == previous_catalog["assignment_groups"]
+    assert catalog["course_name"] == "Fresh Name"
+    # No second Canvas call for assignments was made on Catalog's behalf.
+    assert sum(1 for path, _ in canvas.calls if path.endswith("/assignments")) == 1
+
+
+def test_delta_pass_forwards_valid_receipt_to_catalog_leaving_modules_groups_unchanged(tmp_path):
+    _backfilled(tmp_path)
+    previous_catalog = _seed_catalog_with_modules_and_groups(tmp_path)
+    canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2)])
+
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z", course_name="Fresh Name")
+
+    assert result["ok"] is True
+    catalog = course_catalog.read_catalog(COURSE, root=str(tmp_path))["catalog"]
+    assert catalog["assignments"]["state"] == "current"
+    assert set(catalog["assignments"]["records"]) == {"700010", "700020"}
+    assert catalog["modules"] == previous_catalog["modules"]
+    assert catalog["assignment_groups"] == previous_catalog["assignment_groups"]
+    assert catalog["course_name"] == "Fresh Name"
+    assert sum(1 for path, _ in canvas.calls if path.endswith("/assignments")) == 1
+
+
+def test_delta_pass_bad_receipt_still_reaches_catalog_without_affecting_mirror_result(tmp_path):
+    _backfilled(tmp_path, submissions=[_sub(700010), _sub(700020)])
+    previous_catalog = _seed_catalog_with_modules_and_groups(tmp_path)
+
+    result = sync.delta_pass(
+        COURSE, canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=lambda *args, **kwargs: ([], None, False),
+        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+
+    assert result == {"ok": False, "error": "pagination_incomplete"}
+    catalog = course_catalog.read_catalog(COURSE, root=str(tmp_path))["catalog"]
+    assert catalog["assignments"]["state"] == "stale"
+    assert catalog["assignments"]["error_code"] == "pagination_incomplete"
+    assert catalog["assignments"]["records"] == previous_catalog["assignments"]["records"]
+    assert catalog["modules"] == previous_catalog["modules"]
+    assert catalog["assignment_groups"] == previous_catalog["assignment_groups"]
+
+
+def test_full_pass_bad_receipt_still_reaches_catalog_without_affecting_mirror_result(tmp_path):
+    previous_catalog = _seed_catalog_with_modules_and_groups(tmp_path)
+
+    result = sync.full_pass(
+        COURSE, canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=lambda *args, **kwargs: (None, "HTTP 503: do not expose this", True),
+        root=str(tmp_path), now=NOW)
+
+    # The mirror pass's own result/control-flow is exactly what it already was
+    # before this receipt was ever forwarded to Catalog.
+    assert result == {"ok": False, "error": "HTTP 503: do not expose this"}
+    catalog = course_catalog.read_catalog(COURSE, root=str(tmp_path))["catalog"]
+    assert catalog["assignments"]["state"] == "stale"
+    assert catalog["assignments"]["records"] == previous_catalog["assignments"]["records"]
+    # Catalog's own document never leaks the raw transport detail.
+    assert "503" not in json.dumps(catalog)
+
+
+def test_catalog_write_failure_does_not_affect_full_pass_result(monkeypatch, tmp_path):
+    monkeypatch.setattr(sync.course_catalog, "refresh_catalog_assignments_only",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk full")))
+    canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
+
+    result = sync.full_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
+
+    assert result["ok"] is True
+    assert result["assignments"] == 2
+
+
+def test_catalog_write_failure_does_not_affect_delta_pass_result(monkeypatch, tmp_path):
+    _backfilled(tmp_path)
+    monkeypatch.setattr(sync.course_catalog, "refresh_catalog_assignments_only",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk full")))
+    canvas = FakeCanvas(delta_submitted=[_sub(700010, attempt=2)])
+
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+
+    assert result["ok"] is True
 
 
 # --- roster pass ------------------------------------------------------------------

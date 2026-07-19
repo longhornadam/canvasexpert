@@ -89,6 +89,18 @@ validation and membership writer only: it does not update a pass envelope or
 watermark, reconcile submissions, or perform New Quiz work. The two local
 projection commits are independent rather than transactional.
 
+Every `full_pass`/`delta_pass` invocation — the 15-minute heartbeat, the nightly
+reconcile, and manual "Sync now" alike — forwards the same already-acquired
+assignment receipt to Course Catalog's assignment scope only, via
+`course_catalog.refresh_catalog_assignments_only`. This happens before either
+pass's own `assignment_error` early-return, so Catalog receives and applies the
+receipt (good or bad) independently of whether the mirror pass itself continues.
+Catalog's modules and assignment-groups scopes are never touched by this
+path — they stay exactly as last committed. This is the same non-transactional,
+independently-durable coordination the manual Catalog-refresh route already
+uses, extended to the passes that previously re-fetched assignments without
+ever updating Catalog.
+
 Create's module picker reads the Course Catalog only when its modules scope is exactly
 `current`; missing or non-current catalog state falls back to the existing live Canvas
 lookup. This display-only read never authorizes module placement or another write.

@@ -783,3 +783,98 @@ def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
     assert mirror_calls == [("course-1", receipt)]
     assert blocked_get == {"ok": False, "error": "Select a saved current course first."}
     assert blocked_post == blocked_get
+
+
+# --- refresh_catalog_assignments_only (1.0beta 02c: heartbeat/full/delta coordination) -----
+
+def test_refresh_catalog_assignments_only_updates_assignments_leaves_modules_groups_unchanged(tmp_path):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    receipt = ([_assignment("202")], None, True)
+    result = course_catalog.refresh_catalog_assignments_only(
+        "course-1", assignment_receipt=receipt, root=str(tmp_path), attempted_at=STAMP_2,
+    )["catalog"]
+
+    assert result["assignments"]["state"] == "current"
+    assert set(result["assignments"]["records"]) == {"202"}
+    assert result["assignments"]["last_success_at"] == STAMP_2
+    assert result["modules"] == first["modules"]
+    assert result["assignment_groups"] == first["assignment_groups"]
+    # course_name omitted -> falls back to the previous catalog's stored name.
+    assert result["course_name"] == "Fictional Course"
+    stored = course_catalog.read_catalog("course-1", root=str(tmp_path))
+    assert stored["catalog"] == result
+
+
+def test_refresh_catalog_assignments_only_course_name_explicit_overrides_previous(tmp_path):
+    course_catalog.refresh_catalog(
+        "course-1", "Old Name", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )
+    receipt = ([_assignment("202")], None, True)
+
+    result = course_catalog.refresh_catalog_assignments_only(
+        "course-1", assignment_receipt=receipt, course_name="New Name",
+        root=str(tmp_path), attempted_at=STAMP_2,
+    )["catalog"]
+
+    assert result["course_name"] == "New Name"
+
+
+def test_refresh_catalog_assignments_only_with_no_previous_catalog_stubs_modules_and_groups(tmp_path):
+    receipt = ([_assignment("202")], None, True)
+
+    result = course_catalog.refresh_catalog_assignments_only(
+        "course-1", assignment_receipt=receipt, root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    assert result["assignments"]["state"] == "current"
+    assert set(result["assignments"]["records"]) == {"202"}
+    unavailable_stub = {
+        "state": "unavailable", "last_success_at": "", "last_attempt_at": STAMP_1,
+        "error_code": "", "records": [],
+    }
+    assert result["modules"] == unavailable_stub
+    assert result["assignment_groups"] == unavailable_stub
+    # course_name omitted and no previous catalog -> falls back to course_id.
+    assert result["course_name"] == "course-1"
+    course_catalog.validate_catalog(result)
+
+
+def test_refresh_catalog_assignments_only_bad_receipt_keeps_last_good_and_never_corrupts_catalog(tmp_path):
+    first = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=_canvas_success_complete,
+        root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    bad_receipt = (None, "HTTP 503: do not expose this", True)
+    result = course_catalog.refresh_catalog_assignments_only(
+        "course-1", assignment_receipt=bad_receipt, root=str(tmp_path), attempted_at=STAMP_2,
+    )["catalog"]
+
+    assert result["assignments"]["state"] == "stale"
+    assert result["assignments"]["records"] == first["assignments"]["records"]
+    assert result["assignments"]["last_success_at"] == STAMP_1
+    assert result["assignments"]["error_code"] == "canvas_unavailable"
+    assert "503" not in json.dumps(result)
+    assert result["modules"] == first["modules"]
+    assert result["assignment_groups"] == first["assignment_groups"]
+
+
+def test_refresh_catalog_assignments_only_bad_receipt_with_no_previous_catalog_is_unavailable(tmp_path):
+    bad_receipt = (None, "HTTP 503: do not expose this", True)
+
+    result = course_catalog.refresh_catalog_assignments_only(
+        "course-1", assignment_receipt=bad_receipt, root=str(tmp_path), attempted_at=STAMP_1,
+    )["catalog"]
+
+    assert result["assignments"]["state"] == "unavailable"
+    assert result["assignments"]["records"] == {}
+    assert "503" not in json.dumps(result)
+    course_catalog.validate_catalog(result)

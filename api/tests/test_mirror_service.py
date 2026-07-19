@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from api import course_catalog
 from api.mirror import store
 from api.webui import mirror_service, workspace
 from api.webui.server import app
@@ -357,6 +358,64 @@ def test_heartbeat_and_manual_sync_thread_the_complete_assignment_seam(monkeypat
 
     assert heartbeat_calls[0][1]["canvas_get_all_complete"] is receipt
     assert manual_calls[0][1]["canvas_get_all_complete"] is receipt
+
+
+# --- course_name threading to Course Catalog (1.0beta 02c) ------------------------
+
+def test_heartbeat_never_threads_course_name_into_roster_pass_kwargs(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course One"},))
+    store.record_pass("111", "full", ok=True, attempted_at=NOW)
+    store.record_pass("111", "roster", ok=True, attempted_at="2026-07-15T11:00:00Z")  # >24h -> due
+    delta_calls, roster_calls = [], []
+    monkeypatch.setitem(
+        mirror_service._PASS_RUNNERS, "delta",
+        lambda cid, **kwargs: delta_calls.append(kwargs) or {"ok": True},
+    )
+    monkeypatch.setitem(
+        mirror_service._PASS_RUNNERS, "roster",
+        lambda cid, **kwargs: roster_calls.append(kwargs) or {"ok": True},
+    )
+
+    mirror_service.run_heartbeat_pass(
+        canvas_get=FakeCanvas(), canvas_get_all=FakeCanvas(),
+        canvas_get_all_complete=FakeCanvas().complete, now=NOW)
+
+    assert delta_calls and delta_calls[0]["course_name"] == "Course One"
+    assert roster_calls and "course_name" not in roster_calls[0]
+
+
+def test_heartbeat_forwards_course_name_to_catalog(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course One"},))
+    canvas = FakeCanvas()
+
+    mirror_service.run_heartbeat_pass(
+        canvas_get=canvas, canvas_get_all=canvas, canvas_get_all_complete=canvas.complete, now=NOW)
+
+    catalog = course_catalog.read_catalog("111")["catalog"]
+    assert catalog["course_name"] == "Course One"
+
+
+def test_heartbeat_course_name_omission_falls_back_to_course_id(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path, courses=({"id": "111"},))  # no "name" key at all
+    canvas = FakeCanvas()
+
+    mirror_service.run_heartbeat_pass(
+        canvas_get=canvas, canvas_get_all=canvas, canvas_get_all_complete=canvas.complete, now=NOW)
+
+    catalog = course_catalog.read_catalog("111")["catalog"]
+    assert catalog["course_name"] == "111"
+
+
+def test_sync_now_forwards_course_name_to_catalog(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course One"},))
+    canvas = FakeCanvas()
+
+    mirror_service.sync_now(
+        "111", canvas_get=canvas, canvas_get_all=canvas,
+        canvas_get_all_complete=canvas.complete, now=NOW)
+
+    catalog = course_catalog.read_catalog("111")["catalog"]
+    assert catalog["course_name"] == "Course One"
 
 
 # --- sync_now -------------------------------------------------------------------
