@@ -7,15 +7,22 @@ Read only this file and the sections it names below — not the whole vision doc
 **Batch 5 — Student reports and portfolios** (spine §17.1 row 5) is underway, split into
 sequential slices (same pattern as the earlier 03-series/04-series batches):
 
-- **1.0beta-06a** (`docs/handoffs/1.0beta-06a-student-reports-local-metadata.md`, Status:
-  READY) — migrates `api/student_packet.py::build_packet` (the per-student, multi-course
-  packet) to the typed read service, with live fallback when a course's mirror isn't current.
-  This is the current executor-ready work.
-- **Planned next (not yet spec'd):** the parallel migration of
-  `api/portfolio_service.py::build_merged_portfolios` (the multi-student cohort portfolio),
-  reusing 06a's new shared module (`api/report_local_reads.py` or wherever it lands) and its
-  new `submission_transport.fetch_submission`. Spec this only after 06a is GREEN — do not spec
-  or start it early, and do not let 06a's executor touch `portfolio_service.py`.
+- **1.0beta-06a is GREEN and archived** (`docs/handoffs/archive/`, commit `e595c47`) —
+  `api/student_packet.py::build_packet` now reads standing/due/text-body/comment facts from
+  the typed read service when a course's mirror is current, with live fallback unchanged
+  otherwise. Established two reusable pieces the next slice should build on:
+  `api/report_local_reads.py` (local-read/join + comment-display helpers) and
+  `api/submission_transport.py::fetch_submission` (focused single-submission live fetch for
+  attachments).
+- **Next to spec:** the parallel migration of `api/portfolio_service.py::build_merged_portfolios`
+  (the multi-student cohort portfolio) — reuse `report_local_reads.py`'s joining/comment-display
+  helpers and `fetch_submission` rather than re-deriving them; note `build_merged_portfolios`
+  currently does one live paginated fetch *per student* even within a single course, so a
+  local-current course collapses that to one local read total (bigger win than 06a's
+  per-course-once shape). `report_local_reads.local_course_submissions` takes one `user_id`
+  today (06a's own scope decision, per its "not yet a collection" deviation) — decide during
+  specing whether to extend it for multi-student use or have the portfolio brief filter a
+  per-course join result to each student in memory.
 - **Also planned, later, not yet spec'd:** migrating `list_assignments_full`'s assignment-picker
   endpoint (needs its own investigation — no equivalent shape exists yet in either
   `private_assignments` or Course Catalog), and the private source/freshness provenance
