@@ -5,23 +5,15 @@ Read only this file and the sections it names below — not the whole vision doc
 ## Current authoritative next batch
 
 **Batch 2 remainder — prompt group-mutation reconciliation** (spine §17.1 row 2,
-"People context completion").
+"People context completion") is now spec'd and ready for an executor:
+`docs/handoffs/1.0beta-05a-prompt-group-write-reconciliation.md` (Status: READY).
 
-Batch 2's decision gate is already resolved by
-`docs/handoffs/archive/1.0beta-03i-course-info-local-spine.md` (GREEN): Course Info stayed
-free of Catalog-forbidden `html_url`, and the email action was redesigned rather than
-persisted by default. What remains is the batch's other named outcome:
-
-- Spine §17.1 row 2: "make group mutations reconcile the exact group scope promptly."
-- Spine §17.2 "Former Program 4 — complete roster and group context" (~lines 1320-1336),
-  specifically the still-open sub-outcome "Add targeted post-write group refresh" — group
-  category/group/membership projections, Roster/Course Info migration, and Home roster
-  warnings were already completed by earlier 03-series slices; only prompt post-write
-  reconciliation (today: only cadence-based refresh) remains.
-
-Read those two sections, `docs/reference/roster-module-map.md`, and the existing
-group-snapshot code (`api/mirror/store.py` groups functions, migrated consumers from
-1.0beta-03f/03g/03h) before authoring the next brief.
+Batch 2's Course Info/email decision gate was already resolved by
+`docs/handoffs/archive/1.0beta-03i-course-info-local-spine.md` (GREEN). 1.0beta-05a closes
+the batch's other named outcome (spine §17.1 row 2 / §17.2 "Former Program 4," ~lines
+1320-1336: "Add targeted post-write group refresh"). Once 1.0beta-05a reaches GREEN and is
+archived, Batch 2 is fully closed — update this file's "next batch" to Batch 5 (Student
+reports and portfolios, spine §17.1 row 5) at that point; do not start Batch 5 early.
 
 ## Outstanding senior decisions carried over (not blocking Batch 2)
 
