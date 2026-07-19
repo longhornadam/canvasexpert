@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 import requests
 
 from api import nq_report, portfolio, portfolio_service, student_packet
+from api.mirror import read_service
 from .. import config, workspace
 from ..canvas_client import _canvas_get_all, _canvas_headers
 from ..gradebook_service import _load_curve_events
@@ -32,9 +33,38 @@ def get_download_root():
 
 @router.get("/assignments-full")
 def list_assignments_full(course_id: str):
-    """All assignments for a course — used by the download picker.
+    """All assignments for a course — used by Gradebook's Extra Time dropdown
+    (`gradebook/extensions.js`); the standalone download picker this was
+    originally built for has since been retired.
     Returns id, name, submission_types, due_at, points_possible, is_quiz, quiz_kind.
+    Served from Course Catalog when current; falls back to a live fetch otherwise.
     """
+    assignment_scope = read_service.catalog_assignments(course_id, max_age_hours=None)
+    group_scope = read_service.catalog_assignment_groups(course_id, max_age_hours=None)
+    if assignment_scope["state"] == "current" and group_scope["state"] == "current":
+        group_names = {g["id"]: g["name"] for g in group_scope["records"]}
+        assignments = [
+            {
+                "id":                   record["id"],
+                "name":                 record["name"],
+                "submission_types":     record["submission_types"],
+                "due_at":               record["due_at"][:10],
+                "points_possible":      record["points_possible"],
+                "quiz_id":              record["quiz_id"],
+                "assignment_group_id":  record["assignment_group_id"],
+                "assignment_group_name": group_names.get(record["assignment_group_id"], ""),
+                "is_quiz":              record["is_quiz"],
+                "quiz_kind":            record["quiz_kind"],
+                "is_quiz_lti_assignment": record["is_quiz_lti_assignment"],
+            }
+            for record in assignment_scope["records"]
+        ]
+        assignments.sort(
+            key=lambda a: a["due_at"] if a["due_at"] else "0000-00-00",
+            reverse=True,
+        )
+        return JSONResponse({"ok": True, "assignments": assignments})
+
     hdrs, base = _canvas_headers()
     if not hdrs:
         return JSONResponse({"ok": False, "error": "No token saved."})
