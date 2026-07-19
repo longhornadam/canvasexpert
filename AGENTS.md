@@ -177,6 +177,11 @@ console errors.
 - Close GREEN work by accepting it and moving its brief to `docs/handoffs/archive/` in the
   same batch. A RED/YELLOW brief remains current only while the senior is actively deciding
   or correcting it. Superseded or abandoned briefs are archived with an explicit status.
+- Closing a GREEN brief that finishes or advances a vision-doc batch (spine §17.1) must
+  overwrite `docs/handoffs/NEXT_BATCH.md` — a single current pointer, never a log — naming
+  the next batch-table row, the exact vision-doc sections it requires, and any outstanding
+  senior decisions carried over from other batches. A new senior reads only this file and
+  the sections it names, never the whole vision document, to find the next unit of work.
 - Never route an executor to `docs/handoffs/archive/`; Git and the archive are history, not
   current authority.
 - Keep the brief concise and slice-specific. Link contracts and exact reference sections;
