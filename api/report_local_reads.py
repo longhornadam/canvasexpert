@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 
+from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.work_registry.providers.home_attention import _PROVEN_STAFF_ROLES, _author_role
 
@@ -33,27 +35,32 @@ STAFF_LABEL = "Instructor"
 
 
 def _joined_course_records(course_id, *, root=None) -> list[dict] | None:
-    """Join one course's local assignments+submissions for every student.
+    """Join one course's local assignments+comment-aware submissions for every student.
 
     Returns ``None`` (meaning: use the existing live fallback for this course)
-    unless both the ``private_assignments`` and ``private_submissions`` envelopes
-    report ``state == "current"`` — the local path is never used with
-    incomplete/stale data. Otherwise returns a list of every student's submission
-    records in the exact nested shape downstream report code already expects
-    (``s["assignment"]["name"]``, ``s["score"]``, ``s.get("assignment", {}).get(...)``).
+    unless both the ``private_assignments`` and ``private_submission_comments``
+    envelopes report ``state == "current"`` at the configured serve-age bound
+    (``mirror_queries._serve_max_age_hours()``) — the local path is never used
+    with incomplete, stale, or comment-aged data. ``private_submission_comments``
+    reuses ``private_submissions``' own normalized rows internally (see
+    `read_service.py`), so this reads exactly two top-level scopes, not three.
+    Otherwise returns a list of every student's submission records in the exact
+    nested shape downstream report code already expects (``s["assignment"]["name"]``,
+    ``s["score"]``, ``s.get("assignment", {}).get(...)``).
 
     This is the one shared read+join pass behind both
     ``local_course_submissions`` (filtered to one student) and
     ``local_course_submissions_by_user`` (grouped by every student) — no
     duplicated read/join logic between the two public functions.
     """
-    assignments = read_service.private_assignments(course_id, root=root, max_age_hours=None)
-    submissions = read_service.private_submissions(course_id, root=root, max_age_hours=None)
-    if assignments["state"] != "current" or submissions["state"] != "current":
+    max_age_hours = mirror_queries._serve_max_age_hours()
+    assignments = read_service.private_assignments(course_id, root=root, max_age_hours=max_age_hours)
+    comments = read_service.private_submission_comments(course_id, root=root, max_age_hours=max_age_hours)
+    if assignments["state"] != "current" or comments["state"] != "current":
         return None
     assignments_by_id = {a["id"]: a for a in assignments["records"]}
     joined = []
-    for sub in submissions["records"]:
+    for sub in comments["records"]:
         assignment = assignments_by_id.get(str(sub.get("assignment_id") or ""))
         if assignment is None:
             continue
@@ -164,23 +171,26 @@ def apply_comment_display(subs, report_user_id, report_student_name):
 def local_course_freshness(course_id, *, root=None) -> dict:
     """Report one course's source/freshness for private disclosure only.
 
-    Reads `private_assignments`/`private_submissions` independently (the same
-    two envelopes `_joined_course_records` reads, but not through it and not
+    Reads `private_assignments`/`private_submission_comments` independently
+    (the same two envelopes `_joined_course_records` reads, at the same
+    ``mirror_queries._serve_max_age_hours()`` bound, but not through it and not
     for their records — purely for freshness metadata). Returns
     ``{"source": "mirror", "synced_at": <min of both envelopes'
     last_success_at>}`` exactly when both envelopes report ``state ==
     "current"`` — i.e. exactly when `local_course_submissions`/
     `local_course_submissions_by_user` would return non-``None`` for this
-    course. Otherwise returns ``{"source": "canvas", "synced_at": ""}``.
+    course. Missing, corrupt, or aged comment state can never be reported as
+    mirror-current here. Otherwise returns ``{"source": "canvas", "synced_at": ""}``.
 
     Never calls Canvas; never duplicates or depends on
     `_joined_course_records`'s return value.
     """
-    assignments = read_service.private_assignments(course_id, root=root, max_age_hours=None)
-    submissions = read_service.private_submissions(course_id, root=root, max_age_hours=None)
-    if assignments["state"] != "current" or submissions["state"] != "current":
+    max_age_hours = mirror_queries._serve_max_age_hours()
+    assignments = read_service.private_assignments(course_id, root=root, max_age_hours=max_age_hours)
+    comments = read_service.private_submission_comments(course_id, root=root, max_age_hours=max_age_hours)
+    if assignments["state"] != "current" or comments["state"] != "current":
         return {"source": "canvas", "synced_at": ""}
-    synced_at = min(assignments["last_success_at"], submissions["last_success_at"])
+    synced_at = min(assignments["last_success_at"], comments["last_success_at"])
     return {"source": "mirror", "synced_at": synced_at}
 
 
@@ -195,6 +205,14 @@ def write_source_manifest(dest_dir, entries):
     exactly like `student_packet.py::build_packet`'s existing `_manifest.json`
     try/except pattern.
 
+    The write itself is atomic: the merged manifest is written to a fresh
+    temporary file in ``dest_dir`` (never elsewhere — it holds private data),
+    flushed and fsynced, then swapped onto the destination with ``os.replace``
+    (atomic even over an existing file, including on Windows for closed
+    handles). If anything fails before the swap, the prior destination file is
+    left exactly as it was and the temporary file is removed best-effort;
+    the exception still propagates.
+
     This is a distinct, private, never-rendered sidecar file — a separate
     concern from `_manifest.json`'s change-detection dedupe cache. Contains no
     signed URLs and no absolute filesystem paths.
@@ -208,5 +226,17 @@ def write_source_manifest(dest_dir, entries):
     except Exception:
         manifest = {}
     manifest.update(entries)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
+
+    fd, tmp_path = tempfile.mkstemp(prefix="_source_manifest.", suffix=".tmp", dir=dest_dir)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise

@@ -33,6 +33,11 @@ def _workspace(monkeypatch, tmp_path):
     # build_packet/report_local_reads never take a root= — they always resolve
     # through the configured workspace, so tests redirect it here.
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    # STAMP below is a fixed historical timestamp, older than the real
+    # serve-age bound (default 6h) by the time this suite actually runs.
+    # Neutralize that bound so existing "local current" fixtures keep
+    # resolving to the mirror path regardless of wall-clock time.
+    monkeypatch.setattr(report_local_reads.mirror_queries, "_serve_max_age_hours", lambda: 1e9)
     return tmp_path
 
 
@@ -59,6 +64,9 @@ def _seed_local_current_course(*, submission_type="online_text_entry",
                             attempted_at=STAMP, replace=True)
     # Only recording the "full" pass is what makes private_submissions "current".
     store.record_pass(COURSE_ID, "full", ok=True, attempted_at=STAMP)
+    # The comment scope's own sidecar must also be current -- 1.0beta-06e
+    # requires it alongside assignments for the mirror path to be used.
+    store.record_submission_comments_state(COURSE_ID, ok=True, attempted_at=STAMP)
 
 
 def _forbid_canvas_calls(monkeypatch):
@@ -388,6 +396,7 @@ def test_build_packet_writes_no_manifest_entry_for_a_course_the_student_is_not_i
         "submitted_at": STAMP, "score": 9, "submission_type": "online_text_entry",
     }], attempted_at=STAMP, replace=True)
     store.record_pass(COURSE_ID, "full", ok=True, attempted_at=STAMP)
+    store.record_submission_comments_state(COURSE_ID, ok=True, attempted_at=STAMP)
     assert report_local_reads.local_course_submissions(COURSE_ID, USER_ID) == []
 
     reports_root = str(tmp_path / "reports")

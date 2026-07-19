@@ -34,6 +34,11 @@ STAMP = "2026-07-18T12:00:00Z"
 @pytest.fixture(autouse=True)
 def _workspace(monkeypatch, tmp_path):
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    # STAMP below is a fixed historical timestamp, older than the real
+    # serve-age bound (default 6h) by the time this suite actually runs.
+    # Neutralize that bound so existing "local current" fixtures keep
+    # resolving to the mirror path regardless of wall-clock time.
+    monkeypatch.setattr(report_local_reads.mirror_queries, "_serve_max_age_hours", lambda: 1e9)
     return tmp_path
 
 
@@ -59,6 +64,9 @@ def _seed_local_current_course(rows):
         store.merge_submissions(COURSE_ID, assignment_id, assignment_rows,
                                 attempted_at=STAMP, replace=True)
     store.record_pass(COURSE_ID, "full", ok=True, attempted_at=STAMP)
+    # The comment scope's own sidecar must also be current -- 1.0beta-06e
+    # requires it alongside assignments for the mirror path to be used.
+    store.record_submission_comments_state(COURSE_ID, ok=True, attempted_at=STAMP)
 
 
 def _forbid_canvas_calls(monkeypatch):
