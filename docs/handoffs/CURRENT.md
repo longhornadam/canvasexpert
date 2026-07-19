@@ -1,89 +1,94 @@
-# Make Home discovery honor bounded comment freshness
+# Make report comment provenance honest and its sidecar atomic
 
 > **DEEPSEEK EXECUTION AUTHORITY.** Read `AGENTS.md`, this file, and only the references
 > routed below. Do not read `NEXT_BATCH.md`, `HANDOFF_TEMPLATE.md`, or `archive/`.
 
 Status: **READY**
 
-Risk: **medium** - private comments are transiently reduced into aggregate Home findings;
-registry persistence and Canvas writes remain untouched.
+Risk: **medium** - private Student Reports/portfolio metadata and fallback selection only; no
+Canvas write or rendered DOCX contract changes.
 
-Depends on: commit `6103fca` (accepted 01 comment-freshness foundation)
+Depends on: commit `f482042` (accepted 02 Home comment-aware reads)
 
 ## Teacher-visible result
 
-Home comment-follow-up findings use local comments only while their dedicated freshness scope
-is current. Older/missing comment state triggers the existing bounded live request, so a recent
-comment-free submission delta can no longer hide a student reply.
+Reports use local comments only inside the same bounded freshness policy as Home. Their private
+source manifest reports the oldest required scope timestamp and cannot be torn by interruption.
 
 ## Acceptance criteria
 
-- [ ] `WorkCourseReads.submissions(include_comments=False)` uses `PRIVATE_SUBMISSIONS`; the
-      `True` path uses `PRIVATE_SUBMISSION_COMMENTS`, both with the configured serve-age bound.
-- [ ] Fresh comment state produces zero live calls; stale/missing/corrupt comment state makes
-      exactly one rich live submission call containing `submission_comments`.
-- [ ] Plain submissions may reuse a rich result, but a plain live result is never reused as a
-      rich result; calling plain then rich performs the required rich acquisition.
-- [ ] Grading-debt/Home comment reductions and provider order remain aggregate-only and
-      unchanged; late-work can keep the plain scope.
-- [ ] Deadline, timeout, last-good discovery-cache, and structured-error behavior remain intact.
+- [ ] The shared report join requires current typed assignments plus current
+      `PRIVATE_SUBMISSION_COMMENTS` at the configured serve-age bound; otherwise it preserves the
+      existing live Canvas fallback.
+- [ ] `_source_manifest.json` reports `source=mirror` only for that local path and uses the
+      minimum assignment/comment-inclusive timestamp; fallback remains `source=canvas` with no
+      claimed sync timestamp.
+- [ ] Missing/corrupt/aged comment state cannot be labeled mirror-current.
+- [ ] `write_source_manifest` writes a same-directory temporary file, flushes and fsyncs it,
+      then `os.replace`s the destination; failure leaves the prior destination readable and
+      cleans the temporary file best-effort.
+- [ ] DOCX content, evidence fetches, `_manifest.json` dedupe behavior, report roots, and private
+      manifest allowlist remain unchanged.
 - [ ] The named acceptance gate passes.
 
 ## Explicit non-goals
 
-- Report generation/provenance, comment scheduler cadence, write-triggered invalidation,
-Routines, MCP, registry schema, or any new derived view.
+- New manifest fields/schema, rendering provenance into DOCX, comment write invalidation,
+portfolio/report UI changes, or changes to signed-URL/evidence ownership.
 
 ## Locked decisions
 
-- Use `mirror_queries._serve_max_age_hours()` as the beta comment bound; do not add a setting.
-- Keep separate plain and rich submission caches inside `WorkCourseReads`. A rich result may
-  seed the plain cache; never do the reverse.
-- Live fallback remains the existing course submissions endpoint and is transient only. Do not
-  persist comments, identities, or source envelopes into Work Registry/discovery cache/logs.
-- No provider signature or finding-vocabulary changes are allowed.
+- Reuse the dedicated comment scope's existing normalized rows; do not join a third duplicate
+  submission read. Apply `mirror_queries._serve_max_age_hours()` consistently to assignment and
+  comment scopes.
+- Keep manifest entry keys exactly `course_name, source, synced_at, generated_at`.
+- Implement atomic replacement locally in `report_local_reads.py`; do not introduce a generic
+  persistence abstraction. Temp files contain private data and must stay in `dest_dir`.
+- Update test mirror fixtures by recording comment state current; do not weaken prior assertions.
 
 ## Scope
 
-- `api/work_registry/providers/__init__.py`
-- `api/tests/test_work_providers_mirror.py`
-- `api/tests/test_work_discovery.py` only for an aggregate/provider-order assertion
+- `api/report_local_reads.py`
+- `api/tests/test_report_local_reads.py`
+- `api/tests/test_student_packet.py`
+- `api/tests/test_portfolio_service.py`
+- `api/student_packet.py` or `api/portfolio_service.py` only if an unchanged call signature
+  requires a mechanical adjustment; otherwise do not edit them
 
 ## Read only these references
 
 - `AGENTS.md`; this promoted brief
-- `docs/contracts/work-registry-contract.md`: "Persistence boundary" and "Detected findings"
-- `docs/reference/workbench-canonical-flow-map.md`: Home row and safety boundary
-- `api/mirror/read_service.py`: the two private submission scope constants/readers
+- `docs/reference/canvasmirror-1.0beta-information-spine.md`: §11.7 only
+- `api/mirror/read_service.py`: assignment and comment scope readers
 - the exact files under Scope
 
-Do not read archived handoffs, unrelated providers, or the whole 1.0beta spine.
+Do not read archived handoffs, unrelated report routes, or the whole vision document.
 
 ## Preflight - stop if these facts are false
 
 ```powershell
-rg -n "class WorkCourseReads|def submissions|include_comments|_submissions_cache" api/work_registry/providers/__init__.py
-rg -n "PRIVATE_SUBMISSION_COMMENTS|def private_submission_comments" api/mirror/read_service.py
-rg -n "reads.submissions" api/work_registry/providers -g "*.py"
+rg -n "def _joined_course_records|def local_course_freshness|def write_source_manifest" api/report_local_reads.py
+rg -n "_source_manifest|local_course_freshness" api/tests/test_report_local_reads.py api/tests/test_student_packet.py api/tests/test_portfolio_service.py
+rg -n "PRIVATE_SUBMISSION_COMMENTS" api/mirror/read_service.py
 ```
 
-- 07a's pure live helper is present and Home/grading debt request rich comments explicitly.
-- The dedicated comment scope exists and returns the same normalized row shape.
+- Both report generators still share `report_local_reads` and the manifest schema is unchanged.
+- The writer still uses a direct destination `open(..., "w")`, making this repair necessary.
 
 ## Named acceptance gate
 
 ```powershell
-py -m pytest api/tests/test_work_providers_mirror.py api/tests/test_work_discovery.py api/tests/test_work_registry.py api/tests/test_desk_routes.py -q
+py -m pytest api/tests/test_report_local_reads.py api/tests/test_student_packet.py api/tests/test_portfolio_service.py -q
 ```
 
-- Add zero-live, stale-rich-fallback, corrupt-rich-fallback, and plain-then-rich cache tests.
-- No full suite or rendered route check unless a route/template unexpectedly changes (stop RED).
+- Add aged/missing comment fallback, minimum timestamp, successful replace, and injected
+  pre-replace failure-preserves-old-file tests. No broad suite.
 
 ## Stop conditions
 
-- **RED:** the dedicated scope cannot preserve the existing aggregate finding shape/privacy.
-- **YELLOW:** the provider order makes a plain live result precede the rich request in production;
-  preserve correctness with separate caches and report the exact order.
+- **RED:** honest comment freshness requires a DOCX or public response-shape change.
+- **YELLOW:** Windows prevents replacing an existing closed manifest in the focused test; report
+  the exact exception and keep the old file intact.
 
 ## Execution result
 
