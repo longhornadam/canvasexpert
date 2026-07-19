@@ -6,24 +6,37 @@
 
 ## Current state
 
-Batch 6 — Home, Work, Routines, MCP, and derived views — is active. Its immediate unit is
-**06 — mutation ownership checkpoint** (promoted from the external candidate packet, its final
-unit). The brief in `CURRENT.md` is the sole implementation authority. 01 (`6103fca`),
-02 (`f482042`), 03 (`5bc929c`), 04 (`ae69f26`), and 05 (`047e882`) are GREEN, accepted, and
-archived.
+Batch 6 — Home, Work, Routines, MCP, and derived views — is **complete**. Units 01–06 are all
+GREEN, accepted, committed, and archived:
 
-## Promotion after 06 acceptance
+- 01 comment freshness foundation — `6103fca`
+- 02 Home comment-aware reads — `f482042`
+- 03 report provenance and atomicity — `5bc929c`
+- 04 routine typed-read SDK — `ae69f26`
+- 05 MCP typed local reads — `047e882`
+- 06 mutation ownership checkpoint — `1d85660`
 
-The DeepSeek V4 Flash packet deliberately STOPS after 06. Do not promote another candidate.
-The remaining high-risk reconciliation families (Batch 7) and final beta acceptance must be
-authored by the senior from 06's exact machine map — `docs/contracts/canvas-transport-owners.json`
-and `docs/reference/mutation-reconciliation-map.md` — not pre-authored now.
+`CURRENT.md` holds no active brief. The DeepSeek V4 Flash packet deliberately stops after 06.
+
+## Next: author Batch 7 (senior)
+
+Batch 7 (mutation reconciliation) is authored from unit 06's machine map, not pre-authored:
+
+- `docs/contracts/canvas-transport-owners.json` — machine authority (56 owners; 31 with
+  reconciliation `none` are the candidate gaps)
+- `docs/reference/mutation-reconciliation-map.md` — grouped vertical families and named gaps
+
+Open senior decision that gates Batch 7 authoring: the duplicate-implementation questions 06
+surfaced (group membership/category, and late policy) — a reconciled direct route coexists with an
+unreconciled ledger adapter. Confirm whether the ledger paths still have live callers before
+deciding to reconcile vs retire them (Former Program 10 territory). Do not write a Batch 7 brief
+that fixes reconciliation in a dead code path.
 
 ## Batch table status
 
-- Batches 0–5: delivered or accepted to their recorded scope.
-- Batch 6: active; 01 + 02 + 03 + 04 + 05 accepted, 06 (mutation ownership checkpoint) is current.
-- Batches 7–8: not active; author Batch 7 from 06's map once 06 is accepted.
+- Batches 0–6: delivered/accepted to their recorded scope.
+- Batch 7: not yet authored; seed from 06's map after the duplicate-path decision.
+- Batch 8: not active and must not start early.
 
 ---
 
