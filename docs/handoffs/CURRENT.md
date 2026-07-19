@@ -1,94 +1,98 @@
-# Make report comment provenance honest and its sidecar atomic
+# Give built-in and custom Routines a supported typed read interface
 
 > **DEEPSEEK EXECUTION AUTHORITY.** Read `AGENTS.md`, this file, and only the references
 > routed below. Do not read `NEXT_BATCH.md`, `HANDOFF_TEMPLATE.md`, or `archive/`.
 
 Status: **READY**
 
-Risk: **medium** - private Student Reports/portfolio metadata and fallback selection only; no
-Canvas write or rendered DOCX contract changes.
+Risk: **medium** - background reads may inspect private rows, but final mutation computation,
+Canvas sends, receipts, and routine scheduling remain live and unchanged.
 
-Depends on: commit `f482042` (accepted 02 Home comment-aware reads)
+Depends on: commit `5bc929c` (accepted 03 report provenance and atomicity)
 
 ## Teacher-visible result
 
-Reports use local comments only inside the same bounded freshness policy as Home. Their private
-source manifest reports the oldest required scope timestamp and cannot be torn by interruption.
+Read-only grading-debt/download discovery and newly authored custom read-only Routines reuse
+current local assignments/roster/submissions with honest source/freshness, falling back live
+when unavailable. Existing writing Routines retain their live decision boundary.
 
 ## Acceptance criteria
 
-- [ ] The shared report join requires current typed assignments plus current
-      `PRIVATE_SUBMISSION_COMMENTS` at the configured serve-age bound; otherwise it preserves the
-      existing live Canvas fallback.
-- [ ] `_source_manifest.json` reports `source=mirror` only for that local path and uses the
-      minimum assignment/comment-inclusive timestamp; fallback remains `source=canvas` with no
-      claimed sync timestamp.
-- [ ] Missing/corrupt/aged comment state cannot be labeled mirror-current.
-- [ ] `write_source_manifest` writes a same-directory temporary file, flushes and fsyncs it,
-      then `os.replace`s the destination; failure leaves the prior destination readable and
-      cleans the temporary file best-effort.
-- [ ] DOCX content, evidence fetches, `_manifest.json` dedupe behavior, report roots, and private
-      manifest allowlist remain unchanged.
+- [ ] New `api/routine_reads.py::read_scope(scope, course_id, *, live_reader,
+      max_age_hours=None)` supports only `assignments|roster|submissions` and returns exact keys
+      `ok, records, error, source, synced_at, generation`.
+- [ ] A current typed scope makes zero live calls; missing/stale/corrupt state uses the injected
+      live reader with the existing endpoint/params and labels `source=canvas` without freshness
+      or generation claims.
+- [ ] Built-in `grading_debt` and download assignment listing use `read_scope`; Student Reports
+      remains on its accepted report service. Sweep, curve, PowerGrader, and all apply paths are
+      byte-for-byte untouched.
+- [ ] Custom SDK injects `canvas_read`; existing `canvas_get`, `canvas_get_all`, and
+      `canvas_send` remain compatibility/live tools. The shipped example and AUTHORING guide use
+      `canvas_read` for ordinary assignment/submission reporting.
+- [ ] No private rows/source envelopes enter routine receipts, logs, fixtures, or configuration.
 - [ ] The named acceptance gate passes.
 
 ## Explicit non-goals
 
-- New manifest fields/schema, rendering provenance into DOCX, comment write invalidation,
-portfolio/report UI changes, or changes to signed-URL/evidence ownership.
+- Removing `api/webui/mirror_reads.py` (Gradebook still has a caller), changing custom routine
+  decorator/schema, declaring mutation scopes, or changing write-routine behavior.
 
 ## Locked decisions
 
-- Reuse the dedicated comment scope's existing normalized rows; do not join a third duplicate
-  submission read. Apply `mirror_queries._serve_max_age_hours()` consistently to assignment and
-  comment scopes.
-- Keep manifest entry keys exactly `course_name, source, synced_at, generated_at`.
-- Implement atomic replacement locally in `report_local_reads.py`; do not introduce a generic
-  persistence abstraction. Temp files contain private data and must stay in `dest_dir`.
-- Update test mirror fixtures by recording comment state current; do not weaken prior assertions.
+- Use one explicit mapping in `api/routine_reads.py`; reject unknown scope with a structured
+  error and never accept arbitrary URLs.
+- The helper owns no Canvas import and no persistence. Callers inject `_canvas_get_all`; tests
+  inject fakes. Default age is `mirror_queries._serve_max_age_hours()` when omitted.
+- Built-ins may ignore source metadata but must not serialize it. Custom authors receive the
+  full result dict so freshness is available without a second read.
+- Keep all live endpoint params exactly as `mirror_reads.py` currently defines them.
 
 ## Scope
 
-- `api/report_local_reads.py`
-- `api/tests/test_report_local_reads.py`
-- `api/tests/test_student_packet.py`
-- `api/tests/test_portfolio_service.py`
-- `api/student_packet.py` or `api/portfolio_service.py` only if an unchanged call signature
-  requires a mechanical adjustment; otherwise do not edit them
+- `api/routine_reads.py` (new)
+- `api/webui/routes/routines_builtin.py`
+- `api/webui/routes/routines_custom.py`
+- `api/custom_routines/AUTHORING.md`
+- `api/custom_routines/_example_missing_work.py`
+- `api/tests/test_routine_reads.py` (new)
+- `api/tests/test_routine_receipts.py` only if a no-private-receipt assertion belongs there
 
 ## Read only these references
 
 - `AGENTS.md`; this promoted brief
-- `docs/reference/canvasmirror-1.0beta-information-spine.md`: §11.7 only
-- `api/mirror/read_service.py`: assignment and comment scope readers
-- the exact files under Scope
+- `api/custom_routines/AUTHORING.md`
+- `docs/reference/canvasmirror-1.0beta-information-spine.md`: §11.8 and Former Program 8's
+  Routine bullets only
+- `api/webui/mirror_reads.py`; exact files under Scope
 
-Do not read archived handoffs, unrelated report routes, or the whole vision document.
+Do not read archived handoffs, unrelated route modules, or the whole vision document.
 
 ## Preflight - stop if these facts are false
 
 ```powershell
-rg -n "def _joined_course_records|def local_course_freshness|def write_source_manifest" api/report_local_reads.py
-rg -n "_source_manifest|local_course_freshness" api/tests/test_report_local_reads.py api/tests/test_student_packet.py api/tests/test_portfolio_service.py
-rg -n "PRIVATE_SUBMISSION_COMMENTS" api/mirror/read_service.py
+rg -n "assignments_or_live|submissions_or_live|def _run_routine_grading_debt|def _run_routine_download" api/webui/routes/routines_builtin.py
+rg -n "def _routine_sdk|canvas_get_all|canvas_send" api/webui/routes/routines_custom.py
+rg -n "canvas_get_all" api/custom_routines/AUTHORING.md api/custom_routines/_example_missing_work.py
 ```
 
-- Both report generators still share `report_local_reads` and the manifest schema is unchanged.
-- The writer still uses a direct destination `open(..., "w")`, making this repair necessary.
+- Only grading debt/download listing are authorized compatibility-reader migrations.
+- Custom SDK still injects raw live reads/writes and has no supported typed reader.
 
 ## Named acceptance gate
 
 ```powershell
-py -m pytest api/tests/test_report_local_reads.py api/tests/test_student_packet.py api/tests/test_portfolio_service.py -q
+py -m pytest api/tests/test_routine_reads.py api/tests/test_routine_receipts.py api/tests/test_route_contract.py -q
 ```
 
-- Add aged/missing comment fallback, minimum timestamp, successful replace, and injected
-  pre-replace failure-preserves-old-file tests. No broad suite.
+- Cover three zero-live scopes, three fallback shapes, unknown-scope rejection, metadata labels,
+  and proof that writing routine owners/imports are unchanged. No broad suite.
 
 ## Stop conditions
 
-- **RED:** honest comment freshness requires a DOCX or public response-shape change.
-- **YELLOW:** Windows prevents replacing an existing closed manifest in the focused test; report
-  the exact exception and keep the old file intact.
+- **RED:** the migration requires changing sweep/curve/PowerGrader computation or receipt shape.
+- **YELLOW:** a custom compatibility test requires a different public result shape; preserve raw
+  APIs and report the exact expectation.
 
 ## Execution result
 
