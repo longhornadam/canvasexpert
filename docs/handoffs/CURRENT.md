@@ -1,98 +1,101 @@
-# Route MCP roster and submission helpers through typed local scopes
+# Establish a machine-checked Canvas mutation ownership boundary
 
 > **DEEPSEEK EXECUTION AUTHORITY.** Read `AGENTS.md`, this file, and only the references
 > routed below. Do not read `NEXT_BATCH.md`, `HANDOFF_TEMPLATE.md`, or `archive/`.
 
 Status: **READY**
 
-Risk: **high** - MCP returns pseudonymized private student information outside the app process;
-wire allowlists, safety scanning, course gates, and vault behavior must remain exact.
+Risk: **medium** - no runtime behavior changes, but an incomplete ownership contract would hide
+beta-blocking write/reconciliation gaps.
 
-Depends on: commit `ae69f26` (accepted 04 routine typed-read SDK)
+Depends on: commit `047e882` (accepted 05 MCP typed local reads)
 
 ## Teacher-visible result
 
-MCP tools retain the same compact payloads and privacy gates while their local roster and
-assignment-submission acquisition uses the typed read service instead of direct mirror
-store/query ownership. Stale state still falls back live.
+No UI change. Every outbound mutation call becomes machine-accounted with its owner, transport,
+affected local scopes, and present reconciliation state, giving the senior a bounded source for
+the remaining Batch 7 implementation briefs without rereading the repository.
 
 ## Acceptance criteria
 
-- [ ] `_mirror_roster_doc` (rename allowed) uses `read_service.private_roster` with the configured
-      serve-age bound and preserves the existing monkeypatch/cache guard.
-- [ ] `_mirror_submission_bundle` reads typed roster, assignments, and submissions once each,
-      requires all three current, filters the requested assignment locally, and uses the minimum
-      required `last_success_at` as the unchanged `synced_at` value.
-- [ ] Current local roster/submission tools make zero Canvas calls; any missing/stale/corrupt
-      required scope falls back through the existing live/vault path as one coherent bundle.
-- [ ] Tool names, JSON schemas, columns, truncation, course gate, pseudonym mapping, vault
-      transaction/conflict behavior, outbound scan, and structured errors remain unchanged.
-- [ ] `get_gradebook_snapshot` continues to use shared `gradebook_snapshot.load_snapshot`; do not
-      duplicate or rewrite that use case in MCP.
-- [ ] No `mirror_store`/`mirror_queries` import remains in MCP tools if caller proof shows none.
-- [ ] The named acceptance gate passes.
+- [ ] A strict, student-free `docs/contracts/canvas-transport-owners.json` lists every detected
+      non-test mutation call by stable relative path + qualified symbol + call form, with
+      classification, affected scopes, current reconciliation (`targeted|invalidate|none|n/a`),
+      and a concise exception/gap reason.
+- [ ] `api/tests/test_canvas_mutation_ownership.py` uses Python AST/source inspection to fail on
+      an unlisted `_canvas_send`/`canvas_send`, HTTP `post|put|patch|delete`, generic request with
+      a mutation method, upload POST, or specialized native grader mutation under `api/`.
+- [ ] The test also fails for a listed owner no longer present, duplicate owner keys, unknown
+      classifications/scopes/states, absolute paths, URLs, secrets, or student-identifying data.
+- [ ] `docs/reference/mutation-reconciliation-map.md` groups the machine contract into the next
+      exact vertical families and names which existing paths are already covered versus gaps;
+      it does not call any gap GREEN.
+- [ ] Diagnostics, OpenRouter/external-AI calls, generic Canvas transport internals, uploads, and
+      specialized New Quiz transport remain explicitly classified rather than silently excluded.
+- [ ] The named acceptance gate passes and the executor reports counts by classification and
+      reconciliation state.
 
 ## Explicit non-goals
 
-- Tool/schema version changes, new response fields (including generation), comment payloads,
-new caching, derived views, writes, tunnel/client configuration, or gradebook snapshot refactor.
+- Implementing reconciliation, changing transports, deleting shims, editing runtime modules,
+running Canvas, or declaring Batch 7/8 complete.
 
 ## Locked decisions
 
-- Preserve every module-level monkeypatch seam (`_course_*`, `_assignment*`, `_fetch_sections`)
-  and `_cache_safe` behavior. Patched tests remain on live fakes and never cross-call cache data.
-- Typed envelopes are internal only. MCP output remains `source` plus `synced_at`; generation is
-  neither emitted nor cached in this slice.
-- Continue pseudonymizing/gating dict rows before tabulation and trimming text before the gate.
-- Remove imports/helpers only when the focused tests prove their last caller migrated.
+- The JSON contract is the machine authority; the Markdown map summarizes/groups it and links
+  back rather than duplicating call-level facts.
+- Key entries by repo-relative path and qualified enclosing symbol/call form, never line number.
+- Scan production Python under `api/`; exclude `api/tests/`, generated/cache files, and vendored
+  dependencies only. Classify non-Canvas writes explicitly as `external` or `local`, not gaps.
+- Allowed affected-scope vocabulary: `catalog.assignments`, `catalog.modules`,
+  `catalog.assignment_groups`, `private.assignments`, `private.submissions`,
+  `private.submission_comments`, `private.roster`, `private.groups`, `gradebook.late_policy`,
+  `new_quiz.metadata`, `new_quiz.responses`, `focused_evidence`, `none`, `unknown`.
+- `unknown` is allowed only with reconciliation `none` and must become a named next-batch gap.
 
 ## Scope
 
-- `api/mcp_server/tools.py`
-- `api/tests/test_mcp_server_tools.py`
-- `api/tests/test_beta075_mcp.py`
-- `docs/mcp-server.md`: local-read/source description only
+- `docs/contracts/canvas-transport-owners.json` (new)
+- `docs/reference/mutation-reconciliation-map.md` (new)
+- `api/tests/test_canvas_mutation_ownership.py` (new)
 
 ## Read only these references
 
-- `AGENTS.md`; this promoted brief
-- `docs/mcp-server.md`: introduction, Tools, and Token-lean results
-- `docs/reference/canvasmirror-1.0beta-information-spine.md`: §11.9 and Former Program 8's MCP
-  bullet only
-- `api/mirror/read_service.py`: private roster/assignment/submission readers
-- exact files under Scope
+- `AGENTS.md`; this promoted brief; `TOOLS.md`
+- `docs/reference/canvasmirror-1.0beta-information-spine.md`: §14.2, Former Program 9, and Former
+  Program 10 only
+- `docs/reference/operation-ledger-module-map.md`
+- production files returned by the preflight searches, one owning symbol at a time
 
-Do not read archived handoffs, MCP client setup sections, unrelated privacy modules, or the
-whole vision document.
+Do not read archived handoffs, whole adapters without a matched symbol, or the whole spine.
 
 ## Preflight - stop if these facts are false
 
 ```powershell
-rg -n "mirror_queries|mirror_store|def _mirror_roster_doc|def _mirror_submission_bundle|def _load_snapshot" api/mcp_server/tools.py
-rg -n "def get_roster|def get_submissions|def get_gradebook_snapshot|pseudonym.gate|_tabulate" api/mcp_server/tools.py
-rg -n "cache_safe|zero|mirror|scan_payload|columns" api/tests/test_mcp_server_tools.py
+rg -n "_canvas_send\(|canvas_send\(" api -g "*.py" -g "!api/tests/**"
+rg -n "requests\.(post|put|patch|delete)|\.request\(" api -g "*.py" -g "!api/tests/**"
+rg -n "\.post\(|\.put\(|\.patch\(|\.delete\(" api/powergrader api/operation_ledger -g "*.py"
 ```
 
-- MCP still owns two direct mirror compatibility helpers and the output/privacy seams are tested.
-- Shared gradebook snapshot already owns its local-first behavior.
+- Every result can be assigned to a qualified symbol and classified without executing it.
+- If dynamic dispatch prevents reliable detection, return RED with the exact pattern.
 
 ## Named acceptance gate
 
 ```powershell
-py -m pytest api/tests/test_mcp_server_tools.py api/tests/test_beta075_mcp.py -q
+py -m pytest api/tests/test_canvas_mutation_ownership.py api/tests/test_operation_ledger.py -q
 ```
 
-- Add typed zero-live and stale-required-scope fallback assertions without weakening existing PII
-  sweep tests. No broad suite or live MCP client invocation.
+- Mutation-scan tests must include synthetic unlisted-call and stale-listed-owner failures.
+- No broad suite; zero runtime source files may change.
 
 ## Stop conditions
 
-- **RED:** typed migration requires changing an outbound allowlist, safety scan, vault behavior,
-  or tool schema.
-- **YELLOW:** an established monkeypatch seam cannot be preserved without a compatibility helper;
-  retain it and report the exact test/caller.
+- **RED:** the scanner cannot account for a dynamic/native mutation family without false safety.
+- **YELLOW:** one call's affected scope or reconciliation state is genuinely ambiguous; classify
+  it `unknown/none`, name it in the map, and request the senior decision.
 
 ## Execution result
 
-Record traffic light, changed files, focused command/count, privacy assertions, deviations,
-unresolved decisions, and commit hash if created.
+Record traffic light, three changed files, gate/counts, totals by classification/state, exact
+unknown gaps, deviations, unresolved decisions, and commit hash if created.
