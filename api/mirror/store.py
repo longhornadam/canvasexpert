@@ -533,6 +533,7 @@ def normalize_assignment(row: dict) -> dict | None:
         "html_url": str(row.get("html_url") or ""),
         "submission_types": [str(t) for t in (row.get("submission_types") or [])],
         "updated_at": str(row.get("updated_at") or ""),
+        "description": row.get("description") if isinstance(row.get("description"), str) else "",
     }
 
 
@@ -601,6 +602,7 @@ def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
         "grade_matches_current_submission": row.get("grade_matches_current_submission"),
         "submission_type": str(row.get("submission_type") or ""),
         "body": row.get("body") if isinstance(row.get("body"), str) else "",
+        "url": row.get("url") if isinstance(row.get("url"), str) else "",
         "submission_comments": [
             _comment_record(entry) for entry in (row.get("submission_comments") or [])
             if isinstance(entry, dict)

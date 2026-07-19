@@ -32,7 +32,7 @@ ASSIGNMENTS = [
      "html_url": "https://example.invalid/700010",
      "submission_types": ["online_text_entry"],
      "updated_at": "2026-06-01T00:00:00Z",
-     "description": "must not be stored"},
+     "description": "Write a five-paragraph essay."},
 ]
 
 
@@ -98,7 +98,22 @@ def test_assignments_round_trip_slim_shape(tmp_path):
         "html_url": "https://example.invalid/700010",
         "submission_types": ["online_text_entry"],
         "updated_at": "2026-06-01T00:00:00Z",
+        "description": "Write a five-paragraph essay.",
     }
+
+
+def test_normalize_assignment_description_is_permissive_string_like_body(tmp_path):
+    # Additive field (Batch 5/Student Reports): same permissive-string handling
+    # as the existing `body` field on submissions — non-string defaults to "".
+    row = store.normalize_assignment({**ASSIGNMENTS[0], "description": 12345})
+    assert row["description"] == ""
+    row = store.normalize_assignment({k: v for k, v in ASSIGNMENTS[0].items() if k != "description"})
+    assert row["description"] == ""
+    # Every other field is unaffected by the addition.
+    row = store.normalize_assignment(ASSIGNMENTS[0])
+    assert row["name"] == "Essay 1"
+    assert row["points_possible"] == 10
+    assert row["submission_types"] == ["online_text_entry"]
 
 
 # --- submissions: merge semantics ------------------------------------------------
@@ -199,6 +214,32 @@ def test_current_late_fields_default_to_none_when_absent(tmp_path):
         COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]["current"]
     assert current["cached_due_date"] is None
     assert current["seconds_late"] is None
+
+
+def test_current_carries_url_field_with_permissive_string_handling(tmp_path):
+    # Additive field (Batch 5/Student Reports): the student's submitted URL for
+    # an online_url submission, same permissive-string handling as `body`.
+    row = _submission_row(url="https://example.invalid/my-site")
+    store.merge_submissions(COURSE, "700010", [row], root=str(tmp_path))
+    current = store.read_submissions(
+        COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]["current"]
+    assert current["url"] == "https://example.invalid/my-site"
+    # Every other field remains unaffected by the addition.
+    assert current["body"] == "First draft."
+    assert current["workflow_state"] == "submitted"
+
+
+def test_current_url_defaults_to_empty_string_when_absent_or_non_string(tmp_path):
+    store.merge_submissions(COURSE, "700010", [_submission_row()], root=str(tmp_path))
+    current = store.read_submissions(
+        COURSE, "700010", root=str(tmp_path))["submissions"]["900001"]["current"]
+    assert current["url"] == ""
+
+    store.merge_submissions(COURSE, "700010", [_submission_row(user_id=900002, url=12345)],
+                            root=str(tmp_path))
+    current = store.read_submissions(
+        COURSE, "700010", root=str(tmp_path))["submissions"]["900002"]["current"]
+    assert current["url"] == ""
 
 
 def test_merge_is_idempotent(tmp_path):
