@@ -149,33 +149,50 @@ def _sync_roster(vault, course_id: str):
 # ---------------------------------------------------------------------------
 
 def _mirror_roster_doc(course_id: str):
-    """The mirror roster document when fresh and unseamed, else None."""
+    """The typed roster scope (students + sections) when current and
+    unseamed, else None. Sections have no dedicated typed scope, so the
+    raw roster document is read once more, only after the typed freshness
+    check passes, purely to recover the section id -> name map."""
     if not _cache_safe():
         return None
-    synced_at = mirror_queries.roster_freshness(course_id)
-    if not synced_at:
+    roster = read_service.private_roster(
+        course_id, max_age_hours=mirror_queries._serve_max_age_hours())
+    if roster["state"] != "current":
         return None
-    return mirror_store.read_roster(course_id)
+    document = mirror_store.read_roster(course_id)
+    if document is None:
+        return None
+    return {"students": roster["records"], "sections": document["sections"],
+            "last_success_at": roster["last_success_at"]}
 
 
 def _mirror_submission_bundle(course_id: str, assignment_id: str):
-    """``{assignment, rows, roster, synced_at}`` from a fresh mirror, else
-    None (missing any piece falls back to live as a whole)."""
+    """``{assignment, rows, roster, synced_at}`` from typed local scopes when
+    roster, assignments, and submissions are ALL current, else None (missing
+    or stale any one piece falls back to live as one coherent bundle)."""
     if not _cache_safe():
         return None
     if (_assignment is not _ORIGINAL_ASSIGNMENT
             or _assignment_submissions is not _ORIGINAL_ASSIGNMENT_SUBMISSIONS):
         return None
-    synced_at = mirror_queries.data_freshness(course_id)
-    if not synced_at:
+    max_age_hours = mirror_queries._serve_max_age_hours()
+    roster = read_service.private_roster(course_id, max_age_hours=max_age_hours)
+    assignments = read_service.private_assignments(course_id, max_age_hours=max_age_hours)
+    submissions = read_service.private_submissions(course_id, max_age_hours=max_age_hours)
+    if not (roster["state"] == "current" and assignments["state"] == "current"
+            and submissions["state"] == "current"):
         return None
-    roster_doc = mirror_store.read_roster(course_id)
-    assignment_row, a_err = mirror_queries.assignment(course_id, assignment_id)
-    rows, s_err = mirror_queries.assignment_submissions(course_id, assignment_id)
-    if roster_doc is None or a_err or s_err:
+    assignment_row = next(
+        (row for row in assignments["records"] if str(row.get("id")) == str(assignment_id)),
+        None)
+    if assignment_row is None:
         return None
+    rows = [row for row in submissions["records"]
+            if str(row.get("assignment_id")) == str(assignment_id)]
+    synced_at = min(roster["last_success_at"], assignments["last_success_at"],
+                    submissions["last_success_at"])
     return {"assignment": assignment_row, "rows": rows,
-            "roster": roster_doc, "synced_at": synced_at}
+            "roster": roster["records"], "synced_at": synced_at}
 
 
 def _load_sections(course_id: str) -> dict:
@@ -333,7 +350,7 @@ def get_roster(course_id: str) -> dict:
     mirror_doc = _mirror_roster_doc(course_id)
     with _vault_transaction(vault):
         if mirror_doc is not None:
-            users = list(mirror_doc["students"].values())
+            users = mirror_doc["students"]
             roster_service.upsert_roster(vault, users)
             section_map = mirror_doc["sections"]
             source, synced_at = "mirror", mirror_doc["last_success_at"]
@@ -373,7 +390,7 @@ def get_submissions(course_id: str, assignment_id: str,
     # student, not just the ones who submitted this assignment.
     with _vault_transaction(vault):
         if bundle is not None:
-            roster_service.upsert_roster(vault, list(bundle["roster"]["students"].values()))
+            roster_service.upsert_roster(vault, bundle["roster"])
             assignment, subs = bundle["assignment"], bundle["rows"]
             source, synced_at = "mirror", bundle["synced_at"]
         else:

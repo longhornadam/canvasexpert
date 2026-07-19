@@ -28,6 +28,8 @@ for _path in (_API_DIR, _REPO_ROOT):
 from api import feedback_safety
 from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
+from api.mirror import store as mirror_store
+from api.webui import workspace
 
 FIXTURE_USERS = [
     {
@@ -396,6 +398,152 @@ def test_get_submissions_rejects_non_current_course(monkeypatch, tmp_path):
     result = tools.get_submissions("111", "700010")
     assert result["ok"] is False
     assert "not a Current course" in result["error"]
+
+
+# --- typed mirror-first reads (1.0beta-05) ------------------------------------
+#
+# roster/assignment/submission acquisition now goes through the typed local
+# read service (api/mirror/read_service.py) instead of owning mirror
+# store/query calls directly. These tests populate a real on-disk mirror
+# (workspace root redirected to tmp_path, same fixture style as
+# api/tests/test_mirror_reads_helper.py) and prove (a) a fresh mirror serves
+# both get_roster and get_submissions with zero live Canvas calls, and (b)
+# any one of the three required scopes (roster, assignments, submissions)
+# being stale falls the WHOLE submission bundle back to live as one coherent
+# read -- never a partial mirror/live mix.
+
+MIRROR_COURSE = "111"
+MIRROR_ASSIGNMENT = {
+    "id": 700010, "name": "Essay 1", "due_at": "2026-07-01T23:59:00Z",
+    "points_possible": 10, "published": True, "html_url": "https://example.invalid/essay",
+}
+MIRROR_SUBMISSIONS = [
+    {"assignment_id": 700010, "user_id": 900001, "workflow_state": "graded",
+     "score": 9, "grade": "9", "submitted_at": "2026-07-01T20:00:00Z",
+     "late": False, "missing": False, "excused": False,
+     "body": "<p>Learner One and Lee worked together on this.</p>"},
+    {"assignment_id": 700010, "user_id": 900002, "workflow_state": "submitted",
+     "submitted_at": "2026-07-01T21:00:00Z", "body": "<p>Second submission body.</p>"},
+]
+_STALE_STAMP = "2000-01-01T00:00:00Z"
+
+
+def _mount_mirror(monkeypatch, tmp_path):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+
+
+def _populate_mirror(root, *, roster_at=None, assignments_at=None, submissions_at=None):
+    fresh = mirror_store.now_iso()
+    roster_at = roster_at or fresh
+    assignments_at = assignments_at or fresh
+    submissions_at = submissions_at or fresh
+    mirror_store.write_roster(MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP,
+                              root=root, attempted_at=roster_at)
+    mirror_store.write_assignments(MIRROR_COURSE, [MIRROR_ASSIGNMENT],
+                                   root=root, attempted_at=assignments_at)
+    mirror_store.merge_submissions(MIRROR_COURSE, "700010", MIRROR_SUBMISSIONS,
+                                   root=root, attempted_at=submissions_at, replace=True)
+    mirror_store.record_pass(MIRROR_COURSE, "full", ok=True,
+                             attempted_at=submissions_at, root=root)
+
+
+def _explode_live(*_args, **_kwargs):
+    raise AssertionError("live Canvas read attempted")
+
+
+def test_get_roster_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    _populate_mirror(str(tmp_path))
+    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+
+    result = tools.get_roster(MIRROR_COURSE)
+    assert result["ok"] is True
+    assert result["source"] == "mirror"
+    assert result["synced_at"]
+    roster = _rows(result["roster"])
+    assert len(roster) == 2
+    section_sets = {tuple(row["section_names"]) for row in roster}
+    assert section_sets == {("Period 1",), ("Period 2",)}
+    _assert_no_leaks(result)
+
+
+def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    _populate_mirror(str(tmp_path))
+    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+
+    result = tools.get_submissions(MIRROR_COURSE, "700010")
+    assert result["ok"] is True
+    assert result["source"] == "mirror"
+    assert result["synced_at"]
+    assert result["assignment"]["title"] == "Essay 1"
+    subs = _rows(result["submissions"])
+    assert len(subs) == 2  # locally filtered to just this assignment's rows
+    _assert_no_leaks(result)
+
+
+def test_get_submissions_bundle_falls_back_live_when_roster_stale(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    _populate_mirror(str(tmp_path), roster_at=_STALE_STAMP)
+    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
+    monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: SECTION_MAP)
+    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
+        {"id": 700010, "name": "Essay 1 (live)", "points_possible": 10, "due_at": ""}, None))
+    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
+        {"user_id": 900001, "workflow_state": "submitted",
+         "submitted_at": "2026-07-01T20:00:00Z", "body": "live body"},
+    ], None))
+
+    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") is None
+    result = tools.get_submissions(MIRROR_COURSE, "700010")
+    assert result["ok"] is True
+    assert result["source"] == "canvas"
+    assert result["assignment"]["title"] == "Essay 1 (live)"
+
+
+def test_get_submissions_bundle_falls_back_live_when_assignments_stale(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    _populate_mirror(str(tmp_path), assignments_at=_STALE_STAMP)
+    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
+    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
+        {"id": 700010, "name": "Essay 1 (live)", "points_possible": 10, "due_at": ""}, None))
+    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
+        {"user_id": 900001, "workflow_state": "submitted",
+         "submitted_at": "2026-07-01T20:00:00Z", "body": "live body"},
+    ], None))
+
+    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") is None
+    result = tools.get_submissions(MIRROR_COURSE, "700010")
+    assert result["ok"] is True
+    assert result["source"] == "canvas"
+    assert result["assignment"]["title"] == "Essay 1 (live)"
+
+
+def test_get_submissions_bundle_falls_back_live_when_submissions_stale(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    _populate_mirror(str(tmp_path), submissions_at=_STALE_STAMP)
+    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
+    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
+        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""}, None))
+    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
+        {"user_id": 900001, "workflow_state": "submitted",
+         "submitted_at": "2026-07-01T20:00:00Z", "body": "live body"},
+    ], None))
+
+    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") is None
+    result = tools.get_submissions(MIRROR_COURSE, "700010")
+    assert result["ok"] is True
+    assert result["source"] == "canvas"
 
 
 # --- get_gradebook_snapshot ---------------------------------------------------
