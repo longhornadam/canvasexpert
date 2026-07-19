@@ -1,100 +1,98 @@
-# Give built-in and custom Routines a supported typed read interface
+# Route MCP roster and submission helpers through typed local scopes
 
 > **DEEPSEEK EXECUTION AUTHORITY.** Read `AGENTS.md`, this file, and only the references
 > routed below. Do not read `NEXT_BATCH.md`, `HANDOFF_TEMPLATE.md`, or `archive/`.
 
 Status: **READY**
 
-Risk: **medium** - background reads may inspect private rows, but final mutation computation,
-Canvas sends, receipts, and routine scheduling remain live and unchanged.
+Risk: **high** - MCP returns pseudonymized private student information outside the app process;
+wire allowlists, safety scanning, course gates, and vault behavior must remain exact.
 
-Depends on: commit `5bc929c` (accepted 03 report provenance and atomicity)
+Depends on: commit `ae69f26` (accepted 04 routine typed-read SDK)
 
 ## Teacher-visible result
 
-Read-only grading-debt/download discovery and newly authored custom read-only Routines reuse
-current local assignments/roster/submissions with honest source/freshness, falling back live
-when unavailable. Existing writing Routines retain their live decision boundary.
+MCP tools retain the same compact payloads and privacy gates while their local roster and
+assignment-submission acquisition uses the typed read service instead of direct mirror
+store/query ownership. Stale state still falls back live.
 
 ## Acceptance criteria
 
-- [ ] New `api/routine_reads.py::read_scope(scope, course_id, *, live_reader,
-      max_age_hours=None)` supports only `assignments|roster|submissions` and returns exact keys
-      `ok, records, error, source, synced_at, generation`.
-- [ ] A current typed scope makes zero live calls; missing/stale/corrupt state uses the injected
-      live reader with the existing endpoint/params and labels `source=canvas` without freshness
-      or generation claims.
-- [ ] Built-in `grading_debt` and download assignment listing use `read_scope`; Student Reports
-      remains on its accepted report service. Sweep, curve, PowerGrader, and all apply paths are
-      byte-for-byte untouched.
-- [ ] Custom SDK injects `canvas_read`; existing `canvas_get`, `canvas_get_all`, and
-      `canvas_send` remain compatibility/live tools. The shipped example and AUTHORING guide use
-      `canvas_read` for ordinary assignment/submission reporting.
-- [ ] No private rows/source envelopes enter routine receipts, logs, fixtures, or configuration.
+- [ ] `_mirror_roster_doc` (rename allowed) uses `read_service.private_roster` with the configured
+      serve-age bound and preserves the existing monkeypatch/cache guard.
+- [ ] `_mirror_submission_bundle` reads typed roster, assignments, and submissions once each,
+      requires all three current, filters the requested assignment locally, and uses the minimum
+      required `last_success_at` as the unchanged `synced_at` value.
+- [ ] Current local roster/submission tools make zero Canvas calls; any missing/stale/corrupt
+      required scope falls back through the existing live/vault path as one coherent bundle.
+- [ ] Tool names, JSON schemas, columns, truncation, course gate, pseudonym mapping, vault
+      transaction/conflict behavior, outbound scan, and structured errors remain unchanged.
+- [ ] `get_gradebook_snapshot` continues to use shared `gradebook_snapshot.load_snapshot`; do not
+      duplicate or rewrite that use case in MCP.
+- [ ] No `mirror_store`/`mirror_queries` import remains in MCP tools if caller proof shows none.
 - [ ] The named acceptance gate passes.
 
 ## Explicit non-goals
 
-- Removing `api/webui/mirror_reads.py` (Gradebook still has a caller), changing custom routine
-  decorator/schema, declaring mutation scopes, or changing write-routine behavior.
+- Tool/schema version changes, new response fields (including generation), comment payloads,
+new caching, derived views, writes, tunnel/client configuration, or gradebook snapshot refactor.
 
 ## Locked decisions
 
-- Use one explicit mapping in `api/routine_reads.py`; reject unknown scope with a structured
-  error and never accept arbitrary URLs.
-- The helper owns no Canvas import and no persistence. Callers inject `_canvas_get_all`; tests
-  inject fakes. Default age is `mirror_queries._serve_max_age_hours()` when omitted.
-- Built-ins may ignore source metadata but must not serialize it. Custom authors receive the
-  full result dict so freshness is available without a second read.
-- Keep all live endpoint params exactly as `mirror_reads.py` currently defines them.
+- Preserve every module-level monkeypatch seam (`_course_*`, `_assignment*`, `_fetch_sections`)
+  and `_cache_safe` behavior. Patched tests remain on live fakes and never cross-call cache data.
+- Typed envelopes are internal only. MCP output remains `source` plus `synced_at`; generation is
+  neither emitted nor cached in this slice.
+- Continue pseudonymizing/gating dict rows before tabulation and trimming text before the gate.
+- Remove imports/helpers only when the focused tests prove their last caller migrated.
 
 ## Scope
 
-- `api/routine_reads.py` (new)
-- `api/webui/routes/routines_builtin.py`
-- `api/webui/routes/routines_custom.py`
-- `api/custom_routines/AUTHORING.md`
-- `api/custom_routines/_example_missing_work.py`
-- `api/tests/test_routine_reads.py` (new)
-- `api/tests/test_routine_receipts.py` only if a no-private-receipt assertion belongs there
+- `api/mcp_server/tools.py`
+- `api/tests/test_mcp_server_tools.py`
+- `api/tests/test_beta075_mcp.py`
+- `docs/mcp-server.md`: local-read/source description only
 
 ## Read only these references
 
 - `AGENTS.md`; this promoted brief
-- `api/custom_routines/AUTHORING.md`
-- `docs/reference/canvasmirror-1.0beta-information-spine.md`: §11.8 and Former Program 8's
-  Routine bullets only
-- `api/webui/mirror_reads.py`; exact files under Scope
+- `docs/mcp-server.md`: introduction, Tools, and Token-lean results
+- `docs/reference/canvasmirror-1.0beta-information-spine.md`: §11.9 and Former Program 8's MCP
+  bullet only
+- `api/mirror/read_service.py`: private roster/assignment/submission readers
+- exact files under Scope
 
-Do not read archived handoffs, unrelated route modules, or the whole vision document.
+Do not read archived handoffs, MCP client setup sections, unrelated privacy modules, or the
+whole vision document.
 
 ## Preflight - stop if these facts are false
 
 ```powershell
-rg -n "assignments_or_live|submissions_or_live|def _run_routine_grading_debt|def _run_routine_download" api/webui/routes/routines_builtin.py
-rg -n "def _routine_sdk|canvas_get_all|canvas_send" api/webui/routes/routines_custom.py
-rg -n "canvas_get_all" api/custom_routines/AUTHORING.md api/custom_routines/_example_missing_work.py
+rg -n "mirror_queries|mirror_store|def _mirror_roster_doc|def _mirror_submission_bundle|def _load_snapshot" api/mcp_server/tools.py
+rg -n "def get_roster|def get_submissions|def get_gradebook_snapshot|pseudonym.gate|_tabulate" api/mcp_server/tools.py
+rg -n "cache_safe|zero|mirror|scan_payload|columns" api/tests/test_mcp_server_tools.py
 ```
 
-- Only grading debt/download listing are authorized compatibility-reader migrations.
-- Custom SDK still injects raw live reads/writes and has no supported typed reader.
+- MCP still owns two direct mirror compatibility helpers and the output/privacy seams are tested.
+- Shared gradebook snapshot already owns its local-first behavior.
 
 ## Named acceptance gate
 
 ```powershell
-py -m pytest api/tests/test_routine_reads.py api/tests/test_routine_receipts.py api/tests/test_route_contract.py -q
+py -m pytest api/tests/test_mcp_server_tools.py api/tests/test_beta075_mcp.py -q
 ```
 
-- Cover three zero-live scopes, three fallback shapes, unknown-scope rejection, metadata labels,
-  and proof that writing routine owners/imports are unchanged. No broad suite.
+- Add typed zero-live and stale-required-scope fallback assertions without weakening existing PII
+  sweep tests. No broad suite or live MCP client invocation.
 
 ## Stop conditions
 
-- **RED:** the migration requires changing sweep/curve/PowerGrader computation or receipt shape.
-- **YELLOW:** a custom compatibility test requires a different public result shape; preserve raw
-  APIs and report the exact expectation.
+- **RED:** typed migration requires changing an outbound allowlist, safety scan, vault behavior,
+  or tool schema.
+- **YELLOW:** an established monkeypatch seam cannot be preserved without a compatibility helper;
+  retain it and report the exact test/caller.
 
 ## Execution result
 
-Record traffic light, changed files, focused command/count, deviations, unresolved decisions,
-and commit hash if created.
+Record traffic light, changed files, focused command/count, privacy assertions, deviations,
+unresolved decisions, and commit hash if created.
