@@ -27,7 +27,7 @@ def create_group_set(
     canvas_send: Callable[[str, str, dict], tuple[dict | None, str | None]],
     create_canvas_group: Callable[[str, str], tuple[dict | None, str | None]],
     set_selected_group_category_id: Callable[[str, str | None], None],
-    invalidate_groups: Callable[[str], None],
+    invalidate_groups: Callable[[str, str, str | None], None],
 ) -> dict:
     """Create a Canvas group category and optionally seed groups inside it."""
     set_name = (name or "").strip()
@@ -50,12 +50,20 @@ def create_group_set(
     if not category_id:
         return {"ok": False, "error": "Canvas did not return a group set id."}
 
-    invalidate_groups(course_id)
+    category_name = category.get("name")
 
     created_groups = []
     for group_name in names:
         group, group_err = create_canvas_group(category_id, group_name)
         if group_err:
+            # Unconditional (unlike create_groups's equivalent guard): the
+            # category-creation POST above already succeeded unconditionally
+            # before this loop started, so a real new category exists in
+            # Canvas here regardless of whether zero, some, or all seed
+            # groups also succeeded. It must always be reconciled — even a
+            # brand-new category with zero groups is real state that must
+            # not stay invisible to the mirror.
+            invalidate_groups(course_id, category_id, category_name)
             return {
                 "ok": False,
                 "error": f"Created group set, but failed to create '{group_name}': {group_err}",
@@ -63,6 +71,12 @@ def create_group_set(
                 "created_groups": created_groups,
             }
         created_groups.append(group)
+
+    # Reconcile once after the category and every seed group exist in
+    # Canvas — not right after category creation, which would merge in a
+    # category with zero groups and never get corrected until an unrelated
+    # future write touched the same category.
+    invalidate_groups(course_id, category_id, category_name)
 
     set_selected_group_category_id(course_id, category_id)
     return {
@@ -81,7 +95,7 @@ def create_groups(
         [str, str, str | None], tuple[list[dict], dict | None, str | None]
     ],
     create_canvas_group: Callable[[str, str], tuple[dict | None, str | None]],
-    invalidate_groups: Callable[[str], None],
+    invalidate_groups: Callable[[str, str], None],
 ) -> dict:
     """Create Canvas groups inside an existing group category."""
     names, parse_err = _parse_group_names(group_names)
@@ -107,13 +121,22 @@ def create_groups(
     for group_name in names:
         group, group_err = create_canvas_group(str(category_id), group_name)
         if group_err:
+            # Reconcile whatever was created before the failure — a partial
+            # creation must still be reflected, matching today's behavior
+            # where each success invalidated immediately.
+            if created_groups:
+                invalidate_groups(course_id, str(category_id))
             return {
                 "ok": False,
                 "error": f"Failed to create '{group_name}': {group_err}",
                 "created_groups": created_groups,
             }
         created_groups.append(group)
-        invalidate_groups(course_id)
+
+    # Reconcile once after all requested groups are created, not once per
+    # group — the whole point of targeted reconciliation is to avoid wasted
+    # Canvas traffic for a multi-group creation.
+    invalidate_groups(course_id, str(category_id))
 
     return {"ok": True, "created_groups": created_groups}
 

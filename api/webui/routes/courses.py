@@ -234,6 +234,49 @@ def list_groups(course_id: str):
     return JSONResponse({"ok": True, "categories": categories, "message": message})
 
 
+def fetch_group_category_groups(course_id: str, category_id: str) -> tuple[list[dict] | None, str | None]:
+    """Fetch one group category's groups + memberships live from Canvas.
+
+    Factored out of ``load_group_categories``'s whole-course loop so both the
+    full course refresh and a single-category targeted reconciliation share
+    one Canvas-shape-normalization path (id/name/student_ids/memberships per
+    group). Returns ``(groups_out, None)`` on success, ``(None, err)`` on any
+    non-200/transport failure — never raises.
+    """
+    hdrs, base = _canvas_headers()
+    if not hdrs:
+        return None, "No token saved."
+
+    def get(path, params=None):
+        try:
+            r = requests.get(f"{base}{path}", headers=hdrs,
+                             params=params or {}, timeout=20)
+            return (r.status_code, r.json() if r.status_code == 200 else None)
+        except Exception:
+            return (0, None)
+
+    def memberships(group_id):
+        """Return list of membership dicts for a group."""
+        st, members = get(f"/api/v1/groups/{group_id}/memberships", {"per_page": 200})
+        return members or []
+
+    st, groups_raw = get(f"/api/v1/group_categories/{category_id}/groups", {"per_page": 100})
+    if st != 200:
+        return None, f"Canvas returned {st} for group_categories/{category_id}/groups."
+
+    groups_out = []
+    for grp in (groups_raw or []):
+        grp_id = str(grp["id"])
+        mems = memberships(grp_id)
+        groups_out.append({
+            "id":          grp_id,
+            "name":        grp["name"],
+            "student_ids": [m["user_id"] for m in mems],
+            "memberships": mems,
+        })
+    return groups_out, None
+
+
 def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
     """Return (categories, error, message) for a course's group sets.
 
@@ -267,20 +310,14 @@ def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
     if st == 200 and cats:
         result = []
         for cat in cats:
-            _, groups_raw = get(f"/api/v1/group_categories/{cat['id']}/groups", {"per_page": 100})
-            groups_out = []
-            for grp in (groups_raw or []):
-                grp_id = str(grp["id"])
-                mems = memberships(grp_id)
-                groups_out.append({
-                    "id":          grp_id,
-                    "name":        grp["name"],
-                    "student_ids": [m["user_id"] for m in mems],
-                    "memberships": mems,
-                })
+            # Status intentionally ignored here (unchanged from prior
+            # behavior): a per-category fetch failure degrades to an empty
+            # groups list for that one category rather than failing the
+            # whole-course load.
+            groups_out, _err = fetch_group_category_groups(course_id, cat["id"])
             result.append({"category_id":   str(cat["id"]),
                            "category_name": cat["name"],
-                           "groups":        groups_out})
+                           "groups":        groups_out or []})
         return result, None, ""
 
     # Fallback: course groups bucketed by category id (category names 403-gated).

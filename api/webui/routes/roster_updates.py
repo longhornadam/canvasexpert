@@ -23,7 +23,7 @@ def update_student(
     update_student_canvas_group: Callable[
         [str, str, str, str | None, list[dict] | None], tuple[bool, str | None]
     ],
-    invalidate_groups: Callable[[str], None],
+    invalidate_groups: Callable[[str, str], None],
     allowed_keys: set[str],
     obsolete_keys: set[str],
 ) -> dict:
@@ -122,7 +122,7 @@ def update_student(
         )
         if not ok:
             return {"ok": False, "error": err}
-        invalidate_groups(course_id)
+        invalidate_groups(course_id, category_id)
 
     return {"ok": True}
 
@@ -145,7 +145,7 @@ def update_bulk(
     update_student_canvas_group: Callable[
         [str, str, str, str | None, list[dict] | None], tuple[bool, str | None]
     ],
-    invalidate_groups: Callable[[str], None],
+    invalidate_groups: Callable[[str, str], None],
 ) -> dict:
     """Apply a bulk roster action."""
     if not course_id or not user_ids or not action:
@@ -168,6 +168,7 @@ def update_bulk(
     failed = 0
     errors: list[str] = []
     group_membership_changed = False
+    changed_category_id: str | None = None
 
     if action == "set_extra_time":
         if not isinstance(val, dict):
@@ -217,6 +218,7 @@ def update_bulk(
             if ok:
                 updated += 1
                 group_membership_changed = True
+                changed_category_id = str(category_id)
             else:
                 failed += 1
                 errors.append(f"User {uid}: {err}")
@@ -235,6 +237,7 @@ def update_bulk(
             if ok:
                 updated += 1
                 group_membership_changed = True
+                changed_category_id = str(category_id)
             else:
                 failed += 1
                 errors.append(f"User {uid}: {err}")
@@ -259,7 +262,7 @@ def update_bulk(
         return {"ok": False, "error": f"Unknown action '{action}'."}
 
     if group_membership_changed:
-        invalidate_groups(course_id)
+        invalidate_groups(course_id, changed_category_id)
 
     result = {"ok": True, "updated": updated}
     if failed > 0:

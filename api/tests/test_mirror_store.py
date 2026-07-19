@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 
+import pytest
+
 from api.mirror import course_context, store
 
 COURSE = "111"
@@ -396,3 +398,110 @@ def test_course_context_invalid_file_is_absent_and_failure_preserves_last_good_o
     assert store.read_assignments(COURSE, root=str(tmp_path)) == assignments_before
     assert store.read_sync(COURSE, root=str(tmp_path)) == sync_before
     assert store.read_new_quiz_capability(COURSE, root=str(tmp_path)) == capability_before
+
+
+# --- groups: merge_group_category (targeted post-write reconciliation) -------------
+
+CATEGORY_A = {
+    "category_id": "7", "category_name": "Reading groups",
+    "groups": [{
+        "id": "8", "name": "Blue",
+        "memberships": [{"id": "9", "user_id": "900001"}],
+    }],
+}
+CATEGORY_B = {
+    "category_id": "20", "category_name": "Math groups",
+    "groups": [{
+        "id": "21", "name": "Advanced",
+        "memberships": [{"id": "22", "user_id": "900002"}],
+    }],
+}
+
+
+def test_merge_group_category_skips_without_previous_document(tmp_path):
+    """A lone category is never treated as the course's complete membership."""
+    result = store.merge_group_category(
+        COURSE, {"category_id": "7", "category_name": "Reading groups", "groups": []},
+        root=str(tmp_path))
+    assert result is None
+    assert store.read_groups(COURSE, root=str(tmp_path)) is None
+
+
+def test_merge_group_category_replaces_only_matching_category(tmp_path):
+    store.write_groups(COURSE, [CATEGORY_A, CATEGORY_B], root=str(tmp_path),
+                       attempted_at="2026-07-18T00:00:00Z")
+
+    incoming = {
+        "category_id": "7", "category_name": "Reading groups",
+        "groups": [{
+            "id": "8", "name": "Blue", "student_ids": ["900001", "900003"],
+            "memberships": [
+                {"id": "9", "user_id": "900001"},
+                {"id": "30", "user_id": "900003"},
+            ],
+        }],
+    }
+    merged = store.merge_group_category(COURSE, incoming, root=str(tmp_path),
+                                        attempted_at="2026-07-18T01:00:00Z")
+
+    assert merged["state"] == "current"
+    assert merged["last_success_at"] == "2026-07-18T01:00:00Z"
+    assert merged["last_attempt_at"] == "2026-07-18T01:00:00Z"
+    assert merged["error_code"] == ""
+    # Every other category passes through byte-identical.
+    other = next(c for c in merged["categories"] if c["category_id"] == "20")
+    assert other == CATEGORY_B
+    changed = next(c for c in merged["categories"] if c["category_id"] == "7")
+    assert changed["groups"] == [{
+        "id": "8", "name": "Blue",
+        "memberships": [
+            {"id": "9", "user_id": "900001"},
+            {"id": "30", "user_id": "900003"},
+        ],
+    }]
+    # Persisted, not just returned.
+    assert store.read_groups(COURSE, root=str(tmp_path)) == merged
+
+
+def test_merge_group_category_appends_genuinely_new_category(tmp_path):
+    store.write_groups(COURSE, [CATEGORY_A], root=str(tmp_path))
+
+    new_category = {
+        "category_id": "20", "category_name": "Math groups",
+        "groups": [{"id": "21", "name": "Advanced",
+                    "memberships": [{"id": "22", "user_id": "900002"}]}],
+    }
+    merged = store.merge_group_category(COURSE, new_category, root=str(tmp_path))
+
+    assert [c["category_id"] for c in merged["categories"]] == ["7", "20"]
+    assert merged["categories"][0] == CATEGORY_A
+    assert merged["categories"][1] == new_category
+
+
+def test_merge_group_category_keeps_previous_name_when_incoming_name_falsy(tmp_path):
+    """Only a genuinely new category (create_group_set) supplies a real name;
+    every other caller only knows the category id and must not invent one."""
+    store.write_groups(COURSE, [CATEGORY_A], root=str(tmp_path))
+
+    merged = store.merge_group_category(COURSE, {
+        "category_id": "7", "category_name": None,
+        "groups": [{"id": "8", "name": "Blue", "memberships": []}],
+    }, root=str(tmp_path))
+
+    assert merged["categories"][0]["category_name"] == "Reading groups"
+    assert merged["categories"][0]["groups"] == [{"id": "8", "name": "Blue", "memberships": []}]
+
+
+def test_merge_group_category_raises_on_invalid_incoming_category_and_writes_nothing(tmp_path):
+    store.write_groups(COURSE, [CATEGORY_A], root=str(tmp_path))
+
+    with pytest.raises(ValueError):
+        store.merge_group_category(COURSE, {
+            "category_id": "7", "category_name": "Reading groups",
+            "groups": [{"id": "8", "name": "Blue",
+                       "memberships": [{"id": "", "user_id": "900001"}]}],
+        }, root=str(tmp_path))
+
+    # The failed merge attempt must not have touched the on-disk document —
+    # the caller falls back to the existing whole-document invalidate_groups.
+    assert store.read_groups(COURSE, root=str(tmp_path))["categories"] == [CATEGORY_A]

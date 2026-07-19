@@ -18,7 +18,7 @@ from api import roster_service
 from api.mirror import store as mirror_store
 from .. import config
 from ..canvas_client import _canvas_get_all, _canvas_headers, _canvas_send
-from .courses import load_group_categories
+from .courses import fetch_group_category_groups, load_group_categories
 from .names import _vault
 from . import roster_groups
 from . import roster_canvas
@@ -64,12 +64,30 @@ def _create_canvas_group(category_id: str, name: str) -> tuple[dict | None, str 
     return roster_canvas.create_canvas_group(category_id, name, canvas_send=_canvas_send)
 
 
-def _invalidate_group_snapshot(course_id: str) -> None:
-    """A successful Canvas group write makes the display snapshot stale.
+def _reconcile_group_category(course_id: str, category_id: str,
+                              category_name: str | None = None) -> None:
+    """Reconcile the exact group category a write just changed.
 
-    The live write is already authoritative; local storage trouble must not
-    rewrite that result into a failed Canvas mutation.
+    Live-refetches only the affected category and merges it into the
+    existing groups snapshot, so every other category is served from the
+    untouched local snapshot instead of a needless whole-course re-fetch.
+    The live write is already authoritative; any failure here (targeted
+    fetch, merge, or local storage trouble) must not rewrite that result
+    into a failed Canvas mutation — it falls back to the existing
+    whole-document ``invalidate_groups`` staling instead.
     """
+    groups, err = fetch_group_category_groups(course_id, category_id)
+    if err is None:
+        try:
+            merged = mirror_store.merge_group_category(course_id, {
+                "category_id": str(category_id),
+                "category_name": category_name,
+                "groups": groups,
+            })
+            if merged is not None:
+                return
+        except (OSError, ValueError):
+            pass
     try:
         mirror_store.invalidate_groups(course_id)
     except (OSError, ValueError):
@@ -351,7 +369,7 @@ def roster_student_update(
         as_int=_as_int,
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,
-        invalidate_groups=_invalidate_group_snapshot,
+        invalidate_groups=_reconcile_group_category,
         allowed_keys=ALLOWED_STUDENT_PATCH_KEYS,
         obsolete_keys=OBSOLETE_PATCH_KEYS,
     ))
@@ -384,7 +402,7 @@ def roster_bulk_update(
         value_name=_value_name,
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,
-        invalidate_groups=_invalidate_group_snapshot,
+        invalidate_groups=_reconcile_group_category,
     ))
 
 
@@ -424,7 +442,7 @@ def create_group_set(
         canvas_send=_canvas_send,
         create_canvas_group=_create_canvas_group,
         set_selected_group_category_id=config.set_selected_group_category_id,
-        invalidate_groups=_invalidate_group_snapshot,
+        invalidate_groups=_reconcile_group_category,
     ))
 
 
@@ -445,7 +463,7 @@ def create_groups(
         group_names,
         validate_canvas_group_target=_validate_canvas_group_target,
         create_canvas_group=_create_canvas_group,
-        invalidate_groups=_invalidate_group_snapshot,
+        invalidate_groups=_reconcile_group_category,
     ))
 
 
