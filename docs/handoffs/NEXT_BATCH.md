@@ -25,10 +25,9 @@ group-snapshot code (`api/mirror/store.py` groups functions, migrated consumers 
 
 ## Outstanding senior decisions carried over (not blocking Batch 2)
 
-- `docs/handoffs/1.0beta-04a-gradebook-config-local-read.md` (Batch 3, GREEN but held out of
-  archive pending this) asks the senior to confirm the no-TTL `late_policy_is_current` choice
-  (state-only, no age check) is acceptable, or to direct a specific TTL number. Settle this,
-  then archive that brief — it is otherwise fully closed.
+None open as of this writing. Batch 3's no-TTL `late_policy_is_current` question
+(`1.0beta-04a-gradebook-config-local-read.md`) was confirmed acceptable as implemented and
+that brief is now archived.
 
 ## After Batch 2
 
