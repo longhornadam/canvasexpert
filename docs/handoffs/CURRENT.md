@@ -1,0 +1,148 @@
+> **EXECUTOR AUTHORITY.** Read `AGENTS.md`, this file, and only the references routed
+> below. Do not read `NEXT_BATCH.md`, `HANDOFF_TEMPLATE.md`, or `archive/`.
+
+# Retire the four dead operation-ledger adapters (Former Program 10)
+
+Status: **READY**
+
+Risk: **low-medium** - deletes confirmed-dead code plus its tests and contract entries. No
+live behavior changes (the deleted adapters have no producer). The only real risk is the
+ownership test breaking if deletion is not atomic (a listed owner whose file is gone, or a
+registered adapter whose import is gone), so files + registration + imports + `__all__` +
+contract entries + tests must all land in one change.
+
+Depends on: current `dev` (Batch 7 complete, `1170867`). This is Batch 8 unit 01.
+
+## Teacher-visible result
+
+None (internal hygiene). Observable evidence: the generic `POST /api/operations/{kind}/prepare`
+endpoint can no longer resolve `gradebook.curve`, `gradebook.late_policy`, `roster.membership`,
+or `roster.group_set` (they are unregistered); the full ledger + ownership test suites stay green.
+
+## Why these are safe to delete (established, do not re-litigate)
+
+A four-pass senior audit (2026-07-19, recorded in `mutation-reconciliation-map.md` families 1/4/5)
+confirmed all four adapters are **dead**: no non-test producer emits their KINDs, and their live
+siblings already exist and, where reconciliation is owed, already reconcile:
+
+- `curve.py` (`gradebook.curve`) - live path is `webui/routes/gradebook_curves.py` +
+  `routines_builtin.py _curve_apply_core` (both reconciled, Batch 7).
+- `late_policy.py` (`gradebook.late_policy`) - live path is `webui/routes/gradebook_policy.py
+  apply_late_policy` (reconciles via `invalidate_late_policy`).
+- `roster_membership.py` (`roster.membership`) and `roster_group_set.py` (`roster.group_set`) -
+  live path is `webui/routes/roster_canvas.py` / `roster_groups.py` (reconciled via
+  `_reconcile_group_category`).
+
+## Acceptance criteria
+
+- [ ] The four adapter files are deleted:
+      `api/operation_ledger/adapters/{curve,late_policy,roster_membership,roster_group_set}.py`.
+- [ ] Their four dedicated test files are deleted:
+      `api/tests/test_{curve,late_policy,roster_membership,roster_group_set}_operation.py`.
+      (These test only the dead adapters; confirm no shared fixture in them is imported elsewhere.)
+- [ ] `api/operation_ledger/adapters/__init__.py`: remove the four `from .<mod> import <Class>`
+      lines and the four names (`CurveAdapter, LatePolicyAdapter, MembershipAdapter, GroupSetAdapter`)
+      from `__all__`.
+- [ ] `api/operation_ledger/__init__.py`: remove those four class names from the
+      `from .adapters import (...)` block and from `__all__`, and remove the four
+      `registry.register(...)` lines (`CurveAdapter`, `GroupSetAdapter`, `LatePolicyAdapter`,
+      `MembershipAdapter`).
+- [ ] `docs/contracts/canvas-transport-owners.json`: remove the **six** owner entries for the
+      dead adapters - `curve.py CurveAdapter.execute` (1), `late_policy.py LatePolicyAdapter.execute`
+      (1), `roster_membership.py MembershipAdapter.execute` (2: add + remove),
+      `roster_group_set.py GroupSetAdapter.execute` (2: create category + create group). No other
+      owner entries change. Owner count goes 56 -> 50.
+- [ ] `docs/reference/mutation-reconciliation-map.md`: the family 1/4/5 "Duplicate implementation
+      - resolved (dead ledger path)" notes and the "Batch 8 hygiene note" are updated to reflect
+      the retirement as **done**, and the "Current totals" are recomputed from the JSON (do not
+      hand-type). Do not alter the live-sibling coverage descriptions.
+- [ ] `registry.get_adapter` for the four dead kinds now returns nothing / raises (they are
+      unregistered), and `registry.known_kinds()` no longer lists them. No production path
+      regresses (there is no production caller of these kinds - that is why they are dead).
+- [ ] The named acceptance gate passes.
+
+The executor reports evidence; it does not redefine, narrow, or self-accept these criteria.
+
+## Explicit non-goals
+
+- **Do not touch the live siblings** (`gradebook_curves.py`, `gradebook_policy.py`,
+  `routines_builtin.py`, `roster_canvas.py`, `roster_groups.py`, `roster.py`) or any reconciled
+  path. Only the four dead ledger adapters and their own tests are removed.
+- No reconciliation-behavior change; no change to `registry`, `executor`, `recovery`, or any
+  surviving adapter.
+- **KIND allowlisting of `/api/operations/{kind}/prepare` is NOT this unit.** It is an optional
+  follow-up noted in the map's hygiene note; leave the endpoint's resolution logic unchanged
+  (unregistering the kinds is sufficient to make them unreachable).
+- Do not delete or edit `test_curve_event_migration.py` (curve *events* are a live feature of the
+  direct route, unrelated to the dead ledger adapter) unless the preflight proves it imports a
+  deleted symbol - it should not.
+
+## Locked decisions
+
+- All four are confirmed dead (audit above); deletion is safe. Do not re-verify by trying to make
+  them live.
+- Deletion is atomic in one commit: the ownership test cross-checks the live tree against the JSON,
+  so a file removed without its contract entry (or a contract entry left without its file) fails
+  `test_every_real_mutation_call_site_is_listed` / `test_every_listed_owner_still_exists_in_source`.
+- Map totals are recomputed from the JSON, never hand-typed.
+
+## Scope
+
+- Delete: `api/operation_ledger/adapters/{curve,late_policy,roster_membership,roster_group_set}.py`
+- Delete: `api/tests/test_{curve,late_policy,roster_membership,roster_group_set}_operation.py`
+- Edit: `api/operation_ledger/adapters/__init__.py`, `api/operation_ledger/__init__.py`
+- Edit: `docs/contracts/canvas-transport-owners.json` (remove 6 owner entries)
+- Edit: `docs/reference/mutation-reconciliation-map.md` (families 1/4/5 + hygiene note + totals)
+
+## Read only these references
+
+- `AGENTS.md`; this brief
+- `api/operation_ledger/__init__.py` and `api/operation_ledger/adapters/__init__.py` (the
+  registration + import seams)
+- the four adapter files' KIND constants only (to confirm the KIND strings before removing
+  contract entries)
+- `docs/contracts/canvas-transport-owners.json` (the six entries to remove)
+- `docs/reference/mutation-reconciliation-map.md` families 1/4/5 + Batch 8 hygiene note + Current totals
+- the four `test_*_operation.py` files being deleted
+
+Do not read: `docs/handoffs/archive/`, the live sibling routes' internals, or the whole 1.0beta spine.
+
+## Preflight - stop if these facts are false
+
+```powershell
+rg -n "gradebook\.curve\b|gradebook\.late_policy|roster\.membership|roster\.group_set" api/ --glob '!api/tests/**' -g '!*.json'
+rg -n "from .*\.(curve|late_policy|roster_membership|roster_group_set) import|adapters\.(curve|late_policy|roster_membership|roster_group_set)" api/ --glob '!api/tests/**'
+rg -n "registry.register\((Curve|LatePolicy|Membership|GroupSet)Adapter" api/operation_ledger/__init__.py
+```
+
+- The four KIND strings appear ONLY in their own adapter files under `api/` (no non-test
+  producer). If any live producer emits one of these kinds, that adapter is NOT dead - **RED, stop.**
+- No live (non-test) module imports from the four dead adapter modules; only the two `__init__`
+  files and the four dedicated test files reference them.
+- The four `registry.register(...)` lines exist and are the only registrations of these classes.
+
+If any fact is false, return RED without deletion.
+
+## Named acceptance gate
+
+```powershell
+py -m pytest api/tests/test_canvas_mutation_ownership.py api/tests/test_operation_ledger.py api/tests/ -q
+```
+
+- Run the whole `api/tests/` suite (deletion can have wide fallout); it must be green with the
+  four deleted test files gone. Include the count and confirm no test errors on collection
+  (a dangling import of a deleted module is a collection error, not just a failure).
+- The ownership scan must show owner count 56 -> 50 and detected == listed.
+
+## Stop conditions
+
+- **RED:** any non-test producer of a dead KIND is found (the adapter is live, not dead); or a
+  live module imports a symbol from a dead adapter file; or a surviving test imports a deleted
+  module.
+- **YELLOW:** a deleted test file contains a shared fixture/helper imported by a surviving test -
+  report it and relocate the fixture rather than widening deletion.
+
+## Execution result
+
+<Executor records traffic light against the acceptance criteria above, commit hash, changed/
+deleted files, named-gate command/counts, and any deviations.>

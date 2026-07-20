@@ -1,8 +1,8 @@
 # SENIOR ONLY — CanvasMirror 1.0beta batch pointer
 
-> **NOT EXECUTOR AUTHORITY.** No `CURRENT.md` exists — no executor authority
-> until a senior authors one. Batch 7 is complete through its reconciliation
-> scope; the next unit is Batch 8.
+> **NOT EXECUTOR AUTHORITY.** Executor authority for the current unit is in
+> `CURRENT.md` (Batch 8 unit 01 — dead-adapter retirement, READY, not yet run).
+> Batch 7 is complete through its reconciliation scope.
 
 ## Batch 7 — complete
 
@@ -23,21 +23,16 @@
   reasons. Reopen only with a targeted per-assignment submissions force-refetch or
   a new whole-scope submissions stale-mark — and verify the facts against code first.
 
-## Next unit — Batch 8 (dead-path retirement / Former Program 10)
+## Current unit — Batch 8 unit 01 (dead-path retirement / Former Program 10)
 
-Retire the four confirmed-dead ledger adapters — `operation_ledger/adapters/curve.py`,
-`late_policy.py`, `roster_membership.py`, `roster_group_set.py` (no producer emits
-their KINDs; live siblings already exist and, where owed, already reconcile). Each
-deletion must land together with:
+Authored in `CURRENT.md` (READY, not yet run): retire the four confirmed-dead ledger
+adapters (`curve.py`, `late_policy.py`, `roster_membership.py`, `roster_group_set.py`) —
+files + tests + registrations + imports + the six contract owner entries, atomically.
+See `CURRENT.md` for the full brief, preflight, and gate.
 
-- removal of its `registry.register(...)` line in `operation_ledger/__init__.py` and
-  its import (the ownership test fails on a listed owner no longer present, so
-  adapter deletion + JSON entry pruning must be atomic);
-- removal of its `docs/contracts/canvas-transport-owners.json` owner entries;
-- a map update (families 1/4/5 dead-path notes → retired).
+## Later (not yet authored)
 
-Optional hardening (same batch or a follow-up): consider allowlisting the KINDs the
-`/api/operations/{kind}/prepare` endpoint accepts (`gradebook.sweep`, `content.*`) so
-a stale KIND cannot be hand-invoked; and a guard against Canvas-writing calls migrating
-outside `api/` or a transport-wrapper rename silently blinding the ownership scanner
-(see the 2026-07-19 completeness audit).
+Optional hardening follow-ups from the 2026-07-19 completeness audit: allowlist the KINDs
+`/api/operations/{kind}/prepare` accepts (`gradebook.sweep`, `content.*`) so a stale KIND
+cannot be hand-invoked; and a guard against Canvas-writing calls migrating outside `api/`
+or a transport-wrapper rename silently blinding the ownership scanner.
