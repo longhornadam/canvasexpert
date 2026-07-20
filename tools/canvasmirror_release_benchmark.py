@@ -120,7 +120,12 @@ def _summary(samples: list[dict]) -> dict:
 
 
 def _safe_temp_cleanup(root: Path) -> None:
-    if root.exists() and not _is_within(root, REPO_ROOT):
+    # Delete only a verified disposable root: it must exist, live under the
+    # system temp dir, and never under the repository. The positive
+    # "under system temp" assertion (not just "not under repo") keeps cleanup
+    # resolving to exact disposable roots per the release deletion rule.
+    temp_dir = Path(tempfile.gettempdir()).resolve()
+    if root.exists() and _is_within(root, temp_dir) and not _is_within(root, REPO_ROOT):
         shutil.rmtree(root)
 
 
