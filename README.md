@@ -1,54 +1,32 @@
 # CanvasExpert
 
-CanvasExpert is a local teacher toolkit for Canvas LMS. It combines a token-holding
-FastAPI web UI, Canvas push/download workflows, gradebook tools, pseudonymized feedback
-pipelines, and an offline content rendering engine.
+Created by a teacher for teachers.
 
-## Start Here
+Free. Private. Open source. Uses your secure Canvas "Personal Access Token". Runs entirely on your computer.
 
-- `AGENTS.md` is the canonical AI-agent guidance file. AI agents should read it
-  before editing and keep it current when repo structure, handoff conventions, safety
-  rules, major workflows, or tool-routing conventions change.
-- `TOOLS.md` is the project-local tool registry for deciding when to use tooling before
-  spending LLM context on large raw inputs.
-- `docs/README.md` indexes execution briefs, archived handoffs, contracts, guides,
-  and durable reference notes.
+- Create and push quizzes, assignments, and pages to your Canvas courses
+- Download PDF or Word versions of the work
+- Assign differentiated work to different groups
+- Curve grades, sweep late work, grant extensions (automated for "extended time" students)
+- Powerful, but optional, AI integrations with security-first design
+- "Pseudonymization" (names/IDs changed) built in for protecting student information
 
-## Repo Map
+## Getting started
 
-- `api/` - live, token-holding local app, FastAPI web UI, Canvas API workflows, grading
-  and feedback tools. Keep local-only.
-- `engine/` - offline quiz/content rendering library with no Canvas token and no student
-  data.
-- `LLM_Modules/` - canonical authoring contracts consumed by the app.
-- `docs/` - contracts, guides, references, and senior-authored execution briefs.
-- `tools/` - lightweight tool manifests, templates, and future helper tools for agent
-  routing.
-- `out/` - generated/local output area; do not treat as source.
+Step 1 - Download the CanvasExpert folder.
+Step 2 - Put it anywhere in your own files.
+Step 3 - Double-click `Open Canvas Expert.bat`. First run sets itself up automatically, no admin needed.
 
-## Handoffs
+## Learn more
 
-Canvas Expert uses a senior-design -> one-executor model. The senior makes architecture
-decisions and writes one substantial execution brief in `docs/handoffs/`; one Codex or
-external VS Code agent implements it and returns a GREEN/YELLOW/RED report. Active briefs
-use `docs/handoffs/HANDOFF_TEMPLATE.md`. Historical handoffs live in
-`docs/handoffs/archive/` and do not authorize new work.
+Want more detail? Give `LEARN_CANVASEXPERT.md` to a chatbot and ask it anything.
 
-Testing and review are proportional to risk. Focused checks are the default; full suites
-are integration/release gates or evidence for genuinely cross-cutting/high-risk changes,
-not a mandatory ritual after every edit. `AGENTS.md` is authoritative.
+For developers: see `AGENTS.md` and `docs/README.md`.
 
-## Tool Manifests
+## License
 
-Tool manifests live in `tools/manifests/`. They describe when agents should use a tool,
-what output to expect, and whether the tool is planned, experimental, or available.
+MIT — see `LICENSE`.
 
-## Run And Test
+## AI Disclosures
 
-See `AGENTS.md` for the authoritative run/test commands. Current local workflow is
-Windows PowerShell with the `py` launcher.
-
-## Safety Guardrails
-
-Keep the Canvas token out of the repo, never commit student data, do not add
-district-specific config to source, and keep the web UI bound to `127.0.0.1`.
+AI was used when coding this. Never send anyone's personally identifiable information (PII) to an AI service. Doing so is a violation of federal privacy laws (FERPA).
