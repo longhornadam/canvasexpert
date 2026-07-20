@@ -1,0 +1,18 @@
+{% macro page_header(title, lede='') -%}
+<header class="ce-page-header"><div><h1>{{ title }}</h1>{% if lede %}<p class="ce-hint">{{ lede }}</p>{% endif %}</div></header>
+{%- endmacro %}
+{% macro panel(title='') -%}
+<section class="ce-panel">{% if title %}<h2 class="ce-display">{{ title }}</h2>{% endif %}{{ caller() }}</section>
+{%- endmacro %}
+{% macro notice(kind='attention') -%}
+<div class="ce-notice ce-notice--{{ kind }}">{{ caller() }}</div>
+{%- endmacro %}
+{% macro empty_state(msg) -%}
+<p class="ce-empty">{{ msg }}</p>
+{%- endmacro %}
+{% macro action_bar() -%}
+<div class="ce-actions">{{ caller() }}</div>
+{%- endmacro %}
+{% macro rail(side='left', label='') -%}
+<aside class="ce-rail ce-rail--{{ side }}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</aside>
+{%- endmacro %}

@@ -1,0 +1,528 @@
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail %}
+{% block title %}Settings — Canvas Expert{% endblock %}
+{% block workspace_variant %}left-main{% endblock %}
+{% block workspace_body_class %}ce-settings-page{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/settings.css?v={{ asset_v }}">{% endblock %}
+
+{% block left_rail %}
+{% call rail('left', 'Settings sections') %}
+  <nav class="ce-settings-index" aria-label="Settings sections">
+    <p class="ce-settings-index__title">Settings</p>
+    <div class="ce-settings-index__links">
+      <a href="#workspace-card">Canvas account</a>
+      <a href="#openrouter-card">AI assistance</a>
+      <a href="#tier-tags-card">Differentiation tags</a>
+      <a href="#workspace-settings-card">Workspace</a>
+      <a href="#mirror-card">Canvas data</a>
+      <a href="#current-courses-card">Courses</a>
+      <a href="#download-root-card">Downloads</a>
+      <a href="#ai-ta-card">AI-TA Library</a>
+      <a href="#cal">Academic calendars</a>
+    </div>
+  </nav>
+{% endcall %}
+{% endblock %}
+
+{% block primary %}
+
+<div class="ce-settings-stack">
+
+<section class="ce-panel ce-settings-panel" id="workspace-card" data-path="{{ workspace_root or '' }}">
+  <h2>Canvas account</h2>
+  <p class="ce-hint">
+    Your Canvas API token gives Canvas Expert access to all your courses — paste it
+    once here and you never need to touch it again. It's stored in your
+    <strong>Windows Credential Manager</strong> (not in any file on disk).
+  </p>
+  <p class="ce-hint">
+    In Canvas: Account → Settings → <strong>+ New Access Token</strong>. Name it
+    <strong>CanvasExpert – {{ computer_name }}</strong>, use no expiry unless your
+    district requires one, copy it, and paste it here. Generate a fresh token on
+    each computer; never reuse one or write it down. If a machine is lost, delete
+    just that token from the same Canvas page.
+  </p>
+
+  {% if canvas_base %}
+  <div class="ce-actions ce-settings-link-row">
+    <a class="small-link" href="{{ canvas_base }}/profile/settings" target="_blank" rel="noopener">Get my token ↗</a>
+  </div>
+  {% endif %}
+
+  <form id="canvas-account-form">
+    <label>
+      Canvas base URL
+      <div class="url-row">
+        <span id="url-display" class="url-static">{{ canvas_base or "Not set — enter your Canvas address" }}</span>
+        <button type="button" id="btn-edit-url" class="small">Edit</button>
+        <input type="url" name="base_url" id="base_url_input"
+               value="{{ canvas_base }}" placeholder="https://yourschool.instructure.com"
+               class="ce-settings-url-input{% if canvas_base %} ce-settings-initially-hidden{% endif %}" required>
+      </div>
+    </label>
+
+    <label>
+      Canvas API token
+      {% if token_is_set %}
+      <div class="token-row">
+        <span class="token-saved">●●●●●●●● saved in Windows Credential Manager</span>
+        <button type="button" id="btn-replace-token" class="small">Replace</button>
+      </div>
+      <input type="password" name="token" id="token_input" autocomplete="off"
+             placeholder="Paste new token to replace" class="ce-settings-initially-hidden">
+      {% else %}
+      <div class="ce-notice ce-settings-notice">
+        No token saved yet — paste your Canvas personal access token below.
+        To create one: Canvas → Account → Settings → New Access Token.
+      </div>
+      <input type="password" name="token" id="token_input" autocomplete="off"
+             placeholder="Paste your Canvas token here" required>
+      {% endif %}
+    </label>
+
+    <div class="ce-actions">
+      <button type="button" id="btn-test">Test connection</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+    <p id="account-status" class="status"></p>
+  </form>
+  <div class="ce-actions ce-settings-restart-row">
+    <a href="/welcome" class="small-link">Re-run setup wizard →</a>
+  </div>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="openrouter-card" data-default-model="{{ default_openrouter_model }}">
+  <h2>AI assistance <small class="lbl-hint">(OpenRouter)</small></h2>
+  <p class="ce-hint">
+    PowerGrader can use OpenRouter to co-score submissions and draft feedback.
+    The API key is stored in <strong>Windows Credential Manager</strong>; the selected
+    model is stored locally on this computer.
+  </p>
+
+  <div class="ce-actions ce-settings-link-row ce-settings-actions-wrap">
+    <a class="small-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">Open API keys ↗</a>
+    <a class="small-link" href="https://openrouter.ai/models" target="_blank" rel="noopener">Open models ↗</a>
+    <a class="small-link" href="https://openrouter.ai/settings/credits" target="_blank" rel="noopener">Add credits ↗</a>
+    <button type="button" id="btn-openrouter-help" class="small">What is this?</button>
+  </div>
+
+  <div id="openrouter-help" class="ce-notice ce-settings-help" hidden>
+    <p>
+      OpenRouter is a paid API gateway for AI models. Canvas Expert sends only the
+      pseudonymized grading bundle after its safety gate passes, then brings the score
+      and feedback suggestion back for you to review.
+    </p>
+    <ol>
+      <li>Create or sign in to an OpenRouter account.</li>
+      <li>Go to <strong>API Keys</strong>, create a key named <strong>CanvasExpert - {{ computer_name }}</strong>, and optionally set a small credit limit.</li>
+      <li>Add a small amount of credits before using paid models.</li>
+      <li>Use <strong>DeepSeek V4 Pro</strong> (<code>{{ default_openrouter_model }}</code>) for routine grading.</li>
+      <li>Use the searchable model field below for exact OpenRouter model IDs, including latest aliases.</li>
+    </ol>
+  </div>
+
+  <form id="openrouter-form">
+    <label>
+      OpenRouter API key
+      {% if openrouter_is_set %}
+      <div class="token-row">
+        <span class="token-saved">●●●●●●●● saved in Windows Credential Manager</span>
+        <button type="button" id="btn-replace-openrouter-key" class="small">Replace</button>
+      </div>
+      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
+             placeholder="Paste new OpenRouter key to replace" class="ce-settings-initially-hidden">
+      {% else %}
+      <div class="ce-notice ce-settings-notice">
+        No OpenRouter key saved yet — create one at openrouter.ai/keys and paste it below.
+      </div>
+      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
+             placeholder="Paste your OpenRouter API key here">
+      {% endif %}
+    </label>
+
+    <label>
+      Model ID
+      <input type="text" name="model" id="openrouter-model-input"
+             value="{{ openrouter_model }}" placeholder="{{ default_openrouter_model }}"
+             list="openrouter-model-list" autocomplete="off">
+      <datalist id="openrouter-model-list">
+        {% for m in openrouter_model_presets %}
+        <option value="{{ m.id }}" label="{{ m.cost_tier }} · {{ m.label }} — input ${{ "%.3g"|format(m.input_per_mtok) }}/M; output ${{ "%.3g"|format(m.output_per_mtok) }}/M; 30 essays ~${{ "%.2f"|format(m.scenario_cost) }} — {{ m.note }}"></option>
+        {% endfor %}
+        <option value="openrouter/auto" label="Auto Router (advanced; variable cost)"></option>
+      </datalist>
+      <small class="lbl-hint">
+        Default: <code>{{ default_openrouter_model }}</code>. Avoid <code>openrouter/auto</code> for grading cost control.
+      </small>
+    </label>
+
+    <div class="ce-actions ce-settings-model-tools">
+      <button type="button" id="btn-openrouter-auto" class="small">Use DeepSeek V4 Pro</button>
+      <button type="button" id="btn-openrouter-load-models" class="small">Load current model IDs &amp; prices</button>
+      <button type="button" id="btn-openrouter-test" class="small">Test saved key</button>
+    </div>
+
+    <div id="openrouter-major-models" class="ce-settings-model-box" hidden>
+      <strong class="ce-settings-label">Current major models</strong>
+      <p class="ce-hint ce-settings-compact-hint">
+        Cost estimate assumes 30 1000-word essays with an attached rubric and feedback template.
+        It uses a rough 50k input tokens + 10k output tokens model; actual cost varies with essay length and feedback length.
+      </p>
+      <div id="openrouter-major-list"></div>
+    </div>
+
+    <div class="ce-actions">
+      <button type="submit" class="primary">Save OpenRouter settings</button>
+    </div>
+    <p id="openrouter-status" class="status"></p>
+  </form>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="tier-tags-card">
+  <h2>Differentiation tags</h2>
+  <p class="ce-hint">
+    Optional. Canvas Expert's tiers — <strong>Support, Core, Accelerate, Extend</strong> —
+    stay private. The tag you set here is the only label a <em>student</em> sees on that
+    tier's assignment, so keep it neutral (a color, a form letter). Leave a tag blank for a
+    completely untagged assignment name. Tags double as version labels for anti-cheating and
+    A/B testing — students can't tell a tier from a random form.
+  </p>
+  <form id="tier-tags-form">
+    <div class="settings-grid ce-settings-tier-grid">
+      {% for name in ["Support", "Core", "Accelerate", "Extend"] %}
+      <label>{{ name }} tag <small class="lbl-hint">(student-visible; blank = none)</small>
+        <input type="text" class="tier-tag-input" data-tier="{{ name }}"
+               value="{{ tier_tags[name] }}" placeholder="e.g. {{ {'Support':'Red','Core':'Blue','Accelerate':'Silver','Extend':'White'}[name] }}"
+               autocomplete="off">
+      </label>
+      {% endfor %}
+    </div>
+    <div class="ce-actions">
+      <button type="submit" class="primary">Save tags</button>
+    </div>
+    <p id="tier-tags-status" class="status"></p>
+  </form>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="workspace-settings-card">
+  <h2>Workspace</h2>
+  <p class="ce-hint">
+    {% if workspace_is_local %}
+    no OneDrive found — using local folders for now.
+    {% else %}
+    Your synced content home lives at <strong>{{ workspace_status }}</strong>.
+    {% endif %}
+    Downloaded student work is organized under <strong>Courses</strong> in
+    course → assignment → student → attempt order. <strong>_System</strong> is
+    private machine-owned state; pseudonymized AI packets live separately and
+    must be reviewed before sharing.
+  </p>
+  <div class="ce-actions">
+    <button type="button" id="btn-workspace-open" class="small" {% if workspace_is_local %}disabled{% endif %}>Open folder</button>
+  </div>
+  <div class="ce-settings-section-gap">
+    <strong class="ce-settings-label">Folders here</strong>
+    <ul id="workspace-file-list" class="ce-settings-list">
+      {% for item in workspace_files %}
+      <li>{{ item.name }}{% if item.path %} <span class="muted">({{ item.path }})</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="mirror-card">
+  <h2>Canvas data <small class="lbl-hint">(local mirror)</small></h2>
+  <p class="ce-hint">
+    Canvas Expert keeps a private, local copy of your current courses' assignments,
+    roster, and submissions so Home and grading load instantly and work offline. It
+    refreshes automatically in the background about every 15 minutes — you rarely need
+    to touch it. Data older than {{ mirror_serve_max_age_hours }} h falls back to a live
+    Canvas read.
+  </p>
+  {% if not mirror_enabled %}
+  <div class="ce-notice ce-settings-notice">Background Canvas sync is turned off.</div>
+  {% elif not mirror_configured %}
+  <div class="ce-notice ce-settings-notice">No workspace is configured yet, so there's nothing to sync.</div>
+  {% elif mirror_courses %}
+  <ul class="ce-settings-list" id="mirror-course-list">
+    {% for course in mirror_courses %}
+    <li><strong>{{ course.name }}</strong> <span class="muted">— synced {{ course.synced_relative }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="ce-hint">No current courses to sync yet.</p>
+  {% endif %}
+  <div class="ce-actions">
+    <button type="button" id="btn-mirror-sync" class="primary small"{% if not mirror_enabled or not mirror_configured %} disabled{% endif %}>Sync now</button>
+    <span id="mirror-sync-status" class="status ce-settings-inline-status"></span>
+  </div>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="current-courses-card">
+  <h2>Current courses</h2>
+  <p class="ce-hint">
+    Canvas Expert uses only these courses in Desk scans, normal course pickers, and
+    automatic PowerGrader work. Move a finished course to Previous to keep its local
+    history without including it in current work.
+  </p>
+
+  {% if current_courses %}
+  <table class="profiles">
+    <thead><tr><th>Nickname</th><th>Course name</th><th>ID</th><th></th><th></th></tr></thead>
+    <tbody>
+      {% for c in current_courses %}
+      <tr id="course-row-{{ c.id }}">
+        <td><strong>{{ c.nickname }}</strong></td>
+        <td class="muted">{{ c.name }}</td>
+        <td class="muted">#{{ c.id }}</td>
+        <td>
+          <button class="small active-toggle" data-course-id="{{ c.id }}"
+                  data-current="true">Move to Previous</button>
+        </td>
+        <td>
+          <button class="danger small" data-remove-course="{{ c.id }}"
+                  data-remove-name="{{ c.nickname }}">Remove from Canvas Expert</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="ce-hint">No Current courses yet. Add one from Canvas below.</p>
+  {% endif %}
+</section>
+
+<section class="ce-panel ce-settings-panel" id="previous-courses-card">
+  <h2>Previous courses</h2>
+  <p class="ce-hint">
+    Previous courses stay saved with their local sessions, receipts, downloads, and
+    settings. They are excluded from normal work until you make them Current again.
+  </p>
+
+  {% if previous_courses %}
+  <table class="profiles">
+    <thead><tr><th>Nickname</th><th>Course name</th><th>ID</th><th></th><th></th></tr></thead>
+    <tbody>
+      {% for c in previous_courses %}
+      <tr id="course-row-{{ c.id }}">
+        <td><strong>{{ c.nickname }}</strong></td>
+        <td class="muted">{{ c.name }}</td>
+        <td class="muted">#{{ c.id }}</td>
+        <td>
+          <button class="small active-toggle" data-course-id="{{ c.id }}"
+                  data-current="false">Make Current</button>
+        </td>
+        <td>
+          <button class="danger small" data-remove-course="{{ c.id }}"
+                  data-remove-name="{{ c.nickname }}">Remove from Canvas Expert</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="ce-hint">No Previous courses.</p>
+  {% endif %}
+</section>
+
+<section class="ce-panel ce-settings-panel" id="add-courses-card">
+  <h2>Add courses from Canvas</h2>
+  <p class="ce-hint">
+    Browse every course available to your Canvas account. Adding a course makes it
+    Current in Canvas Expert.
+  </p>
+  <div class="ce-actions ce-settings-course-actions">
+    <button type="button" id="btn-fetch-courses">Browse Canvas courses…</button>
+  </div>
+
+  <div id="course-browser" class="ce-settings-browser" hidden>
+    <label>
+      Search / pick a course
+      <input type="text" id="course-search" placeholder="Type to filter…" autocomplete="off">
+    </label>
+    <div id="course-list"></div>
+  </div>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="download-root-card">
+  <h2>Download location</h2>
+  <p class="ce-hint">
+    Where downloaded submissions are saved on this machine.
+    Each course gets its own subfolder here.
+  </p>
+  <form id="download-root-form">
+    <label>
+      Download root folder
+      <div class="ce-settings-input-row">
+        <input type="text" id="download-root-input" name="path"
+               value="{{ download_root }}" placeholder="e.g. C:\Users\You\Desktop\Canvas Downloads">
+        <button type="submit" class="primary small">Save</button>
+      </div>
+    </label>
+    <p id="download-root-status" class="status ce-settings-status"></p>
+  </form>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="ai-ta-card" data-path="{{ ai_ta_dir }}">
+  <h2>AI-TA Library</h2>
+  <p class="ce-hint">
+    This folder contains the paste-ready skill files you can load into MagicSchool or Copilot. Canvas Expert regenerates it from the current contracts and rubric library, so the contents stay current.
+  </p>
+  <p class="ce-hint">
+    Paste one whole file into your chat assistant, then keep the conversation inside that file's instructions.
+  </p>
+  <div class="ce-actions">
+    <button type="button" id="btn-ai-ta-open" class="small">Open folder</button>
+    <button type="button" id="btn-ai-ta-rebuild" class="primary small">Rebuild</button>
+    <span id="ai-ta-status" class="status ce-settings-inline-status"></span>
+  </div>
+  <div class="ce-settings-files">
+    <strong class="ce-settings-label">Files</strong>
+    <ul id="ai-ta-file-list" class="ce-settings-list"></ul>
+  </div>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="cal">
+  <h2>Academic calendars <small class="lbl-hint">(used by Late Work Sweep &amp; Extensions)</small></h2>
+  <p class="ce-hint">
+    Multiple calendars can be active at once. The sweep automatically uses holidays from
+    whichever calendar covers the selected date range.
+    No calendar = only weekends are skipped.
+  </p>
+
+  <div id="cal-list" class="ce-settings-cal-list">
+    {% if calendars %}
+      {% for key, cal in calendars.items() %}
+      <div class="cal-row" data-cal-key="{{ key }}">
+        <div>
+          <strong>{{ cal.label }}</strong>
+          <span class="muted ce-settings-cal-meta">
+            {{ cal.no_count_dates | length }} day(s) off ·
+            {{ cal.grading_periods | length }} grading period(s)
+          </span>
+        </div>
+        <button class="danger small cal-remove-btn" data-cal-key="{{ key }}">Remove</button>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="callout warn" id="cal-none-callout">
+        No academic calendar configured — only weekends are skipped by default.
+      </div>
+    {% endif %}
+  </div>
+
+  {% if calendar_files %}
+  <p class="ce-hint ce-settings-cal-note">
+    Calendars found in your workspace <strong>Calendars</strong> folder — click to load one.
+    Drop more CSVs in that folder (or add one below) and they'll appear here.
+  </p>
+  <div class="ce-actions ce-settings-cal-actions" id="cal-builtin-actions">
+    {% for cal in calendar_files %}
+    <button type="button" class="cal-load-btn" data-cal-file="{{ cal.name }}">Load {{ cal.label }}</button>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="ce-hint ce-settings-cal-empty">
+    No calendar files in your workspace <strong>Calendars</strong> folder yet. Add one below,
+    or download the template to build your own.
+  </p>
+  {% endif %}
+  <p id="cal-op-status" class="status ce-settings-cal-status"></p>
+
+  <details class="ce-settings-calendar-details">
+    <summary class="delivery-summary">Add a custom CSV calendar</summary>
+    <div class="delivery-inner">
+      <p class="ce-hint ce-settings-cal-note">
+        Paste a calendar CSV. Two formats are accepted:<br>
+        <strong>Canonical (7 columns):</strong> <code>school_year,row_type,code,name,start_date,end_date,report_issue_date,basis</code>
+        — <code>row_type</code> values <em>Holiday</em>, <em>No School for Students</em>, and <em>Holiday for Students/Teachers</em> become no-count dates;
+        <em>Academic Period</em> rows become grading-period presets in the sweep.<br>
+        <strong>Simple (4 columns):</strong> <code>Category,Name,Start Date,End Date</code>
+        — <em>Student Day Off</em> becomes no-count dates; <em>Academic Period</em> becomes grading-period presets.
+        Dates can be <code>MM/DD/YYYY</code> or <code>YYYY-MM-DD</code>.
+      </p>
+      <p class="ce-hint ce-settings-compact-hint">
+        Need a starting point?
+        <a href="/api/calendar/template" download="calendar_template.csv">Download the blank template</a>
+        — then ask an LLM to fill it in for your district and year.
+      </p>
+      <details class="ce-settings-calendar-details ce-settings-calendar-details--nested">
+        <summary class="delivery-summary">LLM prompt for generating a new year's calendar</summary>
+        <div class="delivery-inner">
+          <p class="ce-hint ce-settings-compact-hint">Copy this, attach the downloaded CSV, and send to any LLM:</p>
+          <textarea id="llm-prompt-text" readonly rows="5"
+            class="ce-settings-prompt"
+>Update the attached CSV to the [DISTRICT NAME] [YEAR]-[YEAR+1] school year. Keep the same 7-column format (school_year,row_type,code,name,start_date,end_date,report_issue_date,basis) exactly. Use YYYY-MM-DD dates. Include all grading periods as "Academic Period" rows (use row_type exactly) and all student days off (holidays, breaks, staff days without students) as "Holiday" or "No School for Students" rows with correct start and end dates. Do not add extra columns or change the header.</textarea>
+          <button type="button" id="btn-copy-llm-prompt" class="small">Copy prompt</button>
+        </div>
+      </details>
+      <label>CSV contents
+        <textarea id="cal-csv-input" rows="8" placeholder="school_year,row_type,code,name,start_date,end_date,report_issue_date,basis&#10;2026-27,Academic Period,T1,Term 1 / Report Card 1,2026-09-01,2026-10-09,,&#10;2026-27,Holiday,,Labor Day,2026-09-07,2026-09-07,,"></textarea>
+      </label>
+      <div id="cal-parse-preview" class="ce-settings-preview" hidden></div>
+      <div class="ce-actions">
+        <button type="button" id="btn-cal-parse">Parse &amp; preview</button>
+        <button type="button" id="btn-cal-save" class="primary" hidden>Save this calendar</button>
+      </div>
+      <p id="cal-custom-status" class="status ce-settings-status"></p>
+    </div>
+  </details>
+</section>
+
+<p class="ce-settings-version">CanvasExpert v{{ app_version }}</p>
+
+ </div>
+{% endblock %}
+
+{% block workspace_scripts %}
+<script src="/static/settings.js?v={{ asset_v }}"></script>
+<script src="/static/settings/account.js?v={{ asset_v }}"></script>
+<script src="/static/settings/openrouter.js?v={{ asset_v }}"></script>
+<script src="/static/settings/courses.js?v={{ asset_v }}"></script>
+<script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
+<script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
+
+<script>
+(function () {
+  var button = document.getElementById("btn-mirror-sync");
+  if (!button) return;
+  var status = document.getElementById("mirror-sync-status");
+  button.addEventListener("click", function () {
+    button.disabled = true;
+    if (status) status.textContent = "Syncing… (a first sync can take a minute)";
+    fetch("/api/mirror/sync-now", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "",
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) { if (status) status.textContent = "Synced. Reloading…"; window.location.reload(); }
+        else { if (status) status.textContent = "Some courses could not sync."; button.disabled = false; }
+      })
+      .catch(function () { if (status) status.textContent = "Sync could not run."; button.disabled = false; });
+  });
+})();
+</script>
+
+<script>
+(function () {
+  var form = document.getElementById("tier-tags-form");
+  if (!form) return;
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var tags = {};
+    document.querySelectorAll(".tier-tag-input").forEach(function (inp) {
+      tags[inp.dataset.tier] = inp.value.trim();
+    });
+    var status = document.getElementById("tier-tags-status");
+    status.textContent = "Saving…";
+    fetch("/api/tier-tags", { method: "POST",
+      body: new URLSearchParams({ tags: JSON.stringify(tags) }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { status.textContent = d.ok ? "Saved." : ("Error: " + (d.error || "failed")); })
+      .catch(function (e) { status.textContent = "Error: " + e; });
+  });
+})();
+</script>
+{% endblock %}

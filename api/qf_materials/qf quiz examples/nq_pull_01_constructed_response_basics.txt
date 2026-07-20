@@ -1,0 +1,79 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "NQ Pull Test 01 - Constructed Response Basics",
+  "instructions": "<p>This sandbox quiz checks whether New Quizzes reports preserve typed student responses. Use only synthetic marker text.</p><p>For constructed responses, copy the marker directions as closely as possible.</p>",
+  "metadata": {
+    "subject": "CanvasExpert sandbox",
+    "grade": 8,
+    "standard": "Synthetic New Quizzes response-pull fixture",
+    "variant_group": "nq_pull_basics",
+    "variant_label": "Whole class",
+    "privacy": "Synthetic fixture; no student data in authored file."
+  },
+  "items": [
+    {
+      "id": "basic_q01_anchor_mc",
+      "type": "MC",
+      "prompt": "<p>Which phrase best names the purpose of this sandbox quiz?</p>",
+      "choices": [
+        { "id": "A", "text": "Response pull test", "correct": true },
+        { "id": "B", "text": "Speed grading practice", "correct": false },
+        { "id": "C", "text": "Attendance check", "correct": false },
+        { "id": "D", "text": "Module navigation check", "correct": false }
+      ]
+    },
+    {
+      "id": "basic_q02_fitb_marker",
+      "type": "FITB",
+      "prompt": "<p>Type the word [blank] in the blank. This gives the report one auto-graded text field.</p>",
+      "accept": ["marker"],
+      "answer_mode": "open_entry",
+      "case_sensitive": false
+    },
+    {
+      "id": "basic_q03_short_exact",
+      "type": "ESSAY",
+      "prompt": "<p>In the response box, type this short marker sentence:</p><p><code>CR-BASIC-ALPHA one sentence.</code></p>",
+      "length_guidance": "One short sentence",
+      "rubric_hint": "The response should include the marker CR-BASIC-ALPHA."
+    },
+    {
+      "id": "basic_q04_two_line_response",
+      "type": "ESSAY",
+      "prompt": "<p>Type two lines in the response box.</p><ol><li>Line 1 should be <code>CR-BASIC-LINE-1</code></li><li>Line 2 should be <code>CR-BASIC-LINE-2</code></li></ol>",
+      "length_guidance": "Two short lines",
+      "rubric_hint": "The response should preserve both line markers."
+    },
+    {
+      "id": "basic_q05_special_characters",
+      "type": "ESSAY",
+      "prompt": "<p>Type one sentence that includes this exact marker text:</p><p><code>CR-BASIC \"quoted\" &lt;tag&gt; &amp; apostrophe</code></p>",
+      "length_guidance": "One sentence",
+      "rubric_hint": "The response should preserve quotes, angle brackets, ampersand text, and the marker."
+    },
+    {
+      "id": "basic_q06_formatting_reflection",
+      "type": "ESSAY",
+      "prompt": "<p>Write 2-3 sentences starting with <code>CR-BASIC-REFLECT:</code>. Mention whether you used line breaks, punctuation, or copied marker text.</p>",
+      "length_guidance": "2-3 sentences",
+      "rubric_hint": "The response should begin with CR-BASIC-REFLECT and include a short formatting note."
+    }
+  ],
+  "rationales": [
+    {
+      "item_id": "basic_q01_anchor_mc",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "The quiz is designed to create known responses for a New Quizzes report pull test." },
+        { "id": "B", "correct": false, "rationale": "Speed grading is not the target; the key evidence is whether response text exports cleanly." },
+        { "id": "C", "correct": false, "rationale": "The quiz is not checking attendance because every item is built around response data." },
+        { "id": "D", "correct": false, "rationale": "Module navigation is not tested here; the items focus on exported answer content." }
+      ]
+    },
+    {
+      "item_id": "basic_q02_fitb_marker",
+      "rationale": "The requested word is marker, which creates a simple auto-graded text response for the report."
+    }
+  ]
+}
+</QUIZFORGE_JSON>

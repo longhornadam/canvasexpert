@@ -1,0 +1,24 @@
+.ce-wizard-header { margin-bottom: var(--ce-space-5); text-align: center; }
+.ce-wizard-header h1 { margin: 0 0 var(--ce-space-2); font-size: clamp(24px, 6vw, 30px); }
+.ce-wizard-header p { margin: 0; }
+.wizard-steps { display: flex; gap: var(--ce-space-1); margin-bottom: var(--ce-space-5); }
+.wiz-step { flex: 1; padding: var(--ce-space-2) var(--ce-space-1); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); color: var(--ce-ink-muted); font-size: 12px; font-weight: 700; text-align: center; }
+.wiz-step.active { border-color: var(--ce-accent-canvas); background: var(--ce-accent-canvas); color: var(--ce-on-accent); }
+.wiz-step.done { border-color: var(--ce-ok); background: var(--ce-ok-soft); color: var(--ce-ok); }
+.wizard-panel { margin: 0; }
+.wizard-panel h2 { margin: 0 0 var(--ce-space-2); font-size: 18px; }
+.wizard-panel label { margin: var(--ce-space-3) 0 var(--ce-space-2); }
+.wizard-panel .ce-actions { margin-top: var(--ce-space-4); }
+.ce-wizard-initially-hidden { display: none; }
+.ce-wizard-token-help { margin-bottom: var(--ce-space-3); }
+.ce-wizard-token-help ol { margin: var(--ce-space-2) 0 0; padding-left: 18px; }
+.ce-wizard-example { font-size: 13px; }
+.ce-wizard-skip-row { margin-top: var(--ce-space-2); }
+.ce-wizard-finish { padding: var(--ce-space-6); font-size: 18px; text-align: center; }
+.ce-wizard-finish-actions { justify-content: center; }
+#workspace-result .subfolder-list { display: flex; flex-wrap: wrap; gap: var(--ce-space-2); margin-top: var(--ce-space-2); }
+#workspace-result .subfolder-list span { padding: var(--ce-space-1) var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); font-size: 12px; }
+@media (max-width: 520px) {
+  .wizard-steps { flex-wrap: wrap; }
+  .wiz-step { flex-basis: 42%; }
+}

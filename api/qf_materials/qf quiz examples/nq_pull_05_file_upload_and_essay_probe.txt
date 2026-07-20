@@ -1,0 +1,54 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "NQ Pull Test 05 - File Upload And Essay Probe",
+  "instructions": "<p>This optional sandbox quiz checks how a New Quizzes file-upload item and a matching essay confirmation appear in reports.</p>",
+  "metadata": {
+    "subject": "CanvasExpert sandbox",
+    "grade": 8,
+    "standard": "Synthetic New Quizzes upload and text-response fixture",
+    "variant_group": "nq_pull_upload_probe",
+    "variant_label": "Whole class optional",
+    "privacy": "Synthetic fixture; no student data in authored file."
+  },
+  "items": [
+    {
+      "id": "upload_q01_mc",
+      "type": "MC",
+      "prompt": "<p>What kind of file does this optional probe ask you to upload?</p>",
+      "choices": [
+        { "id": "A", "text": "A small synthetic .txt marker file", "correct": true },
+        { "id": "B", "text": "A personal photo with identifying details", "correct": false },
+        { "id": "C", "text": "A graded assignment from another course", "correct": false },
+        { "id": "D", "text": "A spreadsheet containing real student information", "correct": false }
+      ]
+    },
+    {
+      "id": "upload_q02_file",
+      "type": "FILEUPLOAD",
+      "prompt": "<p>Upload a plain text file named <code>nq-upload-marker.txt</code>.</p><p>The file should contain two lines:</p><ol><li><code>NQ-UPLOAD-MARKER-17</code></li><li>Your sandbox group color: <code>Red</code> or <code>Blue</code></li></ol>",
+      "requirements": "Submit one synthetic .txt file only. Do not include personal information.",
+      "accepted_formats": [".txt"],
+      "max_file_size_mb": 1
+    },
+    {
+      "id": "upload_q03_essay_confirm",
+      "type": "ESSAY",
+      "prompt": "<p>After uploading, paste the first line of your file here: <code>NQ-UPLOAD-MARKER-17</code></p>",
+      "length_guidance": "One line",
+      "rubric_hint": "The response should include NQ-UPLOAD-MARKER-17."
+    }
+  ],
+  "rationales": [
+    {
+      "item_id": "upload_q01_mc",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "The upload probe uses a small synthetic text file so no personal information is needed." },
+        { "id": "B", "correct": false, "rationale": "Personal photos should not be used for this sandbox data-pull test." },
+        { "id": "C", "correct": false, "rationale": "Real coursework is unnecessary and could add irrelevant private data to the test." },
+        { "id": "D", "correct": false, "rationale": "Student information must not be included in this synthetic upload probe." }
+      ]
+    }
+  ]
+}
+</QUIZFORGE_JSON>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block stylesheet_bundle %}
+<link rel="stylesheet" href="/static/ui/tokens.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/foundation.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/components.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/ui/layouts.css?v={{ asset_v }}">
+{% endblock %}
+{% block body_class %}ce-app-page {% block workspace_body_class %}{% endblock %}{% endblock %}
+{% block app_header %}{% include "layouts/_app_header.html" %}{% endblock %}
+{% block main_class %}ce-layout-main{% endblock %}
+{% block content %}
+<div class="ce-shell ce-workspace ce-workspace--{% block workspace_variant %}full{% endblock %}" data-ce-layout="workspace">
+  {% block workspace_header %}{% endblock %}
+  <div class="ce-workspace__grid">
+    {% block left_rail %}{% endblock %}
+    <section class="ce-workspace__stage">{% block primary %}{% endblock %}</section>
+    {% block right_rail %}{% endblock %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts_extra %}
+{% block workspace_scripts %}{% endblock %}
+{% endblock %}

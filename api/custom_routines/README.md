@@ -1,0 +1,15 @@
+# Custom Routines
+
+Drop a `.py` file here and it shows up in the Dashboard → Routines table the next time
+you start Canvas Expert. Each file registers one or more routines with the `@routine`
+decorator. No imports needed — the helpers listed in `AUTHORING.md` are already in scope.
+
+- Files starting with `_` are **templates** and are NOT loaded. Copy
+  `_example_missing_work.py` to a name without the leading underscore to activate it.
+- A broken file is skipped (the server prints the error to its console) — it never takes
+  the app down.
+- A custom routine that uses the same id as a built-in (`sweep`, `download`, `curve`,
+  `grading_debt`) is ignored.
+
+To author one with an LLM, paste `AUTHORING.md` into your assistant and describe what you
+want the routine to check or do.

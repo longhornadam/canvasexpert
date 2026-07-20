@@ -1,0 +1,99 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "Loops & Variables Checkpoint",
+  "instructions": "<p>Read each question carefully. For the code question, trace the program line by line before answering.</p>",
+  "metadata": {
+    "subject": "Intro to Computer Science",
+    "grade": 8,
+    "standard": "Trace and predict output of simple Python for loops; identify valid variable names.",
+    "tier": 2,
+    "variant_group": "cs_loops_checkpoint",
+    "variant_label": "Core"
+  },
+  "items": [
+    {
+      "id": "stim_for",
+      "type": "STIMULUS",
+      "format": "code",
+      "prompt": "<pre style='background-color:#272822;color:#F8F8F2;padding:10px;border-radius:4px;font-family:Courier New, Consolas, monospace;white-space:pre;display:block;'><code>for i in range(3):\n    print(i)</code></pre>"
+    },
+    {
+      "id": "mc_for_output",
+      "type": "MC",
+      "stimulus_id": "stim_for",
+      "prompt": "<p>What does the program above print?</p>",
+      "choices": [
+        { "id": "A", "text": "0, then 1, then 2 (each on its own line)", "correct": true },
+        { "id": "B", "text": "1, then 2, then 3 (each on its own line)", "correct": false },
+        { "id": "C", "text": "0 1 2 all on a single line", "correct": false },
+        { "id": "D", "text": "3", "correct": false }
+      ]
+    },
+    {
+      "id": "tf_range3",
+      "type": "TF",
+      "stimulus_id": "stim_for",
+      "prompt": "<p><code>range(3)</code> includes the value 3.</p>",
+      "answer": false
+    },
+    {
+      "id": "num_runs",
+      "type": "NUMERICAL",
+      "prompt": "<p>How many times does the loop body run in <code>for i in range(5):</code>?</p>",
+      "answer": 5,
+      "evaluation": { "mode": "exact", "value": 5 }
+    },
+    {
+      "id": "ma_varnames",
+      "type": "MA",
+      "prompt": "<p>Which of the following are valid Python variable names? Select all that apply.</p>",
+      "choices": [
+        { "id": "A", "text": "_count", "correct": true },
+        { "id": "B", "text": "total2", "correct": true },
+        { "id": "C", "text": "2cool", "correct": false },
+        { "id": "D", "text": "my var", "correct": false }
+      ]
+    },
+    {
+      "id": "fitb_keyword",
+      "type": "FITB",
+      "prompt": "<p>Python uses the [blank] keyword to begin a counting loop.</p>",
+      "accept": ["for"],
+      "answer_mode": "open_entry",
+      "case_sensitive": false
+    },
+    {
+      "id": "essay_explain",
+      "type": "ESSAY",
+      "prompt": "<p>In 2-3 sentences, explain what a <code>for</code> loop does and give one example of when you would use one.</p>",
+      "length_guidance": "2-3 sentences",
+      "rubric_hint": "Mentions repetition over a sequence/range and a reasonable use case."
+    },
+    { "id": "stim_for_end", "type": "STIMULUS_END", "prompt": "" }
+  ],
+  "rationales": [
+    {
+      "item_id": "mc_for_output",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "range(3) yields 0, 1, 2 and print() outputs each on its own line, so three lines appear." },
+        { "id": "B", "correct": false, "rationale": "This skips 0 and wrongly includes 3; range starts at 0 and stops before the argument." },
+        { "id": "C", "correct": false, "rationale": "Each print() call ends with a newline, so the values cannot land on one line." },
+        { "id": "D", "correct": false, "rationale": "The loop prints the counter each pass, not a single count of iterations." }
+      ]
+    },
+    { "item_id": "tf_range3", "rationale": "range(3) produces 0, 1, 2 and stops before 3, so 3 is never included." },
+    { "item_id": "num_runs", "rationale": "range(5) produces 0,1,2,3,4 - five values - so the body runs five times." },
+    {
+      "item_id": "ma_varnames",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "Names may start with an underscore, so _count is valid." },
+        { "id": "B", "correct": true, "rationale": "Letters followed by digits are allowed, so total2 is valid." },
+        { "id": "C", "correct": false, "rationale": "Names cannot begin with a digit, so 2cool is invalid." },
+        { "id": "D", "correct": false, "rationale": "Names cannot contain spaces, so my var is invalid." }
+      ]
+    },
+    { "item_id": "fitb_keyword", "rationale": "The for keyword begins a count-controlled loop in Python." }
+  ]
+}
+</QUIZFORGE_JSON>

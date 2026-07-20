@@ -1,0 +1,597 @@
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail %}
+{% block title %}Work Tools — Canvas Expert{% endblock %}
+{% block workspace_variant %}three{% endblock %}
+{% block workspace_body_class %}ce-screen{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/course_expert.css?v={{ asset_v }}">{% endblock %}
+
+{% block left_rail %}
+{% if token_is_set %}
+{% call rail('left', 'Work') %}
+    <div class="ce-work-rail" data-ce-hook="course-rail">
+      <div class="ce-work-rail-head"><h2>Work</h2></div>
+      <div class="ce-work-rail-section ce-work-rail-section--start">
+        <p class="ce-work-rail-section-title">Start</p>
+        <div class="ce-work-rail-start-grid">
+          <button type="button" class="ce-work-rail-item" data-rail-tab="quiz">Quiz<span class="ce-work-rail-item-desc">Create and deliver a QuizForge assessment</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="assignment">Assignment<span class="ce-work-rail-item-desc">Create and push an AssignmentForge file</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="page">Page<span class="ce-work-rail-item-desc">Create and place a Canvas page</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="rubric">Rubric<span class="ce-work-rail-item-desc">Create or update a course rubric</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="quick">Quick column<span class="ce-work-rail-item-desc">Add a fast gradebook column</span></button>
+        </div>
+      </div>
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">Continue</p>
+        <div id="ce-rail-continue"><p class="ce-work-rail-empty">None.</p></div>
+      </div>
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">Attention</p>
+        <div id="ce-rail-attention"><p class="ce-work-rail-empty">None.</p></div>
+      </div>
+    </div>
+{% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block primary %}
+{% if not token_is_set %}
+<div class="ce-notice ce-course-expert-notice">No Canvas token saved — <a href="/settings">go to Settings</a> to add one.</div>
+{% else %}
+    <div class="ce-course-expert-center ce-drafting-grid" data-ce-hook="course-shell">
+      <aside class="expert-sidebar expert-sidebar--course" aria-label="Work tool sections">
+    <div class="ce-tabs expert-side-tabs" role="tablist" aria-orientation="vertical">
+      <button type="button" id="ce-tab-button-quiz" class="ce-tab active" data-ce-hook="course-tab" data-tab="quiz" role="tab" aria-selected="true" aria-controls="ce-tab-quiz" tabindex="0">Quiz</button>
+      <button type="button" id="ce-tab-button-assignment" class="ce-tab" data-ce-hook="course-tab" data-tab="assignment" role="tab" aria-selected="false" aria-controls="ce-tab-assignment" tabindex="-1">Assignment</button>
+      <button type="button" id="ce-tab-button-page" class="ce-tab" data-ce-hook="course-tab" data-tab="page" role="tab" aria-selected="false" aria-controls="ce-tab-page" tabindex="-1">Page</button>
+      <button type="button" id="ce-tab-button-rubric" class="ce-tab" data-ce-hook="course-tab" data-tab="rubric" role="tab" aria-selected="false" aria-controls="ce-tab-rubric" tabindex="-1">Rubric</button>
+      <button type="button" id="ce-tab-button-quick" class="ce-tab ce-tab--alt" data-ce-hook="course-tab" data-tab="quick" role="tab" aria-selected="false" aria-controls="ce-tab-quick" tabindex="-1"><em>Quick Assignment</em></button>
+    </div>
+  </aside>
+
+  <div class="ce-workspace-header">
+    <p>Workspace</p>
+    <h1 id="ce-workspace-title">Quiz</h1>
+  </div>
+
+  <!-- ── Tab content ───────────────────────────────────────────────────── -->
+  <div class="ce-workspace-stage">
+  <div class="ce-content ce-panels-wrap expert-main">
+  <section class="ce-panel tool-course-card ce-course-work-card">
+    <div class="tool-course-card-head">
+      <div>
+        <h2>Target courses</h2>
+        <p class="hint">Choose the focused course for Canvas-specific options. Checked courses receive pushes.</p>
+      </div>
+      <div class="ce-course-row">
+        <details class="ce-course-picker" id="ce-course-picker">
+          <summary class="ce-picker-trigger">
+            <span id="ce-picker-label">— pick courses —</span>
+            <span class="ce-picker-caret">▾</span>
+          </summary>
+          <div class="ce-picker-pop">
+            <div class="ce-picker-head">
+              Target courses <span id="target-count" class="cc-count"></span>
+            </div>
+            <div id="course-checklist" class="course-checklist">
+              {% for c in saved_courses %}
+              <div class="cc-row" data-id="{{ c.id }}" data-name="{{ c.name }}">
+                <input type="checkbox" class="cc-cb" value="{{ c.id }}" data-name="{{ c.name }}">
+                <span class="cc-star" title="Current course">★</span>
+                <button type="button" class="cc-focus" title="Focus this course">{{ c.nickname }}</button>
+              </div>
+              {% endfor %}
+              {% if not saved_courses %}
+              <p class="hint ce-u-m0">
+                No Current courses yet. <a href="/settings">Add courses in Settings</a>.
+              </p>
+              {% endif %}
+            </div>
+            <div id="ci-targets" class="ci-targets" hidden></div>
+            <div class="ce-picker-links">
+              <a href="/course" class="small-link">Course info ↗</a>
+              <a href="/settings" class="small-link">Manage ↗</a>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Quiz tab ──────────────────────────────────────────────────────── -->
+  <div id="ce-tab-quiz" class="ce-panel active" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-quiz">
+
+    <!-- Whole-class picker (top) -->
+    <div class="ce-panel ce-quiz-card" id="quiz-whole">
+      <h2 class="ce-u-mb-3">Push quiz</h2>
+      <div class="mode-toggle ce-u-mb-3" role="group" aria-label="Push mode">
+        <button type="button" class="mode-seg active" data-mode="whole">Whole class</button>
+        <button type="button" class="mode-seg" data-mode="diff">Differentiated</button>
+      </div>
+      <label>Quiz file</label>
+      <div class="file-source">
+        <select id="quizfile" class="ce-initially-hidden">
+          <option value="">— select —</option>
+          {% for f in quiz_files %}
+          <option value="{{ f.path }}">{{ f.label }}</option>
+          {% endfor %}
+        </select>
+        <div class="file-source-row">
+          <button type="button" class="file-src-btn" data-src="select">Library</button>
+          <button type="button" class="file-src-btn active" data-src="paste">Paste JSON</button>
+          <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+          <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+        </div>
+        <textarea class="file-src-paste" placeholder="Paste your &lt;QUIZFORGE_JSON&gt;…"></textarea>
+        <p class="file-src-hint ce-initially-hidden"></p>
+      </div>
+      <details class="forge-howto">
+        <summary>Don't have a quiz yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the quiz content (or ask it to write one).</li>
+          <li>Have it format the result as a <code>&lt;QUIZFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.quiz %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.quiz }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.quiz | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
+      </details>
+      <div class="course-scope-summary" data-course-scope="quiz-whole" aria-live="polite"></div>
+      <div class="ce-actions">
+        <button id="btn-validate">Validate</button>
+        <button id="btn-preview">Dry-run preview</button>
+        <button id="btn-push" class="primary">Push live quiz…</button>
+      </div>
+      <pre id="result" class="log" hidden></pre>
+      <div id="push-banner" class="push-banner" hidden></div>
+    </div>
+
+    <!-- Differentiated picker -->
+    <div class="ce-panel" id="quiz-diff" hidden>
+      <p id="groups-status" class="status hint"></p>
+      <div id="variant-rows"></div>
+      <div class="ce-actions">
+        <button id="btn-add-variant">+ Add row</button>
+      </div>
+      <p class="hint ce-course-note">
+        Tiers push to <strong>every checked course</strong> in the Targets list.
+        Groups are matched by name across courses.
+      </p>
+      <div class="course-scope-summary" data-course-scope="quiz-diff" aria-live="polite"></div>
+      <div class="ce-actions ce-u-mt-3">
+        <button id="btn-push-variants" class="primary">Push tiers to checked course(s)…</button>
+      </div>
+      <pre id="variants-result" class="log" hidden></pre>
+      <div id="variants-banner" class="push-banner" hidden></div>
+    </div>
+
+    <!-- Delivery options (below the picker) -->
+    <div class="ce-panel ce-delivery-card">
+      <h2 class="ce-u-mb-3">Delivery options</h2>
+      <div class="settings-grid">
+        <label>Due date <small class="lbl-hint">(optional)</small>
+          <input type="datetime-local" id="due-at">
+        </label>
+        <label>Available from <small class="lbl-hint">(unlock date)</small>
+          <input type="datetime-local" id="unlock-at">
+        </label>
+        <label>Available until <small class="lbl-hint">(lock date)</small>
+          <input type="datetime-local" id="lock-at">
+        </label>
+      </div>
+      <div class="settings-grid ce-grid-two ce-u-mt-3">
+        <label>Grading category <small class="lbl-hint js-ag-hint" id="ag-hint">(select a course)</small>
+          <select id="assignment-group-select" class="js-aggroups" disabled>
+            <option value="">— none / default —</option>
+          </select>
+        </label>
+        <label>Add to module <small class="lbl-hint js-mod-hint" id="mod-hint">(select a course)</small>
+          <select id="module-select" class="js-modules" data-default="first" disabled>
+            <option value="">— don't add to a module —</option>
+            <option value="__new__">＋ Create new module…</option>
+          </select>
+          <input type="text" id="new-module-name" class="js-new-module ce-initially-hidden ce-u-mt-2" placeholder="New module name…">
+        </label>
+      </div>
+      <div class="opt-checks">
+        <label class="opt-check"><input type="checkbox" id="shuffle-answers" checked> Shuffle answer choices</label>
+        <label class="opt-check"><input type="checkbox" id="shuffle-questions"> Shuffle question order</label>
+        <label class="opt-check"><input type="checkbox" id="post-to-sis"> Sync to SIS</label>
+        <label class="opt-check"><input type="checkbox" id="publish-now"> Publish immediately</label>
+        <label class="opt-check"><input type="checkbox" id="hide-results"> Hide results from students</label>
+        <label class="opt-check"><input type="checkbox" id="access-code-enable"> Require access code</label>
+        <div id="access-code-wrap" class="opt-subpanel" hidden>
+          <label>Access code
+            <input type="text" id="access-code" placeholder="e.g. period2quiz" autocomplete="off">
+          </label>
+        </div>
+        <label class="opt-check"><input type="checkbox" id="allow-attempts"> Allow multiple attempts</label>
+        <div id="attempts-wrap" class="opt-subpanel" hidden>
+          <div class="settings-grid ce-grid-four">
+            <label>Attempts allowed
+              <select id="allowed-attempts">
+                <option value="-1">Unlimited</option>
+                {% for n in range(2, 11) %}
+                <option value="{{ n }}"{% if n == 2 %} selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+                <option value="15">15</option>
+                <option value="20">20</option>
+              </select>
+            </label>
+            <label>Score to keep
+              <select id="score-to-keep">
+                <option value="highest" selected>Highest</option>
+                <option value="latest">Latest</option>
+                <option value="average">Average</option>
+                <option value="first">First</option>
+              </select>
+            </label>
+            <label>Cooldown between attempts <small class="lbl-hint">(min, 0 = none)</small>
+              <input type="number" id="attempt-cooldown" value="0" min="0" max="1440">
+            </label>
+            <label class="opt-check ce-u-align-end ce-u-pad-bottom">
+              <input type="checkbox" id="build-on-last"> Build on last attempt
+            </label>
+          </div>
+        </div>
+        <label class="opt-check"><input type="checkbox" id="has-time-limit"> Time limit</label>
+        <div id="time-limit-wrap" class="opt-subpanel" hidden>
+          <label>Minutes
+            <input type="number" id="time-limit-minutes" value="30" min="1" max="600" class="ce-u-compact-input">
+          </label>
+        </div>
+        <label class="opt-check"><input type="checkbox" id="one-at-a-time"> One question at a time</label>
+        <div id="one-at-a-time-wrap" class="opt-subpanel" hidden>
+          <label class="opt-check">
+            <input type="checkbox" id="allow-backtracking" checked> Allow backtracking
+          </label>
+        </div>
+        <label>Calculator <small class="lbl-hint">(shown during quiz)</small>
+          <select id="calculator-type" class="ce-u-auto-input ce-u-mt-1">
+            <option value="none" selected>None</option>
+            <option value="basic">Basic</option>
+            <option value="scientific">Scientific</option>
+          </select>
+        </label>
+        <label class="opt-check ce-u-mt-2">
+          <input type="checkbox" id="physical-version">
+          Also save a printable version
+          <small class="lbl-hint">(QuizForge PDF + DOCX -> Exports folder)</small>
+        </label>
+      </div>
+    </div>
+
+  </div><!-- /#ce-tab-quiz -->
+
+  <!-- ── Assignment tab ──────────────────────────────────────────────────── -->
+  <div id="ce-tab-assignment" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-assignment" hidden>
+
+    <div id="assignment">
+      <h2 class="section-heading">Push Assignment</h2>
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">From AssignmentForge file</h2>
+        <p class="hint ce-u-mb-3">
+          Push an LLM-authored <code>&lt;ASSIGNMENTFORGE_JSON&gt;</code> file to every checked
+          course — HTML description, submission settings, and differentiation tiers come from the file.
+          Tiered files use the group set selected in Roster and create one gradebook column per tier.
+        </p>
+      <details class="forge-howto">
+        <summary>Don't have an assignment yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the assignment content (or ask it to write one).</li>
+          <li>Have it format the result as a <code>&lt;ASSIGNMENTFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.assignment %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.assignment }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.assignment | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
+      </details>
+        <label>AssignmentForge file</label>
+        <div class="file-source">
+          <select id="af-file">
+            <option value="">— select —</option>
+            {% for f in assignment_files %}
+            <option value="{{ f.path }}">{{ f.label }}</option>
+            {% endfor %}
+          </select>
+          <div class="file-source-row">
+            <button type="button" class="file-src-btn active" data-src="select">Library</button>
+            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+          </div>
+          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…"></textarea>
+          <p class="file-src-hint ce-initially-hidden"></p>
+        </div>
+        <label class="ce-u-mt-3">RubricForge file
+          <select id="af-rubric">
+            <option value="">No rubric</option>
+          </select>
+        </label>
+        <div id="af-rubric-controls" hidden>
+          <div class="settings-grid ce-grid-two ce-u-mt-3">
+            <label>Rubric mode
+              <select id="af-rubric-mode">
+                <option value="grading">Grade with rubric (points match rubric)</option>
+                <option value="feedback">Feedback only (keep assignment points)</option>
+              </select>
+            </label>
+            <label class="opt-check ce-u-mt-5">
+              <input type="checkbox" id="af-rubric-link" checked> Link the student explainer page in the description
+            </label>
+          </div>
+          <div class="ce-actions ce-u-mt-3">
+            <button type="button" id="btn-af-copy-prompt" class="small">Copy scoring prompt</button>
+            <span id="af-rubric-status" class="hint ce-u-align-center"></span>
+          </div>
+        </div>
+        <div class="settings-grid ce-u-mt-3">
+          <label>Due date <small class="lbl-hint">(optional)</small>
+            <input type="datetime-local" id="af-due">
+          </label>
+          <label>Available from <small class="lbl-hint">(unlock date)</small>
+            <input type="datetime-local" id="af-unlock">
+          </label>
+          <label>Available until <small class="lbl-hint">(lock date)</small>
+            <input type="datetime-local" id="af-lock">
+          </label>
+        </div>
+        <div class="settings-grid ce-grid-two ce-u-mt-3">
+          <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
+            <select id="af-aggroup" class="js-aggroups" disabled>
+              <option value="">— none / default —</option>
+            </select>
+          </label>
+          <label>Add to module <small class="lbl-hint js-mod-hint">(select a course)</small>
+            <select id="af-module" class="js-modules" data-default="none" disabled>
+              <option value="">— don't add to a module —</option>
+            </select>
+          <input type="text" id="af-new-module" class="js-new-module ce-initially-hidden ce-u-mt-2" placeholder="New module name…">
+          </label>
+        </div>
+        <div class="opt-checks">
+          <label class="opt-check"><input type="checkbox" id="af-sis"> Sync to SIS</label>
+          <label class="opt-check"><input type="checkbox" id="af-publish"> Publish immediately</label>
+        </div>
+        <section class="scheduled-grading-block is-disabled" id="af-scheduled-grading" aria-labelledby="af-scheduled-grading-title">
+          <div class="scheduled-grading-head">
+            <div>
+              <h3 id="af-scheduled-grading-title">Scheduled grading</h3>
+              <p id="af-autoscore-hint">Requires a due date. Add one above to enable these per-assignment opt-ins.</p>
+            </div>
+            <span class="scheduled-grading-badge">Opt-in only</span>
+          </div>
+          <div class="scheduled-grading-options">
+            <label class="scheduled-grading-option">
+              <input type="checkbox" id="af-autoscore" disabled>
+              <span>
+                <strong>Schedule Auto-Score after due date</strong>
+                <small>After the due date, create draft AI suggestions and a teacher review queue.</small>
+              </span>
+            </label>
+            <label class="scheduled-grading-option scheduled-grading-option--nested">
+              <input type="checkbox" id="af-autoscore-push" disabled>
+              <span>
+                <strong>Automatically post eligible AI scores/feedback to Canvas</strong>
+                <small>Writes only eligible scores/comments that pass policy checks; review-needed cases stay out of auto-post.</small>
+              </span>
+            </label>
+          </div>
+          <p class="scheduled-grading-policy">
+            Teacher-controlled per-assignment opt-in only. Never global or default. Auto-post requires eligibility checks,
+            idempotency protection, and audit receipts.
+          </p>
+        </section>
+        <div class="ce-actions">
+          <button id="btn-af-validate">Validate</button>
+          <button id="btn-af-push" class="primary">Push assignment…</button>
+        </div>
+        <div class="course-scope-summary" data-course-scope="assignment" aria-live="polite"></div>
+        <pre id="af-log" class="log" hidden></pre>
+        <div id="af-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+
+    </div><!-- /#ce-tab-assignment -->
+
+  <!-- ── Page tab ──────────────────────────────────────────────────────── -->
+  <div id="ce-tab-page" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-page" hidden>
+
+    <div id="page">
+      <h2 class="section-heading">Push Page</h2>
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">From PageForge file</h2>
+        <p class="hint ce-u-mb-3">
+          Push an LLM-authored <code>&lt;PAGEFORGE_JSON&gt;</code> file to every checked
+          course — title and HTML body come from the file;
+          <code>{{ '{{file:…}}' }}</code> and <code>{{ '{{page:…}}' }}</code> placeholders resolve per course.
+        </p>
+      <details class="forge-howto">
+        <summary>Don't have a page yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the page content (or ask it to write one).</li>
+          <li>Have it format the result as a <code>&lt;PAGEFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.page %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.page }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.page | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
+      </details>
+        <label>PageForge file</label>
+        <div class="file-source">
+          <select id="pf-file">
+            <option value="">— select —</option>
+            {% for f in page_files %}
+            <option value="{{ f.path }}">{{ f.label }}</option>
+            {% endfor %}
+          </select>
+          <div class="file-source-row">
+            <button type="button" class="file-src-btn active" data-src="select">Library</button>
+            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+          </div>
+          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;PAGEFORGE_JSON&gt;…"></textarea>
+          <p class="file-src-hint ce-initially-hidden"></p>
+        </div>
+        <div class="settings-grid ce-grid-two ce-u-mt-3">
+          <label>Add to module <small class="lbl-hint js-mod-hint">(select a course)</small>
+            <select id="pf-module" class="js-modules" data-default="none" disabled>
+              <option value="">— don't add to a module —</option>
+            </select>
+          <input type="text" id="pf-new-module" class="js-new-module ce-initially-hidden ce-u-mt-2" placeholder="New module name…">
+          </label>
+          <div class="opt-checks ce-u-mt-5">
+            <label class="opt-check"><input type="checkbox" id="pf-publish"> Publish immediately</label>
+          </div>
+        </div>
+        <div class="ce-actions">
+          <button id="btn-pf-validate">Validate</button>
+          <button id="btn-pf-prepare" class="secondary">Prepare publication</button>
+          <button id="btn-pf-push" class="primary">Push page…</button>
+        </div>
+        <div class="course-scope-summary" data-course-scope="page" aria-live="polite"></div>
+        <pre id="pf-log" class="log" hidden></pre>
+        <div id="pf-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+
+  </div><!-- /#ce-tab-page -->
+
+  <!-- ── Rubric tab ─────────────────────────────────────────────────────── -->
+  <div id="ce-tab-rubric" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-rubric" hidden>
+
+    <div id="rubric">
+      <h2 class="section-heading">Push Rubric</h2>
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">From RubricForge file</h2>
+        <p class="hint ce-u-mb-3">
+          Push a <code>&lt;RUBRICFORGE_JSON&gt;</code> file to every checked course.
+          Canvas Expert creates (or reuses) the course rubric and updates the student explainer page.
+        </p>
+      <details class="forge-howto">
+        <summary>Don't have a rubric yet? Forge one with your LLM →</summary>
+        <ol>
+          <li>Give your AI the rubric criteria (or ask it to design one).</li>
+          <li>Have it format the result as a <code>&lt;RUBRICFORGE_JSON&gt;</code> file —
+            {% if authoring_skills.rubric %}<button type="button" class="small btn-copy-skill" data-name="{{ authoring_skills.rubric }}">Copy the authoring skill</button> <a class="skill-dl" href="/api/ai-ta/file?name={{ authoring_skills.rubric | urlencode }}" download title="Download as .txt — drop it into your LLM's RAG, project files, or knowledge base">Download</a>{% else %}<a href="/ai-expert#authoring">get the authoring skill →</a>{% endif %}
+          </li>
+          <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
+        </ol>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
+      </details>
+        <label>RubricForge file</label>
+        <div class="file-source">
+          <select id="rf-file">
+            <option value="">— select —</option>
+          </select>
+          <div class="file-source-row">
+            <button type="button" class="file-src-btn active" data-src="select">Library</button>
+            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+          </div>
+          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;RUBRICFORGE_JSON&gt;…"></textarea>
+          <p class="file-src-hint ce-initially-hidden"></p>
+        </div>
+        <div class="ce-actions">
+          <button id="btn-rf-validate">Validate</button>
+          <button id="btn-rf-push" class="primary">Push rubric…</button>
+        </div>
+        <div class="course-scope-summary" data-course-scope="rubric" aria-live="polite"></div>
+        <pre id="rf-log" class="log" hidden></pre>
+        <div id="rf-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+
+  </div><!-- /#ce-tab-rubric -->
+
+  <!-- ── Quick tab ─────────────────────────────────────────────────────── -->
+  <div id="ce-tab-quick" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-quick" hidden>
+    <div id="quick">
+      <h2 class="section-heading">Quick assignment</h2>
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">Fast gradebook column</h2>
+        <p class="hint ce-u-mb-3">
+          For a fast gradebook column across your courses.
+          Authoring real instructions? Use AssignmentForge above.
+        </p>
+        <label>Assignment name
+          <input type="text" id="qa-name" placeholder="e.g. Exit Ticket Week 5">
+        </label>
+        <div class="settings-grid ce-grid-quick">
+          <label>Points
+            <input type="number" id="qa-points" value="100" min="0" step="0.5">
+          </label>
+          <label>Submission type
+            <select id="qa-subtype">
+              <option value="on_paper">On paper</option>
+              <option value="none">No submission</option>
+              <option value="online_text_entry">Text entry</option>
+            </select>
+          </label>
+          <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
+            <select id="qa-aggroup" class="js-aggroups" disabled>
+              <option value="">— none / default —</option>
+            </select>
+          </label>
+        </div>
+        <div class="settings-grid ce-grid-date-publish ce-u-mt-2">
+          <label>Due date <small class="lbl-hint">(optional)</small>
+            <input type="datetime-local" id="qa-due">
+          </label>
+          <div class="opt-checks ce-u-mt-5">
+            <label class="opt-check"><input type="checkbox" id="qa-publish"> Publish immediately</label>
+          </div>
+        </div>
+        <div class="ce-actions">
+          <button id="btn-qa-push" class="primary">Create assignment…</button>
+        </div>
+        <div class="course-scope-summary" data-course-scope="quick" aria-live="polite"></div>
+        <pre id="qa-log" class="log" hidden></pre>
+        <div id="qa-banner" class="push-banner" hidden></div>
+      </div>
+    </div>
+  </div><!-- /#ce-tab-quick -->
+
+  </div><!-- /.ce-panels-wrap -->
+  </div><!-- /.ce-workspace-stage -->
+  </div><!-- /.ce-course-expert-center -->
+{% endif %}
+{% endblock %}
+
+{% block right_rail %}
+{% if token_is_set %}
+{% call rail('right', 'Operation ledger') %}
+  <aside class="ce-summary-panel" data-ce-hook="course-summary" aria-label="Operation ledger">
+    <h3>Operation ledger</h3>
+    <p class="ce-operation-flow">Work → Review → Canvas</p>
+    <div id="ce-operations-list" class="ce-operations-list">
+      <p class="ce-operations-empty">Canvas unchanged.</p>
+    </div>
+  </aside>
+{% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block workspace_scripts %}
+{% if token_is_set %}
+<script>
+  window.QF_FILES            = {{ quiz_files | tojson }};
+  window.QF_QUIZ_FILES       = {{ quiz_files | tojson }};
+  window.QF_ASSIGNMENT_FILES = {{ assignment_files | tojson }};
+  window.QF_PAGE_FILES       = {{ page_files | tojson }};
+  window.QF_CANVAS_BASE      = {{ canvas_base | tojson }};
+  window.QF_HISTORY          = [];
+  window.QF_SAVED            = {{ saved_courses | tojson }};
+</script>
+{% include "_push_common_scripts.html" %}
+<script src="/static/push/quiz.js?v={{ asset_v }}"></script>
+<script src="/static/push/page.js?v={{ asset_v }}"></script>
+<script src="/static/push/rubric.js?v={{ asset_v }}"></script>
+<script src="/static/push/assignment.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/tabs.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/quick_assignment.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/instrument.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/work_rail.js?v={{ asset_v }}"></script>
+{% endif %}
+{% endblock %}

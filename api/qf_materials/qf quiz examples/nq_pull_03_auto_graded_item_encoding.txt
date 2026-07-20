@@ -1,0 +1,152 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "NQ Pull Test 03 - Auto-Graded Item Encoding",
+  "instructions": "<p>This sandbox quiz maps how New Quizzes reports encode auto-graded item responses. Use the obvious marker answers.</p>",
+  "metadata": {
+    "subject": "CanvasExpert sandbox",
+    "grade": 8,
+    "standard": "Synthetic New Quizzes item-type encoding fixture",
+    "variant_group": "nq_pull_auto_graded_encoding",
+    "variant_label": "Whole class",
+    "privacy": "Synthetic fixture; no student data in authored file."
+  },
+  "items": [
+    {
+      "id": "auto_q01_mc",
+      "type": "MC",
+      "prompt": "<p>Select the option whose text should appear in the Student Analysis response cell.</p>",
+      "choices": [
+        { "id": "A", "text": "MC-OPTION-ALPHA selected text", "correct": true },
+        { "id": "B", "text": "MC-OPTION-BETA distractor text", "correct": false },
+        { "id": "C", "text": "MC-OPTION-GAMMA distractor text", "correct": false },
+        { "id": "D", "text": "MC-OPTION-DELTA distractor text", "correct": false }
+      ]
+    },
+    {
+      "id": "auto_q02_ma",
+      "type": "MA",
+      "prompt": "<p>Select the two options marked as selected tags.</p>",
+      "choices": [
+        { "id": "A", "text": "MA-ALPHA selected tag", "correct": true },
+        { "id": "B", "text": "MA-GAMMA selected tag", "correct": true },
+        { "id": "C", "text": "MA-BETA distractor tag", "correct": false },
+        { "id": "D", "text": "MA-DELTA distractor tag", "correct": false }
+      ]
+    },
+    {
+      "id": "auto_q03_tf",
+      "type": "TF",
+      "prompt": "<p>True or false: this item exists to check how true-false responses appear in the report.</p>",
+      "answer": true
+    },
+    {
+      "id": "auto_q04_fitb_open",
+      "type": "FITB",
+      "prompt": "<p>Type <code>OPEN-FITB-17</code> in this open-entry blank: [blank]</p>",
+      "accept": ["OPEN-FITB-17"],
+      "answer_mode": "open_entry",
+      "case_sensitive": false
+    },
+    {
+      "id": "auto_q05_fitb_dropdown",
+      "type": "FITB",
+      "prompt": "<p>Choose the dropdown marker value: [blank]</p>",
+      "accept": ["DROPDOWN-BETA"],
+      "answer_mode": "dropdown",
+      "options": ["DROPDOWN-ALPHA", "DROPDOWN-BETA", "DROPDOWN-GAMMA"],
+      "case_sensitive": false
+    },
+    {
+      "id": "auto_q06_numeric",
+      "type": "NUMERICAL",
+      "prompt": "<p>Enter the numeric marker answer <code>42</code>.</p>",
+      "answer": 42,
+      "evaluation": { "mode": "exact", "value": 42 }
+    },
+    {
+      "id": "auto_q07_matching",
+      "type": "MATCHING",
+      "prompt": "<p>Match each left marker to its matching right marker.</p>",
+      "pairs": [
+        { "left": "MATCH-LEFT-A", "right": "MATCH-RIGHT-A" },
+        { "left": "MATCH-LEFT-B", "right": "MATCH-RIGHT-B" },
+        { "left": "MATCH-LEFT-C", "right": "MATCH-RIGHT-C" }
+      ],
+      "distractors": ["MATCH-RIGHT-DISTRACTOR"]
+    },
+    {
+      "id": "auto_q08_ordering",
+      "type": "ORDERING",
+      "header": "Put the marker sequence in order.",
+      "prompt": "<p>Put the marker sequence in the correct order.</p>",
+      "items": [
+        "ORDER-FIRST",
+        "ORDER-SECOND",
+        "ORDER-THIRD"
+      ]
+    },
+    {
+      "id": "auto_q09_categorization",
+      "type": "CATEGORIZATION",
+      "prompt": "<p>Sort each marker into its matching category.</p>",
+      "categories": ["Red bucket", "Blue bucket"],
+      "items": [
+        { "label": "RED-CAT-A", "category": "Red bucket" },
+        { "label": "RED-CAT-B", "category": "Red bucket" },
+        { "label": "BLUE-CAT-A", "category": "Blue bucket" },
+        { "label": "BLUE-CAT-B", "category": "Blue bucket" }
+      ],
+      "distractors": ["UNUSED-CAT-DISTRACTOR"]
+    }
+  ],
+  "rationales": [
+    {
+      "item_id": "auto_q01_mc",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "This selected marker should reveal how choice text is recorded in the export." },
+        { "id": "B", "correct": false, "rationale": "This distractor is present to check that nonselected choice text does not appear as the response." },
+        { "id": "C", "correct": false, "rationale": "This distractor gives the item another plausible option without changing the intended marker." },
+        { "id": "D", "correct": false, "rationale": "This distractor helps confirm that Canvas records the chosen option, not every option." }
+      ]
+    },
+    {
+      "item_id": "auto_q02_ma",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "MA-ALPHA is one of the two selected markers for this multiple-answer encoding test." },
+        { "id": "B", "correct": true, "rationale": "MA-GAMMA is the second selected marker for this multiple-answer encoding test." },
+        { "id": "C", "correct": false, "rationale": "MA-BETA is a distractor so the export can be checked for only selected values." },
+        { "id": "D", "correct": false, "rationale": "MA-DELTA is a distractor and should not be credited as a selected tag." }
+      ]
+    },
+    {
+      "item_id": "auto_q03_tf",
+      "rationale": "The statement is true because this item exists specifically to check true-false report encoding."
+    },
+    {
+      "item_id": "auto_q04_fitb_open",
+      "rationale": "OPEN-FITB-17 is the requested open-entry marker."
+    },
+    {
+      "item_id": "auto_q05_fitb_dropdown",
+      "rationale": "DROPDOWN-BETA is the requested dropdown marker."
+    },
+    {
+      "item_id": "auto_q06_numeric",
+      "rationale": "The numeric marker answer for this item is exactly 42."
+    },
+    {
+      "item_id": "auto_q07_matching",
+      "rationale": "Each left marker matches the right marker with the same ending letter; the distractor has no partner."
+    },
+    {
+      "item_id": "auto_q08_ordering",
+      "rationale": "The intended order is FIRST, then SECOND, then THIRD."
+    },
+    {
+      "item_id": "auto_q09_categorization",
+      "rationale": "Markers beginning with RED belong in Red bucket, and markers beginning with BLUE belong in Blue bucket."
+    }
+  ]
+}
+</QUIZFORGE_JSON>

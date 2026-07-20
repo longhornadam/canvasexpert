@@ -1,0 +1,94 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "Loops & Variables Checkpoint",
+  "instructions": "<p>Trace each program carefully. Some loops use a start value and a step, so don't assume counting begins at 0 or moves by 1.</p>",
+  "metadata": {
+    "subject": "Intro to Computer Science",
+    "grade": 8,
+    "standard": "Trace and predict output of simple Python for loops; identify valid variable names.",
+    "tier": 3,
+    "variant_group": "cs_loops_checkpoint",
+    "variant_label": "Accelerate"
+  },
+  "items": [
+    {
+      "id": "stim_step",
+      "type": "STIMULUS",
+      "format": "code",
+      "prompt": "<pre style='background-color:#272822;color:#F8F8F2;padding:10px;border-radius:4px;font-family:Courier New, Consolas, monospace;white-space:pre;display:block;'><code>for i in range(1, 6, 2):\n    print(i)</code></pre>"
+    },
+    {
+      "id": "mc_step_output",
+      "type": "MC",
+      "stimulus_id": "stim_step",
+      "prompt": "<p>What does this program print?</p>",
+      "choices": [
+        { "id": "A", "text": "1, then 3, then 5 (each on its own line)", "correct": true },
+        { "id": "B", "text": "1, then 2, then 3, then 4, then 5", "correct": false },
+        { "id": "C", "text": "1, then 3, then 5, then 7", "correct": false },
+        { "id": "D", "text": "2, then 4, then 6", "correct": false }
+      ]
+    },
+    {
+      "id": "ma_step_true",
+      "type": "MA",
+      "stimulus_id": "stim_step",
+      "prompt": "<p>Which statements about <code>range(1, 6, 2)</code> are true? Select all that apply.</p>",
+      "choices": [
+        { "id": "A", "text": "Counting starts at 1", "correct": true },
+        { "id": "B", "text": "Each value increases by 2", "correct": true },
+        { "id": "C", "text": "The value 6 is included", "correct": false },
+        { "id": "D", "text": "The loop body runs 3 times", "correct": true }
+      ]
+    },
+    {
+      "id": "num_step_runs",
+      "type": "NUMERICAL",
+      "prompt": "<p>How many times does the loop body run in <code>for i in range(2, 10, 2):</code>?</p>",
+      "answer": 4,
+      "evaluation": { "mode": "exact", "value": 4 }
+    },
+    {
+      "id": "fitb_step_arg",
+      "type": "FITB",
+      "stimulus_id": "stim_step",
+      "prompt": "<p>In <code>range(start, stop, step)</code>, the third argument that controls how much the counter changes each pass is called the [blank].</p>",
+      "accept": ["step"],
+      "answer_mode": "open_entry",
+      "case_sensitive": false
+    },
+    {
+      "id": "essay_step",
+      "type": "ESSAY",
+      "stimulus_id": "stim_step",
+      "prompt": "<p>Explain how changing the step from 2 to 3 would change what the loop prints. Use specific values as evidence.</p>",
+      "length_guidance": "2-4 sentences",
+      "rubric_hint": "Traces that a step of 3 would print 1, then 4 (stopping before 6), and reasons from the start value and step."
+    },
+    { "id": "stim_step_end", "type": "STIMULUS_END", "prompt": "" }
+  ],
+  "rationales": [
+    {
+      "item_id": "mc_step_output",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "range(1, 6, 2) starts at 1 and steps by 2: 1, 3, 5, stopping before 6." },
+        { "id": "B", "correct": false, "rationale": "A step of 2 skips every other value, so 2 and 4 are not printed." },
+        { "id": "C", "correct": false, "rationale": "range stops before 6, so 7 is never reached." },
+        { "id": "D", "correct": false, "rationale": "Counting starts at the start value 1, not 2." }
+      ]
+    },
+    {
+      "item_id": "ma_step_true",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "The first argument is the start value, 1." },
+        { "id": "B", "correct": true, "rationale": "The third argument, 2, is the step, so each value rises by 2." },
+        { "id": "C", "correct": false, "rationale": "range always stops before its stop argument, so 6 is excluded." },
+        { "id": "D", "correct": true, "rationale": "The values 1, 3, 5 are three values, so the body runs three times." }
+      ]
+    },
+    { "item_id": "num_step_runs", "rationale": "range(2, 10, 2) yields 2, 4, 6, 8 - four values - so the body runs four times." },
+    { "item_id": "fitb_step_arg", "rationale": "The third argument of range() is the step; it sets how much the counter changes each pass." }
+  ]
+}
+</QUIZFORGE_JSON>

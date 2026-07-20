@@ -1,0 +1,96 @@
+"""Parse academic-calendar CSVs for Canvas Expert.
+
+Pure stdlib — no FastAPI or app imports. Called by routes/calendar.py and
+potentially by the gradebook sweep.
+
+_parse_calendar_csv(content: str) -> (sorted_dates: list[str], grading_periods: list[dict])
+"""
+
+
+def _parse_calendar_csv(content: str) -> tuple:
+    """Parse a calendar CSV. Auto-detects two formats:
+
+    Canonical (PISD 7-col): school_year,row_type,code,name,start_date,end_date,...
+      - row_type "Holiday" / "No School for Students" / "Holiday for Students/Teachers"
+        → no-count dates (every calendar day in range)
+      - row_type "Academic Period" → grading period preset
+
+    Simple (custom 4-col): Category,Name,Start Date,End Date
+      - Category "Student Day Off" / "No School" → no-count dates
+      - Category "Academic Period" → grading period preset
+
+    Returns (sorted_dates, grading_periods):
+      - sorted_dates:    [YYYY-MM-DD]
+      - grading_periods: [{name, code, start, end}]
+    Accepts YYYY-MM-DD or MM/DD/YYYY date formats.
+    """
+    import csv as _csv
+    import io as _io
+    from datetime import date as _date, timedelta as _td
+
+    _NO_SCHOOL_TYPES = {"holiday", "no school for students",
+                        "holiday for students/teachers"}
+
+    def _pd(s):
+        s = s.strip()
+        try:
+            return _date.fromisoformat(s)
+        except ValueError:
+            pass
+        parts = s.split("/")
+        if len(parts) == 3:
+            try:
+                return _date(int(parts[2]), int(parts[0]), int(parts[1]))
+            except ValueError:
+                pass
+        return None
+
+    def _expand(d_start, d_end, out: set):
+        d = d_start
+        while d <= d_end:
+            out.add(d.isoformat())
+            d += _td(days=1)
+
+    dates: set = set()
+    periods: list = []
+    reader = _csv.DictReader(_io.StringIO(content))
+    fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
+    canonical = "row_type" in fieldnames and "start_date" in fieldnames
+
+    for row in reader:
+        if canonical:
+            row_type = (row.get("row_type") or "").strip().lower()
+            code     = (row.get("code")     or "").strip()
+            name     = (row.get("name")     or "").strip()
+            start_s  = (row.get("start_date") or "").strip()
+            end_s    = (row.get("end_date")   or "").strip()
+        else:
+            row_type = (row.get("Category") or "").strip().lower()
+            code     = ""
+            name     = (row.get("Name")      or "").strip()
+            start_s  = (row.get("Start Date") or "").strip()
+            end_s    = (row.get("End Date")   or "").strip()
+
+        if not start_s or not end_s:
+            continue
+        d_start = _pd(start_s)
+        d_end   = _pd(end_s)
+        if not d_start or not d_end:
+            continue
+
+        if canonical:
+            if row_type in _NO_SCHOOL_TYPES:
+                _expand(d_start, d_end, dates)
+            elif row_type == "academic period":
+                periods.append({"name": name, "code": code,
+                                "start": d_start.isoformat(),
+                                "end":   d_end.isoformat()})
+        else:
+            if "day off" in row_type or "no school" in row_type:
+                _expand(d_start, d_end, dates)
+            elif "academic period" in row_type:
+                periods.append({"name": name, "code": code,
+                                "start": d_start.isoformat(),
+                                "end":   d_end.isoformat()})
+
+    return sorted(dates), periods

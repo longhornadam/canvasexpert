@@ -1,0 +1,86 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "Reading Check: \"The Lantern\" (Form A)",
+  "instructions": "<p>Read the passage, then answer the questions that follow.</p>",
+  "metadata": {
+    "subject": "ELA 7",
+    "grade": 7,
+    "standard": "Determine theme/central idea and interpret word meaning in context (RL.7.1, RL.7.2, RL.7.4).",
+    "variant_group": "ela7_lantern",
+    "variant_label": "Form A"
+  },
+  "items": [
+    {
+      "id": "stim_lantern",
+      "type": "STIMULUS",
+      "format": "text",
+      "layout": "right",
+      "prompt": "<p><strong>The Lantern</strong></p><p>Every evening, just as the sky turned the color of ash, old Mr. Hale climbed the spiral stair of the lighthouse. He carried a single lantern, its flame held steady against the wind that pushed through the cracks. The fishing boats far out on the water watched for his light the way travelers watch for a familiar face. Some nights the storms were fierce, and the climb left his hands raw on the cold rail. Still, he never missed a night. The town below slept easier knowing the old keeper and his lantern stood guard.</p>"
+    },
+    {
+      "id": "mc_theme",
+      "type": "MC",
+      "stimulus_id": "stim_lantern",
+      "prompt": "<p>Which statement best expresses a central idea of the passage?</p>",
+      "choices": [
+        { "id": "A", "text": "Quiet, faithful dedication can protect and reassure others.", "correct": true },
+        { "id": "B", "text": "Lighthouses are difficult and dangerous to operate.", "correct": false },
+        { "id": "C", "text": "Storms at sea are impossible to predict.", "correct": false },
+        { "id": "D", "text": "Old age makes hard work impossible.", "correct": false }
+      ]
+    },
+    {
+      "id": "mc_vocab_dusk",
+      "type": "MC",
+      "stimulus_id": "stim_lantern",
+      "prompt": "<p>The passage says the keeper climbed the stair when <em>the sky turned the color of ash</em>. This phrase most nearly describes:</p>",
+      "choices": [
+        { "id": "A", "text": "evening, as daylight fades to gray", "correct": true },
+        { "id": "B", "text": "a bright, sunny morning", "correct": false },
+        { "id": "C", "text": "the middle of a rainstorm", "correct": false },
+        { "id": "D", "text": "a fire near the lighthouse", "correct": false }
+      ]
+    },
+    {
+      "id": "fitb_setting",
+      "type": "FITB",
+      "stimulus_id": "stim_lantern",
+      "prompt": "<p>The events of the passage take place at a [blank].</p>",
+      "accept": ["lighthouse", "the lighthouse"],
+      "answer_mode": "open_entry",
+      "case_sensitive": false
+    },
+    {
+      "id": "essay_theme_support",
+      "type": "ESSAY",
+      "stimulus_id": "stim_lantern",
+      "prompt": "<p>What does the keeper's behavior reveal about his character? Support your answer with one detail from the passage.</p>",
+      "length_guidance": "3-4 sentences",
+      "rubric_hint": "Names a trait (dedication, reliability) and cites a detail such as he never missed a night."
+    },
+    { "id": "stim_lantern_end", "type": "STIMULUS_END", "prompt": "" }
+  ],
+  "rationales": [
+    {
+      "item_id": "mc_theme",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "The keeper's steady, nightly service that lets the town sleep easier points to faithful dedication." },
+        { "id": "B", "correct": false, "rationale": "Difficulty is a detail, not the central idea; the focus is on his reliable care." },
+        { "id": "C", "correct": false, "rationale": "Storms appear but the passage is about the keeper, not weather prediction." },
+        { "id": "D", "correct": false, "rationale": "The opposite is shown: despite age, he never misses a night." }
+      ]
+    },
+    {
+      "item_id": "mc_vocab_dusk",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "Ash is gray, and the keeper works each evening, so the phrase signals fading daylight." },
+        { "id": "B", "correct": false, "rationale": "Morning sunlight would not be the color of ash and contradicts every evening." },
+        { "id": "C", "correct": false, "rationale": "Rain is mentioned elsewhere; this phrase describes the sky's color, not a storm." },
+        { "id": "D", "correct": false, "rationale": "Color of ash is a comparison to gray light, not literal fire." }
+      ]
+    },
+    { "item_id": "fitb_setting", "rationale": "The keeper climbs the lighthouse stair each night, so the setting is a lighthouse." }
+  ]
+}
+</QUIZFORGE_JSON>

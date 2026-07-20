@@ -1,0 +1,66 @@
+{% extends "layouts/workspace.html" %}
+{% block title %}Connections — Canvas Expert{% endblock %}
+{% block workspace_body_class %}ce-connections-page{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/connections.css?v={{ asset_v }}">{% endblock %}
+
+{% block primary %}
+<div class="ce-connections-stack">
+  <section class="ce-panel ce-connections-intro">
+    <p class="ce-connections-banner">Canvas Expert runs from this unzipped folder. Moving the folder is okay; regenerate connection packages and copy fresh snippets afterward. Canvas Expert does not require administrator access or a Windows installer.</p>
+    <h1>Connections</h1>
+    <p class="ce-hint">Canvas Expert's MCP server is local and read-only. These copy-only instructions never edit another application's configuration.</p>
+    <div class="ce-connections-actions">
+      <form method="post" action="/api/support-bundle"><button type="submit" class="small">Download support bundle</button></form>
+    </div>
+  </section>
+
+  <div class="ce-connections-grid">
+    <section class="ce-panel ce-connection-card" id="claude-desktop-card">
+      <h2>Claude Desktop</h2>
+      <p class="ce-hint">Create a current folder-linked MCPB package for the Claude Desktop already installed on this computer.</p>
+      <div class="ce-health-list" aria-label="Claude connection health">
+        <span>Canvas: <strong>{{ "Configured" if connection.health.canvas.configured else "Not configured" }}</strong></span>
+        <span>MCP: <strong>{{ "Ready" if connection.health.mcp.importable and connection.health.mcp.entrypoint_present else "Needs attention" }}</strong></span>
+      </div>
+      <p><strong>Current folder</strong><br><code>{{ connection.app_root }}</code></p>
+      <a class="button primary" href="/api/connections/claude-package">Download .mcpb</a>
+      <ol>
+        <li>In Claude Desktop, open Settings → Extensions → Advanced settings → Install Extension.</li>
+        <li>Select the downloaded package. It should appear in conversations.</li>
+        <li>If tools do not appear, restart Claude Desktop and check its Developer settings/logs.</li>
+      </ol>
+      <p class="ce-hint">This is a user-profile import into an already installed Claude client, not a Windows app install. It must not show UAC or require administrator credentials. If district policy shows <strong>Blocked by client policy</strong>, stop; do not bypass it.</p>
+      <p><a href="https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop" target="_blank" rel="noopener">Claude local MCP/MCPB instructions ↗</a> · <a href="https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md" target="_blank" rel="noopener">MCPB manifest ↗</a></p>
+      <details>
+        <summary>Generic stdio fallback</summary>
+        <p class="ce-hint">Copy this JSON into a client that supports local stdio. Canvas Expert does not write it to disk.</p>
+        <pre id="generic-stdio-config">{{ connection.generic_stdio_config | tojson(indent=2) }}</pre>
+        <button type="button" class="small ce-copy-button" data-copy-target="generic-stdio-config">Copy JSON</button>
+      </details>
+    </section>
+
+    <section class="ce-panel ce-connection-card" id="chatgpt-card">
+      <h2>ChatGPT workspace <small class="lbl-hint">(optional)</small></h2>
+      <p class="ce-hint">ChatGPT cannot connect directly to a local stdio server. Use OpenAI's outbound-only Secure MCP Tunnel, then keep the tunnel client running.</p>
+      <p><a href="https://developers.openai.com/api/docs/guides/secure-mcp-tunnels" target="_blank" rel="noopener">OpenAI Secure MCP Tunnel guide ↗</a> · <a href="https://help.openai.com/en/articles/12584461" target="_blank" rel="noopener">ChatGPT developer mode ↗</a></p>
+      <p>Two permission layers apply: Platform tunnel permissions and ChatGPT workspace developer-mode permissions. Create a developer-mode app with Connection set to Tunnel, select the tunnel or enter its <code>tunnel_id</code>, and run Scan Tools.</p>
+      <p class="ce-hint">The <code>CONTROL_PLANE_API_KEY</code> below is set only for the external tunnel process at runtime. Canvas Expert neither asks for nor stores it.</p>
+      <pre id="chatgpt-powershell">{{ connection.chatgpt_powershell }}</pre>
+      <button type="button" class="small ce-copy-button" data-copy-target="chatgpt-powershell">Copy PowerShell</button>
+      <p class="ce-hint">The <code>run</code> command stays active until stopped; run the final cleanup command afterward. Copy only copies text; it never executes a command.</p>
+      <p><strong>Optional portable client path</strong><br><code>{{ connection.portable_tunnel_executable }}</code></p>
+      <p class="ce-hint">If you use a portable tunnel client, this example points to the file inside the current app folder. Canvas Expert does not download, start, install, or assume a machine-wide tunnel client. Later schema changes require the client's review/refresh flow.</p>
+    </section>
+
+    <section class="ce-panel ce-connection-card" id="other-mcp-card">
+      <h2>Other MCP clients</h2>
+      <p class="ce-hint">Use this copy-only JSON with a client that supports local stdio. There is no automatic configuration action.</p>
+      <pre id="other-mcp-config">{{ connection.generic_stdio_config | tojson(indent=2) }}</pre>
+      <button type="button" class="small ce-copy-button" data-copy-target="other-mcp-config">Copy JSON</button>
+      <p class="ce-hint">The server launches from the unzipped folder with the current Python interpreter and does not require a global module or PATH change.</p>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block workspace_scripts %}<script src="/static/connections.js?v={{ asset_v }}"></script>{% endblock %}

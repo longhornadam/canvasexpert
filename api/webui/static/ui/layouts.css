@@ -1,0 +1,37 @@
+.ce-app-header { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(260px, 1fr) auto; align-items: center; gap: var(--ce-space-4); min-width: 0; padding: 7px var(--ce-space-6); border-bottom: 1px solid var(--ce-rule-strong); background: var(--ce-surface-raised); color: var(--ce-ink); }
+.ce-app-header .brand { display: inline-flex; align-items: center; gap: var(--ce-space-2); color: inherit; font-family: var(--ce-font-display); font-size: 17px; font-weight: 750; text-decoration: none; }
+.ce-app-header .brand-logo { width: 27px; height: 27px; }
+.ce-app-nav { display: flex; flex-wrap: nowrap; gap: 2px; min-width: 0; }
+.ce-app-nav a, .ce-app-settings { padding: 7px 9px; border-radius: var(--ce-radius); color: var(--ce-ink-muted); font-size: 13px; font-weight: 650; line-height: 1.2; text-decoration: none; white-space: nowrap; }
+.ce-app-nav a:hover, .ce-app-settings:hover { background: var(--ce-accent-canvas-soft); color: var(--ce-ink); }
+.ce-app-nav .ce-app-nav--active { box-shadow: inset 0 -2px 0 var(--ce-accent-canvas); color: var(--ce-accent-canvas); }
+.ce-app-header .ce-status-strip { display: flex; align-items: center; justify-content: flex-end; gap: var(--ce-space-2); min-width: 0; color: var(--ce-ink-muted); font-size: 11px; }
+.ce-app-header .ce-status-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ce-app-header .ce-readiness-label { font-family: var(--ce-font-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.ce-app-header .ce-readiness-refresh { padding: 4px 7px; border: 1px solid var(--ce-rule-strong); border-radius: var(--ce-radius); background: transparent; color: var(--ce-ink); font-size: 10px; font-weight: 700; }
+.ce-app-header .topbar-right { display: flex; align-items: center; gap: var(--ce-space-2); }
+.ce-layout-main { width: 100%; max-width: none; min-width: 0; margin: 0; padding: 0; }
+.ce-workspace { width: min(100%, var(--ce-width-workspace)); margin: 0 auto; padding: clamp(var(--ce-space-4), 2.5vw, 40px); }
+.ce-workspace__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ce-space-5); min-width: 0; }
+.ce-workspace--three .ce-workspace__grid { grid-template-columns: 240px minmax(0, 1fr) 280px; }
+.ce-workspace--left-main .ce-workspace__grid { grid-template-columns: 240px minmax(0, 1fr); }
+.ce-workspace__stage { min-width: 0; }
+.ce-workspace--three .ce-rail--left, .ce-workspace--left-main .ce-rail--left { padding-left: 0; border-right: 1px solid var(--ce-rule-strong); }
+.ce-workspace--three .ce-rail--right { padding-right: 0; border-left: 1px solid var(--ce-rule-strong); }
+.ce-document { width: min(100%, var(--ce-width-doc)); margin: 0 auto; padding: clamp(var(--ce-space-4), 2.5vw, 40px); }
+.ce-document--wide { width: min(100%, var(--ce-width-doc-wide)); }
+.ce-wizard { width: min(100%, 680px); margin: 0 auto; padding: clamp(var(--ce-space-4), 6vw, 56px) var(--ce-space-4); }
+@media (max-width: 1180px) {
+  .ce-app-header { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ce-app-header .ce-status-strip { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; padding-top: var(--ce-space-2); border-top: 1px solid var(--ce-rule); }
+  .ce-workspace--three .ce-workspace__grid { grid-template-columns: 240px minmax(0, 1fr); }
+  .ce-workspace--three .ce-rail--right { grid-column: 1 / -1; padding: var(--ce-space-4) 0 0; border-top: 1px solid var(--ce-rule-strong); border-left: 0; }
+}
+@media (max-width: 760px) {
+  .ce-app-header { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ce-space-2); padding: var(--ce-space-2) var(--ce-space-4); }
+  .ce-app-nav { grid-column: 1 / -1; grid-row: 2; overflow-x: auto; padding-bottom: var(--ce-space-1); }
+  .ce-app-header .ce-status-strip { grid-row: 3; flex-wrap: wrap; }
+  .ce-workspace { padding: var(--ce-space-4); }
+  .ce-workspace--three .ce-workspace__grid, .ce-workspace--left-main .ce-workspace__grid { grid-template-columns: minmax(0, 1fr); }
+  .ce-workspace .ce-rail--left, .ce-workspace--three .ce-rail--right { grid-column: auto; padding: 0 0 var(--ce-space-3); border: 0; border-bottom: 1px solid var(--ce-rule-strong); }
+}
