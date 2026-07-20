@@ -6,6 +6,8 @@ pattern from test_powergrader_scheduled_autoscore).
 """
 from __future__ import annotations
 
+import time
+
 from fastapi.testclient import TestClient
 
 from api import course_catalog
@@ -556,8 +558,80 @@ def test_mirror_sync_now_route(monkeypatch, tmp_path):
     monkeypatch.setattr(mirror_service, "_canvas_get", canvas)
     response = TestClient(app).post("/api/mirror/sync-now", data={"course_id": "111"})
     payload = response.json()
-    assert payload["ok"] is True
-    assert payload["results"][0]["pass"] == "delta"
+    assert response.status_code == 202
+    assert payload["ok"] is True and isinstance(payload["plan_id"], str)
+    client = TestClient(app)
+    for _ in range(100):
+        status = client.get("/api/mirror/status", params={"plan_id": payload["plan_id"]}).json()
+        if status["plan"]["plans"][0]["state"] in {"succeeded", "failed", "cancelled"}:
+            break
+        time.sleep(0.01)
+    assert status["plan"]["plans"][0]["plan_id"] == payload["plan_id"]
+
+
+def test_coordinated_heartbeat_uses_background_and_concluded_plans_before_findings(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path, courses=(
+        {"id": "111", "name": "Current"}, {"id": "222", "name": "Concluded"},
+    ))
+    monkeypatch.setattr(mirror_service.store, "read_course_context", lambda course_id: {
+        "lifecycle": "concluded" if course_id == "222" else "current",
+        "state": "current",
+    })
+    calls = []
+
+    class FakeCoordinator:
+        def submit(self, course_ids, scopes, *, priority):
+            calls.append(("submit", tuple(course_ids), tuple(scopes), priority))
+            return priority
+
+    monkeypatch.setattr(mirror_service, "coordinator_instance", lambda: FakeCoordinator())
+    monkeypatch.setattr(mirror_service, "wait_for_plan", lambda plan_id: calls.append(("wait", plan_id)))
+    monkeypatch.setattr(mirror_service, "refresh_work_findings", lambda: calls.append(("findings",)))
+    mirror_service.run_coordinated_heartbeat_tick()
+    assert calls == [
+        ("submit", ("111",), ("course.refresh",), "background"),
+        ("submit", ("222",), ("course.refresh",), "concluded"),
+        ("wait", "background"), ("wait", "concluded"), ("findings",),
+    ]
+
+
+def test_named_scope_runners_do_not_call_legacy_full_or_delta(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.setattr(mirror_service.course_catalog, "refresh_catalog", lambda *args, **kwargs: {
+        "catalog": {"assignments": {"state": "current"}, "modules": {"state": "current"},
+                    "assignment_groups": {"state": "current"}}})
+    monkeypatch.setattr(mirror_service.sync, "full_pass", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError()))
+    assert mirror_service._run_course_structure("111") == {"ok": True}
+    assignment_map = {"700": {"id": "700", "is_quiz_lti_assignment": True}}
+    monkeypatch.setattr(mirror_service.store, "read_assignments", lambda _course: {"assignments": assignment_map})
+    seen = []
+    monkeypatch.setattr(mirror_service.new_quizzes, "sync_metadata", lambda *args, **kwargs: seen.append(args[1]) or {"ok": True})
+    monkeypatch.setattr(mirror_service.sync, "delta_pass", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError()))
+    assert mirror_service._run_new_quiz_metadata("111")["ok"] is True
+    assert seen == [[{"id": "700", "is_quiz_lti_assignment": True}]]
+
+
+def test_context_and_group_runner_failures_are_explicit_and_fail_plans(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.setattr(mirror_service.course_context, "refresh_course_context",
+                        lambda *args, **kwargs: {"state": "stale"})
+    monkeypatch.setattr(mirror_service, "_refresh_groups_on_maintenance",
+                        lambda *args, **kwargs: {"state": "unavailable"})
+    assert mirror_service._run_course_context("111") == {"ok": False, "state": "stale"}
+    assert mirror_service._run_groups("111") == {"ok": False, "state": "unavailable"}
+    from api.mirror.coordinator import MirrorCoordinator
+    coordinator = MirrorCoordinator({"course_context": mirror_service._run_course_context,
+                                     "groups": mirror_service._run_groups})
+    context_plan = coordinator.submit(["111"], ["course_context"])
+    group_plan = coordinator.submit(["222"], ["groups"])
+    for _ in range(100):
+        if coordinator.status(context_plan)["plans"][0]["state"] == "failed" and \
+           coordinator.status(group_plan)["plans"][0]["state"] == "failed":
+            break
+        time.sleep(0.01)
+    assert coordinator.status(context_plan)["plans"][0]["state"] == "failed"
+    # Group depends on context, whose missing runner also fails instead of succeeding.
+    assert coordinator.status(group_plan)["plans"][0]["state"] == "failed"
 
 
 # --- background findings refresh ------------------------------------------------------
@@ -628,6 +702,22 @@ def test_notify_course_changed_runs_targeted_submission_delta_after_delay(monkey
         "/api/v1/courses/111/students/submissions",
     ]
     assert store.read_sync("111") == before
+
+
+def test_notify_course_changed_submits_post_write_scope(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    submitted = []
+
+    class FakeCoordinator:
+        def submit(self, course_ids, scopes, *, priority):
+            submitted.append((tuple(course_ids), tuple(scopes), priority))
+            return "post-write-plan"
+
+    monkeypatch.setattr(mirror_service, "coordinator_instance", lambda: FakeCoordinator())
+    monkeypatch.setattr(mirror_service, "wait_for_plan", lambda plan_id: {"state": "succeeded"})
+    timer = mirror_service.notify_course_changed("111", delay_seconds=0.01)
+    timer.join(timeout=5)
+    assert submitted == [(('111',), ("submissions.course_delta",), "post_write")]
 
 
 def test_targeted_submission_delta_returns_sanitized_summary_without_advancing_pass(monkeypatch, tmp_path):

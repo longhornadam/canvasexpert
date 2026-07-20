@@ -21,12 +21,16 @@ from api import __version__
 
 _EVENT_RE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 _ERROR_CLASS_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,79}$")
+_SCOPE_RE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
+_PRIORITY_RE = re.compile(r"^(preflight|post_write|focus|manual|background|concluded)$")
 _OUTCOMES = {"ok", "blocked", "failed", "unconfigured"}
 _MAX_BYTES = 1_048_576
 _BACKUP_COUNT = 3
 _ALLOWED_KEYS = {
     "timestamp", "app_version", "event", "outcome", "duration_ms",
-    "status_code", "error_class", "count",
+    "status_code", "error_class", "count", "logical_count", "physical_count",
+    "byte_count", "retry_count", "transport_ms", "queue_wait_ms", "priority",
+    "scope", "yield_count", "cancel_count",
 }
 _REQUIRED_KEYS = {"timestamp", "app_version", "event", "outcome"}
 
@@ -76,7 +80,8 @@ def _valid_record(record: object) -> bool:
         return False
     if record.get("outcome") not in _OUTCOMES:
         return False
-    for key in ("duration_ms", "count"):
+    for key in ("duration_ms", "count", "logical_count", "physical_count", "byte_count",
+                "retry_count", "transport_ms", "queue_wait_ms", "yield_count", "cancel_count"):
         if key in record and (isinstance(record[key], bool) or
                               not isinstance(record[key], int) or record[key] < 0):
             return False
@@ -90,6 +95,12 @@ def _valid_record(record: object) -> bool:
         not isinstance(record["error_class"], str)
         or not _ERROR_CLASS_RE.fullmatch(record["error_class"])
     ):
+        return False
+    if "scope" in record and (not isinstance(record["scope"], str) or
+                               not _SCOPE_RE.fullmatch(record["scope"])):
+        return False
+    if "priority" in record and (not isinstance(record["priority"], str) or
+                                  not _PRIORITY_RE.fullmatch(record["priority"])):
         return False
     return True
 
@@ -123,6 +134,16 @@ def emit(
     status_code: int | None = None,
     error_class: type[BaseException] | str | None = None,
     count: int | None = None,
+    logical_count: int | None = None,
+    physical_count: int | None = None,
+    byte_count: int | None = None,
+    retry_count: int | None = None,
+    transport_ms: int | None = None,
+    queue_wait_ms: int | None = None,
+    priority: str | None = None,
+    scope: str | None = None,
+    yield_count: int | None = None,
+    cancel_count: int | None = None,
 ) -> None:
     """Write one validated, privacy-minimized event if local logging permits."""
     if not isinstance(event, str) or not _EVENT_RE.fullmatch(event):
@@ -143,6 +164,21 @@ def emit(
         record["error_class"] = _error_class_name(error_class)
     if count is not None:
         record["count"] = _nonnegative_int(count, "count")
+    for key, value in {
+        "logical_count": logical_count, "physical_count": physical_count,
+        "byte_count": byte_count, "retry_count": retry_count, "transport_ms": transport_ms,
+        "queue_wait_ms": queue_wait_ms, "yield_count": yield_count, "cancel_count": cancel_count,
+    }.items():
+        if value is not None:
+            record[key] = _nonnegative_int(value, key)
+    if priority is not None:
+        if not isinstance(priority, str) or not _PRIORITY_RE.fullmatch(priority):
+            raise ValueError("unsupported operational priority")
+        record["priority"] = priority
+    if scope is not None:
+        if not isinstance(scope, str) or not _SCOPE_RE.fullmatch(scope):
+            raise ValueError("scope must be a safe machine code")
+        record["scope"] = scope
     if not _valid_record(record):
         raise ValueError("operational record failed validation")
     try:

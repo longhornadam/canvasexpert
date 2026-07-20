@@ -301,6 +301,25 @@
       .catch(function () { renderMirror({ state: "", label: "Canvas sync status unavailable", sync: false }); });
   }
 
+  function pollMirrorPlan(planId, remaining) {
+    return fetch("/api/mirror/status?plan_id=" + encodeURIComponent(planId), {
+      headers: { "Accept": "application/json" }
+    }).then(responseJson).then(function (result) {
+      var plans = result.body && result.body.plan && result.body.plan.plans;
+      var plan = Array.isArray(plans) ? plans[0] : null;
+      if (!result.response.ok || !plan) throw new Error("sync_status_unavailable");
+      if (["succeeded", "failed", "cancelled"].indexOf(plan.state) !== -1) return plan;
+      if (remaining <= 0) throw new Error("sync_status_timeout");
+      var jobs = Array.isArray(plan.jobs) ? plan.jobs : [];
+      var completed = jobs.filter(function (job) {
+        return ["succeeded", "failed", "cancelled"].indexOf(job.state) !== -1;
+      }).length;
+      renderMirror({ state: "", label: "Syncing Canvas data… " + completed + "/" + jobs.length + " scopes complete", sync: true });
+      return new Promise(function (resolve) { setTimeout(resolve, 750); })
+        .then(function () { return pollMirrorPlan(planId, remaining - 1); });
+    });
+  }
+
   // One honest action: pull fresh Canvas data into the mirror, then recompute
   // the work lists from it, then repaint the cards and freshness line.
   if (syncButton) {
@@ -316,7 +335,10 @@
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: "",
         keepalive: true,
-      }).then(responseJson).then(function () {
+      }).then(responseJson).then(function (syncResult) {
+        if (!syncResult.response.ok || !syncResult.body.plan_id) throw new Error("sync_not_queued");
+        return pollMirrorPlan(syncResult.body.plan_id, 160);
+      }).then(function () {
         return fetch("/api/work/scan", { method: "POST", headers: mutationHeaders(), keepalive: true }).then(responseJson);
       }).then(function () {
         return Promise.all([loadMirror(), refreshLocal()]);

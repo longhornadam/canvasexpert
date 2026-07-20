@@ -16,10 +16,11 @@ from __future__ import annotations
 import threading
 import time
 
-from api.mirror import course_context, store, sync
+from api import course_catalog
+from api.mirror import coordinator, course_context, new_quizzes, store, sync
 
 from . import config, workspace
-from .canvas_client import _canvas_get, _canvas_get_all, _canvas_get_all_complete
+from .canvas_client import _canvas_get, _canvas_get_all, _canvas_get_all_complete, canvas_get_telemetry
 from .routes.courses import load_group_categories
 from .routes.names import _vault as _identity_vault
 
@@ -47,6 +48,144 @@ _PASS_RUNNERS = {"full": sync.full_pass, "delta": sync.delta_pass,
                  "roster": sync.roster_pass}
 
 
+def _course_name(course_id: str) -> str:
+    return next((str(course.get("name") or "") for course in config.active_courses()
+                 if str(course.get("id")) == str(course_id)), "")
+
+
+def _telemetry(scope: str):
+    context = coordinator.current_worker_context()
+    return canvas_get_telemetry(scope, context.get("priority", "manual"),
+                                queue_wait_ms=context.get("queue_wait_ms", 0))
+
+
+def _scoped_client(scope: str, client):
+    """Carry worker priority and telemetry into catalog's helper threads."""
+    context = coordinator.current_worker_context()
+    bound = coordinator.bind_current_worker(client)
+    def call(*args, **kwargs):
+        with canvas_get_telemetry(scope, context.get("priority", "manual"),
+                                  queue_wait_ms=context.get("queue_wait_ms", 0)):
+            return bound(*args, **kwargs)
+    return call
+
+
+def _run_course_context(course_id: str):
+    with _telemetry("course_context"):
+        result = course_context.refresh_course_context(
+            course_id, canvas_get=_canvas_get, canvas_get_all=_canvas_get_all)
+        return {"ok": result.get("state") == "current", "state": result.get("state", "failed")}
+
+
+def _run_course_structure(course_id: str):
+    """Catalog structure only; never piggybacks roster/submission acquisition."""
+    with _telemetry("course_structure"):
+        result = course_catalog.refresh_catalog(
+            course_id, _course_name(course_id), canvas_get_all=_scoped_client("course_structure", _canvas_get_all),
+            canvas_get_all_complete=_scoped_client("course_structure", _canvas_get_all_complete))
+        catalog = result.get("catalog", {}) if isinstance(result, dict) else {}
+        scopes = (catalog.get("assignments", {}), catalog.get("modules", {}),
+                  catalog.get("assignment_groups", {}))
+        return {"ok": bool(result) and all(scope.get("state") == "current" for scope in scopes)}
+
+
+def _run_roster(course_id: str):
+    with _telemetry("roster"):
+        return sync.roster_pass(course_id, canvas_get_all=_canvas_get_all)
+
+
+def _run_groups(course_id: str):
+    with _telemetry("groups"):
+        result = _refresh_groups_on_maintenance(course_id, load_groups=load_group_categories,
+                                                now=store.now_iso())
+        return {"ok": result.get("state") == "current", "state": result.get("state", "failed")}
+
+
+def _run_submission_delta(course_id: str):
+    with _telemetry("submissions.course_delta"):
+        return sync.refresh_submissions_course_delta(course_id, canvas_get_all=_canvas_get_all)
+
+
+def _run_new_quiz_metadata(course_id: str):
+    """Metadata-only refresh from the existing local assignment projection."""
+    with _telemetry("new_quizzes.metadata"):
+        assignment_map = (store.read_assignments(course_id) or {}).get("assignments")
+        if not isinstance(assignment_map, dict):
+            return {"ok": False, "error_class": "assignment_projection_unavailable"}
+        return new_quizzes.sync_metadata(
+            course_id, list(assignment_map.values()), canvas_get_all=_canvas_get_all,
+            bypass_cooldown=coordinator.current_worker_context().get("priority") == "manual")
+
+
+def _run_course_refresh(course_id: str):
+    """One compatibility job: manual calls legacy sync once; heartbeat is filtered."""
+    context = coordinator.current_worker_context()
+    with _telemetry("course.refresh"):
+        if context.get("priority") in {"background", "concluded"}:
+            course = next((item for item in config.active_courses()
+                           if str(item.get("id")) == str(course_id)), None)
+            return _run_heartbeat_course(course) if course else {"ok": False, "error_class": "course_unavailable"}
+        results = sync_now(course_id)
+        return {"ok": bool(results) and all(result.get("ok") for result in results)}
+
+
+def coordinator_instance() -> coordinator.MirrorCoordinator:
+    """The sole production registry.  Every runner above is read-only."""
+    return coordinator.configure_default({
+        "course.refresh": _run_course_refresh,
+        "course_context": _run_course_context,
+        "course_structure": _run_course_structure,
+        "roster": _run_roster,
+        "groups": _run_groups,
+        "submissions.course_delta": _run_submission_delta,
+        "new_quizzes.metadata": _run_new_quiz_metadata,
+    })
+
+
+def enqueue_sync(course_id: str | None = None, scopes: list[str] | None = None) -> str:
+    """Queue manual read-only work; HTTP callers receive the opaque plan ID."""
+    courses = [course for course in config.active_courses()
+               if not course_id or str(course.get("id")) == str(course_id)]
+    if not courses:
+        raise ValueError("Not a Current course.")
+    return coordinator_instance().submit((str(course.get("id")) for course in courses), scopes,
+                                         priority="manual")
+
+
+def enqueue_heartbeat_refreshes() -> list[str]:
+    """Queue one compatibility refresh job per configured course, never direct GET work."""
+    if not config.token_is_set() or not config.mirror_enabled() or workspace.workspace_root() is None:
+        return []
+    instance = coordinator_instance()
+    plans = []
+    for course in config.active_courses():
+        course_id = str(course.get("id") or "")
+        if not course_id:
+            continue
+        context = store.read_course_context(course_id)
+        priority = ("concluded" if context["lifecycle"] == "concluded" and
+                    context["state"] in {"current", "stale"} else "background")
+        plans.append(instance.submit([course_id], ["course.refresh"], priority=priority))
+    return plans
+
+
+def wait_for_plan(plan_id: str, *, poll_seconds: float = 0.05) -> dict:
+    """Heartbeat/timer helper: workers own I/O while this helper only observes state."""
+    instance = coordinator_instance()
+    while True:
+        plans = instance.status(plan_id).get("plans", [])
+        if not plans or plans[0]["state"] in {"succeeded", "failed", "cancelled"}:
+            return plans[0] if plans else {"state": "failed"}
+        time.sleep(poll_seconds)
+
+
+def run_coordinated_heartbeat_tick() -> None:
+    """One daemon tick: workers acquire first, then Home findings observe the result."""
+    for plan_id in enqueue_heartbeat_refreshes():
+        wait_for_plan(plan_id)
+    refresh_work_findings()
+
+
 def _refresh_groups_on_maintenance(course_id: str, *, load_groups, now: str) -> dict:
     """Best-effort private group refresh nested under roster/full maintenance."""
     try:
@@ -66,58 +205,58 @@ def _refresh_groups_on_maintenance(course_id: str, *, load_groups, now: str) -> 
                 "error_code": "refresh_failed"}
 
 
-def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None,
-                       canvas_get_all_complete=None, load_groups=None,
-                       now=None) -> list[dict]:
-    """One tick: run whatever is due for every Current course. Never raises;
-    per-course failures are recorded in that course's _sync envelope and
-    reported in the returned summaries."""
-    if not config.token_is_set() or not config.mirror_enabled():
-        return []
-    if workspace.workspace_root() is None:
-        return []
+def _run_heartbeat_course(course: dict, *, canvas_get=None, canvas_get_all=None,
+                          canvas_get_all_complete=None, load_groups=None, now=None) -> dict:
+    """One course's legacy cadence, called inside a background coordinator job."""
     canvas_get = canvas_get or _canvas_get
     canvas_get_all = canvas_get_all or _canvas_get_all
     canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
     load_groups = load_groups or load_group_categories
     now_iso = now or store.now_iso()
+    course_id = str((course or {}).get("id") or "")
+    if not course_id:
+        return {"ok": False, "error_class": "course_unavailable", "results": []}
+    try:
+        context = course_context.ensure_course_context(
+            course_id, canvas_get=canvas_get, canvas_get_all=canvas_get_all, now=now_iso)
+    except Exception:
+        context = store.read_course_context(course_id)
+    state = store.read_sync(course_id)
+    pass_names = due_passes(state, now_iso)
+    concluded = (context["lifecycle"] == "concluded" and context["state"] in {"current", "stale"})
+    if concluded and "full" not in pass_names:
+        return {"ok": True, "results": []}
+    summaries = []
+    for pass_name in pass_names:
+        try:
+            kwargs = {"canvas_get_all": canvas_get_all, "now": now_iso}
+            if pass_name in {"full", "delta"}:
+                kwargs["canvas_get_all_complete"] = canvas_get_all_complete
+                kwargs["course_name"] = course.get("name")
+            if concluded and pass_name == "full":
+                kwargs["skip_new_quiz_metadata"] = True
+            result = _PASS_RUNNERS[pass_name](course_id, **kwargs)
+        except Exception as error:
+            result = {"ok": False, "error_class": type(error).__name__}
+        if result.get("ok") and pass_name in {"full", "roster"}:
+            result = {**result, "groups": _refresh_groups_on_maintenance(
+                course_id, load_groups=load_groups, now=now_iso)}
+        summaries.append({"course_id": course_id, "pass": pass_name, **result})
+    return {"ok": all(item.get("ok") for item in summaries), "results": summaries}
+
+
+def run_heartbeat_pass(*, canvas_get=None, canvas_get_all=None,
+                       canvas_get_all_complete=None, load_groups=None,
+                       now=None) -> list[dict]:
+    """Compatibility test seam for one tick's per-course cadence."""
+    if not config.token_is_set() or not config.mirror_enabled() or workspace.workspace_root() is None:
+        return []
     summaries = []
     for course in config.active_courses():
-        course_id = str(course.get("id") or "")
-        if not course_id:
-            continue
-        try:
-            context = course_context.ensure_course_context(
-                course_id, canvas_get=canvas_get, canvas_get_all=canvas_get_all,
-                now=now_iso)
-        except Exception:
-            # Context is advisory scheduling state; an unexpected local
-            # storage problem must degrade to ordinary mirror cadence, not
-            # stop the heartbeat for this or later configured courses.
-            context = store.read_course_context(course_id)
-        state = store.read_sync(course_id)
-        pass_names = due_passes(state, now_iso)
-        concluded = (context["lifecycle"] == "concluded"
-                     and context["state"] in {"current", "stale"})
-        if concluded and "full" not in pass_names:
-            # The daily full reconcile is the concluded course's only normal
-            # heartbeat work.  Explicit manual Sync remains a live diagnostic.
-            continue
-        for pass_name in pass_names:
-            try:
-                kwargs = {"canvas_get_all": canvas_get_all, "now": now_iso}
-                if pass_name in {"full", "delta"}:
-                    kwargs["canvas_get_all_complete"] = canvas_get_all_complete
-                    kwargs["course_name"] = course.get("name")
-                if concluded and pass_name == "full":
-                    kwargs["skip_new_quiz_metadata"] = True
-                result = _PASS_RUNNERS[pass_name](course_id, **kwargs)
-            except Exception as e:
-                result = {"ok": False, "error": str(e)}
-            if result.get("ok") and pass_name in {"full", "roster"}:
-                result = {**result, "groups": _refresh_groups_on_maintenance(
-                    course_id, load_groups=load_groups, now=now_iso)}
-            summaries.append({"course_id": course_id, "pass": pass_name, **result})
+        outcome = _run_heartbeat_course(
+            course, canvas_get=canvas_get, canvas_get_all=canvas_get_all,
+            canvas_get_all_complete=canvas_get_all_complete, load_groups=load_groups, now=now)
+        summaries.extend(outcome["results"])
     return summaries
 
 
@@ -194,8 +333,9 @@ def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECO
                 return
             if workspace.workspace_root() is None:
                 return
-            sync.refresh_submissions_course_delta(
-                str(course_id), canvas_get_all=_canvas_get_all)
+            plan_id = coordinator_instance().submit(
+                [str(course_id)], ["submissions.course_delta"], priority="post_write")
+            wait_for_plan(plan_id)
         except Exception:
             pass
 
@@ -205,7 +345,7 @@ def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECO
     return timer
 
 
-def status() -> dict:
+def status(plan_id: str | None = None) -> dict:
     courses = []
     for course in config.active_courses():
         course_id = str(course.get("id") or "")
@@ -219,7 +359,7 @@ def status() -> dict:
             "watermarks": state["watermarks"],
             "context": store.read_course_context(course_id),
         })
-    return {
+    payload = {
         "ok": True,
         "enabled": config.mirror_enabled(),
         "workspace_configured": workspace.workspace_root() is not None,
@@ -227,6 +367,9 @@ def status() -> dict:
         "courses": courses,
         "vault_conflict": _vault_conflict_files(),
     }
+    if plan_id:
+        payload["plan"] = coordinator_instance().status(plan_id)
+    return payload
 
 
 def _vault_conflict_files() -> list[str]:
@@ -244,8 +387,7 @@ def _mirror_heartbeat():
     time.sleep(LAUNCH_DELAY_SECONDS)
     while True:
         try:
-            run_heartbeat_pass()
-            refresh_work_findings()
+            run_coordinated_heartbeat_tick()
         except Exception:
             pass
         time.sleep(TICK_SECONDS)

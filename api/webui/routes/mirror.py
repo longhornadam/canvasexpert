@@ -1,12 +1,7 @@
-"""CanvasMirror routes — status and manual sync.
-
-Thin router over ``api/webui/mirror_service.py`` (house pattern: logic in the
-service module, routes stay declarative). ``sync-now`` runs synchronously —
-a first backfill of a large course can take a minute; the UI should say so.
-"""
+"""CanvasMirror status and asynchronous, read-only manual sync routes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
 
 from .. import mirror_service
@@ -15,12 +10,14 @@ router = APIRouter(tags=["mirror"])
 
 
 @router.get("/api/mirror/status")
-def mirror_status():
-    return JSONResponse(mirror_service.status())
+def mirror_status(plan_id: str = ""):
+    return JSONResponse(mirror_service.status(plan_id or None))
 
 
-@router.post("/api/mirror/sync-now")
-def mirror_sync_now(course_id: str = Form("")):
-    results = mirror_service.sync_now(course_id or None)
-    ok = bool(results) and all(r.get("ok") for r in results)
-    return JSONResponse({"ok": ok, "results": results})
+@router.post("/api/mirror/sync-now", status_code=202)
+def mirror_sync_now(course_id: str = Form(""), scope: list[str] = Form([])):
+    try:
+        plan_id = mirror_service.enqueue_sync(course_id or None, scope or None)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return JSONResponse(status_code=202, content={"ok": True, "plan_id": plan_id})

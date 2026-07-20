@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from api import student_packet
+from api.mirror import coordinator as _mirror_coordinator
 
 from . import af, ai_ta, config, pf, rf, runner
 from . import workspace
@@ -94,14 +95,18 @@ _ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/connections", "/static", "/api
 
 @app.middleware("http")
 async def _onboarding_gate(request: Request, call_next):
-    if not config.token_is_set() or not config.get_canvas_base():
-        path = request.url.path
-        wants_html = "text/html" in request.headers.get("accept", "")
-        allowlisted = any(path.startswith(p) for p in _ALLOWLIST_PREFIXES)
-        if wants_html and not allowlisted:
-            from fastapi.responses import RedirectResponse
-            return RedirectResponse(url="/welcome", status_code=303)
-    return await call_next(request)
+    # The interval covers routing, response construction, and every local API
+    # request.  Background Canvas GET workers inspect this shared gate before
+    # each physical request and cooperatively yield to the teacher.
+    with _mirror_coordinator.foreground_interval():
+        if not config.token_is_set() or not config.get_canvas_base():
+            path = request.url.path
+            wants_html = "text/html" in request.headers.get("accept", "")
+            allowlisted = any(path.startswith(p) for p in _ALLOWLIST_PREFIXES)
+            if wants_html and not allowlisted:
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(url="/welcome", status_code=303)
+        return await call_next(request)
 
 
 app.include_router(_onboarding_router)

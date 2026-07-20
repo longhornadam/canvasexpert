@@ -183,9 +183,20 @@ Config (machine-local): `mirror_enabled` (default true),
 `mirror_serve_max_age_hours` (default 6 — older than this, readers fall back
 to live Canvas).
 
-Routes: `GET /api/mirror/status` (per-course pass envelopes + watermarks),
-`POST /api/mirror/sync-now` (manual delta; falls back to a full backfill for
-a never-synced course — the first one can take a minute).
+Routes: `GET /api/mirror/status` (per-course pass envelopes + watermarks, and
+sanitized plan progress when passed `plan_id`), `POST /api/mirror/sync-now`
+(asynchronous manual read-only sync; returns an opaque plan ID with `202`). The Home
+surface polls the plan before rescanning its local Work findings. The legacy internal
+`sync_now()` compatibility function remains direct for existing callers/tests; the HTTP
+route uses the two-worker coordinator. Heartbeat and post-write refreshes also submit
+read-only coordinator plans, so background GETs yield to foreground local requests.
+See
+`docs/contracts/canvasmirror-coordinator-contract.md`.
+
+For release measurement, `tools/canvasmirror_release_benchmark.py --live-readonly`
+uses the configured 1-current/2-concluded profile with disposable roots and core GET
+owners only. It refuses any other profile and writes aggregate-only metrics outside the
+workspace; it is never a Canvas content/grade write tool.
 
 New Quiz metadata follows the same full/delta cadence without generating
 Student Analysis reports. Per-quiz metadata fetches are skipped while the

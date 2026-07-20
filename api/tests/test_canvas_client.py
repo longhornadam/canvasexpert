@@ -102,3 +102,27 @@ def test_legacy_collection_client_keeps_its_two_value_contract(monkeypatch):
     result = canvas_client._canvas_get_all("/api/v1/courses/111/assignments",
                                             {"per_page": 100})
     assert result == ([{"id": 1}, {"id": 2}], None)
+
+
+def test_get_retries_only_429_with_capped_numeric_retry_after(monkeypatch):
+    throttled = FakeResponse([], status_code=429)
+    throttled.headers["Retry-After"] = "99"
+    _client_with(monkeypatch, [throttled, FakeResponse({"id": 1})])
+    sleeps = []
+    monkeypatch.setattr(canvas_client.time, "sleep", lambda seconds: sleeps.append(seconds))
+    # The synthetic first response asks for a long pause; it is capped.
+    assert canvas_client._canvas_get("/api/v1/courses/111") == ({"id": 1}, None)
+    assert sleeps == [30.0]
+
+
+def test_get_telemetry_keeps_scope_priority_and_actual_queue_wait_identifier_free(monkeypatch):
+    _client_with(monkeypatch, [FakeResponse({"id": 1})])
+    records = []
+    monkeypatch.setattr(canvas_client.operational_log, "emit", lambda *args, **kwargs: records.append(kwargs))
+    with canvas_client.canvas_get_telemetry("course.refresh", "post_write", queue_wait_ms=17):
+        assert canvas_client._canvas_get("/api/v1/courses/111") == ({"id": 1}, None)
+    record = records[-1]
+    assert record["scope"] == "course.refresh"
+    assert record["priority"] == "post_write"
+    assert record["queue_wait_ms"] >= 17
+    assert "url" not in record and "course_id" not in record

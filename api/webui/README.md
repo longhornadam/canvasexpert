@@ -33,6 +33,9 @@ For the shared layout/template API and presentation ownership, see
 | `/about` | What-is-Canvas-Expert explainer | — |
 | `/forge/quizforge/` | Embedded QuizForge zero-auth compiler (separate Pyodide app) | its own |
 
+Home's Canvas sync action queues local read-only coordinator work and polls its opaque
+plan status before refreshing Work cards. It does not keep a Canvas request open.
+
 ### Create module routing
 
 Create is split for low-token debugging.
