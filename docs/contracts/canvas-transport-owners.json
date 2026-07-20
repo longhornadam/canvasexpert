@@ -37,17 +37,6 @@
   "allowed_reconciliation_states": ["targeted", "invalidate", "none", "n/a"],
   "owners": [
     {
-      "path": "api/operation_ledger/adapters/curve.py",
-      "symbol": "CurveAdapter.execute",
-      "detector": "attr:_canvas_send",
-      "call_index": 1,
-      "call_form": "canvas_client._canvas_send(\"PUT\", <submission_path>, request)",
-      "classification": "canvas_mutation",
-      "scopes": ["private.submissions"],
-      "reconciliation": "none",
-      "reason": "reconcile() only re-fetches the assignment submissions from live Canvas to detect drift; it never calls a CanvasMirror invalidate/merge function. Former Program 9 gap."
-    },
-    {
       "path": "api/operation_ledger/adapters/assignment_tiered.py",
       "symbol": "execute",
       "detector": "attr:_canvas_send",
@@ -180,17 +169,6 @@
       "reason": "content.rubric intentionally maps to no catalog invalidate in this unit; optional page bodies have no catalog scope."
     },
     {
-      "path": "api/operation_ledger/adapters/late_policy.py",
-      "symbol": "LatePolicyAdapter.execute",
-      "detector": "attr:_canvas_send",
-      "call_index": 1,
-      "call_form": "canvas_client._canvas_send(method, \"/api/v1/courses/<course_id>/late_policy\", request)",
-      "classification": "canvas_mutation",
-      "scopes": ["gradebook.late_policy"],
-      "reconciliation": "none",
-      "reason": "This ledger-path adapter has no mirror invalidate call. A separate, non-ledger direct route (api/webui/routes/gradebook_policy.py apply_late_policy) implements the same KIND and does call mirror_store.invalidate_late_policy — a duplicate-implementation gap, not just a missing-reconciliation gap. Named in the map."
-    },
-    {
       "path": "api/operation_ledger/adapters/quiz_steps.py",
       "symbol": "ensure_quiz",
       "detector": "attr:_canvas_send",
@@ -288,50 +266,6 @@
       "scopes": ["private.assignments"],
       "reconciliation": "none",
       "reason": "Per-student override write. The base override facts are not projected into the mirror at all; the only mirror footprint is the effective due date cached on the affected submission rows (private.submissions cached_due_date), read by the Student Report 'Due date extended to' line. Bounded, low-severity staleness (the report falls back to live Canvas outside the freshness window) — deferred for 1.0beta as a documented bounded limitation, not an open gap. See mutation-reconciliation-map.md family 3."
-    },
-    {
-      "path": "api/operation_ledger/adapters/roster_membership.py",
-      "symbol": "MembershipAdapter.execute",
-      "detector": "attr:_canvas_send",
-      "call_index": 1,
-      "call_form": "canvas_client._canvas_send(\"POST\", <memberships_path>, req) [add membership]",
-      "classification": "canvas_mutation",
-      "scopes": ["private.groups"],
-      "reconciliation": "none",
-      "reason": "This ledger-path adapter's own execute/reconcile never calls mirror_store.invalidate_groups or merge_group_category. A separate, non-ledger direct path (api/webui/routes/roster_canvas.py, dispatched from roster.py/roster_groups.py) performs the equivalent membership write and does reconcile via _reconcile_group_category. Duplicate-implementation gap, named in the map."
-    },
-    {
-      "path": "api/operation_ledger/adapters/roster_membership.py",
-      "symbol": "MembershipAdapter.execute",
-      "detector": "attr:_canvas_send",
-      "call_index": 2,
-      "call_form": "canvas_client._canvas_send(\"DELETE\", <memberships_path>, {}) [remove membership]",
-      "classification": "canvas_mutation",
-      "scopes": ["private.groups"],
-      "reconciliation": "none",
-      "reason": "Same duplicate-implementation gap as the add-membership call above."
-    },
-    {
-      "path": "api/operation_ledger/adapters/roster_group_set.py",
-      "symbol": "GroupSetAdapter.execute",
-      "detector": "attr:_canvas_send",
-      "call_index": 1,
-      "call_form": "canvas_client._canvas_send(\"POST\", <group_categories_path>, req) [create category]",
-      "classification": "canvas_mutation",
-      "scopes": ["private.groups"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call in this ledger-path adapter. Former Program 9 gap; see also the roster_membership.py duplicate-implementation note."
-    },
-    {
-      "path": "api/operation_ledger/adapters/roster_group_set.py",
-      "symbol": "GroupSetAdapter.execute",
-      "detector": "attr:_canvas_send",
-      "call_index": 2,
-      "call_form": "canvas_client._canvas_send(\"POST\", <groups_path>, greq) [create group in category]",
-      "classification": "canvas_mutation",
-      "scopes": ["private.groups"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call. Former Program 9 gap."
     },
     {
       "path": "api/webui/routes/gradebook_curves.py",

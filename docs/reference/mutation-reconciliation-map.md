@@ -16,15 +16,15 @@ the suite.
 
 ## Current totals (from the JSON, 2026-07-19)
 
-- **56 owners total.**
-- By classification: `canvas_mutation` 44, `canvas_read_acquisition` 5,
+- **50 owners total.** (Down from 56 — Batch 8 retired 4 dead ledger adapters, removing 6 owner entries.)
+- By classification: `canvas_mutation` 38, `canvas_read_acquisition` 5,
   `canvas_upload` 2, `generic_transport_internal` 2, `canvas_mutation_native` 1,
   `diagnostic_probe` 1, `external` 1.
-- By reconciliation state: `none` 17, `n/a` 19, `targeted` 9, `invalidate` 11.
-- By scope (an owner may touch more than one): `private.submissions` 9,
-  `private.groups` 8, `none` 8, `catalog.assignments` 7, `private.assignments` 7,
-  `catalog.modules` 6, `focused_evidence` 6, `new_quiz.metadata` 5,
-  `gradebook.late_policy` 2, `private.submission_comments` 2,
+- By reconciliation state: `none` 10, `n/a` 19, `targeted` 10, `invalidate` 11.
+- By scope (an owner may touch more than one): `private.submissions` 8,
+  `catalog.assignments` 7, `private.assignments` 7, `none` 8, `catalog.modules` 6,
+  `focused_evidence` 6, `new_quiz.metadata` 5, `private.groups` 4,
+  `private.submission_comments` 2, `gradebook.late_policy` 1,
   `new_quiz.responses` 1. `catalog.assignment_groups`, `private.roster`, and
   `unknown` are currently unused (no live mutation touches them).
 
@@ -51,8 +51,8 @@ is the scheduled-routine path `webui/routes/routines_builtin.py`
 directly and neither it nor its caller calls a mirror refresh. This is the
 Batch 7 unit 02 target — point `_run_routine_curve` at the same
 `mirror_service.notify_course_changed` hook (coalesced once per course), not new
-machinery. The ledger adapter `operation_ledger/adapters/curve.py` is **dead**
-(no producer emits `gradebook.curve`) — do not reconcile it; Batch 8 retires it.
+machinery. The ledger adapter `operation_ledger/adapters/curve.py` was **dead**
+(no producer emitted `gradebook.curve`) — Batch 8 retired it.
 
 **Not a gap — late sweep is CanvasExpert-owned:** the late-sweep owners
 (`operation_ledger/adapters/sweep.py SweepAdapter.execute` and
@@ -65,15 +65,13 @@ change: it overrides seconds on already-timestamp-late submissions). No mirror
 consumer reads `seconds_late_override`, so no submissions-projection
 reconciliation is owed. Recorded `n/a`, not a Former Program 9 gap.
 
-**Duplicate implementation — resolved 2026-07-19 (dead ledger path):** the
-ledger adapter `operation_ledger/adapters/curve.py` (`gradebook.curve` KIND) is
-**dead** — no non-test producer emits that KIND (the generic
-`/api/operations/{kind}/prepare` endpoint is only ever called with
-`gradebook.sweep` and the content KINDs). The live curve writers are
+**Duplicate implementation — retired 2026-07-19 (Batch 8):** the
+ledger adapter `operation_ledger/adapters/curve.py` (`gradebook.curve` KIND) was
+**dead** — no non-test producer emitted that KIND. The live curve writers are
 `webui/routes/gradebook_curves.py` (direct route) and
-`routines_builtin.py _curve_apply_core` (scheduled routine); neither reconciles.
-Batch 7 wires reconciliation into those two live paths only; Batch 8 retires the
-dead ledger adapter (Former Program 10). Do not reconcile the ledger adapter.
+`routines_builtin.py _curve_apply_core` (scheduled routine); the former
+reconciles, the latter is Batch 7 unit 02. The dead ledger adapter file and its
+contract and test entries have been removed.
 
 ### 2. Assignment/Quiz/Module structure (`catalog.assignments`, `catalog.modules`, `new_quiz.metadata`)
 
@@ -152,12 +150,12 @@ the one changed category (`mirror_store.merge_group_category`) and falls back
 to a whole-document `invalidate_groups` stale-mark only on failure. This is
 the most complete reconciliation family in the codebase today.
 
-**Duplicate implementation — resolved 2026-07-19 (dead ledger path):** the
+**Duplicate implementation — retired 2026-07-19 (Batch 8):** the
 operation-ledger adapters `operation_ledger/adapters/roster_membership.py`
 (`roster.membership`) and `operation_ledger/adapters/roster_group_set.py`
-(`roster.group_set`) are **dead** — no non-test producer emits those KINDs. The
-live, already-reconciled path is the direct route above. Nothing for Batch 7
-here; Batch 8 retires both dead adapters (Former Program 10).
+(`roster.group_set`) were **dead** — no non-test producer emitted those KINDs. The
+live, already-reconciled path is the direct route above. The dead adapter files
+and their contract and test entries have been removed.
 
 ### 5. Gradebook configuration (`gradebook.late_policy`)
 
@@ -166,11 +164,11 @@ apply_late_policy` calls `mirror_store.invalidate_late_policy` after a
 verified apply — a whole-scope stale-mark, not a precise merge, hence
 reconciliation state `invalidate` rather than `targeted`.
 
-**Duplicate implementation — resolved 2026-07-19 (dead ledger path):** the
+**Duplicate implementation — retired 2026-07-19 (Batch 8):** the
 ledger adapter `operation_ledger/adapters/late_policy.py LatePolicyAdapter`
-(`gradebook.late_policy` KIND) is **dead** — no non-test producer emits that
+(`gradebook.late_policy` KIND) was **dead** — no non-test producer emitted that
 KIND. The live path is the direct route above, which already reconciles via
-`invalidate`. Nothing for Batch 7 here; Batch 8 retires the dead adapter.
+`invalidate`. The dead adapter file and its contract and test entries have been removed.
 
 ### 6. New Quiz native grading (`new_quiz.responses`, `focused_evidence`)
 
@@ -236,18 +234,21 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
    `submissions.cached_due_date`, read by the Student Report extension line, with
    live fallback outside the freshness window. Low severity, and no existing hook
    repairs it (the delta watermark misses override-only changes). See family 3.
-4. **Resolved 2026-07-19 — no Batch 7 work.** The duplicate ledger adapters
+4. **Retired 2026-07-19 — Batch 8 done.** The duplicate ledger adapters
    (`roster_membership.py`, `roster_group_set.py`, `late_policy.py`, and
-   `curve.py`) are confirmed dead: no non-test producer emits their KINDs, and
-   their live direct-route/routine siblings already exist (groups and late policy
-   already reconcile). These are **Batch 8** retirements (Former Program 10), not
-   Batch 7 reconciliation targets.
+   `curve.py`) were confirmed dead: no non-test producer emitted their KINDs, and
+   their live direct-route/routine siblings already existed (groups and late policy
+   already reconcile). These were **Batch 8** retirements (Former Program 10), now
+   complete.
 
 ## Batch 8 hygiene note (from the 2026-07-19 dead-path trace)
 
-- Retire the four dead ledger adapters above and remove their contract entries in
-  the same change (the ownership test fails on a listed owner no longer present,
-  so adapter deletion and JSON pruning must land together).
+- **Done 2026-07-19:** the four dead ledger adapters
+  (`curve.py`, `late_policy.py`, `roster_membership.py`, `roster_group_set.py`)
+  have been deleted, their dedicated test files removed, their imports and
+  registrations stripped from both `__init__.py` files, and their six contract
+  owner entries pruned. The owner count went 56 → 50, and the full ownership
+  test cross-checks pass.
 - The generic `/api/operations/{kind}/prepare` endpoint accepts any registered
   KIND (gated only by `require_local_mutation`, not a kind allowlist). After the
   dead adapters are removed, consider allowlisting the KINDs the UI actually
