@@ -67,7 +67,7 @@
       "classification": "canvas_mutation",
       "scopes": ["private.assignments"],
       "reconciliation": "none",
-      "reason": "No mirror invalidate call for the created override. Former Program 9 gap."
+      "reason": "Per-student override write. The base override facts are not projected into the mirror at all; the only mirror footprint is the effective due date cached on the affected submission rows (private.submissions cached_due_date), read by the Student Report 'Due date extended to' line. Bounded, low-severity staleness (the report falls back to live Canvas outside the freshness window) — deferred for 1.0beta as a documented bounded limitation, not an open gap. See mutation-reconciliation-map.md family 3."
     },
     {
       "path": "api/operation_ledger/adapters/assignment_whole.py",
@@ -221,7 +221,7 @@
       "classification": "canvas_mutation",
       "scopes": ["private.assignments"],
       "reconciliation": "none",
-      "reason": "No mirror invalidate call for the created override. Former Program 9 gap."
+      "reason": "Per-student override write. The base override facts are not projected into the mirror at all; the only mirror footprint is the effective due date cached on the affected submission rows (private.submissions cached_due_date), read by the Student Report 'Due date extended to' line. Bounded, low-severity staleness (the report falls back to live Canvas outside the freshness window) — deferred for 1.0beta as a documented bounded limitation, not an open gap. See mutation-reconciliation-map.md family 3."
     },
     {
       "path": "api/operation_ledger/adapters/quiz_steps.py",
@@ -276,7 +276,7 @@
       "classification": "canvas_mutation",
       "scopes": ["private.assignments"],
       "reconciliation": "none",
-      "reason": "No mirror invalidate call. Former Program 9 gap."
+      "reason": "Per-student override write. The base override facts are not projected into the mirror at all; the only mirror footprint is the effective due date cached on the affected submission rows (private.submissions cached_due_date), read by the Student Report 'Due date extended to' line. Bounded, low-severity staleness (the report falls back to live Canvas outside the freshness window) — deferred for 1.0beta as a documented bounded limitation, not an open gap. See mutation-reconciliation-map.md family 3."
     },
     {
       "path": "api/operation_ledger/adapters/extension.py",
@@ -287,7 +287,7 @@
       "classification": "canvas_mutation",
       "scopes": ["private.assignments"],
       "reconciliation": "none",
-      "reason": "No mirror invalidate call. Former Program 9 gap."
+      "reason": "Per-student override write. The base override facts are not projected into the mirror at all; the only mirror footprint is the effective due date cached on the affected submission rows (private.submissions cached_due_date), read by the Student Report 'Due date extended to' line. Bounded, low-severity staleness (the report falls back to live Canvas outside the freshness window) — deferred for 1.0beta as a documented bounded limitation, not an open gap. See mutation-reconciliation-map.md family 3."
     },
     {
       "path": "api/operation_ledger/adapters/roster_membership.py",
@@ -375,7 +375,7 @@
       "classification": "canvas_mutation",
       "scopes": ["private.assignments"],
       "reconciliation": "none",
-      "reason": "No mirror invalidate call after the override write. Former Program 9 gap."
+      "reason": "Per-student override write (direct route). The base override facts are not projected into the mirror at all; the only mirror footprint is the effective due date cached on the affected submission rows (private.submissions cached_due_date), read by the Student Report 'Due date extended to' line. Bounded, low-severity staleness (the report falls back to live Canvas outside the freshness window) — deferred for 1.0beta as a documented bounded limitation, not an open gap. See mutation-reconciliation-map.md family 3."
     },
     {
       "path": "api/webui/routes/roster_canvas.py",

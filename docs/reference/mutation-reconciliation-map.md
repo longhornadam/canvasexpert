@@ -104,15 +104,42 @@ create alters no assignments-catalog data.
 
 ### 3. Per-student assignment facts (`private.assignments`)
 
-**Gap — no reconciliation:** tier overrides
-(`assignment_tiered.py`), quiz overrides (`quiz_steps.py create_override`),
-and extension/override adapters (`extension.py`) all create/update Canvas
-assignment overrides with no mirror invalidate call.
-`webui/routes/gradebook_extensions.py extend_due` (a direct, non-ledger
-route) has the same gap. No dedicated scope existed for "effective due
-date/override" facts in the locked vocabulary; `private.assignments` is the
-closest fit since overrides are inherently per-student, not catalog data —
-confirmed against the JSON rather than left `unknown`.
+**Deferred (bounded staleness, accepted 2026-07-19) — not an open gap:** tier
+overrides (`assignment_tiered.py`), quiz overrides (`quiz_steps.py
+create_override`), extension/override adapters (`extension.py`), and the direct
+route `webui/routes/gradebook_extensions.py extend_due` all create/update Canvas
+assignment overrides with no mirror invalidate call. A senior audit
+(2026-07-19) traced the actual staleness this causes and ruled it a deliberately
+deferred, bounded limitation rather than a reconciliation task, on this evidence:
+
+- **The mirror stores no assignment-override projection.** `normalize_assignment`
+  (`api/mirror/store.py`) persists only base fields (single class-wide `due_at`,
+  points, name, published, etc.) — no override objects, no `all_dates`, no
+  per-student dates. So the `private.assignments` scope itself has nothing to
+  reconcile. (The scope tag stays `private.assignments` because overrides are
+  inherently per-student, not catalog data — confirmed against the JSON, not
+  `unknown`.)
+- **The only mirror footprint is `cached_due_date` on submission rows**
+  (`normalize_submission`, `store.py`) — Canvas's per-student effective due date.
+  One mirror-backed teacher surface reads it: the Student Report "Due date
+  extended to X" line (`api/student_packet.py` `_info_blocks`). Every other
+  override reader (sweep, late-catchup) reads **live**, so it is always correct.
+- **The write-through delta hook cannot repair it, and this is why it is not
+  simply wired like curves/grades.** `refresh_submissions_course_delta`
+  (`api/mirror/sync.py`) refetches only rows `submitted_since`/`graded_since` the
+  watermark; an override changes `cached_due_date` but neither timestamp, so the
+  affected rows are never refetched. Only the periodic `full_pass` picks it up.
+- **Severity is low and the window is bounded.** The report local path is gated on
+  the freshness window (`mirror_serve_max_age_hours`, default 6h) advanced only by
+  `full_pass`; outside it the report falls back to **live** Canvas and is correct.
+  Worst case: a teacher grants an extension and immediately generates a Student
+  Report within the window, which then shows the pre-override due date — a display
+  blemish on one line, not a grade error.
+
+Closing it would need new machinery not reused from any existing hook (a targeted
+per-assignment submissions force-refetch, or a new whole-scope submissions
+stale-mark). Given the low, bounded severity and the live fallback, that machinery
+is deferred for 1.0beta. If reopened, verify these facts against code first.
 
 ### 4. Groups and membership (`private.groups`)
 
@@ -203,9 +230,12 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
    stale-mark hook (ten `none` → `invalidate` contract transitions). Rubric
    library and `new_quiz.metadata` reconciliation remain outside this unit; a
    per-record merge remains a later refinement, not Batch 7 work.
-3. **Per-student assignment facts** (family 3): decide the reconciliation
-   shape for overrides/extensions (`private.assignments`) — no existing
-   invalidate function covers this scope yet.
+3. **Per-student assignment facts** (family 3): **decided 2026-07-19 — deferred
+   as a bounded, documented limitation, not an open gap.** Overrides/extensions
+   have no mirror override projection; their only mirror footprint is
+   `submissions.cached_due_date`, read by the Student Report extension line, with
+   live fallback outside the freshness window. Low severity, and no existing hook
+   repairs it (the delta watermark misses override-only changes). See family 3.
 4. **Resolved 2026-07-19 — no Batch 7 work.** The duplicate ledger adapters
    (`roster_membership.py`, `roster_group_set.py`, `late_policy.py`, and
    `curve.py`) are confirmed dead: no non-test producer emits their KINDs, and
