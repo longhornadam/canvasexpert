@@ -360,3 +360,120 @@ def score(http_post=None):
 '''
     calls, aliases = _scan_source(source)
     assert aliases == [("score", "alias:post")]
+
+
+# ───────────────────────────── reconciliation-label guard ────────────────────
+# Structural checks above prove every mutation call site is *listed*, but the
+# `reconciliation` field itself is human-authored and unverified: a call site
+# that actually refreshes the mirror can still be mislabeled "none" (an
+# unreconciled gap), which misdirects planning. This guard closes the specific
+# error class that a real audit found — `gradebook_curves.py` curve_apply /
+# revert_curve were labeled "none" while calling notify_course_changed. It
+# asserts no first-party owner marked reconciliation="none" has a
+# reconcile-call token anywhere in its enclosing function's source.
+
+# Known post-write mirror-reconciliation function names. A "none" owner whose
+# function contains one of these is calling a reconcile path and is mislabeled.
+RECONCILE_TOKENS = (
+    "notify_course_changed",
+    "_notify_write_through",
+    "refresh_submissions_course_delta",
+    "merge_group_category",
+    "_reconcile_group_category",
+    "invalidate_groups",
+    "invalidate_late_policy",
+    "invalidate_responses",
+    "invalidate_scope",
+)
+
+
+class _FunctionSourceCollector(ast.NodeVisitor):
+    """Map each qualified enclosing symbol to its function source segment(s).
+
+    Uses the exact same qualified-name scheme as ``_SymbolTracker`` (``<Class>.<method>``
+    inside a class, bare function name otherwise, nearest-enclosing for nested
+    functions), so an owner's ``symbol`` looks up the function containing its call.
+    """
+
+    def __init__(self, source: str):
+        self.source = source
+        self.class_stack: list[str] = []
+        self.func_stack: list[str] = []
+        self.sources: dict[str, list[str]] = {}
+
+    def _qual(self) -> str:
+        if self.func_stack:
+            if self.class_stack:
+                return f"{self.class_stack[-1]}.{self.func_stack[-1]}"
+            return self.func_stack[-1]
+        return "<module>"
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.class_stack.append(node.name)
+        self.generic_visit(node)
+        self.class_stack.pop()
+
+    def _visit_func(self, node) -> None:
+        self.func_stack.append(node.name)
+        segment = ast.get_source_segment(self.source, node)
+        if segment is not None:
+            self.sources.setdefault(self._qual(), []).append(segment)
+        self.generic_visit(node)
+        self.func_stack.pop()
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_func(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_func(node)
+
+
+def _collect_function_sources(source: str) -> dict[str, list[str]]:
+    collector = _FunctionSourceCollector(source)
+    collector.visit(ast.parse(source))
+    return collector.sources
+
+
+def test_no_none_owner_actually_reconciles():
+    """A reconciliation="none" label asserts the owner performs NO post-write
+    mirror reconciliation. If the owner's enclosing function actually calls a
+    reconcile function, the label is a lie — exactly the defect an audit found
+    on gradebook_curves.py curve_apply/revert_curve. Fail, naming the offender,
+    so the label must be corrected (usually to "targeted"/"invalidate")."""
+    per_file_sources: dict[str, dict[str, list[str]]] = {}
+    offenders = []
+    for owner in CONTRACT["owners"]:
+        if owner["reconciliation"] != "none":
+            continue
+        rel = owner["path"]
+        abs_path = REPO_ROOT / rel
+        if not abs_path.is_file():
+            continue  # stale entries are caught by test_every_listed_owner_still_exists_in_source
+        if rel not in per_file_sources:
+            per_file_sources[rel] = _collect_function_sources(
+                abs_path.read_text(encoding="utf-8")
+            )
+        blob = "\n".join(per_file_sources[rel].get(owner["symbol"], []))
+        hits = [tok for tok in RECONCILE_TOKENS if tok in blob]
+        if hits:
+            offenders.append((rel, owner["symbol"], sorted(hits)))
+    assert not offenders, (
+        "Owner(s) labeled reconciliation='none' whose function calls a reconcile "
+        "function — the 'none' label is wrong; correct it (likely 'targeted'/'invalidate') "
+        f"or the reason: {offenders}"
+    )
+
+
+def test_synthetic_mislabeled_none_owner_is_flagged():
+    """Prove the guard mechanism actually trips on a 'none' function that
+    reconciles (using synthetic source, so the real scan is never weakened)."""
+    source = '''
+def curve_apply(course_id):
+    _canvas_send("PUT", "/x", {"submission": {}})
+    mirror_service.notify_course_changed(course_id)
+    return {"ok": True}
+'''
+    fns = _collect_function_sources(source)
+    blob = "\n".join(fns.get("curve_apply", []))
+    hits = [tok for tok in RECONCILE_TOKENS if tok in blob]
+    assert hits == ["notify_course_changed"]

@@ -20,10 +20,10 @@ the suite.
 - By classification: `canvas_mutation` 44, `canvas_read_acquisition` 5,
   `canvas_upload` 2, `generic_transport_internal` 2, `canvas_mutation_native` 1,
   `diagnostic_probe` 1, `external` 1.
-- By reconciliation state: `none` 19, `n/a` 19, `targeted` 7, `invalidate` 11.
+- By reconciliation state: `none` 17, `n/a` 19, `targeted` 9, `invalidate` 11.
 - By scope (an owner may touch more than one): `private.submissions` 9,
-  `catalog.assignments` 8, `private.groups` 8, `private.assignments` 7,
-  `none` 7, `catalog.modules` 6, `focused_evidence` 6, `new_quiz.metadata` 5,
+  `private.groups` 8, `none` 8, `catalog.assignments` 7, `private.assignments` 7,
+  `catalog.modules` 6, `focused_evidence` 6, `new_quiz.metadata` 5,
   `gradebook.late_policy` 2, `private.submission_comments` 2,
   `new_quiz.responses` 1. `catalog.assignment_groups`, `private.roster`, and
   `unknown` are currently unused (no live mutation touches them).
@@ -34,20 +34,25 @@ the suite.
 
 **Covered (targeted):** PowerGrader's two grade-push owners —
 `api/powergrader/session_actions.py push_grades` and
-`api/powergrader/autopush_executor.py run_autopush_for_session` — both
-converge through `_notify_write_through` in `api/webui/routes/powergrader.py`,
-which calls `mirror_service.notify_course_changed` (a narrow per-course
-submissions delta refresh). This is the only submissions-scope family with a
-real, tested targeted reconciliation path today.
+`api/powergrader/autopush_executor.py run_autopush_for_session` — converge
+through `_notify_write_through` in `api/webui/routes/powergrader.py` (and, for
+the scheduled-autoscore path, an inline `notify_course_changed` in
+`routines_powergrader.py`), which calls `mirror_service.notify_course_changed`
+(a narrow per-course submissions delta refresh). The **direct grade-curve
+routes** `webui/routes/gradebook_curves.py` (`curve_apply`, `revert_curve`)
+are ALSO already reconciled: each calls `mirror_service.notify_course_changed`
+on its success branch (the same hook, inline rather than via
+`_notify_write_through`). A 2026-07-19 audit corrected these two from a false
+`none` to `targeted`.
 
-**Gap — no reconciliation:** every grade-curve owner
-(`operation_ledger/adapters/curve.py`, `webui/routes/gradebook_curves.py`
-(`curve_apply`, `revert_curve`), `webui/routes/routines_builtin.py`
-(`_curve_apply_core`)) writes `posted_grade` directly and never calls a mirror
-invalidate/refresh function. This is a Former Program 9 exit-gate target:
-curves write the exact grade scope PowerGrader already reconciles, so the fix
-is likely "point them at the same `mirror_service.notify_course_changed` hook,"
-not new machinery.
+**Gap — no reconciliation:** the one remaining unreconciled live curve writer
+is the scheduled-routine path `webui/routes/routines_builtin.py`
+(`_curve_apply_core`, driven by `_run_routine_curve`): it writes `posted_grade`
+directly and neither it nor its caller calls a mirror refresh. This is the
+Batch 7 unit 02 target — point `_run_routine_curve` at the same
+`mirror_service.notify_course_changed` hook (coalesced once per course), not new
+machinery. The ledger adapter `operation_ledger/adapters/curve.py` is **dead**
+(no producer emits `gradebook.curve`) — do not reconcile it; Batch 8 retires it.
 
 **Not a gap — late sweep is CanvasExpert-owned:** the late-sweep owners
 (`operation_ledger/adapters/sweep.py SweepAdapter.execute` and
@@ -87,10 +92,15 @@ both rubric owners at `none`; neither has an invalidate in this unit.
 
 **No catalog scope exists (by design, not a gap):** page bodies
 (`PageAdapter.execute` create-page call, `RubricAdapter.execute`
-create-student-page call) and rubric-body-only creates have no dedicated
-catalog scope in the allowed vocabulary — this matches spine 7.1 ("page
-bodies are not a 1.0-beta requirement") and is recorded as scope `none`, not
-`unknown`.
+create-student-page call) have no dedicated catalog scope in the allowed
+vocabulary — this matches spine 7.1 ("page bodies are not a 1.0-beta
+requirement") and is recorded as scope `none`, not `unknown`. The
+`RubricAdapter.execute` create-rubric call is likewise scope `none`: a
+2026-07-19 audit corrected it from a misleading `catalog.assignments` tag,
+because `rf.canvas_rubric_payload` builds a Course-level bookkeeping
+association (`association_type: "Course"`, no assignment linkage — assignment
+association is deferred to the `content.assignment` adapter), so a rubric
+create alters no assignments-catalog data.
 
 ### 3. Per-student assignment facts (`private.assignments`)
 
@@ -180,12 +190,14 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
 
 ## Batch 7 seeds (named gaps, in priority order)
 
-1. **Submissions/comments** (family 1): wire the two live grade-curve writers —
-   `webui/routes/gradebook_curves.py` and `routines_builtin.py _curve_apply_core`
-   — to the same `mirror_service.notify_course_changed` targeted refresh
-   PowerGrader already uses. The ledger `curve.py` adapter is dead (see family 1)
-   — do not reconcile it. The late sweep is out of scope — CanvasExpert-owned
-   (`n/a`), not a reconciliation gap.
+1. **Submissions/comments** (family 1): the direct curve routes
+   `webui/routes/gradebook_curves.py` (`curve_apply`, `revert_curve`) were found
+   ALREADY reconciled (corrected to `targeted` 2026-07-19), so the only remaining
+   gap is the scheduled-routine writer `routines_builtin.py _curve_apply_core` /
+   `_run_routine_curve` — wire it to the same `mirror_service.notify_course_changed`
+   targeted refresh PowerGrader uses (coalesced once per course; Batch 7 unit 02).
+   The ledger `curve.py` adapter is dead (see family 1) — do not reconcile it. The
+   late sweep is out of scope — CanvasExpert-owned (`n/a`), not a reconciliation gap.
 2. **Catalog structure** (family 2): **covered 2026-07-19** for
    `catalog.assignments` and `catalog.modules` by the central ledger post-apply
    stale-mark hook (ten `none` → `invalidate` contract transitions). Rubric

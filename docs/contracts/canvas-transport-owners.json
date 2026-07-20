@@ -164,9 +164,9 @@
       "call_index": 1,
       "call_form": "canvas_client._canvas_send(\"POST\", path, canvas_payload) [create rubric]",
       "classification": "canvas_mutation",
-      "scopes": ["catalog.assignments"],
+      "scopes": ["none"],
       "reconciliation": "none",
-      "reason": "content.rubric intentionally maps to no catalog invalidate in this unit; rubric-library reconciliation remains outside the catalog hook."
+      "reason": "Creates a Course-level rubric: rf.canvas_rubric_payload sets rubric_association with association_type 'Course' and purpose 'bookkeeping' (no assignment linkage; assignment-rubric association is deferred to the content.assignment adapter, see rubric.py docstring). The create alters no assignments-catalog data, so the honest scope is 'none', not catalog.assignments. content.rubric maps to no catalog invalidate."
     },
     {
       "path": "api/operation_ledger/adapters/rubric.py",
@@ -341,8 +341,8 @@
       "call_form": "_canvas_send(\"PUT\", <submission_path>, request) [apply curve]",
       "classification": "canvas_mutation",
       "scopes": ["private.submissions"],
-      "reconciliation": "none",
-      "reason": "Direct webui route, parallel to operation_ledger/adapters/curve.py; neither path calls a mirror invalidate function. Former Program 9 gap."
+      "reconciliation": "targeted",
+      "reason": "Direct webui route: on the success branch (any push ok) it calls mirror_service.notify_course_changed(course_id), which runs sync.refresh_submissions_course_delta — the same narrow per-course submissions delta refresh PowerGrader uses, inline rather than via the _notify_write_through helper. The parallel ledger adapter operation_ledger/adapters/curve.py is dead (no producer emits gradebook.curve); the scheduled-routine path routines_builtin.py _curve_apply_core is the only remaining unreconciled curve writer (Batch 7 unit 02)."
     },
     {
       "path": "api/webui/routes/gradebook_curves.py",
@@ -352,8 +352,8 @@
       "call_form": "_canvas_send(\"PUT\", <submission_path>, request) [revert curve]",
       "classification": "canvas_mutation",
       "scopes": ["private.submissions"],
-      "reconciliation": "none",
-      "reason": "No mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "targeted",
+      "reason": "Direct webui route: on the success branch (any push ok) it calls mirror_service.notify_course_changed(course_id), which runs sync.refresh_submissions_course_delta — the same narrow per-course submissions delta refresh PowerGrader uses, inline rather than via the _notify_write_through helper. Reverting a curve writes posted_grade back and is reconciled identically to the apply path above."
     },
     {
       "path": "api/webui/routes/gradebook_policy.py",
@@ -452,7 +452,7 @@
       "classification": "canvas_mutation",
       "scopes": ["private.submissions", "private.submission_comments"],
       "reconciliation": "targeted",
-      "reason": "Every powergrader.py caller of run_interactive_autopush (the wrapper around this function) calls _notify_write_through -> mirror_service.notify_course_changed -> sync.refresh_submissions_course_delta on success, a narrow per-course submissions delta refresh."
+      "reason": "Reconciled on every entry point. The three api/webui/routes/powergrader.py callers of the wrapper run_interactive_autopush call _notify_write_through -> mirror_service.notify_course_changed -> sync.refresh_submissions_course_delta on success. The direct scheduled-autoscore caller api/webui/routes/routines_powergrader.py (which calls run_autopush_for_session, bypassing the wrapper) reconciles inline via mirror_service.notify_course_changed guarded on pushed. Both are the same narrow per-course submissions delta refresh."
     },
     {
       "path": "api/powergrader/session_actions.py",
