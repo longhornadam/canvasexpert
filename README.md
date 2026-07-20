@@ -13,15 +13,15 @@ Free. Private. Open source. Uses your secure Canvas "Personal Access Token". Run
 
 ## Getting started
 
-Step 1 - Download the code. Click the green **Code** button near the top of this page, then **Download ZIP** (or grab the latest ZIP from the **Releases** page). Unzip it.
-Step 2 - Put the folder anywhere in your own files.
+Step 1 - Click the green **Code** button near the top of this page, then **Download ZIP** and unzip it.
+Step 2 - Put the unzipped folder anywhere in your own files.
 Step 3 - Double-click `Open Canvas Expert.bat`. First run sets itself up automatically, no admin needed.
 
 ## Learn more
 
 Want more detail? Give `LEARN_CANVASEXPERT.md` to a chatbot and ask it anything.
 
-For developers: the full source, dev docs, and design notes live on the [`dev` branch](https://github.com/longhornadam/canvasexpert/tree/dev).
+For developers: see `AGENTS.md` and `docs/README.md`.
 
 ## License
 
@@ -29,6 +29,8 @@ MIT — see `LICENSE`.
 
 ## AI Disclosures
 
-**Yes, AI helped build this — a lot of it.** No point being coy about it: CanvasExpert was built by a teacher working shoulder-to-shoulder with AI coding tools. Some folks have strong feelings about that, and that's fair — if it's a dealbreaker for you, this probably isn't your tool, and no hard feelings. 🙂 But if you're curious rather than allergic: the AI was the power tools; a working teacher drew the blueprints, reviewed the work, and signed off on the house. It's open source for exactly this reason — you never have to take anyone's word for it. Read it, run it, break it, fork it.
+CanvasExpert was built by a teacher working with AI coding tools. 
 
-**About your students' data:** never send anyone's personally identifiable information (PII) to an AI service — in the US that's a FERPA violation. CanvasExpert's optional AI features pseudonymize names and IDs before anything leaves your computer. That's a real safeguard, not a magic FERPA-proof stamp, so you're still the adult in the room — know what you're sending.
+CanvasExpert's optional AI features pseudonymize names and IDs before anything leaves your computer, but that's not a 100% guarantee. Review anything you're going to send to AI services.
+
+Never send anyone's personally identifiable information (PII) to an AI service. Not only is that uncool, it's illegal.

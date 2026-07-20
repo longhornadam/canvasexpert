@@ -1,0 +1,14 @@
+#!/bin/sh
+# Block accidental commit of a Canvas access token (pattern: NNNN~<40+ alnum>).
+# Secrets belong only in api/.env (gitignored). This is a backstop against a
+# token sneaking into a tracked file. Shared via: git config core.hooksPath .githooks
+match=$(git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+' | grep -E '[0-9]{3,6}~[A-Za-z0-9]{40,}')
+if [ -n "$match" ]; then
+  echo "" >&2
+  echo "COMMIT BLOCKED: a possible Canvas access token is in your staged changes." >&2
+  echo "$match" | sed -E 's/([0-9]{3,6}~[A-Za-z0-9]{4})[A-Za-z0-9]+/\1.../g' >&2
+  echo "Remove it. The token belongs only in api/.env (gitignored)." >&2
+  echo "" >&2
+  exit 1
+fi
+exit 0
