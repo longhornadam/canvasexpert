@@ -1208,10 +1208,27 @@ preflight, verification, native evidence action, or focused diagnostic read.
 | 7 | Mutation reconciliation coverage | Inventory every mutation owner; declare exact affected scopes, coalesced refreshes, pending/failed local convergence states, preflight yielding, and retry/idempotency proof. | Every live preflight, mutation, verification, and receipt. | Beta-blocking. Do not default to whole-course sync. |
 | 8 | Transport ownership and beta acceptance | Retire only proven-unused shims; enforce direct-transport ownership; then run the deliberate full suite, rendered routes, benchmark, privacy scan, offline/current/concluded, and OneDrive release matrix. | Named specialized transports documented at their owners. | Final beta checkpoint. |
 
-Batch 1 is accepted. Batch 2 may be prepared only as senior design; it is not
-implementation-ready until its Course Info response and email boundaries are locked. The
-next implementation batch is selected from this table only when its dependencies and
-decision seams are ready.
+**Current status (2026-07-20) — supersedes the per-row "Status / dependency" column
+above, which is retained for historical planning context.** All execution batches are
+complete and accepted; the code work for 1.0-beta is done:
+
+- Batch 0 — delivered (regression boundary). Batch 1 — GREEN (`6705490`).
+- Batch 2 (people context) — ACCEPTED; both decision seams resolved (`html_url` computed
+  at read time, never persisted; the student-email column was removed outright).
+- Batch 3 (gradebook reads) — ACCEPTED (`04a`). Batch 4 (precision grading) — ACCEPTED
+  (`f1135b4`). Batch 5 (reports/portfolios) — ACCEPTED (`1b3a2c1`).
+- Batch 6 (Home/Work/Routines/MCP) — ACCEPTED (units 01–06, `1d85660`).
+- Batch 7 (mutation reconciliation) — ACCEPTED (`7a703c2`/`6f9dbf8`/`8e22fbb`); the
+  per-student override unit is DEFERRED as a documented bounded limitation (family 3).
+- Batch 8 (transport ownership & beta acceptance) — dead-path retirement ACCEPTED
+  (`f3cf5e5`); bounded coordinator + release telemetry ACCEPTED (`074ecd5`); release-
+  acceptance build gates (repo privacy scan, transport-ownership test) landed (`24315f5`).
+  The **live beta-acceptance RUN** (benchmark + offline/current-concluded/OneDrive/
+  network-fault matrices) is intentionally **deferred to real start-of-year courses** —
+  see `docs/reference/1.0beta-acceptance-record.md`.
+
+The next initiative is not a new batch but a **cruft-removal / de-duplication audit** — see
+`docs/handoffs/cruft-removal-audit-brief.md`.
 
 ### 17.2 Retained requirements crosswalk
 
