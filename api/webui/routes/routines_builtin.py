@@ -7,7 +7,7 @@ import json
 import uuid as _uuid
 from datetime import datetime, timedelta
 
-from .. import config
+from .. import config, mirror_service
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
 from ..mirror_reads import students_or_live, submissions_or_live
@@ -191,6 +191,7 @@ def _run_routine_curve(params):
     lines, ok, flagged, applied = [], True, 0, 0
     for c in config.active_courses():
         cid = str(c["id"])
+        course_applied = 0
         asgns, err = _canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
         if err:
             lines.append(f"✗ {c['nickname']}: {err}")
@@ -235,7 +236,18 @@ def _run_routine_curve(params):
             all_ok, event_id, _ = _curve_apply_core(cid, aid, "target_average", settings, rows)
             ok = ok and all_ok
             applied += 1
+            course_applied += 1
             lines.append(f"✓ {c['nickname']}: curved \"{a.get('name','')}\" {avg_pct:.1f}% → {floor:g}% ({len(rows)} students)")
+        # Coalesced write-through: after this course's whole curve batch, fire one
+        # per-course submissions refresh so mirror-backed grade reads pick up the
+        # curved scores. Fire-and-forget (self-guarding, swallows its own errors);
+        # the heartbeat's full delta pass repairs any miss — same contract as the
+        # PowerGrader grade-push path. A course that curved nothing fires nothing.
+        if course_applied:
+            try:
+                mirror_service.notify_course_changed(cid)
+            except Exception:
+                pass
     summary = f"{applied} assignment(s) curved" if mode == "apply" else f"{flagged} assignment(s) flagged below {floor:g}%"
     return {"ok": ok, "lines": lines or ["· all assignment averages at or above the floor"], "summary": summary}
 

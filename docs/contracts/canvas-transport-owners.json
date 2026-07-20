@@ -440,8 +440,8 @@
       "call_form": "_canvas_send(\"PUT\", <submission_path>, request) [routine-triggered curve apply]",
       "classification": "canvas_mutation",
       "scopes": ["private.submissions"],
-      "reconciliation": "none",
-      "reason": "Scheduled-routine code path; no mirror invalidate call. Former Program 9 gap."
+      "reconciliation": "targeted",
+      "reason": "Scheduled-routine curve writer. Its caller _run_routine_curve fires one coalesced mirror_service.notify_course_changed(course_id) after each course's whole curve batch (once per course that curved at least one assignment), which runs sync.refresh_submissions_course_delta — the same narrow per-course submissions delta refresh PowerGrader and the direct curve routes use. Fire-and-forget; the heartbeat repairs any miss."
     },
     {
       "path": "api/powergrader/autopush_executor.py",
