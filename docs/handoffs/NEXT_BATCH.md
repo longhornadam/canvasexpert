@@ -1,8 +1,9 @@
 # SENIOR ONLY — CanvasMirror 1.0beta batch pointer
 
-> **NOT EXECUTOR AUTHORITY.** Executor authority for the current unit is in
-> `CURRENT.md` (Batch 8 unit 01 — dead-adapter retirement, READY, not yet run).
-> Batch 7 is complete through its reconciliation scope.
+> **NOT EXECUTOR AUTHORITY.** No `CURRENT.md` exists — no executor authority
+> until a senior authors one. Batch 7 (reconciliation) and Batch 8 (dead-path
+> retirement) are both complete and accepted. Nothing is queued for build; the
+> only remaining items are the optional hardening follow-ups below.
 
 ## Batch 7 — complete
 
@@ -23,12 +24,14 @@
   reasons. Reopen only with a targeted per-assignment submissions force-refetch or
   a new whole-scope submissions stale-mark — and verify the facts against code first.
 
-## Current unit — Batch 8 unit 01 (dead-path retirement / Former Program 10)
+## Batch 8 — complete
 
-Authored in `CURRENT.md` (READY, not yet run): retire the four confirmed-dead ledger
-adapters (`curve.py`, `late_policy.py`, `roster_membership.py`, `roster_group_set.py`) —
-files + tests + registrations + imports + the six contract owner entries, atomically.
-See `CURRENT.md` for the full brief, preflight, and gate.
+- **Unit 01 — dead-path retirement (Former Program 10)** — ACCEPTED (`f3cf5e5`,
+  DeepSeek; archive `1.0beta-08-dead-adapter-retirement.md`). Retired the four dead
+  ledger adapters (`curve.py`, `late_policy.py`, `roster_membership.py`,
+  `roster_group_set.py`) — files + tests + registrations + imports + six contract
+  owner entries (56 → 50). Senior-verified against the repo: deletion-only contract
+  diff, totals recomputed, full suite 1110 passed / 1 skipped.
 
 ## Later (not yet authored)
 
