@@ -36,15 +36,6 @@ def data_freshness(course_id, *, root=None, max_age_hours=None, now=None) -> str
     return result["last_success_at"] if result["state"] == "current" else ""
 
 
-def roster_freshness(course_id, *, root=None, max_age_hours=None, now=None) -> str:
-    result = read_service.private_roster(
-        course_id, root=root,
-        max_age_hours=max_age_hours if max_age_hours is not None else _serve_max_age_hours(),
-        now=now,
-    )
-    return result["last_success_at"] if result["state"] == "current" else ""
-
-
 # --- the gradebook_queries interface, mirror-backed ---------------------------
 
 def course_students(course_id, *, root=None):
@@ -73,14 +64,6 @@ def course_submissions(course_id, *, root=None):
     if result["source"] == "none":
         return None, MIRROR_UNAVAILABLE
     return result["records"], None
-
-
-def assignment(course_id, assignment_id, *, root=None):
-    result = read_service.private_assignments(course_id, root=root)
-    row = next((entry for entry in result["records"] if str(entry.get("id")) == str(assignment_id)), None)
-    if row is None:
-        return None, MIRROR_UNAVAILABLE
-    return row, None
 
 
 def assignment_submissions(course_id, assignment_id, *, root=None):

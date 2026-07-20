@@ -1,5 +1,4 @@
 """Shared helpers for feedback tools route modules."""
-import glob
 import json
 import os
 from datetime import datetime
@@ -64,18 +63,3 @@ def audit(entry: dict):
             f.write(json.dumps(entry) + "\n")
     except Exception:
         pass
-
-
-def bundle_paths():
-    roots = []
-    legacy = workspace.feedback_legacy_folder("2_ForLLM")
-    if legacy:
-        roots.append(legacy)
-    canonical = workspace.ai_packets_root()
-    if canonical:
-        roots.append(canonical)
-    paths = []
-    for root in roots:
-        if os.path.isdir(root):
-            paths.extend(glob.glob(os.path.join(root, "**", "*__bundle.json"), recursive=True))
-    return sorted(set(paths))

@@ -157,12 +157,6 @@ def read_operations_document() -> dict:
         return copy.deepcopy(_read_operations_unlocked())
 
 
-def write_operations_document(document: dict) -> None:
-    with _LOCK:
-        with interprocess_lock(paths.ledger_lock_file()):
-            _atomic_write_operations_unlocked(document)
-
-
 def find_operation(operation_id: str) -> dict | None:
     with _LOCK:
         document = _read_operations_unlocked()
@@ -226,17 +220,6 @@ def _read_claims_unlocked() -> dict:
 def _atomic_write_claims_unlocked(document: dict) -> None:
     _validate_claims_document(document)
     atomic_write_json(paths.claims_file(), document)
-
-
-def read_claims_document() -> dict:
-    with _LOCK:
-        return copy.deepcopy(_read_claims_unlocked())
-
-
-def write_claims_document(document: dict) -> None:
-    with _LOCK:
-        with interprocess_lock(paths.ledger_lock_file()):
-            _atomic_write_claims_unlocked(document)
 
 
 def upsert_claim(claim: dict) -> dict:

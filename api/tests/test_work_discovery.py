@@ -9,7 +9,7 @@ import pytest
 
 from api.work_registry import discovery, storage
 from api.work_registry.models import material_version, stable_fingerprint
-from api.work_registry.providers import CourseTimeout, WorkCourseReads, call_canvas_get_all, finding
+from api.work_registry.providers import WorkCourseReads, finding
 from api.work_registry.providers import grading_debt, home_attention, late_work, roster_warnings
 
 
@@ -228,13 +228,6 @@ def test_scan_course_shares_successful_assignment_and_submission_reads(monkeypat
     }
     assert calls == {assignments_path: 1, submissions_path: 1}
 
-
-def test_provider_timeout_is_fixed_and_redacted():
-    def timed_out(*args, **kwargs):
-        return None, "Read timed out"
-
-    with pytest.raises(CourseTimeout):
-        call_canvas_get_all(timed_out, "/api/v1/courses/course-1/assignments", {}, time.monotonic() + 1)
 
 
 def test_grading_debt_counts_zero_as_graded_and_teacher_comment_as_touched(monkeypatch):

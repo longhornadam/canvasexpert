@@ -7,7 +7,7 @@ from api.feedback_vault import Vault
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from api.webui.routes import powergrader
-from api.powergrader import session_builder
+from api.powergrader import packet, privacy, session_builder
 
 
 def _bundle(pseudonym="Sparky McGee"):
@@ -38,7 +38,7 @@ def test_build_safe_ai_packet_writes_teacher_facing_zip(tmp_path):
     student_txt = safe_dir / "Sparky-McGee__SAFE.txt"
     student_txt.write_text("Pseudonym: Sparky McGee", encoding="utf-8")
 
-    info = powergrader._build_safe_ai_packet(
+    info = packet.build_safe_ai_packet(
         "Essay",
         str(safe_dir),
         {"how_to_score": str(how_to), "student_txts": [str(student_txt)]},
@@ -101,7 +101,7 @@ def test_openrouter_debug_file_omits_key_and_records_response(tmp_path):
         response_snippet="<html>bad</html>",
     )
 
-    path = powergrader._write_openrouter_debug_file(
+    path = privacy.write_openrouter_debug_file(
         str(tmp_path),
         "Essay Debug",
         session_id="sid",

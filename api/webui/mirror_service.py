@@ -16,7 +16,6 @@ from __future__ import annotations
 import threading
 import time
 
-from api import course_catalog
 from api.mirror import coordinator, course_context, new_quizzes, store, sync
 
 from . import config, workspace
@@ -77,18 +76,6 @@ def _run_course_context(course_id: str):
         return {"ok": result.get("state") == "current", "state": result.get("state", "failed")}
 
 
-def _run_course_structure(course_id: str):
-    """Catalog structure only; never piggybacks roster/submission acquisition."""
-    with _telemetry("course_structure"):
-        result = course_catalog.refresh_catalog(
-            course_id, _course_name(course_id), canvas_get_all=_scoped_client("course_structure", _canvas_get_all),
-            canvas_get_all_complete=_scoped_client("course_structure", _canvas_get_all_complete))
-        catalog = result.get("catalog", {}) if isinstance(result, dict) else {}
-        scopes = (catalog.get("assignments", {}), catalog.get("modules", {}),
-                  catalog.get("assignment_groups", {}))
-        return {"ok": bool(result) and all(scope.get("state") == "current" for scope in scopes)}
-
-
 def _run_roster(course_id: str):
     with _telemetry("roster"):
         return sync.roster_pass(course_id, canvas_get_all=_canvas_get_all)
@@ -134,7 +121,6 @@ def coordinator_instance() -> coordinator.MirrorCoordinator:
     return coordinator.configure_default({
         "course.refresh": _run_course_refresh,
         "course_context": _run_course_context,
-        "course_structure": _run_course_structure,
         "roster": _run_roster,
         "groups": _run_groups,
         "submissions.course_delta": _run_submission_delta,

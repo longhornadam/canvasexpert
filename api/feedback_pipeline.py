@@ -8,11 +8,8 @@ from api.feedback_contract import CONTRACT_VERSION, _REVIEW_NOTE, _safe, build_c
 from api.feedback_artifacts import (
     _shared_context_blob,
     _scrub_bundle,
-    process_inbox,
     pseudonymize,
     pseudonymize_submissions,
-    reidentify_dir,
-    write_bundle,
     write_safe_and_private,
 )
 from api.feedback_results import (
@@ -49,13 +46,10 @@ __all__ = [
     "normalize_ai_feedback",
     "parse_results",
     "persona_signoff",
-    "process_inbox",
     "pseudonymize",
     "pseudonymize_submissions",
     "reidentify",
-    "reidentify_dir",
     "reidentified_csv",
     "validate_results",
-    "write_bundle",
     "write_safe_and_private",
 ]

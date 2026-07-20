@@ -2,23 +2,10 @@
 
 from __future__ import annotations
 
-from api.work_registry import adapters
-
 from . import as_datetime, safe_id, text
 
 
 _TERMINAL = {"approved", "skipped", "posted", "auto_pushed"}
-
-
-def project_local(*, course_id: str | None = None, now=None) -> list[dict]:
-    """Project existing local summaries without opening private student rows."""
-    jobs = adapters.collect_local_jobs()
-    if not course_id:
-        return jobs
-    return [
-        job for job in jobs
-        if str(course_id) in {str(value) for value in (job.get("course_ids") or [])}
-    ]
 
 
 def _student_evidence(student: dict) -> tuple[bool, str]:
@@ -111,4 +98,4 @@ def powergrader_evidence() -> dict[tuple[str, str, str], dict]:
     return evidence
 
 
-__all__ = ["powergrader_evidence", "project_local"]
+__all__ = ["powergrader_evidence"]

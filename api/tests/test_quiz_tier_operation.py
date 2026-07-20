@@ -229,10 +229,6 @@ def test_adapter_is_registered():
     assert adapter.kind == "content.quiz"
 
 
-def test_known_kinds_includes_quiz():
-    assert "content.quiz" in registry.known_kinds()
-
-
 # ── Build payload tests ──────────────────────────────────────────────────
 
 def test_build_payload_differentiated(tmp_path, monkeypatch):

@@ -25,22 +25,6 @@ _WARNING_CODES = {
 }
 
 
-def _groups_from_categories(categories: list[dict]) -> list[dict]:
-    groups = []
-    for category in categories:
-        category_id = text(category.get("id") or category.get("category_id"))
-        category_name = text(category.get("name") or category.get("category_name"))
-        raw_groups = category.get("groups")
-        if not isinstance(raw_groups, list):
-            raw_groups = []
-        groups.append({
-            "category_id": category_id,
-            "category_name": category_name,
-            "groups": raw_groups,
-        })
-    return groups
-
-
 def _fetch_groups(course_id: str, *, reads: WorkCourseReads) -> list[dict]:
     """Read Canvas groups, using the same permission-tolerant shape as Roster."""
     categories = reads.live_call(

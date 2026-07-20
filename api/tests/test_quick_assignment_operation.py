@@ -392,11 +392,6 @@ def test_retry_selector_picks_unresolved():
     assert "tk-4" not in keys  # skipped is terminal
 
 
-def test_reversal_descriptor_unsupported():
-    adapter = QuickAssignmentAdapter()
-    desc = adapter.reversal_descriptor({}, {})
-    assert desc["supported"] is False
-    assert desc["method"] is None
 
 
 # ── Full prepare->verify->freeze->apply pipeline ─────────────────────────

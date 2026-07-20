@@ -62,30 +62,6 @@ def canvas_remove_group_membership(
         return False, str(e)
 
 
-def get_group_memberships(
-    course_id: str,
-    group_id: str,
-    *,
-    canvas_headers: Callable[[], tuple[dict | None, str | None]],
-) -> tuple[list[dict], str | None]:
-    """Get all memberships for a Canvas group."""
-    hdrs, base = canvas_headers()
-    if not hdrs:
-        return [], "No Canvas token saved"
-    try:
-        r = requests.get(
-            f"{base}/api/v1/groups/{group_id}/memberships",
-            headers=hdrs,
-            params={"per_page": 200},
-            timeout=20,
-        )
-        if r.status_code != 200:
-            return [], f"HTTP {r.status_code}: {r.text[:200]}"
-        return r.json() or [], None
-    except Exception as e:
-        return [], str(e)
-
-
 def validate_canvas_group_target(
     course_id: str,
     category_id: str,

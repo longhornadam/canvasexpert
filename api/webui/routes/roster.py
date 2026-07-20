@@ -17,7 +17,7 @@ from api import feedback_scrub
 from api import roster_service
 from api.mirror import store as mirror_store
 from .. import config
-from ..canvas_client import _canvas_get_all, _canvas_headers, _canvas_send
+from ..canvas_client import _canvas_get_all, _canvas_send
 from .courses import fetch_group_category_groups, load_group_categories
 from .names import _vault
 from . import roster_groups
@@ -120,11 +120,6 @@ def canvas_add_group_membership(group_id: str, user_id: str) -> tuple[bool, str 
 def canvas_remove_group_membership(group_id: str, membership_id: str) -> tuple[bool, str | None]:
     return roster_canvas.canvas_remove_group_membership(
         group_id, membership_id, canvas_send=_canvas_send)
-
-
-def _get_group_memberships(course_id: str, group_id: str) -> tuple[list[dict], str | None]:
-    return roster_canvas.get_group_memberships(
-        course_id, group_id, canvas_headers=_canvas_headers)
 
 
 def _validate_canvas_group_target(

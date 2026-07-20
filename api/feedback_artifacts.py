@@ -3,7 +3,7 @@ import csv
 import json
 import os
 
-from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
+from api.nq_report import constructed_responses, html_to_text
 from api.feedback_vault import Vault
 from api import feedback_scrub, feedback_safety
 from api.powergrader import student_attachments
@@ -13,7 +13,6 @@ from api.feedback_contract import (
     _safe,
     build_contract_text,
 )
-from api.feedback_results import parse_results, reidentify, reidentified_csv
 
 
 def _attachment_meta(attachment: dict) -> dict:
@@ -218,21 +217,6 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
             "quiz_title": assignment_title,
             "source": "assignment",
             "review_required": True, "note": _REVIEW_NOTE, "students": students}
-
-
-def write_bundle(bundle: dict, forllm_dir: str, ai_ta_name: str = "your teaching assistant",
-                 persona: dict | None = None):
-    """Write the JSON bundle + the contract text into the ForLLM folder. Returns
-    (bundle_path, contract_path)."""
-    os.makedirs(forllm_dir, exist_ok=True)
-    stem = _safe(bundle.get("quiz_title", "quiz"))
-    bpath = os.path.join(forllm_dir, f"{stem}__bundle.json")
-    cpath = os.path.join(forllm_dir, f"{stem}__HOW-TO-SCORE.txt")
-    with open(bpath, "w", encoding="utf-8") as f:
-        json.dump(bundle, f, indent=2, ensure_ascii=False)
-    with open(cpath, "w", encoding="utf-8") as f:
-        f.write(build_contract_text(ai_ta_name, persona=persona))
-    return bpath, cpath
 
 
 def _scrub_bundle(bundle: dict, vault: Vault,
@@ -536,54 +520,3 @@ def write_safe_and_private(
         "log": log,
     }
 
-
-def process_inbox(inbox_dir, forllm_dir, archive_dir, vault, ai_ta_name="your teaching assistant"):
-    """Generator of progress strings. Process every CSV in 1_Inbox -> pseudonymized
-    bundle in 2_ForLLM, then archive the original. Persists each vault mutation
-    transactionally with its bundle."""
-    import glob
-    import shutil
-    os.makedirs(archive_dir, exist_ok=True)
-    csvs = sorted(glob.glob(os.path.join(inbox_dir, "*.csv"))) if os.path.isdir(inbox_dir) else []
-    if not csvs:
-        yield "No CSVs in the Inbox."
-        return
-    for path in csvs:
-        title = os.path.splitext(os.path.basename(path))[0]
-        try:
-            with vault.transaction():
-                parsed = parse_student_analysis_file(path)
-                bundle = pseudonymize(parsed, vault, title)
-                write_bundle(bundle, forllm_dir, ai_ta_name)
-                shutil.move(path, os.path.join(archive_dir, os.path.basename(path)))
-                count = len(bundle["students"])
-            yield f"✓ {title}: {count} student(s) pseudonymized → ForLLM"
-        except Exception as e:
-            yield f"!! {title}: {e}"
-    yield f"FOLDER: {forllm_dir}"
-
-
-def reidentify_dir(fromllm_dir, toenter_dir, vault):
-    """Generator of progress strings. Re-identify every results file in 3_FromLLM ->
-    a real-name CSV in 4_ToEnter."""
-    import glob
-    os.makedirs(toenter_dir, exist_ok=True)
-    files = (sorted(glob.glob(os.path.join(fromllm_dir, "*.json")))
-             if os.path.isdir(fromllm_dir) else [])
-    if not files:
-        yield "No result files in FromLLM."
-        return
-    for path in files:
-        stem = os.path.splitext(os.path.basename(path))[0]
-        try:
-            with open(path, encoding="utf-8") as f:
-                rows = reidentify(parse_results(f.read()), vault)
-            dest = os.path.join(toenter_dir, f"{stem}__to-enter.csv")
-            with open(dest, "w", encoding="utf-8", newline="") as f:
-                f.write(reidentified_csv(rows))
-            unresolved = sum(1 for r in rows if not r["resolved"])
-            note = f" ({unresolved} unmatched)" if unresolved else ""
-            yield f"✓ {stem}: {len(rows)} result(s) re-identified{note}"
-        except Exception as e:
-            yield f"!! {stem}: {e}"
-    yield f"FOLDER: {toenter_dir}"

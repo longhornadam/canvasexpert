@@ -14,7 +14,7 @@ from api import course_scope
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
 from api.powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
-                             import_results, late_catchup, packet, privacy,
+                             import_results, late_catchup, privacy,
                              new_quiz_csv, new_quiz_grader,
                              session_actions, session_builder, session_store,
                              start_workflow)
@@ -29,7 +29,6 @@ from .powergrader_setup_support import (
     build_estimate_payload,
     build_queue_page_context,
     build_setup_page_context,
-    load_module_picker,
 )
 from .powergrader_late import (
     _late_watch_error as _late_watch_error_impl,
@@ -47,9 +46,7 @@ _save_session = session_store.save_session
 
 _privacy_step = privacy.privacy_step
 _write_privacy_audit_file = privacy.write_privacy_audit_file
-_write_openrouter_debug_file = privacy.write_openrouter_debug_file
 
-_build_safe_ai_packet = packet.build_safe_ai_packet
 _vault = context.vault
 
 
@@ -150,15 +147,6 @@ def powergrader_queue(request: Request, session_id: str):
 @router.get("/api/powergrader/sessions")
 def list_sessions():
     return JSONResponse({"sessions": session_store.list_session_summaries()})
-
-
-@router.get("/api/powergrader/modules")
-def pg_modules(course_id: str, module_id: str = ""):
-    return JSONResponse(load_module_picker(
-        course_id,
-        module_id,
-        canvas_get_all=_canvas_get_all,
-    ))
 
 
 @router.post("/api/powergrader/estimate")

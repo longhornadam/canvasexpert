@@ -6,7 +6,18 @@ For every target in ``claimed`` or ``sent_unknown`` state:
 3. If reconcile proves applied: persist returned IDs, set target applied.
 4. If reconcile proves absent: set target back to pending (eligible for retry).
 5. If reconcile cannot prove either: target stays sent_unknown (Attention).
+
+Without this running, a crash between sending a Canvas write and recording its
+result leaves the target's claim unreconciled — every later retry attempt then
+raises ``ClaimConflictError`` (see ``claims.acquire_claim``) before ever
+reaching Canvas again, since nothing else in the app calls
+``claims.detect_expired_claims``. Call ``recover_pending_operations`` once at
+startup, before any new operation work can claim the same targets.
 """
+import time
+
+from api import operational_log
+
 from . import claims, models, operations, registry, storage
 from .catalog_reconcile import reconcile_catalog_after_apply
 
@@ -16,6 +27,7 @@ def recover_pending_operations() -> dict:
 
     Returns a summary: ``{recovered: int, still_unknown: int, reset_to_pending: int}``.
     """
+    started = time.monotonic()
     doc = storage.read_operations_document()
     summary = {"recovered": 0, "still_unknown": 0, "reset_to_pending": 0}
 
@@ -82,6 +94,11 @@ def recover_pending_operations() -> dict:
                     claims.mark_reconciled(expired_claim_id)
                 summary["still_unknown"] += 1
 
+    operational_log.emit(
+        "operation_ledger.recovery", "ok",
+        duration_ms=max(0, int(round((time.monotonic() - started) * 1000))),
+        count=summary["recovered"] + summary["still_unknown"] + summary["reset_to_pending"],
+    )
     return summary
 
 

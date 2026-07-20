@@ -106,12 +106,6 @@ def isolated_roster(monkeypatch):
         scheme = fake_get_roster_group_scheme(course_id)
         return scheme.get("group_labels", {}).get(str(group_id))
 
-    def fake_set_group_label(course_id, group_id, teacher_label, meaning=""):
-        scheme = fake_get_roster_group_scheme(course_id)
-        labels = scheme.setdefault("group_labels", {})
-        labels[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
-        fake_set_roster_group_scheme(course_id, scheme)
-
     monkeypatch.setattr(roster_routes, "_vault", lambda: stores["vault"])
     monkeypatch.setattr(roster_routes, "_upsert_roster", lambda vault, users: None)
     monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: ([], "No token saved."))
@@ -130,7 +124,6 @@ def isolated_roster(monkeypatch):
     monkeypatch.setattr(roster_routes.config, "get_selected_group_category_id", fake_get_selected_group_category_id)
     monkeypatch.setattr(roster_routes.config, "set_selected_group_category_id", fake_set_selected_group_category_id)
     monkeypatch.setattr(roster_routes.config, "get_group_label", fake_get_group_label)
-    monkeypatch.setattr(roster_routes.config, "set_group_label", fake_set_group_label)
     monkeypatch.setattr(roster_routes.config, "compute_group_display",
                         lambda label, name: f"{label} / {name}" if label and label != name else name)
     return stores

@@ -10,68 +10,55 @@ from api.mirror.coordinator import MirrorCoordinator
 def _wait(coordinator, plan_id):
     for _ in range(100):
         plan = coordinator.status(plan_id)["plans"][0]
-        if plan["state"] in {"succeeded", "failed", "cancelled"}:
+        if plan["state"] in {"succeeded", "failed"}:
             return plan
         time.sleep(0.01)
     raise AssertionError("coordinator did not settle")
 
 
-def test_scope_dependencies_coalescing_promotion_and_sanitized_state():
+def test_coalescing_and_priority_promotion():
     calls = []
-    lock = threading.Lock()
-
-    def runner(scope):
-        def run(course_id):
-            with lock:
-                calls.append((scope, course_id))
-        return run
-
-    coordinator = MirrorCoordinator({scope: runner(scope) for scope in (
-        "course_context", "course_structure", "roster", "groups",
-        "submissions.course_delta", "new_quizzes.metadata",
-    )})
-    first = coordinator.submit(["local-course"], ["groups"], priority="background")
-    second = coordinator.submit(["local-course"], ["groups"], priority="focus")
-    assert _wait(coordinator, first)["state"] == "succeeded"
-    assert _wait(coordinator, second)["state"] == "succeeded"
-    assert calls == [("course_context", "local-course"), ("roster", "local-course"),
-                     ("groups", "local-course")]
-    jobs = coordinator.status(first)["plans"][0]["jobs"]
-    assert [job["scope"] for job in jobs] == ["course_context", "roster", "groups"]
-    assert all(set(job) <= {"job_id", "course_id", "scope", "priority", "state",
-                            "error_class", "queue_wait_ms", "yield_count", "cancel_count"} for job in jobs)
-
-
-def test_failure_isolated_and_cancellation_cooperates_before_get():
     started = threading.Event()
     release = threading.Event()
 
+    def run(course_id):
+        started.set()
+        release.wait(1)
+        calls.append(course_id)
+
+    coordinator = MirrorCoordinator({
+        "course_context": lambda _course: None, "roster": lambda _course: None,
+        "groups": run, "submissions.course_delta": lambda _course: None,
+        "new_quizzes.metadata": lambda _course: None,
+    })
+    first = coordinator.submit(["local-course"], ["groups"], priority="background")
+    assert started.wait(1)
+    second = coordinator.submit(["local-course"], ["groups"], priority="manual")
+    assert coordinator.status(second)["plans"][0]["jobs"][0]["priority"] == "manual"
+    release.set()
+    first_plan = _wait(coordinator, first)
+    second_plan = _wait(coordinator, second)
+    assert first_plan["state"] == second_plan["state"] == "succeeded"
+    assert first_plan["jobs"][0]["job_id"] == second_plan["jobs"][0]["job_id"]
+    assert calls == ["local-course"]
+    assert all(set(job) <= {"job_id", "course_id", "scope", "priority", "state",
+                            "error_class", "queue_wait_ms", "yield_count"} for job in first_plan["jobs"])
+
+
+def test_independent_scopes_fail_and_succeed_independently():
     def fail(_course):
         raise RuntimeError("private detail must not escape")
 
-    def wait_for_cancel(_course):
-        started.set()
-        release.wait(1)
-
     coordinator = MirrorCoordinator({
-        "course_context": lambda _course: None,
-        "course_structure": fail,
-        "roster": lambda _course: None,
-        "groups": lambda _course: None,
-        "submissions.course_delta": wait_for_cancel,
-        "new_quizzes.metadata": lambda _course: None,
+        "course_context": fail, "roster": lambda _course: None, "groups": lambda _course: None,
+        "submissions.course_delta": lambda _course: None, "new_quizzes.metadata": lambda _course: None,
     })
-    failed = coordinator.submit(["course"], ["course_structure", "roster"], priority="manual")
+    failed = coordinator.submit(["course"], ["course_context", "roster"], priority="manual")
     failed_plan = _wait(coordinator, failed)
     assert failed_plan["state"] == "failed"
-    assert {job["state"] for job in failed_plan["jobs"]} >= {"failed", "succeeded"}
-
-    plan_id = coordinator.submit(["course"], ["submissions.course_delta"], priority="background")
-    assert started.wait(1)
-    assert coordinator.cancel(plan_id) is True
-    release.set()
-    plan = _wait(coordinator, plan_id)
-    assert plan["state"] == "cancelled"
+    assert {job["state"] for job in failed_plan["jobs"]} == {"failed", "succeeded"}
+    course_context_job = next(job for job in failed_plan["jobs"] if job["scope"] == "course_context")
+    assert course_context_job["error_class"] == "RuntimeError"
 
 
 def test_background_get_yields_to_foreground():
@@ -84,7 +71,7 @@ def test_background_get_yields_to_foreground():
         observed.append(holder["coordinator"].before_physical_get())
 
     coordinator = MirrorCoordinator({
-        "course_context": run, "course_structure": run, "roster": run,
+        "course_context": run, "roster": run,
         "groups": run, "submissions.course_delta": run, "new_quizzes.metadata": run,
     })
     holder["coordinator"] = coordinator
@@ -114,24 +101,23 @@ def test_course_refresh_is_one_compatibility_job_and_history_is_bounded():
     assert calls == ["one", "two", "three", "four"]
 
 
-def test_failed_result_blocks_dependents_but_not_unrelated_work():
+def test_failed_job_does_not_block_unrelated_course_or_scope():
     ran = []
     coordinator = MirrorCoordinator({
         "course_context": lambda course: {"ok": False} if course == "bad" else {"ok": True},
-        "course_structure": lambda course: ran.append(("structure", course)) or {"ok": True},
+        "submissions.course_delta": lambda course: ran.append(("delta", course)) or {"ok": True},
         "roster": lambda course: ran.append(("roster", course)) or {"ok": True},
         "groups": lambda course: ran.append(("groups", course)) or {"ok": True},
-        "submissions.course_delta": lambda course: {"ok": True},
         "new_quizzes.metadata": lambda course: {"ok": True},
         "course.refresh": lambda course: {"ok": True},
     })
-    failed = coordinator.submit(["bad"], ["groups"])
-    unrelated = coordinator.submit(["good"], ["course_structure"])
+    failed = coordinator.submit(["bad"], ["course_context"])
+    unrelated = coordinator.submit(["good"], ["submissions.course_delta"])
     failed_plan = _wait(coordinator, failed)
     assert failed_plan["state"] == "failed"
-    assert [job["state"] for job in failed_plan["jobs"]] == ["failed", "cancelled", "cancelled"]
+    assert failed_plan["jobs"][0]["state"] == "failed"
     assert _wait(coordinator, unrelated)["state"] == "succeeded"
-    assert ran == [("structure", "good")]
+    assert ran == [("delta", "good")]
 
 
 def test_concluded_get_yields_to_foreground():

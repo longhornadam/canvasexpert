@@ -84,17 +84,13 @@ def test_queries_interface_serves_canvas_shaped_rows(tmp_path):
     assert err is None and assignments[0]["name"] == "Essay 1"
     subs, err = queries.course_submissions(COURSE, root=str(tmp_path))
     assert err is None and len(subs) == 2
-    row, err = queries.assignment(COURSE, "700010", root=str(tmp_path))
-    assert err is None and row["points_possible"] == 10
     rows, err = queries.assignment_submissions(COURSE, "700010", root=str(tmp_path))
     assert err is None and rows[0]["user_id"] == "900001"
 
 
 def test_queries_report_unavailable_for_unknown_course(tmp_path):
-    for fn in (lambda: queries.course_students("999", root=str(tmp_path)),
-               lambda: queries.assignment("999", "1", root=str(tmp_path))):
-        data, err = fn()
-        assert data is None and err == queries.MIRROR_UNAVAILABLE
+    data, err = queries.course_students("999", root=str(tmp_path))
+    assert data is None and err == queries.MIRROR_UNAVAILABLE
 
 
 def test_freshness_gates_on_serve_max_age(tmp_path):

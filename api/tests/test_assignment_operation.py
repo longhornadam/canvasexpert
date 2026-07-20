@@ -412,11 +412,6 @@ def test_retry_selector_picks_unresolved():
     assert "tk-4" not in keys
 
 
-def test_reversal_descriptor_unsupported():
-    adapter = AssignmentAdapter()
-    desc = adapter.reversal_descriptor({}, {})
-    assert desc["supported"] is False
-    assert desc["method"] is None
 
 
 # ── Full pipeline ────────────────────────────────────────────────────────

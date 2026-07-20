@@ -202,64 +202,11 @@ def _callback_accepts_deadline(callback) -> bool:
     )
 
 
-# Exactly the three course-scoped shapes the Work Registry providers request.
-# Any other path always goes live; recognized here with one compiled regex
-# per shape so course_id extraction stays unambiguous.
-_MIRROR_ASSIGNMENTS_RE = re.compile(r"^/api/v1/courses/(?P<course_id>[^/]+)/assignments/?$")
-_MIRROR_USERS_RE = re.compile(r"^/api/v1/courses/(?P<course_id>[^/]+)/users/?$")
-_MIRROR_SUBMISSIONS_RE = re.compile(
-    r"^/api/v1/courses/(?P<course_id>[^/]+)/students/submissions/?$"
-)
-_MIRROR_PATH_SHAPES = (
-    (_MIRROR_ASSIGNMENTS_RE, "assignments"),
-    (_MIRROR_USERS_RE, "users"),
-    (_MIRROR_SUBMISSIONS_RE, "submissions"),
-)
-
-
-def _mirror_shape(path: str) -> tuple[str, str] | tuple[None, None]:
-    """Return ``(kind, course_id)`` when ``path`` matches one of the three
-    recognized shapes, else ``(None, None)``."""
-    for pattern, kind in _MIRROR_PATH_SHAPES:
-        match = pattern.match(path)
-        if match:
-            return kind, match.group("course_id")
-    return None, None
-
-
-def _mirror_rows(kind: str, course_id: str) -> list | None:
-    """Return rows from the mirror only when fresh and error-free, else None
-    so the caller falls back to the existing live call unchanged."""
-    try:
-        if kind == "users":
-            state = read_service.private_roster(
-                course_id, max_age_hours=mirror_queries._serve_max_age_hours())
-            if state["state"] != "current":
-                return None
-            rows, error = mirror_queries.course_students(course_id)
-        else:
-            scope = (read_service.private_assignments if kind == "assignments"
-                     else read_service.private_submissions)
-            state = scope(course_id, max_age_hours=mirror_queries._serve_max_age_hours())
-            if state["state"] != "current":
-                return None
-            if kind == "assignments":
-                rows, error = mirror_queries.course_assignments(course_id)
-            else:
-                rows, error = mirror_queries.course_submissions(course_id)
-    except Exception:
-        return None
-    if error or not isinstance(rows, list):
-        return None
-    return rows
-
-
 def _call_live_get_all(canvas_get_all, path: str, params: dict, deadline: float) -> list[dict]:
     """Call a paginated GET with deadline, timeout, and structured-error handling.
 
-    Pure live-request helper: no mirror fallback logic, no endpoint-shape
-    matching.  ``call_canvas_get_all`` delegates here after its mirror check;
-    ``WorkCourseReads`` typed methods call this directly for live work.
+    Pure live-request helper: ``WorkCourseReads`` typed methods call this
+    directly for live work.
     """
     check_deadline(deadline)
     kwargs = {"params": params, "timeout": 10}
@@ -287,23 +234,6 @@ def _call_live_get_all(canvas_get_all, path: str, params: dict, deadline: float)
         raise ProviderFailure() from None
     check_deadline(deadline)
     return result
-
-
-def call_canvas_get_all(canvas_get_all, path: str, params: dict, deadline: float):
-    """Call an injected paginated GET while preserving test-friendly callbacks.
-
-    Course-scoped assignment/user/submission reads are served from the
-    CanvasMirror when it is fresh; any other path, staleness, or mirror error
-    falls through to ``_call_live_get_all``, completely unchanged.
-    """
-    check_deadline(deadline)
-    kind, course_id = _mirror_shape(path)
-    if kind:
-        rows = _mirror_rows(kind, course_id)
-        if rows is not None:
-            check_deadline(deadline)
-            return rows
-    return _call_live_get_all(canvas_get_all, path, params, deadline)
 
 
 def finding(
@@ -368,6 +298,6 @@ def finding(
 __all__ = [
     "CourseTimeout", "CourseUnavailable", "DiscoveryDeadline", "ProviderFailure",
     "WorkCourseReads",
-    "as_datetime", "call_canvas_get_all", "check_deadline", "finding", "iso_now",
+    "as_datetime", "check_deadline", "finding", "iso_now",
     "safe_id", "text",
 ]

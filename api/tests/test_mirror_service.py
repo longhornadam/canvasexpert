@@ -597,11 +597,6 @@ def test_coordinated_heartbeat_uses_background_and_concluded_plans_before_findin
 
 def test_named_scope_runners_do_not_call_legacy_full_or_delta(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
-    monkeypatch.setattr(mirror_service.course_catalog, "refresh_catalog", lambda *args, **kwargs: {
-        "catalog": {"assignments": {"state": "current"}, "modules": {"state": "current"},
-                    "assignment_groups": {"state": "current"}}})
-    monkeypatch.setattr(mirror_service.sync, "full_pass", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError()))
-    assert mirror_service._run_course_structure("111") == {"ok": True}
     assignment_map = {"700": {"id": "700", "is_quiz_lti_assignment": True}}
     monkeypatch.setattr(mirror_service.store, "read_assignments", lambda _course: {"assignments": assignment_map})
     seen = []

@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 import requests
 
 from api import nq_report, portfolio, portfolio_service, student_packet
-from api.mirror import read_service
+from api.mirror import read_service, store as mirror_store
 from .. import config, workspace
 from ..canvas_client import _canvas_get_all, _canvas_headers
 from ..gradebook_service import _load_curve_events
@@ -170,11 +170,22 @@ def course_folder(course_name: str, course_id: str = ""):
 
 @router.get("/students")
 def api_students(course_id: str):
-    """Roster for one course, annotated with the machine-local monitored flag."""
-    users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
-                                 {"enrollment_type[]": "student", "per_page": 100})
-    if err:
-        return JSONResponse({"ok": False, "error": err})
+    """Roster for one course, annotated with the machine-local monitored flag.
+    Served from the local roster mirror when current; falls back to live."""
+    roster_scope = read_service.private_roster(course_id)
+    if roster_scope["state"] == "current" and isinstance(roster_scope.get("records"), list):
+        users = roster_scope["records"]
+        has_ids = all(isinstance(u, dict) and u.get("id") is not None for u in users)
+    else:
+        has_ids = False
+
+    if has_ids:
+        pass  # records already in hand
+    else:
+        users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
+                                     {"enrollment_type[]": "student", "per_page": 100})
+        if err:
+            return JSONResponse({"ok": False, "error": err})
     mon = config.get_monitored_students()
     out = [{"id": str(u["id"]),
             "name": u.get("sortable_name") or u.get("name", ""),
@@ -291,10 +302,14 @@ async def portfolio_merged(course_id: str = Form(...),
         students = [{"id": uid, "name": v["name"]}
                     for uid, v in config.get_monitored_students().items()]
     else:
-        users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
-                                     {"enrollment_type[]": "student", "per_page": 100})
-        if err:
-            return JSONResponse({"ok": False, "error": err})
+        roster_scope = read_service.private_roster(course_id)
+        if roster_scope["state"] == "current" and isinstance(roster_scope.get("records"), list):
+            users = roster_scope["records"]
+        else:
+            users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
+                                         {"enrollment_type[]": "student", "per_page": 100})
+            if err:
+                return JSONResponse({"ok": False, "error": err})
         students = [{"id": str(u["id"]),
                      "name": u.get("sortable_name") or u.get("name", "")}
                     for u in (users or [])]

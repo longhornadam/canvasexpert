@@ -61,39 +61,6 @@ def test_round_trip_reidentify(tmp_path):
     assert rows[1]["resolved"] is False                # unknown pseudonym flagged, not dropped
 
 
-def test_process_inbox_and_reidentify_dir(tmp_path):
-    inbox = tmp_path / "PRIVATE"; inbox.mkdir()
-    forllm = tmp_path / "SAFE"
-    archive = tmp_path / "_system" / "archive"
-    fromllm = tmp_path / "SAFE"
-    toenter = tmp_path / "PRIVATE"
-    vpath = str(tmp_path / "_system" / "vault" / "vault.json")
-    shutil.copy(FIXTURE, str(inbox / "THG Test.csv"))
-
-    v = Vault(vpath)
-    log = list(fp.process_inbox(str(inbox), str(forllm), str(archive), v, "Sage"))
-    assert any(line.startswith("✓") for line in log)
-    assert (forllm / "THG Test__bundle.json").exists()
-    assert (forllm / "THG Test__HOW-TO-SCORE.txt").exists()
-    assert os.path.exists(vpath)                        # vault saved
-    assert not list(inbox.glob("*.csv"))               # original archived
-    assert (archive / "THG Test.csv").exists()
-
-    # Simulate an LLM results drop — use the actual pseudonym from the vault
-    entries = v.entries()
-    first_pseudo = entries[0]["pseudonym"] if entries else "S001"
-
-    (fromllm / "THG Test__results.json").write_text(json.dumps([
-        {"pseudonym": first_pseudo, "item_id": "1003", "score": 9,
-         "feedback": "Nice. Drafted by Sage (AI), reviewed by your teacher.",
-         "disclosure": "Drafted by Sage (AI)."}]), encoding="utf-8")
-    v2 = Vault(vpath)
-    log2 = list(fp.reidentify_dir(str(fromllm), str(toenter), v2))
-    assert any(line.startswith("✓") for line in log2)
-    out = (toenter / "THG Test__results__to-enter.csv").read_text(encoding="utf-8")
-    assert "Ada Lovelace" in out and "Sage" in out
-
-
 # --------------------------------------------------------------------------
 # Phase B: assignment-API submissions path (pseudonymize_submissions)
 # --------------------------------------------------------------------------

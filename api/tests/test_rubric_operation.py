@@ -365,11 +365,6 @@ def test_retry_selector_picks_unresolved():
     assert "tk-3" in keys
 
 
-def test_reversal_descriptor_unsupported():
-    adapter = RubricAdapter()
-    desc = adapter.reversal_descriptor({}, {})
-    assert desc["supported"] is False
-    assert desc["method"] is None
 
 
 # ── Full pipeline ────────────────────────────────────────────────────────

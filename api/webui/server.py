@@ -23,6 +23,7 @@ from fastapi.templating import Jinja2Templates
 
 from api import student_packet
 from api.mirror import coordinator as _mirror_coordinator
+from api.operation_ledger import recovery as _operation_ledger_recovery
 
 from . import af, ai_ta, config, pf, rf, runner
 from . import workspace
@@ -77,6 +78,13 @@ async def _lifespan(app):
         ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
     except Exception as e:
         print(f"AI-TA library build failed: {e}")
+    try:
+        # Reconcile any operation-ledger targets left claimed/sent_unknown by a
+        # crash mid-write, before the routines heartbeat can claim the same
+        # targets for new work. Usually a no-op (empty scan).
+        _operation_ledger_recovery.recover_pending_operations()
+    except Exception as e:
+        print(f"Operation-ledger recovery note: {e}")
     _load_custom_routines()
     threading.Thread(target=_routines_heartbeat, daemon=True).start()
     threading.Thread(target=_mirror_heartbeat, daemon=True).start()

@@ -150,10 +150,6 @@ def test_adapter_is_registered():
     assert adapter.kind == "content.quiz"
 
 
-def test_known_kinds_includes_quiz():
-    assert "content.quiz" in registry.known_kinds()
-
-
 # ── Prepare tests ────────────────────────────────────────────────────────
 
 def test_prepare_with_valid_plan(tmp_path, monkeypatch):
@@ -861,9 +857,6 @@ def test_reversal_not_supported(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
 
-    adapter = QuizAdapter()
-    desc = adapter.reversal_descriptor({}, {})
-    assert desc["supported"] is False
 
 
 # ── Plan determinism ─────────────────────────────────────────────────────

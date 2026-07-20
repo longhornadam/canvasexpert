@@ -727,12 +727,6 @@ def test_retry_resumes_module_attachment(tmp_path, monkeypatch):
 
 # ── Reversal ────────────────────────────────────────────────────────────
 
-def test_reversal_is_unsupported():
-    adapter = PageAdapter()
-    desc = adapter.reversal_descriptor({}, {"course_id": "101"})
-    assert desc["supported"] is False
-    assert desc["method"] is None
-    assert desc["snapshot"] is None
 
 
 # ── Receipt written per apply ───────────────────────────────────────────

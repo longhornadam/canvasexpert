@@ -49,7 +49,6 @@ ALLOWED_DIRECT_HTTP = {
     "api/operation_ledger/adapters/assignment_whole.py",
     # Deliberate live reads / fallbacks (tracked; not accidental)
     "api/webui/routes/courses.py",       # group/membership reads feeding Canvas group writes (design law 5.7)
-    "api/webui/routes/roster_canvas.py", # roster reads feeding group writes
     "api/webui/routes/reports.py",       # report assignment live read/fallback
     "api/webui/routes/settings.py",      # token validation + OpenRouter connectivity checks
     "api/portfolio_service.py",          # portfolio live fallback (requests.Session)

@@ -22,7 +22,6 @@ class OperationAdapter(Protocol):
                 context) -> dict: ...
     def reconcile(self, payload: dict, target: dict, baseline: dict) -> dict: ...
     def retry_selector(self, operation: dict) -> list[dict]: ...
-    def reversal_descriptor(self, payload: dict, target: dict) -> dict: ...
 
 
 _REGISTRY: dict[str, OperationAdapter] = {}
@@ -39,10 +38,6 @@ def get_adapter(kind: str) -> OperationAdapter:
     if adapter is None:
         raise ValueError(f"unknown operation kind: {kind}")
     return adapter
-
-
-def known_kinds() -> list[str]:
-    return sorted(_REGISTRY.keys())
 
 
 def is_registered(kind: str) -> bool:

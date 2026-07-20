@@ -2,8 +2,6 @@
 
 Uses lazy module-reference so monkeypatches to config._io propagate correctly.
 """
-import re
-
 from . import _io as _io_mod
 
 
@@ -112,32 +110,6 @@ def roster_tier_by_id(course_id: str) -> dict:
     return {t["id"]: t for t in scheme}
 
 
-def active_tier_ids(course_id: str) -> set[str]:
-    return {t["id"] for t in get_roster_tier_scheme(course_id) if t.get("active", True)}
-
-
-def migrate_legacy_tier(course_id: str, user_id: str, tier_val: str, roster_settings: dict | None = None) -> str | None:
-    if not tier_val:
-        return None
-    scheme = get_roster_tier_scheme(course_id)
-    tier_lower = tier_val.strip().lower()
-    for t in scheme:
-        if t.get("teacher_label", "").lower() == tier_lower:
-            return t["id"]
-    slug = re.sub(r'[^a-z0-9]+', '_', tier_lower).strip('_') or f"tier_{len(scheme)}"
-    new_tier = {
-        "id": slug,
-        "teacher_label": tier_val.strip(),
-        "meaning": "",
-        "alias": tier_val.strip(),
-        "order": 1000,
-        "active": True,
-    }
-    scheme.append(new_tier)
-    set_roster_tier_scheme(course_id, scheme)
-    return slug
-
-
 # --------------------------------------------------------------------------
 # Group scheme
 # --------------------------------------------------------------------------
@@ -179,16 +151,6 @@ def set_selected_group_category_id(course_id: str, category_id: str | None):
 def get_group_label(course_id: str, group_id: str) -> dict | None:
     scheme = get_roster_group_scheme(course_id)
     return scheme.get("group_labels", {}).get(str(group_id))
-
-
-def set_group_label(course_id: str, group_id: str, teacher_label: str, meaning: str = ""):
-    def mutate(state):
-        schemes = state.setdefault("roster_group_schemes", {})
-        scheme = schemes.setdefault(str(course_id), {})
-        labels = scheme.setdefault("group_labels", {})
-        labels[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
-
-    _io_mod._modify_synced(mutate)
 
 
 def set_group_labels(course_id: str, labels: dict):

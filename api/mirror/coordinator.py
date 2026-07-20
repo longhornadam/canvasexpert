@@ -16,18 +16,12 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 
-PRIORITIES = ("preflight", "post_write", "focus", "manual", "background", "concluded")
+PRIORITIES = ("post_write", "manual", "background", "concluded")
 _PRIORITY_VALUE = {name: index for index, name in enumerate(PRIORITIES)}
 PRODUCTION_SCOPES = (
-    "course.refresh", "course_context", "course_structure", "roster", "groups",
+    "course.refresh", "course_context", "roster", "groups",
     "submissions.course_delta", "new_quizzes.metadata",
 )
-_DEPENDENCIES = {
-    "course_structure": ("course_context",),
-    "roster": ("course_context",),
-    "groups": ("roster",),
-    "new_quizzes.metadata": ("course_context",),
-}
 
 _WORKER = contextvars.ContextVar("canvasmirror_worker", default=None)
 
@@ -45,10 +39,7 @@ class _Job:
     started_at: float | None = None
     finished_at: float | None = None
     error_class: str = ""
-    cancel_requested: bool = False
-    dependencies: tuple[str, ...] = ()
     yields: int = 0
-    cancelled: int = 0
     queue_wait_ms: int = 0
 
 
@@ -100,14 +91,12 @@ class MirrorCoordinator:
             plan = _Plan(plan_id)
             self._plans[plan_id] = plan
             for course_id in course_ids:
-                course_jobs: dict[str, str] = {}
-                for scope in self._ordered_scopes(requested):
+                for scope in requested:
                     key = (course_id, scope)
                     existing_id = self._by_key.get(key)
                     existing = self._jobs.get(existing_id) if existing_id else None
                     if existing and existing.state in {"queued", "running"}:
                         plan.jobs.append(existing.job_id)
-                        course_jobs[scope] = existing.job_id
                         if _PRIORITY_VALUE[priority] < _PRIORITY_VALUE[existing.priority]:
                             existing.priority = priority
                             if existing.state == "queued":
@@ -117,34 +106,16 @@ class MirrorCoordinator:
                                                             existing.job_id))
                         continue
                     self._sequence += 1
-                    dependencies = tuple(course_jobs[dependency] for dependency in
-                                         _DEPENDENCIES.get(scope, ()) if dependency in course_jobs)
                     job = _Job(uuid.uuid4().hex, plan_id, course_id, scope, priority,
-                               self._sequence, dependencies=dependencies)
+                               self._sequence)
                     self._jobs[job.job_id] = job
                     self._by_key[key] = job.job_id
-                    course_jobs[scope] = job.job_id
                     plan.jobs.append(job.job_id)
                     heapq.heappush(self._queue, (_PRIORITY_VALUE[priority], job.sequence, job.job_id))
             self._trim_locked()
             self._refresh_plan_locked(plan)
             self._lock.notify_all()
             return plan_id
-
-    @staticmethod
-    def _ordered_scopes(requested: tuple[str, ...]) -> tuple[str, ...]:
-        ordered: list[str] = []
-        seen: set[str] = set()
-        def visit(scope: str):
-            if scope in seen:
-                return
-            seen.add(scope)
-            for dependency in _DEPENDENCIES.get(scope, ()):
-                visit(dependency)
-            ordered.append(scope)
-        for scope in requested:
-            visit(scope)
-        return tuple(ordered)
 
     @contextlib.contextmanager
     def foreground_interval(self):
@@ -168,13 +139,9 @@ class MirrorCoordinator:
             job = self._jobs.get(job_id)
             if not job:
                 return 0, True
-            while (job.priority in {"background", "concluded"} and self._foreground > 0
-                   and not job.cancel_requested):
+            while job.priority in {"background", "concluded"} and self._foreground > 0:
                 job.yields += 1
                 self._lock.wait(timeout=0.1)
-            if job.cancel_requested:
-                job.cancelled += 1
-                return int((time.monotonic() - started) * 1000), True
         return int((time.monotonic() - started) * 1000), False
 
     def current_worker_context(self) -> dict:
@@ -185,7 +152,7 @@ class MirrorCoordinator:
             if not job:
                 return {}
             return {"scope": job.scope, "priority": job.priority,
-                    "queue_wait_ms": job.queue_wait_ms, "cancel_requested": job.cancel_requested}
+                    "queue_wait_ms": job.queue_wait_ms}
 
     def bind_current_worker(self, callback):
         """Bind the active worker marker into helper threads owned by a runner."""
@@ -199,18 +166,6 @@ class MirrorCoordinator:
             finally:
                 _WORKER.reset(token)
         return bound
-
-    def cancel(self, plan_id: str) -> bool:
-        with self._lock:
-            plan = self._plans.get(plan_id)
-            if not plan:
-                return False
-            for job_id in plan.jobs:
-                job = self._jobs.get(job_id)
-                if job and job.state in {"queued", "running"}:
-                    job.cancel_requested = True
-            self._lock.notify_all()
-            return True
 
     def status(self, plan_id: str | None = None) -> dict:
         with self._lock:
@@ -226,15 +181,13 @@ class MirrorCoordinator:
     def _job_view(job: _Job) -> dict:
         return {"job_id": job.job_id, "course_id": job.course_id, "scope": job.scope,
                 "priority": job.priority, "state": job.state, "error_class": job.error_class,
-                "queue_wait_ms": job.queue_wait_ms, "yield_count": job.yields,
-                "cancel_count": job.cancelled}
+                "queue_wait_ms": job.queue_wait_ms, "yield_count": job.yields}
 
     def _refresh_plan_locked(self, plan: _Plan) -> None:
         states = [self._jobs[job_id].state for job_id in plan.jobs if job_id in self._jobs]
         if any(state == "running" for state in states): plan.state = "running"
         elif any(state == "queued" for state in states): plan.state = "queued"
         elif any(state == "failed" for state in states): plan.state = "failed"
-        elif any(state == "cancelled" for state in states): plan.state = "cancelled"
         else: plan.state = "succeeded"
 
     def _worker(self) -> None:
@@ -248,21 +201,6 @@ class MirrorCoordinator:
                 job = self._jobs.get(job_id)
                 if not job or job.state != "queued" or job.sequence != sequence:
                     continue
-                dependency_states = [self._jobs[dependency].state for dependency in job.dependencies
-                                     if dependency in self._jobs]
-                if any(state in {"failed", "cancelled"} for state in dependency_states):
-                    job.state, job.finished_at = "cancelled", time.monotonic()
-                    job.error_class = "dependency_failed"
-                    self._refresh_plan_locked(self._plans[job.plan_id])
-                    continue
-                if any(state in {"queued", "running"} for state in dependency_states):
-                    self._sequence += 1
-                    job.sequence = self._sequence
-                    heapq.heappush(self._queue, (_PRIORITY_VALUE[job.priority], job.sequence, job.job_id))
-                    continue
-                if job.cancel_requested:
-                    job.state, job.finished_at = "cancelled", time.monotonic()
-                    continue
                 job.state, job.started_at = "running", time.monotonic()
                 job.queue_wait_ms = max(0, int((job.started_at - job.created_at) * 1000))
             token = _WORKER.set(job_id)
@@ -272,19 +210,15 @@ class MirrorCoordinator:
                     raise RuntimeError("runner_unavailable")
                 outcome = runner(job.course_id)
                 with self._lock:
-                    if job.cancel_requested or (isinstance(outcome, dict) and
-                                                 (outcome.get("state") == "cancelled" or
-                                                  outcome.get("cancelled") is True)):
-                        job.state = "cancelled"
-                    elif isinstance(outcome, dict) and (outcome.get("ok") is False or
-                                                        outcome.get("state") == "failed"):
+                    if isinstance(outcome, dict) and (outcome.get("ok") is False or
+                                                       outcome.get("state") == "failed"):
                         job.state = "failed"
                         job.error_class = str(outcome.get("error_class") or "acquisition_failed")
                     else:
                         job.state = "succeeded"
             except Exception as error:
                 with self._lock:
-                    job.state = "cancelled" if job.cancel_requested else "failed"
+                    job.state = "failed"
                     job.error_class = type(error).__name__
             finally:
                 _WORKER.reset(token)
@@ -302,14 +236,14 @@ class MirrorCoordinator:
             self._plans.pop(plan.plan_id, None)
         referenced = {job_id for plan in self._plans.values() for job_id in plan.jobs}
         for job_id, job in list(self._jobs.items()):
-            if job_id not in referenced and job.state in {"succeeded", "failed", "cancelled"}:
+            if job_id not in referenced and job.state in {"succeeded", "failed"}:
                 self._jobs.pop(job_id, None)
                 if self._by_key.get((job.course_id, job.scope)) == job_id:
                     self._by_key.pop((job.course_id, job.scope), None)
 
     def _refresh_and_return_completed(self, plan: _Plan) -> bool:
         self._refresh_plan_locked(plan)
-        return plan.state in {"succeeded", "failed", "cancelled"}
+        return plan.state in {"succeeded", "failed"}
 
 
 _DEFAULT: MirrorCoordinator | None = None

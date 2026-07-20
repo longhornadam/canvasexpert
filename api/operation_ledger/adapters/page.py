@@ -435,9 +435,6 @@ class PageAdapter:
         return [target for target in operation.get("targets", [])
                 if models.is_unresolved_target_state(target.get("state", "pending"))]
 
-    def reversal_descriptor(self, payload: dict, target: dict) -> dict:
-        return {"supported": False, "method": None, "snapshot": None}
-
 
 def _read_modules(course_id: str):
     return canvas_client._canvas_get_all(

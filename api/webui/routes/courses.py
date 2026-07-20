@@ -9,6 +9,7 @@ Routes: GET /api/courses
 import requests
 
 from api import course_catalog
+from api.mirror import read_service
 from api.mirror import store as mirror_store
 
 from fastapi import APIRouter
@@ -129,6 +130,32 @@ def _local_assignments(course_id: str):
     return assignments
 
 
+def _local_modules(course_id: str):
+    """Modules from the Course Catalog when its scope is exactly
+    current, or None to signal the existing live modules fallback.
+    """
+    module_scope = read_service.catalog_modules(course_id)
+    if not isinstance(module_scope, dict) or module_scope.get("state") != "current":
+        return None
+    records = module_scope.get("records")
+    if not isinstance(records, list):
+        return None
+    try:
+        modules = [
+            {
+                "id":          str(module.get("id") or ""),
+                "name":        module.get("name", ""),
+                "items_count": len(module.get("items") or []),
+                "published":   True,
+            }
+            for module in records
+            if isinstance(module, dict) and module.get("id") is not None
+        ]
+    except (TypeError, AttributeError):
+        return None
+    return modules
+
+
 @router.get("/api/courses")
 def list_all_courses():
     """All courses the saved token can see (used by both settings and dashboard)."""
@@ -149,7 +176,7 @@ def course_detail(course_id: str):
     Course Catalog) when their scope is current/fresh; each scope
     independently falls back to its existing live Canvas call when its
     projection is missing, stale, incomplete, or malformed — one stale scope
-    never forces the others live. Modules stay a live read this batch."""
+    never forces the others live. Modules are served from the local Course Catalog when current."""
     local_students = _local_students(course_id)
     if local_students is not None:
         students, name_by_id = local_students
@@ -185,8 +212,10 @@ def course_detail(course_id: str):
                 })
             group_sets.append({"name": cat["name"], "groups": out})
 
-    modules, _ = _canvas_get_all(
-        f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
+    modules = _local_modules(course_id)
+    if modules is None:
+        modules, _ = _canvas_get_all(
+            f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
 
     assignments = _local_assignments(course_id)
     if assignments is None:

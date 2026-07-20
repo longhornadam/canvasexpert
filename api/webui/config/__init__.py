@@ -95,10 +95,10 @@ from .roster import (
     update_roster_student_settings,
     _validate_tier_scheme, _normalize_tier_scheme,
     get_roster_tier_scheme, set_roster_tier_scheme,
-    roster_tier_by_id, active_tier_ids, migrate_legacy_tier,
+    roster_tier_by_id,
     get_roster_group_scheme, set_roster_group_scheme,
     get_selected_group_category_id, set_selected_group_category_id,
-    get_group_label, set_group_label, set_group_labels,
+    get_group_label, set_group_labels,
     compute_group_display, default_group_label,
 )
 

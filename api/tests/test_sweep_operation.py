@@ -76,9 +76,7 @@ def test_retry_selector():
     ]})
     assert [s["target_key"] for s in sel] == ["b"]
 
-def test_reversal_unsupported():
-    adapter = SweepAdapter()
-    assert adapter.reversal_descriptor({}, {})["supported"] is False
+
 
 # ── Execute with canvas mocks ────────────────────────────────────────────
 

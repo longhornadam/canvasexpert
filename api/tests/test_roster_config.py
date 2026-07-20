@@ -174,17 +174,6 @@ def test_validate_rejects_blank_label():
         ])
 
 
-def test_active_tier_ids_returns_only_active():
-    cid = "active_test"
-    config.set_roster_tier_scheme(cid, [
-        {"id": "a", "teacher_label": "A", "alias": "A1", "order": 1, "active": True},
-        {"id": "b", "teacher_label": "B", "alias": "B1", "order": 2, "active": False},
-        {"id": "c", "teacher_label": "C", "alias": "C1", "order": 3, "active": True},
-    ])
-    active = config.active_tier_ids(cid)
-    assert active == {"a", "c"}
-
-
 def test_roster_tier_by_id():
     cid = "by_id_test"
     config.set_roster_tier_scheme(cid, [
@@ -195,35 +184,6 @@ def test_roster_tier_by_id():
     assert by_id["a"]["alias"] == "A1"
     assert by_id["b"]["alias"] == "B1"
     assert by_id["b"]["active"] is False
-
-
-def test_migrate_legacy_tier_known():
-    """Should map 'Support' -> 'support' by label."""
-    cid = "migrate_known"
-    result = config.migrate_legacy_tier(cid, "101", "Support")
-    assert result == "support"
-
-
-def test_migrate_legacy_tier_case_insensitive():
-    cid = "migrate_case"
-    result = config.migrate_legacy_tier(cid, "101", "core")
-    assert result == "core"
-
-
-def test_migrate_legacy_tier_unknown_adds_to_scheme():
-    cid = "migrate_unknown"
-    result = config.migrate_legacy_tier(cid, "101", "Accelerate")
-    assert result is not None
-    scheme = config.get_roster_tier_scheme(cid)
-    tier_ids = [t["id"] for t in scheme]
-    assert result in tier_ids
-    assert "accelerate" in tier_ids
-
-
-def test_migrate_legacy_tier_blank_returns_none():
-    cid = "migrate_blank"
-    result = config.migrate_legacy_tier(cid, "101", "")
-    assert result is None
 
 
 def test_validate_requires_non_empty_scheme():

@@ -11,7 +11,7 @@ import time
 
 from api.mirror import store
 from api.webui import workspace
-from api.work_registry.providers import WorkCourseReads, call_canvas_get_all
+from api.work_registry.providers import WorkCourseReads
 from api.work_registry.providers import grading_debt, home_attention, late_work, roster_warnings
 
 COURSE = "555001"
@@ -228,43 +228,6 @@ def test_wrapper_falls_back_live_when_mirror_read_errors(monkeypatch, tmp_path):
         return live_rows, None
 
     reads = _reads(fake_get)
-    result = reads.assignments()
-    assert result == live_rows
-
-
-def test_call_canvas_get_all_still_serves_fresh_mirror_for_backward_compat(monkeypatch, tmp_path):
-    """Verify the old call_canvas_get_all entry point still works unchanged."""
-    _mount(monkeypatch, tmp_path)
-    _populate(str(tmp_path))
-    deadline = time.monotonic() + 5
-
-    assignments = call_canvas_get_all(
-        _explode, f"/api/v1/courses/{COURSE}/assignments", {"per_page": 100}, deadline)
-    assert {a["id"] for a in assignments} == {"700100", "700101"}
-
-
-def test_work_course_reads_live_fallback_never_touches_mirror_shape(monkeypatch, tmp_path):
-    """Prove WorkCourseReads live fallback bypasses _mirror_shape entirely.
-
-    When the mirror is stale, the typed read calls ``_call_live_get_all``
-    directly; monkeypatching ``_mirror_shape`` to raise proves the fallback
-    path never re-enters the URL-regex matching logic.
-    """
-    _mount(monkeypatch, tmp_path)
-    _populate(str(tmp_path), fresh=False)
-
-    def raise_on_mirror_shape(*_args, **_kwargs):
-        raise AssertionError("_mirror_shape reached from WorkCourseReads live fallback")
-    monkeypatch.setattr(
-        "api.work_registry.providers._mirror_shape", raise_on_mirror_shape)
-
-    live_rows = [{"id": "live-1", "name": "Live from test"}]
-
-    def fake_get(path, params=None, timeout=None, deadline=None):
-        return live_rows, None
-
-    reads = WorkCourseReads(
-        COURSE, deadline=time.monotonic() + 5, live_reader=fake_get)
     result = reads.assignments()
     assert result == live_rows
 

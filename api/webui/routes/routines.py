@@ -6,14 +6,13 @@ No external scheduler (locked-down district machines), no cloud, ever.
 import json
 import threading
 import time as _time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
 from .. import config
-from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
-from ..schooldays import _school_days_late, _parse_iso_local
+from ..canvas_client import _canvas_send
 from . import powergrader as pg_routes
 from api.powergrader import (
     ai_workflow,
@@ -113,10 +112,6 @@ def _routine_due(state):
 
 from .routines_powergrader import (
     PowerGraderRoutineDeps,
-    _autoscore_job_label, _autoscore_fetch_status, _autoscore_receipt_dir,
-    _autoscore_canvas_states, _autoscore_session_is_fully_pushed,
-    _autoscore_status_from_summary, _autoscore_summary_payload,
-    _autoscore_decisions_payload, _parse_routine_dt,
     _run_routine_powergrader_scheduled_autoscore as _run_routine_powergrader_scheduled_autoscore_impl,
     _run_routine_powergrader_late_catchup as _run_routine_powergrader_late_catchup_impl,
 )

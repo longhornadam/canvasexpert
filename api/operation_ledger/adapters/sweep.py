@@ -272,9 +272,6 @@ class SweepAdapter:
             )
         ]
 
-    def reversal_descriptor(self, payload: dict, target: dict) -> dict:
-        return {"supported": False, "method": None, "snapshot": None}
-
 
 # ── Module-level helpers ─────────────────────────────────────────────────
 

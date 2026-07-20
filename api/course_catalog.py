@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Callable
 
 from api.assignment_collection import (
-    ASSIGNMENTS_PATH,
     AssignmentCollectionReceipt,
     acquire_assignment_collection,
 )
