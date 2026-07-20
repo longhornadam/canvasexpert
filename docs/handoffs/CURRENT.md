@@ -127,7 +127,7 @@ unresolved decisions. Do not self-accept or edit `NEXT_BATCH.md`.
 - Focused acceptance command: **102 passed** in 3.95s.
 - Full API command: **1117 passed, 1 skipped** in 34.63s.
 - `git diff --check`: passed.
-- Synthetic harness self-check: passed; aggregate-only JSON at `C:\Users\adamb\AppData\Local\Temp\canvasmirror-release-self-check-20260719-019f7d5d.json`, classification `synthetic_self_check`, verified disposable root, 1-current/2-concluded profile, no Canvas calls.
+- Synthetic harness self-check: passed; aggregate-only JSON at `%USERPROFILE%\AppData\Local\Temp\canvasmirror-release-self-check-20260719-019f7d5d.json`, classification `synthetic_self_check`, verified disposable root, 1-current/2-concluded profile, no Canvas calls.
 - Browser Page-map matrix: **0 routes / 0 console errors observed**. Local app was started without invoking sync/write controls, but the required in-app browser connection returned exact failure text: `No browser is available`; all Page-map routes therefore remain unverified. This is the sole YELLOW condition.
 - Deviations: none from locked implementation decisions. `course.refresh` is implemented as compatibility orchestration over dependent scope jobs, not a physical pass/scope synonym; legacy direct `sync_now()` remains for internal callers/tests.
 - Unresolved decision: senior lane must provide/restore a real browser surface and run the required Page-map route matrix before GREEN acceptance.
@@ -137,7 +137,7 @@ unresolved decisions. Do not self-accept or edit `NEXT_BATCH.md`.
 - Repaired coordinator seams: heartbeat now queues one `course.refresh` compatibility job per course at `background`/`concluded` priority and waits before `refresh_work_findings`; post-write timers queue/coalesce `submissions.course_delta` at `post_write`; `course.refresh` no longer fans out, while explicit named scopes retain dependency planning; structure and New Quiz metadata runners are narrow/direct; result states, failed dependencies, queue wait/context telemetry, and bounded job/key cleanup are enforced.
 - Added focused assertions for background/concluded foreground yield, heartbeat priority/order, post-write queueing, no legacy full/delta from named runners, failed-result/dependency isolation, queue telemetry, and deterministic plan/job/key bounds.
 - Corrected focused command: **109 passed** in 4.04s. Corrected full API command: **1124 passed, 1 skipped** in 35.08s. `git diff --check`: passed.
-- Corrected synthetic self-check: passed; aggregate-only JSON at `C:\Users\adamb\AppData\Local\Temp\canvasmirror-release-self-check-20260719-correction.json`, classification `synthetic_self_check`.
+- Corrected synthetic self-check: passed; aggregate-only JSON at `%USERPROFILE%\AppData\Local\Temp\canvasmirror-release-self-check-20260719-correction.json`, classification `synthetic_self_check`.
 - The original browser matrix remains unavailable (`No browser is available`); this is still the sole YELLOW condition. No commit was created.
 
 **YELLOW — live-readonly harness correction evidence**
@@ -146,7 +146,7 @@ unresolved decisions. Do not self-accept or edit `NEXT_BATCH.md`.
 - Added `--live-readonly` to the release harness. It validates the configured 1-current/2-concluded lifecycle profile through core GET-backed course-context reads, runs three fresh disposable-root cold/full + current-only warm/delta pairs, optionally executes membership-checked focused reads from a private environment ID, cleans every verified root, and writes/prints aggregate-only sanitized results. The executor did **not** run this live mode.
 - Added injected synthetic orchestration coverage for fresh-root-per-pair cleanup, current/concluded cadence, focused membership, aggregate-only output, profile refusal, runner failure normalization, and internal core-GET status-class counters without new persisted operational-log fields.
 - Final focused command: **112 passed** in 3.75s. Final full API command: **1127 passed, 1 skipped** in 32.27s. `git diff --check`: passed.
-- Final synthetic self-check: passed; classification `synthetic_self_check`; aggregate-only JSON at `C:\Users\adamb\AppData\Local\Temp\canvasmirror-release-self-check-20260719-live-readonly.json`.
+- Final synthetic self-check: passed; classification `synthetic_self_check`; aggregate-only JSON at `%USERPROFILE%\AppData\Local\Temp\canvasmirror-release-self-check-20260719-live-readonly.json`.
 - Browser remains unattempted in this correction pass and unavailable from the prior executor check (`No browser is available`): sole YELLOW condition. No commit was created.
 
 **YELLOW — benchmark helper cleanup evidence**

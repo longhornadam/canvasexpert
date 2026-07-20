@@ -9,7 +9,7 @@ Executor: **Luna**
 ## Outcome
 
 Make `/` feel like the operational Desk study at
-`C:\Users\adamb\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-desk.html`: an information-dense work console rather than a card dashboard. Teachers can start existing workflows from four compact lanes, see Continue and Attention as ledger rows, keep explicit course scope, and see truthful Prepared and Receipts projections.
+`%USERPROFILE%\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-desk.html`: an information-dense work console rather than a card dashboard. Teachers can start existing workflows from four compact lanes, see Continue and Attention as ledger rows, keep explicit course scope, and see truthful Prepared and Receipts projections.
 
 This is a UI-composition batch. It makes the already available local summaries legible without changing what Desk is authorized to do.
 
@@ -45,7 +45,7 @@ This is a UI-composition batch. It makes the already available local summaries l
 
 ## Reference pattern and routing
 
-- Visual reference: `C:\Users\adamb\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-desk.html` — read only its escaped `#ce-desk-study` fragment (around source lines 751–844).
+- Visual reference: `%USERPROFILE%\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-desk.html` — read only its escaped `#ce-desk-study` fragment (around source lines 751–844).
 - Current Desk owners: `api/webui/routes/pages.py::dashboard`, `api/webui/templates/dashboard.html`, `api/webui/static/desk.js`, and the Desk block in `api/webui/static/workbench.css`.
 - Existing safe Prepared projection: `api/operation_ledger/operations.py::list_operations_pii_minimized` and `api/webui/routes/operations.py::list_operations_route`.
 - Existing safety/render test: `api/tests/test_desk_routes.py`.

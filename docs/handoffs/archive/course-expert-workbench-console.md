@@ -9,7 +9,7 @@ Executor: **Luna**
 ## Outcome
 
 Make `/course-expert` resemble the Workbench study at
-`C:\Users\adamb\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-workbench.html`: a dense three-column creation console with a compact work rail, clear workspace orientation, and a real operation ledger.
+`%USERPROFILE%\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-workbench.html`: a dense three-column creation console with a compact work rail, clear workspace orientation, and a real operation ledger.
 
 The teacher-visible workflows remain the existing ones. This batch improves orientation and density around those workflows; it does not create a second authoring flow or alter a Canvas write path.
 
@@ -44,7 +44,7 @@ The teacher-visible workflows remain the existing ones. This batch improves orie
 
 ## Reference pattern and routing
 
-- Visual reference: `C:\Users\adamb\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-workbench.html` — use only escaped `#ce-workbench-study-v2` fragment around source lines 751–846.
+- Visual reference: `%USERPROFILE%\.codex\visualizations\2026\07\10\019f4d61-ebcc-78a0-b981-45d66ab59d39\canvasexpert-workbench.html` — use only escaped `#ce-workbench-study-v2` fragment around source lines 751–846.
 - Shell: `api/webui/templates/course_expert.html`.
 - Tab activation/Instrument routing: `api/webui/static/course_expert/tabs.js::activateTab`.
 - Work rail: `api/webui/static/course_expert/work_rail.js`.

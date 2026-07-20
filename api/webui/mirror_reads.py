@@ -10,6 +10,16 @@ ignore it (locked decision 2).
 
 Reads that feed a Canvas write (curve preview/apply score baselines, the
 operation-ledger sweep adapter) do not use this module — locked decision 1.
+
+Compatibility shim (1.0-beta). Owner: the CanvasMirror read-spine migration
+(spine §20 Maintainability — "compatibility shims have an owner and removal
+condition"). Remaining consumers are the not-yet-migrated routine/sweep/curve
+read call sites, pinned by
+``test_routine_reads.py::test_sweep_and_curve_still_use_the_unmigrated_mirror_reads_helpers``.
+Removal condition: once those call sites read ``api.mirror.read_service`` typed
+scopes directly — as Home, Work, Course Info, and PowerGrader already do — delete
+this module together with that test. Do not add new consumers; new code calls
+``read_service`` directly.
 """
 from __future__ import annotations
 
