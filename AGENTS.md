@@ -87,7 +87,7 @@ user may choose an external executor.
 
 - Understand the relevant teacher path and make the hard product/technical decisions.
 - Discuss choices that materially change the user's direction.
-- Write one durable brief from `docs/handoffs/HANDOFF_TEMPLATE.md` before delegation.
+- Write one durable brief before delegation.
 - Prefer one meaningful vertical improvement (normally half a day to two days), not a
   chain of numbered micro-slices.
 - Author independently checkable acceptance criteria and explicit non-goals before execution,
@@ -172,17 +172,17 @@ console errors.
 
 ## Handoff and document hygiene
 
-- `docs/handoffs/` contains `HANDOFF_TEMPLATE.md` and at most one current direct brief.
+- `docs/handoffs/` contains at most one current direct brief.
   Do not store a future queue there; create a brief only when it is ready for execution.
-- Close GREEN work by accepting it and moving its brief to `docs/handoffs/archive/` in the
-  same batch. A RED/YELLOW brief remains current only while the senior is actively deciding
-  or correcting it. Superseded or abandoned briefs are archived with an explicit status.
+- Close GREEN work by accepting it and retiring its brief in the same batch (Git history is
+  its record). A RED/YELLOW brief remains current only while the senior is actively deciding
+  or correcting it. Superseded or abandoned briefs are retired with an explicit status.
 - Closing a GREEN brief that finishes or advances a vision-doc batch (spine §17.1) must
-  overwrite `docs/handoffs/NEXT_BATCH.md` — a single current pointer, never a log — naming
+  leave a single current pointer to the next batch — never a log — naming
   the next batch-table row, the exact vision-doc sections it requires, and any outstanding
-  senior decisions carried over from other batches. A new senior reads only this file and
+  senior decisions carried over from other batches. A new senior reads only that pointer and
   the sections it names, never the whole vision document, to find the next unit of work.
-- Never route an executor to `docs/handoffs/archive/`; Git and the archive are history, not
+- Never route an executor to a retired or superseded brief; Git history is history, not
   current authority.
 - Keep the brief concise and slice-specific. Link contracts and exact reference sections;
   do not paste product history or whole architecture narratives into it.

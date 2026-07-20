@@ -7,8 +7,7 @@ For canonical AI-agent guidance and safety rules, read `../AGENTS.md` first.
 
 - `docs/contracts/` - durable data contracts and interface agreements.
 - `docs/guides/` - durable usage, authoring, and workflow guidance.
-- `docs/handoffs/` - active execution briefs plus the canonical brief template.
-- `docs/handoffs/archive/` - completed or historical handoffs retained for reference.
+- `docs/handoffs/` - active execution briefs.
 - `docs/reference/` - stable reference notes and extracted facts.
 
 Useful starting references for new debugging and refactor sessions:
@@ -26,7 +25,7 @@ Useful starting references for new debugging and refactor sessions:
 ## Handoff Convention
 
 The senior/orchestrator makes the difficult product and architecture decisions, then writes
-one substantial brief from `docs/handoffs/HANDOFF_TEMPLATE.md`. One executor implements it:
+one substantial brief. One executor implements it:
 Luna for established patterns, Terra for complex/guardrail-adjacent work, or an external
 VS Code agent chosen by the user. Do not run planner/implementer/reviewer swarms.
 

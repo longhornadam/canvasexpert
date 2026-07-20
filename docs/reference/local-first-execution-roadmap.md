@@ -2,9 +2,8 @@
 
 Status: **ordered planning roadmap; not an execution brief**
 
-This roadmap converts the decisions in
-`docs/handoffs/local-first-simplification-planning.md` into substantial, sequential
-implementation batches. It exists so a lower-level executor never has to rediscover the
+This roadmap converts the local-first simplification planning decisions into substantial,
+sequential implementation batches. It exists so a lower-level executor never has to rediscover the
 architecture or infer which subsystem should move first.
 
 ## Execution protocol
@@ -15,7 +14,7 @@ continuity; they do not imply a Luna-tier executor.
 
 - Run exactly **one implementation executor at a time**, regardless of tier.
 - Before each batch, the senior (Claude, orchestrator role) creates or revises the single
-  active brief in `docs/handoffs/` using `HANDOFF_TEMPLATE.md`, resolving that batch's named
+  active brief in `docs/handoffs/`, resolving that batch's named
   decision gate and current exact symbols. This roadmap is never handed to an executor as a
   substitute for an execution brief.
 - The executor reads `AGENTS.md`, that one active brief, and only the references routed by
@@ -67,7 +66,7 @@ These are not delegated architecture questions:
 
 ## Luna 1 — Focused assignment refresh with one local evidence owner **(GREEN accepted 2026-07-14)**
 
-Completed record: `docs/handoffs/archive/focused-assignment-refresh.md`.
+Completed record: `focused-assignment-refresh` brief (retired; Git history).
 
 Risk: **high** — private student evidence and FERPA-sensitive persistence.
 
@@ -117,7 +116,7 @@ cross-machine authority model.
 
 ## Luna 2 — Retire duplicate Download Work acquisition **(GREEN accepted 2026-07-14)**
 
-Completed record: `docs/handoffs/archive/retire-duplicate-download-work.md`.
+Completed record: `retire-duplicate-download-work` brief (retired; Git history).
 
 Depends on: **Luna 1 GREEN**.
 
@@ -160,9 +159,9 @@ without broadening the persistence contract.
 
 ## Luna 3 — New Quiz item review and teacher finalization in PowerGrader **(GREEN completed 2026-07-14)**
 
-Completed record: `docs/handoffs/archive/new-quiz-item-finalization-v2.md`. Archived RED records:
-`docs/handoffs/archive/new-quiz-item-finalization.md` and
-`docs/handoffs/archive/new-quiz-grader-transport-capture.md` — their blockers are stale:
+Completed record: `new-quiz-item-finalization-v2` brief (retired; Git history). Superseded RED
+briefs `new-quiz-item-finalization` and `new-quiz-grader-transport-capture` are likewise
+retired (Git history) — their blockers are stale:
 the sessionless native read chain is live-verified (commit `7fb63b9`), the
 `quiz_api_quiz_session_id` shape is normalized, and interim lanes shipped the same day
 (per-item AI drafts merged per student, comment-only assignment-level feedback push,
@@ -220,7 +219,7 @@ post-write authority, or inability to reconcile an ambiguous response.
 
 ## PowerGrader Course Catalog v1 **(GREEN accepted 2026-07-14)**
 
-Implementation brief: `docs/handoffs/course-catalog-powergrader.md`. Durable contract:
+Implementation brief: retired (Git history). Durable contract:
 `docs/contracts/course-catalog-contract.md`.
 
 PowerGrader course selection now reads a strict, student-data-free assignment/module catalog
@@ -371,7 +370,7 @@ silently migrating/deleting private data.
 
 ## Luna 7 — Finish the smaller teacher-facing product surface **(YELLOW: browser verification pending 2026-07-15)**
 
-Implementation record: `docs/handoffs/teacher-surface-finish-luna7.md`.
+Implementation record: retired (Git history).
 
 Depends on: **Lunas 2, 5, and 6 GREEN** plus the Student Reports placement decision.
 

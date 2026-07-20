@@ -6,7 +6,7 @@ REM --- Python present? (the only prerequisite a bat can't install without admin
 where py >nul 2>&1
 if errorlevel 1 (
   echo Python is not installed.
-  echo Install the per-user Python 3.13 from https://www.python.org/downloads/
+  echo Install the per-user Python 3.13 or newer from https://www.python.org/downloads/
   echo  ^(tick "Install for me only" - no admin needed^), then run this again.
   pause & exit /b 1
 )

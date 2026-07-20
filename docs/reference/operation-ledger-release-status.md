@@ -70,12 +70,12 @@ implementation is authorized by them.
 
 | Work | Authority | Status |
 |---|---|---|
-| PowerGrader session workbench and responsive grading instrument | `docs/handoffs/archive/powergrader-frontend-workbench.md` | **completed** |
-| Roster Workbench lenses over one student dataset | `docs/handoffs/archive/roster-frontend-workbench.md` | **completed** |
-| Course Expert Quiz operation-ledger browser migration | `docs/handoffs/archive/course-expert-quiz-ledger-migration.md` | **completed** |
-| Shared Workbench header visual integration | `docs/handoffs/archive/workbench-header-integration.md` | **completed** |
-| Instrument language and drafting-grid restoration | `docs/handoffs/archive/instrument-language-and-drafting-grid.md` | **completed** |
-| Workbench readiness/header and Desk control consolidation | `docs/handoffs/archive/workbench-readiness-header-consolidation.md` | **completed** |
+| PowerGrader session workbench and responsive grading instrument | `powergrader-frontend-workbench` brief (retired; Git history) | **completed** |
+| Roster Workbench lenses over one student dataset | `roster-frontend-workbench` brief (retired; Git history) | **completed** |
+| Course Expert Quiz operation-ledger browser migration | `course-expert-quiz-ledger-migration` brief (retired; Git history) | **completed** |
+| Shared Workbench header visual integration | `workbench-header-integration` brief (retired; Git history) | **completed** |
+| Instrument language and drafting-grid restoration | `instrument-language-and-drafting-grid` brief (retired; Git history) | **completed** |
+| Workbench readiness/header and Desk control consolidation | `workbench-readiness-header-consolidation` brief (retired; Git history) | **completed** |
 
 ### Deferred to post-release
 

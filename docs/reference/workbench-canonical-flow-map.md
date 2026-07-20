@@ -42,7 +42,7 @@
 | `GET /api/roster/tier-scheme` | Roster V3 Canvas group scheme | Routes removed from `roster.py`; 5 endpoint tests removed from `test_roster_routes.py`; 2 entries removed from `test_route_contract.py::EXPECTED` |
 | `POST /api/roster/tier-scheme` | Roster V3 Canvas group scheme | Routes removed from `roster.py`; 5 endpoint tests removed from `test_roster_routes.py`; 2 entries removed from `test_route_contract.py::EXPECTED` |
 
-**Live config retained:** `config.get_roster_tier_scheme()`, `config.roster_tier_by_id()`, and the `roster_tier_schemes` synced key remain for PowerGrader's tier-map resolution. Only the unused HTTP endpoint wrappers were removed. The archived audit brief is at `docs/handoffs/archive/workbench-canonical-flow-audit.md`.
+**Live config retained:** `config.get_roster_tier_scheme()`, `config.roster_tier_by_id()`, and the `roster_tier_schemes` synced key remain for PowerGrader's tier-map resolution. Only the unused HTTP endpoint wrappers were removed.
 
 ### July 2026: QuizForge streaming HTTP wrappers removed
 
@@ -55,7 +55,7 @@
 
 **Retained:** `POST /api/push/preview` dry-run — moved to `push_validation.py`. Direct CLI (`qf_pusher.py`, `push_tiers.py`) remains a supported manual teacher path.
 
-**Changes:** 4 route entries removed from `test_route_contract.py::EXPECTED`; 4 literal-string assertions removed from `test_webui_template_contracts.py`. All reference docs updated to identify typed operations as the sole browser live-write path. Archived at `docs/handoffs/archive/retire-quiz-streaming-http-surface.md`.
+**Changes:** 4 route entries removed from `test_route_contract.py::EXPECTED`; 4 literal-string assertions removed from `test_webui_template_contracts.py`. All reference docs updated to identify typed operations as the sole browser live-write path.
 
 ---
 

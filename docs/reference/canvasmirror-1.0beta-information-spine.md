@@ -1227,8 +1227,7 @@ complete and accepted; the code work for 1.0-beta is done:
   network-fault matrices) is intentionally **deferred to real start-of-year courses** —
   see `docs/reference/1.0beta-acceptance-record.md`.
 
-The next initiative is not a new batch but a **cruft-removal / de-duplication audit** — see
-`docs/handoffs/cruft-removal-audit-brief.md`.
+The next initiative is not a new batch but a **cruft-removal / de-duplication audit**.
 
 ### 17.2 Retained requirements crosswalk
 
@@ -1487,7 +1486,7 @@ safety; the executor owns implementation of the selected vertical batch.
 
 ### 18.1 A good batch brief
 
-This section, together with `docs/handoffs/HANDOFF_TEMPLATE.md`, is the operative handoff
+This section is the operative handoff
 template. A good handoff normally delivers one whole batch in roughly half a day to two days.
 It may include contract, acquisition, immediate consumer migration, and cleanup when they
 share one teacher outcome and one focused gate. It does not turn unrelated risk boundaries
