@@ -28,7 +28,6 @@
 | `/course` (Course Info detail page) | N/A – distinct outcome | Read-only course inspection; not a duplicate of any other surface |
 | `/ai-expert` (AI helper files) | N/A – distinct outcome | Paste-ready LLM skill files; not a duplicate |
 | `/about` | N/A – distinct outcome | Explainer page |
-| `/forge/quizforge/` | N/A – distinct outcome | Embedded Pyodide zero-auth compiler; separate app |
 | `push/core.js` legacy globals (`localToISO`, `targetCourses`, `initFileSource`, `copySkill`) | `window.CE_PUSH` namespace | Still consumed by `push/*.js` feature scripts and `course_expert/*.js`; guarded by `course-expert-module-map.md` |
 | `push_validation.py` `/api/push/preview` (dry-run) | N/A – distinct validation step | QuizForge dry-run preview; not a write path; still called by `push/quiz.js` |
 | `gradebook_service.py` legacy curve events migration | Current curve events path | Data migration for existing teacher curve history; not a surface |

@@ -174,7 +174,7 @@ def _current_routes():
     out = []
     for r in app.routes:
         methods = getattr(r, "methods", None)
-        if not methods:          # skip Mounts (static, /forge/quizforge)
+        if not methods:          # skip Mounts (static)
             continue
         out.append((r.path, tuple(sorted(m for m in methods if m != "HEAD"))))
     return sorted(out)
