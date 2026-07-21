@@ -18,12 +18,12 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 4
+    assert contract.TOOL_SCHEMA_VERSION == 5
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
     # Older contracts stay immutable and independently loadable for clients
-    # pinned before refresh_mirror (v3) and seating context (v4).
+    # pinned before refresh_mirror (v3), seating context (v4), and modules (v5).
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -31,7 +31,10 @@ def test_live_mcp_schema_matches_versioned_contract():
     v3 = contract.load_contract(3)
     assert v3["schema_version"] == 3
     assert len(v3["tools"]) == 6
-    assert len(live["tools"]) == 7
+    v4 = contract.load_contract(4)
+    assert v4["schema_version"] == 4
+    assert len(v4["tools"]) == 7
+    assert len(live["tools"]) == 8
     forbidden = ("write", "update", "comment", "push", "delete", "create", "canvas")
     assert all(not any(word in tool["name"].lower() for word in forbidden) for tool in live["tools"])
 

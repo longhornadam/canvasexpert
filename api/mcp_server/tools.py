@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 7 MCP tools.
+"""Plain, testable implementations of the 8 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -73,6 +73,9 @@ _ASSIGNMENT_COLUMNS = ("id", "title", "due_at", "points_possible",
 _GRADEBOOK_ASSIGNMENT_COLUMNS = ("id", "title", "due_at", "points", "submitted",
                                  "graded", "missing", "late", "avg_pct")
 _GRADEBOOK_STUDENT_COLUMNS = ("pseudonym", "missing", "late", "ungraded", "pct")
+_MODULE_COLUMNS = ("id", "name", "position", "item_count")
+_MODULE_COLUMNS_WITH_PUBLISHED = ("id", "name", "position", "published", "item_count")
+_MODULE_ITEM_COLUMNS = ("id", "type", "title", "position")
 
 
 def _tabulate(rows: list[dict], columns: tuple[str, ...]) -> dict:
@@ -330,6 +333,68 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> d
         "course_id": str((read_result.get("catalog") or {}).get("course_id") or course_id),
         "course_name": str((read_result.get("catalog") or {}).get("course_name") or ""),
         "assignments": _tabulate(assignments, _ASSIGNMENT_COLUMNS),
+    }
+
+
+def get_modules(course_id: str, include_items: bool = False) -> dict:
+    """Module structure from the local course catalog (disk-only, no live
+    Canvas fallback — refresh the catalog from the web UI first). No student
+    data — no vault, no safety gate. Staleness is labeled (source, synced_at,
+    state), never refused, since modules are structural, not student data.
+    Modules go out as a {columns, rows} table; include_items nests each
+    module's items as their own {columns, rows} table. ``published`` is
+    included only when the catalog record actually carries it."""
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+
+    read_result = read_catalog(course_id)
+    scope = read_service.catalog_modules(
+        course_id, catalog_reader=lambda _course_id: read_result)
+    if scope["source"] == "none":
+        return {
+            "ok": False,
+            "error": ("No local course catalog found for this course. Refresh "
+                      "the catalog from the CanvasExpert web UI, then try again."),
+        }
+
+    records = scope["records"]
+    has_published = any("published" in module for module in records)
+    columns = _MODULE_COLUMNS_WITH_PUBLISHED if has_published else _MODULE_COLUMNS
+    if include_items:
+        columns = columns + ("items",)
+
+    modules = []
+    for module in records:
+        row = {
+            "id": module.get("id"),
+            "name": module.get("name", ""),
+            "position": module.get("position"),
+            "item_count": len(module.get("items") or []),
+        }
+        if has_published:
+            row["published"] = module.get("published")
+        if include_items:
+            items = [
+                {
+                    "id": item.get("id"),
+                    "type": item.get("type", ""),
+                    "title": item.get("title", ""),
+                    "position": item.get("position"),
+                }
+                for item in (module.get("items") or [])
+            ]
+            row["items"] = _tabulate(items, _MODULE_ITEM_COLUMNS)
+        modules.append(row)
+
+    return {
+        "ok": True,
+        "course_id": str((read_result.get("catalog") or {}).get("course_id") or course_id),
+        "course_name": str((read_result.get("catalog") or {}).get("course_name") or ""),
+        "modules": _tabulate(modules, columns),
+        "source": scope["source"],
+        "synced_at": scope["last_success_at"],
+        "state": scope["state"],
     }
 
 

@@ -134,4 +134,13 @@ Canvas call, no student data, no network binding.
 
 ## Execution result
 
-_Pending executor work._
+Done. `get_modules(course_id, include_items=False)` added in `tools.py` (course-gated,
+catalog-only, no vault or safety gate; returns a `{columns, rows}` module table with
+`source`/`synced_at`/`state` labels; stale-but-present returns labeled records, absent
+catalog returns a structured error; `include_items` nests each module's items;
+`published` column emitted only when the catalog record carries it). Wrapper added in
+`server.py` with the exact concise docstring. Schema bumped to v5 (`tool_schema_v5.json`,
+`contract.py`); v1-v4 untouched. Tests added in `test_mcp_server_tools.py`; contract test
+in `test_beta075_mcp.py` updated to v5/8 tools with a v4-immutability check.
+Verification gate green (55 passed). Implemented by a Sonnet subagent, verified by the
+senior agent.

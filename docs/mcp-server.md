@@ -1,9 +1,8 @@
 # CanvasExpert MCP server
 
 A local, stdio-only [Model Context Protocol](https://modelcontextprotocol.io) server that
-lets any MCP-capable assistant (Claude Code, Claude Desktop, Cowork, etc.) help plan
-lessons and manage rosters conversationally, while CanvasExpert keeps sole custody of the
-Canvas PAT and every write path.
+lets any MCP-capable assistant help plan lessons and manage rosters conversationally,
+while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 - **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
   local copy on their computer. It never holds the Canvas token, and writes nothing
@@ -30,21 +29,25 @@ Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 4.
+Tool schema version 5.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
+| `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
 | `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
 | `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
 
-`get_course_assignments` only reads the local course catalog written by the CanvasExpert
-web UI — it never falls back to a live Canvas call. If the catalog hasn't been refreshed
-yet, refresh it from the web UI first, then retry.
+`get_course_assignments` and `get_modules` only read the local course catalog written by
+the CanvasExpert web UI — neither ever falls back to a live Canvas call. If the catalog
+hasn't been refreshed yet, refresh it from the web UI first, then retry. Unlike the mirror
+tools below, `get_modules` never refuses on staleness: it returns whatever module records
+the catalog holds, labeled with `source`, `synced_at`, and `state`, since module structure
+is far lower-risk than student data.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
 CanvasMirror. `get_seating_context` uses the current mirror for identity and section

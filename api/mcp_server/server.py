@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Seven thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Eight thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -59,6 +59,14 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> s
     (id, title, due_at, points_possible, published, description_text).
     Descriptions are previews unless full_descriptions=true. No student data."""
     return _compact(tools.get_course_assignments(course_id, full_descriptions))
+
+
+@mcp.tool()
+def get_modules(course_id: str, include_items: bool = False) -> str:
+    """A course's modules from the local catalog as a {columns, rows} table
+    (id, name, position, published, item_count). include_items=true adds each
+    module's items (id, type, title, position). No student data."""
+    return _compact(tools.get_modules(course_id, include_items))
 
 
 @mcp.tool()

@@ -260,6 +260,110 @@ def test_get_course_assignments_rejects_non_current_course(monkeypatch):
     assert "not a Current course" in result["error"]
 
 
+# --- get_modules (disk-only catalog, no student data, no vault/gate) --------
+
+MODULE_FIXTURE = [
+    {"id": "1", "name": "Unit 1", "position": 1, "items": [
+        {"id": "10", "type": "Assignment", "title": "Essay 1", "position": 1, "content_id": "700010"},
+        {"id": "11", "type": "Quiz", "title": "Quiz 1", "position": 2, "content_id": "700020"},
+    ]},
+    {"id": "2", "name": "Unit 2", "position": 2, "items": []},
+]
+
+
+def _module_catalog_document(module_records, *, state="current"):
+    module_scope = {"state": state, "last_success_at": "2026-07-01T00:00:00Z",
+                    "last_attempt_at": "2026-07-01T00:00:00Z", "error_code": ""}
+    assignment_scope = {"state": "current", "last_success_at": "2026-07-01T00:00:00Z",
+                        "last_attempt_at": "2026-07-01T00:00:00Z", "error_code": ""}
+    return {
+        "course_id": "111",
+        "course_name": "Test Course",
+        "updated_at": "2026-07-01T00:00:00Z",
+        "assignments": {**assignment_scope, "records": {}},
+        "modules": {**module_scope, "records": module_records},
+    }
+
+
+def test_get_modules_happy_returns_table(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document(MODULE_FIXTURE)
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+
+    result = tools.get_modules("111")
+    assert result["ok"] is True
+    assert result["course_id"] == "111"
+    assert result["course_name"] == "Test Course"
+    assert result["source"] == "catalog"
+    assert result["synced_at"] == "2026-07-01T00:00:00Z"
+    assert result["state"] == "current"
+    assert result["modules"]["columns"] == ["id", "name", "position", "item_count"]
+    assert _rows(result["modules"]) == [
+        {"id": "1", "name": "Unit 1", "position": 1, "item_count": 2},
+        {"id": "2", "name": "Unit 2", "position": 2, "item_count": 0},
+    ]
+
+
+def test_get_modules_include_items_true_nests_item_tables(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document(MODULE_FIXTURE)
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+
+    result = tools.get_modules("111", include_items=True)
+    assert result["ok"] is True
+    assert result["modules"]["columns"] == ["id", "name", "position", "item_count", "items"]
+    rows = _rows(result["modules"])
+    assert rows[0]["items"]["columns"] == ["id", "type", "title", "position"]
+    assert _rows(rows[0]["items"]) == [
+        {"id": "10", "type": "Assignment", "title": "Essay 1", "position": 1},
+        {"id": "11", "type": "Quiz", "title": "Quiz 1", "position": 2},
+    ]
+    assert rows[1]["items"]["rows"] == []
+
+
+def test_get_modules_include_items_false_omits_items_column(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document(MODULE_FIXTURE)
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+
+    result = tools.get_modules("111", include_items=False)
+    assert "items" not in result["modules"]["columns"]
+    assert all("items" not in row for row in _rows(result["modules"]))
+
+
+def test_get_modules_rejects_non_current_course(monkeypatch):
+    _set_active_courses(monkeypatch, ["222"])
+    result = tools.get_modules("111")
+    assert result["ok"] is False
+    assert "not a Current course" in result["error"]
+
+
+def test_get_modules_catalog_missing(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": None, "source": "none", "warnings": []})
+
+    result = tools.get_modules("111")
+    assert result["ok"] is False
+    assert "refresh" in result["error"].lower()
+
+
+def test_get_modules_stale_returns_labeled_records_not_refusal(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document(MODULE_FIXTURE, state="stale")
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+
+    result = tools.get_modules("111")
+    assert result["ok"] is True
+    assert result["state"] == "stale"
+    assert result["source"] == "catalog"
+    assert len(_rows(result["modules"])) == 2
+
+
 # --- get_roster --------------------------------------------------------------
 
 def test_get_roster_happy(monkeypatch, tmp_path):
@@ -907,12 +1011,12 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_seven_read_only_tools():
+def test_server_registers_exactly_the_eight_read_only_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
-        "list_courses", "get_course_assignments", "get_roster",
+        "list_courses", "get_course_assignments", "get_modules", "get_roster",
         "get_seating_context", "get_submissions", "get_gradebook_snapshot", "refresh_mirror",
     }
 
