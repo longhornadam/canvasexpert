@@ -132,6 +132,22 @@ def test_get_roster_rejects_non_current_course(monkeypatch, tmp_path):
     assert "not a Current course" in result["error"]
 
 
+def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch):
+    """When the workspace (and thus the identity vault) can't be resolved, the
+    student-data tools must refuse rather than scatter the vault to a stray path.
+    No _vault_factory override here: this exercises the real _default_vault."""
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(workspace, "identity_vault_dir", lambda *a, **k: None)
+    monkeypatch.setattr(workspace, "feedback_folder", lambda *a, **k: None)
+    for result in (
+        tools.get_roster("111"),
+        tools.get_submissions("111", "700010"),
+        tools.get_gradebook_snapshot("111"),
+    ):
+        assert result["ok"] is False
+        assert "workspace" in result["error"].lower()
+
+
 # --- get_course_assignments (disk-only catalog, no student data) -----------
 
 def _catalog_document(assignment_records, module_records):

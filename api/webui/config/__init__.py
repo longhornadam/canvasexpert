@@ -22,7 +22,7 @@ from .canvas import (
     get_openrouter_key, set_openrouter_key, has_openrouter_key,
     get_openrouter_model, set_openrouter_model,
     openrouter_model_presets, _openrouter_cost_tier,
-    get_workspace_path, set_workspace_path,
+    get_workspace_path, set_workspace_path, ensure_workspace_pinned,
     resolve_env,
 )
 

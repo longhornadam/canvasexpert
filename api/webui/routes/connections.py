@@ -8,11 +8,31 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 
-from api import __version__, connections, runtime_paths
+from api import __version__, ai_clients, connections, runtime_paths
 from ..deps import templates
 
 
 router = APIRouter(tags=["connections"])
+
+
+def _client_action(action) -> JSONResponse:
+    """Run a connect/disconnect and map failures to teacher-readable JSON."""
+    try:
+        return JSONResponse({"ok": True, "status": action()})
+    except ai_clients.ClientError as error:
+        return JSONResponse(
+            {"ok": False, "code": error.code, "detail": error.detail},
+            status_code=409,
+        )
+    except Exception:
+        return JSONResponse(
+            {
+                "ok": False,
+                "code": "error",
+                "detail": "Something went wrong writing the config file. Nothing was changed.",
+            },
+            status_code=500,
+        )
 
 
 def _cleanup(path: Path) -> None:
@@ -41,6 +61,26 @@ def connections_page(request: Request):
 @router.get("/api/connections/health")
 def connections_health():
     return JSONResponse(connections.connection_context()["health"])
+
+
+@router.post("/api/connections/claude/connect")
+def claude_connect():
+    return _client_action(ai_clients.connect_claude)
+
+
+@router.post("/api/connections/claude/disconnect")
+def claude_disconnect():
+    return _client_action(ai_clients.disconnect_claude)
+
+
+@router.post("/api/connections/chatgpt/connect")
+def chatgpt_connect():
+    return _client_action(ai_clients.connect_chatgpt)
+
+
+@router.post("/api/connections/chatgpt/disconnect")
+def chatgpt_disconnect():
+    return _client_action(ai_clients.disconnect_chatgpt)
 
 
 @router.post("/api/connections/claude-package")

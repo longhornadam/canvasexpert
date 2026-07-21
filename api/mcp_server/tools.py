@@ -223,11 +223,30 @@ def _load_snapshot(course_id: str):
     return gradebook_snapshot.load_snapshot(course_id, queries=queries)
 
 
+_VAULT_UNAVAILABLE_ERROR = (
+    "Canvas Expert cannot find your workspace, so student data is withheld. "
+    "Open Canvas Expert on this computer once (or reconnect from AI Connections), "
+    "then try again."
+)
+
+
+class _VaultUnavailable(Exception):
+    """Raised when the identity vault directory cannot be resolved."""
+
+
 def _default_vault() -> feedback_vault.Vault:
     """Mirror ``api/webui/routes/names.py::_vault`` — the one global identity
-    vault, keyed by Canvas user id."""
+    vault, keyed by Canvas user id.
+
+    Fails closed when the workspace (and thus the vault directory) cannot be
+    resolved, rather than falling back to a stray ``./vault.json``. That stray
+    fallback would misplace the re-identification map outside the protected
+    workspace and hand out unstable pseudonyms, so student-data tools must
+    refuse instead."""
     root = workspace.identity_vault_dir() or workspace.feedback_folder("_vault")
-    return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
+    if not root:
+        raise _VaultUnavailable(_VAULT_UNAVAILABLE_ERROR)
+    return feedback_vault.Vault(os.path.join(root, "vault.json"))
 
 
 # Bound to a module-level name so tests can point it at a tmp_path vault.
@@ -274,6 +293,18 @@ def _vault_conflict_check(vault) -> str | None:
     if conflicts():
         return _VAULT_CONFLICT_ERROR
     return None
+
+
+def _open_vault():
+    """Open the identity vault, failing closed if it is unavailable or forked.
+
+    Returns ``(vault, None)`` on success or ``(None, error)`` for the tool to
+    return verbatim."""
+    try:
+        vault = _vault_factory()
+    except _VaultUnavailable as error:
+        return None, str(error)
+    return vault, _vault_conflict_check(vault)
 
 
 def list_courses() -> dict:
@@ -342,10 +373,9 @@ def get_roster(course_id: str) -> dict:
     if err:
         return {"ok": False, "error": err}
 
-    vault = _vault_factory()
-    conflict_err = _vault_conflict_check(vault)
-    if conflict_err:
-        return {"ok": False, "error": conflict_err}
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
 
     mirror_doc = _mirror_roster_doc(course_id)
     with _vault_transaction(vault):
@@ -380,10 +410,9 @@ def get_submissions(course_id: str, assignment_id: str,
     if err:
         return {"ok": False, "error": err}
 
-    vault = _vault_factory()
-    conflict_err = _vault_conflict_check(vault)
-    if conflict_err:
-        return {"ok": False, "error": conflict_err}
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
 
     bundle = _mirror_submission_bundle(course_id, assignment_id)
     # Sync the full roster first so the scrub map covers every enrolled
@@ -454,10 +483,9 @@ def get_gradebook_snapshot(course_id: str) -> dict:
     if err:
         return {"ok": False, "error": err}
 
-    vault = _vault_factory()
-    conflict_err = _vault_conflict_check(vault)
-    if conflict_err:
-        return {"ok": False, "error": conflict_err}
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
 
     snapshot, snapshot_error = _load_snapshot(course_id)
     if snapshot_error:

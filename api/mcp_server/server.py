@@ -20,17 +20,22 @@ from mcp.server.fastmcp import FastMCP
 from . import tools
 
 _FERPA_NOTICE = (
-    "CanvasExpert read-only Canvas tools. Every result about students is "
-    "pseudonymized through a local identity vault before it reaches you: "
-    "real names, Canvas user IDs, and SIS IDs never leave that machine. "
-    "Stable fake names (e.g. \"Sparky McGee\") stand in for real students so "
-    "you can refer to them consistently without ever seeing who they are. "
-    "Results are session-local — do not write them to a file, and do not "
-    "attempt to re-identify a student from a pseudonym, writing style, or "
-    "any other clue. This server is read-only: no tool writes to Canvas. "
-    "Results are compact JSON; list data arrives as {columns, rows} tables. "
-    "Prefer narrow calls: include_text=false or specific pseudonyms first, "
-    "full text only for the students you actually need."
+    "CanvasExpert gives you read-only access to THIS teacher's own Canvas "
+    "courses, assignments, rosters, grades, and student submissions, read "
+    "locally through Canvas Expert on their computer. Use these tools whenever "
+    "the teacher asks about their courses, classes, students, assignments, or "
+    "grades; call list_courses first to get a course_id for the other tools. "
+    "Every result about students is pseudonymized through a local identity "
+    "vault before it reaches you: real names, Canvas user IDs, and SIS IDs "
+    "never leave that machine. Stable fake names (e.g. \"Sparky McGee\") stand "
+    "in for real students so you can refer to them consistently without ever "
+    "seeing who they are. Results are session-local; do not write them to a "
+    "file, and do not attempt to re-identify a student from a pseudonym, "
+    "writing style, or any other clue. This server is read-only: no tool "
+    "writes to Canvas. Results are compact JSON; list data arrives as "
+    "{columns, rows} tables. Prefer narrow calls: include_text=false or "
+    "specific pseudonyms first, full text only for the students you actually "
+    "need."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -48,8 +53,9 @@ def _compact(payload: dict) -> str:
 
 @mcp.tool()
 def list_courses() -> str:
-    """List every saved course (Current + Previous) as
-    {course_id, course_name, active}. No student data."""
+    """List this teacher's Canvas courses in Canvas Expert as
+    {course_id, course_name, active}. Start here to get a course_id for the
+    other tools; active=true marks a current course. No student data."""
     return _compact(tools.list_courses())
 
 

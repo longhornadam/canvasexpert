@@ -75,6 +75,13 @@ async def _lifespan(app):
     except Exception as e:
         print(f"Workspace setup note: {e}")
     try:
+        # Pin the resolved workspace path so the headless MCP server (launched by
+        # Claude Desktop / ChatGPT without the OneDrive env var) resolves the same
+        # workspace instead of falling back to stale machine-local state.
+        config.ensure_workspace_pinned()
+    except Exception as e:
+        print(f"Workspace pin note: {e}")
+    try:
         ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
     except Exception as e:
         print(f"AI-TA library build failed: {e}")
