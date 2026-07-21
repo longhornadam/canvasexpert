@@ -62,7 +62,7 @@ def build_replacement_map(vault_entries: list[dict],
       - full real name -> full fake name
       - first name -> pseudo_first
       - last name -> pseudo_last
-      - each nickname -> pseudo_first
+      - each nickname -> full pseudonym
       - canvas_id, sis_id (when >= _MIN_ID_SCRUB_LEN chars) -> ID_PLACEHOLDER
 
     A token that is ALSO in `protected` is STILL scrubbed (roster identity wins
@@ -107,10 +107,11 @@ def build_replacement_map(vault_entries: list[dict],
             if mapped:
                 rules.append((re.escape(token), mapped))
 
-        # Nicknames -> pseudo_first
+        # Nicknames/aliases -> full pseudonym so every identity alias resolves
+        # consistently to the student's existing pseudonym.
         for nn in nicknames:
             if nn.strip():
-                rules.append((re.escape(nn.strip()), pseudo_first or pseudo))
+                rules.append((re.escape(nn.strip()), pseudo or pseudo_first))
 
     # Sort by pattern length descending (longest first) so full-name rules beat
     # single-token rules

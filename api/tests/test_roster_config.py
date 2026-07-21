@@ -78,6 +78,24 @@ def test_update_removes_key_when_none():
     assert result["101"]["tier"] == "Support"
 
 
+def test_seating_context_removal_keeps_other_local_settings():
+    context = {
+        "front_row": "required",
+        "near_teacher": "preferred",
+        "private_note": "Teacher-only context.",
+        "ai_context_note": "Designated AI context.",
+    }
+    config.set_roster_student_settings("100", {
+        "101": {"tier": "Support", "seating_context": context},
+    })
+
+    config.update_roster_student_settings("100", "101", {"seating_context": None})
+
+    result = config.get_roster_student_settings("100")
+    assert "seating_context" not in result["101"]
+    assert result["101"]["tier"] == "Support"
+
+
 def test_courses_are_independent():
     config.set_roster_student_settings("100", {"101": {"tier": "Support"}})
     config.set_roster_student_settings("200", {"201": {"tier": "Core"}})

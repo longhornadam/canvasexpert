@@ -6,6 +6,58 @@ import json
 from collections.abc import Callable
 
 
+SEATING_CONTEXT_DEFAULT = {
+    "front_row": "none",
+    "near_teacher": "none",
+    "private_note": "",
+    "ai_context_note": "",
+}
+SEATING_CONTEXT_SUPPORTS = {"none", "preferred", "required"}
+
+
+def normalize_seating_context(value: object) -> dict:
+    """Return the safe, complete Roster seating-context shape for a stored value."""
+    context = dict(SEATING_CONTEXT_DEFAULT)
+    if not isinstance(value, dict):
+        return context
+
+    for key in ("front_row", "near_teacher"):
+        if value.get(key) in SEATING_CONTEXT_SUPPORTS:
+            context[key] = value[key]
+    for key in ("private_note", "ai_context_note"):
+        if isinstance(value.get(key), str):
+            context[key] = value[key]
+    return context
+
+
+def validate_seating_context(value: object) -> tuple[dict | None, str | None]:
+    """Validate a seating-context patch before any roster setting is written."""
+    if not isinstance(value, dict):
+        return None, "seating_context must be an object."
+
+    expected = set(SEATING_CONTEXT_DEFAULT)
+    supplied = set(value)
+    if supplied != expected:
+        unknown = sorted(supplied - expected)
+        missing = sorted(expected - supplied)
+        details = []
+        if unknown:
+            details.append(f"unknown fields: {unknown}")
+        if missing:
+            details.append(f"missing fields: {missing}")
+        return None, "seating_context must contain exactly the supported fields (" + "; ".join(details) + ")."
+
+    for key in ("front_row", "near_teacher"):
+        if value[key] not in SEATING_CONTEXT_SUPPORTS:
+            return None, f"seating_context.{key} must be one of {sorted(SEATING_CONTEXT_SUPPORTS)}."
+    for key in ("private_note", "ai_context_note"):
+        if not isinstance(value[key], str):
+            return None, f"seating_context.{key} must be a string."
+
+    context = normalize_seating_context(value)
+    return (None if context == SEATING_CONTEXT_DEFAULT else context), None
+
+
 def update_student(
     course_id: str,
     user_id: str,
@@ -16,6 +68,7 @@ def update_student(
     set_extra_time: Callable[[str, list[dict]], None],
     set_monitored_student: Callable[..., None],
     remove_monitored_student: Callable[[str], None],
+    update_roster_student_settings: Callable[[str, str, dict], None],
     as_int: Callable[[object, str], tuple[int | None, str | None]],
     validate_canvas_group_target: Callable[
         [str, str, str | None], tuple[list[dict], dict | None, str | None]
@@ -51,6 +104,12 @@ def update_student(
     unknown = set(data.keys()) - allowed_keys
     if unknown:
         return {"ok": False, "error": f"Unknown patch keys: {sorted(unknown)}"}
+
+    seating_context = None
+    if "seating_context" in data:
+        seating_context, err = validate_seating_context(data["seating_context"])
+        if err:
+            return {"ok": False, "error": err}
 
     vault = vault_factory()
 
@@ -123,6 +182,11 @@ def update_student(
         if not ok:
             return {"ok": False, "error": err}
         invalidate_groups(course_id, category_id)
+
+    if "seating_context" in data:
+        update_roster_student_settings(
+            course_id, user_id, {"seating_context": seating_context}
+        )
 
     return {"ok": True}
 

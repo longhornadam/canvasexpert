@@ -38,7 +38,7 @@ router = APIRouter(prefix="/api/roster", tags=["roster"])
 # V3: Canvas group-backed keys only
 ALLOWED_STUDENT_PATCH_KEYS = {
     "nicknames", "pseudonym", "regenerate_pseudonym",
-    "extra_time", "monitored", "canvas_group",
+    "extra_time", "monitored", "canvas_group", "seating_context",
 }
 
 # Legacy keys that are rejected with clear errors
@@ -212,6 +212,9 @@ def roster_get(course_id: str = Query("")):
     # Monitored
     monitored = config.get_monitored_students()
 
+    # Private local Roster context, scoped to this course and student.
+    raw_roster_settings = config.get_roster_student_settings(course_id)
+
     # Protected names for collision check
     protected_names = {p.lower() for p in config.active_protected_names()}
 
@@ -273,6 +276,10 @@ def roster_get(course_id: str = Query("")):
 
         # Nicknames from vault
         nicknames = ve.get("nicknames", [])
+        local_settings = raw_roster_settings.get(uid, {})
+        seating_context = roster_updates.normalize_seating_context(
+            local_settings.get("seating_context") if isinstance(local_settings, dict) else None
+        )
 
         row = {
             "id": uid,
@@ -287,6 +294,7 @@ def roster_get(course_id: str = Query("")):
             "pseudo_last": ve.get("pseudo_last", ""),
             "extra_time": et,
             "monitored": {"enabled": monitored_flag, "note": monitored_note},
+            "seating_context": seating_context,
             "canvas_groups": canvas_groups,
             "canvas_group": canvas_group,
             "warnings": [],
@@ -316,7 +324,6 @@ def roster_get(course_id: str = Query("")):
 
     # Check for legacy tier assignments
     legacy_tier_count = 0
-    raw_roster_settings = config.get_roster_student_settings(course_id)
     for uid, local in raw_roster_settings.items():
         if local.get("tier_id") or local.get("tier") or local.get("planned_group"):
             legacy_tier_count += 1
@@ -361,6 +368,7 @@ def roster_student_update(
         set_extra_time=config.set_extra_time,
         set_monitored_student=config.set_monitored_student,
         remove_monitored_student=config.remove_monitored_student,
+        update_roster_student_settings=config.update_roster_student_settings,
         as_int=_as_int,
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,

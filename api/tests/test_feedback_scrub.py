@@ -31,13 +31,15 @@ def test_jose_flores_scrub_in_sentence(tmp_path):
     assert e["pseudo_first"] in result or e["pseudonym"] in result
 
 
-def test_nickname_scrubbed(tmp_path):
-    """Nickname 'Paco' is replaced with the fake first name."""
+def test_nickname_scrubbed_to_full_pseudonym(tmp_path):
+    """A manually entered nickname resolves to the student's full pseudonym."""
     v = _vault_with_students(tmp_path)
     rmap = scrub.build_replacement_map(v.entries(), set())
     text = "My friend Paco helped me."
     result = scrub.scrub_text(text, rmap)
     assert "Paco" not in result
+    assert result == f"My friend {v.entries()[0]['pseudonym']} helped me."
+    assert scrub.verify_clean(result, v) == []
 
 
 def test_protected_literary_name_preserved_when_no_roster_collision(tmp_path):

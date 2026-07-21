@@ -260,6 +260,9 @@ def test_upsert_roster_captures_preferred_name_as_nickname(tmp_path):
     rmap = scrub.build_replacement_map(v.entries(), config.active_protected_names())
     scrubbed = scrub.scrub_text("Joey wrote a great essay about Joey.", rmap)
     assert "Joey" not in scrubbed                      # preferred name is gone
+    assert scrubbed == (
+        f"{entry['pseudonym']} wrote a great essay about {entry['pseudonym']}."
+    )
     assert scrub.verify_clean(scrubbed, v) == []
 
 

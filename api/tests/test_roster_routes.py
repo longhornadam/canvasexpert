@@ -166,6 +166,8 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
     monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {"44": "Period 1"})
     monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: (groups, None, ""))
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: None)
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups", lambda course_id, categories: None)
 
     resp = client.get("/api/roster?course_id=1")
     data = resp.json()
@@ -180,11 +182,53 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     assert row["pseudonym"] == "Sparky McGee"
     assert row["extra_time"] == {"enabled": True, "days": 2}
     assert row["monitored"] == {"enabled": True, "note": "Private note"}
+    assert row["seating_context"] == {
+        "front_row": "none",
+        "near_teacher": "none",
+        "private_note": "",
+        "ai_context_note": "",
+    }
     # V3: canvas_group instead of tier_id
     assert "canvas_group" in row
     assert row["canvas_groups"][0]["group_name"] == "Blue"
     assert "sis_id" not in row
     assert "Groups" not in str(data.get("groups", ""))
+
+
+def test_roster_get_uses_course_scoped_seating_context(monkeypatch, isolated_roster):
+    users = [{
+        "id": 101,
+        "name": "Test Student",
+        "sortable_name": "Student, Test",
+        "short_name": "Test",
+        "enrollments": [],
+    }]
+    isolated_roster["settings"]["1"] = {"101": {"seating_context": {
+        "front_row": "required",
+        "near_teacher": "preferred",
+        "private_note": "Teacher-only context.",
+        "ai_context_note": "Designated AI context.",
+    }}}
+    isolated_roster["settings"]["2"] = {"101": {"seating_context": {
+        "front_row": "none",
+        "near_teacher": "required",
+        "private_note": "",
+        "ai_context_note": "",
+    }}}
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: None)
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups", lambda course_id, categories: None)
+
+    first = client.get("/api/roster?course_id=1").json()["students"][0]
+    second = client.get("/api/roster?course_id=2").json()["students"][0]
+
+    assert first["seating_context"]["front_row"] == "required"
+    assert first["seating_context"]["near_teacher"] == "preferred"
+    assert first["seating_context"]["private_note"] == "Teacher-only context."
+    assert first["seating_context"]["ai_context_note"] == "Designated AI context."
+    assert second["seating_context"]["front_row"] == "none"
+    assert second["seating_context"]["near_teacher"] == "required"
 
 
 def test_roster_get_uses_current_mirror_before_live_students_and_sections(
@@ -217,6 +261,8 @@ def test_roster_get_uses_current_mirror_before_live_students_and_sections(
         "load_group_categories",
         lambda course_id: (group_calls.append(course_id) or [], None, ""),
     )
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: None)
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups", lambda course_id, categories: None)
 
     data = client.get("/api/roster?course_id=1").json()
 
@@ -702,6 +748,107 @@ def test_roster_student_validates_pseudonym_shape():
     data = resp.json()
     assert data.get("ok") is False
     assert "first" in data.get("error", "").lower()
+
+
+def test_roster_student_saves_and_clears_seating_context(monkeypatch, isolated_roster):
+    users = [{
+        "id": 101,
+        "name": "Test Student",
+        "sortable_name": "Student, Test",
+        "short_name": "Test",
+        "enrollments": [],
+    }]
+    other_course_context = {
+        "front_row": "required",
+        "near_teacher": "none",
+        "private_note": "",
+        "ai_context_note": "",
+    }
+    isolated_roster["settings"]["2"] = {"101": {"seating_context": other_course_context}}
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
+    context = {
+        "front_row": "preferred",
+        "near_teacher": "required",
+        "private_note": "Teacher-only context.",
+        "ai_context_note": "Designated AI context.",
+    }
+
+    saved = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({"seating_context": context}),
+    }).json()
+    reloaded = client.get("/api/roster?course_id=1").json()["students"][0]
+
+    assert saved["ok"] is True
+    assert reloaded["seating_context"] == context
+    assert isolated_roster["settings"]["2"]["101"]["seating_context"] == other_course_context
+
+    cleared = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({"seating_context": {
+            "front_row": "none",
+            "near_teacher": "none",
+            "private_note": "",
+            "ai_context_note": "",
+        }}),
+    }).json()
+    reloaded_after_clear = client.get("/api/roster?course_id=1").json()["students"][0]
+
+    assert cleared["ok"] is True
+    assert "seating_context" not in isolated_roster["settings"]["1"]["101"]
+    assert reloaded_after_clear["seating_context"] == {
+        "front_row": "none",
+        "near_teacher": "none",
+        "private_note": "",
+        "ai_context_note": "",
+    }
+
+
+@pytest.mark.parametrize("context", [
+    {
+        "front_row": "unsupported",
+        "near_teacher": "none",
+        "private_note": "",
+        "ai_context_note": "",
+    },
+    "not-an-object",
+    {
+        "front_row": "none",
+        "near_teacher": "none",
+        "private_note": "",
+        "ai_context_note": "",
+        "unexpected": True,
+    },
+    {
+        "front_row": "none",
+        "near_teacher": "none",
+        "private_note": 7,
+        "ai_context_note": "",
+    },
+])
+def test_roster_student_rejects_invalid_seating_context_without_partial_write(
+    isolated_roster, context
+):
+    existing = {
+        "front_row": "required",
+        "near_teacher": "preferred",
+        "private_note": "Existing private context.",
+        "ai_context_note": "Existing AI context.",
+    }
+    isolated_roster["settings"]["1"] = {"101": {"seating_context": existing}}
+
+    response = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({
+            "nicknames": ["Should not persist"],
+            "seating_context": context,
+        }),
+    }).json()
+
+    assert response["ok"] is False
+    assert isolated_roster["settings"]["1"]["101"]["seating_context"] == existing
+    assert isolated_roster["vault"].rows["101"]["nicknames"] == ["Addie"]
 
 
 def test_roster_student_rejects_obsolete_tier_id(isolated_roster):

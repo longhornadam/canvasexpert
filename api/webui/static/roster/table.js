@@ -125,13 +125,27 @@
     return h;
   }
 
+  function seatingSupportOptions(selected) {
+    var options = [
+      ["none", "None"],
+      ["preferred", "Preferred"],
+      ["required", "Required"]
+    ];
+    var html = "";
+    for (var i = 0; i < options.length; i++) {
+      var value = options[i][0];
+      html += '<option value="' + value + '"' + (value === selected ? " selected" : "") + ">" + options[i][1] + "</option>";
+    }
+    return html;
+  }
+
   function renderTable() {
     var filteredStudents = roster.getFilteredStudents() || [];
     var state = roster.getGroupState() || {};
     var categoryGroups = state.currentCategoryGroups || [];
 
     if (filteredStudents.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="9" class="roster-empty">No students.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="13" class="roster-empty">No students.</td></tr>';
       updateSelectedNameMap();
       if (typeof roster.notifyTableRendered === "function") {
         roster.notifyTableRendered();
@@ -146,6 +160,11 @@
       var nnVal = esc((s.nicknames || []).join(", "));
       var pseudoVal = esc(s.pseudonym || "");
       var noteVal = esc((s.monitored && s.monitored.note) || "");
+      var seatingContext = s.seating_context || {};
+      var frontRow = seatingContext.front_row || "none";
+      var nearTeacher = seatingContext.near_teacher || "none";
+      var privateNote = esc(seatingContext.private_note || "");
+      var aiContextNote = esc(seatingContext.ai_context_note || "");
       var status = rowStatus(s.warnings, canvasGroup);
 
       html += "<tr data-id=\"" + esc(s.id) + "\">" +
@@ -159,6 +178,10 @@
         '<td class="roster-col-group"><select class="roster-v2-canvas-group" data-id="' + esc(s.id) + '" data-category="' + esc(state.selectedGroupCategoryId || "") + '">' + canvasGroupOptions(categoryGroups, canvasGroup.group_id) + "</select></td>" +
         '<td class="roster-col-monitor"><input type="checkbox" class="roster-v2-monitor" data-id="' + esc(s.id) + '"' + (s.monitored.enabled ? " checked" : "") + "></td>" +
         '<td class="roster-col-note"><input type="text" class="roster-v2-input roster-v2-note" value="' + noteVal + '" data-id="' + esc(s.id) + '"></td>' +
+        '<td class="roster-col-front-row"><select class="roster-v2-seating-front-row" data-id="' + esc(s.id) + '" aria-label="Front row">' + seatingSupportOptions(frontRow) + "</select></td>" +
+        '<td class="roster-col-near-teacher"><select class="roster-v2-seating-near-teacher" data-id="' + esc(s.id) + '" aria-label="Near teacher">' + seatingSupportOptions(nearTeacher) + "</select></td>" +
+        '<td class="roster-col-private-note"><input type="text" class="roster-v2-input roster-v2-seating-private-note" value="' + privateNote + '" data-id="' + esc(s.id) + '" aria-label="Private teacher note" placeholder="Private note"></td>' +
+        '<td class="roster-col-ai-context-note"><input type="text" class="roster-v2-input roster-v2-seating-ai-context-note" value="' + aiContextNote + '" data-id="' + esc(s.id) + '" aria-label="AI-context note" placeholder="AI-context note"></td>' +
         '<td class="roster-col-status"><span class="roster-v2-status ' + status.cls + '" title="' + esc(status.title) + '">' + esc(status.text) + "</span></td>" +
         "</tr>";
     }
