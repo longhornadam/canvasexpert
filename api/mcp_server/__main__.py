@@ -1,4 +1,4 @@
-"""Entry point for the CanvasExpert read-only MCP server, run over stdio.
+"""Entry point for the CanvasExpert MCP server, run over stdio.
 
 Cwd-independent: resolves the repository root from this file so it works
 regardless of the caller's working directory (MCP clients typically launch it

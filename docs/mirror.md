@@ -15,8 +15,8 @@ happens when it isn't fresh, by design:
   used by CanvasExpert's own grading screens) falls back to a live Canvas
   fetch, visibly labeled `source: "canvas"` — the teacher is in the loop and
   reads there can feed a write decision, so staleness should never block them.
-- **The AI-facing MCP tools** (`get_roster`, `get_submissions`,
-  `get_gradebook_snapshot`) never fall back to live Canvas. This is the strict
+- **The AI-facing MCP tools** (`get_roster`, `get_seating_context`,
+  `get_submissions`, `get_gradebook_snapshot`) never fall back to live Canvas. This is the strict
   mirror-only law: the AI's whole path to Canvas must stay indirect — through
   Canvas Expert's own sync engine, never a direct relay of a live fetch. A
   stale or missing mirror makes these tools refuse with a clear error instead
@@ -305,7 +305,11 @@ no live path left for it to fall into.
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` are strict
 mirror-only (design law 6): a stale or missing mirror returns
 `{"ok": false, "error": "..."}` naming the problem, never a live Canvas
-payload. `refresh_mirror(course_id)` is the assistant's only lever to move
+payload. `get_seating_context` is a fourth MCP reader in the same spirit: it
+is mirror-gated the same way (a stale or missing mirror roster makes it refuse,
+and it never relays a live Canvas fetch), but it additionally joins that
+course's private local Roster context, so it is mirror+local rather than strict
+mirror-only. `refresh_mirror(course_id)` is the assistant's only lever to move
 past that: it calls `mirror_service.enqueue_sync` (the same manual-priority
 coordinator plan behind the web UI's "Sync now") and waits up to
 `tools._REFRESH_TIMEOUT_SECONDS` (25s) via `mirror_service.wait_for_plan`,

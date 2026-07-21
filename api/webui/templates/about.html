@@ -95,10 +95,11 @@
       <li><strong>Everything runs on your computer.</strong> The app serves itself at
         <code>127.0.0.1</code> — your own machine, full stop. There is no Canvas
         Expert server, no account to create, no third party between you and Canvas.</li>
-      <li><strong>The AI never sees your token or your students.</strong> Your LLM
-        only ever writes content files. Canvas Expert — local code you can read — is
-        the only thing that talks to Canvas. Authoring and pushing are separated on
-        purpose.</li>
+      <li><strong>The AI never sees your token or a real student identity.</strong>
+        When your assistant reads your class data through Canvas Expert, it comes
+        pseudonymized: stable fake names stand in for real students, and Canvas user
+        IDs and SIS IDs never leave this computer. Canvas Expert, local code you can
+        read, is the only thing that talks to Canvas.</li>
       <li><strong>Credential-free by rule.</strong> The project rule is
         absolute — any tool that needs a credential is local-only, forever.</li>
       <li><strong>Accommodation data stays home.</strong> The extra-time roster

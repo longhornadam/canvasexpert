@@ -1,6 +1,6 @@
-"""Read-only Canvas MCP server for CanvasExpert.
+"""Canvas MCP server for CanvasExpert.
 
-Exposes 7 read-only tools (list_courses, get_course_assignments, get_roster,
+Exposes 7 tools (list_courses, get_course_assignments, get_roster,
 get_seating_context, get_submissions, get_gradebook_snapshot, refresh_mirror)
 over stdio so any MCP-capable
 assistant can help plan lessons and manage rosters. CanvasExpert keeps sole

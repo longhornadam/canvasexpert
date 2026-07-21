@@ -105,16 +105,16 @@ def _zip_text_member(archive: zipfile.ZipFile, name: str, content: str) -> None:
 
 
 def build_claude_mcpb(destination: Path) -> Path:
-    """Create the folder-linked read-only Claude package at destination."""
+    """Create the folder-linked Claude package at destination."""
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     app_root, python_executable, _ = _resolved_paths()
     manifest = {
         "manifest_version": "0.3",
-        "name": "canvas-expert-read-only",
-        "display_name": "Canvas Expert (Read Only)",
+        "name": "canvas-expert",
+        "display_name": "Canvas Expert",
         "version": __version__,
-        "description": "Launches the read-only Canvas Expert MCP server from this computer's unzipped CanvasExpert folder.",
+        "description": "Launches the Canvas Expert MCP server from this computer's unzipped CanvasExpert folder.",
         "author": {"name": "Canvas Expert"},
         "server": {
             "type": "python",

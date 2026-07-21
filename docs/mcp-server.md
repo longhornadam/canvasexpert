@@ -1,12 +1,13 @@
-# CanvasExpert read-only MCP server
+# CanvasExpert MCP server
 
 A local, stdio-only [Model Context Protocol](https://modelcontextprotocol.io) server that
 lets any MCP-capable assistant (Claude Code, Claude Desktop, Cowork, etc.) help plan
 lessons and manage rosters conversationally, while CanvasExpert keeps sole custody of the
 Canvas PAT and every write path.
 
-- **Read-only.** No tool writes to Canvas. No tool writes to disk beyond the existing
-  identity vault it already shares with the rest of CanvasExpert.
+- **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
+  local copy on their computer. It never holds the Canvas token, and writes nothing
+  beyond the identity vault it already shares with the rest of CanvasExpert.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   fake name (e.g. "Sparky McGee") — never a real name, Canvas user ID, or SIS ID.

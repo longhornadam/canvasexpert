@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 7 read-only MCP tools.
+"""Plain, testable implementations of the 7 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.

@@ -1,6 +1,6 @@
-"""FastMCP wiring for the read-only CanvasExpert MCP server.
+"""FastMCP wiring for the CanvasExpert MCP server.
 
-Six thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Seven thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -20,22 +20,22 @@ from mcp.server.fastmcp import FastMCP
 from . import tools
 
 _FERPA_NOTICE = (
-    "CanvasExpert gives you read-only access to THIS teacher's own Canvas "
-    "courses, assignments, rosters, grades, and student submissions, read "
-    "locally through Canvas Expert on their computer. Use these tools whenever "
-    "the teacher asks about their courses, classes, students, assignments, or "
-    "grades; call list_courses first to get a course_id for the other tools. "
-    "Every result about students is pseudonymized through a local identity "
-    "vault before it reaches you: real names, Canvas user IDs, and SIS IDs "
-    "never leave that machine. Stable fake names (e.g. \"Sparky McGee\") stand "
-    "in for real students so you can refer to them consistently without ever "
-    "seeing who they are. Results are session-local; do not write them to a "
-    "file, and do not attempt to re-identify a student from a pseudonym, "
-    "writing style, or any other clue. This server is read-only: no tool "
-    "writes to Canvas. get_roster, get_submissions, and get_gradebook_snapshot "
-    "are served ONLY from Canvas Expert's local CanvasMirror, never a live "
-    "Canvas fetch, so they refuse with a clear error when the mirror is "
-    "stale or missing instead of returning live data; if that happens, call "
+    "CanvasExpert lets you read THIS teacher's own Canvas courses, "
+    "assignments, rosters, grades, student submissions, and seating context, "
+    "read locally through Canvas Expert on their computer. Use these tools "
+    "whenever the teacher asks about their courses, classes, students, "
+    "assignments, or grades; call list_courses first to get a course_id for "
+    "the other tools. Every result about students is pseudonymized through a "
+    "local identity vault before it reaches you: real names, Canvas user IDs, "
+    "and SIS IDs never leave that machine. Stable fake names (e.g. \"Sparky "
+    "McGee\") stand in for real students so you can refer to them consistently "
+    "without ever seeing who they are. Results are session-local; do not write "
+    "them to a file, and do not attempt to re-identify a student from a "
+    "pseudonym, writing style, or any other clue. get_roster, "
+    "get_seating_context, get_submissions, and get_gradebook_snapshot are "
+    "served ONLY from Canvas Expert's local CanvasMirror, never a live Canvas "
+    "fetch, so they refuse with a clear error when the mirror is stale or "
+    "missing instead of returning live data; if that happens, call "
     "refresh_mirror for that course, then retry the same call once. Results "
     "are compact JSON; list data arrives as {columns, rows} tables. Prefer "
     "narrow calls: include_text=false or specific pseudonyms first, full "
