@@ -25,7 +25,7 @@ for _path in (_API_DIR, _REPO_ROOT):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from api import feedback_safety, feedback_scrub, gradebook_queries, roster_service
+from api import feedback_safety, feedback_scrub, gradebook_queries, roster_service, runtime_paths
 from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
 from api.mirror import store as mirror_store
@@ -389,6 +389,76 @@ def test_get_authoring_contract_missing_file_returns_structured_error(monkeypatc
     result = tools.get_authoring_contract("quiz")
     assert result["ok"] is False
     assert "quiz" in result["error"]
+
+
+# --- list_staged_content (no course_id, no student data -> no gates) -------
+
+def test_list_staged_content_one_kind_lists_label_only(monkeypatch):
+    monkeypatch.setattr(
+        tools.deps, "list_inbox_files",
+        lambda kind: [{"label": "Inbox/Quizzes/draft1.txt",
+                       "path": "C:/abs/Inbox/Quizzes/draft1.txt", "source": "inbox"}]
+        if kind == "quiz" else [],
+    )
+    result = tools.list_staged_content("quiz")
+    assert result["ok"] is True
+    assert result["staged"]["columns"] == ["kind", "label"]
+    assert _rows(result["staged"]) == [
+        {"kind": "quiz", "label": "Inbox/Quizzes/draft1.txt"},
+    ]
+    dumped = json.dumps(result)
+    assert "C:/abs/Inbox" not in dumped
+
+
+def test_list_staged_content_empty_inbox_returns_empty_table(monkeypatch):
+    monkeypatch.setattr(tools.deps, "list_inbox_files", lambda kind: [])
+    result = tools.list_staged_content("quiz")
+    assert result["ok"] is True
+    assert result["staged"] == {"columns": ["kind", "label"], "rows": []}
+
+
+def test_list_staged_content_omitting_kind_aggregates_across_kinds(monkeypatch):
+    def _fake_list(kind):
+        return [{"label": f"{kind}-draft.txt", "path": f"/abs/{kind}", "source": "inbox"}]
+
+    monkeypatch.setattr(tools.deps, "list_inbox_files", _fake_list)
+    result = tools.list_staged_content()
+    assert result["ok"] is True
+    assert _rows(result["staged"]) == [
+        {"kind": "quiz", "label": "quiz-draft.txt"},
+        {"kind": "assignment", "label": "assignment-draft.txt"},
+        {"kind": "page", "label": "page-draft.txt"},
+        {"kind": "rubric", "label": "rubric-draft.txt"},
+    ]
+
+
+def test_list_staged_content_unknown_kind_returns_structured_error():
+    result = tools.list_staged_content("essay")
+    assert result == {
+        "ok": False,
+        "error": ("unknown kind 'essay'; expected one of: "
+                  "quiz, assignment, page, rubric (or omit for all)"),
+    }
+
+
+def test_list_staged_content_uses_real_inbox_via_workspace(monkeypatch, tmp_path):
+    """End-to-end through the real deps.list_inbox_files/runtime_paths.inbox_folder
+    seam, same fixture style as api/tests/test_inbox_files.py."""
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    folder = runtime_paths.inbox_folder("assignment")
+    txt_path = os.path.join(str(folder), "staged_assignment.txt")
+    body = "assignment draft body"
+    with open(txt_path, "w", encoding="utf-8") as handle:
+        handle.write(body)
+    with open(txt_path + ".done", "w", encoding="utf-8") as handle:
+        handle.write(str(len(body.encode("utf-8"))))
+
+    result = tools.list_staged_content("assignment")
+    assert result["ok"] is True
+    rows = _rows(result["staged"])
+    assert len(rows) == 1
+    assert rows[0]["kind"] == "assignment"
+    assert rows[0]["label"].endswith("staged_assignment.txt")
 
 
 # --- get_roster --------------------------------------------------------------
@@ -1038,14 +1108,14 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_nine_read_only_tools():
+def test_server_registers_exactly_the_ten_read_only_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
         "list_courses", "get_course_assignments", "get_modules", "get_roster",
         "get_seating_context", "get_submissions", "get_gradebook_snapshot",
-        "refresh_mirror", "get_authoring_contract",
+        "refresh_mirror", "get_authoring_contract", "list_staged_content",
     }
 
 

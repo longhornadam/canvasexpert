@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Nine thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Ten thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -115,6 +115,14 @@ def get_authoring_contract(kind: str) -> str:
     assignment, page, or rubric. Pull this before authoring so the file
     validates. No student data."""
     return _compact(tools.get_authoring_contract(kind))
+
+
+@mcp.tool()
+def list_staged_content(kind: str = "") -> str:
+    """Drafts currently staged in the Inbox for the teacher to review, as a
+    {columns, rows} table (kind, label). Pass kind to filter; omit for all.
+    No student data."""
+    return _compact(tools.list_staged_content(kind))
 
 
 @mcp.tool()

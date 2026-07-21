@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 9 MCP tools.
+"""Plain, testable implementations of the 10 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -7,9 +7,10 @@ monkeypatch them without touching the real Canvas API or identity vault
 (same pattern as ``api/tests/test_gradebook_routes.py``).
 
 Every ``course_id`` tool gates on ``config.active_courses()`` — the same
-Current-course scope the web UI uses. ``list_courses`` and
-``get_authoring_contract`` are the only tools with no ``course_id`` and no
-student data, so they skip both the course gate and the outbound safety gate.
+Current-course scope the web UI uses. ``list_courses``,
+``get_authoring_contract``, and ``list_staged_content`` are the only tools
+with no ``course_id`` and no student data, so they skip both the course gate
+and the outbound safety gate.
 
 Strict mirror-only law: get_roster, get_submissions, and
 get_gradebook_snapshot serve ONLY from the local CanvasMirror and refuse
@@ -29,6 +30,7 @@ from api.mirror import store as mirror_store
 from api.webui import config, mirror_service, workspace
 from api.webui.canvas_client import _canvas_get_all
 from api.webui.deps import REPO_ROOT
+from api.webui import deps
 from api import feedback_vault
 from api.course_catalog import read_catalog
 
@@ -77,6 +79,7 @@ _GRADEBOOK_STUDENT_COLUMNS = ("pseudonym", "missing", "late", "ungraded", "pct")
 _MODULE_COLUMNS = ("id", "name", "position", "item_count")
 _MODULE_COLUMNS_WITH_PUBLISHED = ("id", "name", "position", "published", "item_count")
 _MODULE_ITEM_COLUMNS = ("id", "type", "title", "position")
+_STAGED_CONTENT_COLUMNS = ("kind", "label")
 
 
 def _tabulate(rows: list[dict], columns: tuple[str, ...]) -> dict:
@@ -432,6 +435,33 @@ def get_authoring_contract(kind: str) -> dict:
         }
 
     return {"ok": True, "kind": kind, "contract": contract_text}
+
+
+def list_staged_content(kind: str = "") -> dict:
+    """Drafts an assistant has already staged in the per-kind Inbox, so it can
+    confirm a drop landed and avoid losing track or duplicating it. Reuses
+    ``webui.deps.list_inbox_files`` (the Slice C marker gate) as-is. Pass one
+    of quiz/assignment/page/rubric to narrow to that kind, or omit for all
+    four. No course_id, no student data — no course gate, no vault, no safety
+    gate. Only each draft's label (name) is returned, never its absolute
+    path."""
+    if kind:
+        if kind not in _CONTRACT_FILES:
+            return {
+                "ok": False,
+                "error": (f"unknown kind '{kind}'; expected one of: "
+                          f"{', '.join(_CONTRACT_FILES)} (or omit for all)"),
+            }
+        kinds = [kind]
+    else:
+        kinds = list(_CONTRACT_FILES)
+
+    rows = [
+        {"kind": k, "label": entry["label"]}
+        for k in kinds
+        for entry in deps.list_inbox_files(k)
+    ]
+    return {"ok": True, "staged": _tabulate(rows, _STAGED_CONTENT_COLUMNS)}
 
 
 _MIRROR_UNAVAILABLE_ROSTER_ERROR = (
