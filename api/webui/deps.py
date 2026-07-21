@@ -135,6 +135,62 @@ def list_rubric_files():
     return _list_txt_files(runtime_paths.rubric_folders())
 
 
+def _inbox_marker_size(marker_path: str):
+    """Parse a `<name>.txt.done` marker's decimal byte-length payload.
+
+    Returns None (skip) for a missing file, unreadable file, or any content
+    that isn't a plain non-negative integer.
+    """
+    try:
+        with open(marker_path, encoding="utf-8") as f:
+            text = f.read().strip()
+    except OSError:
+        return None
+    if not text.isdigit():
+        return None
+    return int(text)
+
+
+def list_inbox_files(kind: str):
+    """Assistant-staged drafts from the per-kind Inbox, marker-gated.
+
+    A dropped `<name>.txt` is only listed once its sibling `<name>.txt.done`
+    marker exists and the decimal byte count parsed from it equals the
+    actual size of `<name>.txt` -- this guards against listing a draft that
+    is still half-synced by OneDrive. The `.done` markers themselves are
+    never returned.
+
+    Same {label, path} shape as the other list_*_files helpers, plus
+    "source": "inbox" so the push tabs can badge these distinctly from the
+    teacher's own library files (Slice D).
+    """
+    folder = runtime_paths.inbox_folder(kind)
+    if not folder or not os.path.isdir(folder):
+        return []
+    found = []
+    for path in sorted(_glob.glob(os.path.join(str(folder), "*.txt"))):
+        expected = _inbox_marker_size(path + ".done")
+        if expected is None:
+            continue
+        try:
+            actual = os.path.getsize(path)
+        except OSError:
+            continue
+        if expected != actual:
+            continue
+        abspath = os.path.abspath(path)
+        try:
+            label = os.path.relpath(path, REPO_ROOT)
+        except ValueError:
+            label = os.path.basename(path)
+        found.append({
+            "label": label,
+            "path": abspath,
+            "source": "inbox",
+        })
+    return found
+
+
 def list_ai_ta_files():
     found = []
     ai_ta_dir = runtime_paths.ai_ta_dir()
