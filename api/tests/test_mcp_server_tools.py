@@ -25,7 +25,7 @@ for _path in (_API_DIR, _REPO_ROOT):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from api import feedback_safety, gradebook_queries, roster_service
+from api import feedback_safety, feedback_scrub, gradebook_queries, roster_service
 from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
 from api.mirror import store as mirror_store
@@ -714,6 +714,41 @@ def test_gate_passes_clean_payload_through(tmp_path):
     clean_payload = {"roster": [{"pseudonym": "Whatever Fake Name", "section_names": ["Period 1"]}]}
     result = pseudonym.gate(clean_payload, vault)
     assert result == {"ok": True, **clean_payload}
+
+
+# --- id-in-free-text through the full gate (proactive scrub + fail-closed backstop) --
+
+def test_gate_after_submission_scrub_lets_id_in_text_through_as_placeholder(tmp_path):
+    """A student's real Canvas id typed into a submission body is scrubbed to
+    the neutral placeholder by pseudonymize_submission_rows, so the gate sees
+    clean text and passes it through -- the raw id never survives."""
+    vault = Vault(str(tmp_path / "vault.json"))
+    vault.get_or_assign("900123", "Jordan Rivera", "50055")
+    subs = [{"user_id": "900123", "workflow_state": "graded", "body":
+             "<p>My canvas number is 900123, please grade my essay.</p>"}]
+    rows = pseudonym.pseudonymize_submission_rows(vault, subs)
+    assert "900123" not in rows[0]["text"]
+    assert feedback_scrub.ID_PLACEHOLDER in rows[0]["text"]
+
+    result = pseudonym.gate({"submissions": rows}, vault)
+    assert result["ok"] is True
+
+
+def test_gate_hard_blocks_unscrubbed_id_in_text_field_and_sanitizes_violation(tmp_path):
+    """If a >= 5 char real id somehow lands in an un-scrubbed text field of the
+    assembled payload (a scrub-pipeline bug), the gate must fail closed, and
+    the violation string returned to the MCP client must never contain the
+    raw id value -- only _sanitize_violation's generic description."""
+    vault = Vault(str(tmp_path / "vault.json"))
+    vault.get_or_assign("900456", "Learner Two", "50099")
+    leaking_payload = {"submissions": [{"pseudonym": "Whatever Fake Name",
+                                        "text": "my canvas number is 900456 today"}]}
+    result = pseudonym.gate(leaking_payload, vault)
+    assert result["ok"] is False
+    dumped = json.dumps(result)
+    assert "900456" not in dumped
+    for violation in result["violations"]:
+        assert "900456" not in violation
 
 
 # --- refresh_mirror -------------------------------------------------------------

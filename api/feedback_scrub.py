@@ -9,6 +9,20 @@ Pure stdlib; offline-testable.
 """
 import re
 
+# Neutral placeholder for a real Canvas/SIS id found in free text. Ids carry no
+# useful signal for feedback quality (unlike a name), so there's no "fake id"
+# to substitute in; just remove it. Deliberately word-character-free: the scrub
+# engine re-scans its own output, so a placeholder containing letters (e.g.
+# "[id]") could be re-clobbered by a later shorter name/nickname rule whose
+# token appears inside it. "[#]" has no word chars, so no \b-bounded rule can
+# match within it.
+ID_PLACEHOLDER = "[#]"
+
+# Ids shorter than this are never real Canvas/SIS ids in practice; skipping
+# them avoids pathological corruption from a stray 1-2 char match (e.g. a
+# lone digit that happens to equal a truncated/blank id field).
+_MIN_ID_SCRUB_LEN = 3
+
 # Common English words that happen to look like names — collision hints only.
 # These are never used to block scrubbing, just surfaced in find_collisions().
 COMMON_WORDS = {
@@ -49,6 +63,7 @@ def build_replacement_map(vault_entries: list[dict],
       - first name -> pseudo_first
       - last name -> pseudo_last
       - each nickname -> pseudo_first
+      - canvas_id, sis_id (when >= _MIN_ID_SCRUB_LEN chars) -> ID_PLACEHOLDER
 
     A token that is ALSO in `protected` is STILL scrubbed (roster identity wins
     over a literary match — privacy first). `protected` only shields words that
@@ -65,6 +80,16 @@ def build_replacement_map(vault_entries: list[dict],
         pseudo_last = entry.get("pseudo_last", "")
         pseudo = entry.get("pseudonym", "")
         nicknames = entry.get("nicknames", [])
+
+        # Real ids (canvas_id, sis_id) -> neutral placeholder. This runs
+        # BEFORE the name/nickname guard below so an entry with no name on
+        # file (or no nicknames) still gets its id scrubbed out of free text
+        # — a student's Canvas/SIS number typed into an essay body is just as
+        # much a real identifier as their name.
+        for id_field in ("canvas_id", "sis_id"):
+            raw_id = str(entry.get(id_field, "") or "").strip()
+            if len(raw_id) >= _MIN_ID_SCRUB_LEN:
+                rules.append((re.escape(raw_id), ID_PLACEHOLDER))
 
         if not real_name and not nicknames:
             continue
