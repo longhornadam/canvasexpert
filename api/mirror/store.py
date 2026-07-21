@@ -707,22 +707,35 @@ def write_groups(course_id, categories: list[dict], *, root=None,
         return _write_document(groups_path(course_id, root), validate_groups(document, course_id))
 
 
-def write_assignments(course_id, rows: list[dict], *, root=None,
-                      attempted_at: str | None = None,
-                      state: str = "current") -> dict:
-    _require_dir(course_id, root)
-    attempted_at = attempted_at or now_iso()
+def build_assignments_document(course_id, rows: list[dict], *, attempted_at: str,
+                               state: str = "current") -> dict:
+    """Normalize + envelope-wrap the assignments document without writing it.
+
+    Factored out of ``write_assignments`` so a caller (``_commit_assignment_index``
+    in ``api/mirror/sync.py``) can build the candidate document, diff it
+    against the previously committed one, and skip the actual write (and the
+    OneDrive re-sync it triggers) when nothing but envelope timestamps would
+    change.
+    """
     assignments = {}
     for row in rows or []:
         normalized = normalize_assignment(row)
         if normalized is not None:
             assignments[normalized["id"]] = normalized
-    document = {
+    return {
         "schema_version": MIRROR_VERSION,
         "course_id": str(course_id),
         **_envelope(state, attempted_at),
         "assignments": assignments,
     }
+
+
+def write_assignments(course_id, rows: list[dict], *, root=None,
+                      attempted_at: str | None = None,
+                      state: str = "current") -> dict:
+    _require_dir(course_id, root)
+    attempted_at = attempted_at or now_iso()
+    document = build_assignments_document(course_id, rows, attempted_at=attempted_at, state=state)
     with course_lock(course_id):
         return _write_document(assignments_path(course_id, root),
                                validate_assignments(document, course_id))

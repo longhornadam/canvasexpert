@@ -306,6 +306,57 @@ def test_delta_pass_error_keeps_watermarks(tmp_path):
     assert state["watermarks"]["submitted_since"] == NOW_MINUS_OVERLAP  # unchanged
 
 
+# --- no-op delta tick must not rewrite the assignments mirror file ---------------
+
+def test_delta_pass_no_op_does_not_rewrite_assignments_file(tmp_path):
+    """The 15-minute incremental sync must not rewrite the assignments mirror
+    file on a tick where the assignment collection is unchanged -- only
+    envelope timestamps would differ, and the file lives in a
+    OneDrive-synced workspace where that write is expensive busywork."""
+    _backfilled(tmp_path)
+    before = store.read_assignments(COURSE, root=str(tmp_path))
+
+    canvas = FakeCanvas()  # identical assignments/no submission deltas
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    assert result["assignment_changes"] == {
+        "added": [], "changed": [], "removed": [],
+        "large_shrink": 0, "orphans_filtered": [], "orphans_pruned": [],
+    }
+    after_first = store.read_assignments(COURSE, root=str(tmp_path))
+    assert after_first == before  # byte-identical, including last_success_at
+
+    canvas2 = FakeCanvas()
+    result2 = sync.delta_pass(COURSE, canvas_get_all=canvas2,
+                              canvas_get_all_complete=canvas2.complete, root=str(tmp_path),
+                              now="2026-07-16T14:00:00Z")
+    assert result2["ok"] is True
+    after_second = store.read_assignments(COURSE, root=str(tmp_path))
+    assert after_second == after_first  # a second no-op tick still leaves it untouched
+
+
+def test_delta_pass_with_assignment_change_rewrites_and_advances_freshness(tmp_path):
+    """The counterpart to the no-op test above: an actual assignment change
+    must still commit a rewrite and advance the file's own envelope."""
+    _backfilled(tmp_path)
+    before = store.read_assignments(COURSE, root=str(tmp_path))
+
+    changed_assignments = [dict(ASSIGNMENTS[0], name="Essay 1 (revised)"), ASSIGNMENTS[1]]
+    canvas = FakeCanvas(assignments=changed_assignments)
+    result = sync.delta_pass(COURSE, canvas_get_all=canvas,
+                             canvas_get_all_complete=canvas.complete, root=str(tmp_path),
+                             now="2026-07-16T13:00:00Z")
+    assert result["ok"] is True
+    assert result["assignment_changes"]["changed"] == ["700010"]
+
+    after = store.read_assignments(COURSE, root=str(tmp_path))
+    assert after != before
+    assert after["assignments"]["700010"]["name"] == "Essay 1 (revised)"
+    assert after["last_success_at"] == "2026-07-16T13:00:00Z"
+
+
 # --- 1.0beta slice 01b: assignment deletion membership + safe pruning ------------
 
 EXTRA_ASSIGNMENTS = ASSIGNMENTS + [

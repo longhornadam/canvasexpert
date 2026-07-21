@@ -142,10 +142,14 @@ def test_both_public_functions_delegate_to_the_one_shared_join_pass(monkeypatch)
 
 def test_local_course_freshness_reports_mirror_with_min_synced_at_when_current():
     # Assignments and the comment scope become "current" via two independent
-    # stamps (write_assignments' attempted_at vs.
-    # record_submission_comments_state's attempted_at, which never derives
-    # from the full/delta pass) — the earlier of the two must win, proving
-    # this reads both envelopes independently rather than reusing one shared
+    # stamps: private_assignments' freshness comes from the full/delta
+    # sync-pass envelope (record_pass) -- not from write_assignments' own
+    # attempted_at, which no longer drives freshness (see
+    # read_service._sync_freshness / the no-op-write fix) -- while the
+    # comment scope's freshness comes from its own sidecar
+    # (record_submission_comments_state), which never derives from the
+    # full/delta pass either. The earlier of the two must win, proving this
+    # reads both envelopes independently rather than reusing one shared
     # timestamp.
     stamp_assignments = "2026-07-10T08:00:00Z"
     stamp_comments = "2026-07-15T09:00:00Z"
@@ -157,7 +161,7 @@ def test_local_course_freshness_reports_mirror_with_min_synced_at_when_current()
         "assignment_id": ASSIGNMENT_ID, "user_id": "900001", "workflow_state": "submitted",
         "submitted_at": stamp_comments, "score": 9, "submission_type": "online_text_entry",
     }], attempted_at=stamp_comments, replace=True)
-    store.record_pass(COURSE_ID, "full", ok=True, attempted_at=stamp_comments)
+    store.record_pass(COURSE_ID, "full", ok=True, attempted_at=stamp_assignments)
     store.record_submission_comments_state(COURSE_ID, ok=True, attempted_at=stamp_comments)
 
     assert report_local_reads.local_course_freshness(COURSE_ID) == {
