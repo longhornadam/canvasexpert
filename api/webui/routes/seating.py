@@ -7,7 +7,7 @@ import json
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
-from api import seating_constraints, seating_state
+from api import seating_constraints, seating_grouping, seating_state
 from .. import config
 
 
@@ -81,6 +81,7 @@ def seating_proposal(
     locks: str = Form("{}"),
     proposal: str = Form("{}"),
     reroll_seat_ids: str = Form("[]"),
+    academic: str = Form('{"score_column_id":"","scores":{},"mentor_ready":[]}'),
 ):
     """Generate, reroll, or evaluate an in-memory local proposal only."""
     if not course_id or not mode_id:
@@ -97,27 +98,38 @@ def seating_proposal(
     reroll_value, error = _parse_json(reroll_seat_ids, "reroll seats")
     if error:
         return JSONResponse({"ok": False, "error": error})
-    _, _, layout, context_data = _mode_context(course_id, mode_id, context_value)
+    academic_value, error = _parse_json(academic, "academic context")
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    _, mode, layout, context_data = _mode_context(course_id, mode_id, context_value)
     if layout is None:
         return JSONResponse({"ok": False, "error": context_data})
 
     if operation == "generate":
-        generated, results, error = seating_constraints.generate(layout, context_data, locks_value)
+        generated, results, grouping, error = seating_grouping.generate(
+            layout, context_data, mode["strategy"], academic_value, locks_value
+        )
     elif operation == "reroll":
-        generated, results, error = seating_constraints.reroll(
-            layout, context_data, proposal_value, locks_value, reroll_value
+        generated, results, grouping, error = seating_grouping.reroll(
+            layout, context_data, mode["strategy"], academic_value,
+            proposal_value, locks_value, reroll_value,
         )
     elif operation == "evaluate":
         generated, error = seating_constraints.validate_assignment(layout, context_data, proposal_value)
         if error is None:
             _, error = seating_constraints.validate_locks(layout, context_data, generated, locks_value)
-        results, results_error = seating_constraints.evaluate(layout, context_data, generated) if error is None else (None, None)
-        error = error or results_error
+        if error is None:
+            results, grouping, evaluation_error = seating_grouping.evaluate(
+                layout, context_data, mode["strategy"], academic_value, generated
+            )
+            error = evaluation_error
+        else:
+            results, grouping = None, None
     else:
         return JSONResponse({"ok": False, "error": "Unknown Seating proposal operation."})
     if error:
         return JSONResponse({"ok": False, "error": error})
-    return JSONResponse({"ok": True, "proposal": generated, "results": results})
+    return JSONResponse({"ok": True, "proposal": generated, "results": results, "grouping": grouping})
 
 
 @router.post("/apply")

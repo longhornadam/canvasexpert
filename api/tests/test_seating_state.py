@@ -14,9 +14,9 @@ def _layout(layout_id="layout-a", rows=2, columns=2, seats=None):
             "seats": seats, "near_teacher_seat_ids": []}
 
 
-def _mode(mode_id="mode-a", layout_id="layout-a", assignment=None):
+def _mode(mode_id="mode-a", layout_id="layout-a", assignment=None, strategy="manual"):
     return {"id": mode_id, "name": "Rows", "section_id": "section-a",
-            "layout_id": layout_id, "strategy": "manual", "assignment": assignment or {}}
+            "layout_id": layout_id, "strategy": strategy, "assignment": assignment or {}}
 
 
 def test_normalize_malformed_state_to_empty_valid_shape():
@@ -65,6 +65,26 @@ def test_assignment_validation_rejects_unknown_or_duplicate_student_atomically()
     })]}
     assert seating_state.validate_state(unknown)[0] is None
     assert seating_state.validate_state(duplicate)[0] is None
+
+
+def test_strategy_enum_normalizes_legacy_modes_and_preserves_current_assignments():
+    state = {
+        "layouts": [_layout(), _layout("layout-b")],
+        "modes": [
+            _mode(assignment={"seat-1-1": "student-a"}, strategy="mixed_fours"),
+            _mode("mode-b", "layout-b", {"seat-1-2": "student-b"}, "mentor_pairs"),
+        ],
+    }
+    accepted, error = seating_state.validate_state(state)
+    assert error is None
+    assert accepted["modes"][0]["strategy"] == "mixed_fours"
+    assert accepted["modes"][0]["assignment"] == {"seat-1-1": "student-a"}
+    assert accepted["modes"][1]["strategy"] == "mentor_pairs"
+    assert accepted["modes"][1]["assignment"] == {"seat-1-2": "student-b"}
+
+    legacy = _mode(strategy="unsupported")
+    assert seating_state.normalize_state({"layouts": [_layout()], "modes": [legacy]})["modes"][0]["strategy"] == "manual"
+    assert seating_state.validate_state({"layouts": [_layout()], "modes": [legacy]})[0] is None
 
 
 def test_delete_layout_removes_only_dependent_modes():

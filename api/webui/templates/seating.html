@@ -103,6 +103,17 @@
           <label>Layout
             <select id="seating-mode-layout"></select>
           </label>
+          <label>Strategy
+            <select id="seating-mode-strategy">
+              <option value="manual">Manual</option>
+              <option value="testing">Testing</option>
+              <option value="buddy_pairs">Buddy pairs</option>
+              <option value="random_trios">Random trios</option>
+              <option value="mixed_fours">Mixed fours</option>
+              <option value="uniform_fours">Uniform fours</option>
+              <option value="mentor_pairs">Mentor pairs</option>
+            </select>
+          </label>
           <button type="button" id="seating-save-mode" class="small">Save mode</button>
           <button type="button" id="seating-delete-mode" class="small">Delete mode</button>
         </div>
@@ -150,6 +161,22 @@
         <button type="button" id="seating-swap" class="small">Swap unlocked seats</button>
         <button type="button" id="seating-apply-proposal" class="primary small" disabled>Apply proposal</button>
         <button type="button" id="seating-undo-apply" class="small" hidden>Undo last apply</button>
+      </div>
+      <div id="seating-academic-controls" class="seating-academic-controls" hidden>
+        <label id="seating-score-column-field">Score column
+          <select id="seating-score-column"></select>
+        </label>
+        <fieldset id="seating-mentor-ready-field" hidden>
+          <legend>Mentor-ready students</legend>
+          <p class="hint">Choose only after reviewing local Roster information. This is temporary and does not infer eligibility from a score.</p>
+          <div id="seating-mentor-ready-list" class="seating-mentor-ready-list"></div>
+        </fieldset>
+      </div>
+      <div class="seating-pasted-proposal">
+        <label for="seating-pasted-proposal">Review a pasted pseudonym proposal</label>
+        <textarea id="seating-pasted-proposal" rows="4" placeholder='{"assignments":[{"pseudonym":"Pseudonym","seat_label":"1-1"}]}'></textarea>
+        <button type="button" id="seating-review-pasted-proposal" class="small">Review pasted proposal</button>
+        <p class="hint">Paste strict pseudonym-to-seat JSON only. It is parsed and cleared in this browser, then reviewed as a temporary local chart.</p>
       </div>
       <div id="seating-proposal-results" class="seating-proposal-results"></div>
       <div id="seating-proposal-chart" class="seating-chart seating-proposal-chart" aria-label="Temporary seating proposal"></div>

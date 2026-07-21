@@ -23,7 +23,7 @@ def isolated_seating(monkeypatch):
     return records
 
 
-def _state(assignment=None):
+def _state(assignment=None, strategy="manual"):
     return {
         "layouts": [{
             "id": "layout-a", "name": "Room", "rows": 2, "columns": 2,
@@ -32,7 +32,7 @@ def _state(assignment=None):
         }],
         "modes": [{
             "id": "mode-a", "name": "Rows", "section_id": "section-a",
-            "layout_id": "layout-a", "strategy": "manual", "assignment": assignment or {},
+            "layout_id": "layout-a", "strategy": strategy, "assignment": assignment or {},
         }],
     }
 
@@ -46,6 +46,10 @@ def _context(required=False):
         }],
         "relationships": [],
     }
+
+
+def _academic(scores=None, column="score-a", mentors=None):
+    return {"score_column_id": column, "scores": scores or {}, "mentor_ready": mentors or []}
 
 
 def test_seating_get_is_course_scoped_and_normalizes_stored_state(isolated_seating):
@@ -125,6 +129,39 @@ def test_near_teacher_editor_only_renders_existing_current_layout_seats():
         assert excluded not in editor + toggle
 
 
+def test_academic_browser_controls_keep_score_and_mentor_data_transient_and_local():
+    source = Path("api/webui/static/seating.js").read_text(encoding="utf-8")
+    clear = source[source.index("function clearProposalDraft"):source.index("function newId")]
+    academic = source[source.index("function academicContext"):source.index("function renderAcademicControls")]
+    controls = source[source.index("function renderAcademicControls"):source.index("function proposalNames")]
+
+    assert "selectedScoreColumnId = \"\";" in clear
+    assert "mentorReady = {};" in clear
+    assert "proposalGrouping = null;" in clear
+    assert 'document.getElementById("seating-pasted-proposal").value = "";' in clear
+    assert "rosterScoreMatrix.values_by_section" in academic
+    assert "Number.isFinite(value)" in academic
+    assert "scores: scores" in academic
+    assert "student.pseudonym" not in academic
+    assert "private_note" not in academic and "ai_context_note" not in academic
+    assert "displayName(student)" in controls
+    assert "clearProposalDraft();" in controls
+
+
+def test_pasted_proposal_parser_is_strict_browser_only_and_never_sends_pseudonyms():
+    source = Path("api/webui/static/seating.js").read_text(encoding="utf-8")
+    parser = source[source.index("function reviewPastedProposal"):source.index("function renderProposalResults")]
+
+    assert "JSON.parse(text)" in parser
+    assert "Object.keys(parsed).length !== 1" in parser
+    assert "pseudonymIndex" in parser and "seatByLabel" in parser
+    assert "Object.prototype.hasOwnProperty.call(pseudonymIndex, item.pseudonym)" in parser
+    assert "requestProposal(\"evaluate\", assignment);" in parser
+    assert "finally" in parser and "pasted.value = \"\";" in parser
+    for excluded in ("fetch(", "clipboard", "navigator", "XMLHttpRequest", "private_note", "ai_context_note", "score"):
+        assert excluded not in parser
+
+
 def test_proposal_and_apply_stay_local_and_apply_only_the_selected_mode(isolated_seating):
     state = _state()
     state["modes"].append({
@@ -165,3 +202,22 @@ def test_apply_rejects_required_violation_or_foreign_student_atomically(isolated
     assert "results" in required
     assert foreign["ok"] is False
     assert isolated_seating["course-a"] == previous
+
+
+def test_academic_proposal_uses_persisted_mode_strategy_and_rejects_foreign_scores(isolated_seating):
+    isolated_seating["course-a"] = _state(strategy="mixed_fours")
+    generated = client.post("/api/seating/proposal", data={
+        "course_id": "course-a", "mode_id": "mode-a", "operation": "generate",
+        "context": json.dumps(_context()), "academic": json.dumps(_academic({"student-a": 4})),
+        "locks": "{}", "proposal": "{}", "reroll_seat_ids": "[]",
+    }).json()
+    invalid = client.post("/api/seating/proposal", data={
+        "course_id": "course-a", "mode_id": "mode-a", "operation": "generate",
+        "context": json.dumps(_context()), "academic": json.dumps(_academic({"student-z": 4})),
+        "locks": "{}", "proposal": "{}", "reroll_seat_ids": "[]",
+    }).json()
+
+    assert generated["ok"] is True
+    assert generated["grouping"]["groups"][0]["kind"] == "mixed_four"
+    assert invalid["ok"] is False
+    assert "invalid score" in invalid["error"]

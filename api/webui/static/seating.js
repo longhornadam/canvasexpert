@@ -18,6 +18,7 @@
   var state = emptyState();
   var students = [];
   var rosterRelationships = { by_section: {} };
+  var rosterScoreMatrix = { columns: [], values_by_section: {} };
   var currentCourseId = "";
   var selectedLayoutId = "";
   var selectedModeId = "";
@@ -25,7 +26,10 @@
   var proposalLocks = {};
   var rerollSeatIds = {};
   var proposalResults = null;
+  var proposalGrouping = null;
   var undoAssignment = null;
+  var selectedScoreColumnId = "";
+  var mentorReady = {};
 
   function emptyState() { return { layouts: [], modes: [] }; }
   function seatId(row, column) { return "seat-" + row + "-" + column; }
@@ -41,17 +45,25 @@
     proposalStatus.className = "hint" + (isError ? " error" : "");
   }
 
-  function clearTransient() {
+  function clearProposalDraft() {
     proposal = null;
     proposalLocks = {};
     rerollSeatIds = {};
     proposalResults = null;
-    undoAssignment = null;
+    proposalGrouping = null;
     proposalCard.hidden = true;
     document.getElementById("seating-proposal-chart").replaceChildren();
     document.getElementById("seating-proposal-results").replaceChildren();
-    document.getElementById("seating-undo-apply").hidden = true;
     setProposalStatus("", false);
+  }
+
+  function clearTransient() {
+    clearProposalDraft();
+    undoAssignment = null;
+    selectedScoreColumnId = "";
+    mentorReady = {};
+    document.getElementById("seating-undo-apply").hidden = true;
+    document.getElementById("seating-pasted-proposal").value = "";
   }
 
   function newId(prefix) {
@@ -216,6 +228,7 @@
     document.getElementById("seating-mode-name").value = mode.name;
     fillSections(document.getElementById("seating-mode-section"), mode.section_id);
     fillLayouts(document.getElementById("seating-mode-layout"), mode.layout_id);
+    document.getElementById("seating-mode-strategy").value = mode.strategy;
   }
 
   function chartLayout(mode) {
@@ -339,6 +352,71 @@
     return { section_id: mode.section_id, students: projectedStudents, relationships: relationships };
   }
 
+  function strategyNeedsScores(strategy) {
+    return strategy === "mixed_fours" || strategy === "uniform_fours" || strategy === "mentor_pairs";
+  }
+
+  function academicContext(mode) {
+    if (!strategyNeedsScores(mode.strategy)) {
+      return { score_column_id: "", scores: {}, mentor_ready: [] };
+    }
+    var sectionScores = ((rosterScoreMatrix.values_by_section || {})[mode.section_id] || {});
+    var allowedStudents = {};
+    studentsInSection(mode.section_id).forEach(function (student) { allowedStudents[String(student.id)] = true; });
+    var scores = {};
+    Object.keys(sectionScores).forEach(function (studentId) {
+      var value = sectionScores[studentId] && sectionScores[studentId][selectedScoreColumnId];
+      if (allowedStudents[studentId] && Number.isFinite(value)) scores[studentId] = value;
+    });
+    return {
+      score_column_id: selectedScoreColumnId,
+      scores: scores,
+      mentor_ready: mode.strategy === "mentor_pairs" ? Object.keys(mentorReady) : []
+    };
+  }
+
+  function renderAcademicControls(mode) {
+    var controls = document.getElementById("seating-academic-controls");
+    var needsScores = strategyNeedsScores(mode.strategy);
+    controls.hidden = !needsScores;
+    if (!needsScores) return;
+    var scoreField = document.getElementById("seating-score-column-field");
+    var scoreColumn = document.getElementById("seating-score-column");
+    scoreField.hidden = false;
+    scoreColumn.replaceChildren();
+    option(scoreColumn, "", "— choose a current score column —");
+    (rosterScoreMatrix.columns || []).forEach(function (column) {
+      option(scoreColumn, column.id, column.label);
+    });
+    if (!(rosterScoreMatrix.columns || []).some(function (column) { return column.id === selectedScoreColumnId; })) {
+      selectedScoreColumnId = "";
+    }
+    scoreColumn.value = selectedScoreColumnId;
+
+    var mentorField = document.getElementById("seating-mentor-ready-field");
+    mentorField.hidden = mode.strategy !== "mentor_pairs";
+    var mentorList = document.getElementById("seating-mentor-ready-list");
+    mentorList.replaceChildren();
+    if (mode.strategy !== "mentor_pairs") return;
+    studentsInSection(mode.section_id).forEach(function (student) {
+      var studentId = String(student.id);
+      var label = document.createElement("label");
+      var checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = !!mentorReady[studentId];
+      checkbox.addEventListener("change", (function (candidateId, input) {
+        return function () {
+          if (input.checked) mentorReady[candidateId] = true;
+          else delete mentorReady[candidateId];
+          clearProposalDraft();
+          renderProposal();
+        };
+      })(studentId, checkbox));
+      label.append(checkbox, document.createTextNode(displayName(student)));
+      mentorList.appendChild(label);
+    });
+  }
+
   function proposalNames(mode) {
     var names = {};
     studentsInSection(mode.section_id).forEach(function (student) {
@@ -351,6 +429,11 @@
     var mode = selectedMode();
     var layout = mode && chartLayout(mode);
     if (!mode || !layout) return;
+    var academic = academicContext(mode);
+    if (strategyNeedsScores(mode.strategy) && !academic.score_column_id) {
+      setProposalStatus("Choose a current score column for this strategy.", true);
+      return;
+    }
     var initiatingCourseId = currentCourseId;
     var initiatingModeId = mode.id;
     setProposalStatus("Working…", false);
@@ -361,6 +444,7 @@
         mode_id: initiatingModeId,
         operation: operation,
         context: JSON.stringify(seatingContext(mode)),
+        academic: JSON.stringify(academic),
         locks: JSON.stringify(proposalLocks),
         proposal: JSON.stringify(nextProposal || proposal || {}),
         reroll_seat_ids: JSON.stringify(Object.keys(rerollSeatIds))
@@ -373,6 +457,7 @@
       }
       proposal = data.proposal || {};
       proposalResults = data.results || null;
+      proposalGrouping = data.grouping || null;
       rerollSeatIds = {};
       setProposalStatus("Proposal updated.", false);
       renderProposal();
@@ -380,6 +465,62 @@
       if (initiatingCourseId !== currentCourseId || initiatingModeId !== selectedModeId) return;
       setProposalStatus("Network error: " + error.message, true);
     });
+  }
+
+  function reviewPastedProposal() {
+    var pasted = document.getElementById("seating-pasted-proposal");
+    var text = pasted.value;
+    try {
+      var mode = selectedMode();
+      var layout = mode && chartLayout(mode);
+      if (!mode || !layout) throw new Error("Choose a loaded mode before reviewing a pasted proposal.");
+      var parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)
+          || Object.keys(parsed).length !== 1 || !Array.isArray(parsed.assignments) || !parsed.assignments.length) {
+        throw new Error("Use one JSON object with a non-empty assignments list.");
+      }
+      var pseudonymIndex = Object.create(null);
+      studentsInSection(mode.section_id).forEach(function (student) {
+        var pseudonym = student.pseudonym;
+        if (typeof pseudonym !== "string" || !pseudonym.trim() || Object.prototype.hasOwnProperty.call(pseudonymIndex, pseudonym)) {
+          throw new Error("Every current-section student needs a unique non-blank local pseudonym before review.");
+        }
+        pseudonymIndex[pseudonym] = String(student.id);
+      });
+      var seatByLabel = Object.create(null);
+      layout.seats.forEach(function (seat) {
+        if (Object.prototype.hasOwnProperty.call(seatByLabel, seat.label)) {
+          throw new Error("Current layout has colliding seat labels.");
+        }
+        seatByLabel[seat.label] = seat.id;
+      });
+      var assignment = {};
+      var usedPseudonyms = Object.create(null);
+      parsed.assignments.forEach(function (item) {
+        if (!item || typeof item !== "object" || Array.isArray(item)
+            || Object.keys(item).length !== 2 || typeof item.pseudonym !== "string"
+            || typeof item.seat_label !== "string" || !item.pseudonym.trim() || !item.seat_label.trim()) {
+          throw new Error("Each assignment needs exactly non-blank pseudonym and seat_label strings.");
+        }
+        if (!Object.prototype.hasOwnProperty.call(pseudonymIndex, item.pseudonym)) {
+          throw new Error("A pasted pseudonym is not an exact current-section match.");
+        }
+        if (usedPseudonyms[item.pseudonym]) throw new Error("A pasted pseudonym appears more than once.");
+        var seatIdValue = seatByLabel[item.seat_label];
+        if (!seatIdValue) throw new Error("A pasted seat label is not in the current layout.");
+        if (assignment[seatIdValue]) throw new Error("A pasted seat label appears more than once.");
+        usedPseudonyms[item.pseudonym] = true;
+        assignment[seatIdValue] = pseudonymIndex[item.pseudonym];
+      });
+      proposalLocks = {};
+      rerollSeatIds = {};
+      proposalGrouping = null;
+      requestProposal("evaluate", assignment);
+    } catch (error) {
+      setProposalStatus(error.message || "Could not review pasted proposal.", true);
+    } finally {
+      pasted.value = "";
+    }
   }
 
   function renderProposalResults() {
@@ -405,6 +546,21 @@
       ? proposalResults.unmet_preferences.length + " preference(s) are unmet."
       : "All configured preferences are met.";
     results.appendChild(preference);
+    (proposalGrouping && proposalGrouping.notices || []).forEach(function (notice) {
+      var item = document.createElement("p");
+      if (notice.kind === "groups") {
+        item.textContent = notice.count + " local group(s) of up to " + notice.group_size + ".";
+      } else if (notice.kind === "partial_groups") {
+        item.textContent = notice.count + " partial group(s) need teacher review.";
+      } else if (notice.kind === "unscored") {
+        item.textContent = notice.count + " student(s) have no finite value in the selected score column.";
+      } else if (notice.kind === "mentor_unpaired") {
+        item.textContent = notice.count + " selected mentor-ready student(s) could not be paired with a lower-scored peer.";
+      } else {
+        return;
+      }
+      results.appendChild(item);
+    });
   }
 
   function renderSwapOptions() {
@@ -431,6 +587,7 @@
     var layout = mode && chartLayout(mode);
     proposalCard.hidden = !layout;
     if (!layout) return;
+    renderAcademicControls(mode);
     renderProposalResults();
     renderSwapOptions();
     document.getElementById("seating-apply-proposal").disabled = !(
@@ -528,6 +685,7 @@
       proposalLocks = {};
       rerollSeatIds = {};
       proposalResults = null;
+      proposalGrouping = null;
       undoAssignment = previousAssignment;
       setProposalStatus("Proposal applied to the current chart.", false);
       renderAll();
@@ -613,6 +771,7 @@
     currentCourseId = courseId;
     students = [];
     rosterRelationships = { by_section: {} };
+    rosterScoreMatrix = { columns: [], values_by_section: {} };
     state = emptyState();
     selectedLayoutId = "";
     selectedModeId = "";
@@ -632,6 +791,7 @@
         if (!roster.ok) throw new Error(roster.error || "Could not load Roster.");
         students = roster.students || [];
         rosterRelationships = roster.relationships || { by_section: {} };
+        rosterScoreMatrix = roster.score_matrix || { columns: [], values_by_section: {} };
         return fetch("/api/seating?course_id=" + encodeURIComponent(courseId));
       })
       .then(function (response) { return response ? response.json() : null; })
@@ -723,6 +883,7 @@
     var name = document.getElementById("seating-mode-name").value.trim();
     var sectionId = document.getElementById("seating-mode-section").value;
     var layoutId = document.getElementById("seating-mode-layout").value;
+    var strategy = document.getElementById("seating-mode-strategy").value;
     if (!name || !sectionId || !layoutId) {
       setStatus("Choose a name, loaded Roster section, and layout.", true);
       return;
@@ -737,7 +898,9 @@
       return assignment;
     }, {});
     var replacement = Object.assign({}, mode, { name: name, section_id: sectionId,
-                                                 layout_id: layoutId, assignment: nextAssignment });
+                                                 layout_id: layoutId, strategy: strategy,
+                                                 assignment: nextAssignment });
+    clearTransient();
     postState({
       layouts: state.layouts,
       modes: state.modes.map(function (item) { return item.id === mode.id ? replacement : item; })
@@ -797,6 +960,14 @@
                 modes: state.modes.map(function (item) { return item.id === mode.id ? replacement : item; }) },
               "Seat cleared.");
   });
+
+  document.getElementById("seating-score-column").addEventListener("change", function () {
+    selectedScoreColumnId = document.getElementById("seating-score-column").value;
+    clearProposalDraft();
+    renderProposal();
+  });
+
+  document.getElementById("seating-review-pasted-proposal").addEventListener("click", reviewPastedProposal);
 
   document.getElementById("seating-generate").addEventListener("click", function () {
     var mode = selectedMode();

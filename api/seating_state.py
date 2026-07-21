@@ -14,6 +14,10 @@ _LAYOUT_FIELDS = {"id", "name", "rows", "columns", "seats", "near_teacher_seat_i
 _LEGACY_LAYOUT_FIELDS = _LAYOUT_FIELDS - {"near_teacher_seat_ids"}
 _SEAT_FIELDS = {"id", "row", "column", "label"}
 _MODE_FIELDS = {"id", "name", "section_id", "layout_id", "strategy", "assignment"}
+STRATEGIES = {
+    "manual", "testing", "buddy_pairs", "random_trios", "mixed_fours",
+    "uniform_fours", "mentor_pairs",
+}
 
 
 def empty_state() -> dict:
@@ -113,8 +117,11 @@ def normalize_state(value: object) -> dict:
         )
         if (not _valid_id(mode_id) or mode_id in mode_ids or not _valid_name(value_mode.get("name"))
                 or not _valid_id(layout_id) or layout_id not in layout_by_id
-                or not _valid_id(section_id) or value_mode.get("strategy") != "manual"):
+                or not _valid_id(section_id)):
             continue
+        strategy = value_mode.get("strategy")
+        if strategy not in STRATEGIES:
+            strategy = "manual"
         assignment_value = value_mode.get("assignment")
         if not isinstance(assignment_value, dict):
             assignment_value = {}
@@ -129,7 +136,7 @@ def normalize_state(value: object) -> dict:
             assignment[raw_seat_id] = student_id
         modes.append({"id": mode_id, "name": value_mode["name"].strip(),
                       "section_id": section_id, "layout_id": layout_id,
-                      "strategy": "manual", "assignment": assignment})
+                      "strategy": strategy, "assignment": assignment})
         mode_ids.add(mode_id)
     return {"layouts": layouts, "modes": modes}
 
@@ -177,8 +184,8 @@ def validate_state(value: object) -> tuple[dict | None, str | None]:
             return None, f"mode {index} has an invalid id or name."
         if not _valid_id(section_id) or not _valid_id(layout_id) or layout_id not in layout_by_id:
             return None, f"mode {index} must reference a known layout and valid section."
-        if mode_value.get("strategy") != "manual":
-            return None, f"mode {index} strategy must be manual."
+        if mode_value.get("strategy") not in STRATEGIES:
+            return None, f"mode {index} has an unsupported strategy."
         assignment_value = mode_value.get("assignment")
         if not isinstance(assignment_value, dict):
             return None, f"mode {index} assignment must be an object."
@@ -196,7 +203,7 @@ def validate_state(value: object) -> tuple[dict | None, str | None]:
             assignment[raw_seat_id] = student_id
         modes.append({"id": mode_id, "name": mode_value["name"].strip(),
                       "section_id": section_id, "layout_id": layout_id,
-                      "strategy": "manual", "assignment": assignment})
+                      "strategy": mode_value["strategy"], "assignment": assignment})
         mode_ids.add(mode_id)
     return {"layouts": layouts, "modes": modes}, None
 
