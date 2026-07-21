@@ -29,13 +29,14 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 5.
+Tool schema version 6.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
+| `get_authoring_contract(kind)` | The Forge authoring contract (envelope format) for one content kind (`quiz`, `assignment`, `page`, `rubric`), served verbatim from `LLM_Modules/*_Base.md` | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
 | `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
@@ -48,6 +49,12 @@ hasn't been refreshed yet, refresh it from the web UI first, then retry. Unlike 
 tools below, `get_modules` never refuses on staleness: it returns whatever module records
 the catalog holds, labeled with `source`, `synced_at`, and `state`, since module structure
 is far lower-risk than student data.
+
+`get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
+needs no course gate, no identity vault, and no safety scan. It reads the same
+`LLM_Modules/*_Base.md` file the web UI's own `/api/download-contract` route serves,
+so the Forge envelope format lives in exactly one place. Pull it before authoring a
+quiz, assignment, page, or rubric so the resulting file validates.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
 CanvasMirror. `get_seating_context` uses the current mirror for identity and section

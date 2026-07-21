@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Eight thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Nine thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -107,6 +107,14 @@ def get_gradebook_snapshot(course_id: str) -> str:
     late, avg_pct) and per-student stats (pseudonym, missing, late, ungraded,
     pct)."""
     return _compact(tools.get_gradebook_snapshot(course_id))
+
+
+@mcp.tool()
+def get_authoring_contract(kind: str) -> str:
+    """The authoring contract (envelope format) for a Forge content kind: quiz,
+    assignment, page, or rubric. Pull this before authoring so the file
+    validates. No student data."""
+    return _compact(tools.get_authoring_contract(kind))
 
 
 @mcp.tool()

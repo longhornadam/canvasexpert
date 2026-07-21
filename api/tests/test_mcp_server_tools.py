@@ -364,6 +364,33 @@ def test_get_modules_stale_returns_labeled_records_not_refusal(monkeypatch):
     assert len(_rows(result["modules"])) == 2
 
 
+# --- get_authoring_contract (no course_id, no student data -> no gates) -----
+
+def test_get_authoring_contract_each_kind_returns_nonempty_contract_text():
+    for kind in ("quiz", "assignment", "page", "rubric"):
+        result = tools.get_authoring_contract(kind)
+        assert result["ok"] is True
+        assert result["kind"] == kind
+        assert isinstance(result["contract"], str)
+        assert len(result["contract"]) > 0
+
+
+def test_get_authoring_contract_unknown_kind_returns_structured_error():
+    result = tools.get_authoring_contract("essay")
+    assert result == {
+        "ok": False,
+        "error": ("unknown kind 'essay'; expected one of: "
+                  "quiz, assignment, page, rubric"),
+    }
+
+
+def test_get_authoring_contract_missing_file_returns_structured_error(monkeypatch):
+    monkeypatch.setitem(tools._CONTRACT_FILES, "quiz", "NoSuchFile_Base.md")
+    result = tools.get_authoring_contract("quiz")
+    assert result["ok"] is False
+    assert "quiz" in result["error"]
+
+
 # --- get_roster --------------------------------------------------------------
 
 def test_get_roster_happy(monkeypatch, tmp_path):
@@ -1011,13 +1038,14 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_eight_read_only_tools():
+def test_server_registers_exactly_the_nine_read_only_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
         "list_courses", "get_course_assignments", "get_modules", "get_roster",
-        "get_seating_context", "get_submissions", "get_gradebook_snapshot", "refresh_mirror",
+        "get_seating_context", "get_submissions", "get_gradebook_snapshot",
+        "refresh_mirror", "get_authoring_contract",
     }
 
 

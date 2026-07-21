@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 8 MCP tools.
+"""Plain, testable implementations of the 9 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -7,9 +7,9 @@ monkeypatch them without touching the real Canvas API or identity vault
 (same pattern as ``api/tests/test_gradebook_routes.py``).
 
 Every ``course_id`` tool gates on ``config.active_courses()`` — the same
-Current-course scope the web UI uses. ``list_courses`` is the only tool with
-no ``course_id`` and no student data, so it skips both the course gate and
-the outbound safety gate.
+Current-course scope the web UI uses. ``list_courses`` and
+``get_authoring_contract`` are the only tools with no ``course_id`` and no
+student data, so they skip both the course gate and the outbound safety gate.
 
 Strict mirror-only law: get_roster, get_submissions, and
 get_gradebook_snapshot serve ONLY from the local CanvasMirror and refuse
@@ -28,6 +28,7 @@ from api.mirror import read_service
 from api.mirror import store as mirror_store
 from api.webui import config, mirror_service, workspace
 from api.webui.canvas_client import _canvas_get_all
+from api.webui.deps import REPO_ROOT
 from api import feedback_vault
 from api.course_catalog import read_catalog
 
@@ -396,6 +397,41 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
         "synced_at": scope["last_success_at"],
         "state": scope["state"],
     }
+
+
+_CONTRACT_FILES = {
+    "quiz": "QuizForge_Base.md",
+    "assignment": "AssignmentForge_Base.md",
+    "page": "PageForge_Base.md",
+    "rubric": "RubricForge_Base.md",
+}
+
+
+def get_authoring_contract(kind: str) -> dict:
+    """The Forge authoring contract (envelope format) for one content kind,
+    served verbatim from ``LLM_Modules/{Kind}Forge_Base.md`` — the same
+    on-disk source ``/api/download-contract`` reads. No course_id, no
+    student data — no course gate, no vault, no safety gate. The contract is
+    a single markdown document, returned as a plain string, not tabulated."""
+    filename = _CONTRACT_FILES.get(kind)
+    if filename is None:
+        return {
+            "ok": False,
+            "error": (f"unknown kind '{kind}'; expected one of: "
+                      f"{', '.join(_CONTRACT_FILES)}"),
+        }
+
+    path = os.path.join(REPO_ROOT, "LLM_Modules", filename)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            contract_text = handle.read()
+    except OSError as error:
+        return {
+            "ok": False,
+            "error": f"Could not read the {kind} authoring contract: {error}",
+        }
+
+    return {"ok": True, "kind": kind, "contract": contract_text}
 
 
 _MIRROR_UNAVAILABLE_ROSTER_ERROR = (
