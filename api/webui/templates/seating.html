@@ -62,6 +62,11 @@
           <button type="button" id="seating-delete-layout" class="small">Delete layout</button>
         </div>
         <div id="seating-layout-grid" class="seating-layout-grid" aria-label="Seat position builder"></div>
+        <div class="seating-near-teacher">
+          <strong>Near-teacher seats</strong>
+          <p class="hint">Mark existing seats only. Row 1 is the front.</p>
+          <div id="seating-near-teacher-seats" class="seating-near-teacher-seats"></div>
+        </div>
       </div>
     </section>
 
@@ -123,6 +128,31 @@
         <button type="button" id="seating-clear-seat" class="small">Clear seat</button>
       </div>
       <div id="seating-chart" class="seating-chart" aria-label="Manual seating chart"></div>
+    </section>
+
+    <section id="seating-proposal-card" class="seating-card" hidden aria-labelledby="seating-proposal-title">
+      <div class="seating-heading">
+        <div>
+          <h2 id="seating-proposal-title">Temporary proposal</h2>
+          <p class="hint">Review this local draft before applying it. It is not printed or saved until Apply.</p>
+        </div>
+        <span id="seating-proposal-status" class="hint" aria-live="polite"></span>
+      </div>
+      <div class="seating-controls seating-proposal-controls">
+        <button type="button" id="seating-generate" class="primary small">Generate proposal</button>
+        <button type="button" id="seating-reroll" class="small">Reroll selected seats</button>
+        <label>Swap seat A
+          <select id="seating-swap-a"></select>
+        </label>
+        <label>Swap seat B
+          <select id="seating-swap-b"></select>
+        </label>
+        <button type="button" id="seating-swap" class="small">Swap unlocked seats</button>
+        <button type="button" id="seating-apply-proposal" class="primary small" disabled>Apply proposal</button>
+        <button type="button" id="seating-undo-apply" class="small" hidden>Undo last apply</button>
+      </div>
+      <div id="seating-proposal-results" class="seating-proposal-results"></div>
+      <div id="seating-proposal-chart" class="seating-chart seating-proposal-chart" aria-label="Temporary seating proposal"></div>
     </section>
   </div>
 

@@ -10,7 +10,8 @@ GRID_MAX = 12
 NAME_MAX_LENGTH = 80
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 _STATE_FIELDS = {"layouts", "modes"}
-_LAYOUT_FIELDS = {"id", "name", "rows", "columns", "seats"}
+_LAYOUT_FIELDS = {"id", "name", "rows", "columns", "seats", "near_teacher_seat_ids"}
+_LEGACY_LAYOUT_FIELDS = _LAYOUT_FIELDS - {"near_teacher_seat_ids"}
 _SEAT_FIELDS = {"id", "row", "column", "label"}
 _MODE_FIELDS = {"id", "name", "section_id", "layout_id", "strategy", "assignment"}
 
@@ -40,7 +41,7 @@ def _valid_name(value: object) -> bool:
 
 
 def _normalize_layout(value: object) -> dict | None:
-    if not isinstance(value, dict) or set(value) != _LAYOUT_FIELDS:
+    if not isinstance(value, dict) or set(value) not in (_LAYOUT_FIELDS, _LEGACY_LAYOUT_FIELDS):
         return None
     if not _valid_id(value.get("id")) or not _valid_name(value.get("name")):
         return None
@@ -69,8 +70,19 @@ def _normalize_layout(value: object) -> dict | None:
         normalized_seats.append({"id": seat_id(row, column), "row": row,
                                  "column": column, "label": seat_label(row, column)})
     normalized_seats.sort(key=lambda seat: (seat["row"], seat["column"]))
+    raw_near_teacher = value.get("near_teacher_seat_ids", [])
+    if not isinstance(raw_near_teacher, list):
+        raw_near_teacher = []
+    seat_ids = {seat["id"] for seat in normalized_seats}
+    marked_ids: set[str] = set()
+    for seat_id_value in raw_near_teacher:
+        if isinstance(seat_id_value, str) and seat_id_value in seat_ids:
+            marked_ids.add(seat_id_value)
     return {"id": value["id"], "name": value["name"].strip(), "rows": rows,
-            "columns": columns, "seats": normalized_seats}
+            "columns": columns, "seats": normalized_seats,
+            "near_teacher_seat_ids": [
+                seat["id"] for seat in normalized_seats if seat["id"] in marked_ids
+            ]}
 
 
 def normalize_state(value: object) -> dict:
@@ -145,6 +157,11 @@ def validate_state(value: object) -> tuple[dict | None, str | None]:
             return None, f"layout {index} has an invalid seat."
         if len({seat["id"] for seat in layout["seats"]}) != len(layout["seats"]):
             return None, f"layout {index} has duplicate seats."
+        raw_marks = layout_value["near_teacher_seat_ids"]
+        if (not isinstance(raw_marks, list)
+                or len(raw_marks) != len(layout["near_teacher_seat_ids"])
+                or any(not isinstance(seat_id_value, str) for seat_id_value in raw_marks)):
+            return None, f"layout {index} has invalid near-teacher seats."
         layouts.append(layout)
         layout_by_id[layout["id"]] = layout
 
@@ -198,7 +215,12 @@ def resize_layout(state: object, layout_id: object, rows: object, columns: objec
             layouts.append(layout)
             continue
         seats = [seat for seat in layout["seats"] if seat["row"] <= rows and seat["column"] <= columns]
-        replacement = {**layout, "rows": rows, "columns": columns, "seats": seats}
+        valid_seat_ids = {seat["id"] for seat in seats}
+        replacement = {**layout, "rows": rows, "columns": columns, "seats": seats,
+                       "near_teacher_seat_ids": [
+                           seat_id_value for seat_id_value in layout["near_teacher_seat_ids"]
+                           if seat_id_value in valid_seat_ids
+                       ]}
         layouts.append(replacement)
     if replacement is None:
         return None, "layout not found."
@@ -216,7 +238,8 @@ def toggle_seat(state: object, layout_id: object, row: object, column: object) -
     current, error = validate_state(state)
     if error:
         return None, error
-    if not _valid_id(layout_id) or not isinstance(row, int) or not isinstance(column, int):
+    if (not _valid_id(layout_id) or not isinstance(row, int) or isinstance(row, bool)
+            or not isinstance(column, int) or isinstance(column, bool)):
         return None, "seat toggle requires a valid layout and coordinates."
     changed_layout = None
     layouts: list[dict] = []
@@ -235,7 +258,11 @@ def toggle_seat(state: object, layout_id: object, row: object, column: object) -
         else:
             removed_seat_id = target_id
         existing.sort(key=lambda seat: (seat["row"], seat["column"]))
-        changed_layout = {**layout, "seats": existing}
+        changed_layout = {**layout, "seats": existing,
+                          "near_teacher_seat_ids": [
+                              seat_id_value for seat_id_value in layout["near_teacher_seat_ids"]
+                              if seat_id_value != removed_seat_id
+                          ]}
         layouts.append(changed_layout)
     if changed_layout is None:
         return None, "layout not found."
@@ -245,6 +272,36 @@ def toggle_seat(state: object, layout_id: object, row: object, column: object) -
         for mode in current["modes"]
     ]
     return {"layouts": layouts, "modes": modes}, None
+
+
+def toggle_near_teacher_seat(state: object, layout_id: object, seat_id_value: object) -> tuple[dict | None, str | None]:
+    """Toggle a near-teacher mark on one existing seat without changing assignments."""
+    current, error = validate_state(state)
+    if error:
+        return None, error
+    if not _valid_id(layout_id) or not _valid_id(seat_id_value):
+        return None, "near-teacher toggle requires a valid layout and seat."
+    changed = False
+    layouts = []
+    for layout in current["layouts"]:
+        if layout["id"] != layout_id:
+            layouts.append(layout)
+            continue
+        valid_seat_ids = {seat["id"] for seat in layout["seats"]}
+        if seat_id_value not in valid_seat_ids:
+            return None, "near-teacher seat is not in this layout."
+        marks = set(layout["near_teacher_seat_ids"])
+        if seat_id_value in marks:
+            marks.remove(seat_id_value)
+        else:
+            marks.add(seat_id_value)
+        layouts.append({**layout, "near_teacher_seat_ids": [
+            seat["id"] for seat in layout["seats"] if seat["id"] in marks
+        ]})
+        changed = True
+    if not changed:
+        return None, "layout not found."
+    return {"layouts": layouts, "modes": current["modes"]}, None
 
 
 def delete_layout(state: object, layout_id: object) -> tuple[dict | None, str | None]:

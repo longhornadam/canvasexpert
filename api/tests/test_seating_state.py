@@ -10,7 +10,8 @@ def _layout(layout_id="layout-a", rows=2, columns=2, seats=None):
             {"id": "seat-1-2", "row": 1, "column": 2, "label": "1-2"},
             {"id": "seat-2-1", "row": 2, "column": 1, "label": "2-1"},
         ]
-    return {"id": layout_id, "name": "Room", "rows": rows, "columns": columns, "seats": seats}
+    return {"id": layout_id, "name": "Room", "rows": rows, "columns": columns,
+            "seats": seats, "near_teacher_seat_ids": []}
 
 
 def _mode(mode_id="mode-a", layout_id="layout-a", assignment=None):
@@ -21,10 +22,13 @@ def _mode(mode_id="mode-a", layout_id="layout-a", assignment=None):
 def test_normalize_malformed_state_to_empty_valid_shape():
     assert seating_state.normalize_state(None) == seating_state.empty_state()
     assert seating_state.normalize_state({"layouts": "bad", "modes": []}) == seating_state.empty_state()
+    legacy = _layout(seats=[{"id": "wrong", "row": 1, "column": 1, "label": "wrong"}])
+    legacy.pop("near_teacher_seat_ids")
     assert seating_state.normalize_state({
-        "layouts": [_layout(seats=[{"id": "wrong", "row": 1, "column": 1, "label": "wrong"}])],
+        "layouts": [legacy],
         "modes": [],
-    }) == {"layouts": [{"id": "layout-a", "name": "Room", "rows": 2, "columns": 2, "seats": []}], "modes": []}
+    }) == {"layouts": [{"id": "layout-a", "name": "Room", "rows": 2, "columns": 2,
+                          "seats": [], "near_teacher_seat_ids": []}], "modes": []}
 
 
 def test_resize_and_toggle_drop_only_dependent_assignments():
@@ -74,3 +78,24 @@ def test_delete_layout_removes_only_dependent_modes():
     assert error is None
     assert [layout["id"] for layout in result["layouts"]] == ["layout-b"]
     assert [mode["id"] for mode in result["modes"]] == ["mode-b"]
+
+
+def test_near_teacher_marks_are_a_unique_current_seat_subset():
+    state = {
+        "layouts": [_layout(), _layout("layout-b")],
+        "modes": [_mode(assignment={"seat-1-1": "student-a"}), _mode("mode-b", "layout-b")],
+    }
+    marked, error = seating_state.toggle_near_teacher_seat(state, "layout-a", "seat-1-1")
+    assert error is None
+    assert marked["layouts"][0]["near_teacher_seat_ids"] == ["seat-1-1"]
+    assert marked["layouts"][1]["near_teacher_seat_ids"] == []
+    assert marked["modes"][0]["assignment"] == {"seat-1-1": "student-a"}
+
+    rejected, error = seating_state.toggle_near_teacher_seat(marked, "layout-a", "seat-9-9")
+    assert rejected is None
+    assert error == "near-teacher seat is not in this layout."
+
+    removed, error = seating_state.toggle_seat(marked, "layout-a", 1, 1)
+    assert error is None
+    assert removed["layouts"][0]["near_teacher_seat_ids"] == []
+    assert removed["modes"][0]["assignment"] == {}

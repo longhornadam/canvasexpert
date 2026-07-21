@@ -28,11 +28,23 @@ def _state(assignment=None):
         "layouts": [{
             "id": "layout-a", "name": "Room", "rows": 2, "columns": 2,
             "seats": [{"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"}],
+            "near_teacher_seat_ids": [],
         }],
         "modes": [{
             "id": "mode-a", "name": "Rows", "section_id": "section-a",
             "layout_id": "layout-a", "strategy": "manual", "assignment": assignment or {},
         }],
+    }
+
+
+def _context(required=False):
+    return {
+        "section_id": "section-a",
+        "students": [{
+            "id": "student-a", "front_row": "required" if required else "none",
+            "near_teacher": "none",
+        }],
+        "relationships": [],
     }
 
 
@@ -75,7 +87,7 @@ def test_seating_state_post_rejects_invalid_data_atomically(isolated_seating, st
 
 def test_print_builder_has_only_chart_title_seat_labels_and_display_names():
     source = Path("api/webui/static/seating.js").read_text(encoding="utf-8")
-    print_function = source[source.index("function renderPrintChart"):source.index("function renderAll")]
+    print_function = source[source.index("function renderPrintChart"):source.index("function seatingContext")]
     assert "mode.name" in print_function
     assert "seat.label" in print_function
     assert "namesById" in print_function
@@ -95,3 +107,61 @@ def test_frontend_ignores_stale_course_switch_responses_before_state_changes():
     assert load_function.index("if (currentCourseId !== courseId) return null;") < load_function.index("students = roster.students")
     assert "if (!data || currentCourseId !== courseId) return;" in load_function
     assert load_function.index("if (!data || currentCourseId !== courseId) return;") < load_function.index("state = data.state")
+
+
+def test_near_teacher_editor_only_renders_existing_current_layout_seats():
+    source = Path("api/webui/static/seating.js").read_text(encoding="utf-8")
+    editor = source[source.index("function renderLayoutEditor"):source.index("function fillSections")]
+    toggle = source[source.index("function toggleNearTeacherSeat"):source.index("function loadCourse")]
+    update = source[source.index("function updateLayout"):source.index("function toggleSeat")]
+
+    assert "layout.seats.forEach(function (seat)" in editor
+    assert "toggleNearTeacherSeat(seatIdValue)" in editor
+    assert "layout.seats.some(function (seat) { return seat.id === targetSeatId; })" in toggle
+    assert "near_teacher_seat_ids" in toggle
+    assert "updateLayout(Object.assign({}, layout" in toggle
+    assert "if (selectedMode() && selectedMode().layout_id === nextLayout.id) clearTransient();" in update
+    for excluded in ("students", "displayName", "fetch(", "relationship", "support"):
+        assert excluded not in editor + toggle
+
+
+def test_proposal_and_apply_stay_local_and_apply_only_the_selected_mode(isolated_seating):
+    state = _state()
+    state["modes"].append({
+        "id": "mode-b", "name": "Other", "section_id": "section-a",
+        "layout_id": "layout-a", "strategy": "manual", "assignment": {},
+    })
+    isolated_seating["course-a"] = state
+    context = _context()
+    proposal = client.post("/api/seating/proposal", data={
+        "course_id": "course-a", "mode_id": "mode-a", "operation": "generate",
+        "context": json.dumps(context), "locks": "{}", "proposal": "{}", "reroll_seat_ids": "[]",
+    }).json()
+
+    assert proposal["ok"] is True
+    applied = client.post("/api/seating/apply", data={
+        "course_id": "course-a", "mode_id": "mode-a", "context": json.dumps(context),
+        "proposal": json.dumps(proposal["proposal"]),
+    }).json()
+
+    assert applied["ok"] is True
+    assert applied["state"]["modes"][0]["assignment"] == proposal["proposal"]
+    assert applied["state"]["modes"][1]["assignment"] == {}
+
+
+def test_apply_rejects_required_violation_or_foreign_student_atomically(isolated_seating):
+    previous = _state()
+    isolated_seating["course-a"] = previous
+    required = client.post("/api/seating/apply", data={
+        "course_id": "course-a", "mode_id": "mode-a", "context": json.dumps(_context(required=True)),
+        "proposal": "{}",
+    }).json()
+    foreign = client.post("/api/seating/apply", data={
+        "course_id": "course-a", "mode_id": "mode-a", "context": json.dumps(_context()),
+        "proposal": json.dumps({"seat-1-1": "student-z"}),
+    }).json()
+
+    assert required["ok"] is False
+    assert "results" in required
+    assert foreign["ok"] is False
+    assert isolated_seating["course-a"] == previous

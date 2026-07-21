@@ -9,12 +9,21 @@
 .seating-controls label { display: grid; gap: var(--ce-space-1); color: var(--ce-ink-muted); font-size: 12px; font-weight: 600; }
 .seating-controls input, .seating-controls select { width: auto; min-width: 130px; margin: 0; padding: 4px var(--ce-space-2); font-size: 13px; }
 .seating-layout-grid, .seating-chart { display: grid; gap: 6px; margin-top: var(--ce-space-3); }
+.seating-near-teacher { margin-top: var(--ce-space-3); }
+.seating-near-teacher p { margin: var(--ce-space-1) 0; }
+.seating-near-teacher-seats { display: flex; gap: var(--ce-space-2); flex-wrap: wrap; }
+.seating-near-teacher-seats label { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .seating-layout-seat { min-height: 38px; border: 1px solid var(--ce-rule); background: var(--ce-surface); color: var(--ce-ink-muted); }
 .seating-layout-seat.is-seat { border-color: var(--ce-accent); background: color-mix(in srgb, var(--ce-accent) 14%, var(--ce-surface)); color: var(--ce-ink); }
 .seating-chart-seat { display: grid; align-content: center; min-height: 76px; padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface); }
 .seating-chart-seat strong, .seating-chart-seat span { overflow-wrap: anywhere; }
 .seating-chart-seat strong { font-size: 12px; color: var(--ce-ink-muted); }
 .seating-chart-seat span { margin-top: var(--ce-space-1); font-size: 14px; }
+.seating-proposal-results { margin-top: var(--ce-space-3); color: var(--ce-ink-muted); }
+.seating-proposal-results ul { margin: var(--ce-space-1) 0 0; padding-left: 20px; }
+.seating-proposal-chart .seating-chart-seat { border-style: dashed; }
+.seating-proposal-flags { display: flex; gap: var(--ce-space-2); margin-top: var(--ce-space-2); }
+.seating-proposal-flags label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ce-ink-muted); }
 .seating-print-chart { display: none; }
 
 @media print {

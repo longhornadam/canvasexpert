@@ -12,12 +12,20 @@
   var modeEditor = document.getElementById("seating-mode-editor");
   var chartCard = document.getElementById("seating-chart-card");
   var printChart = document.getElementById("seating-print-chart");
+  var proposalCard = document.getElementById("seating-proposal-card");
+  var proposalStatus = document.getElementById("seating-proposal-status");
 
   var state = emptyState();
   var students = [];
+  var rosterRelationships = { by_section: {} };
   var currentCourseId = "";
   var selectedLayoutId = "";
   var selectedModeId = "";
+  var proposal = null;
+  var proposalLocks = {};
+  var rerollSeatIds = {};
+  var proposalResults = null;
+  var undoAssignment = null;
 
   function emptyState() { return { layouts: [], modes: [] }; }
   function seatId(row, column) { return "seat-" + row + "-" + column; }
@@ -28,6 +36,24 @@
     status.className = "hint" + (isError ? " error" : "");
   }
 
+  function setProposalStatus(message, isError) {
+    proposalStatus.textContent = message || "";
+    proposalStatus.className = "hint" + (isError ? " error" : "");
+  }
+
+  function clearTransient() {
+    proposal = null;
+    proposalLocks = {};
+    rerollSeatIds = {};
+    proposalResults = null;
+    undoAssignment = null;
+    proposalCard.hidden = true;
+    document.getElementById("seating-proposal-chart").replaceChildren();
+    document.getElementById("seating-proposal-results").replaceChildren();
+    document.getElementById("seating-undo-apply").hidden = true;
+    setProposalStatus("", false);
+  }
+
   function newId(prefix) {
     var token = window.crypto && window.crypto.randomUUID
       ? window.crypto.randomUUID().replace(/-/g, "")
@@ -35,7 +61,7 @@
     return prefix + "-" + token;
   }
 
-  function postState(next, successMessage) {
+  function postState(next, successMessage, onSaved) {
     if (!currentCourseId) return;
     var initiatingCourseId = currentCourseId;
     setStatus("Saving…", false);
@@ -49,6 +75,7 @@
         return;
       }
       state = data.state || emptyState();
+      if (typeof onSaved === "function") onSaved();
       setStatus(successMessage || "Saved.", false);
       renderAll();
     }).catch(function (error) {
@@ -138,6 +165,22 @@
         grid.appendChild(button);
       }
     }
+    var nearTeacherSeats = document.getElementById("seating-near-teacher-seats");
+    nearTeacherSeats.replaceChildren();
+    var marks = {};
+    (layout.near_teacher_seat_ids || []).forEach(function (seatIdValue) { marks[seatIdValue] = true; });
+    layout.seats.forEach(function (seat) {
+      var label = document.createElement("label");
+      var checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = Boolean(marks[seat.id]);
+      checkbox.setAttribute("aria-label", "Mark " + seat.label + " as near the teacher");
+      checkbox.addEventListener("change", (function (seatIdValue) {
+        return function () { toggleNearTeacherSeat(seatIdValue); };
+      })(seat.id));
+      label.append(checkbox, document.createTextNode(seat.label));
+      nearTeacherSeats.appendChild(label);
+    });
   }
 
   function fillSections(select, selectedId) {
@@ -270,15 +313,257 @@
     printChart.appendChild(grid);
   }
 
+  function seatingContext(mode) {
+    var selectedStudents = studentsInSection(mode.section_id);
+    var allowed = { none: true, preferred: true, required: true };
+    var studentIds = {};
+    var projectedStudents = selectedStudents.map(function (student) {
+      var seating = student.seating_context || {};
+      var id = String(student.id);
+      studentIds[id] = true;
+      return {
+        id: id,
+        front_row: allowed[seating.front_row] ? seating.front_row : "none",
+        near_teacher: allowed[seating.near_teacher] ? seating.near_teacher : "none"
+      };
+    });
+    var relationships = ((rosterRelationships.by_section || {})[mode.section_id] || [])
+      .filter(function (relationship) {
+        return studentIds[relationship.student_a] && studentIds[relationship.student_b];
+      }).map(function (relationship) {
+        return {
+          type: relationship.type,
+          students: [relationship.student_a, relationship.student_b]
+        };
+      });
+    return { section_id: mode.section_id, students: projectedStudents, relationships: relationships };
+  }
+
+  function proposalNames(mode) {
+    var names = {};
+    studentsInSection(mode.section_id).forEach(function (student) {
+      names[String(student.id)] = displayName(student);
+    });
+    return names;
+  }
+
+  function requestProposal(operation, nextProposal) {
+    var mode = selectedMode();
+    var layout = mode && chartLayout(mode);
+    if (!mode || !layout) return;
+    var initiatingCourseId = currentCourseId;
+    var initiatingModeId = mode.id;
+    setProposalStatus("Working…", false);
+    fetch("/api/seating/proposal", {
+      method: "POST",
+      body: new URLSearchParams({
+        course_id: initiatingCourseId,
+        mode_id: initiatingModeId,
+        operation: operation,
+        context: JSON.stringify(seatingContext(mode)),
+        locks: JSON.stringify(proposalLocks),
+        proposal: JSON.stringify(nextProposal || proposal || {}),
+        reroll_seat_ids: JSON.stringify(Object.keys(rerollSeatIds))
+      })
+    }).then(function (response) { return response.json(); }).then(function (data) {
+      if (initiatingCourseId !== currentCourseId || initiatingModeId !== selectedModeId) return;
+      if (!data.ok) {
+        setProposalStatus(data.error || "Could not build a proposal.", true);
+        return;
+      }
+      proposal = data.proposal || {};
+      proposalResults = data.results || null;
+      rerollSeatIds = {};
+      setProposalStatus("Proposal updated.", false);
+      renderProposal();
+    }).catch(function (error) {
+      if (initiatingCourseId !== currentCourseId || initiatingModeId !== selectedModeId) return;
+      setProposalStatus("Network error: " + error.message, true);
+    });
+  }
+
+  function renderProposalResults() {
+    var results = document.getElementById("seating-proposal-results");
+    results.replaceChildren();
+    if (!proposal) {
+      results.textContent = "Generate a temporary proposal to review required conditions and preferences.";
+      return;
+    }
+    if (!proposalResults) {
+      results.textContent = "Proposal needs local evaluation.";
+      return;
+    }
+    var summary = document.createElement("p");
+    if (proposalResults.required_ok) {
+      summary.textContent = "All required conditions pass.";
+    } else {
+      summary.textContent = proposalResults.required_violations.length + " required condition(s) need attention before apply.";
+    }
+    results.appendChild(summary);
+    var preference = document.createElement("p");
+    preference.textContent = proposalResults.unmet_preferences.length
+      ? proposalResults.unmet_preferences.length + " preference(s) are unmet."
+      : "All configured preferences are met.";
+    results.appendChild(preference);
+  }
+
+  function renderSwapOptions() {
+    var first = document.getElementById("seating-swap-a");
+    var second = document.getElementById("seating-swap-b");
+    var firstValue = first.value;
+    var secondValue = second.value;
+    first.replaceChildren();
+    second.replaceChildren();
+    option(first, "", "— choose seat —");
+    option(second, "", "— choose seat —");
+    Object.keys(proposal || {}).sort().forEach(function (seat) {
+      if (!proposalLocks[seat]) {
+        option(first, seat, seat);
+        option(second, seat, seat);
+      }
+    });
+    if (firstValue) first.value = firstValue;
+    if (secondValue) second.value = secondValue;
+  }
+
+  function renderProposal() {
+    var mode = selectedMode();
+    var layout = mode && chartLayout(mode);
+    proposalCard.hidden = !layout;
+    if (!layout) return;
+    renderProposalResults();
+    renderSwapOptions();
+    document.getElementById("seating-apply-proposal").disabled = !(
+      proposal && proposalResults && proposalResults.required_ok
+    );
+    document.getElementById("seating-undo-apply").hidden = !undoAssignment;
+    var chart = document.getElementById("seating-proposal-chart");
+    chart.replaceChildren();
+    if (!proposal) return;
+    chart.style.gridTemplateColumns = "repeat(" + layout.columns + ", minmax(92px, 1fr))";
+    var seats = {};
+    layout.seats.forEach(function (seat) { seats[seat.id] = seat; });
+    var names = proposalNames(mode);
+    for (var row = 1; row <= layout.rows; row++) {
+      for (var column = 1; column <= layout.columns; column++) {
+        var seat = seats[seatId(row, column)];
+        if (!seat) {
+          var spacer = document.createElement("div");
+          spacer.setAttribute("aria-hidden", "true");
+          chart.appendChild(spacer);
+          continue;
+        }
+        var cell = document.createElement("div");
+        cell.className = "seating-chart-seat";
+        var label = document.createElement("strong");
+        label.textContent = seat.label;
+        cell.appendChild(label);
+        var assigned = document.createElement("span");
+        assigned.textContent = names[proposal[seat.id]] || "";
+        cell.appendChild(assigned);
+        if (proposal[seat.id]) {
+          var flags = document.createElement("div");
+          flags.className = "seating-proposal-flags";
+          var lockLabel = document.createElement("label");
+          var lock = document.createElement("input");
+          lock.type = "checkbox";
+          lock.checked = proposalLocks[seat.id] === proposal[seat.id];
+          lock.addEventListener("change", (function (seatIdValue, checkbox) {
+            return function () {
+              if (checkbox.checked) proposalLocks[seatIdValue] = proposal[seatIdValue];
+              else delete proposalLocks[seatIdValue];
+              delete rerollSeatIds[seatIdValue];
+              renderProposal();
+            };
+          })(seat.id, lock));
+          lockLabel.appendChild(lock);
+          lockLabel.appendChild(document.createTextNode("Lock"));
+          flags.appendChild(lockLabel);
+          var rerollLabel = document.createElement("label");
+          var reroll = document.createElement("input");
+          reroll.type = "checkbox";
+          reroll.disabled = !!proposalLocks[seat.id];
+          reroll.checked = !!rerollSeatIds[seat.id];
+          reroll.addEventListener("change", (function (seatIdValue, checkbox) {
+            return function () {
+              if (checkbox.checked) rerollSeatIds[seatIdValue] = true;
+              else delete rerollSeatIds[seatIdValue];
+            };
+          })(seat.id, reroll));
+          rerollLabel.appendChild(reroll);
+          rerollLabel.appendChild(document.createTextNode("Reroll"));
+          flags.appendChild(rerollLabel);
+          cell.appendChild(flags);
+        }
+        chart.appendChild(cell);
+      }
+    }
+  }
+
+  function applyProposal() {
+    var mode = selectedMode();
+    if (!mode || !proposal || !proposalResults || !proposalResults.required_ok) return;
+    var initiatingCourseId = currentCourseId;
+    var initiatingModeId = mode.id;
+    var previousAssignment = Object.assign({}, mode.assignment);
+    setProposalStatus("Applying…", false);
+    fetch("/api/seating/apply", {
+      method: "POST",
+      body: new URLSearchParams({
+        course_id: initiatingCourseId,
+        mode_id: initiatingModeId,
+        context: JSON.stringify(seatingContext(mode)),
+        proposal: JSON.stringify(proposal)
+      })
+    }).then(function (response) { return response.json(); }).then(function (data) {
+      if (initiatingCourseId !== currentCourseId || initiatingModeId !== selectedModeId) return;
+      if (!data.ok) {
+        proposalResults = data.results || proposalResults;
+        setProposalStatus(data.error || "Could not apply proposal.", true);
+        renderProposal();
+        return;
+      }
+      state = data.state || state;
+      proposal = null;
+      proposalLocks = {};
+      rerollSeatIds = {};
+      proposalResults = null;
+      undoAssignment = previousAssignment;
+      setProposalStatus("Proposal applied to the current chart.", false);
+      renderAll();
+    }).catch(function (error) {
+      if (initiatingCourseId !== currentCourseId || initiatingModeId !== selectedModeId) return;
+      setProposalStatus("Network error: " + error.message, true);
+    });
+  }
+
+  function undoLastApply() {
+    var mode = selectedMode();
+    if (!mode || !undoAssignment) return;
+    var restored = Object.assign({}, undoAssignment);
+    var next = {
+      layouts: state.layouts,
+      modes: state.modes.map(function (item) {
+        return item.id === mode.id ? Object.assign({}, item, { assignment: restored }) : item;
+      })
+    };
+    postState(next, "Previous chart restored.", function () {
+      undoAssignment = null;
+      setProposalStatus("Undo applied.", false);
+    });
+  }
+
   function renderAll() {
     renderLayoutSelect();
     renderLayoutEditor();
     renderModeSelect();
     renderModeEditor();
     renderChart();
+    renderProposal();
   }
 
   function updateLayout(nextLayout, message) {
+    if (selectedMode() && selectedMode().layout_id === nextLayout.id) clearTransient();
     var layouts = state.layouts.map(function (layout) {
       return layout.id === nextLayout.id ? nextLayout : layout;
     });
@@ -307,16 +592,34 @@
     updateLayout(Object.assign({}, layout, { seats: seats }), "Seat positions saved.");
   }
 
+  function toggleNearTeacherSeat(targetSeatId) {
+    var layout = selectedLayout();
+    if (!layout || !layout.seats.some(function (seat) { return seat.id === targetSeatId; })) return;
+    var marks = {};
+    (layout.near_teacher_seat_ids || []).forEach(function (seatIdValue) { marks[seatIdValue] = true; });
+    if (marks[targetSeatId]) {
+      delete marks[targetSeatId];
+    } else {
+      marks[targetSeatId] = true;
+    }
+    updateLayout(Object.assign({}, layout, {
+      near_teacher_seat_ids: layout.seats.filter(function (seat) { return marks[seat.id]; })
+        .map(function (seat) { return seat.id; })
+    }), "Near-teacher seats saved.");
+  }
+
   function loadCourse() {
     var courseId = courseSelect.value;
     currentCourseId = courseId;
     students = [];
+    rosterRelationships = { by_section: {} };
     state = emptyState();
     selectedLayoutId = "";
     selectedModeId = "";
     workspace.hidden = true;
     chartCard.hidden = true;
     printChart.replaceChildren();
+    clearTransient();
     if (!courseId) {
       setStatus("", false);
       return;
@@ -328,6 +631,7 @@
         if (currentCourseId !== courseId) return null;
         if (!roster.ok) throw new Error(roster.error || "Could not load Roster.");
         students = roster.students || [];
+        rosterRelationships = roster.relationships || { by_section: {} };
         return fetch("/api/seating?course_id=" + encodeURIComponent(courseId));
       })
       .then(function (response) { return response ? response.json() : null; })
@@ -358,7 +662,8 @@
         seats.push({ id: seatId(row, column), row: row, column: column, label: seatLabel(row, column) });
       }
     }
-    var layout = { id: newId("layout"), name: name, rows: rows, columns: columns, seats: seats };
+    var layout = { id: newId("layout"), name: name, rows: rows, columns: columns,
+                   seats: seats, near_teacher_seat_ids: [] };
     selectedLayoutId = layout.id;
     postState({ layouts: state.layouts.concat([layout]), modes: state.modes }, "Layout created.");
   });
@@ -374,7 +679,12 @@
       return;
     }
     var seats = layout.seats.filter(function (seat) { return seat.row <= rows && seat.column <= columns; });
-    updateLayout(Object.assign({}, layout, { name: name, rows: rows, columns: columns, seats: seats }), "Layout saved.");
+    var validSeats = {};
+    seats.forEach(function (seat) { validSeats[seat.id] = true; });
+    updateLayout(Object.assign({}, layout, {
+      name: name, rows: rows, columns: columns, seats: seats,
+      near_teacher_seat_ids: (layout.near_teacher_seat_ids || []).filter(function (seat) { return validSeats[seat]; })
+    }), "Layout saved.");
   });
 
   document.getElementById("seating-delete-layout").addEventListener("click", function () {
@@ -444,6 +754,7 @@
 
   modeSelect.addEventListener("change", function () {
     selectedModeId = modeSelect.value;
+    clearTransient();
     renderAll();
   });
 
@@ -486,6 +797,52 @@
                 modes: state.modes.map(function (item) { return item.id === mode.id ? replacement : item; }) },
               "Seat cleared.");
   });
+
+  document.getElementById("seating-generate").addEventListener("click", function () {
+    var mode = selectedMode();
+    if (!mode) {
+      setProposalStatus("Choose a loaded mode first.", true);
+      return;
+    }
+    requestProposal("generate", proposal || {});
+  });
+
+  document.getElementById("seating-reroll").addEventListener("click", function () {
+    if (!proposal) {
+      setProposalStatus("Generate a proposal before rerolling seats.", true);
+      return;
+    }
+    if (!Object.keys(rerollSeatIds).length) {
+      setProposalStatus("Select one or more unlocked proposed seats to reroll.", true);
+      return;
+    }
+    requestProposal("reroll", proposal);
+  });
+
+  document.getElementById("seating-swap").addEventListener("click", function () {
+    if (!proposal) {
+      setProposalStatus("Generate a proposal before swapping seats.", true);
+      return;
+    }
+    var first = document.getElementById("seating-swap-a").value;
+    var second = document.getElementById("seating-swap-b").value;
+    if (!first || !second || first === second) {
+      setProposalStatus("Choose two different unlocked proposed seats.", true);
+      return;
+    }
+    if (proposalLocks[first] || proposalLocks[second]) {
+      setProposalStatus("Unlock both seats before swapping them.", true);
+      return;
+    }
+    var swapped = Object.assign({}, proposal);
+    var firstStudent = swapped[first];
+    swapped[first] = swapped[second];
+    swapped[second] = firstStudent;
+    requestProposal("evaluate", swapped);
+  });
+
+  document.getElementById("seating-apply-proposal").addEventListener("click", applyProposal);
+  document.getElementById("seating-undo-apply").addEventListener("click", undoLastApply);
 
   document.getElementById("seating-print").addEventListener("click", function () {
     if (selectedMode()) window.print();
