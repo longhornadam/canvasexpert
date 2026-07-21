@@ -1,0 +1,76 @@
+"""Pure private Seating state tests using synthetic opaque identifiers only."""
+
+from api import seating_state
+
+
+def _layout(layout_id="layout-a", rows=2, columns=2, seats=None):
+    if seats is None:
+        seats = [
+            {"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"},
+            {"id": "seat-1-2", "row": 1, "column": 2, "label": "1-2"},
+            {"id": "seat-2-1", "row": 2, "column": 1, "label": "2-1"},
+        ]
+    return {"id": layout_id, "name": "Room", "rows": rows, "columns": columns, "seats": seats}
+
+
+def _mode(mode_id="mode-a", layout_id="layout-a", assignment=None):
+    return {"id": mode_id, "name": "Rows", "section_id": "section-a",
+            "layout_id": layout_id, "strategy": "manual", "assignment": assignment or {}}
+
+
+def test_normalize_malformed_state_to_empty_valid_shape():
+    assert seating_state.normalize_state(None) == seating_state.empty_state()
+    assert seating_state.normalize_state({"layouts": "bad", "modes": []}) == seating_state.empty_state()
+    assert seating_state.normalize_state({
+        "layouts": [_layout(seats=[{"id": "wrong", "row": 1, "column": 1, "label": "wrong"}])],
+        "modes": [],
+    }) == {"layouts": [{"id": "layout-a", "name": "Room", "rows": 2, "columns": 2, "seats": []}], "modes": []}
+
+
+def test_resize_and_toggle_drop_only_dependent_assignments():
+    state = {
+        "layouts": [_layout(), _layout("layout-b", seats=[
+            {"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"},
+        ])],
+        "modes": [
+            _mode(assignment={"seat-1-1": "student-a", "seat-2-1": "student-b"}),
+            _mode("mode-b", "layout-b", {"seat-1-1": "student-c"}),
+        ],
+    }
+
+    resized, error = seating_state.resize_layout(state, "layout-a", 1, 2)
+    assert error is None
+    assert resized["modes"][0]["assignment"] == {"seat-1-1": "student-a"}
+    assert resized["modes"][1]["assignment"] == {"seat-1-1": "student-c"}
+
+    toggled, error = seating_state.toggle_seat(resized, "layout-a", 1, 1)
+    assert error is None
+    assert toggled["modes"][0]["assignment"] == {}
+    assert toggled["modes"][1]["assignment"] == {"seat-1-1": "student-c"}
+
+
+def test_assignment_validation_rejects_unknown_or_duplicate_student_atomically():
+    valid = {"layouts": [_layout()], "modes": [_mode(assignment={"seat-1-1": "student-a"})]}
+    accepted, error = seating_state.validate_state(valid)
+    assert error is None
+    assert accepted == valid
+
+    unknown = {"layouts": [_layout()], "modes": [_mode(assignment={"seat-9-9": "student-a"})]}
+    duplicate = {"layouts": [_layout()], "modes": [_mode(assignment={
+        "seat-1-1": "student-a", "seat-1-2": "student-a",
+    })]}
+    assert seating_state.validate_state(unknown)[0] is None
+    assert seating_state.validate_state(duplicate)[0] is None
+
+
+def test_delete_layout_removes_only_dependent_modes():
+    state = {
+        "layouts": [_layout(), _layout("layout-b", seats=[
+            {"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"},
+        ])],
+        "modes": [_mode(), _mode("mode-b", "layout-b")],
+    }
+    result, error = seating_state.delete_layout(state, "layout-a")
+    assert error is None
+    assert [layout["id"] for layout in result["layouts"]] == ["layout-b"]
+    assert [mode["id"] for mode in result["modes"]] == ["mode-b"]

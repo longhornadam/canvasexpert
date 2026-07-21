@@ -104,6 +104,12 @@ from .roster import (
     compute_group_display, default_group_label,
 )
 
+# --- Seating physical state ---
+from .seating import (
+    SEATING_COURSE_STATE_DEFAULT,
+    get_seating_course_state, set_seating_course_state,
+)
+
 # --- private I/O helpers (needed by sibling sub-modules and test monkeypatches) ---
 from . import _io
 

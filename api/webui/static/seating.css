@@ -1,0 +1,33 @@
+.seating-shell { display: grid; gap: var(--ce-space-3); max-width: 1180px; }
+.seating-intro h1, .seating-heading h2 { margin: 0; }
+.seating-intro p, .seating-heading p { margin: var(--ce-space-1) 0 0; }
+.seating-course-bar, .seating-controls { display: flex; align-items: end; flex-wrap: wrap; gap: var(--ce-space-2); }
+.seating-course-bar, .seating-card { padding: var(--ce-space-3) var(--ce-space-4); border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); }
+.seating-card { margin-top: var(--ce-space-3); }
+.seating-heading { display: flex; justify-content: space-between; gap: var(--ce-space-3); }
+.seating-controls { margin-top: var(--ce-space-3); }
+.seating-controls label { display: grid; gap: var(--ce-space-1); color: var(--ce-ink-muted); font-size: 12px; font-weight: 600; }
+.seating-controls input, .seating-controls select { width: auto; min-width: 130px; margin: 0; padding: 4px var(--ce-space-2); font-size: 13px; }
+.seating-layout-grid, .seating-chart { display: grid; gap: 6px; margin-top: var(--ce-space-3); }
+.seating-layout-seat { min-height: 38px; border: 1px solid var(--ce-rule); background: var(--ce-surface); color: var(--ce-ink-muted); }
+.seating-layout-seat.is-seat { border-color: var(--ce-accent); background: color-mix(in srgb, var(--ce-accent) 14%, var(--ce-surface)); color: var(--ce-ink); }
+.seating-chart-seat { display: grid; align-content: center; min-height: 76px; padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface); }
+.seating-chart-seat strong, .seating-chart-seat span { overflow-wrap: anywhere; }
+.seating-chart-seat strong { font-size: 12px; color: var(--ce-ink-muted); }
+.seating-chart-seat span { margin-top: var(--ce-space-1); font-size: 14px; }
+.seating-print-chart { display: none; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  #seating-print-chart, #seating-print-chart * { visibility: visible !important; }
+  #seating-print-chart { display: block !important; position: absolute; inset: 0; padding: 24px; color: #000; background: #fff; }
+  .seating-print-title { margin: 0 0 16px; font-size: 22px; }
+  .seating-print-grid { display: grid; gap: 8px; }
+  .seating-print-seat { min-height: 58px; padding: 8px; border: 1px solid #000; break-inside: avoid; }
+  .seating-print-label { display: block; font-size: 11px; }
+  .seating-print-name { display: block; margin-top: 5px; font-size: 14px; }
+}
+
+@media (max-width: 720px) {
+  .seating-heading { align-items: stretch; flex-direction: column; }
+}
