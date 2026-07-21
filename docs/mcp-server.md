@@ -7,7 +7,7 @@ Canvas PAT and every write path.
 
 - **Read-only.** No tool writes to Canvas. No tool writes to disk beyond the existing
   identity vault it already shares with the rest of CanvasExpert.
-- **Pseudonymized.** Every student-data tool routes its result through the identity vault
+- **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   fake name (e.g. "Sparky McGee") — never a real name, Canvas user ID, or SIS ID.
 - **Fail-closed.** Every student-data result also passes the existing outbound safety scan
@@ -16,25 +16,27 @@ Canvas PAT and every write path.
 - **Session-local.** Nothing here logs tool arguments or results. Don't write results to a
   file, and don't attempt to re-identify a student from a pseudonym.
 - **stdio transport only.** No network port is ever bound.
-- **Mirror-only, never a live relay.** `get_roster`, `get_submissions`, and
+- **Mirror-bounded, never a live relay.** `get_roster`, `get_submissions`, and
   `get_gradebook_snapshot` serve exclusively from the local CanvasMirror
-  (`docs/mirror.md`) and refuse with a clear error when it's stale or missing,
-  instead of fetching live from Canvas. The assistant's only way past a
-  refusal is `refresh_mirror`, which triggers Canvas Expert's own sync and
-  reports freshness — never Canvas data. This keeps the AI's whole path to
-  Canvas indirect: it can ask Canvas Expert to sync, then read what Canvas
-  Expert wrote to disk, but it can never receive a live Canvas response
-  directly.
+  (`docs/mirror.md`). `get_seating_context` combines current mirrored identity
+  and section membership with private local Roster context. All four refuse
+  with a clear error when the required mirror data is stale or missing, instead
+  of fetching live from Canvas. The assistant's only way past a refusal is
+  `refresh_mirror`, which triggers Canvas Expert's own sync and reports
+  freshness — never Canvas data. This keeps the AI's whole path to Canvas
+  indirect: it can ask Canvas Expert to sync, then read what Canvas Expert
+  wrote to disk, but it can never receive a live Canvas response directly.
 
 ## Tools
 
-Tool schema version 3.
+Tool schema version 4.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
+| `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
 | `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
@@ -44,12 +46,17 @@ web UI — it never falls back to a live Canvas call. If the catalog hasn't been
 yet, refresh it from the web UI first, then retry.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
-CanvasMirror — they never fall back to a live Canvas call either. If the mirror is stale or
-missing for a course, they return `{"ok": false, "error": "..."}` naming the problem; call
-`refresh_mirror(course_id)` and retry the same read once it reports `"synced"`.
+CanvasMirror. `get_seating_context` uses the current mirror for identity and section
+membership, then joins the private local Roster context for that course. None fall back to
+a live Canvas call. If the required mirror data is stale or missing, they return
+`{"ok": false, "error": "..."}` naming the problem; call `refresh_mirror(course_id)` and
+retry the same read once it reports `"synced"`.
 
 Every `course_id` tool is scoped to Current courses (`config.active_courses()`) — the same
-scope the web UI uses.
+scope the web UI uses. `get_seating_context` requires exactly one matching mirror section
+name and withholds all student data when the name is absent or ambiguous. Pseudonymized
+artifacts are scrubbed, not anonymous or guaranteed FERPA-safe; teachers review them before
+any external upload.
 
 ### Token-lean results
 

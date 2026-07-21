@@ -115,6 +115,22 @@ def test_score_matrix_round_trip_is_course_scoped():
     assert "roster_score_matrices" in config.SYNCED_KEYS
 
 
+def test_relationships_round_trip_is_course_scoped():
+    first = {"by_section": {"section-a": [{
+        "student_a": "student-a", "student_b": "student-b",
+        "type": "keep_apart", "reason": "private",
+    }]}}
+    second = {"by_section": {}}
+
+    assert config.get_roster_relationships("missing") == config.ROSTER_RELATIONSHIPS_DEFAULT
+    config.set_roster_relationships("course-a", first)
+    config.set_roster_relationships("course-b", second)
+
+    assert config.get_roster_relationships("course-a") == first
+    assert config.get_roster_relationships("course-b") == second
+    assert "roster_relationships" in config.SYNCED_KEYS
+
+
 def test_courses_are_independent():
     config.set_roster_student_settings("100", {"101": {"tier": "Support"}})
     config.set_roster_student_settings("200", {"201": {"tier": "Core"}})

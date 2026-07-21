@@ -90,10 +90,11 @@ from .reports import (
 
 # --- Roster Console settings ---
 from .roster import (
-    ROSTER_DEFAULT_TIER_SCHEME, ROSTER_SCORE_MATRIX_DEFAULT, DEFAULT_GROUP_LABELS,
+    ROSTER_DEFAULT_TIER_SCHEME, ROSTER_SCORE_MATRIX_DEFAULT, ROSTER_RELATIONSHIPS_DEFAULT, DEFAULT_GROUP_LABELS,
     get_roster_student_settings, set_roster_student_settings,
     update_roster_student_settings,
     get_roster_score_matrix, set_roster_score_matrix,
+    get_roster_relationships, set_roster_relationships,
     _validate_tier_scheme, _normalize_tier_scheme,
     get_roster_tier_scheme, set_roster_tier_scheme,
     roster_tier_by_id,

@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 6 read-only MCP tools.
+"""Plain, testable implementations of the 7 read-only MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 
-from api import course_scope, gradebook_queries, gradebook_snapshot, roster_service
+from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, roster_context, roster_service
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
@@ -118,8 +118,9 @@ def _cache_safe() -> bool:
 # engine, never a direct relay). When the mirror isn't fresh enough to serve
 # (or a test seam is patched — the seam guard refuses rather than silently
 # reading disk out from under it), these helpers return None so the caller
-# refuses instead of fetching live. Every served payload is labeled with
-# source="mirror" + synced_at so staleness is visible, never silent.
+# refuses instead of fetching live. Mirror-only payloads are labeled
+# source="mirror" + synced_at; a caller that joins private local context must
+# label that boundary explicitly, so staleness is visible and never silent.
 # ---------------------------------------------------------------------------
 
 def _mirror_roster_doc(course_id: str):
@@ -378,6 +379,117 @@ def get_roster(course_id: str) -> dict:
     if result.get("ok"):
         result["roster"] = _tabulate(result["roster"], _ROSTER_COLUMNS)
     return result
+
+
+def get_seating_context(course_id: str, section_name: str) -> dict:
+    """Pseudonymized mirror+local seating context for one exact section name.
+
+    Current mirrored identity/membership is joined with private local Roster
+    context. This deliberately narrow projection carries neither Canvas
+    identifiers nor private local reasons/notes, and it refuses rather than
+    guessing when mirror section names are absent or ambiguous.
+    """
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+    if not isinstance(section_name, str):
+        return {"ok": False, "error": "A section name is required."}
+
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
+    mirror_doc = _mirror_roster_doc(course_id)
+    if mirror_doc is None:
+        return {"ok": False, "error": _MIRROR_UNAVAILABLE_ROSTER_ERROR}
+
+    section_ids = [
+        str(section_id) for section_id, name in mirror_doc["sections"].items()
+        if name == section_name
+    ]
+    if len(section_ids) != 1:
+        return {
+            "ok": False,
+            "error": "The requested local mirror section is missing or ambiguous; student data is withheld.",
+        }
+    selected_section_id = section_ids[0]
+
+    with _vault_transaction(vault):
+        users = mirror_doc["students"]
+        roster_service.upsert_roster(vault, users)
+        selected_users = []
+        for user in users:
+            enrolled_section_ids = {
+                str(enrollment.get("course_section_id") or "")
+                for enrollment in user.get("enrollments") or []
+            }
+            if selected_section_id in enrolled_section_ids and user.get("id") is not None:
+                selected_users.append(user)
+
+        settings = config.get_roster_student_settings(course_id)
+        score_matrix = roster_context._normalize_score_matrix(
+            config.get_roster_score_matrix(course_id)
+        )
+        relationships = roster_context.normalize_relationships(
+            config.get_roster_relationships(course_id)
+        )
+        replacement_map = feedback_scrub.build_replacement_map(
+            vault.entries(), set(config.active_protected_names())
+        )
+        columns = score_matrix["columns"]
+        values_by_student = score_matrix["values_by_section"].get(selected_section_id, {})
+        student_payload: list[dict] = []
+        pseudonyms_by_id: dict[str, str] = {}
+        selected_ids: set[str] = set()
+        for user in selected_users:
+            student_id = str(user["id"])
+            pseudo = vault.get_or_assign(user["id"])
+            pseudonyms_by_id[student_id] = pseudo
+            selected_ids.add(student_id)
+            local_settings = settings.get(student_id, {}) if isinstance(settings, dict) else {}
+            seating = roster_context.normalize_seating_context(
+                local_settings.get("seating_context") if isinstance(local_settings, dict) else None
+            )
+            raw_scores = values_by_student.get(student_id, {})
+            scores = [
+                {
+                    "label": feedback_scrub.scrub_text(column["label"], replacement_map),
+                    "value": raw_scores[column["id"]],
+                }
+                for column in columns
+                if column["id"] in raw_scores
+            ]
+            student_payload.append({
+                "pseudonym": pseudo,
+                "supports": {
+                    "front_row": seating["front_row"],
+                    "near_teacher": seating["near_teacher"],
+                },
+                "scores": scores,
+                "ai_context_note": feedback_scrub.scrub_text(
+                    seating["ai_context_note"], replacement_map
+                ),
+            })
+
+        relationship_payload = []
+        for item in relationships["by_section"].get(selected_section_id, []):
+            first, second = item["student_a"], item["student_b"]
+            if first not in selected_ids or second not in selected_ids:
+                continue
+            relationship_payload.append({
+                "type": item["type"],
+                "students": sorted((pseudonyms_by_id[first], pseudonyms_by_id[second])),
+            })
+
+        student_payload.sort(key=lambda item: item["pseudonym"])
+        relationship_payload.sort(
+            key=lambda item: (item["type"], item["students"][0], item["students"][1])
+        )
+        return pseudonym.gate({
+            "students": student_payload,
+            "relationships": relationship_payload,
+            "source": "mirror+local",
+            "synced_at": mirror_doc["last_success_at"],
+        }, vault)
 
 
 def get_submissions(course_id: str, assignment_id: str,

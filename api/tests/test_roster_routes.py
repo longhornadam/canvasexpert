@@ -60,6 +60,7 @@ def isolated_roster(monkeypatch):
         "monitored": {},
         "settings": {},
         "score_matrices": {},
+        "relationships": {},
     }
 
     def fake_get_extra_time(course_id):
@@ -95,6 +96,12 @@ def isolated_roster(monkeypatch):
     def fake_set_roster_score_matrix(course_id, matrix):
         stores["score_matrices"][str(course_id)] = matrix
 
+    def fake_get_roster_relationships(course_id):
+        return stores["relationships"].get(str(course_id), {})
+
+    def fake_set_roster_relationships(course_id, relationships):
+        stores["relationships"][str(course_id)] = relationships
+
     def fake_get_roster_group_scheme(course_id):
         return stores.get("group_schemes", {}).get(str(course_id), {})
 
@@ -127,6 +134,8 @@ def isolated_roster(monkeypatch):
     monkeypatch.setattr(roster_routes.config, "update_roster_student_settings", fake_update_roster_student_settings)
     monkeypatch.setattr(roster_routes.config, "get_roster_score_matrix", fake_get_roster_score_matrix)
     monkeypatch.setattr(roster_routes.config, "set_roster_score_matrix", fake_set_roster_score_matrix)
+    monkeypatch.setattr(roster_routes.config, "get_roster_relationships", fake_get_roster_relationships)
+    monkeypatch.setattr(roster_routes.config, "set_roster_relationships", fake_set_roster_relationships)
     monkeypatch.setattr(roster_routes.config, "active_protected_names", lambda: set())
     monkeypatch.setattr(roster_routes.config, "get_roster_group_scheme", fake_get_roster_group_scheme)
     monkeypatch.setattr(roster_routes.config, "set_roster_group_scheme", fake_set_roster_group_scheme)
@@ -319,6 +328,56 @@ def test_roster_score_matrix_rejects_invalid_patch_atomically(isolated_roster, p
 
     assert response["ok"] is False
     assert isolated_roster["score_matrices"]["course-a"] == original
+
+
+def test_roster_relationships_replace_one_section_and_round_trip(monkeypatch, isolated_roster):
+    users = [{
+        "id": "student-a", "name": "Test Student A", "sortable_name": "A, Test",
+        "short_name": "A", "enrollments": [{"course_section_id": "section-a"}],
+    }, {
+        "id": "student-b", "name": "Test Student B", "sortable_name": "B, Test",
+        "short_name": "B", "enrollments": [{"course_section_id": "section-a"}],
+    }]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {"section-a": "Section A"})
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: None)
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups", lambda course_id, categories: None)
+
+    response = client.post("/api/roster/relationships", data={
+        "course_id": "course-a", "section_id": "section-a",
+        "relationships": json.dumps([{
+            "student_a": "student-b", "student_b": "student-a",
+            "type": "preferred_pair", "reason": "private local reason",
+        }]),
+    }).json()
+
+    assert response == {"ok": True, "relationships": {"by_section": {"section-a": [{
+        "student_a": "student-a", "student_b": "student-b",
+        "type": "preferred_pair", "reason": "private local reason",
+    }]}}}
+    assert client.get("/api/roster?course_id=course-a").json()["relationships"] == response["relationships"]
+
+
+@pytest.mark.parametrize("items", [
+    [{"student_a": "student-a", "student_b": "student-a", "type": "keep_apart", "reason": ""}],
+    [{"student_a": "student-a", "student_b": "student-b", "type": "unknown", "reason": ""}],
+    [{"student_a": "student-a", "student_b": "student-b", "type": "keep_apart", "reason": 3}],
+    [{"student_a": "student-a", "student_b": "student-b", "type": "keep_apart", "reason": ""},
+     {"student_a": "student-b", "student_b": "student-a", "type": "preferred_pair", "reason": ""}],
+])
+def test_roster_relationships_reject_invalid_replace_atomically(isolated_roster, items):
+    original = {"by_section": {"section-a": [{
+        "student_a": "student-a", "student_b": "student-b",
+        "type": "keep_apart", "reason": "saved",
+    }]}}
+    isolated_roster["relationships"]["course-a"] = original
+
+    response = client.post("/api/roster/relationships", data={
+        "course_id": "course-a", "section_id": "section-a", "relationships": json.dumps(items),
+    }).json()
+
+    assert response["ok"] is False
+    assert isolated_roster["relationships"]["course-a"] == original
 
 
 def test_roster_get_uses_current_mirror_before_live_students_and_sections(

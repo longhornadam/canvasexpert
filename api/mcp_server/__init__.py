@@ -1,7 +1,8 @@
 """Read-only Canvas MCP server for CanvasExpert.
 
-Exposes 5 read-only tools (list_courses, get_course_assignments, get_roster,
-get_submissions, get_gradebook_snapshot) over stdio so any MCP-capable
+Exposes 7 read-only tools (list_courses, get_course_assignments, get_roster,
+get_seating_context, get_submissions, get_gradebook_snapshot, refresh_mirror)
+over stdio so any MCP-capable
 assistant can help plan lessons and manage rosters. CanvasExpert keeps sole
 custody of the Canvas PAT and every write path — this package never writes to
 Canvas and never binds a network port.

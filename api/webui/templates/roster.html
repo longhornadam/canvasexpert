@@ -169,6 +169,42 @@
       </div>
     </section>
 
+    <section class="roster-relationships" id="roster-relationships" hidden aria-labelledby="roster-relationships-title">
+      <div class="roster-score-matrix-heading">
+        <div>
+          <h2 id="roster-relationships-title">Relationships</h2>
+          <p class="hint">Private, local-only pair preferences for seating. Reasons never go to Canvas or AI.</p>
+        </div>
+        <span id="roster-relationships-status" class="hint" aria-live="polite"></span>
+      </div>
+      <div class="roster-relationships-controls">
+        <label>Section
+          <select id="roster-relationships-section" aria-label="Relationships section">
+            <option value="">— select a section —</option>
+          </select>
+        </label>
+        <label>Student A
+          <select id="roster-relationship-student-a" aria-label="First student"></select>
+        </label>
+        <label>Student B
+          <select id="roster-relationship-student-b" aria-label="Second student"></select>
+        </label>
+        <label>Preference
+          <select id="roster-relationship-type">
+            <option value="keep_apart">Keep apart</option>
+            <option value="preferred_pair">Preferred pair</option>
+          </select>
+        </label>
+      </div>
+      <label class="roster-relationship-reason">Private local reason (optional)
+        <textarea id="roster-relationship-reason" rows="2" maxlength="1000" placeholder="Visible only in this local Roster workspace"></textarea>
+      </label>
+      <div class="ce-actions roster-relationship-actions">
+        <button type="button" id="roster-relationship-save" class="primary small">Save relationship</button>
+      </div>
+      <div id="roster-relationships-list" class="roster-relationships-list"></div>
+    </section>
+
     <details class="roster-v2-details" id="roster-group-labels-editor" hidden>
       <summary><strong>Group labels</strong></summary>
       <div class="roster-v2-tier-editor" id="roster-group-labels-body">
@@ -222,4 +258,5 @@
 <script src="/static/roster/groups.js?v={{ asset_v }}"></script>
 <script src="/static/roster/safety.js?v={{ asset_v }}"></script>
 <script src="/static/roster/scores.js?v={{ asset_v }}"></script>
+<script src="/static/roster/relationships.js?v={{ asset_v }}"></script>
 {% endblock %}

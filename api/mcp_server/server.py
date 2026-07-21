@@ -83,6 +83,16 @@ def get_roster(course_id: str) -> str:
 
 
 @mcp.tool()
+def get_seating_context(course_id: str, section_name: str) -> str:
+    """Read one exact Current-course section's mirror+local seating context:
+    fresh mirrored identity/membership joined with private local supports,
+    score values, AI-context notes, and pair preferences. It never fetches
+    Canvas, never returns Canvas IDs or private local reasons, and refuses
+    absent or ambiguous section names rather than guessing."""
+    return _compact(tools.get_seating_context(course_id, section_name))
+
+
+@mcp.tool()
 def get_submissions(course_id: str, assignment_id: str,
                     include_text: bool = True, pseudonyms: str = "",
                     max_text_chars: int = 2000) -> str:

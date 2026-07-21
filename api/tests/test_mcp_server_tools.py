@@ -141,6 +141,7 @@ def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch):
     monkeypatch.setattr(workspace, "feedback_folder", lambda *a, **k: None)
     for result in (
         tools.get_roster("111"),
+        tools.get_seating_context("111", "Period 1"),
         tools.get_submissions("111", "700010"),
         tools.get_gradebook_snapshot("111"),
     ):
@@ -504,6 +505,106 @@ def test_get_roster_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, 
     _assert_no_leaks(result)
 
 
+# --- get_seating_context ----------------------------------------------------
+
+def _set_seating_context(monkeypatch, *, settings=None, matrix=None, relationships=None):
+    monkeypatch.setattr(tools.config, "get_roster_student_settings", lambda course_id: settings or {})
+    monkeypatch.setattr(tools.config, "get_roster_score_matrix", lambda course_id: matrix or {})
+    monkeypatch.setattr(tools.config, "get_roster_relationships", lambda course_id: relationships or {})
+    monkeypatch.setattr(tools.config, "active_protected_names", lambda: set())
+
+
+def test_get_seating_context_is_mirror_only_pseudonymized_and_scrubbed(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    vault_path = _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    users = [dict(FIXTURE_USERS[0]), dict(FIXTURE_USERS[1])]
+    users[1]["enrollments"] = [{"course_section_id": 800001}]
+    mirror_store.write_roster(MIRROR_COURSE, users, {"800001": "Period 1"}, root=str(tmp_path))
+    _set_seating_context(
+        monkeypatch,
+        settings={
+            "900001": {"seating_context": {
+                "front_row": "required", "near_teacher": "none",
+                "private_note": "private only", "ai_context_note": "Lee needs a calm start.",
+            }},
+            "900002": {"seating_context": {
+                "front_row": "none", "near_teacher": "preferred",
+                "private_note": "private only", "ai_context_note": "",
+            }},
+        },
+        matrix={
+            "columns": [{"id": "score-writing", "label": "Learner One writing"}],
+            "values_by_section": {"800001": {
+                "900001": {"score-writing": 4}, "900002": {"score-writing": 3},
+            }},
+        },
+        relationships={"by_section": {"800001": [{
+            "student_a": "900001", "student_b": "900002",
+            "type": "keep_apart", "reason": "private local reason",
+        }]}},
+    )
+    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+
+    result = tools.get_seating_context(MIRROR_COURSE, "Period 1")
+
+    assert result["ok"] is True
+    assert result["source"] == "mirror+local"
+    assert len(result["students"]) == 2
+    assert result["students"] == sorted(result["students"], key=lambda item: item["pseudonym"])
+    assert all(set(item) == {"pseudonym", "supports", "scores", "ai_context_note"}
+               for item in result["students"])
+    assert all(item["scores"] for item in result["students"])
+    assert len(result["relationships"]) == 1
+    assert set(result["relationships"][0]) == {"type", "students"}
+    assert result["relationships"][0]["students"] == sorted(result["relationships"][0]["students"])
+    assert "private local reason" not in json.dumps(result)
+    assert "private only" not in json.dumps(result)
+    _assert_no_leaks(result)
+    assert feedback_safety.scan_payload(result, Vault(vault_path))["green"] is True
+
+
+def test_get_seating_context_withholds_missing_or_ambiguous_section(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    mirror_store.write_roster(
+        MIRROR_COURSE, FIXTURE_USERS,
+        {"800001": "Period", "800002": "Period"}, root=str(tmp_path),
+    )
+    _set_seating_context(monkeypatch)
+
+    for section_name in ("Missing", "Period"):
+        result = tools.get_seating_context(MIRROR_COURSE, section_name)
+        assert result["ok"] is False
+        assert set(result) == {"ok", "error"}
+        assert "800001" not in result["error"] and "800002" not in result["error"]
+
+
+def test_get_seating_context_refuses_stale_mirror_and_vault_conflict(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
+    _use_vault(monkeypatch, tmp_path)
+    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+    mirror_store.write_roster(
+        MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP,
+        root=str(tmp_path), attempted_at=_STALE_STAMP,
+    )
+    _set_seating_context(monkeypatch)
+    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+    assert tools.get_seating_context(MIRROR_COURSE, "Period 1") == {
+        "ok": False, "error": tools._MIRROR_UNAVAILABLE_ROSTER_ERROR,
+    }
+
+    class ConflictedVault:
+        def conflicts(self):
+            return ["vault conflict.json"]
+
+    monkeypatch.setattr(tools, "_vault_factory", ConflictedVault)
+    result = tools.get_seating_context(MIRROR_COURSE, "Period 1")
+    assert result["ok"] is False
+    assert "conflict" in result["error"].lower()
+
+
 def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path):
     _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
@@ -806,13 +907,13 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_six_read_only_tools():
+def test_server_registers_exactly_the_seven_read_only_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
         "list_courses", "get_course_assignments", "get_roster",
-        "get_submissions", "get_gradebook_snapshot", "refresh_mirror",
+        "get_seating_context", "get_submissions", "get_gradebook_snapshot", "refresh_mirror",
     }
 
 

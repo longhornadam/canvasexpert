@@ -123,7 +123,8 @@ DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config.json")
 SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags",
                "ai_ta_persona", "roster_student_settings", "roster_tier_schemes",
-               "roster_group_schemes", "roster_score_matrices", "monitored_students")
+               "roster_group_schemes", "roster_score_matrices", "roster_relationships",
+               "monitored_students")
 
 
 def _source_label(key: str) -> str:

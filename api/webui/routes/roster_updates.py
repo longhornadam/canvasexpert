@@ -5,58 +5,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-
-SEATING_CONTEXT_DEFAULT = {
-    "front_row": "none",
-    "near_teacher": "none",
-    "private_note": "",
-    "ai_context_note": "",
-}
-SEATING_CONTEXT_SUPPORTS = {"none", "preferred", "required"}
-
-
-def normalize_seating_context(value: object) -> dict:
-    """Return the safe, complete Roster seating-context shape for a stored value."""
-    context = dict(SEATING_CONTEXT_DEFAULT)
-    if not isinstance(value, dict):
-        return context
-
-    for key in ("front_row", "near_teacher"):
-        if value.get(key) in SEATING_CONTEXT_SUPPORTS:
-            context[key] = value[key]
-    for key in ("private_note", "ai_context_note"):
-        if isinstance(value.get(key), str):
-            context[key] = value[key]
-    return context
-
-
-def validate_seating_context(value: object) -> tuple[dict | None, str | None]:
-    """Validate a seating-context patch before any roster setting is written."""
-    if not isinstance(value, dict):
-        return None, "seating_context must be an object."
-
-    expected = set(SEATING_CONTEXT_DEFAULT)
-    supplied = set(value)
-    if supplied != expected:
-        unknown = sorted(supplied - expected)
-        missing = sorted(expected - supplied)
-        details = []
-        if unknown:
-            details.append(f"unknown fields: {unknown}")
-        if missing:
-            details.append(f"missing fields: {missing}")
-        return None, "seating_context must contain exactly the supported fields (" + "; ".join(details) + ")."
-
-    for key in ("front_row", "near_teacher"):
-        if value[key] not in SEATING_CONTEXT_SUPPORTS:
-            return None, f"seating_context.{key} must be one of {sorted(SEATING_CONTEXT_SUPPORTS)}."
-    for key in ("private_note", "ai_context_note"):
-        if not isinstance(value[key], str):
-            return None, f"seating_context.{key} must be a string."
-
-    context = normalize_seating_context(value)
-    return (None if context == SEATING_CONTEXT_DEFAULT else context), None
-
+from api.roster_context import (
+    SEATING_CONTEXT_DEFAULT,
+    SEATING_CONTEXT_SUPPORTS,
+    normalize_seating_context,
+    validate_seating_context,
+)
 
 def update_student(
     course_id: str,

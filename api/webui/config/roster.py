@@ -56,6 +56,26 @@ def set_roster_score_matrix(course_id: str, matrix: dict):
 
 
 # --------------------------------------------------------------------------
+# Section relationships
+# --------------------------------------------------------------------------
+
+ROSTER_RELATIONSHIPS_DEFAULT = {"by_section": {}}
+
+
+def get_roster_relationships(course_id: str) -> dict:
+    relationships = _io_mod._synced_state().get("roster_relationships", {})
+    return relationships.get(str(course_id), ROSTER_RELATIONSHIPS_DEFAULT)
+
+
+def set_roster_relationships(course_id: str, relationships: dict):
+    _io_mod._modify_synced(
+        lambda state: state.setdefault("roster_relationships", {}).__setitem__(
+            str(course_id), relationships
+        )
+    )
+
+
+# --------------------------------------------------------------------------
 # Tier scheme
 # --------------------------------------------------------------------------
 
