@@ -10,6 +10,10 @@ Routes:
 V3: Canvas groups are the source of truth for tier/group assignment.
 Does NOT write local tier_id.
 """
+import json
+import math
+import re
+
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
@@ -50,6 +54,168 @@ WARNING_CODES = (
     "nickname_collision", "protected_name_collision",
 )
 ROSTER_MAX_AGE_HOURS = 24
+SCORE_MATRIX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
+SCORE_MATRIX_FIELDS = {"columns", "values_by_section"}
+SCORE_MATRIX_PATCH_FIELDS = {"columns", "section_id", "values"}
+
+
+def _empty_score_matrix() -> dict:
+    return {"columns": [], "values_by_section": {}}
+
+
+def _safe_score_matrix_id(value: object) -> bool:
+    return isinstance(value, str) and bool(SCORE_MATRIX_ID_RE.fullmatch(value))
+
+
+def _finite_score(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _validate_score_matrix_columns(columns: object) -> tuple[list[dict] | None, str | None]:
+    if not isinstance(columns, list):
+        return None, "score-matrix columns must be a list."
+
+    normalized: list[dict] = []
+    seen_ids: set[str] = set()
+    seen_labels: set[str] = set()
+    for index, column in enumerate(columns):
+        if not isinstance(column, dict) or set(column) != {"id", "label"}:
+            return None, f"score-matrix column {index} must contain exactly id and label."
+        column_id = column["id"]
+        label = column["label"]
+        if not _safe_score_matrix_id(column_id):
+            return None, f"score-matrix column {index} has an invalid id."
+        if not isinstance(label, str):
+            return None, f"score-matrix column {index} label must be a string."
+        label = label.strip()
+        if not label:
+            return None, f"score-matrix column {index} label must not be blank."
+        if len(label) > 80:
+            return None, f"score-matrix column {index} label must be 80 characters or fewer."
+        if column_id in seen_ids:
+            return None, f"Duplicate score-matrix column id: {column_id}."
+        label_key = label.casefold()
+        if label_key in seen_labels:
+            return None, f"Duplicate score-matrix column label: {label}."
+        seen_ids.add(column_id)
+        seen_labels.add(label_key)
+        normalized.append({"id": column_id, "label": label})
+    return normalized, None
+
+
+def _normalize_score_matrix(matrix: object) -> dict:
+    """Return the complete current-only score-matrix shape for stored local data."""
+    if not isinstance(matrix, dict) or set(matrix) - SCORE_MATRIX_FIELDS:
+        return _empty_score_matrix()
+
+    columns, error = _validate_score_matrix_columns(matrix.get("columns", []))
+    if error:
+        return _empty_score_matrix()
+    column_ids = {column["id"] for column in columns}
+    values_by_section = matrix.get("values_by_section", {})
+    if not isinstance(values_by_section, dict):
+        return {"columns": columns, "values_by_section": {}}
+
+    normalized_values: dict[str, dict[str, dict[str, int | float]]] = {}
+    for section_id, students in values_by_section.items():
+        if not _safe_score_matrix_id(section_id) or not isinstance(students, dict):
+            continue
+        normalized_students: dict[str, dict[str, int | float]] = {}
+        for student_id, scores in students.items():
+            if not _safe_score_matrix_id(student_id) or not isinstance(scores, dict):
+                continue
+            normalized_scores = {
+                column_id: value
+                for column_id, value in scores.items()
+                if column_id in column_ids and _finite_score(value)
+            }
+            if normalized_scores:
+                normalized_students[student_id] = normalized_scores
+        if normalized_students:
+            normalized_values[section_id] = normalized_students
+    return {"columns": columns, "values_by_section": normalized_values}
+
+
+def _apply_score_matrix_patch(matrix: object, patch: object) -> tuple[dict | None, str | None]:
+    """Build one validated local score-matrix update without mutating stored state."""
+    if not isinstance(patch, dict):
+        return None, "score-matrix patch must be an object."
+    unknown = set(patch) - SCORE_MATRIX_PATCH_FIELDS
+    if unknown:
+        return None, f"Unknown score-matrix patch fields: {sorted(unknown)}"
+    if "columns" not in patch and "values" not in patch:
+        return None, "score-matrix patch needs columns and/or values."
+    if "section_id" in patch and "values" not in patch:
+        return None, "score-matrix section_id requires values."
+
+    candidate = _normalize_score_matrix(matrix)
+    if "columns" in patch:
+        columns, error = _validate_score_matrix_columns(patch["columns"])
+        if error:
+            return None, error
+        candidate["columns"] = columns
+
+    valid_column_ids = {column["id"] for column in candidate["columns"]}
+    candidate["values_by_section"] = {
+        section_id: {
+            student_id: {
+                column_id: value
+                for column_id, value in scores.items()
+                if column_id in valid_column_ids
+            }
+            for student_id, scores in students.items()
+            if any(column_id in valid_column_ids for column_id in scores)
+        }
+        for section_id, students in candidate["values_by_section"].items()
+        if any(any(column_id in valid_column_ids for column_id in scores)
+               for scores in students.values())
+    }
+
+    if "values" not in patch:
+        return candidate, None
+
+    section_id = patch.get("section_id")
+    if not _safe_score_matrix_id(section_id):
+        return None, "score-matrix values require a valid section_id."
+    values = patch["values"]
+    if not isinstance(values, dict):
+        return None, "score-matrix values must be an object keyed by student id."
+
+    for student_id, scores in values.items():
+        if not _safe_score_matrix_id(student_id):
+            return None, "score-matrix values contain an invalid student id."
+        if not isinstance(scores, dict):
+            return None, f"score-matrix values for student {student_id} must be an object."
+        for column_id, value in scores.items():
+            if column_id not in valid_column_ids:
+                return None, f"Unknown score-matrix column id: {column_id}."
+            if value is not None and not _finite_score(value):
+                return None, f"score-matrix value for {column_id} must be a finite number or null."
+
+    section_values = {
+        student_id: dict(scores)
+        for student_id, scores in candidate["values_by_section"].get(section_id, {}).items()
+    }
+    for student_id, scores in values.items():
+        student_values = section_values.get(student_id, {})
+        for column_id, value in scores.items():
+            if value is None:
+                student_values.pop(column_id, None)
+            else:
+                student_values[column_id] = value
+        if student_values:
+            section_values[student_id] = student_values
+        else:
+            section_values.pop(student_id, None)
+    if section_values:
+        candidate["values_by_section"][section_id] = section_values
+    else:
+        candidate["values_by_section"].pop(section_id, None)
+    return candidate, None
 
 
 def _fetch_sections(course_id: str) -> dict:
@@ -214,6 +380,7 @@ def roster_get(course_id: str = Query("")):
 
     # Private local Roster context, scoped to this course and student.
     raw_roster_settings = config.get_roster_student_settings(course_id)
+    score_matrix = _normalize_score_matrix(config.get_roster_score_matrix(course_id))
 
     # Protected names for collision check
     protected_names = {p.lower() for p in config.active_protected_names()}
@@ -334,6 +501,7 @@ def roster_get(course_id: str = Query("")):
         "groups": categories,
         "selected_group_category_id": selected_category_id,
         "group_label_scheme": group_scheme.get("group_labels", {}),
+        "score_matrix": score_matrix,
         "counts": {
             "total": total,
             "extra_time": extra_time_count,
@@ -376,6 +544,28 @@ def roster_student_update(
         allowed_keys=ALLOWED_STUDENT_PATCH_KEYS,
         obsolete_keys=OBSOLETE_PATCH_KEYS,
     ))
+
+
+@router.post("/score-matrix")
+def roster_score_matrix_update(
+    course_id: str = Form(...),
+    patch: str = Form(...),
+):
+    """Apply one local, current-only score-matrix patch for a course."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    try:
+        data = json.loads(patch)
+    except json.JSONDecodeError as error:
+        return JSONResponse({"ok": False, "error": f"Invalid score-matrix patch JSON: {error}"})
+
+    matrix, error = _apply_score_matrix_patch(
+        config.get_roster_score_matrix(course_id), data
+    )
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    config.set_roster_score_matrix(course_id, matrix)
+    return JSONResponse({"ok": True, "score_matrix": matrix})
 
 
 @router.post("/bulk")

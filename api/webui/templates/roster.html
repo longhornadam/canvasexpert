@@ -138,6 +138,37 @@
       </table>
     </div>
 
+    <section class="roster-score-matrix" id="roster-score-matrix" hidden aria-labelledby="roster-score-matrix-title">
+      <div class="roster-score-matrix-heading">
+        <div>
+          <h2 id="roster-score-matrix-title">Score matrix</h2>
+          <p class="hint">Private, current-only teacher context. Blank cells have no value.</p>
+        </div>
+        <span id="roster-score-matrix-status" class="hint" aria-live="polite"></span>
+      </div>
+      <div class="roster-score-matrix-controls">
+        <label>Section
+          <select id="roster-score-section" aria-label="Score matrix section">
+            <option value="">— select a section —</option>
+          </select>
+        </label>
+        <label>Add score column
+          <input type="text" id="roster-score-new-column" maxlength="80" placeholder="Teacher label">
+        </label>
+        <button type="button" id="roster-score-add-column" class="small">Add column</button>
+      </div>
+      <div id="roster-score-columns" class="roster-score-columns" aria-label="Score columns"></div>
+      <div class="roster-score-grid-wrap">
+        <table class="roster-score-grid" id="roster-score-grid">
+          <thead id="roster-score-grid-head"></thead>
+          <tbody id="roster-score-grid-body"></tbody>
+        </table>
+      </div>
+      <div class="ce-actions roster-score-actions">
+        <button type="button" id="roster-score-save" class="primary small">Save scores</button>
+      </div>
+    </section>
+
     <details class="roster-v2-details" id="roster-group-labels-editor" hidden>
       <summary><strong>Group labels</strong></summary>
       <div class="roster-v2-tier-editor" id="roster-group-labels-body">
@@ -190,4 +221,5 @@
 <script src="/static/roster/bulk.js?v={{ asset_v }}"></script>
 <script src="/static/roster/groups.js?v={{ asset_v }}"></script>
 <script src="/static/roster/safety.js?v={{ asset_v }}"></script>
+<script src="/static/roster/scores.js?v={{ asset_v }}"></script>
 {% endblock %}

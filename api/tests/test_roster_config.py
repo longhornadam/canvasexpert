@@ -96,6 +96,25 @@ def test_seating_context_removal_keeps_other_local_settings():
     assert result["101"]["tier"] == "Support"
 
 
+def test_score_matrix_round_trip_is_course_scoped():
+    first = {
+        "columns": [{"id": "score-writing", "label": "Writing"}],
+        "values_by_section": {"section-a": {"student-a": {"score-writing": 12.5}}},
+    }
+    second = {
+        "columns": [{"id": "score-reading", "label": "Reading"}],
+        "values_by_section": {},
+    }
+
+    assert config.get_roster_score_matrix("missing") == config.ROSTER_SCORE_MATRIX_DEFAULT
+    config.set_roster_score_matrix("course-a", first)
+    config.set_roster_score_matrix("course-b", second)
+
+    assert config.get_roster_score_matrix("course-a") == first
+    assert config.get_roster_score_matrix("course-b") == second
+    assert "roster_score_matrices" in config.SYNCED_KEYS
+
+
 def test_courses_are_independent():
     config.set_roster_student_settings("100", {"101": {"tier": "Support"}})
     config.set_roster_student_settings("200", {"201": {"tier": "Core"}})

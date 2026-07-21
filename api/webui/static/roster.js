@@ -21,6 +21,7 @@
   var currentCategoryGroups = [];
   var filteredStudents = [];
   var selectedNameMap = {};
+  var scoreMatrix = { columns: [], values_by_section: {} };
   var currentCourseId = "";
   var courseLoaded = false;
   var courseLoadHooks = [];
@@ -112,6 +113,7 @@
         groups = data.groups || [];
         selectedGroupCategoryId = data.selected_group_category_id == null ? null : String(data.selected_group_category_id);
         groupLabelScheme = data.group_label_scheme || {};
+        scoreMatrix = data.score_matrix || { columns: [], values_by_section: {} };
         selectedNameMap = {};
         refreshCurrentCategoryGroups();
         renderSummary(data.counts);
@@ -144,6 +146,10 @@
     hasLoadedCourse: function () { return courseLoaded; },
     reloadCourse: loadCourse,
     getStudents: function () { return students; },
+    getScoreMatrix: function () { return scoreMatrix; },
+    setScoreMatrix: function (value) {
+      scoreMatrix = value || { columns: [], values_by_section: {} };
+    },
     getGroupState: function () {
       return {
         groups: groups,

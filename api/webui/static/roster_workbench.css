@@ -65,6 +65,21 @@
 .roster-col-private-note, .roster-col-ai-context-note { width: 180px; }
 .roster-col-status { width: 150px; }
 .roster-empty { padding: var(--ce-space-4) !important; color: var(--ce-ink-muted); font-size: 13px; text-align: center; }
+.roster-score-matrix { margin-top: var(--ce-space-3); padding: var(--ce-space-3) var(--ce-space-4); border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); }
+.roster-score-matrix-heading { display: flex; align-items: start; justify-content: space-between; gap: var(--ce-space-3); }
+.roster-score-matrix-heading h2 { margin: 0; font-size: 16px; }
+.roster-score-matrix-heading p { margin: var(--ce-space-1) 0 0; }
+.roster-score-matrix-controls, .roster-score-columns, .roster-score-actions { display: flex; align-items: end; gap: var(--ce-space-2); flex-wrap: wrap; margin-top: var(--ce-space-3); }
+.roster-score-matrix-controls label, .roster-score-column { display: grid; gap: var(--ce-space-1); color: var(--ce-ink-muted); font-size: 12px; font-weight: 600; }
+.roster-score-matrix-controls select, .roster-score-matrix-controls input, .roster-score-column input { width: auto; min-width: 150px; margin: 0; padding: 4px var(--ce-space-2); font-size: 12px; }
+.roster-score-column { grid-template-columns: minmax(150px, 1fr) auto; align-items: end; min-width: 200px; padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
+.roster-score-column label { display: grid; gap: var(--ce-space-1); }
+.roster-score-grid-wrap { width: 100%; margin-top: var(--ce-space-3); overflow-x: auto; border: 1px solid var(--ce-rule); }
+.roster-score-grid { width: 100%; min-width: 480px; border-collapse: collapse; font-size: 12px; }
+.roster-score-grid th, .roster-score-grid td { padding: 5px var(--ce-space-2); border-bottom: 1px solid var(--ce-rule); text-align: left; }
+.roster-score-grid th { background: var(--ce-surface-soft); color: var(--ce-ink-muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.roster-score-grid input { width: 100%; min-width: 88px; margin: 0; padding: 3px var(--ce-space-1); font-size: 12px; }
+.roster-score-empty { color: var(--ce-ink-muted); text-align: center; }
 .roster-v2-details { margin-top: var(--ce-space-2); padding: var(--ce-space-3) var(--ce-space-4); border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); }
 .roster-v2-details summary { color: var(--ce-ink-muted); cursor: pointer; font-size: 13px; }
 .roster-group-builder-body { display: grid; gap: var(--ce-space-2); margin-top: var(--ce-space-3); }
@@ -97,6 +112,7 @@
   .roster-v2-course-picker select, .roster-v2-group-set-picker select, .roster-search-input { width: 100%; }
   .roster-v2-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
   .roster-bulk-bar { align-items: flex-start; flex-direction: column; }
+  .roster-score-matrix-heading { align-items: stretch; flex-direction: column; }
   .roster-v2-table-wrap { max-width: 100%; overscroll-behavior-inline: contain; }
   .roster-group-builder input, .roster-group-builder textarea { min-width: 0; }
 }

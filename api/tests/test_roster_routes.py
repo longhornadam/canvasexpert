@@ -59,6 +59,7 @@ def isolated_roster(monkeypatch):
         "extra_time": {},
         "monitored": {},
         "settings": {},
+        "score_matrices": {},
     }
 
     def fake_get_extra_time(course_id):
@@ -87,6 +88,12 @@ def isolated_roster(monkeypatch):
                 row.pop(key, None)
             else:
                 row[key] = value
+
+    def fake_get_roster_score_matrix(course_id):
+        return stores["score_matrices"].get(str(course_id), {})
+
+    def fake_set_roster_score_matrix(course_id, matrix):
+        stores["score_matrices"][str(course_id)] = matrix
 
     def fake_get_roster_group_scheme(course_id):
         return stores.get("group_schemes", {}).get(str(course_id), {})
@@ -118,6 +125,8 @@ def isolated_roster(monkeypatch):
     monkeypatch.setattr(roster_routes.config, "remove_monitored_student", fake_remove_monitored_student)
     monkeypatch.setattr(roster_routes.config, "get_roster_student_settings", fake_get_roster_student_settings)
     monkeypatch.setattr(roster_routes.config, "update_roster_student_settings", fake_update_roster_student_settings)
+    monkeypatch.setattr(roster_routes.config, "get_roster_score_matrix", fake_get_roster_score_matrix)
+    monkeypatch.setattr(roster_routes.config, "set_roster_score_matrix", fake_set_roster_score_matrix)
     monkeypatch.setattr(roster_routes.config, "active_protected_names", lambda: set())
     monkeypatch.setattr(roster_routes.config, "get_roster_group_scheme", fake_get_roster_group_scheme)
     monkeypatch.setattr(roster_routes.config, "set_roster_group_scheme", fake_set_roster_group_scheme)
@@ -188,6 +197,7 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
         "private_note": "",
         "ai_context_note": "",
     }
+    assert data["score_matrix"] == {"columns": [], "values_by_section": {}}
     # V3: canvas_group instead of tier_id
     assert "canvas_group" in row
     assert row["canvas_groups"][0]["group_name"] == "Blue"
@@ -229,6 +239,86 @@ def test_roster_get_uses_course_scoped_seating_context(monkeypatch, isolated_ros
     assert first["seating_context"]["ai_context_note"] == "Designated AI context."
     assert second["seating_context"]["front_row"] == "none"
     assert second["seating_context"]["near_teacher"] == "required"
+
+
+def test_roster_score_matrix_patch_round_trips_through_roster_get(monkeypatch, isolated_roster):
+    users = [{
+        "id": 101,
+        "name": "Test Student",
+        "sortable_name": "Student, Test",
+        "short_name": "Test",
+        "enrollments": [{"course_section_id": "section-a"}],
+    }]
+    columns = [
+        {"id": "score-writing", "label": "Writing"},
+        {"id": "score-reading", "label": "Reading"},
+    ]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {"section-a": "Section A"})
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: None)
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups", lambda course_id, categories: None)
+
+    created = client.post("/api/roster/score-matrix", data={
+        "course_id": "course-a",
+        "patch": json.dumps({"columns": columns}),
+    }).json()
+    saved = client.post("/api/roster/score-matrix", data={
+        "course_id": "course-a",
+        "patch": json.dumps({
+            "section_id": "section-a",
+            "values": {"101": {"score-writing": 0, "score-reading": 12.5}},
+        }),
+    }).json()
+    reloaded = client.get("/api/roster?course_id=course-a").json()["score_matrix"]
+
+    assert created["ok"] is True
+    assert saved["ok"] is True
+    assert reloaded == {
+        "columns": columns,
+        "values_by_section": {
+            "section-a": {"101": {"score-writing": 0, "score-reading": 12.5}},
+        },
+    }
+
+    cleared = client.post("/api/roster/score-matrix", data={
+        "course_id": "course-a",
+        "patch": json.dumps({
+            "section_id": "section-a",
+            "values": {"101": {"score-writing": None}},
+        }),
+    }).json()
+
+    assert cleared["ok"] is True
+    assert cleared["score_matrix"]["values_by_section"]["section-a"]["101"] == {
+        "score-reading": 12.5,
+    }
+    assert "course-b" not in isolated_roster["score_matrices"]
+
+
+@pytest.mark.parametrize("patch", [
+    {"columns": [{"id": "bad id", "label": "Writing"}]},
+    {"columns": [
+        {"id": "score-a", "label": "Writing"},
+        {"id": "score-b", "label": " writing "},
+    ]},
+    {"section_id": "section-a", "values": {"student-a": {"unknown": 1}}},
+    {"section_id": "section-a", "values": {"student-a": {"score-a": True}}},
+    {"section_id": "section-a", "values": None},
+    {"section_id": "invalid id", "values": {"student-a": {"score-a": None}}},
+])
+def test_roster_score_matrix_rejects_invalid_patch_atomically(isolated_roster, patch):
+    original = {
+        "columns": [{"id": "score-a", "label": "Writing"}],
+        "values_by_section": {"section-a": {"student-a": {"score-a": 3}}},
+    }
+    isolated_roster["score_matrices"]["course-a"] = original
+
+    response = client.post("/api/roster/score-matrix", data={
+        "course_id": "course-a", "patch": json.dumps(patch),
+    }).json()
+
+    assert response["ok"] is False
+    assert isolated_roster["score_matrices"]["course-a"] == original
 
 
 def test_roster_get_uses_current_mirror_before_live_students_and_sections(
