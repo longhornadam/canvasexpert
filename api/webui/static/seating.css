@@ -25,6 +25,12 @@
 .seating-proposal-flags { display: flex; gap: var(--ce-space-2); margin-top: var(--ce-space-2); }
 .seating-proposal-flags label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ce-ink-muted); }
 .seating-academic-controls, .seating-pasted-proposal { margin-top: var(--ce-space-3); }
+.seating-group-controls { display: flex; align-items: end; flex-wrap: wrap; gap: var(--ce-space-2); margin-top: var(--ce-space-3); }
+.seating-group-controls label { display: grid; gap: var(--ce-space-1); color: var(--ce-ink-muted); font-size: 12px; font-weight: 600; }
+.seating-group-controls input, .seating-group-controls select { width: auto; min-width: 200px; margin: 0; padding: 4px var(--ce-space-2); font-size: 13px; }
+.seating-group-controls .hint { margin: 0; }
+.seating-group-export-preview { flex-basis: 100%; color: var(--ce-ink-muted); }
+.seating-group-export-preview p { margin: var(--ce-space-1) 0; }
 .seating-academic-controls { display: grid; gap: var(--ce-space-2); }
 .seating-academic-controls label { display: grid; gap: var(--ce-space-1); max-width: 280px; color: var(--ce-ink-muted); font-size: 12px; font-weight: 600; }
 .seating-academic-controls select { width: auto; margin: 0; padding: 4px var(--ce-space-2); }

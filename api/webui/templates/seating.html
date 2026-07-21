@@ -172,6 +172,21 @@
           <div id="seating-mentor-ready-list" class="seating-mentor-ready-list"></div>
         </fieldset>
       </div>
+      <div id="seating-group-import" class="seating-group-controls" hidden>
+        <label>Existing loaded Canvas group set
+          <select id="seating-import-group-set"></select>
+        </label>
+        <button type="button" id="seating-import-groups" class="small">Import as temporary proposal</button>
+        <p id="seating-group-import-summary" class="hint"></p>
+      </div>
+      <div id="seating-group-export" class="seating-group-controls" hidden>
+        <label>New Canvas group-set name
+          <input id="seating-new-group-set-name" type="text" maxlength="100" placeholder="New group set">
+        </label>
+        <button type="button" id="seating-preview-group-export" class="small">Preview finalized groups</button>
+        <button type="button" id="seating-create-group-set" class="primary small">Create a new Canvas group set</button>
+        <div id="seating-group-export-preview" class="seating-group-export-preview"></div>
+      </div>
       <div class="seating-pasted-proposal">
         <label for="seating-pasted-proposal">Review a pasted pseudonym proposal</label>
         <textarea id="seating-pasted-proposal" rows="4" placeholder='{"assignments":[{"pseudonym":"Pseudonym","seat_label":"1-1"}]}'></textarea>

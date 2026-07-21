@@ -19,6 +19,7 @@ GROUP_SIZES = {
     "uniform_fours": 4,
     "mentor_pairs": 2,
 }
+GROUP_CAPABLE_STRATEGIES = frozenset(GROUP_SIZES)
 
 
 def _valid_id(value: object) -> bool:
@@ -357,3 +358,137 @@ def evaluate(layout_value: object, context_value: object, strategy: object,
         return None, None, results_error
     plan, group_size, unscored, mentor_unpaired = _group_plan(context, academic, strategy)
     return results, _grouping_summary(plan, group_size, unscored, mentor_unpaired, proposal), None
+
+
+def finalized_group_plan(layout_value: object, strategy: object,
+                         assignment_value: object) -> tuple[dict | None, str | None]:
+    """Derive one exportable, generic-ID plan from a saved Seating assignment only."""
+    layout, layout_error = _validated_layout(layout_value)
+    if layout_error:
+        return None, layout_error
+    if strategy not in GROUP_CAPABLE_STRATEGIES:
+        return None, "this Seating strategy cannot create a Canvas group set."
+    if not isinstance(assignment_value, dict):
+        return None, "saved Seating assignment is invalid."
+    seat_ids = {seat["id"] for seat in layout["seats"]}
+    assignment: dict[str, str] = {}
+    assigned_students: set[str] = set()
+    for seat_id_value, student_id in assignment_value.items():
+        if (not _valid_id(seat_id_value) or seat_id_value not in seat_ids
+                or not _valid_id(student_id) or student_id in assigned_students):
+            return None, "saved Seating assignment is invalid."
+        assignment[seat_id_value] = student_id
+        assigned_students.add(student_id)
+    if not assignment:
+        return None, "save a finalized Seating assignment before creating a Canvas group set."
+    group_size = GROUP_SIZES[strategy]
+    clusters, cluster_error = seat_clusters(layout, group_size)
+    if cluster_error:
+        return None, cluster_error
+    groups = []
+    for cluster in clusters or []:
+        members = [assignment[seat_id_value] for seat_id_value in cluster if seat_id_value in assignment]
+        if members:
+            groups.append({
+                "student_ids": members,
+                "seat_ids": list(cluster),
+                "partial": len(members) < group_size,
+            })
+    if not groups:
+        return None, "save a finalized Seating assignment before creating a Canvas group set."
+    return {
+        "group_size": group_size,
+        "groups": groups,
+        "member_count": sum(len(group["student_ids"]) for group in groups),
+        "partial_group_count": sum(1 for group in groups if group["partial"]),
+    }, None
+
+
+def import_group_membership(layout_value: object, context_value: object, strategy: object,
+                            source_groups_value: object, locks_value: object = None) -> tuple[
+                                dict | None, dict | None, dict | None, str | None]:
+    """Map an existing local Roster group set into one temporary Seating proposal."""
+    layout, layout_error = _validated_layout(layout_value)
+    if layout_error:
+        return None, None, None, layout_error
+    context, context_error = seating_constraints.validate_context(context_value)
+    if context_error:
+        return None, None, None, context_error
+    if strategy not in GROUP_CAPABLE_STRATEGIES:
+        return None, None, None, "this Seating strategy cannot import a Canvas group set."
+    if not isinstance(source_groups_value, list):
+        return None, None, None, "group import must contain a list of source groups."
+    locks, locks_error = seating_constraints.validate_locks(layout, context, {}, locks_value or {})
+    if locks_error:
+        return None, None, None, locks_error
+    current_student_ids = {student["id"] for student in context["students"]}
+    source_groups: list[list[str]] = []
+    seen_current: set[str] = set()
+    ignored_outside: set[str] = set()
+    for index, item in enumerate(source_groups_value):
+        if not isinstance(item, dict) or set(item) != {"student_ids"} or not isinstance(item["student_ids"], list):
+            return None, None, None, f"source group {index} is invalid."
+        members: list[str] = []
+        seen_in_group: set[str] = set()
+        for student_id in item["student_ids"]:
+            if not _valid_id(student_id) or student_id in seen_in_group:
+                return None, None, None, f"source group {index} has an invalid member."
+            seen_in_group.add(student_id)
+            if student_id not in current_student_ids:
+                ignored_outside.add(student_id)
+                continue
+            if student_id in seen_current:
+                return None, None, None, "a current-section student appears in more than one source group."
+            seen_current.add(student_id)
+            members.append(student_id)
+        if members:
+            source_groups.append(members)
+    if not source_groups:
+        return None, None, None, "the selected group set has no members in this Seating section."
+
+    group_size = GROUP_SIZES[strategy]
+    if any(len(group) > group_size for group in source_groups):
+        return None, None, None, "a source group exceeds this Seating strategy's cluster capacity."
+    clusters, cluster_error = seat_clusters(layout, group_size)
+    if cluster_error:
+        return None, None, None, cluster_error
+    assignment = dict(locks)
+    locked_positions = {student_id: seat_id_value for seat_id_value, student_id in locks.items()}
+    unused_clusters = list(clusters or [])
+    records = []
+    for group in source_groups:
+        members = set(group)
+        selected_cluster = None
+        for cluster_index, cluster in enumerate(unused_clusters):
+            cluster_set = set(cluster)
+            if len(cluster) < len(group):
+                continue
+            if any(locked_positions.get(student_id) not in cluster_set for student_id in members if student_id in locked_positions):
+                continue
+            if any(seat_id_value in locks and locks[seat_id_value] not in members for seat_id_value in cluster):
+                continue
+            selected_cluster = unused_clusters.pop(cluster_index)
+            break
+        if selected_cluster is None:
+            return None, None, None, "source groups cannot fit the available Seating clusters without moving a lock."
+        available_seats = [seat_id_value for seat_id_value in selected_cluster if seat_id_value not in locks]
+        for student_id in group:
+            if student_id in locked_positions:
+                continue
+            assignment[available_seats.pop(0)] = student_id
+        records.append({
+            "student_ids": list(group),
+            "seat_ids": list(selected_cluster),
+            "partial": len(group) < group_size,
+        })
+    results, results_error = seating_constraints.evaluate(layout, context, assignment)
+    if results_error:
+        return None, None, None, results_error
+    unassigned_count = sum(1 for student_id in current_student_ids if student_id not in assignment.values())
+    summary = {
+        "group_count": len(records),
+        "partial_group_count": sum(1 for group in records if group["partial"]),
+        "ignored_outside_count": len(ignored_outside),
+        "unassigned_count": unassigned_count,
+    }
+    return assignment, results, {"groups": records, "summary": summary}, None

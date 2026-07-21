@@ -17,6 +17,7 @@
 
   var state = emptyState();
   var students = [];
+  var rosterGroups = [];
   var rosterRelationships = { by_section: {} };
   var rosterScoreMatrix = { columns: [], values_by_section: {} };
   var currentCourseId = "";
@@ -30,6 +31,9 @@
   var undoAssignment = null;
   var selectedScoreColumnId = "";
   var mentorReady = {};
+  var importSourceGroups = [];
+  var importSummary = null;
+  var exportPlan = null;
 
   function emptyState() { return { layouts: [], modes: [] }; }
   function seatId(row, column) { return "seat-" + row + "-" + column; }
@@ -51,6 +55,7 @@
     rerollSeatIds = {};
     proposalResults = null;
     proposalGrouping = null;
+    importSummary = null;
     proposalCard.hidden = true;
     document.getElementById("seating-proposal-chart").replaceChildren();
     document.getElementById("seating-proposal-results").replaceChildren();
@@ -62,8 +67,11 @@
     undoAssignment = null;
     selectedScoreColumnId = "";
     mentorReady = {};
+    importSourceGroups = [];
+    exportPlan = null;
     document.getElementById("seating-undo-apply").hidden = true;
     document.getElementById("seating-pasted-proposal").value = "";
+    document.getElementById("seating-new-group-set-name").value = "";
   }
 
   function newId(prefix) {
@@ -356,6 +364,76 @@
     return strategy === "mixed_fours" || strategy === "uniform_fours" || strategy === "mentor_pairs";
   }
 
+  function strategyCanCreateGroups(strategy) {
+    return ["buddy_pairs", "mentor_pairs", "random_trios", "mixed_fours", "uniform_fours"]
+      .indexOf(strategy) !== -1;
+  }
+
+  function renderGroupControls(mode) {
+    var enabled = !!mode && strategyCanCreateGroups(mode.strategy);
+    var importControls = document.getElementById("seating-group-import");
+    var exportControls = document.getElementById("seating-group-export");
+    importControls.hidden = !enabled;
+    exportControls.hidden = !enabled;
+    if (!enabled) return;
+
+    var groupSetSelect = document.getElementById("seating-import-group-set");
+    var prior = groupSetSelect.value;
+    groupSetSelect.replaceChildren();
+    option(groupSetSelect, "", rosterGroups.length
+      ? "— select a loaded group set —"
+      : "— no loaded group sets —");
+    rosterGroups.forEach(function (category) {
+      option(groupSetSelect, String(category.category_id || ""), category.category_name || "Canvas group set");
+    });
+    if (rosterGroups.some(function (category) { return String(category.category_id) === prior; })) {
+      groupSetSelect.value = prior;
+    }
+    groupSetSelect.disabled = !rosterGroups.length;
+    document.getElementById("seating-import-groups").disabled = !rosterGroups.length;
+
+    var importText = "";
+    if (importSummary) {
+      importText = importSummary.group_count + " group(s) imported locally";
+      if (importSummary.partial_group_count) importText += "; " + importSummary.partial_group_count + " partial";
+      if (importSummary.ignored_outside_count) importText += "; " + importSummary.ignored_outside_count + " outside this section ignored";
+      if (importSummary.unassigned_count) importText += "; " + importSummary.unassigned_count + " current-section student(s) unassigned";
+      importText += ". Apply to save this temporary Seating proposal.";
+    }
+    document.getElementById("seating-group-import-summary").textContent = importText;
+    renderGroupExportPreview(mode);
+  }
+
+  function renderGroupExportPreview(mode) {
+    var preview = document.getElementById("seating-group-export-preview");
+    preview.replaceChildren();
+    if (!exportPlan) {
+      preview.textContent = "Preview the saved current chart before preparing a new Canvas group set.";
+      return;
+    }
+    var names = proposalNames(mode);
+    var heading = document.createElement("p");
+    heading.textContent = exportPlan.groups.length + " new group(s), " + exportPlan.member_count + " member(s).";
+    preview.appendChild(heading);
+    exportPlan.groups.forEach(function (group, index) {
+      var line = document.createElement("p");
+      line.textContent = "Group " + (index + 1) + " — " + group.student_ids.map(function (studentId) {
+        return names[studentId] || "Student";
+      }).join(", ") + (group.partial ? " (partial)" : "");
+      preview.appendChild(line);
+    });
+    if (exportPlan.partial_group_count) {
+      var partial = document.createElement("p");
+      partial.textContent = "Warning: " + exportPlan.partial_group_count + " partial group(s) will be created.";
+      preview.appendChild(partial);
+    }
+    if (exportPlan.unassigned_count) {
+      var unassigned = document.createElement("p");
+      unassigned.textContent = "Warning: " + exportPlan.unassigned_count + " current-section student(s) are unassigned and will not be included.";
+      preview.appendChild(unassigned);
+    }
+  }
+
   function academicContext(mode) {
     if (!strategyNeedsScores(mode.strategy)) {
       return { score_column_id: "", scores: {}, mentor_ready: [] };
@@ -430,7 +508,8 @@
     var layout = mode && chartLayout(mode);
     if (!mode || !layout) return;
     var academic = academicContext(mode);
-    if (strategyNeedsScores(mode.strategy) && !academic.score_column_id) {
+    if (["generate", "reroll", "evaluate"].indexOf(operation) !== -1
+        && strategyNeedsScores(mode.strategy) && !academic.score_column_id) {
       setProposalStatus("Choose a current score column for this strategy.", true);
       return;
     }
@@ -447,7 +526,8 @@
         academic: JSON.stringify(academic),
         locks: JSON.stringify(proposalLocks),
         proposal: JSON.stringify(nextProposal || proposal || {}),
-        reroll_seat_ids: JSON.stringify(Object.keys(rerollSeatIds))
+        reroll_seat_ids: JSON.stringify(Object.keys(rerollSeatIds)),
+        source_groups: JSON.stringify(importSourceGroups || [])
       })
     }).then(function (response) { return response.json(); }).then(function (data) {
       if (initiatingCourseId !== currentCourseId || initiatingModeId !== selectedModeId) return;
@@ -455,16 +535,143 @@
         setProposalStatus(data.error || "Could not build a proposal.", true);
         return;
       }
+      if (operation === "group_plan") {
+        exportPlan = data.group_plan || null;
+        setProposalStatus("Finalized groups previewed from the saved current chart.", false);
+        renderProposal();
+        return;
+      }
       proposal = data.proposal || {};
       proposalResults = data.results || null;
       proposalGrouping = data.grouping || null;
+      importSummary = operation === "import_groups" && proposalGrouping
+        ? proposalGrouping.summary || null : null;
+      exportPlan = null;
       rerollSeatIds = {};
-      setProposalStatus("Proposal updated.", false);
+      setProposalStatus(operation === "import_groups" ? "Group set imported as a temporary proposal." : "Proposal updated.", false);
       renderProposal();
     }).catch(function (error) {
       if (initiatingCourseId !== currentCourseId || initiatingModeId !== selectedModeId) return;
       setProposalStatus("Network error: " + error.message, true);
     });
+  }
+
+  function csrfToken() {
+    var meta = document.querySelector('meta[name="canvasexpert-csrf-token"]');
+    return meta ? meta.getAttribute("content") : "";
+  }
+
+  async function postLedgerJson(url, body) {
+    var response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CanvasExpert-CSRF": csrfToken()
+      },
+      body: JSON.stringify(body)
+    });
+    var data = await response.json().catch(function () { return {}; });
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || data.detail || ("Request failed (HTTP " + response.status + ")"));
+    }
+    return data;
+  }
+
+  function importSelectedGroupSet() {
+    var mode = selectedMode();
+    var categoryId = document.getElementById("seating-import-group-set").value;
+    var category = rosterGroups.find(function (item) {
+      return String(item.category_id) === String(categoryId);
+    });
+    if (!mode || !category) {
+      setProposalStatus("Choose a loaded Canvas group set to import.", true);
+      return;
+    }
+    importSourceGroups = (category.groups || []).map(function (group) {
+      return {
+        student_ids: (group.memberships || []).map(function (membership) {
+          return String(membership.user_id || "");
+        }).filter(function (studentId) { return !!studentId; })
+      };
+    });
+    requestProposal("import_groups", proposal || {});
+  }
+
+  function previewGroupExport() {
+    var mode = selectedMode();
+    if (!mode || !strategyCanCreateGroups(mode.strategy)) {
+      setProposalStatus("Choose a group-capable Seating strategy first.", true);
+      return;
+    }
+    requestProposal("group_plan", {});
+  }
+
+  async function createNewCanvasGroupSet() {
+    var mode = selectedMode();
+    var groupSetName = document.getElementById("seating-new-group-set-name").value.trim();
+    if (!mode || !strategyCanCreateGroups(mode.strategy)) {
+      setProposalStatus("This Seating strategy cannot create a Canvas group set.", true);
+      return;
+    }
+    if (!groupSetName) {
+      setProposalStatus("Enter a new Canvas group-set name.", true);
+      return;
+    }
+    if (!exportPlan) {
+      previewGroupExport();
+      setProposalStatus("Review the finalized local group preview, then create the new Canvas group set.", false);
+      return;
+    }
+    try {
+      setProposalStatus("Preparing Canvas write review…", false);
+      var prepared = await postLedgerJson(
+        "/api/operations/seating.group_set_create/prepare",
+        {
+          payload: {
+            course_id: currentCourseId,
+            mode_id: mode.id,
+            group_set_name: groupSetName
+          },
+          targets: [{ course_id: currentCourseId }]
+        }
+      );
+      var review = await postLedgerJson("/api/operation-batches/review", {
+        operation_ids: [prepared.operation_id]
+      });
+      var frozen = (review.frozen_reviews || [])[0] || {};
+      var approved = await window.CE_WRITE_REVIEW.confirm({
+        title: "Review new Canvas group set",
+        action: "Create a new Canvas group set from the saved Seating chart.",
+        targets: [{ name: frozen.course_name || "Current course" }],
+        details: [
+          "New group set: " + (frozen.new_group_set_name || groupSetName),
+          (frozen.group_count || 0) + " new groups and " + (frozen.member_count || 0) + " memberships"
+        ],
+        warnings: [
+          "Canvas will create a new group set only. Existing group sets, groups, and memberships will not be changed.",
+          frozen.partial_group_count ? frozen.partial_group_count + " partial group(s) will be created." : ""
+        ].filter(Boolean),
+        confirmText: "Create new group set",
+        cancelText: "Cancel"
+      });
+      if (!approved) {
+        setProposalStatus("Canvas unchanged. The prepared operation remains available for later review.", false);
+        return;
+      }
+      setProposalStatus("Creating new Canvas group set…", false);
+      var applied = await postLedgerJson(
+        "/api/operation-batches/" + encodeURIComponent(review.batch_id) + "/apply",
+        { review_digest: review.review_digest }
+      );
+      setProposalStatus(
+        applied.status === "applied"
+          ? "New Canvas group set created."
+          : "Canvas write needs attention; check Operations before retrying.",
+        applied.status !== "applied"
+      );
+    } catch (error) {
+      setProposalStatus(error.message || "Could not prepare the Canvas group-set export.", true);
+    }
   }
 
   function reviewPastedProposal() {
@@ -588,6 +795,7 @@
     proposalCard.hidden = !layout;
     if (!layout) return;
     renderAcademicControls(mode);
+    renderGroupControls(mode);
     renderProposalResults();
     renderSwapOptions();
     document.getElementById("seating-apply-proposal").disabled = !(
@@ -686,6 +894,8 @@
       rerollSeatIds = {};
       proposalResults = null;
       proposalGrouping = null;
+      importSummary = null;
+      exportPlan = null;
       undoAssignment = previousAssignment;
       setProposalStatus("Proposal applied to the current chart.", false);
       renderAll();
@@ -770,6 +980,7 @@
     var courseId = courseSelect.value;
     currentCourseId = courseId;
     students = [];
+    rosterGroups = [];
     rosterRelationships = { by_section: {} };
     rosterScoreMatrix = { columns: [], values_by_section: {} };
     state = emptyState();
@@ -790,6 +1001,7 @@
         if (currentCourseId !== courseId) return null;
         if (!roster.ok) throw new Error(roster.error || "Could not load Roster.");
         students = roster.students || [];
+        rosterGroups = Array.isArray(roster.groups) ? roster.groups : [];
         rosterRelationships = roster.relationships || { by_section: {} };
         rosterScoreMatrix = roster.score_matrix || { columns: [], values_by_section: {} };
         return fetch("/api/seating?course_id=" + encodeURIComponent(courseId));
@@ -941,6 +1153,7 @@
     });
     assignment[seat] = student;
     var replacement = Object.assign({}, mode, { assignment: assignment });
+    exportPlan = null;
     postState({ layouts: state.layouts,
                 modes: state.modes.map(function (item) { return item.id === mode.id ? replacement : item; }) },
               "Student assigned.");
@@ -956,6 +1169,7 @@
     var assignment = Object.assign({}, mode.assignment);
     delete assignment[seat];
     var replacement = Object.assign({}, mode, { assignment: assignment });
+    exportPlan = null;
     postState({ layouts: state.layouts,
                 modes: state.modes.map(function (item) { return item.id === mode.id ? replacement : item; }) },
               "Seat cleared.");
@@ -968,6 +1182,9 @@
   });
 
   document.getElementById("seating-review-pasted-proposal").addEventListener("click", reviewPastedProposal);
+  document.getElementById("seating-import-groups").addEventListener("click", importSelectedGroupSet);
+  document.getElementById("seating-preview-group-export").addEventListener("click", previewGroupExport);
+  document.getElementById("seating-create-group-set").addEventListener("click", createNewCanvasGroupSet);
 
   document.getElementById("seating-generate").addEventListener("click", function () {
     var mode = selectedMode();

@@ -122,3 +122,61 @@ def test_academic_projection_rejects_foreign_scores_and_never_accepts_mentor_dat
 
     assert invalid_score is None and "invalid score" in score_error
     assert invalid_mentor is None and "only mentor pairs" in mentor_error
+
+
+def test_finalized_group_plan_uses_existing_clusters_and_rejects_non_group_strategies():
+    layout = _layout(rows=1, columns=4)
+    plan, error = seating_grouping.finalized_group_plan(layout, "buddy_pairs", {
+        "seat-1-1": "student-a",
+        "seat-1-2": "student-b",
+        "seat-1-3": "student-c",
+    })
+    rejected, rejected_error = seating_grouping.finalized_group_plan(
+        layout, "manual", {"seat-1-1": "student-a"}
+    )
+
+    assert error is None
+    assert [group["student_ids"] for group in plan["groups"]] == [
+        ["student-a", "student-b"], ["student-c"],
+    ]
+    assert plan["partial_group_count"] == 1
+    assert rejected is None
+    assert "cannot create" in rejected_error
+
+
+def test_group_import_preserves_locks_and_reports_outside_and_unassigned_students():
+    layout = _layout(rows=1, columns=4)
+    context = _context(["student-a", "student-b", "student-c"])
+    assignment, results, grouping, error = seating_grouping.import_group_membership(
+        layout, context, "buddy_pairs", [
+            {"student_ids": ["student-a", "student-b"]},
+            {"student_ids": ["student-outside"]},
+        ], {"seat-1-1": "student-a"},
+    )
+
+    assert error is None
+    assert results["required_ok"] is True
+    assert assignment["seat-1-1"] == "student-a"
+    assert grouping["summary"] == {
+        "group_count": 1,
+        "partial_group_count": 0,
+        "ignored_outside_count": 1,
+        "unassigned_count": 1,
+    }
+
+
+def test_group_import_rejects_duplicates_and_groups_that_cannot_fit():
+    layout = _layout(rows=1, columns=4)
+    context = _context(["student-a", "student-b", "student-c"])
+    _, _, _, duplicate_error = seating_grouping.import_group_membership(
+        layout, context, "buddy_pairs", [
+            {"student_ids": ["student-a", "student-b"]},
+            {"student_ids": ["student-a", "student-c"]},
+        ], {},
+    )
+    _, _, _, capacity_error = seating_grouping.import_group_membership(
+        layout, context, "buddy_pairs", [{"student_ids": ["student-a", "student-b", "student-c"]}], {},
+    )
+
+    assert "more than one" in duplicate_error
+    assert "capacity" in capacity_error

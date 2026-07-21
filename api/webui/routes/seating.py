@@ -81,6 +81,7 @@ def seating_proposal(
     locks: str = Form("{}"),
     proposal: str = Form("{}"),
     reroll_seat_ids: str = Form("[]"),
+    source_groups: str = Form("[]"),
     academic: str = Form('{"score_column_id":"","scores":{},"mentor_ready":[]}'),
 ):
     """Generate, reroll, or evaluate an in-memory local proposal only."""
@@ -96,6 +97,9 @@ def seating_proposal(
     if error:
         return JSONResponse({"ok": False, "error": error})
     reroll_value, error = _parse_json(reroll_seat_ids, "reroll seats")
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    source_groups_value, error = _parse_json(source_groups, "source groups")
     if error:
         return JSONResponse({"ok": False, "error": error})
     academic_value, error = _parse_json(academic, "academic context")
@@ -125,11 +129,44 @@ def seating_proposal(
             error = evaluation_error
         else:
             results, grouping = None, None
+    elif operation == "import_groups":
+        generated, results, grouping, error = seating_grouping.import_group_membership(
+            layout, context_data, mode["strategy"], source_groups_value, locks_value,
+        )
+    elif operation == "group_plan":
+        generated, error = seating_constraints.validate_assignment(
+            layout, context_data, mode["assignment"]
+        )
+        if error is None:
+            plan, error = seating_grouping.finalized_group_plan(
+                layout, mode["strategy"], generated,
+            )
+        else:
+            plan = None
+        if error is None:
+            results, results_error = seating_constraints.evaluate(layout, context_data, generated)
+            if results_error:
+                error = results_error
+                grouping = None
+            else:
+                grouping = {"groups": plan["groups"], "notices": []}
+                plan = {
+                    **plan,
+                    "unassigned_count": sum(
+                        1 for student in context_data["students"]
+                        if student["id"] not in generated.values()
+                    ),
+                }
+        else:
+            results, grouping = None, None
     else:
         return JSONResponse({"ok": False, "error": "Unknown Seating proposal operation."})
     if error:
         return JSONResponse({"ok": False, "error": error})
-    return JSONResponse({"ok": True, "proposal": generated, "results": results, "grouping": grouping})
+    response = {"ok": True, "proposal": generated, "results": results, "grouping": grouping}
+    if operation == "group_plan":
+        response["group_plan"] = plan
+    return JSONResponse(response)
 
 
 @router.post("/apply")

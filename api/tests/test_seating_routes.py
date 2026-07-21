@@ -221,3 +221,42 @@ def test_academic_proposal_uses_persisted_mode_strategy_and_rejects_foreign_scor
     assert generated["grouping"]["groups"][0]["kind"] == "mixed_four"
     assert invalid["ok"] is False
     assert "invalid score" in invalid["error"]
+
+
+def test_group_import_and_export_preview_are_local_and_use_saved_mode_assignment(isolated_seating):
+    state = _state({"seat-1-1": "student-a", "seat-1-2": "student-b"}, strategy="buddy_pairs")
+    state["layouts"][0]["columns"] = 2
+    state["layouts"][0]["seats"].append({
+        "id": "seat-1-2", "row": 1, "column": 2, "label": "1-2",
+    })
+    isolated_seating["course-a"] = state
+    context = {
+        "section_id": "section-a",
+        "students": [
+            {"id": "student-a", "front_row": "none", "near_teacher": "none"},
+            {"id": "student-b", "front_row": "none", "near_teacher": "none"},
+            {"id": "student-c", "front_row": "none", "near_teacher": "none"},
+        ],
+        "relationships": [],
+    }
+
+    imported = client.post("/api/seating/proposal", data={
+        "course_id": "course-a", "mode_id": "mode-a", "operation": "import_groups",
+        "context": json.dumps(context), "locks": "{}", "proposal": "{}", "reroll_seat_ids": "[]",
+        "source_groups": json.dumps([
+            {"student_ids": ["student-a", "student-b"]},
+            {"student_ids": ["student-outside"]},
+        ]),
+    }).json()
+    preview = client.post("/api/seating/proposal", data={
+        "course_id": "course-a", "mode_id": "mode-a", "operation": "group_plan",
+        "context": json.dumps(context), "locks": "{}",
+        "proposal": json.dumps({"seat-1-1": "student-c"}), "reroll_seat_ids": "[]",
+    }).json()
+
+    assert imported["ok"] is True
+    assert imported["grouping"]["summary"]["ignored_outside_count"] == 1
+    assert imported["grouping"]["summary"]["unassigned_count"] == 1
+    assert preview["ok"] is True
+    assert preview["group_plan"]["groups"][0]["student_ids"] == ["student-a", "student-b"]
+    assert preview["group_plan"]["unassigned_count"] == 1

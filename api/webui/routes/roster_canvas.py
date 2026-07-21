@@ -9,6 +9,44 @@ import requests
 from .roster_helpers import _user_id_set_from_canvas_groups
 
 
+def list_canvas_group_categories(
+    course_id: str,
+    *,
+    canvas_get_all: Callable[..., tuple[list[dict] | None, str | None]],
+) -> tuple[list[dict] | None, str | None]:
+    """Read real category IDs/names; callers must not substitute fallback labels."""
+    categories, error = canvas_get_all(
+        f"/api/v1/courses/{course_id}/group_categories",
+        {"per_page": 50},
+    )
+    if error:
+        return None, error
+    if not isinstance(categories, list):
+        return None, "Canvas returned an invalid group category response."
+    normalized = []
+    for category in categories:
+        category_id = str(category.get("id", "") if isinstance(category, dict) else "")
+        name = category.get("name") if isinstance(category, dict) else None
+        if not category_id or not isinstance(name, str):
+            return None, "Canvas returned an invalid group category."
+        normalized.append({"id": category_id, "name": name})
+    return normalized, None
+
+
+def create_canvas_group_category(
+    course_id: str,
+    name: str,
+    *,
+    canvas_send: Callable[..., tuple[dict | None, str | None]],
+) -> tuple[dict | None, str | None]:
+    """Create one new category; callers own all review/checkpoint safeguards."""
+    return canvas_send(
+        "POST",
+        f"/api/v1/courses/{course_id}/group_categories",
+        {"name": name},
+    )
+
+
 def create_canvas_group(
     category_id: str,
     name: str,
@@ -22,6 +60,20 @@ def create_canvas_group(
     )
 
 
+def create_canvas_group_membership(
+    group_id: str,
+    user_id: str,
+    *,
+    canvas_send: Callable[..., tuple[dict | None, str | None]],
+) -> tuple[dict | None, str | None]:
+    """Create one membership while retaining Canvas's returned membership object."""
+    return canvas_send(
+        "POST",
+        f"/api/v1/groups/{group_id}/memberships",
+        {"user_id": user_id},
+    )
+
+
 def canvas_add_group_membership(
     group_id: str,
     user_id: str,
@@ -30,13 +82,11 @@ def canvas_add_group_membership(
 ) -> tuple[bool, str | None]:
     """Add a user to a Canvas group."""
     try:
-        r = canvas_send(
-            "POST",
-            f"/api/v1/groups/{group_id}/memberships",
-            {"user_id": user_id},
+        _, error = create_canvas_group_membership(
+            group_id, user_id, canvas_send=canvas_send,
         )
-        if r[1]:
-            return False, r[1]
+        if error:
+            return False, error
         return True, None
     except Exception as e:  # pragma: no cover - defensive Canvas transport wrapper
         return False, str(e)
