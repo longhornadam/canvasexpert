@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 5 read-only MCP tools.
+"""Plain, testable implementations of the 6 read-only MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -10,18 +10,23 @@ Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses`` is the only tool with
 no ``course_id`` and no student data, so it skips both the course gate and
 the outbound safety gate.
-"""
+
+Strict mirror-only law: get_roster, get_submissions, and
+get_gradebook_snapshot serve ONLY from the local CanvasMirror and refuse
+(rather than falling back to a live Canvas fetch) when it isn't fresh
+enough. refresh_mirror is the assistant's only way to move that forward —
+it triggers Canvas Expert's own sync engine and reports freshness, never
+Canvas data, keeping the AI's whole path to Canvas indirect."""
 from __future__ import annotations
 
 import os
-import time
 from contextlib import contextmanager
 
 from api import course_scope, gradebook_queries, gradebook_snapshot, roster_service
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
-from api.webui import config, workspace
+from api.webui import config, mirror_service, workspace
 from api.webui.canvas_client import _canvas_get_all
 from api import feedback_vault
 from api.course_catalog import read_catalog
@@ -31,21 +36,20 @@ from . import pseudonym
 
 # Compatibility seams retained for existing route-style tests; the bound
 # implementations all live in root-level shared use-case modules.
-_course_students = gradebook_queries.course_students
-_course_assignments = gradebook_queries.course_assignments
-_course_submissions = gradebook_queries.course_submissions
 _assignment = gradebook_queries.assignment
 _assignment_submissions = gradebook_queries.assignment_submissions
 _fetch_sections = roster_service.fetch_sections
-_ORIGINAL_COURSE_STUDENTS = _course_students
-_ORIGINAL_COURSE_ASSIGNMENTS = _course_assignments
-_ORIGINAL_COURSE_SUBMISSIONS = _course_submissions
 _ORIGINAL_ASSIGNMENT = _assignment
 _ORIGINAL_ASSIGNMENT_SUBMISSIONS = _assignment_submissions
 _ORIGINAL_FETCH_SECTIONS = _fetch_sections
 _ORIGINAL_PSEUDONYM_FETCH_STUDENTS = pseudonym._fetch_students
 _ORIGINAL_ROSTER_FETCH_STUDENTS = roster_service.fetch_students
 _ORIGINAL_ROSTER_FETCH_SECTIONS = roster_service.fetch_sections
+
+# Bound seams for the assistant-invokable refresh tool, so tests can point
+# these at a fake coordinator without starting the real background workers.
+_enqueue_sync = mirror_service.enqueue_sync
+_wait_for_plan = mirror_service.wait_for_plan
 
 
 # ---------------------------------------------------------------------------
@@ -85,23 +89,18 @@ def _truncate_text(text: str, max_chars: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Roster fetch cache.
+# Fetch-seam detection.
 #
-# One MCP server process serves a whole client session, and every student-data
-# tool must sync the roster before it can scrub — without a cache, each tool
-# call costs a fresh Canvas roster (and sections) round trip. Cache the raw
-# FETCH results only (never the vault, never anything on disk) for a few
-# minutes. Monkeypatched fetch seams always bypass the cache.
+# Strict mirror-only law: the student-data tools never call live Canvas, so
+# there is no fetch cache to protect here anymore. ``_cache_safe`` survives
+# purely as the seam guard the mirror-first helpers below use to refuse
+# serving mirror data out from under a test that has monkeypatched one of
+# these fetchers for an unrelated purpose.
 # ---------------------------------------------------------------------------
-
-_ROSTER_CACHE_TTL_SECONDS = 300.0
-_roster_fetch_cache: dict[str, tuple[float, list[dict]]] = {}
-_section_fetch_cache: dict[str, tuple[float, dict]] = {}
 
 
 def _cache_safe() -> bool:
-    """True only when every roster fetch seam is the real implementation —
-    a monkeypatched fetcher's data must never leak across tests via cache."""
+    """True only when every roster fetch seam is the real implementation."""
     return (
         pseudonym._fetch_students is _ORIGINAL_PSEUDONYM_FETCH_STUDENTS
         and roster_service.fetch_students is _ORIGINAL_ROSTER_FETCH_STUDENTS
@@ -110,42 +109,17 @@ def _cache_safe() -> bool:
     )
 
 
-def _cached_fetch_students(course_id: str):
-    cached = _roster_fetch_cache.get(course_id)
-    now = time.monotonic()
-    if cached and now - cached[0] < _ROSTER_CACHE_TTL_SECONDS:
-        return cached[1], None
-    users, err = roster_service.fetch_students(course_id, canvas_get_all=_canvas_get_all)
-    if err:
-        return None, err
-    _roster_fetch_cache[course_id] = (now, users)
-    return users, None
-
-
-def _sync_roster(vault, course_id: str):
-    """Fetch (cached) + upsert one course roster so the scrub map covers
-    every enrolled student, not just the ones in this payload."""
-    if pseudonym._fetch_students is not _ORIGINAL_PSEUDONYM_FETCH_STUDENTS:
-        fetcher = lambda cid: pseudonym._fetch_students(cid)
-    elif _cache_safe():
-        fetcher = _cached_fetch_students
-    else:
-        fetcher = None
-    return roster_service.sync_roster_for_course(
-        vault, course_id,
-        canvas_get_all=_canvas_get_all,
-        fetch_students_override=fetcher,
-    )
-
-
 # ---------------------------------------------------------------------------
-# Mirror-first reads.
+# Mirror-only reads.
 #
-# When the CanvasMirror is fresh enough to serve (and no test seam is
-# patched — the seam guard keeps monkeypatched tests on the live path), the
-# student-data tools read from disk instead of Canvas: instant, offline-
-# tolerant, zero Canvas round trips. Every mirror-served payload is labeled
-# with source="mirror" + synced_at so staleness is visible, never silent.
+# The student-data tools serve ONLY from the local CanvasMirror, never live
+# Canvas: instant, offline-tolerant, zero Canvas round trips, and the AI's
+# path to Canvas always stays indirect (through Canvas Expert's own sync
+# engine, never a direct relay). When the mirror isn't fresh enough to serve
+# (or a test seam is patched — the seam guard refuses rather than silently
+# reading disk out from under it), these helpers return None so the caller
+# refuses instead of fetching live. Every served payload is labeled with
+# source="mirror" + synced_at so staleness is visible, never silent.
 # ---------------------------------------------------------------------------
 
 def _mirror_roster_doc(course_id: str):
@@ -167,60 +141,53 @@ def _mirror_roster_doc(course_id: str):
 
 
 def _mirror_submission_bundle(course_id: str, assignment_id: str):
-    """``{assignment, rows, roster, synced_at}`` from typed local scopes when
-    roster, assignments, and submissions are ALL current, else None (missing
-    or stale any one piece falls back to live as one coherent bundle)."""
+    """``({assignment, rows, roster, synced_at}, None)`` from typed local
+    scopes when roster, assignments, and submissions are ALL current and
+    ``assignment_id`` is one of them. ``(None, None)`` means the mirror
+    itself isn't fresh enough to serve (missing or stale any one piece,
+    including the seam-guard case); ``(None, message)`` means the mirror IS
+    fresh but no such assignment exists in this course — a distinct,
+    non-staleness error worth reporting verbatim."""
     if not _cache_safe():
-        return None
+        return None, None
     if (_assignment is not _ORIGINAL_ASSIGNMENT
             or _assignment_submissions is not _ORIGINAL_ASSIGNMENT_SUBMISSIONS):
-        return None
+        return None, None
     max_age_hours = mirror_queries._serve_max_age_hours()
     roster = read_service.private_roster(course_id, max_age_hours=max_age_hours)
     assignments = read_service.private_assignments(course_id, max_age_hours=max_age_hours)
     submissions = read_service.private_submissions(course_id, max_age_hours=max_age_hours)
     if not (roster["state"] == "current" and assignments["state"] == "current"
             and submissions["state"] == "current"):
-        return None
+        return None, None
     assignment_row = next(
         (row for row in assignments["records"] if str(row.get("id")) == str(assignment_id)),
         None)
     if assignment_row is None:
-        return None
+        return None, "No such assignment in this course's local catalog."
     rows = [row for row in submissions["records"]
             if str(row.get("assignment_id")) == str(assignment_id)]
     synced_at = min(roster["last_success_at"], assignments["last_success_at"],
                     submissions["last_success_at"])
     return {"assignment": assignment_row, "rows": rows,
-            "roster": roster["records"], "synced_at": synced_at}
-
-
-def _load_sections(course_id: str) -> dict:
-    if _fetch_sections is not _ORIGINAL_FETCH_SECTIONS:
-        return _fetch_sections(course_id, canvas_get_all=_canvas_get_all)
-    if _cache_safe():
-        cached = _section_fetch_cache.get(course_id)
-        if cached and time.monotonic() - cached[0] < _ROSTER_CACHE_TTL_SECONDS:
-            return cached[1]
-    section_map = roster_service.fetch_sections(course_id, canvas_get_all=_canvas_get_all)
-    if _cache_safe():
-        _section_fetch_cache[course_id] = (time.monotonic(), section_map)
-    return section_map
+            "roster": roster["records"], "synced_at": synced_at}, None
 
 
 def _load_snapshot(course_id: str):
-    if (
-        _course_students is _ORIGINAL_COURSE_STUDENTS
-        and _course_assignments is _ORIGINAL_COURSE_ASSIGNMENTS
-        and _course_submissions is _ORIGINAL_COURSE_SUBMISSIONS
-    ):
-        return gradebook_snapshot.load_snapshot(course_id)
-    queries = type("McpQueries", (), {
-        "course_students": staticmethod(_course_students),
-        "course_assignments": staticmethod(_course_assignments),
-        "course_submissions": staticmethod(_course_submissions),
-    })
-    return gradebook_snapshot.load_snapshot(course_id, queries=queries)
+    """``(snapshot, None)`` from the CanvasMirror ONLY when it's fresh enough
+    to serve the whole gradebook (roster + assignments + submissions), else
+    ``(None, error)``. Never falls back to live Canvas — unlike the shared
+    ``gradebook_snapshot.load_snapshot`` the web UI's own gradebook route
+    uses, which keeps that live fallback for its own grading flows."""
+    namespace, synced_at = mirror_queries.snapshot_queries(course_id)
+    if namespace is None:
+        return None, _MIRROR_UNAVAILABLE_SNAPSHOT_ERROR
+    snapshot, error = gradebook_snapshot.load_snapshot(course_id, queries=namespace)
+    if error:
+        return None, error
+    snapshot["source"] = "mirror"
+    snapshot["synced_at"] = synced_at
+    return snapshot, None
 
 
 _VAULT_UNAVAILABLE_ERROR = (
@@ -365,10 +332,30 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> d
     }
 
 
+_MIRROR_UNAVAILABLE_ROSTER_ERROR = (
+    "The local CanvasMirror roster for this course is stale or missing. "
+    "Canvas Expert withholds it rather than fetching live from Canvas — call "
+    "refresh_mirror for this course, then try again."
+)
+_MIRROR_UNAVAILABLE_SUBMISSIONS_ERROR = (
+    "The local CanvasMirror for this course (roster, assignments, or "
+    "submissions) is stale or missing. Canvas Expert withholds submissions "
+    "rather than fetching live from Canvas — call refresh_mirror for this "
+    "course, then try again."
+)
+_MIRROR_UNAVAILABLE_SNAPSHOT_ERROR = (
+    "The local CanvasMirror for this course isn't fresh enough to serve a "
+    "whole-course snapshot. Canvas Expert withholds it rather than fetching "
+    "live from Canvas — call refresh_mirror for this course, then try again."
+)
+
+
 def get_roster(course_id: str) -> dict:
     """Current roster as a {columns, rows} table of (pseudonym,
-    section_names), sorted by pseudonym. Mirror-first; pseudonymized through
-    the identity vault; gated by the outbound safety scan before tabulation."""
+    section_names), sorted by pseudonym. Served ONLY from the local
+    CanvasMirror — never live Canvas; a stale or missing mirror is refused
+    (call refresh_mirror first). Pseudonymized through the identity vault;
+    gated by the outbound safety scan before tabulation."""
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
@@ -378,21 +365,16 @@ def get_roster(course_id: str) -> dict:
         return {"ok": False, "error": vault_err}
 
     mirror_doc = _mirror_roster_doc(course_id)
+    if mirror_doc is None:
+        return {"ok": False, "error": _MIRROR_UNAVAILABLE_ROSTER_ERROR}
+
     with _vault_transaction(vault):
-        if mirror_doc is not None:
-            users = mirror_doc["students"]
-            roster_service.upsert_roster(vault, users)
-            section_map = mirror_doc["sections"]
-            source, synced_at = "mirror", mirror_doc["last_success_at"]
-        else:
-            users, fetch_err = _sync_roster(vault, course_id)
-            if fetch_err:
-                return {"ok": False, "error": fetch_err}
-            section_map = _load_sections(course_id)
-            source, synced_at = "canvas", ""
-        roster = pseudonym.pseudonymize_roster(vault, users, section_map)
+        users = mirror_doc["students"]
+        roster_service.upsert_roster(vault, users)
+        roster = pseudonym.pseudonymize_roster(vault, users, mirror_doc["sections"])
         result = pseudonym.gate(
-            {"roster": roster, "source": source, "synced_at": synced_at}, vault)
+            {"roster": roster, "source": "mirror",
+             "synced_at": mirror_doc["last_success_at"]}, vault)
     if result.get("ok"):
         result["roster"] = _tabulate(result["roster"], _ROSTER_COLUMNS)
     return result
@@ -402,10 +384,12 @@ def get_submissions(course_id: str, assignment_id: str,
                     include_text: bool = True, pseudonyms: str = "",
                     max_text_chars: int = _DEFAULT_MAX_TEXT_CHARS) -> dict:
     """One assignment's submissions, pseudonymized and scrubbed, as
-    ``{assignment: {...}, submissions: {columns, rows}}``. ``pseudonyms``
-    (comma-separated) narrows to specific students; ``include_text=False``
-    drops the text column; text is trimmed to ``max_text_chars`` (0 = full).
-    Attachments are never included. Gated by the outbound safety scan."""
+    ``{assignment: {...}, submissions: {columns, rows}}``. Served ONLY from
+    the local CanvasMirror — never live Canvas; a stale or missing mirror is
+    refused (call refresh_mirror first). ``pseudonyms`` (comma-separated)
+    narrows to specific students; ``include_text=False`` drops the text
+    column; text is trimmed to ``max_text_chars`` (0 = full). Attachments are
+    never included. Gated by the outbound safety scan."""
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
@@ -414,34 +398,17 @@ def get_submissions(course_id: str, assignment_id: str,
     if vault_err:
         return {"ok": False, "error": vault_err}
 
-    bundle = _mirror_submission_bundle(course_id, assignment_id)
+    bundle, bundle_err = _mirror_submission_bundle(course_id, assignment_id)
+    if bundle_err:
+        return {"ok": False, "error": bundle_err}
+    if bundle is None:
+        return {"ok": False, "error": _MIRROR_UNAVAILABLE_SUBMISSIONS_ERROR}
+
     # Sync the full roster first so the scrub map covers every enrolled
     # student, not just the ones who submitted this assignment.
     with _vault_transaction(vault):
-        if bundle is not None:
-            roster_service.upsert_roster(vault, bundle["roster"])
-            assignment, subs = bundle["assignment"], bundle["rows"]
-            source, synced_at = "mirror", bundle["synced_at"]
-        else:
-            _, fetch_err = _sync_roster(vault, course_id)
-            if fetch_err:
-                return {"ok": False, "error": fetch_err}
-            assignment_reader = (
-                gradebook_queries.assignment
-                if _assignment is _ORIGINAL_ASSIGNMENT else _assignment
-            )
-            submission_reader = (
-                gradebook_queries.assignment_submissions
-                if _assignment_submissions is _ORIGINAL_ASSIGNMENT_SUBMISSIONS
-                else _assignment_submissions
-            )
-            assignment, a_err = assignment_reader(course_id, assignment_id)
-            if a_err:
-                return {"ok": False, "error": a_err}
-            subs, s_err = submission_reader(course_id, assignment_id)
-            if s_err:
-                return {"ok": False, "error": s_err}
-            source, synced_at = "canvas", ""
+        roster_service.upsert_roster(vault, bundle["roster"])
+        assignment, subs = bundle["assignment"], bundle["rows"]
 
         rows = pseudonym.pseudonymize_submission_rows(vault, subs)
         wanted = {p.strip().casefold() for p in pseudonyms.split(",") if p.strip()}
@@ -463,8 +430,8 @@ def get_submissions(course_id: str, assignment_id: str,
                 "due_at": assignment.get("due_at", ""),
             },
             "submissions": rows,
-            "source": source,
-            "synced_at": synced_at,
+            "source": "mirror",
+            "synced_at": bundle["synced_at"],
         }
         result = pseudonym.gate(payload, vault)
     if result.get("ok"):
@@ -478,7 +445,9 @@ def get_gradebook_snapshot(course_id: str) -> dict:
     """Whole-course grading snapshot, pseudonymized: per-assignment stats
     (``title`` instead of ``name``, no ``html_url``) and per-student stats
     (``pseudonym`` instead of a name), each as a {columns, rows} table.
-    Gated by the outbound safety scan before tabulation."""
+    Served ONLY from the local CanvasMirror — never live Canvas; a stale or
+    missing mirror is refused (call refresh_mirror first). Gated by the
+    outbound safety scan before tabulation."""
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
@@ -519,3 +488,36 @@ def get_gradebook_snapshot(course_id: str) -> dict:
         result["assignments"] = _tabulate(result["assignments"], _GRADEBOOK_ASSIGNMENT_COLUMNS)
         result["students"] = _tabulate(result["students"], _GRADEBOOK_STUDENT_COLUMNS)
     return result
+
+
+_REFRESH_TIMEOUT_SECONDS = 25.0
+
+
+def refresh_mirror(course_id: str) -> dict:
+    """Ask Canvas Expert to sync this course's local CanvasMirror from Canvas,
+    then report freshness — the response is a sync STATUS, never Canvas data.
+    Call this after get_roster/get_submissions/get_gradebook_snapshot refuses
+    as stale or unavailable, then re-call that same tool; this tool never
+    returns course, roster, or submission data itself, so it needs no
+    identity vault and no outbound safety scan."""
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+
+    try:
+        plan_id = _enqueue_sync(course_id)
+    except ValueError as error:
+        return {"ok": False, "error": str(error)}
+    except Exception as error:
+        return {"ok": False, "error": f"Could not start a sync: {error}"}
+
+    plan = _wait_for_plan(plan_id, timeout_seconds=_REFRESH_TIMEOUT_SECONDS)
+    state = plan.get("state", "failed")
+    if state == "succeeded":
+        return {"ok": True, "status": "synced",
+                "message": "Mirror refreshed. Re-read the data now."}
+    if state in ("queued", "running"):
+        return {"ok": True, "status": "syncing",
+                "message": "Still syncing — wait a few seconds, then try again."}
+    return {"ok": False, "status": "failed",
+            "error": "Sync failed. Try again, or use Sync now in the CanvasExpert web UI."}

@@ -223,7 +223,7 @@ def test_mcp_stale_mirror_is_not_served(monkeypatch, tmp_path):
     _mcp_setup(monkeypatch, tmp_path)
     _populate(str(tmp_path), fresh=False)
     assert tools._mirror_roster_doc(COURSE) is None
-    assert tools._mirror_submission_bundle(COURSE, "700010") is None
+    assert tools._mirror_submission_bundle(COURSE, "700010") == (None, None)
 
 
 def test_mcp_seamed_tests_bypass_the_mirror(monkeypatch, tmp_path):

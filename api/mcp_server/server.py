@@ -1,6 +1,6 @@
 """FastMCP wiring for the read-only CanvasExpert MCP server.
 
-Five thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Six thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -32,10 +32,14 @@ _FERPA_NOTICE = (
     "seeing who they are. Results are session-local; do not write them to a "
     "file, and do not attempt to re-identify a student from a pseudonym, "
     "writing style, or any other clue. This server is read-only: no tool "
-    "writes to Canvas. Results are compact JSON; list data arrives as "
-    "{columns, rows} tables. Prefer narrow calls: include_text=false or "
-    "specific pseudonyms first, full text only for the students you actually "
-    "need."
+    "writes to Canvas. get_roster, get_submissions, and get_gradebook_snapshot "
+    "are served ONLY from Canvas Expert's local CanvasMirror, never a live "
+    "Canvas fetch, so they refuse with a clear error when the mirror is "
+    "stale or missing instead of returning live data; if that happens, call "
+    "refresh_mirror for that course, then retry the same call once. Results "
+    "are compact JSON; list data arrives as {columns, rows} tables. Prefer "
+    "narrow calls: include_text=false or specific pseudonyms first, full "
+    "text only for the students you actually need."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -72,7 +76,9 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> s
 @mcp.tool()
 def get_roster(course_id: str) -> str:
     """Current course roster as a {columns, rows} table of
-    (pseudonym, section_names), sorted by pseudonym."""
+    (pseudonym, section_names), sorted by pseudonym. Refuses if the local
+    mirror isn't fresh enough to serve it (call refresh_mirror), rather than
+    fetching live from Canvas."""
     return _compact(tools.get_roster(course_id))
 
 
@@ -85,7 +91,9 @@ def get_submissions(course_id: str, assignment_id: str,
     text). Student text is scrubbed of real names and trimmed to
     max_text_chars (0 = full text). Set include_text=false for status and
     scores only, or pseudonyms=\"Name A,Name B\" for specific students.
-    Attachments are never included."""
+    Attachments are never included. Refuses if the local mirror isn't fresh
+    enough to serve it (call refresh_mirror), rather than fetching live from
+    Canvas."""
     return _compact(tools.get_submissions(
         course_id, assignment_id,
         include_text=include_text, pseudonyms=pseudonyms,
@@ -98,5 +106,17 @@ def get_gradebook_snapshot(course_id: str) -> str:
     """Whole-course grading snapshot: class totals plus {columns, rows}
     tables of per-assignment stats (title, due_at, points, submitted, graded,
     missing, late, avg_pct) and per-student stats (pseudonym, missing, late,
-    ungraded, pct)."""
+    ungraded, pct). Refuses if the local mirror isn't fresh enough to serve
+    it (call refresh_mirror), rather than fetching live from Canvas."""
     return _compact(tools.get_gradebook_snapshot(course_id))
+
+
+@mcp.tool()
+def refresh_mirror(course_id: str) -> str:
+    """Call this ONLY after get_roster, get_submissions, or
+    get_gradebook_snapshot refuses with a stale/unavailable error. Triggers
+    Canvas Expert's own sync of this course's local data from Canvas and
+    waits briefly, then reports sync status (synced, syncing, or failed) --
+    never course, roster, or submission data. After a "synced" result,
+    re-call the tool that refused."""
+    return _compact(tools.refresh_mirror(course_id))

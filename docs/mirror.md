@@ -7,9 +7,22 @@ the current contracts until its individual implementation briefs are completed.
 
 A disposable local mirror of Canvas course facts, kept fresh by deterministic
 background sync, living in the synced workspace at `_System/Canvas Mirror/`.
-Reads that used to cost live Canvas round trips (gradebook snapshot, MCP
-roster/submissions) are served from disk in milliseconds when the mirror is
-fresh — and fall back to live Canvas, visibly labeled, when it isn't.
+Reads that used to cost live Canvas round trips are served from disk in
+milliseconds when the mirror is fresh. Two different rules apply to what
+happens when it isn't fresh, by design:
+
+- **The web UI's own gradebook snapshot route** (`gradebook_snapshot.load_snapshot`,
+  used by CanvasExpert's own grading screens) falls back to a live Canvas
+  fetch, visibly labeled `source: "canvas"` — the teacher is in the loop and
+  reads there can feed a write decision, so staleness should never block them.
+- **The AI-facing MCP tools** (`get_roster`, `get_submissions`,
+  `get_gradebook_snapshot`) never fall back to live Canvas. This is the strict
+  mirror-only law: the AI's whole path to Canvas must stay indirect — through
+  Canvas Expert's own sync engine, never a direct relay of a live fetch. A
+  stale or missing mirror makes these tools refuse with a clear error instead
+  of serving live data; the assistant calls `refresh_mirror` (also an MCP
+  tool) to trigger a sync and re-checks freshness, then re-reads. See "MCP
+  reads and the refresh tool" below.
 
 ## Design laws
 
@@ -24,10 +37,20 @@ fresh — and fall back to live Canvas, visibly labeled, when it isn't.
    the machine.
 4. **Freshness is always visible.** Every collection carries an envelope
    (`state`, `last_success_at`, `last_attempt_at`, `error_code`); every
-   mirror-served read is labeled `source: "mirror"` + `synced_at`; live
-   fallbacks are labeled `source: "canvas"`. Staleness is never silent.
+   mirror-served read is labeled `source: "mirror"` + `synced_at`; the web
+   UI's own live fallbacks are labeled `source: "canvas"`. Staleness is never
+   silent — and for the MCP tools, staleness is never quietly papered over
+   with a live fetch either (see law 6).
 5. **Foreground wins.** Sync runs on a background heartbeat and yields to
    whatever the teacher is doing.
+6. **The AI's path to Canvas always stays indirect.** `get_roster`,
+   `get_submissions`, and `get_gradebook_snapshot` serve ONLY from the mirror
+   and refuse rather than falling back to a live Canvas fetch. The only way
+   forward from a refusal is `refresh_mirror`, which triggers Canvas Expert's
+   own sync engine (the same coordinator behind "Sync now") and reports a
+   freshness status — never Canvas data itself. This is an absolute, not a
+   default: there is no config flag or fallback path that lets an MCP tool
+   relay a live Canvas response to the AI.
 
 ## On-disk layout
 
@@ -180,8 +203,8 @@ heartbeat) ticks every 15 minutes for Current courses only:
   freshness authority.
 
 Config (machine-local): `mirror_enabled` (default true),
-`mirror_serve_max_age_hours` (default 6 — older than this, readers fall back
-to live Canvas).
+`mirror_serve_max_age_hours` (default 6 — older than this, the web UI's own
+readers fall back to live Canvas; the MCP tools refuse instead, per law 6).
 
 Routes: `GET /api/mirror/status` (per-course pass envelopes + watermarks, and
 sanitized plan progress when passed `plan_id`), `POST /api/mirror/sync-now`
@@ -261,14 +284,38 @@ Implements the `gradebook_queries` interface (`course_students`,
 Consumers flipped in v1:
 
 - `gradebook_snapshot.load_snapshot` — mirror-first when fresh, live
-  fallback; snapshot carries `source` + `synced_at` either way (web UI route
-  and MCP both inherit this).
-- MCP `get_roster` / `get_submissions` — served from the mirror when fresh
-  (zero Canvas calls, works offline), pseudonymized and gated exactly as
-  before; payloads carry `source` + `synced_at`.
+  fallback; snapshot carries `source` + `synced_at` either way. This is the
+  web UI gradebook route's own loader.
+- MCP `get_roster` / `get_submissions` / `get_gradebook_snapshot` — served
+  from the mirror when fresh (zero Canvas calls, works offline),
+  pseudonymized and gated exactly as before; payloads carry `source` +
+  `synced_at`. Unlike the web UI route above, these three tools call
+  `mirror_queries` directly and refuse (a structured `{"ok": false, "error":
+  ...}`) rather than falling through to a live fetch when the mirror can't
+  serve — see "MCP reads and the refresh tool" below.
 
 Explicit `queries=` overrides and monkeypatched test seams always bypass the
-mirror, so offline tests exercise the live path unchanged.
+mirror in the web UI's loader, so offline tests exercise the live path
+unchanged; the MCP tools' seam guard (`api/mcp_server/tools.py::_cache_safe`)
+instead makes a monkeypatched fetch seam a reason to *refuse*, since there is
+no live path left for it to fall into.
+
+## MCP reads and the refresh tool (`api/mcp_server/tools.py`, `server.py`)
+
+`get_roster`, `get_submissions`, and `get_gradebook_snapshot` are strict
+mirror-only (design law 6): a stale or missing mirror returns
+`{"ok": false, "error": "..."}` naming the problem, never a live Canvas
+payload. `refresh_mirror(course_id)` is the assistant's only lever to move
+past that: it calls `mirror_service.enqueue_sync` (the same manual-priority
+coordinator plan behind the web UI's "Sync now") and waits up to
+`tools._REFRESH_TIMEOUT_SECONDS` (25s) via `mirror_service.wait_for_plan`,
+then reports `{"ok": true, "status": "synced"}`, `{"ok": true, "status":
+"syncing"}` (still running past the timeout — safe to retry shortly), or
+`{"ok": false, "status": "failed"}`. It never returns course, roster, or
+submission data itself, so it opens no identity vault and runs no outbound
+safety scan — the response is a sync status, full stop. This keeps the AI's
+entire path to Canvas indirect: it can only ask Canvas Expert to sync, then
+read whatever Canvas Expert wrote to disk.
 
 ## v1 non-goals (deliberate)
 

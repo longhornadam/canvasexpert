@@ -26,7 +26,9 @@ for _path in (_API_DIR, _REPO_ROOT):
 
 from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
+from api.mirror import store as mirror_store
 from api.powergrader.autoscore_claims import machine_id
+from api.webui import workspace
 
 FIXTURE_USERS = [
     {
@@ -178,13 +180,11 @@ def test_get_roster_fails_closed_on_vault_conflict(monkeypatch, tmp_path):
 
 
 def test_get_roster_normal_when_no_conflict(monkeypatch, tmp_path):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
     vault_path = str(tmp_path / "vault.json")
     _use_vault(monkeypatch, vault_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students",
-                       lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_fetch_sections",
-                       lambda course_id, canvas_get_all: SECTION_MAP)
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
 
     result = tools.get_roster("111")
     assert result["ok"] is True

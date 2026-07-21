@@ -25,7 +25,7 @@ for _path in (_API_DIR, _REPO_ROOT):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from api import feedback_safety
+from api import feedback_safety, gradebook_queries, roster_service
 from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
 from api.mirror import store as mirror_store
@@ -262,13 +262,14 @@ def test_get_course_assignments_rejects_non_current_course(monkeypatch):
 # --- get_roster --------------------------------------------------------------
 
 def test_get_roster_happy(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: SECTION_MAP)
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
 
     result = tools.get_roster("111")
     assert result["ok"] is True
+    assert result["source"] == "mirror"
     assert result["roster"]["columns"] == ["pseudonym", "section_names"]
     roster = _rows(result["roster"])
     assert len(roster) == 2
@@ -281,10 +282,10 @@ def test_get_roster_happy(monkeypatch, tmp_path):
 
 
 def test_get_roster_empty(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: ([], None))
-    monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: {})
+    mirror_store.write_roster("111", [], {}, root=str(tmp_path))
 
     result = tools.get_roster("111")
     assert result["ok"] is True
@@ -292,32 +293,34 @@ def test_get_roster_empty(monkeypatch, tmp_path):
 
 
 def test_get_roster_failure(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (None, "Canvas fetch failed"))
+    # No mirror seeded at all: refused rather than fetched live.
 
-    assert tools.get_roster("111") == {"ok": False, "error": "Canvas fetch failed"}
+    assert tools.get_roster("111") == {"ok": False, "error": tools._MIRROR_UNAVAILABLE_ROSTER_ERROR}
 
 
 # --- get_submissions ----------------------------------------------------------
 
 def test_get_submissions_happy_scrubs_real_name_and_short_name(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
-        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": "2026-07-01T23:59:00Z"}, None))
-    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
-        {"user_id": 900001, "workflow_state": "graded", "score": 9, "grade": "9",
-         "submitted_at": "2026-07-01T20:00:00Z", "late": False, "missing": False,
-         "excused": False,
-         "body": "<p>Learner One and Lee worked together on this.</p>"},
-    ], None))
+    root = str(tmp_path)
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
+    mirror_store.write_assignments("111", [MIRROR_ASSIGNMENT], root=root)
+    mirror_store.merge_submissions("111", "700010", [
+        {"assignment_id": 700010, "user_id": 900001, "workflow_state": "graded", "score": 9,
+         "grade": "9", "submitted_at": "2026-07-01T20:00:00Z", "late": False, "missing": False,
+         "excused": False, "body": "<p>Learner One and Lee worked together on this.</p>"},
+    ], root=root, replace=True)
+    mirror_store.record_pass("111", "full", ok=True, root=root)
 
     result = tools.get_submissions("111", "700010")
     assert result["ok"] is True
     assert result["assignment"] == {
-        "id": 700010, "title": "Essay 1", "points_possible": 10, "due_at": "2026-07-01T23:59:00Z",
+        "id": "700010", "title": "Essay 1", "points_possible": 10, "due_at": "2026-07-01T23:59:00Z",
     }
     subs = _rows(result["submissions"])
     assert len(subs) == 1
@@ -337,16 +340,20 @@ def _submissions_fixture(monkeypatch, tmp_path, bodies_by_user=None):
         900001: "<p>First essay body.</p>",
         900002: "<p>Second essay body.</p>",
     }
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
-        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""}, None))
-    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
-        {"user_id": uid, "workflow_state": "submitted",
+    root = str(tmp_path)
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
+    mirror_store.write_assignments("111", [
+        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""},
+    ], root=root)
+    mirror_store.merge_submissions("111", "700010", [
+        {"assignment_id": 700010, "user_id": uid, "workflow_state": "submitted",
          "submitted_at": "2026-07-01T20:00:00Z", "body": body}
         for uid, body in bodies_by_user.items()
-    ], None))
+    ], root=root, replace=True)
+    mirror_store.record_pass("111", "full", ok=True, root=root)
 
 
 def test_get_submissions_include_text_false_drops_text_column(monkeypatch, tmp_path):
@@ -387,12 +394,16 @@ def test_get_submissions_max_text_chars_truncates_with_marker(monkeypatch, tmp_p
 
 
 def test_get_submissions_empty(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
-        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""}, None))
-    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([], None))
+    root = str(tmp_path)
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
+    mirror_store.write_assignments("111", [
+        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""},
+    ], root=root)
+    mirror_store.merge_submissions("111", "700010", [], root=root, replace=True)
+    mirror_store.record_pass("111", "full", ok=True, root=root)
 
     result = tools.get_submissions("111", "700010")
     assert result["ok"] is True
@@ -400,12 +411,20 @@ def test_get_submissions_empty(monkeypatch, tmp_path):
 
 
 def test_get_submissions_failure(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (None, "Assignment not found"))
+    root = str(tmp_path)
+    # Fresh mirror (roster + a DIFFERENT assignment) -- "700010" just isn't in
+    # it, a distinct non-staleness error from the mirror-unavailable refusal.
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
+    mirror_store.write_assignments("111", [
+        {"id": 700099, "name": "Other Assignment", "points_possible": 10, "due_at": ""},
+    ], root=root)
+    mirror_store.record_pass("111", "full", ok=True, root=root)
 
-    assert tools.get_submissions("111", "700010") == {"ok": False, "error": "Assignment not found"}
+    assert tools.get_submissions("111", "700010") == {
+        "ok": False, "error": "No such assignment in this course's local catalog."}
 
 
 def test_get_submissions_rejects_non_current_course(monkeypatch, tmp_path):
@@ -502,74 +521,60 @@ def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypa
     _assert_no_leaks(result)
 
 
-def test_get_submissions_bundle_falls_back_live_when_roster_stale(monkeypatch, tmp_path):
+def test_get_submissions_refuses_when_roster_stale(monkeypatch, tmp_path):
     _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, [MIRROR_COURSE])
     _populate_mirror(str(tmp_path), roster_at=_STALE_STAMP)
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: SECTION_MAP)
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
-        {"id": 700010, "name": "Essay 1 (live)", "points_possible": 10, "due_at": ""}, None))
-    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
-        {"user_id": 900001, "workflow_state": "submitted",
-         "submitted_at": "2026-07-01T20:00:00Z", "body": "live body"},
-    ], None))
+    monkeypatch.setattr(gradebook_queries, "assignment", _explode_live)
+    monkeypatch.setattr(gradebook_queries, "assignment_submissions", _explode_live)
+    monkeypatch.setattr(roster_service, "fetch_students", _explode_live)
 
-    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") is None
+    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") == (None, None)
     result = tools.get_submissions(MIRROR_COURSE, "700010")
-    assert result["ok"] is True
-    assert result["source"] == "canvas"
-    assert result["assignment"]["title"] == "Essay 1 (live)"
+    assert result == {"ok": False, "error": tools._MIRROR_UNAVAILABLE_SUBMISSIONS_ERROR}
 
 
-def test_get_submissions_bundle_falls_back_live_when_assignments_stale(monkeypatch, tmp_path):
+def test_get_submissions_refuses_when_assignments_stale(monkeypatch, tmp_path):
     _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, [MIRROR_COURSE])
     _populate_mirror(str(tmp_path), assignments_at=_STALE_STAMP)
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
-        {"id": 700010, "name": "Essay 1 (live)", "points_possible": 10, "due_at": ""}, None))
-    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
-        {"user_id": 900001, "workflow_state": "submitted",
-         "submitted_at": "2026-07-01T20:00:00Z", "body": "live body"},
-    ], None))
+    monkeypatch.setattr(gradebook_queries, "assignment", _explode_live)
+    monkeypatch.setattr(gradebook_queries, "assignment_submissions", _explode_live)
+    monkeypatch.setattr(roster_service, "fetch_students", _explode_live)
 
-    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") is None
+    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") == (None, None)
     result = tools.get_submissions(MIRROR_COURSE, "700010")
-    assert result["ok"] is True
-    assert result["source"] == "canvas"
-    assert result["assignment"]["title"] == "Essay 1 (live)"
+    assert result == {"ok": False, "error": tools._MIRROR_UNAVAILABLE_SUBMISSIONS_ERROR}
 
 
-def test_get_submissions_bundle_falls_back_live_when_submissions_stale(monkeypatch, tmp_path):
+def test_get_submissions_refuses_when_submissions_stale(monkeypatch, tmp_path):
     _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, [MIRROR_COURSE])
     _populate_mirror(str(tmp_path), submissions_at=_STALE_STAMP)
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
-        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""}, None))
-    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
-        {"user_id": 900001, "workflow_state": "submitted",
-         "submitted_at": "2026-07-01T20:00:00Z", "body": "live body"},
-    ], None))
+    monkeypatch.setattr(gradebook_queries, "assignment", _explode_live)
+    monkeypatch.setattr(gradebook_queries, "assignment_submissions", _explode_live)
+    monkeypatch.setattr(roster_service, "fetch_students", _explode_live)
 
-    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") is None
+    assert tools._mirror_submission_bundle(MIRROR_COURSE, "700010") == (None, None)
     result = tools.get_submissions(MIRROR_COURSE, "700010")
-    assert result["ok"] is True
-    assert result["source"] == "canvas"
+    assert result == {"ok": False, "error": tools._MIRROR_UNAVAILABLE_SUBMISSIONS_ERROR}
 
 
 # --- get_gradebook_snapshot ---------------------------------------------------
 
 def test_get_gradebook_snapshot_happy(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(tools, "_course_students", lambda course_id: (GRADEBOOK_STUDENTS, None))
-    monkeypatch.setattr(tools, "_course_assignments", lambda course_id: (GRADEBOOK_ASSIGNMENTS, None))
-    monkeypatch.setattr(tools, "_course_submissions", lambda course_id: (GRADEBOOK_SUBS, None))
+    root = str(tmp_path)
+    mirror_store.write_roster("111", GRADEBOOK_STUDENTS, {}, root=root)
+    mirror_store.write_assignments("111", GRADEBOOK_ASSIGNMENTS, root=root)
+    mirror_store.merge_submissions("111", "700010", GRADEBOOK_SUBS, root=root, replace=True)
+    for pass_name in ("full", "roster"):
+        mirror_store.record_pass("111", pass_name, ok=True, root=root)
 
     result = tools.get_gradebook_snapshot("111")
     assert result["ok"] is True
@@ -585,11 +590,15 @@ def test_get_gradebook_snapshot_happy(monkeypatch, tmp_path):
 
 
 def test_get_gradebook_snapshot_empty(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(tools, "_course_students", lambda course_id: ([], None))
-    monkeypatch.setattr(tools, "_course_assignments", lambda course_id: ([], None))
-    monkeypatch.setattr(tools, "_course_submissions", lambda course_id: ([], None))
+    root = str(tmp_path)
+    mirror_store.write_roster("111", [], {}, root=root)
+    mirror_store.write_assignments("111", [], root=root)
+    mirror_store.merge_submissions("111", "700010", [], root=root, replace=True)
+    for pass_name in ("full", "roster"):
+        mirror_store.record_pass("111", pass_name, ok=True, root=root)
 
     result = tools.get_gradebook_snapshot("111")
     assert result["ok"] is True
@@ -600,11 +609,13 @@ def test_get_gradebook_snapshot_empty(monkeypatch, tmp_path):
 
 
 def test_get_gradebook_snapshot_failure(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(tools, "_course_students", lambda course_id: (None, "Canvas fetch failed"))
+    # No mirror seeded at all: a whole-course snapshot is refused, never live.
 
-    assert tools.get_gradebook_snapshot("111") == {"ok": False, "error": "Canvas fetch failed"}
+    assert tools.get_gradebook_snapshot("111") == {
+        "ok": False, "error": tools._MIRROR_UNAVAILABLE_SNAPSHOT_ERROR}
 
 
 def test_get_gradebook_snapshot_rejects_non_current_course(monkeypatch, tmp_path):
@@ -618,10 +629,10 @@ def test_get_gradebook_snapshot_rejects_non_current_course(monkeypatch, tmp_path
 # --- pseudonym round trip -----------------------------------------------------
 
 def test_pseudonym_reverse_round_trip(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     vault_path = _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: SECTION_MAP)
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
 
     result = tools.get_roster("111")
     assert result["ok"] is True
@@ -637,11 +648,15 @@ def test_pseudonym_reverse_round_trip(monkeypatch, tmp_path):
 # --- no-PII sweep + scan_payload green ---------------------------------------
 
 def test_no_pii_sweep_and_scan_payload_green(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     vault_path = _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(tools, "_course_students", lambda course_id: (GRADEBOOK_STUDENTS, None))
-    monkeypatch.setattr(tools, "_course_assignments", lambda course_id: (GRADEBOOK_ASSIGNMENTS, None))
-    monkeypatch.setattr(tools, "_course_submissions", lambda course_id: (GRADEBOOK_SUBS, None))
+    root = str(tmp_path)
+    mirror_store.write_roster("111", GRADEBOOK_STUDENTS, {}, root=root)
+    mirror_store.write_assignments("111", GRADEBOOK_ASSIGNMENTS, root=root)
+    mirror_store.merge_submissions("111", "700010", GRADEBOOK_SUBS, root=root, replace=True)
+    for pass_name in ("full", "roster"):
+        mirror_store.record_pass("111", pass_name, ok=True, root=root)
 
     result = tools.get_gradebook_snapshot("111")
     assert result["ok"] is True
@@ -654,17 +669,18 @@ def test_no_pii_sweep_and_scan_payload_green(monkeypatch, tmp_path):
 
 
 def test_no_pii_sweep_scan_payload_green_for_submissions(monkeypatch, tmp_path):
+    _mount_mirror(monkeypatch, tmp_path)
     vault_path = _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_assignment", lambda course_id, assignment_id: (
-        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": "2026-07-01T23:59:00Z"}, None))
-    monkeypatch.setattr(tools, "_assignment_submissions", lambda course_id, assignment_id: ([
-        {"user_id": 900001, "workflow_state": "graded", "score": 9, "grade": "9",
-         "submitted_at": "2026-07-01T20:00:00Z", "late": False, "missing": False,
-         "excused": False,
-         "body": "<p>Learner One and Lee worked together on this.</p>"},
-    ], None))
+    root = str(tmp_path)
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
+    mirror_store.write_assignments("111", [MIRROR_ASSIGNMENT], root=root)
+    mirror_store.merge_submissions("111", "700010", [
+        {"assignment_id": 700010, "user_id": 900001, "workflow_state": "graded", "score": 9,
+         "grade": "9", "submitted_at": "2026-07-01T20:00:00Z", "late": False, "missing": False,
+         "excused": False, "body": "<p>Learner One and Lee worked together on this.</p>"},
+    ], root=root, replace=True)
+    mirror_store.record_pass("111", "full", ok=True, root=root)
 
     result = tools.get_submissions("111", "700010")
     assert result["ok"] is True
@@ -700,87 +716,68 @@ def test_gate_passes_clean_payload_through(tmp_path):
     assert result == {"ok": True, **clean_payload}
 
 
-# --- roster fetch cache --------------------------------------------------------
+# --- refresh_mirror -------------------------------------------------------------
 
-def test_cached_fetch_students_reuses_fresh_fetch(monkeypatch):
-    calls = []
-
-    def counting_fetch(course_id, *, canvas_get_all=None):
-        calls.append(course_id)
-        return list(FIXTURE_USERS), None
-
-    monkeypatch.setattr(tools.roster_service, "fetch_students", counting_fetch)
-    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
-
-    users_a, err_a = tools._cached_fetch_students("111")
-    users_b, err_b = tools._cached_fetch_students("111")
-    assert (err_a, err_b) == (None, None)
-    assert users_a == users_b
-    assert calls == ["111"]  # second call served from cache
-
-    # A different course is its own cache entry.
-    tools._cached_fetch_students("222")
-    assert calls == ["111", "222"]
+def test_refresh_mirror_rejects_non_current_course(monkeypatch):
+    _set_active_courses(monkeypatch, ["222"])
+    result = tools.refresh_mirror("111")
+    assert result["ok"] is False
+    assert "not a Current course" in result["error"]
 
 
-def test_cached_fetch_students_expires_after_ttl(monkeypatch):
-    calls = []
-
-    def counting_fetch(course_id, *, canvas_get_all=None):
-        calls.append(course_id)
-        return list(FIXTURE_USERS), None
-
-    monkeypatch.setattr(tools.roster_service, "fetch_students", counting_fetch)
-    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
-
-    tools._cached_fetch_students("111")
-    stamp, users = tools._roster_fetch_cache["111"]
-    tools._roster_fetch_cache["111"] = (
-        stamp - tools._ROSTER_CACHE_TTL_SECONDS - 1, users)
-    tools._cached_fetch_students("111")
-    assert calls == ["111", "111"]  # stale entry refetched
-
-
-def test_cached_fetch_students_never_caches_errors(monkeypatch):
-    responses = [(None, "Canvas fetch failed"), (list(FIXTURE_USERS), None)]
-
-    def flaky_fetch(course_id, *, canvas_get_all=None):
-        return responses.pop(0)
-
-    monkeypatch.setattr(tools.roster_service, "fetch_students", flaky_fetch)
-    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
-
-    users, err = tools._cached_fetch_students("111")
-    assert users is None and err == "Canvas fetch failed"
-    users, err = tools._cached_fetch_students("111")
-    assert err is None and len(users) == 2
-
-
-def test_monkeypatched_fetch_seams_bypass_the_cache(monkeypatch, tmp_path):
-    # The integration tests in this file patch pseudonym._fetch_students; that
-    # seam must never populate or read the cross-call cache.
-    _use_vault(monkeypatch, tmp_path)
+def test_refresh_mirror_reports_synced_on_success(monkeypatch):
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(pseudonym, "_fetch_students", lambda course_id: (FIXTURE_USERS, None))
-    monkeypatch.setattr(tools, "_fetch_sections", lambda course_id, canvas_get_all: SECTION_MAP)
-    monkeypatch.setattr(tools, "_roster_fetch_cache", {})
-    monkeypatch.setattr(tools, "_section_fetch_cache", {})
+    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id: "plan-1")
+    monkeypatch.setattr(tools, "_wait_for_plan",
+                        lambda plan_id, **kwargs: {"state": "succeeded"})
 
-    assert tools._cache_safe() is False
-    assert tools.get_roster("111")["ok"] is True
-    assert tools._roster_fetch_cache == {}
-    assert tools._section_fetch_cache == {}
+    result = tools.refresh_mirror("111")
+    assert result["ok"] is True
+    assert result["status"] == "synced"
+
+
+def test_refresh_mirror_reports_syncing_while_running(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id: "plan-1")
+    monkeypatch.setattr(tools, "_wait_for_plan",
+                        lambda plan_id, **kwargs: {"state": "running"})
+
+    result = tools.refresh_mirror("111")
+    assert result["ok"] is True
+    assert result["status"] == "syncing"
+
+
+def test_refresh_mirror_reports_failure(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id: "plan-1")
+    monkeypatch.setattr(tools, "_wait_for_plan",
+                        lambda plan_id, **kwargs: {"state": "failed"})
+
+    result = tools.refresh_mirror("111")
+    assert result["ok"] is False
+    assert result["status"] == "failed"
+
+
+def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+
+    def _raise(course_id):
+        raise ValueError("Not a Current course.")
+
+    monkeypatch.setattr(tools, "_enqueue_sync", _raise)
+
+    assert tools.refresh_mirror("111") == {"ok": False, "error": "Not a Current course."}
 
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_five_read_only_tools():
+def test_server_registers_exactly_the_six_read_only_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
         "list_courses", "get_course_assignments", "get_roster",
-        "get_submissions", "get_gradebook_snapshot",
+        "get_submissions", "get_gradebook_snapshot", "refresh_mirror",
     }
 
 

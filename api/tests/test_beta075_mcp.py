@@ -3,24 +3,33 @@ import os
 import sys
 from pathlib import Path
 
-from api import course_scope, gradebook_queries, gradebook_snapshot, roster_service
+from api import course_scope, gradebook_queries, gradebook_snapshot
 from api.feedback_vault import Vault
 from api.mcp_server import contract, pseudonym, tools
+from api.mirror import store as mirror_store
+from api.webui import workspace
 from api.webui.routes import gradebook_snapshot as gradebook_route
+
+
+def _explode_live(*_args, **_kwargs):
+    raise AssertionError("live Canvas read attempted")
 
 
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 2
+    assert contract.TOOL_SCHEMA_VERSION == 3
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
-    # v1 stays immutable and loadable for clients pinned to it.
+    # v1 and v2 stay immutable and loadable for clients pinned to them -- both
+    # predate refresh_mirror (added in v3), so they must match each other,
+    # not the (now 6-tool) live/expected contract.
     v1 = contract.load_contract(1)
+    v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
-    assert [t["name"] for t in v1["tools"]] == [t["name"] for t in expected["tools"]]
-    assert len(live["tools"]) == 5
+    assert [t["name"] for t in v1["tools"]] == [t["name"] for t in v2["tools"]]
+    assert len(live["tools"]) == 6
     forbidden = ("write", "update", "comment", "push", "delete", "create", "canvas")
     assert all(not any(word in tool["name"].lower() for word in forbidden) for tool in live["tools"])
 
@@ -54,13 +63,28 @@ def test_http_and_mcp_share_use_cases_and_student_outputs_stay_green(tmp_path, m
         "body": "Learner One wrote this.",
         "attachments": [{"filename": "private-name.pdf"}],
     }]
-    monkeypatch.setattr(gradebook_queries, "course_students", lambda _course: (users, None))
-    monkeypatch.setattr(gradebook_queries, "course_assignments", lambda _course: (assignments, None))
-    monkeypatch.setattr(gradebook_queries, "course_submissions", lambda _course: (submissions, None))
-    monkeypatch.setattr(gradebook_queries, "assignment", lambda *_args: (assignments[0], None))
-    monkeypatch.setattr(gradebook_queries, "assignment_submissions", lambda *_args: (submissions, None))
-    monkeypatch.setattr(roster_service, "fetch_students", lambda _course, **_kwargs: (users, None))
-    monkeypatch.setattr(roster_service, "fetch_sections", lambda _course, **_kwargs: {"800001": "Period 1"})
+
+    # Seed a real on-disk mirror instead of monkeypatching live Canvas reads:
+    # both the HTTP route (mirror-first-with-live-fallback) and the MCP tool
+    # (strict mirror-only) must genuinely read from it, not from a stub.
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    root = str(tmp_path)
+    mirror_store.write_roster("current", users, {"800001": "Period 1"}, root=root)
+    mirror_store.write_assignments("current", assignments, root=root)
+    mirror_store.merge_submissions("current", "700010", submissions, root=root, replace=True)
+    mirror_store.record_pass("current", "full", ok=True, root=root)
+
+    # Tripwires: if either path ever fell back to a live Canvas read instead
+    # of the mirror seeded above, one of these would raise. (roster_service
+    # is deliberately left unpatched here -- tools._cache_safe() treats a
+    # patched roster_service.fetch_students/fetch_sections as a test seam and
+    # refuses to serve the mirror at all, which would break the very mirror
+    # path this test is proving out.)
+    monkeypatch.setattr(gradebook_queries, "course_students", _explode_live)
+    monkeypatch.setattr(gradebook_queries, "course_assignments", _explode_live)
+    monkeypatch.setattr(gradebook_queries, "course_submissions", _explode_live)
+    monkeypatch.setattr(gradebook_queries, "assignment", _explode_live)
+    monkeypatch.setattr(gradebook_queries, "assignment_submissions", _explode_live)
     monkeypatch.setattr(tools.config, "active_courses", lambda: [
         {"id": "current", "active": True}, {"id": "previous", "active": False},
     ])
@@ -78,7 +102,14 @@ def test_http_and_mcp_share_use_cases_and_student_outputs_stay_green(tmp_path, m
     assert http_result.body
     http_payload = json.loads(http_result.body)
     mcp_gradebook = tools.get_gradebook_snapshot("current")
+    # One call from the HTTP route's own load_snapshot(course_id) (queries=None,
+    # so it resolves the mirror itself), one from tools._load_snapshot's
+    # internal load_snapshot(course_id, queries=namespace) -- both still hit
+    # this wrapper even though the MCP path resolves the mirror namespace
+    # itself via mirror_queries.snapshot_queries before calling in.
     assert len(loader_calls) == 2
+    assert http_payload["source"] == "mirror"
+    assert mcp_gradebook["source"] == "mirror"
     assert "user_id" not in http_payload["students"][0]
     assert mcp_gradebook["students"]["columns"] == [
         "pseudonym", "missing", "late", "ungraded", "pct"]
@@ -86,6 +117,8 @@ def test_http_and_mcp_share_use_cases_and_student_outputs_stay_green(tmp_path, m
 
     mcp_roster = tools.get_roster("current")
     mcp_submissions = tools.get_submissions("current", "700010")
+    assert mcp_roster["source"] == "mirror"
+    assert mcp_submissions["source"] == "mirror"
     for payload in (mcp_roster, mcp_submissions, mcp_gradebook):
         assert payload["ok"] is True
         verdict = __import__("api.feedback_safety", fromlist=["scan_payload"]).scan_payload(

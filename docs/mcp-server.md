@@ -16,22 +16,37 @@ Canvas PAT and every write path.
 - **Session-local.** Nothing here logs tool arguments or results. Don't write results to a
   file, and don't attempt to re-identify a student from a pseudonym.
 - **stdio transport only.** No network port is ever bound.
+- **Mirror-only, never a live relay.** `get_roster`, `get_submissions`, and
+  `get_gradebook_snapshot` serve exclusively from the local CanvasMirror
+  (`docs/mirror.md`) and refuse with a clear error when it's stale or missing,
+  instead of fetching live from Canvas. The assistant's only way past a
+  refusal is `refresh_mirror`, which triggers Canvas Expert's own sync and
+  reports freshness — never Canvas data. This keeps the AI's whole path to
+  Canvas indirect: it can ask Canvas Expert to sync, then read what Canvas
+  Expert wrote to disk, but it can never receive a live Canvas response
+  directly.
 
 ## Tools
 
-Tool schema version 2.
+Tool schema version 3.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
-| `get_roster(course_id)` | Table of `(pseudonym, section_names)` | Yes — pseudonymized |
-| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed | Yes — pseudonymized |
-| `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats | Yes — pseudonymized |
+| `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
+| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
+| `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
+| `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
 
 `get_course_assignments` only reads the local course catalog written by the CanvasExpert
 web UI — it never falls back to a live Canvas call. If the catalog hasn't been refreshed
 yet, refresh it from the web UI first, then retry.
+
+`get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
+CanvasMirror — they never fall back to a live Canvas call either. If the mirror is stale or
+missing for a course, they return `{"ok": false, "error": "..."}` naming the problem; call
+`refresh_mirror(course_id)` and retry the same read once it reports `"synced"`.
 
 Every `course_id` tool is scoped to Current courses (`config.active_courses()`) — the same
 scope the web UI uses.
@@ -53,9 +68,6 @@ turn of the conversation, so the wire format is deliberately compact:
 - The outbound safety scan always runs on the full row payload **before** tabulation and
   truncation happens **before** the scan — the gate inspects exactly the bytes that leave
   the machine.
-
-The server also caches roster/section fetches in memory for 5 minutes (never on disk), so
-back-to-back tool calls in one session don't each re-hit Canvas.
 
 ## Running it
 
@@ -115,4 +127,6 @@ After registering, try `list_courses` first (no Canvas call, no student data —
 sanity check that the process starts and the interpreter resolves correctly), then
 `get_gradebook_snapshot` on a Current course. Every student name in the output should be a
 pseudonym you don't recognize from the real roster — that's the privacy boundary working as
-intended, not a bug.
+intended, not a bug. If the mirror hasn't synced this course yet, `get_gradebook_snapshot`
+(or `get_roster`/`get_submissions`) refuses instead — call `refresh_mirror` for that course
+and retry.

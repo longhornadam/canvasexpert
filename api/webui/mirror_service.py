@@ -155,13 +155,21 @@ def enqueue_heartbeat_refreshes() -> list[str]:
     return plans
 
 
-def wait_for_plan(plan_id: str, *, poll_seconds: float = 0.05) -> dict:
-    """Heartbeat/timer helper: workers own I/O while this helper only observes state."""
+def wait_for_plan(plan_id: str, *, poll_seconds: float = 0.05,
+                  timeout_seconds: float | None = None) -> dict:
+    """Heartbeat/timer helper: workers own I/O while this helper only observes state.
+
+    ``timeout_seconds`` bounds the wait for callers that must not block a
+    request indefinitely (e.g. the MCP refresh tool); the default of None
+    preserves the original unbounded behavior used by the heartbeat."""
     instance = coordinator_instance()
+    deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
     while True:
         plans = instance.status(plan_id).get("plans", [])
         if not plans or plans[0]["state"] in {"succeeded", "failed", "cancelled"}:
             return plans[0] if plans else {"state": "failed"}
+        if deadline is not None and time.monotonic() >= deadline:
+            return plans[0]
         time.sleep(poll_seconds)
 
 
