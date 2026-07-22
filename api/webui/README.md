@@ -15,6 +15,31 @@ For the shared layout/template API and presentation ownership, see
 
 ---
 
+## Rendered verification (read-only)
+
+Use a lifespan-disabled server for read-only browser verification so enabled routines
+cannot fire:
+
+```powershell
+cd api
+py -m uvicorn webui.server:app --host 127.0.0.1 --port 8765 --lifespan off
+```
+
+The active execution brief names the affected routes, useful viewports, themes, and
+interactions. Do not expand that matrix by ritual. For each named route, confirm:
+
+- `document.documentElement.scrollWidth === window.innerWidth` unless an explicitly
+  documented data table owns horizontal scrolling.
+- Required page globals exist and scripts occur once in dependency order.
+- Deep links, course focus/targets, keyboard focus, dialogs, and theme initialization work.
+- Browser console has zero new CanvasExpert errors or warnings.
+- No Canvas write, external AI request, routine execution, or session start occurs during
+  read-only verification.
+
+Source tests never substitute for rendered verification.
+
+---
+
 ## Page map
 
 | Route | Page | JS |

@@ -9,9 +9,6 @@ Engine-layer reference docs. **Project orientation is the root `AGENTS.md`**
 - Live Canvas behavior and API limits -> [`../../api/README.md`](../../api/README.md)
 
 ## In this folder (engine/docs/)
-- `JSON3_PRODUCTION_READINESS.md` — the JSON 3.0 spec-mode pipeline (`QUIZFORGE_SPEC_MODE`)
-- `MIGRATION_GUIDE.md` — **historical**: the `Packager/quizforge/` → `engine/` restructure (Nov 2025)
-- `VERIFICATION_CHECKLIST.md` — **historical**: migration sign-off snapshot (Nov 2025)
 - `ARCHITECTURE.md` - current engine architecture and boundaries
 - `AGENT_MAP.md` - short navigation guide for engine-only agent work
 

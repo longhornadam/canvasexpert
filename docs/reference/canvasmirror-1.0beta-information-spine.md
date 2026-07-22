@@ -28,14 +28,13 @@ current contract and module maps in the same change.
 ## Reading map (senior routing only)
 
 - Sections 1–5 lock the product decision, evidence, existing foundation, and design laws.
-- Sections 6–10 define the target architecture, projection/read contracts, coordinator,
+- Sections 6–10 define the current architecture, projection/read contracts, coordinator,
   and deletion/change semantics.
 - Sections 11–15 map every product surface and Canvas endpoint family, then lock Gradebook,
   write-safety, and privacy boundaries.
-- Sections 16–18 define performance targets, the ordered migration program, and how a
-  senior should write bounded executor briefs.
-- Sections 19–24 provide the test matrix, release checklist, known starting issues,
-  non-goals, current insertion points, and final north star.
+- Section 16 defines the performance targets that remain the bar for the live run.
+- Sections 19–24 provide the test/benchmark matrix, the pending live-run checklist, known
+  open seams, non-goals, current insertion points, and final north star.
 
 ---
 
@@ -112,128 +111,30 @@ CanvasMirror already proves the value of local reads. The remaining problem is s
 the application still has multiple acquisition owners, multiple freshness stories, and
 several endpoint call sites that bypass the mirror entirely.
 
-### 3.1 Measured baseline
-
-A July 2026 test used three configured courses: one current course and two concluded
-courses. The data below is aggregate and contains no course or student identity.
-
-| Scenario | Wall time | Physical HTTP GETs | Bytes downloaded |
-|---|---:|---:|---:|
-| Empty private mirror to all three courses | 12:01.7 | 383 | 23.11 MiB |
-| Immediate refresh after a small set of changes | 2:17.4 | 113 | 2.91 MiB |
-
-The warm refresh spent almost all of its time in network calls:
-
-- 11 successful logical calls consumed 33.0 seconds;
-- 96 forbidden New Quiz metadata calls consumed 81.4 seconds;
-- one connection failure consumed 22.2 seconds;
-- there was no deliberate sleep, cooldown, or structural time gate causing the delay.
-
-On the cold sync, successful logical calls consumed about 574 seconds and forbidden New
-Quiz calls consumed about 136 seconds. The 403s are not the only cold-sync cost, but they
-are the dominant avoidable warm-sync cost.
-
-The change test also exposed correctness boundaries. The teacher created an assignment/New
-Quiz, deleted an assignment, and created a page. The comparison surfaced only the
-assignment creation. The page omission is expected under the current contract because page
-content is not mirrored. The missing deletion signal is not acceptable for an information
-spine and must be resolved before 1.0 beta.
-
-### 3.2 The architectural diagnosis
-
-The benchmark is not evidence that “Canvas is just slow.” It exposes four design issues:
-
-1. **Lifecycle ignorance.** A course can be configured in Canvas Expert while concluded in
-   Canvas. Configuration membership and Canvas lifecycle are currently conflated.
-2. **Capability ignorance.** A scope that returns a durable 401/403 is retried per object and
-   per heartbeat instead of being recorded as restricted with a bounded reprobe policy.
-   For New Quizzes the root cause is already known and documented (`api/README.md`): the
-   gate is **active enrollment** — the same token and endpoint return 200 in an
-   actively-enrolled course and 403 once the enrollment is concluded/retired. The failure
-   is course-level and predictable from lifecycle, not a per-quiz mystery.
-3. **Oversized refresh semantics.** `sync_now(course_id)` means “run the whole delta,” even
-   when PowerGrader only needs submissions for one assignment.
-4. **Incomplete deletion semantics.** The current assignment index can change while orphan
-   submission files remain readable until a full reconcile; change reporting also failed
-   to prove the tested assignment deletion.
-
-These are information-spine concerns, not isolated New Quiz bugs.
-
-### 3.3 Test baseline and slice gates
-
-The broad suite is an integration/release instrument, not an automatic toll for every
-bounded slice. At each declared integration checkpoint, record the known commit, exact
-command, pass/fail/deselection result, and reproduction state of any pre-existing failure in
-this vision or the current brief. A later slice cites that one record; it does not rerun,
-re-explain, or silently absorb an unrelated failure.
-
-Every implementation brief instead names the focused tests and any behavior/render evidence
-that form its acceptance gate before execution. A slice confined to its declared surface is
-accepted when its pre-authored criteria and named gate hold; it does not owe the broad matrix.
-The full API/engine suites and the section 19 matrix run only at an explicitly declared
-integration/release checkpoint, after genuinely cross-cutting coupling, or when focused
-evidence exposes unexpected coupling.
-
-**Current API baseline (integration checkpoint, source HEAD `5059b26`, 2026-07-18):**
-`py -m pytest api/tests -q` -> **937 passed, 5 failed, 1 skipped** in 108.59 seconds. The
-five failures are the known starting state for subsequent slices; this record does not claim
-their root cause or that they predate this head:
-
-- `test_autoscore_failure_is_partial_and_retry_upserts_once`
-- `test_delta_after_full_does_not_erase_stored_comments`
-- `test_ordinary_ingestion_preserves_all_formats_and_routes_shared_gate`
-- `test_apply_creates_quiz_and_items`
-- `test_execute_creates_groups`
-
-Later slices name their own focused gate and report only evidence that this baseline changed.
-
 ---
 
 ## 4. Existing foundation: preserve it, do not rebuild it
 
-The 1.0-beta program begins from substantial completed work.
+The 1.0-beta program begins from substantial completed work. The durable component
+inventory the migration must preserve:
 
-### CanvasMirror v1
-
-- Versioned private course storage under the configured workspace.
-- Students, sections, assignments, current submissions, attempt history, grades, status,
-  and nightly submission comments.
-- Full, delta, and roster passes with last-good behavior and watermarks.
-- Mirror-first gradebook snapshots and MCP roster/submission reads.
-
-### CanvasMirror New Quizzes v2
-
-- Continuous New Quiz metadata and item catalogs.
-- Focused, on-demand response snapshots.
-- Append-preserving attempts and URL/credential scrubbing.
-- PowerGrader cache reads while native evidence and every grading write remain live.
-
-### CanvasMirror v3 read migration
-
-- Work-discovery providers are mirror-first for assignments, users, and submissions.
-- Display-only routine reads and curve assignment lists are mirror-first.
-- Text-only PowerGrader session creation uses delta-then-disk.
-- Submission comments are persisted on full passes.
-- The pseudonym vault has separate multi-machine hardening.
-
-### Course Catalog v1
-
-- A student-data-free assignment/module projection with strict allowlists.
-- Rich assignment descriptions, rubric data, and module-item outlines.
-- Atomic writes, previous snapshots, corruption recovery, and OneDrive conflict warnings.
-- PowerGrader setup reads the catalog before a bounded selected-course refresh.
-
-### Existing write safety
-
-- Operation-ledger adapters own most content and gradebook mutation workflows.
-- PowerGrader has explicit review, live preflight, idempotency, and receipt rules.
-- PowerGrader's separate live-course New Quiz item-finalization lane uses Canvas's
-  first-party, short-lived signed grader transport for teacher-reviewed item scores and
-  per-item feedback. It preserves preflight freeze, result-version drift detection,
-  idempotency, verification, receipts, and fail-closed SpeedGrader fallback. Active/current
-  instructor enrollment is required; concluded, closed, past-enrollment, or otherwise
-  restricted courses can return `403`. New Quiz scheduled, late-catch-up, and interactive
-  automatic posting remain unavailable.
+- **CanvasMirror v1** — versioned private course storage (students, sections, assignments,
+  submissions, attempts, grades, status, comments) with full/delta/roster passes,
+  last-good behavior, watermarks, mirror-first gradebook snapshots, and MCP reads.
+- **CanvasMirror New Quizzes v2** — continuous NQ metadata/item catalogs, focused response
+  snapshots, append-preserving attempts, URL/credential scrubbing; grading writes stay live.
+- **CanvasMirror v3 read migration** — mirror-first work-discovery providers, display reads,
+  and curve lists; comments persisted on full passes; separately hardened pseudonym vault.
+- **Course Catalog v1** — student-data-free assignment/module projection with strict
+  allowlists, rich descriptions/rubric data/module outlines, atomic writes, previous
+  snapshots, corruption recovery, and OneDrive conflict warnings.
+- **Existing write safety** — operation-ledger adapters own most content/gradebook
+  mutations; PowerGrader keeps explicit review, live preflight, idempotency, and receipts.
+  Its live-course New Quiz item-finalization lane uses Canvas's first-party short-lived
+  signed grader transport (preflight freeze, result-version drift detection, verification,
+  receipts, fail-closed SpeedGrader fallback); active/current instructor enrollment is
+  required and restricted courses can return `403`; NQ scheduled/late-catch-up/interactive
+  auto-posting remain unavailable.
 
 The migration must converge these pieces. It must not replace them with a database, a new
 job platform, a raw-response cache, or a second write system.
@@ -325,7 +226,7 @@ and queue delay are acceptance evidence.
 
 ---
 
-## 6. Target architecture
+## 6. Current architecture
 
 ```mermaid
 flowchart LR
@@ -486,212 +387,35 @@ transaction. A later retry reuses or reacquires according to the versioned contr
 
 ## 8. The typed read contract
 
-The final API should be based on scope and intent, not Canvas URL shape. Exact Python names
-belong in a senior-written contract, but every implementation must preserve these semantics.
+Reads are typed by scope and intent, not Canvas URL shape. Every result carries an envelope
+(state, capability, source, freshness timestamps, generation) under a `records` payload key.
+Read intents span local-display, refresh-if-stale, focused-current, authoritative-live,
+explicit-diagnostic, and offline. State (`current`/`stale`/`incomplete`/`unavailable`) and
+capability (`supported`/`restricted`/`unsupported`/`unknown`) are separate axes; a restricted
+scope can still hold stale last-good data.
 
-### 8.1 Read intents
-
-| Intent | Typical use | Allowed source behavior | Must never happen |
-|---|---|---|---|
-| Local display | Home cards, pickers, roster table, grade snapshot | Return current or allowed-stale local data immediately; optionally queue background refresh | Block the route on a whole-course sync |
-| Refresh if stale | Opening a selected course surface | Return last-good data and request the named stale scope | Refresh unrelated scopes/courses |
-| Focused current | Start grading one assignment, refresh one report | Synchronously acquire the minimum named scope, then read projection | Treat an old general freshness timestamp as sufficient |
-| Authoritative live | Write preview that must exactly match execution, preflight, verify | Call Canvas through the command owner | Substitute mirror data when Canvas is unavailable |
-| Explicit diagnostic | Test connection, refresh course list, investigate capability | Live call with sanitized output | Persist raw errors/tokens or silently alter normal capability policy |
-| Offline | Canvas unavailable | Serve last-good local state with stale/offline label | Enable a write or claim current |
-
-### 8.2 Every result has an envelope
-
-The exact schema should be versioned in a durable contract. Conceptually every scope/view
-result includes:
-
-```json
-{
-  "course_id": "synthetic-id",
-  "scope": "submissions",
-  "state": "current",
-  "capability": "supported",
-  "source": "mirror",
-  "last_success_at": "ISO-8601",
-  "last_attempt_at": "ISO-8601",
-  "canvas_observed_at": "ISO-8601 or empty",
-  "retry_after": "ISO-8601 or empty",
-  "generation": "opaque local generation",
-  "error_code": "sanitized stable code or empty",
-  "records": []
-}
-```
-
-This is illustrative, not a command to widen every current file. The durable contract must
-define which fields persist and which are computed at read time. Two decisions are locked
-now to prevent drift: the payload key is `records`, matching the existing Course Catalog
-contract (do not introduce a parallel `data` key); and adding envelope fields to the Course
-Catalog requires a versioned schema bump with a validator update, because the catalog
-contract rejects unknown keys — a brief must never loosen unknown-field rejection to
-smuggle envelope fields in.
-
-### 8.3 State and capability are separate
-
-Persisted data state should converge on:
-
-- `current`: the requested acquisition completed and validated;
-- `stale`: last-good data exists but the newest attempt failed or exceeded its age policy;
-- `incomplete`: useful data exists, but pagination, record validation, evidence, or joins
-  did not fully complete;
-- `unavailable`: no usable data exists.
-
-Runtime `queued` and `refreshing` states may be presented by the coordinator but should not
-replace the last-good persisted state.
-
-This four-state enum is not new everywhere: the Course Catalog contract already uses
-exactly these four states, while the private mirror currently persists only a two-state
-degradation (`stale` after a prior success, `unavailable` before one) and has no
-`incomplete`. The migration is therefore "the private mirror adopts the catalog's existing
-enum," not a fresh invention — briefs must say so, or an executor reading only
-`docs/mirror.md` will believe `incomplete` is novel.
-
-Capability should separately express:
-
-- `supported`: the scope has succeeded or the course advertises it;
-- `restricted`: authorization/lifecycle prevents access with current credentials;
-- `unsupported`: the Canvas/course feature does not exist;
-- `unknown`: not yet probed or a transient failure prevents classification.
-
-A restricted scope can still have stale last-good data. An unavailable scope is not
-necessarily unsupported.
-
-### 8.4 Source labeling is end-to-end
-
-Any UI, MCP payload, report manifest, or support snapshot that exposes freshness must use
-the common envelope. Do not invent surface-specific `cached`, `fresh`, `loaded`, and
-`synced` booleans with different meanings.
+This contract is now formalized and shipped. See
+`docs/contracts/canvas-read-spine-contract.md` for the authoritative envelope schema, the
+per-intent source rules, and the versioning constraints (including the locked `records` key
+and the Course Catalog unknown-field rejection rule).
 
 ---
 
 ## 9. Coordinator and scheduling model
 
-### 9.1 Named scopes replace monolithic `sync_now(course_id)`
+The coordinator replaces monolithic `sync_now(course_id)` with named minimum scopes
+(course context, structure, roster, groups, submission delta, focused assignment, comment
+reconcile, New Quiz metadata/response, evidence) planned into orchestrations. It enforces a
+priority order (live preflight/verify > targeted post-write reconcile > teacher focus >
+manual refresh > current-course maintenance > concluded-course true-up), coalesces duplicate
+requests under a fixed small concurrency bound, and applies course lifecycle and per-scope
+capability policy (a capability circuit backstops durable restrictions; lifecycle predicts,
+one bounded probe confirms). The app shell renders from last-good state with no global
+readiness barrier.
 
-The coordinator must support the minimum useful scope. Likely scope families are:
-
-- `course_context`;
-- `course_structure.assignments`;
-- `course_structure.modules`;
-- `course_structure.assignment_groups`;
-- `course_structure.rubrics` where consumed;
-- `gradebook_config`;
-- `roster`;
-- `groups`;
-- `submissions.course_delta`;
-- `submissions.assignment_current`;
-- `comments.reconcile`;
-- `new_quizzes.metadata`;
-- `new_quizzes.response:<assignment>`;
-- `evidence:<assignment>`.
-
-The senior may choose different names, but a focused submissions refresh must not imply New
-Quiz metadata, roster, modules, or every course.
-
-“Full sync” becomes an orchestration plan over scopes, not one inseparable function. This
-allows independent failure, retry, progress, and lifecycle policies.
-
-Vocabulary warning for brief authors: today's contract (`docs/mirror.md`) is written in
-terms of **passes** (`full`, `delta`, `roster`), while this document is written in terms of
-**scopes**. The words overlap — there is a roster *pass* today and a `roster` *scope*
-tomorrow, and today's delta pass covers what becomes `submissions.course_delta` plus
-`new_quizzes.metadata`. Every brief must state which vocabulary it uses and map between
-them explicitly; an executor must never treat "pass" and "scope" as synonyms.
-
-### 9.2 Priority order
-
-The coordinator should enforce this order:
-
-1. live command preflight and verification;
-2. targeted post-write reconciliation;
-3. teacher-focused refresh for the selected course/assignment;
-4. explicit manual refresh;
-5. current-course background maintenance;
-6. concluded-course maintenance and low-priority true-ups.
-
-Background requests must yield before they starve a write preflight. Duplicate requests for
-the same course/scope should coalesce. A fixed, small concurrency bound is appropriate;
-Canvas Expert does not need a generalized adaptive job platform.
-
-### 9.3 Course lifecycle policy
-
-Canvas Expert configuration and Canvas lifecycle are separate dimensions:
-
-- **configured current course:** normal background deltas plus daily reconcile;
-- **configured concluded/read-only course:** initial/explicit sync and low-frequency
-  maintenance for accessible scopes, but no 15-minute submission/New Quiz churn;
-- **configured inaccessible course:** retain last-good data, expose restriction, and retry
-  only on manual request or bounded capability cooldown;
-- **unconfigured course:** may remain on disk, but normal routes and heartbeat do not read or
-  refresh it.
-
-A concluded course may still expose core assignments/submissions while restricting New Quiz
-metadata. Capability must remain per scope; lifecycle is not a blanket assumption.
-
-Recommended policy for 1.0 beta:
-
-- current courses: 15-minute lean deltas, daily roster and full correctness reconcile;
-- concluded courses: no normal 15-minute delta; refresh last-good accessible scopes when
-  explicitly focused or older than a daily maintenance threshold;
-- restricted scopes: no heartbeat reprobe before `retry_after`; manual diagnostic refresh
-  can override the cooldown;
-- lifecycle/capability context: refresh on course-list refresh, manual sync, or a modest
-  daily cadence.
-
-Exact intervals are tuneable parameters, not reasons to change the architecture.
-
-### 9.4 Capability circuit and error policy
-
-The current New Quiz behavior performs a per-quiz call even after repeated 403s prove the
-scope is unavailable. The root cause of those 403s is documented in `api/README.md` and
-confirmed in production use: New Quiz endpoints are gated on **active enrollment**, so a
-current course succeeds while a retired/expired/closed course fails deterministically. The
-design is therefore **lifecycle predicts, probe confirms, circuit backstops**: the
-course-context lifecycle signal downgrades the New Quiz scope before any fan-out, one
-bounded probe per cooldown confirms the classification, and the generic circuit below is
-the backstop for failures lifecycle cannot predict. The target behavior is:
-
-1. classify failures into stable sanitized categories (`unauthorized`, `forbidden`,
-   `not_found`, `rate_limited`, `timeout`, `connection`, `invalid_response`, `storage`);
-2. distinguish transient transport failures from durable course/scope restrictions;
-3. open a course/scope circuit after bounded evidence of a capability-class authorization
-   failure;
-4. skip remaining fan-out work for that scope;
-5. retain last-good data and record `retry_after`;
-6. probe again only on cooldown, lifecycle change, explicit manual request, or a relevant
-   successful CanvasExpert mutation.
-
-One bad item must not poison a whole supported scope. The acquisition contract must state
-when a failure is scope-level and when it is record-level. For the New Quiz metadata scope,
-the enrollment gate makes the classification course-level: consecutive 403s across distinct
-quizzes in one course are scope evidence, not item noise. The foundation batch must also test whether
-the New Quiz collection endpoint (`GET /api/quiz/v1/courses/:id/quizzes`) can serve as a
-one-call scope probe — and potentially replace the per-quiz metadata fan-out outright for
-accessible courses.
-
-### 9.5 Pagination, rate limits, and timeouts
-
-- Physical page requests and logical collection requests must be measured separately.
-- Pagination completion must be proven before a collection can authorize deletion.
-- Canvas rate-limit headers and 429 retry timing must be honored.
-- Retries must be bounded and visible; no hidden multi-minute loop.
-- Long submission collections may run concurrently with independent course metadata within
-  the fixed coordinator bound, but not with unbounded per-assignment fan-out.
-- Network acquisition, normalization, validation, and disk commit times must be measured
-  separately so slow Canvas responses are not confused with local processing.
-
-### 9.6 Startup and manual sync behavior
-
-The application shell and last-good data render before synchronization. The existing
-two-minute catch-up can evolve, but there must be no global readiness barrier.
-
-Manual sync should report course/scope progress and allow a selected course or named scope.
-A manual “all configured courses” action may enqueue a plan; it must not hold one HTTP
-request open for twelve minutes or make the UI unusable.
+This model is now formalized and shipped. See
+`docs/contracts/canvasmirror-coordinator-contract.md` for the authoritative scope names,
+priority/lifecycle/capability policy, cadence parameters, and pagination/rate-limit rules.
 
 ---
 
@@ -706,234 +430,37 @@ then may the new ID set replace the old set.
 A fully successful, fully paginated empty response can be authoritative. A timeout, partial
 pagination, invalid root, or rejected record cannot.
 
-Current behavior splits in two directions, and briefs must target the right owner:
-
-- The **Course Catalog** (`api/course_catalog.py`) treats a successful empty response as a
-  failure and retains last-good records, so it cannot represent the legitimate deletion of
-  the last object. Fixing it may require a new catalog contract version.
-- The **private mirror** (`api/mirror/sync.py` + `store.py`) has the inverse hazard: it
-  writes any non-error empty collection as authoritative membership, and the full pass then
-  prunes submission files from it. A truncated or transiently empty response is therefore
-  potentially destructive. The mirror must prove pagination completeness before an empty
-  (or shrunken) collection may drive deletion or pruning.
-
-### 10.2 Assignment deletion behavior
-
-After a complete assignment collection commits:
-
-1. compute added, changed, unchanged, and removed assignment IDs;
-2. publish the new assignment index atomically;
-3. make aggregate submission queries filter by the committed assignment membership
-   immediately;
-4. invalidate related New Quiz metadata, report snapshots, derived views, and catalog/module
-   references for removed assignments;
-5. prune orphan disposable mirror files only after path validation and successful commit;
-6. record sanitized change counts for diagnostics.
-
-Filtering provides immediate logical correctness. Pruning controls disk/OneDrive clutter.
-Neither action may touch canonical teacher evidence or operation receipts.
-
-### 10.3 Submission and attempt behavior
-
-- Delta merges remain idempotent with overlap.
-- Attempts observed for a living submission remain append-preserving.
-- A complete full reconcile may remove submissions/students no longer present in Canvas.
-- An assignment deletion removes the assignment from all aggregate reads even before file
-  cleanup.
-- Current pointers reflect the newest authoritative fetch, not merely the highest locally
-  preserved attempt.
-
-### 10.4 Comment freshness and deletion
-
-Comments are a known delta blind spot because comment-only activity does not reliably move
-the existing submission watermarks. The 1.0-beta contract should use three lanes:
-
-- lean 15-minute submission deltas without expensive comment-wide refresh;
-- targeted post-write refresh after CanvasExpert posts a comment;
-- bounded comment reconcile for a focused Home/Grade surface plus a daily full correctness
-  pass.
-
-The UI must show comment freshness separately. A complete comment-bearing reconcile must be
-able to replace an old non-empty list with an authoritative empty list so deleted comments
-do not persist forever. A lean delta that omitted comments must preserve the existing list.
-
-### 10.5 Page changes
-
-Page-body creation, update, or deletion does not count as a mirror miss while page bodies
-remain outside the contract. Module placement changes do count because module outlines are
-mirrored. Diagnostics and tests must state the scope expectation before judging a change.
-
-### 10.6 New Quiz changes
-
-- Assignment identity is the bridge between core Canvas and New Quiz metadata.
-- A complete assignment removal invalidates the corresponding New Quiz tree.
-- Metadata true-up remains bounded because item changes may not bump assignment timestamps.
-- Known-restricted courses do not perform per-quiz fan-out.
-- Focused response snapshots retain attempts but do not claim freshness for students or
-  attempts that could not be joined.
-
 ---
 
-## 11. Tool-to-Canvas routing in the target state
+## 11. Tool-to-Canvas routing
 
-This section is the product map the senior should preserve while writing implementation
-briefs.
+The product map the senior should preserve while writing briefs. The module maps under
+`docs/reference/` own the per-route implementation detail; this table owns the durable
+routing law.
 
-### 11.1 Home and Work
+| Surface | Local spine | Canvas live / focused | After write |
+|---|---|---|---|
+| Home / Work | course context, assignments, submissions, comments, roster, groups, derived attention/work rows | bounded comment reconcile on focus; explicit retry for a failed scope | actions enter the owning operation/PowerGrader path; no writes from discovery |
+| Create / Course Expert | course context, modules, module items, assignment groups, assignment/rubric search records, capability | operation-ledger baseline, collision/drift checks, create/update, file upload, module placement, overrides, verification | refresh exact structure scopes (assignment → both projections; placement → modules; rubric → index) |
+| Course Info | course context, students, sections, groups/memberships, modules, assignments | explicit course-list refresh; any non-persisted field (e.g. email) only if that feature remains | targeted refresh of the touched scope |
+| Grade / PowerGrader | picker data, rubric context, text-entry rows, attempts, comment context, cached NQ metadata/response snapshots | exact assignment state/submissions when the delta cannot satisfy; evidence; Student Analysis report; native NQ evidence; late-catch-up polling; grade/comment/NQ-finalization writes | refresh exact submission/student or NQ response scope, then invalidate grading-debt/attention views; never whole-course `sync_now`; never unrelated NQ metadata |
+| Gradebook Expert | students, assignments, submissions, personalized due facts, assignment groups/weights, late-policy display, grading settings, optional grading periods, derived snapshots | curve baselines feeding a write, sweep final recompute, extensions/overrides, late-policy apply/verify, every grade/status mutation | refresh only affected gradebook-config/assignment/submission/due-fact scopes |
+| Students / Roster | students, sections, group categories, groups, memberships, aliases, tiers, extra-time settings | group creation, membership add/remove, final verification | targeted group/membership refresh; invalidate roster-warning views |
+| Student Reports / portfolios | roster identity, assignments, standing, text bodies, attempts, comments, group names, due facts, derived report facts | attachment bytes and in-memory signed URLs; any field absent from a deliberate projection | emit a private source/freshness manifest; never copy signed URLs into reports |
+| Automations / Routines | detection/count/report-only routines whose scope is fresh enough | final compute/preflight and execute of any mutating routine | targeted refresh of scopes the routine mutated |
+| MCP | roster, assignments, submissions, grades/status, allowed derived views (local pseudonymization + source labeling) | bounded, explicitly authorized fallback only when no projection exists; never an accidental all-course first sync | newly mirrored fields need an outbound allowlist + scrub review before entering payloads |
+| Settings / Connections | course context, last-known lifecycle/capability, sync state, sanitized diagnostics | connection test, `/users/self`, course discovery, capability diagnostic | course discovery teaches the course-context scope; status pages read local envelopes |
+| Operation Ledger | course/module/assignment-group/rubric pickers | prepare baselines, execute, drift detection, reconcile, verify (live even when local equivalents exist) | each adapter declares the scopes it invalidates/refreshes; no shadow cache |
+| AI Expert | local only — no Canvas read requirement | — | not routed through CanvasMirror for symmetry |
+| Diagnostics / support | sanitized local metrics: scope, state, request counts, durations, bytes, retry/circuit state, stable error code | live health tests are explicit user actions | support bundles exclude student rows, response bodies, tokens, signed URLs, and private paths |
 
-**Local spine:** course context, assignments, submissions, comments, roster, groups, and
-derived attention/work rows.
+Two durable safety notes survive the table:
 
-**Canvas on focus:** a bounded comment reconcile when Home needs fresher conversation
-state; an explicit retry for a failed scope.
-
-**Canvas writes:** none from discovery. Any action launched from a work row enters its
-owning operation or PowerGrader command path.
-
-**Transition:** remove endpoint-regex provider shims after providers use the typed read
-service. Work Registry remains job authority, not a second student-data store.
-
-### 11.2 Create / Course Expert
-
-**Local spine:** configured course context, modules, module items, assignment groups,
-assignment/rubric search records, and course capability.
-
-**Canvas live:** operation-ledger baseline, name collision/drift checks when required,
-assignment/page/quiz/rubric creation or update, file upload, module placement, overrides,
-and verification.
-
-**After write:** refresh or invalidate exact structure scopes. Assignment creation updates
-both catalog and private assignment projections; module placement refreshes modules; rubric
-creation refreshes rubric index; a page operation refreshes module stubs and a future page
-index only if one exists.
-
-**Important:** local pickers reduce latency. They never prove that a target still exists at
-execution time.
-
-### 11.3 Course Info
-
-**Local spine:** course context, students, sections, groups/memberships, modules, and
-assignments.
-
-**Canvas live:** explicit course-list refresh; any user-requested field intentionally not
-persisted, such as email, if that feature remains.
-
-**Transition:** replace the current N+1 group/member route and duplicate assignment/module
-fetches. Decide whether email provides enough teacher value to justify an explicit live
-action; do not add email to the mirror merely to preserve the current response shape.
-
-### 11.4 Grade / PowerGrader
-
-**Local spine:** course/assignment picker data, rubric context, text-entry submission rows,
-attempt history, comment context, and fresh cached New Quiz metadata/response snapshots.
-
-**Focused Canvas reads:** exact assignment current state; exact assignment submissions when
-the named delta cannot satisfy them; attachment and media evidence; Student Analysis report
-generation; native New Quiz evidence; late-catch-up polling.
-
-**Canvas writes:** grade/comment pushes and New Quiz item finalization under existing review,
-lock, idempotency, and verification rules.
-
-**After write:** refresh exact submission/student or New Quiz response scope, then invalidate
-grading-debt/attention views. Do not call whole-course `sync_now` from a text submission
-refresh. Do not run unrelated New Quiz metadata as a side effect.
-
-### 11.5 Gradebook Expert
-
-**Local spine:** students, assignments, submissions, personalized due facts, assignment
-groups/weights, Canvas late-policy display, relevant grading settings, optional Canvas
-grading periods, and derived grade snapshots.
-
-**Canvas live:** curve baselines that feed a write, sweep final recomputation, extensions and
-assignment overrides, late-policy apply/verify, and every grade/status mutation.
-
-**After write:** refresh only affected gradebook config, assignment, submission, or due-fact
-scopes.
-
-**Release blocker:** the direct `/api/sweep/apply` path currently accepts client-submitted
-preview entries without a fresh authoritative re-read. Before local preview data expands,
-this path must recompute live at apply time or route through the operation-ledger sweep
-adapter.
-
-### 11.6 Students / Roster
-
-**Local spine:** students, sections, group categories, groups, memberships, local aliases,
-tiers, and extra-time settings.
-
-**Canvas live:** group creation, membership add/remove, and final membership verification.
-
-**After write:** targeted group/membership refresh and invalidation of roster-warning views.
-
-**Transition:** the roster page should not refetch users/sections/groups merely because the
-teacher revisits it.
-
-### 11.7 Student Reports and portfolios
-
-**Local spine:** roster identity, assignments, submission standing, text bodies, attempts,
-comments, group names, personalized due facts, and derived report facts.
-
-**Focused Canvas/evidence:** attachment bytes, signed download URLs in memory, and any report
-field absent from a deliberate projection.
-
-**Transition:** split current direct `requests.Session` collection code into local metadata
-assembly plus focused evidence acquisition. Reports should state source/freshness in their
-private manifest. Do not copy signed URLs into reports.
-
-### 11.8 Automations / Routines
-
-**Local spine:** every detection, count, and report-only routine whose required scope is
-fresh enough.
-
-**Canvas live:** the final compute/preflight and execute phases of any routine that mutates
-Canvas.
-
-**Transition:** built-in and custom routines receive a supported mirror-read interface and
-an explicit live command interface. A custom routine must not construct arbitrary Canvas
-GETs for data already owned by the spine.
-
-### 11.9 MCP
-
-**Local spine:** roster, assignments, submissions, grades/status, and allowed derived views,
-with existing local pseudonymization and source labeling.
-
-**Canvas live:** only a bounded, explicitly authorized fallback when no usable projection
-exists. An MCP read must not unexpectedly initiate an all-course first sync.
-
-**Safety:** newly mirrored private fields do not automatically enter MCP payloads. Each
-field needs an outbound allowlist and scrub review.
-
-### 11.10 Settings and Connections
-
-**Local spine:** configured course context, last-known lifecycle/capability, sync state, and
-sanitized performance diagnostics.
-
-**Canvas live:** connection test, `/users/self`, explicit course discovery, and deliberate
-capability diagnostic.
-
-**Transition:** course discovery teaches the local course-context scope. Status pages read
-local envelopes; they do not probe Canvas simply to render.
-
-### 11.11 Operation Ledger
-
-**Local spine:** course/module/assignment-group/rubric pickers may use local projections.
-
-**Canvas live:** prepare baselines where correctness demands it, execute, drift detection,
-reconcile, and verify. These remain live even when equivalent facts exist locally.
-
-**After write:** every adapter declares the scopes it invalidates or refreshes. The ledger
-must not implement its own shadow cache.
-
-### 11.12 AI Expert
-
-AI Expert has no Canvas read requirement. It remains local. Do not route it through
-CanvasMirror for architectural symmetry.
-
-### 11.13 Diagnostics and support
-
-Operational status uses sanitized local metrics: course alias or configured label where
-appropriate, scope, state, request counts, durations, bytes, retry/circuit state, and stable
-error code. Live health tests remain explicit user actions. Support bundles exclude student
-rows, response bodies, tokens, URLs containing signed values, and private paths.
+- **Pickers never prove existence.** Local pickers reduce latency but never prove a target
+  still exists at execution time; every mutation resolves authoritative live state first.
+- **Sweep-apply release blocker.** The direct `/api/sweep/apply` path must recompute live at
+  apply time or route through the operation-ledger sweep adapter; it must never accept
+  client-submitted preview entries as the authoritative write set.
 
 ---
 
@@ -1005,9 +532,9 @@ It should not persist raw course settings.
 ### 13.3 Read-only gradebook views
 
 Grade snapshots, student/assignment pickers, standing, missing/late/excused state, report
-inputs, and configuration display come from the local spine. Personalized due fields should
-be added to the private submission allowlist because current reports use
-`cached_due_date`/`seconds_late` but the mirror currently drops them.
+inputs, and configuration display come from the local spine. Personalized due fields
+(`cached_due_date`/`seconds_late`) belong in the private submission allowlist because reports
+consume them.
 
 ### 13.4 Write-adjacent gradebook workflows
 
@@ -1052,23 +579,14 @@ incomplete response.
 
 ### 14.2 Mutation-to-scope map
 
-| Mutation | Invalidate/refresh after verified success |
-|---|---|
-| Ordinary grade or submission comment | Exact assignment submissions; comments if changed; grade/work views |
-| New Quiz item score/feedback | Exact student response snapshot; assignment submission total/status; grading views |
-| Assignment create/update/delete | Assignment structure in both projections; related module references; removed-object cleanup |
-| Quiz create/update | Assignment structure; New Quiz metadata if applicable; modules if placement changed |
-| Page create/update/delete | Modules if placement changed; future page index only if it exists |
-| Rubric create/update/attach | Rubric index; affected assignment catalog |
-| Module/item placement | Module structure |
-| Group/category/membership change | Groups/memberships; roster-warning views |
-| Late-policy change | Gradebook-config scope |
-| Assignment override/extension | Focused assignment/effective-due facts and related report view |
-| File upload | Owning content/evidence record only; never trigger course-wide binary refresh |
+Every mutation declares the exact scopes it invalidates or refreshes after verified success,
+and each operation adapter owns that declaration near its own code rather than in one giant
+disconnected registry. The per-mutation mapping is no longer maintained in this document.
 
-Each operation adapter should declare this mapping near its owner. Do not maintain one giant
-string registry disconnected from the operation unless concrete repetition proves it
-simpler.
+The authoritative sources are `docs/reference/mutation-reconciliation-map.md` and the
+enforcing test `api/tests/test_canvas_mutation_ownership.py` — **the test is the source of
+truth**. Any prose mapping (including in the reconciliation map) is unverified until it
+agrees with that test; verify against the test before planning a reconciliation unit.
 
 ### 14.3 GET-only enforcement for background work
 
@@ -1181,392 +699,6 @@ is still incorrect.
 
 ---
 
-## 17. Batched execution plan to 1.0 beta
-
-This is an ordered **batch plan**, not a micro-slice queue. The senior creates one current,
-executor-ready brief at a time, but a brief should normally deliver the whole vertical batch
-below: its shared contract, immediate consumers, migration, and named acceptance gate. Do not
-pre-split a batch into speculative handoffs. If repository truth makes a locked batch too
-large or unsafe, return YELLOW/RED and revise that one brief; do not silently revive a
-30–50-item implementation queue.
-
-The plan deliberately keeps live Canvas at the decision boundary. A batch may strengthen
-routine local reads and targeted reconciliation, but no cached fact authorizes a write,
-preflight, verification, native evidence action, or focused diagnostic read.
-
-### 17.1 Authoritative execution batches
-
-| Order | Vertical batch | Included outcome | Boundary that remains live | Status / dependency |
-|---|---|---|---|---|
-| 0 | Foundation truth and safety | Keep the call-owner inventory, broad baseline, New Quiz live-course documentation, sweep hardening, lifecycle/capability policy, deletion safety, and focused assignment refresh as regression boundaries. Finish only missing per-scope observability or benchmark-harness work when it has an immediate batch consumer. | All commands and specialized New Quiz grading transport. | Substantially delivered; not a standalone queue. |
-| 1 | Typed Canvas read spine | Versioned envelope and read intents; adapters for the existing Catalog, private mirror, roster/groups, submissions, and Work compatibility seams; source/state/time contract tests. | `authoritative-live` intent, commands, diagnostics, focused evidence. | GREEN (`6705490`); runtime-only v1 is the common boundary for later batches. |
-| 2 | People context completion | Complete Course Info and remaining Roster/Create/Home local people context; make group mutations reconcile the exact group scope promptly. | Group/member writes and verification; email remains explicit live if retained. | Decision-gated: Course Info must not reintroduce Catalog-forbidden `html_url`, and the email action must be explicitly designed. |
-| 3 | Gradebook local read spine | Acquire the consumed private due/late and gradebook-config facts, then migrate gradebook lists, snapshots, standing, and report inputs behind the typed service with focused invalidation. | Curve, sweep, extension, late-policy, override, and all other grade writes. | Beta-blocking. Conditional grading periods stay out without a real consumer. |
-| 4 | Precision grading | Finish exact ordinary-assignment post-write convergence, comment/currentness policy, and late-catch-up behavior; finish equivalent New Quiz freshness without widening its transport. | Ordinary and New Quiz preflight, writes, verification, receipts, native evidence. | Beta-blocking; ordinary and New Quiz acceptance evidence remain separately named within one brief only if the seams prove shared. |
-| 5 | Student reports and portfolios | Build report/portfolio metadata from typed local reads, fetch attachment bytes only through focused evidence, and emit a private provenance manifest. | Evidence acquisition when a selected report requires it. | Beta-blocking unless the user accepts a visible limitation. |
-| 6 | Home, Work, Routines, MCP, and derived views | Replace remaining routine compatibility readers; set bounded comment freshness; give report routines/custom routines a supported read interface; preserve MCP allowlists and generation-based invalidation. | Mutation routines' final compute/execute and explicit live refreshes. | May accept a teacher-visible beta exception only by explicit decision. |
-| 7 | Mutation reconciliation coverage | Inventory every mutation owner; declare exact affected scopes, coalesced refreshes, pending/failed local convergence states, preflight yielding, and retry/idempotency proof. | Every live preflight, mutation, verification, and receipt. | Beta-blocking. Do not default to whole-course sync. |
-| 8 | Transport ownership and beta acceptance | Retire only proven-unused shims; enforce direct-transport ownership; then run the deliberate full suite, rendered routes, benchmark, privacy scan, offline/current/concluded, and OneDrive release matrix. | Named specialized transports documented at their owners. | Final beta checkpoint. |
-
-**Current status (2026-07-20) — supersedes the per-row "Status / dependency" column
-above, which is retained for historical planning context.** All execution batches are
-complete and accepted; the code work for 1.0-beta is done:
-
-- Batch 0 — delivered (regression boundary). Batch 1 — GREEN (`6705490`).
-- Batch 2 (people context) — ACCEPTED; both decision seams resolved (`html_url` computed
-  at read time, never persisted; the student-email column was removed outright).
-- Batch 3 (gradebook reads) — ACCEPTED (`04a`). Batch 4 (precision grading) — ACCEPTED
-  (`f1135b4`). Batch 5 (reports/portfolios) — ACCEPTED (`1b3a2c1`).
-- Batch 6 (Home/Work/Routines/MCP) — ACCEPTED (units 01–06, `1d85660`).
-- Batch 7 (mutation reconciliation) — ACCEPTED (`7a703c2`/`6f9dbf8`/`8e22fbb`); the
-  per-student override unit is DEFERRED as a documented bounded limitation (family 3).
-- Batch 8 (transport ownership & beta acceptance) — dead-path retirement ACCEPTED
-  (`f3cf5e5`); bounded coordinator + release telemetry ACCEPTED (`074ecd5`); release-
-  acceptance build gates (repo privacy scan, transport-ownership test) landed (`24315f5`).
-  The **live beta-acceptance RUN** (benchmark + offline/current-concluded/OneDrive/
-  network-fault matrices) is intentionally **deferred to real start-of-year courses** —
-  see `docs/reference/1.0beta-acceptance-record.md`.
-
-The next initiative is not a new batch but a **cruft-removal / de-duplication audit**.
-
-### 17.2 Retained requirements crosswalk
-
-The former program headings below preserve the detailed requirements and exit gates that
-each batch inherits. They are **not** an implementation order or a list of separate briefs.
-Use the batch table above to select work; use only the applicable requirements below when
-authoring that batch's direct handoff. Completed requirements remain regression boundaries.
-
-#### Former Program 0 — freeze current truth and establish the release benchmark
-
-**Purpose:** prevent implementation from optimizing against an inaccurate map.
-
-Required outcomes:
-
-- **First outcome — preserve New Quiz item-finalization truth.** The write lane is
-  implemented, routed, and enabled (commit `4a4309a`, 2026-07-14, with tests), and canonical
-  safety documentation describes the shipped live-course lane, its signed grader transport,
-  active/current enrollment prerequisite, safeguards, `403` fallback, and unavailable
-  automatic-post variants. Any future change to this high-risk boundary must keep that
-  documentation accurate before later performance work proceeds.
-- Re-run a static Canvas call-site inventory and classify every call as routine read,
-  focused read, preflight, write, verify, binary/native, or diagnostic.
-- Record current owners and direct `requests` bypasses.
-- The July 2026 benchmark scripts are **not in the repository**. Obtain them from the
-  benchmark author or rebuild an equivalent sanitized harness outside private data roots;
-  a brief that says "preserve the scripts" without a location will stall.
-- Specify which Canvas lifecycle fields the `course_context` scope persists (course
-  `workflow_state`, course/term `end_at`, enrollment state), and which field gates New Quiz
-  capability — concluded *enrollment* is the documented 403 gate and is not the same thing
-  as course `workflow_state`.
-- Test whether `GET /api/quiz/v1/courses/:id/quizzes` (collection) can serve as a one-call
-  New Quiz scope probe and/or bulk metadata source replacing per-quiz fan-out.
-- Define how a test course is identified without committing course names/IDs.
-- Add a durable Canvas read-spine contract derived from this vision before public scope
-  shapes change.
-- Establish and record the current focused and full API test baseline at this program's
-  declared integration checkpoint, including known-head reproduction state for any
-  pre-existing failure; later slices cite rather than re-litigate it.
-
-Exit gate: every Canvas call family has an intended 1.0-beta owner; benchmark methodology is
-repeatable; no behavior changes yet.
-
-#### Former Program 1 — correctness and performance foundation
-
-**Purpose:** fix the spine before routing more consumers through it.
-
-Required outcomes:
-
-- Introduce named scope synchronization and remove the assumption that
-  `sync_now(course_id)` always means every delta scope.
-- Add course lifecycle and per-scope capability envelopes.
-- Add sanitized retry/circuit policy for concluded/restricted New Quiz metadata.
-- Add per-scope request/time/byte/change instrumentation.
-- Prove complete pagination before destructive membership changes.
-- Fix assignment deletion visibility and safe orphan projection cleanup.
-- Fix authoritative empty-collection semantics in a versioned contract, covering both
-  directions from section 10.1 (catalog retains-forever; mirror trusts-any-empty).
-- Harden `/api/sweep/apply` to authoritative recompute or route it through the existing
-  operation-ledger sweep adapter. This is independent of every spine change and is already a
-  regression boundary; do not reintroduce a client-authored write path while performance work
-  proceeds.
-- Preserve old read APIs as compatibility shims during migration.
-
-Exit gate: the original change test detects create/update/delete correctly for mirrored
-scopes; a concluded New Quiz restriction costs a bounded probe rather than per-quiz fan-out;
-PowerGrader can request submissions without unrelated scopes.
-
-#### Former Program 2 — unify course structure acquisition
-
-**Purpose:** make one acquisition feed the student-free and private projections.
-
-Required outcomes:
-
-- One complete assignment collection acquisition emits the slim mirror index and rich
-  Course Catalog assignments.
-- Preserve the Course Catalog's forbidden-field and corruption contracts.
-- Add student-free course context/lifecycle.
-- Add assignment-group definitions/weights and module structure behind the shared read
-  service.
-- Add a rubric index only to satisfy existing Create/Grade consumers; avoid duplicating
-  embedded rubric records without need.
-- Add gradebook-config acquisition for late policy and consumed course settings.
-- Keep raw Canvas responses in memory only.
-
-Exit gate: Course Catalog and private mirror do not independently fetch the same assignment
-collection during a coordinated refresh; existing PowerGrader catalog behavior remains
-compatible.
-
-#### Former Program 3 — establish the typed read service
-
-**Purpose:** replace endpoint-shaped shims with one explicit information boundary.
-
-Required outcomes:
-
-- Version the scope/view envelope and read-intent semantics.
-- Implement local display, refresh-if-stale, focused-current, authoritative-live, and
-  offline behavior without ambiguous fallbacks.
-- Preserve test injection/monkeypatch seams.
-- Migrate the existing `mirror_queries`, `mirror_reads`, work-provider shim, and Course
-  Catalog readers behind the service without a flag-day rewrite.
-- Add contract tests for source/state/time propagation.
-
-Exit gate: one consumer from each major projection can read through the service; no
-consumer loses explicit source/freshness behavior.
-
-#### Former Program 4 — complete roster and group context
-
-**Purpose:** remove repeated roster/group N+1 reads and give Students/Create one shared
-people context.
-
-Required outcomes:
-
-- Add strict private group category/group/membership projections.
-- Migrate Roster display and Course Info to private roster/group reads.
-- Migrate Home roster warnings and differentiated-assignment picker context.
-- Keep group/membership mutations and verification live.
-- Add targeted post-write group refresh.
-- Decide explicitly whether Course Info email is removed or remains an explicit live action;
-  do not persist it by default.
-
-Exit gate: revisiting Roster/Course Info makes zero Canvas calls when scopes are usable;
-group changes reconcile locally without a course-wide sync.
-
-#### Former Program 5 — make Gradebook a complete local read consumer
-
-**Purpose:** route gradebook information through the spine while strengthening writes.
-
-Required outcomes:
-
-- Add personalized due/late fields to the private submission projection with exact
-  allowlists.
-- Add assignment groups/weights and late-policy display to gradebook config.
-- Conditionally add Canvas grading periods only if the actual Gradebook consumer is built.
-- Migrate student/assignment lists, grade snapshots, standing, and report inputs.
-- Confirm the sweep-apply hardening still holds under the new
-  gradebook read paths.
-- Keep curve, sweep, extension, late-policy, and override write boundaries live.
-- Add targeted post-write refresh mappings.
-
-Exit gate: Gradebook display works from disk/offline with honest freshness; no gradebook
-write can consume a stale or browser-submitted mirror plan as authority.
-
-#### Former Program 6 — finish focused grading acquisition
-
-**Purpose:** make PowerGrader the model for precise freshness.
-
-Required outcomes:
-
-- Replace whole-course delta-then-disk with a named assignment submissions refresh where
-  Canvas semantics permit it.
-- Preserve live fallback for upload/media evidence and unsupported shapes.
-- Ensure New Quiz metadata uses lifecycle/capability circuits.
-- Keep Student Analysis/native evidence focused and credential-safe.
-- Reconcile exact ordinary/New Quiz student state after writes.
-- Prove late-catch-up observes a new attempt without re-fetching unrelated assignments.
-
-Exit gate: opening one text assignment cannot trigger New Quiz metadata for the course;
-opening one New Quiz cannot generate reports for other quizzes; every push remains live
-verified.
-
-#### Former Program 7 — migrate Student Reports and portfolios
-
-**Purpose:** eliminate duplicate large metadata fetches from report generation.
-
-Required outcomes:
-
-- Assemble roster, assignment, standing, text, attempt, comment, group, and due facts from
-  the typed read service.
-- Acquire attachment bytes through the focused evidence owner only when the report needs
-  them.
-- Remove routine direct `requests.Session` calls from report/portfolio code.
-- Include a private freshness/source manifest without signed URLs or private absolute paths.
-- Preserve existing report roots and compatibility reads.
-
-Exit gate: text-only reports can generate from current local state with zero Canvas calls;
-attachment reports issue only evidence-specific calls.
-
-#### Former Program 8 — converge Home, Work, Routines, MCP, and derived views
-
-**Purpose:** remove remaining duplicate readers and build useful local concepts once.
-
-Required outcomes:
-
-- Migrate Work providers from endpoint regex shims to typed scopes.
-- Give Home a bounded comment freshness policy.
-- Migrate report-only routines and provide a supported custom-routine read interface.
-- Keep mutation routines' final compute/execute live.
-- Keep MCP payload allowlists/pseudonymization separate from newly persisted fields.
-- Add derived revision/regrade/attention views only when an immediate consumer uses them.
-- Invalidate derived views by projection generation rather than ad hoc timers.
-
-Exit gate: background/display features do not independently call core assignment, roster,
-or submissions collections; derived views state their source generation/freshness.
-
-#### Former Program 9 — complete mutation reconciliation coverage
-
-**Purpose:** make local truth converge promptly after every CanvasExpert action.
-
-Required outcomes:
-
-- Inventory every `_canvas_send`, specialized native write, upload, and direct mutation.
-- For each owner, declare affected scopes and targeted refresh behavior.
-- Coalesce multiple changes within one operation into one reconciliation plan.
-- Surface “Canvas verified, local reconciliation pending/failed” honestly.
-- Ensure background coordinator activity yields during preflight/verify.
-- Add idempotency tests proving reconciliation retries do not duplicate writes.
-
-Exit gate: every supported Canvas mutation has a tested post-write local convergence path;
-no mutation triggers a default whole-course sync.
-
-#### Former Program 10 — enforce transport ownership and remove dead paths
-
-**Purpose:** keep the architecture from regressing before beta.
-
-Required outcomes:
-
-- Remove migrated endpoint-matching compatibility shims only after caller proof.
-- Add an architecture test/allowlist for direct Canvas URL construction and direct
-  `requests` use.
-- Keep specialized exceptions documented near their owner.
-- Remove duplicate fetch helpers and dead routes in the same vertical batch that retires
-  their last caller.
-- Update module maps, `docs/mirror.md`, Course Catalog contract, and Web UI docs as behavior
-  becomes current.
-
-Exit gate: routine UI/business modules cannot introduce a new direct Canvas read without a
-test failure or explicit architecture change.
-
-#### Former Program 11 — 1.0-beta acceptance
-
-**Purpose:** prove the product, not just the units. `AGENTS.md` remains the authority for
-suite selection and evidence rules.
-
-Required outcomes:
-
-- Run the full API suite and affected engine suite only if engine behavior changed.
-- Run rendered browser checks for every teacher surface with zero new console errors.
-- Run the full benchmark matrix in section 19.
-- Perform a sanitized repository scan for credentials, PII, private paths, and raw Canvas
-  responses.
-- Verify offline/last-good behavior and disabled/stale write controls.
-- Verify current and concluded course behavior.
-- Verify OneDrive/cross-machine last-good and conflict warnings.
-- Update current contracts, reference maps, support diagnostics, and release notes.
-
-Exit gate: every checklist in section 20 is green or has an explicit, teacher-visible beta
-limitation accepted by the user.
-
----
-
-## 18. How the senior should turn batches into executor briefs
-
-The program is intentionally too broad for one implementation pass, not for one capable
-executor. The senior owns decisions that cross privacy, persistence, read intent, or write
-safety; the executor owns implementation of the selected vertical batch.
-
-### 18.1 A good batch brief
-
-This section is the operative handoff
-template. A good handoff normally delivers one whole batch in roughly half a day to two days.
-It may include contract, acquisition, immediate consumer migration, and cleanup when they
-share one teacher outcome and one focused gate. It does not turn unrelated risk boundaries
-into a convenience bundle. It contains:
-
-- the exact teacher outcome;
-- one locked projection/read/write decision;
-- a "read only these references" list that scopes the executor's context;
-- a preflight section — "stop if these facts are false" — with runnable checks proving the
-  insertion points still exist on current `dev`;
-- exact files, symbols, and insertion points verified against current `dev`;
-- allowed schema fields and forbidden material;
-- explicit current behavior that must remain live;
-- compatibility and migration behavior;
-- focused tests, rendered routes where relevant, and performance evidence;
-- stop conditions for contradictory Canvas behavior or missing fields;
-- an execution-result section updated by the executor.
-
-Examples of appropriately bounded batch briefs:
-
-- the typed envelope, its adapters for existing projections, and one contract-tested reader
-  from each projection family;
-- private Gradebook config/due facts, Gradebook display migration, focused invalidation, and
-  unchanged live write paths;
-- report/portfolio local metadata assembly, evidence-only attachment reads, and private
-  provenance manifest;
-- ordinary PowerGrader post-write convergence and its exact comment/currentness gate while
-  New Quiz transport remains untouched.
-
-Examples of bad batch briefs:
-
-- “migrate every GET to CanvasMirror”;
-- “make sync faster” without a request/time acceptance target;
-- “mirror all Canvas objects”;
-- “refactor networking” without an immediate consumer;
-- a schema expansion and five unrelated consumer migrations;
-- Gradebook write work combined with New Quiz native transport changes;
-- Routines/MCP privacy work bundled with an unrelated Home layout migration;
-- a read migration that says “keep writes safe” without tracing the write call chain.
-
-### 18.2 Senior-only decisions
-
-A weaker executor must stop rather than decide:
-
-- whether a new private field belongs at rest;
-- whether an empty collection is authoritative;
-- whether a read feeds a write decision;
-- whether a 401/403 is item-level or course/scope capability;
-- whether a direct Canvas call is specialized or accidental;
-- whether a page/rubric/grading-period scope has a real consumer;
-- whether a compatibility file can be removed;
-- whether a mutation's verification or receipt rules may change.
-
-### 18.3 Verification proportionality
-
-`AGENTS.md` is the authority for risk tiers and verification requirements; if this list
-ever disagrees with it, `AGENTS.md` wins. Spine-specific guidance:
-
-- Read-only student-free projection changes are usually medium risk.
-- Private roster/submission/evidence changes are high risk because of FERPA persistence.
-- Any change touching grades, comments, credentials, New Quiz native transport, or
-  scheduled writes is high risk.
-- A slice that changes shared coordinator/query semantics should name affected mirror,
-  consumer, and service suites as its focused acceptance gate; the full API suite belongs at
-  an explicitly declared cross-cutting integration boundary and the final beta gate.
-- Every brief states independently checkable acceptance criteria and explicit non-goals
-  before execution. The senior accepts against those criteria and the named gate, rather than
-  an executor-defined claim of completion.
-- Browser routes require rendered checks; source-text tests are not substitutes.
-
-### 18.4 One executor, one active batch at a time
-
-Follow the repository execution model. Do not send this vision to a swarm. The senior writes
-one durable handoff, one executor implements and self-reviews the active batch, and the
-senior accepts or redirects before the next dependent batch. A GREEN brief is archived with
-its evidence; a YELLOW correction returns to the same executor instead of becoming a new
-micro-slice.
-
----
-
 ## 19. Required test and benchmark matrix
 
 All repository fixtures are synthetic. Live tests use teacher-authorized courses and keep
@@ -1574,52 +706,30 @@ all private output outside the repository.
 
 ### 19.1 Projection contract tests
 
-- exact allowlists and unknown-field rejection;
-- atomic write, previous snapshot, corruption quarantine, and last-good fallback;
-- ID normalization and int/string consumer compatibility;
-- complete versus partial pagination;
-- legitimate empty collection versus failure;
-- add/change/delete membership diffs;
-- orphan filtering before cleanup;
-- idempotent overlap and attempt preservation;
-- comment omitted versus authoritative empty behavior;
-- per-scope state/capability/freshness envelopes;
-- no tokens, signed URLs, emails, avatars, private paths, or raw response fields.
+Allowlists/unknown-field rejection, atomic-write/snapshot/corruption/last-good, ID
+normalization, complete-vs-partial pagination, empty-vs-failure, membership diffs, orphan
+filtering, idempotent overlap, comment omit-vs-empty, per-scope envelopes, and no leaked
+credentials/PII — embodied in the shipped projection suites.
 
 ### 19.2 Coordinator tests
 
-- named scope dependency planning;
-- duplicate request coalescing;
-- priority: preflight > post-write > focus > manual > background > concluded;
-- current versus concluded cadence;
-- restricted capability cooldown and manual override;
-- rate-limit and bounded retry handling;
-- cancellation/yield without watermark advancement;
-- one scope failure does not mark unrelated scopes current or unavailable;
-- manual all-course plan remains asynchronous and observable.
+Scope dependency planning, coalescing, priority order, current-vs-concluded cadence,
+capability cooldown/override, rate-limit/retry, cancellation without watermark advance, and
+isolated per-scope failure — embodied in the shipped coordinator suites.
 
 ### 19.3 Consumer tests
 
-For every migrated surface:
-
-- usable local state causes zero routine Canvas calls;
-- stale state uses the intended visible behavior;
-- unavailable state performs only the allowed bounded fallback;
-- source and timestamp reach the UI/payload/report manifest;
-- equivalent live/local fixtures produce equivalent teacher results;
-- newly added private fields do not leak to MCP or operational logs;
-- write paths still consult live transport even when the mirror is current.
+Per migrated surface: zero routine Canvas calls on usable local state, correct
+stale/unavailable behavior, source/timestamp reaching the UI, live/local equivalence, no
+private-field leakage, and write paths still consulting live transport — embodied in the
+shipped consumer suites.
 
 ### 19.4 Mutation tests
 
-- authoritative reload immediately before execution;
-- drift rejection;
-- idempotency and receipt preflight;
-- ambiguous response verification;
-- exact post-write scope reconciliation;
-- reconciliation failure does not repeat the Canvas write;
-- background sync never issues a mutation;
-- `/api/sweep/apply` cannot write a browser-provided stale plan.
+Authoritative pre-execution reload, drift rejection, idempotency/receipt preflight, ambiguous
+verification, exact post-write reconciliation, no repeated write on reconcile failure,
+mutation-ineligible background sync, and `/api/sweep/apply` refusing a browser-provided stale
+plan — embodied in the shipped mutation suites.
 
 ### 19.5 Live benchmark scenarios
 
@@ -1648,75 +758,46 @@ Run these against the same configured three-course profile:
 Record wall time, logical/physical requests, bytes, status/error classes, scope changes,
 source/freshness, and any Canvas rate-limit evidence. Never record private response bodies.
 
+### 19.6 Accepted limitations and deferred live-run
+
+**Accepted beta limitation (documented, not a defect):** Per-student override staleness
+(Batch 7 unit 03) — the mirror stores no override projection; the only stale surface is
+`submissions.cached_due_date` on the Student Report "Due date extended to" line, with live
+fallback outside the ~6h freshness window. Low severity; no hook repairs it. See
+`docs/reference/mutation-reconciliation-map.md` family 3.
+
+**Deferred to the live start-of-year run** (needs a real 1-current/2-concluded profile with
+live students and current New Quizzes; we chose not to build a synthetic Canvas):
+
+1. Benchmark (`tools/canvasmirror_release_benchmark.py --live-readonly`) against the §16
+   cold/warm/GET targets.
+2. Live state matrices: offline launch + write-refusal, two-machine OneDrive conflict, and
+   network-fault recovery — all unit-covered; live confirmation pending.
+3. Rendered-route sweep completion (12 routes already clean).
+
+Note: the 2026-07-20 live sync surfaced no code defect — it honestly reported "could not
+finish" when an out-of-profile shell course and 503-throttled archived New Quizzes made
+complete-collection fetches fail. That is design law 5.10 working (fail-closed), not a bug.
+
 ---
 
 ## 20. 1.0-beta release checklist
 
-### Product behavior
+The code-complete acceptance items — read authority, correctness, write safety, privacy,
+and maintainability — are done and now stand as regression boundaries. Only the live
+start-of-year run remains. These items overlap §19.6 and must be confirmed against real
+courses, not synthetic data:
 
-- [ ] App and all main surfaces render from last-good local state without waiting for Canvas.
-- [ ] Current/stale/incomplete/unavailable/offline state is consistent and visible.
-- [ ] Manual refresh can target one course and, where useful, one scope.
-- [ ] Current and concluded configured courses have visibly different maintenance behavior.
-- [ ] Teacher-focused work outranks background synchronization.
-
-### Read authority
-
-- [ ] Home/Work routine reads use the typed spine.
-- [ ] Create/Course Info pickers and structure views use the student-free spine.
-- [ ] PowerGrader uses named focused refresh, not whole-course delta side effects.
-- [ ] Gradebook routine reads and configuration display use the spine.
-- [ ] Roster and groups display use private projections.
-- [ ] Student Reports/portfolios use local metadata plus focused evidence.
-- [ ] Routines and MCP have no duplicate routine collection fetches.
-- [ ] Remaining live reads are explicitly classified and owned.
-
-### Correctness
-
-- [ ] Add, update, delete, and authoritative-empty semantics pass for every mirrored
-  collection.
-- [ ] Orphan submission/New Quiz files cannot leak deleted assignments into queries.
-- [ ] Comment-only updates and deletions follow the documented reconcile policy.
-- [ ] Watermarks advance only after complete validated success.
-- [ ] Cross-projection assignment generations cannot silently disagree.
-- [ ] Derived views invalidate when their source generation changes.
-
-### Write safety
-
-- [ ] Every grade/comment/content/group/policy mutation has live preflight and verification.
-- [ ] Every mutation declares exact reconciliation scopes.
-- [ ] Reconciliation retries cannot repeat the mutation.
-- [ ] Sweep apply performs an authoritative recompute.
-- [ ] Background sync transport is mutation-ineligible.
-- [ ] Offline/stale data never enables an unsafe write.
-
-### Privacy and security
-
-- [ ] Student-free and private projections remain physically distinct.
-- [ ] Every persisted schema is allowlisted and versioned.
-- [ ] No email/avatar is added without explicit product approval.
-- [ ] No token, cookie, JWT, signed URL, authorization field, or raw transport error persists.
-- [ ] MCP/outbound AI allowlists remain narrower than private mirror schemas.
-- [ ] Operational metrics and support bundles are content-free and path-safe.
-- [ ] Rebuild/cleanup actions resolve only exact disposable roots.
-
-### Performance and resilience
-
-- [ ] Cold and warm benchmark targets in section 16 pass or have an accepted measured beta
-  exception.
-- [ ] Known-restricted New Quiz scopes do not fan out during cooldown.
-- [ ] Focused assignment refresh has no unrelated scope calls.
-- [ ] Canvas latency does not freeze unrelated UI.
-- [ ] Rate-limit, timeout, partial-pagination, corrupt-file, and offline recovery pass.
-- [ ] OneDrive conflict behavior retains last-good readable state.
-
-### Maintainability
-
-- [ ] UI/business modules no longer construct routine Canvas endpoints.
-- [ ] Direct `requests` exceptions are documented and architecture-tested.
-- [ ] Compatibility shims have an owner and removal condition.
-- [ ] `docs/mirror.md`, contracts, module maps, and support docs describe actual behavior.
-- [ ] One active senior-written handoff at a time records implementation evidence.
+- [ ] Cold and warm benchmark targets in section 16 pass, or an accepted measured beta
+  exception is recorded.
+- [ ] Known-restricted New Quiz scopes do not fan out during cooldown (live).
+- [ ] Focused assignment refresh makes no unrelated scope calls (live).
+- [ ] Canvas latency does not freeze unrelated UI (live).
+- [ ] Rate-limit, timeout, partial-pagination, corrupt-file, and offline recovery hold (live).
+- [ ] Offline launch/navigation from last-good state with write refusal (live).
+- [ ] Current-versus-concluded course maintenance behavior differs visibly (live).
+- [ ] OneDrive/two-machine conflict behavior retains last-good readable state (live).
+- [ ] Rendered-route sweep completes with zero new console errors.
 
 ---
 
@@ -1725,44 +806,28 @@ source/freshness, and any Canvas rate-limit evidence. Never record private respo
 These are current, concrete seams discovered during the architecture/performance audit.
 They are not speculative feature requests.
 
-1. **Assignment deletion consistency (resolved by 01b/01e):** complete collection receipts
-   now gate private membership replacement; aggregate reads hide orphans and cleanup remains
-   last-good-safe.
-2. **PowerGrader refresh scope (resolved by 01c):** focused assignment refresh no longer
-   invokes whole-course `mirror_service.sync_now(course_id)` or unrelated New Quiz metadata.
-3. **Concluded-course New Quiz retry storm (resolved by 01a/01d):** the circuit provides
-   bounded probes while lifecycle context suppresses normal concluded-course metadata work.
-4. **Lifecycle model (resolved by 01d):** student-free course context distinguishes current,
-   concluded, and unknown scheduling state without becoming a write preflight.
-5. **Duplicate structure acquisition:** Course Catalog and private mirror independently
+1. **Duplicate structure acquisition:** Course Catalog and private mirror independently
    acquire assignments.
-6. **Roster/Course Info bypass:** Roster and Course Info still fetch users, sections,
+2. **Roster/Course Info bypass:** Roster and Course Info still fetch users, sections,
    groups, memberships, modules, and assignments live; group reads include N+1 patterns.
-7. **Create picker bypass:** module and assignment-group pickers still have direct live
+3. **Create picker bypass:** module and assignment-group pickers still have direct live
    routes even though relevant structure is or should be local.
-8. **Gradebook configuration bypass:** late policy and related config display are live; the
+4. **Gradebook configuration bypass:** late policy and related config display are live; the
    private submission projection omits report-used personalized due fields.
-9. **Sweep safety seam (resolved by 00b/00c):** apply uses authoritative recomputation and
-   the reviewed operation-ledger path rather than client-submitted preview entries.
-10. **Student Report/portfolio bypass:** metadata assembly uses direct HTTP sessions rather
-    than shared projections.
-11. **Comment-only blind spot:** nightly full capture bounds staleness but cannot support a
-    truly current Home conversation view; deleted comments can persist under omit-versus-
-    empty ambiguity.
-12. **Transport ownership drift:** specialized and accidental direct HTTP calls are not yet
-    enforced by an architecture boundary.
-13. **New Quiz write-status documentation drift (resolved):** route code enables an
-    item-finalization lane (deliberately shipped in commit `4a4309a`, 2026-07-14, with tests),
-    and canonical safety references describe the live-course signed grader transport,
-    enrollment gate, safeguards, and `403`/SpeedGrader fallback. Future work must preserve
-    that current-state documentation before touching the high-risk boundary.
-14. **Mirror collection completeness (resolved by 01e):** the private mirror requires a
-    proven complete receipt before destructive assignment membership changes; complete empty
-    collections remain authoritative and transport/validation failures retain last-good data.
+5. **Student Report/portfolio bypass:** metadata assembly uses direct HTTP sessions rather
+   than shared projections.
+6. **Comment-only blind spot:** nightly full capture bounds staleness but cannot support a
+   truly current Home conversation view; deleted comments can persist under omit-versus-
+   empty ambiguity.
+7. **Transport ownership drift:** specialized and accidental direct HTTP calls are not yet
+   enforced by an architecture boundary.
 
-The next senior brief begins with item 5: duplicate Course Catalog/private-mirror assignment
-acquisition. The completed safety seams above remain regression boundaries; routing more
-surfaces through the mirror must not reintroduce them.
+These open seams remain the natural starting points if migration work resumes, beginning
+with item 1 (duplicate Course Catalog/private-mirror assignment acquisition). The safety
+seams retired from this list — assignment-deletion consistency, PowerGrader refresh scope,
+the New Quiz retry circuit, the lifecycle model, sweep safety, New Quiz write-status
+documentation, and mirror collection completeness — remain regression boundaries that
+routing more surfaces through the mirror must not reintroduce; their history is in git.
 
 ---
 

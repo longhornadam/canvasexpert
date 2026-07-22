@@ -3,15 +3,6 @@
 from __future__ import annotations
 
 
-def _clean_text_content(text: str) -> str:
-    """DEPRECATED: escape-cleaning must be render-mode gated.
-
-    This function remains for backwards compatibility but MUST NOT be used for
-    student-facing verbatim strings. Use _clean_text(text, render_mode=...).
-    """
-    return _clean_text(text, render_mode="executable")
-
-
 def _clean_text_verbatim(text: str) -> str:
     """Verbatim mode: treat text as opaque payload (no escape interpretation)."""
     return text

@@ -210,7 +210,7 @@ This content will be auto-detected and numbered.
    - Converts `\n` escape sequences to actual newline characters (`chr(10)`)
 
 3. **QuizForge Processing:**
-   - `_clean_text_content()` handles any remaining `\\n` (double-escaped) → `\n` → actual newline
+   - `_clean_text()` (executable render mode) handles any remaining `\\n` (double-escaped) → `\n` → actual newline
    - `htmlize_prompt()` splits on `\n` for fence/block detection
 
 4. **HTML Rendering:**

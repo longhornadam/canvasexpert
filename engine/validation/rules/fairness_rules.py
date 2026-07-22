@@ -191,8 +191,3 @@ def check_length_bias(quiz: Quiz) -> List[str]:
 
     return errors
 
-
-def _check_answer_position_pattern(questions: List[MCQuestion]) -> List[str]:
-    """Deprecated: answer-position streak warnings are suppressed (see check_fairness)."""
-    return []
-

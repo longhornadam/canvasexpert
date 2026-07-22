@@ -6,7 +6,7 @@ AI-feedback submission comment to Canvas (``comment[text_comment]``). Gradebook
 tools may adjust ``posted_grade`` (curve, late penalty, extension) but never
 write feedback.
 
-See docs/handoffs/fold-feedbackexpert-into-powergrader.md.
+See docs/reference/powergrader-scoring-map.md (Guardrails: single grading surface).
 """
 
 from pathlib import Path

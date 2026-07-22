@@ -56,7 +56,9 @@ engine-accurate names.
 - **Single grading surface:** PowerGrader is the only code that writes a Canvas
   submission comment (`comment[text_comment]`) as AI feedback. Gradebook may write
   `posted_grade` for post-hoc adjustment (curve, late penalty, extension, policy) but
-  never writes AI feedback. See `docs/handoffs/fold-feedbackexpert-into-powergrader.md`.
+  never writes AI feedback. This invariant is machine-enforced by
+  `api/tests/test_grading_surface_invariant.py`, which fails the build if any file
+  outside `api/powergrader/` writes `comment[text_comment]`.
 - SAFE files are pseudonymized, not guaranteed anonymous; teachers review them before
   external upload.
 - CSV bytes, legacy result-folder paths, names, IDs, grades, comments, and submission
