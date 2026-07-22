@@ -354,8 +354,12 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
         return {"ok": False, "error": err}
 
     read_result = read_catalog(course_id)
+    # Age-gate the stored catalog against the same mirror serve-age window
+    # used elsewhere, so "current" means fresh, not just last-refreshed-ever;
+    # a stale catalog is still returned in full, only relabeled "stale".
     scope = read_service.catalog_modules(
-        course_id, catalog_reader=lambda _course_id: read_result)
+        course_id, catalog_reader=lambda _course_id: read_result,
+        max_age_hours=mirror_queries._serve_max_age_hours())
     if scope["source"] == "none":
         return {
             "ok": False,

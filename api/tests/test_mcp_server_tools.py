@@ -290,6 +290,10 @@ def test_get_modules_happy_returns_table(monkeypatch):
     document = _module_catalog_document(MODULE_FIXTURE)
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+    # Fixture's last_success_at is weeks before "now" -- widen the serve-age
+    # window so this test's real focus (module row content) isn't coupled to
+    # the freshness threshold, which is covered separately below.
+    monkeypatch.setattr(tools.mirror_queries, "_serve_max_age_hours", lambda: 10**9)
 
     result = tools.get_modules("111")
     assert result["ok"] is True
@@ -362,6 +366,31 @@ def test_get_modules_stale_returns_labeled_records_not_refusal(monkeypatch):
     assert result["state"] == "stale"
     assert result["source"] == "catalog"
     assert len(_rows(result["modules"])) == 2
+
+
+def test_get_modules_marks_state_stale_past_serve_window(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document(MODULE_FIXTURE)  # state="current", synced weeks ago
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+    monkeypatch.setattr(tools.mirror_queries, "_serve_max_age_hours", lambda: 6.0)
+
+    result = tools.get_modules("111")
+    assert result["ok"] is True
+    assert result["state"] == "stale"
+    assert len(_rows(result["modules"])) == 2
+
+
+def test_get_modules_state_current_when_within_serve_window(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document(MODULE_FIXTURE)  # state="current", synced weeks ago
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+    monkeypatch.setattr(tools.mirror_queries, "_serve_max_age_hours", lambda: 10**9)
+
+    result = tools.get_modules("111")
+    assert result["ok"] is True
+    assert result["state"] == "current"
 
 
 # --- get_authoring_contract (no course_id, no student data -> no gates) -----
