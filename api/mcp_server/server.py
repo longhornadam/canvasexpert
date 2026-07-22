@@ -25,12 +25,14 @@ _FERPA_NOTICE = (
     "their computer. Call list_courses first for a course_id. Student data is "
     "pseudonymized through a local vault before you see it: stable fake names "
     "(e.g. \"Sparky McGee\") stand in for real students, and real names and "
-    "Canvas/SIS IDs never leave the machine. Do not re-identify anyone or "
-    "write results to a file. get_roster, get_seating_context, get_submissions, "
+    "Canvas/SIS IDs never leave the machine. Do not re-identify anyone or save "
+    "student data to a file. get_roster, get_seating_context, get_submissions, "
     "and get_gradebook_snapshot serve only from the local mirror and refuse "
     "when it is stale; call refresh_mirror for that course, then retry once. "
     "Results are compact JSON, with list data as {columns, rows} tables. "
-    "Prefer narrow calls: include_text=false or specific pseudonyms first."
+    "Prefer narrow calls: include_text=false or specific pseudonyms first. To "
+    "help the teacher create content, call get_authoring_contract for the kind "
+    "and follow the staging steps in its response."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)

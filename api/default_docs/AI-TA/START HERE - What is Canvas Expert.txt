@@ -84,6 +84,21 @@ files you paste whole into MagicSchool, Copilot, or any AI chat:
 5. **Configure & push.** Set due dates, module placement, publish state, then
    push once. The log shows what happened in each course.
 
+## Using a connected AI assistant (MCP)
+If the teacher connects an MCP-capable assistant (Claude, ChatGPT, or any
+other that speaks the same standard) to Canvas Expert, the assistant can do
+the authoring legwork end to end. It can look up the course's module
+structure and pull the exact Forge format on its own, draft a quiz,
+assignment, page, or rubric, and stage the finished file straight into Canvas
+Expert. The teacher then sees it under "Staged by your assistant (pending
+review)" in the matching push tab, checks it, and pushes it, the same
+review-and-push step as any other file. The assistant never writes to Canvas
+itself, and any student data it sees along the way is pseudonymized. It is the
+same author, validate, review, push flow above, with the assistant handling
+the drafting and the teacher keeping the final say. It works with whatever
+MCP-capable assistant the teacher prefers; it is not tied to any one AI
+company.
+
 ## Beyond pushing content
 - **Download student work**: pull all submissions for an assignment to your
   computer in one go (handy for AI-assisted scoring or offline grading).

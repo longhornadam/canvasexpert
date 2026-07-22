@@ -16,6 +16,10 @@ It can also generate a printable PDF or an editable Word document of the same qu
 
 Assignments can be pushed in different versions for different groups of students (differentiated or scaffolded versions of the same assignment, matched to a class's tiers or Canvas groups), so a teacher isn't manually re-creating three versions of the same assignment by hand.
 
+## Letting a connected AI assistant help directly
+
+A teacher can connect an AI assistant that speaks the MCP standard (Claude, ChatGPT, or another) to CanvasExpert. Once connected, the assistant can look up a course's structure and the simple file format on its own, draft a quiz, assignment, page, or rubric, and place the finished draft into a review area inside CanvasExpert. The teacher sees it listed as staged by the assistant, pending their review, in the matching tab, then checks it and pushes it, the same one-click review-and-push as any file they wrote themselves. The assistant never pushes to Canvas on its own, and any student data it sees is pseudonymized first. It is a faster way to draft coursework that keeps the teacher's approval as the only path to Canvas. This works with whatever MCP-capable assistant the teacher prefers; it isn't tied to any one AI company.
+
 ## Grading
 
 CanvasExpert has its own grading screen, separate from Canvas's own SpeedGrader, built to be moved through quickly with just a keyboard. A teacher can go student to student without repeatedly clicking back into Canvas's own interface.

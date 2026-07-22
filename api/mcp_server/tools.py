@@ -33,6 +33,7 @@ from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_vault
 from api.course_catalog import read_catalog
+from api import runtime_paths
 
 from . import pseudonym
 
@@ -410,6 +411,36 @@ _CONTRACT_FILES = {
 }
 
 
+def _staging_appendix(kind: str) -> str:
+    """A short "how to stage this for the teacher" section appended to the
+    contract an assistant pulls. Kept here rather than in the shared
+    ``LLM_Modules/*_Base.md`` files so the web UI's own download-contract stays
+    the pure envelope format, while an MCP assistant that authors a draft
+    learns where to drop it and how to mark it complete. The detailed steps
+    ride this response, so they cost context only when authoring."""
+    folder = runtime_paths.inbox_folder(kind)
+    where = str(folder) if folder else (
+        f"the {kind.capitalize()} Inbox folder in the Canvas Expert workspace")
+    return (
+        "\n\n---\n\n"
+        "## Staging this for the teacher\n\n"
+        "Do not push to Canvas yourself. When the draft is ready, stage it for "
+        "the teacher to review and push:\n\n"
+        f"1. Write the completed envelope to a `.txt` file in this kind's Inbox "
+        f"folder:\n   `{where}`\n"
+        "2. Write a sibling marker file named the same with `.done` added (for "
+        "example `my-quiz.txt` and `my-quiz.txt.done`). Its only contents are "
+        "the draft's size in bytes, measured from the file on disk after you "
+        "write it. Do not use the length of the text you generated: a text-mode "
+        "write can turn each line ending into two bytes, so a count taken "
+        "beforehand will be wrong and the draft is held back until the sizes "
+        "agree.\n"
+        "3. Tell the teacher it is staged. It appears under \"Staged by your "
+        "assistant (pending review)\" in the matching Canvas Expert push tab, "
+        "where they validate and push it. You never write to Canvas.\n"
+    )
+
+
 def get_authoring_contract(kind: str) -> dict:
     """The Forge authoring contract (envelope format) for one content kind,
     served verbatim from ``LLM_Modules/{Kind}Forge_Base.md`` — the same
@@ -434,7 +465,8 @@ def get_authoring_contract(kind: str) -> dict:
             "error": f"Could not read the {kind} authoring contract: {error}",
         }
 
-    return {"ok": True, "kind": kind, "contract": contract_text}
+    return {"ok": True, "kind": kind,
+            "contract": contract_text + _staging_appendix(kind)}
 
 
 def list_staged_content(kind: str = "") -> dict:
