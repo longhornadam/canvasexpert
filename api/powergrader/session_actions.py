@@ -232,6 +232,10 @@ def _writeback_mode(session: dict) -> str:
 
 
 def _payload(student: dict, *, comments_only: bool = False) -> dict:
+    # Single grading surface: PowerGrader is the only writer of an AI-feedback
+    # submission comment (``comment[text_comment]``). Gradebook may adjust
+    # ``posted_grade`` (curve/late/extension) but never writes feedback here.
+    # See docs/handoffs/fold-feedbackexpert-into-powergrader.md.
     score = student.get("teacher_score")
     feedback = (student.get("teacher_feedback") or "").strip()
     payload: dict = {}
