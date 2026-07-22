@@ -92,13 +92,29 @@ def _resolve_folder_file(relpath: str) -> str:
     folder = ensure_source_folder()
     if not folder:
         raise ValueError("No Source Materials folder is available.")
-    # abspath + commonpath containment (blocks .. traversal) instead of
-    # Path.resolve(), which does realpath I/O that can fail past MAX_PATH.
-    root = os.path.abspath(folder)
-    candidate = os.path.abspath(os.path.join(root, relpath))
-    if os.path.commonpath([root, candidate]) != root:
+    # Use the extended-path-safe canonical helper: os.path.realpath follows
+    # symlinks/junctions but can fail past MAX_PATH.  We resolve the root and
+    # candidate through a long-path-safe canonical helper, compare resolved
+    # targets with Windows case-insensitive containment, and return the
+    # resolved in-tree target.
+    root_ext = workspace.extended_path(os.path.abspath(folder))
+    candidate = os.path.abspath(os.path.join(folder, relpath))
+    # Resolve through extended path for symlink/junction following past MAX_PATH
+    try:
+        resolved_root = os.path.realpath(workspace.extended_path(folder))
+        resolved_candidate = os.path.realpath(workspace.extended_path(candidate))
+    except OSError:
+        # realpath I/O can fail past MAX_PATH; fall back to lexical containment
+        resolved_root = os.path.abspath(folder)
+        resolved_candidate = os.path.abspath(candidate)
+    # Case-insensitive containment check for Windows
+    root_norm = os.path.normcase(resolved_root)
+    candidate_norm = os.path.normcase(resolved_candidate)
+    if os.path.commonpath([root_norm, candidate_norm]) != root_norm:
         raise ValueError("Source-material path is outside the workspace folder.")
-    if not os.path.isfile(workspace.extended_path(candidate)):
+    # Use the extended path for the actual read-back check
+    ext_candidate = workspace.extended_path(candidate)
+    if not os.path.isfile(ext_candidate):
         raise ValueError(f"Source-material file not found: {relpath}")
     return candidate
 

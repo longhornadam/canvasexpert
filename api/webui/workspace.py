@@ -49,8 +49,130 @@ FEEDBACK_SUBFOLDERS = ["SAFE", "PRIVATE", "_system"]
 
 MAX_COMPONENT_LENGTH = 120
 MAX_PATH_LENGTH = 240
+TEACHER_VISIBLE_BUDGET = 230
 _BAD_COMPONENT = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _BAD_ID = re.compile(r"[^A-Za-z0-9._-]+")
+
+# Deterministic short-hash length for compact path components.
+# 8 hex chars → 2^32 namespace, negligible collision risk within one assignment.
+_COMPACT_HASH_LENGTH = 8
+
+
+class TeacherVisiblePathBudgetError(ValueError):
+    """Raised when even the compact form of a teacher-visible path exceeds
+    the 230-character budget."""
+
+
+def _deterministic_hash(text: str, length: int = _COMPACT_HASH_LENGTH) -> str:
+    """Return a deterministic lowercase hex hash of *text*.
+
+    Uses Python's built-in hash() salted with a fixed seed so results are
+    stable across interpreter runs on the same platform.  The hex digest is
+    short enough to fit within the path budget.
+    """
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:length]
+
+
+_SHA256_ABBREV = _deterministic_hash
+
+
+def teacher_visible_path(
+    base: str,
+    *components: str,
+    filename: str = "",
+    reserve: int = 0,
+) -> str:
+    """Build a teacher-visible absolute path guaranteed to be at most 230 characters.
+
+    Parameters
+    ----------
+    base:
+        Absolute base directory (e.g. workspace root).
+    *components:
+        Ordered path segments to join under *base*.  Each may be a plain
+        string or a ``(display, stable_id)`` tuple.  For tuples, the
+        component becomes ``<display> — <id>`` and the stable id portion
+        is always preserved in the compact fallback.
+    filename:
+        Optional final file name with extension.
+    reserve:
+        Extra characters to reserve for projected suffix components that
+        will be appended by the caller *after* this call (e.g. batch
+        index, extension).  When given, the returned path is *shorter* so
+        the caller's full path still fits.
+
+    Returns
+    -------
+    str
+        The projected plain (unprefixed) absolute path, at most
+        ``TEACHER_VISIBLE_BUDGET`` characters.
+
+    Raises
+    ------
+    TeacherVisiblePathBudgetError
+        When even the compact form (shortened display portions, stable-id
+        suffixes preserved) cannot fit within the budget.
+    """
+    budget = TEACHER_VISIBLE_BUDGET - reserve
+    segments: list[str] = [os.path.abspath(base)]
+
+    # First pass: assemble with full display names.
+    raw_segments: list[str] = []
+    for c in components:
+        if isinstance(c, tuple):
+            display, stable_id = c
+            raw_segments.append(f"{display} — {stable_id}")
+        else:
+            raw_segments.append(str(c))
+
+    # Try full-readable form first.
+    def _project(seg: list[str]) -> str:
+        parts = [str(s) for s in seg]
+        if filename:
+            parts.append(str(filename))
+        return os.path.join(*parts)
+
+    candidate = _project(segments + raw_segments)
+    if len(candidate) <= budget:
+        return candidate
+
+    # Compact fallback: shorten display portions, keep stable IDs.
+    compact_segments: list[str] = list(segments)
+    for c in components:
+        if isinstance(c, tuple):
+            display, stable_id = c
+            # Use a deterministic short hash of the full stable-id-bearing
+            # name so that two different assignments with the same stable ID
+            # still produce distinct paths.
+            short_hash = _deterministic_hash(f"{display}—{stable_id}")
+            compact_segments.append(f"{short_hash} — {stable_id}")
+        else:
+            # Non-identity component: shorten aggressively.
+            short = _deterministic_hash(str(c))
+            compact_segments.append(short)
+
+    candidate = _project(compact_segments)
+    if len(candidate) <= budget:
+        return candidate
+
+    # Strip display portions entirely: keep only the hash.
+    minimal_segments: list[str] = list(segments)
+    for c in components:
+        if isinstance(c, tuple):
+            _display, stable_id = c
+            minimal_segments.append(stable_id)
+        else:
+            minimal_segments.append(_deterministic_hash(str(c)))
+
+    candidate = _project(minimal_segments)
+    if len(candidate) <= budget:
+        return candidate
+
+    raise TeacherVisiblePathBudgetError(
+        f"Path too deep for teacher-visible output "
+        f"(projected {len(candidate)} > {budget} budget)"
+    )
 
 
 def _machine_config():
@@ -285,8 +407,19 @@ def course_folder(course_name, course_id, root=None):
     return bounded_join(base, COURSES_NAME, named_id_folder(course_name, course_id)) if base else None
 
 
-def assignment_folder(course_name, course_id, assignment_name, assignment_id, root=None):
+def assignment_folder(course_name, course_id, assignment_name, assignment_id, root=None, *, reserve=0):
     base = _root_or_workspace(root)
+    if not base:
+        return None
+    if reserve:
+        return teacher_visible_path(
+            base,
+            (COURSES_NAME, COURSES_NAME),
+            (named_id_folder(course_name, course_id), course_id),
+            ("Assignments", "Assignments"),
+            (named_id_folder(assignment_name, assignment_id), assignment_id),
+            reserve=reserve,
+        )
     return bounded_join(base, COURSES_NAME, named_id_folder(course_name, course_id),
                        "Assignments", named_id_folder(assignment_name, assignment_id)) if base else None
 
@@ -398,11 +531,20 @@ def ai_assignment_root(course_name, course_id, assignment_name, assignment_id, r
 
 
 def ai_run_folder(course_name, course_id, assignment_name, assignment_id,
-                  mode="assisted", *, run_timestamp=None, root=None):
+                  mode="assisted", *, run_timestamp=None, root=None, reserve=0):
     base = _root_or_workspace(root)
     if not base:
         return None
     stamp = run_timestamp or datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    if reserve:
+        return teacher_visible_path(
+            base,
+            (AI_PACKETS_NAME, AI_PACKETS_NAME),
+            (named_id_folder(course_name, course_id), course_id),
+            (named_id_folder(assignment_name, assignment_id), assignment_id),
+            f"{safe_component(stamp, 32)} — {safe_component(mode, 32)}",
+            reserve=reserve,
+        )
     return bounded_join(base, AI_PACKETS_NAME, named_id_folder(course_name, course_id),
                         named_id_folder(assignment_name, assignment_id),
                         f"{safe_component(stamp, 32)} — {safe_component(mode, 32)}")

@@ -27,17 +27,27 @@ def feedback_artifact_dirs(
     mode: str = "assisted", run_timestamp: str | None = None,
 ) -> tuple[str | None, str | None]:
     """Resolve new AI/private homes; never recreates the legacy workspace folder
-    (see ``workspace.LEGACY_FEEDBACK_NAME``)."""
+    (see ``workspace.LEGACY_FEEDBACK_NAME``).
+
+    The *reserve* value accounts for the deepest PowerGrader child layout
+    (packet folder, batch folder, batch file name) so the root SAFE and PRIVATE
+    directories stay short enough for all teacher-visible children.
+    """
     workspace.ensure_workspace()
     if course_id and assignment_id:
+        # Reserve ~60 chars for the deepest child: "Packet-<hash>/Batches/Batch-99/03-work.md"
+        # where <hash> is 8 chars, batch index is 2 digits.
+        pg_child_reserve = 60
         safe = workspace.ai_run_folder(
             course_name or course_id, course_id,
             assignment_name or assignment_id, assignment_id,
             mode or "assisted", run_timestamp=run_timestamp,
+            reserve=pg_child_reserve,
         )
         private = workspace.assignment_folder(
             course_name or course_id, course_id,
             assignment_name or assignment_id, assignment_id,
+            reserve=pg_child_reserve,
         )
         return safe, private
     return workspace.ai_packets_root(), workspace.courses_root()

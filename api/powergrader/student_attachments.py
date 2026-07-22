@@ -260,8 +260,14 @@ def eligibility_decision(attachments: list[dict], *, expected_count: int | None 
             "expected_count": expected_count, "attachment_count": len(items)}
 
 
-def write_safe_derivatives(route: dict, destination_dir: str, *, pseudonym: str, item_id: str) -> list[dict]:
-    """Persist only synthetic, metadata-stripped media derivatives for AI use."""
+def write_safe_derivatives(route: dict, destination_dir: str, *, pseudonym: str, item_id: str,
+                            compact: bool = False) -> list[dict]:
+    """Persist only synthetic, metadata-stripped media derivatives for AI use.
+
+    When *compact* is True, uses shorter media filenames:
+    ``<pseudonym-hash>-<index>.<ext>`` under ``S/<pseudonym-hash>/`` (the
+    destination_dir is expected to already include the per-student subfolder).
+    """
     os.makedirs(workspace.extended_path(destination_dir), exist_ok=True)
     outputs = []
     media = route.get("media_derivative")
@@ -273,7 +279,12 @@ def write_safe_derivatives(route: dict, destination_dir: str, *, pseudonym: str,
         entries = []
     for index, entry in enumerate(entries, start=1):
         ext = ".jpg" if entry.get("media_type") == "image/jpeg" else ".png"
-        filename = f"{str(pseudonym).replace(' ', '-')}_{str(item_id)}_image-{index}{ext}"
+        if compact:
+            # Compact: use a short deterministic hash of pseudonym + item_id
+            short_id = workspace._deterministic_hash(f"{pseudonym}_{item_id}", 8)
+            filename = f"{short_id}-{index}{ext}"
+        else:
+            filename = f"{str(pseudonym).replace(' ', '-')}_{str(item_id)}_image-{index}{ext}"
         filename = "".join(c if c.isalnum() or c in "-_." else "_" for c in filename)
         path = os.path.join(destination_dir, filename)
         with open(workspace.extended_path(path), "wb") as f:

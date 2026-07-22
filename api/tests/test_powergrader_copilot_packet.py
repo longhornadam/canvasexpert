@@ -1,8 +1,12 @@
+import os
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from api.webui import workspace
 from api.powergrader.copilot_packet import build_copilot_batches
 
 
@@ -143,3 +147,114 @@ def test_build_copilot_batches_warns_for_oversized_single_student(tmp_path):
     assert batch["expected_results"] == [{"pseudonym": "Atlas Reed", "item_id": "501"}]
     assert batch["warnings"]
     assert "larger than the target Copilot budget" in batch["warnings"][0]
+
+
+def test_build_copilot_batches_compact_layout_deep_workspace(tmp_path, monkeypatch):
+    """In a deep workspace, Copilot batches use compact layout with short names."""
+    # Pad the root to simulate a deep workspace
+    padding = max(1, 80 - len(str(tmp_path)))
+    deep_root = tmp_path / ("D" * padding)
+    deep_root.mkdir(parents=True, exist_ok=True)
+
+    bundle = _bundle([
+        _student("Sparky McGee", "42", "The character becomes braver."),
+        _student("Nova Bright", "43", "The character learns to listen."),
+    ])
+
+    info = build_copilot_batches(
+        assignment_name="A" * 120,
+        safe_dir=str(deep_root),
+        llm_bundle=bundle,
+        rubric_text="Score for claim and evidence.",
+        persona={"name": "Sage", "personality": "Be concise and supportive."},
+        assignment_id="assignment-1000002",
+    )
+
+    # Verify compact layout: batches under "Batches" not "Copilot Batches"
+    assert "Batches" in info["packet_folder"] or "Batches" in str(info["batches"][0]["folder"])
+    # All returned paths must be <= budget
+    assert len(info["packet_folder"]) <= workspace.TEACHER_VISIBLE_BUDGET
+    for batch in info["batches"]:
+        assert len(batch["folder"]) <= workspace.TEACHER_VISIBLE_BUDGET
+        for fpath in batch["files"].values():
+            assert len(fpath) <= workspace.TEACHER_VISIBLE_BUDGET, (
+                f"Batch file path {fpath} ({len(fpath)}) exceeds budget"
+            )
+    # Check compact file names
+    batch = info["batches"][0]
+    info_file = os.path.basename(batch["files"]["assignment_info"])
+    assert info_file == "01-info.md", f"Expected 01-info.md, got {info_file}"
+    rubric_file = os.path.basename(batch["files"]["rubric_persona"])
+    assert rubric_file == "02-rubric.md", f"Expected 02-rubric.md, got {rubric_file}"
+    work_file = os.path.basename(batch["files"]["student_work"])
+    assert work_file == "03-work.md", f"Expected 03-work.md, got {work_file}"
+
+
+def test_build_copilot_batches_normal_layout_short_root(tmp_path):
+    """Under a short root, Copilot batches use the normal readable layout."""
+    bundle = _bundle([
+        _student("Sparky McGee", "42", "A short response."),
+    ])
+
+    info = build_copilot_batches(
+        assignment_name="Short Essay",
+        safe_dir=str(tmp_path),
+        llm_bundle=bundle,
+        rubric_text="Score.",
+        persona={"name": "Sage"},
+    )
+
+    # Normal layout: readable names
+    batch = info["batches"][0]
+    info_file = os.path.basename(batch["files"]["assignment_info"])
+    assert info_file.startswith("01 -"), f"Expected readable name, got {info_file}"
+    # All paths must be <= budget
+    assert len(info["packet_folder"]) <= workspace.TEACHER_VISIBLE_BUDGET
+    for fpath in batch["files"].values():
+        assert len(fpath) <= workspace.TEACHER_VISIBLE_BUDGET
+
+
+def test_build_copilot_batches_budget_exception(tmp_path):
+    """A path so deep that even compact layout exceeds the budget raises an error."""
+    very_deep = tmp_path / ("X" * 90)
+    os.makedirs(workspace.extended_path(str(very_deep)), exist_ok=True)
+
+    bundle = _bundle([
+        _student("Sparky", "42", "Response."),
+    ])
+
+    with pytest.raises(workspace.TeacherVisiblePathBudgetError):
+        build_copilot_batches(
+            assignment_name="A" * 120,
+            safe_dir=str(very_deep),
+            llm_bundle=bundle,
+            rubric_text="Score.",
+            persona={"name": "Sage"},
+            assignment_id="assignment-1000002",
+        )
+
+
+def test_two_assignments_share_prefix_have_distinct_compact_paths(tmp_path):
+    """Two different assignment labels sharing a readable prefix but having
+    different stable IDs produce distinct, deterministic compact paths."""
+    bundle = _bundle([_student("A", "1", "Response.")])
+
+    info1 = build_copilot_batches(
+        assignment_name="Fictional Research Essay - Section A",
+        safe_dir=str(tmp_path),
+        llm_bundle=bundle,
+        rubric_text="Score.",
+        persona={"name": "Sage"},
+        assignment_id="assignment-1001",
+    )
+    info2 = build_copilot_batches(
+        assignment_name="Fictional Research Essay - Section B",
+        safe_dir=str(tmp_path),
+        llm_bundle=bundle,
+        rubric_text="Score.",
+        persona={"name": "Sage"},
+        assignment_id="assignment-1002",
+    )
+
+    # Normal layout: different names
+    assert info1["packet_folder"] != info2["packet_folder"]

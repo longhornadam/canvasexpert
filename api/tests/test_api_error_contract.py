@@ -46,7 +46,7 @@ def test_non_api_path_keeps_plain_text():
 
 def test_api_route_that_raises_is_readable_json(monkeypatch):
     """End-to-end: a route that raises comes back as parseable JSON, so the
-    frontend's response.json() succeeds and the real cause reaches the UI."""
+    frontend's response.json() succeeds and the generic error message is shown."""
     from api.webui.routes import powergrader as pg_routes
 
     def _boom():
@@ -58,4 +58,6 @@ def test_api_route_that_raises_is_readable_json(monkeypatch):
     assert resp.status_code == 500
     body = resp.json()  # would raise if the body were plain text — the bug
     assert body["ok"] is False
-    assert "kaboom" in body["error"]
+    # The error message is now a fixed generic message, not the raw exception
+    assert "kaboom" not in body["error"]
+    assert "unexpected server error" in body["error"].lower()

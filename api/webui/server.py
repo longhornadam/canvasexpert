@@ -138,11 +138,15 @@ async def _api_errors_return_json(request: Request, exc: Exception):
     cause. Convert unhandled errors on API routes into a structured payload so
     the real reason reaches the teacher, and always print the traceback to the
     server console for debugging. Non-API (HTML) routes keep the plain-text 500.
+
+    The error payload uses a fixed generic message and never exposes the
+    exception type, message, absolute path, student detail, setting, or
+    credential.  The traceback is still printed locally for debugging.
     """
     print("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
     if request.url.path.startswith("/api/"):
         return JSONResponse(
-            {"ok": False, "error": f"Unexpected server error: {type(exc).__name__}: {exc}"},
+            {"ok": False, "error": "An unexpected server error occurred. Check the server console for details."},
             status_code=500,
         )
     return PlainTextResponse("Internal Server Error", status_code=500)

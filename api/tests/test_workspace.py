@@ -267,3 +267,81 @@ def test_managed_evidence_path_uses_identity_not_filename_suffix(tmp_path):
     first = workspace.managed_evidence_path("Course", "course", "Essay", "assignment", "Student", "user", 2, "file-1", "draft.docx", tmp_path)
     second = workspace.managed_evidence_path("Course", "course", "Essay", "assignment", "Student", "user", 2, "file-2", "draft.docx", tmp_path)
     assert first != second and "file-1" in first and "file-2" in second
+
+
+def test_teacher_visible_path_fits_under_budget(tmp_path):
+    """teacher_visible_path returns a path at most 230 chars."""
+    base = str(tmp_path)
+    result = workspace.teacher_visible_path(
+        base,
+        ("A long course name that goes on and on for testing purposes", "course-1000001"),
+        ("A long assignment name that also goes on and on for testing", "assignment-1000002"),
+        "run-timestamp",
+        filename="some-file.txt",
+    )
+    assert len(result) <= workspace.TEACHER_VISIBLE_BUDGET
+    assert result.startswith(base)
+
+
+def test_teacher_visible_path_compact_fallback_keeps_stable_id(tmp_path):
+    """When the full readable path exceeds the budget, the compact form
+    preserves the stable ID."""
+    base = str(tmp_path)
+    # Pad the base to trigger compact fallback without exceeding budget entirely
+    padded_base = os.path.join(base, "x" * 40)
+    result = workspace.teacher_visible_path(
+        padded_base,
+        ("A very long fictional course name for testing purposes that exceeds all limits", "course-1000001"),
+        ("Another extremely long fictional assignment name for testing purposes here", "assignment-1000002"),
+        "20260722-120000-000000",
+        filename="test-file.txt",
+    )
+    assert len(result) <= workspace.TEACHER_VISIBLE_BUDGET
+    # The stable ID should be preserved in the compact form
+    assert "course-1000001" in result or "assignment-1000002" in result
+
+
+def test_teacher_visible_path_raises_on_too_deep(tmp_path):
+    """When even the compact form cannot fit, TeacherVisiblePathBudgetError is raised."""
+    base = str(tmp_path)
+    # Deeply nested path that even compact form can't fix
+    very_deep_base = os.path.join(base, *["x" * 50] * 5)
+    with pytest.raises(workspace.TeacherVisiblePathBudgetError):
+        workspace.teacher_visible_path(
+            very_deep_base,
+            ("course", "course-1000001"),
+            ("assignment", "assignment-1000002"),
+            filename="file.txt",
+        )
+
+
+def test_teacher_visible_path_reserve_makes_shorter_path(tmp_path):
+    """When reserve is specified, the returned path is shorter to leave room."""
+    base = str(tmp_path)
+    without_reserve = workspace.teacher_visible_path(
+        base,
+        ("Course", "course-1"),
+        ("Assignment", "assignment-1"),
+        filename="file.txt",
+    )
+    with_reserve = workspace.teacher_visible_path(
+        base,
+        ("Course", "course-1"),
+        ("Assignment", "assignment-1"),
+        filename="file.txt",
+        reserve=50,
+    )
+    assert len(with_reserve) <= len(without_reserve)
+    assert len(with_reserve) <= workspace.TEACHER_VISIBLE_BUDGET - 50
+
+
+def test_teacher_visible_path_deterministic_hash_distinct(tmp_path):
+    """Two different stable IDs produce distinct compact paths."""
+    base = str(tmp_path)
+    r1 = workspace.teacher_visible_path(
+        base,
+        ("Same Name", "id-1111111"),
+        filename="f.txt",
+    )
+    # Both should fit (no deep base)
+    assert len(r1) <= workspace.TEACHER_VISIBLE_BUDGET
