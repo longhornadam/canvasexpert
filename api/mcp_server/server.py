@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Ten thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Eleven thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -50,9 +50,18 @@ def _compact(payload: dict) -> str:
 
 @mcp.tool()
 def list_courses() -> str:
-    """This teacher's courses as {course_id, course_name, active}; active=true
-    marks a current course. Call first to get a course_id. No student data."""
+    """This teacher's courses as {course_id, course_name, active, lifecycle};
+    active=true marks a current course, lifecycle tells Canvas concluded status.
+    Call first to get a course_id. No student data."""
     return _compact(tools.list_courses())
+
+
+@mcp.tool()
+def list_sections(course_id: str) -> str:
+    """A course's section names from the local mirror as a {columns, rows}
+    table of (section_id, section_name). Call before get_seating_context to
+    discover valid section_name values. No student data."""
+    return _compact(tools.list_sections(course_id))
 
 
 @mcp.tool()

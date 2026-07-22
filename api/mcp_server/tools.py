@@ -294,9 +294,42 @@ def list_courses() -> dict:
                 "course_id": str(c.get("id", "")),
                 "course_name": str(c.get("nickname") or c.get("name") or ""),
                 "active": bool(c.get("active", True)),
+                "lifecycle": mirror_store.read_course_context(
+                    str(c.get("id", ""))).get("lifecycle", "unknown"),
             }
             for c in courses
         ],
+    }
+
+
+_SECTION_COLUMNS = ("section_id", "section_name")
+
+
+def list_sections(course_id: str) -> dict:
+    """Section names from the local CanvasMirror roster (disk-only, no live
+    Canvas fallback). No student data — no vault, no safety gate. Returns
+    a {columns, rows} table of (section_id, section_name). Call this before
+    get_seating_context to discover valid section_name values."""
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+
+    document = mirror_store.read_roster(course_id)
+    if document is None:
+        return {
+            "ok": False,
+            "error": _MIRROR_UNAVAILABLE_ROSTER_ERROR,
+        }
+
+    sections = document.get("sections", {})
+    rows = [
+        {"section_id": str(sid), "section_name": str(name)}
+        for sid, name in sections.items()
+    ]
+    return {
+        "ok": True,
+        "course_id": course_id,
+        "sections": _tabulate(rows, _SECTION_COLUMNS),
     }
 
 
@@ -368,6 +401,14 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
         }
 
     records = scope["records"]
+    # Distinguish "never successfully cataloged" (state=unavailable, no
+    # last_success_at) from "cataloged but has no modules" (state=current/stale
+    # with empty records), since both produce an empty modules list.
+    never_cataloged = (
+        scope["state"] == "unavailable"
+        and not scope.get("last_success_at")
+    )
+    modules_state_detail = "never_cataloged" if never_cataloged else "cataloged"
     has_published = any("published" in module for module in records)
     columns = _MODULE_COLUMNS_WITH_PUBLISHED if has_published else _MODULE_COLUMNS
     if include_items:
@@ -404,6 +445,7 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
         "source": scope["source"],
         "synced_at": scope["last_success_at"],
         "state": scope["state"],
+        "modules_state_detail": modules_state_detail,
     }
 
 

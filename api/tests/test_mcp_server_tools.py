@@ -104,10 +104,16 @@ def test_list_courses_happy(monkeypatch):
         {"id": "111", "name": "Algebra I", "nickname": "", "active": True},
         {"id": "222", "name": "Geometry", "nickname": "Geo Honors", "active": False},
     ])
+    monkeypatch.setattr(
+        tools.mirror_store, "read_course_context",
+        lambda cid: {"lifecycle": "current" if cid == "111" else "concluded"},
+    )
     result = tools.list_courses()
     assert result == {"ok": True, "courses": [
-        {"course_id": "111", "course_name": "Algebra I", "active": True},
-        {"course_id": "222", "course_name": "Geo Honors", "active": False},
+        {"course_id": "111", "course_name": "Algebra I", "active": True,
+         "lifecycle": "current"},
+        {"course_id": "222", "course_name": "Geo Honors", "active": False,
+         "lifecycle": "concluded"},
     ]}
 
 
@@ -302,6 +308,7 @@ def test_get_modules_happy_returns_table(monkeypatch):
     assert result["source"] == "catalog"
     assert result["synced_at"] == "2026-07-01T00:00:00Z"
     assert result["state"] == "current"
+    assert result["modules_state_detail"] == "cataloged"
     assert result["modules"]["columns"] == ["id", "name", "position", "item_count"]
     assert _rows(result["modules"]) == [
         {"id": "1", "name": "Unit 1", "position": 1, "item_count": 2},
@@ -391,6 +398,83 @@ def test_get_modules_state_current_when_within_serve_window(monkeypatch):
     result = tools.get_modules("111")
     assert result["ok"] is True
     assert result["state"] == "current"
+
+
+def test_get_modules_never_cataloged_detail(monkeypatch):
+    """When modules scope has never been successfully cataloged (state=unavailable,
+    no last_success_at), modules_state_detail says never_cataloged."""
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document([])
+    document["modules"]["state"] = "unavailable"
+    document["modules"]["last_success_at"] = ""
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+    monkeypatch.setattr(tools.mirror_queries, "_serve_max_age_hours", lambda: 10**9)
+
+    result = tools.get_modules("111")
+    assert result["ok"] is True
+    assert result["modules_state_detail"] == "never_cataloged"
+    assert result["modules"]["rows"] == []
+
+
+def test_get_modules_empty_but_cataloged_detail(monkeypatch):
+    """When modules scope has been cataloged (has last_success_at) but has zero
+    records, modules_state_detail says cataloged — the course genuinely has no
+    modules."""
+    _set_active_courses(monkeypatch, ["111"])
+    document = _module_catalog_document([])  # state="current" with last_success_at
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+    monkeypatch.setattr(tools.mirror_queries, "_serve_max_age_hours", lambda: 10**9)
+
+    result = tools.get_modules("111")
+    assert result["ok"] is True
+    assert result["modules_state_detail"] == "cataloged"
+    assert result["modules"]["rows"] == []
+
+
+# --- list_sections (no student data -> no vault, no safety gate) ------------
+
+def test_list_sections_happy(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(
+        tools.mirror_store, "read_roster",
+        lambda cid: {"sections": {"800001": "Period 1", "800002": "Period 2"}},
+    )
+    result = tools.list_sections("111")
+    assert result["ok"] is True
+    assert result["course_id"] == "111"
+    rows = _rows(result["sections"])
+    assert rows == [
+        {"section_id": "800001", "section_name": "Period 1"},
+        {"section_id": "800002", "section_name": "Period 2"},
+    ]
+
+
+def test_list_sections_empty(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(
+        tools.mirror_store, "read_roster",
+        lambda cid: {"sections": {}},
+    )
+    result = tools.list_sections("111")
+    assert result["ok"] is True
+    assert result["sections"]["rows"] == []
+
+
+def test_list_sections_roster_missing(monkeypatch):
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(tools.mirror_store, "read_roster", lambda cid: None)
+    result = tools.list_sections("111")
+    assert result["ok"] is False
+    assert "mirror" in result["error"].lower()
+
+
+def test_list_sections_rejects_non_current_course(monkeypatch):
+    _set_active_courses(monkeypatch, ["222"])
+    result = tools.list_sections("111")
+    assert result["ok"] is False
+    assert "not a Current course" in result["error"]
 
 
 # --- get_authoring_contract (no course_id, no student data -> no gates) -----
@@ -1156,14 +1240,15 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_ten_read_only_tools():
+def test_server_registers_exactly_the_eleven_read_only_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
-        "list_courses", "get_course_assignments", "get_modules", "get_roster",
-        "get_seating_context", "get_submissions", "get_gradebook_snapshot",
-        "refresh_mirror", "get_authoring_contract", "list_staged_content",
+        "list_courses", "list_sections", "get_course_assignments", "get_modules",
+        "get_roster", "get_seating_context", "get_submissions",
+        "get_gradebook_snapshot", "refresh_mirror", "get_authoring_contract",
+        "list_staged_content",
     }
 
 
@@ -1173,6 +1258,10 @@ def test_server_wrappers_return_compact_json(monkeypatch):
     monkeypatch.setattr(tools.config, "saved_courses", lambda: [
         {"id": "111", "name": "Algebra I", "nickname": "", "active": True},
     ])
+    monkeypatch.setattr(
+        tools.mirror_store, "read_course_context",
+        lambda cid: {"lifecycle": "current"},
+    )
     wire = server.list_courses()
     assert isinstance(wire, str)
     assert "\n" not in wire and ": " not in wire and ", " not in wire
