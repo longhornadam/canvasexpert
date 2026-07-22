@@ -55,6 +55,7 @@ EXPECTED = [
     ('/api/files', ('GET',)),
     ('/api/gradebook', ('GET',)),
     ('/api/groups', ('GET',)),
+    ('/api/inbox-files', ('GET',)),
     ('/api/late-policy', ('GET',)),
     ('/api/late-policy/apply', ('POST',)),
     ('/api/modules', ('GET',)),

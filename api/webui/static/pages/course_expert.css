@@ -58,6 +58,18 @@
 .push-banner.ok { border-color: var(--ce-ok); background: var(--ce-ok-soft); }
 .push-banner.warn { border-color: var(--ce-attention); background: var(--ce-attention-soft); }
 .push-banner.fail { border-color: var(--ce-danger); background: var(--ce-danger-soft); }
+.inbox-pending { margin-bottom: var(--ce-space-3); padding: var(--ce-space-3); border: 1px dashed var(--ce-rule-strong); background: var(--ce-surface-soft); }
+.inbox-pending-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ce-space-2); }
+.inbox-pending-head h3 { margin: 0; font-size: 13px; font-weight: 700; color: var(--ce-ink-muted); }
+.inbox-pending-list { display: grid; gap: var(--ce-space-2); margin-top: var(--ce-space-2); }
+.inbox-pending-empty { margin: 0; }
+.inbox-pending-row { display: grid; gap: var(--ce-space-1); padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); }
+.inbox-pending-label { display: flex; align-items: center; gap: var(--ce-space-2); font-size: 13px; }
+.inbox-pending-status { padding: 1px 6px; font-size: 11px; font-weight: 700; }
+.inbox-pending-status.ok { color: var(--ce-ok); background: var(--ce-ok-soft); }
+.inbox-pending-status.err { color: var(--ce-danger); background: var(--ce-danger-soft); }
+.inbox-pending-problems { margin: 0; padding-left: var(--ce-space-4); color: var(--ce-danger); font-size: 12px; }
+.inbox-pending-list .err { color: var(--ce-danger); }
 .log { width: 100%; max-height: 300px; overflow: auto; padding: var(--ce-space-3); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
 .ce-work-rail { display: grid; align-content: start; gap: var(--ce-space-4); }
 .ce-work-rail-head { padding-bottom: var(--ce-space-2); border-bottom: 1px solid var(--ce-rule-strong); }
