@@ -767,20 +767,31 @@ def get_gradebook_snapshot(course_id: str) -> dict:
 
 _REFRESH_TIMEOUT_SECONDS = 25.0
 
+# refresh_mirror drives a submissions delta (course.refresh) AND a roster
+# pass, so a roster that has aged past the serve window is recoverable on
+# demand. Without the explicit roster scope the manual refresh runs a delta
+# only, which never rewrites the roster file — get_roster/get_seating_context
+# would then refuse indefinitely (the assistant loops: refresh says "synced",
+# the roster stays stale) while the gradebook served fine off deltas. The
+# background heartbeat closes the same gap from the other side; see
+# mirror_service.due_passes.
+_REFRESH_SCOPES = ["course.refresh", "roster"]
+
 
 def refresh_mirror(course_id: str) -> dict:
-    """Ask Canvas Expert to sync this course's local CanvasMirror from Canvas,
-    then report freshness — the response is a sync STATUS, never Canvas data.
-    Call this after get_roster/get_submissions/get_gradebook_snapshot refuses
-    as stale or unavailable, then re-call that same tool; this tool never
-    returns course, roster, or submission data itself, so it needs no
-    identity vault and no outbound safety scan."""
+    """Ask Canvas Expert to sync this course's local CanvasMirror from Canvas
+    (a submissions delta plus a roster refresh), then report freshness — the
+    response is a sync STATUS, never Canvas data. Call this after
+    get_roster/get_submissions/get_gradebook_snapshot refuses as stale or
+    unavailable, then re-call that same tool; this tool never returns course,
+    roster, or submission data itself, so it needs no identity vault and no
+    outbound safety scan."""
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
 
     try:
-        plan_id = _enqueue_sync(course_id)
+        plan_id = _enqueue_sync(course_id, _REFRESH_SCOPES)
     except ValueError as error:
         return {"ok": False, "error": str(error)}
     except Exception as error:

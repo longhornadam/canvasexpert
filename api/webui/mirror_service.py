@@ -31,14 +31,28 @@ ROSTER_MAX_AGE_HOURS = 24.0
 NOTIFY_DELAY_SECONDS = 15.0       # write-through settle delay
 
 
-def due_passes(state: dict, now_iso: str) -> list[str]:
-    """Which passes one course needs this tick."""
+def due_passes(state: dict, now_iso: str, *,
+               serve_max_age_hours: float | None = None) -> list[str]:
+    """Which passes one course needs this tick.
+
+    The roster refreshes before it can age past the serve window, not merely
+    once a day: the roster file is rewritten only by a full or roster pass
+    (never a delta), and reads serve it only while it is younger than the
+    serve threshold (~6h). Left at a flat 24h cadence it went unservable for
+    most of every day — get_roster/get_seating_context refusing while deltas
+    kept the gradebook fresh. The daily figure stays as a floor via ``min``,
+    so an unusually large serve window still refreshes the roster at least
+    once a day.
+    """
     full_age = store.age_hours(state["passes"]["full"]["last_success_at"], now_iso)
     if full_age is None or full_age >= FULL_MAX_AGE_HOURS:
         return ["full"]  # covers roster and resets watermarks
     passes = ["delta"]
+    if serve_max_age_hours is None:
+        serve_max_age_hours = config.mirror_serve_max_age_hours()
+    roster_due_age = min(ROSTER_MAX_AGE_HOURS, serve_max_age_hours)
     roster_age = store.age_hours(state["passes"]["roster"]["last_success_at"], now_iso)
-    if roster_age is None or roster_age >= ROSTER_MAX_AGE_HOURS:
+    if roster_age is None or roster_age >= roster_due_age:
         passes.append("roster")
     return passes
 

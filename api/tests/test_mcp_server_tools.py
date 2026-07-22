@@ -1064,7 +1064,7 @@ def test_refresh_mirror_rejects_non_current_course(monkeypatch):
 
 def test_refresh_mirror_reports_synced_on_success(monkeypatch):
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id: "plan-1")
+    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
     monkeypatch.setattr(tools, "_wait_for_plan",
                         lambda plan_id, **kwargs: {"state": "succeeded"})
 
@@ -1073,9 +1073,28 @@ def test_refresh_mirror_reports_synced_on_success(monkeypatch):
     assert result["status"] == "synced"
 
 
+def test_refresh_mirror_enqueues_roster_pass(monkeypatch):
+    """refresh_mirror must drive a roster pass, not a delta alone — otherwise a
+    roster aged past the serve window is unrecoverable through this tool (the
+    delta never rewrites the roster file, so get_roster keeps refusing)."""
+    _set_active_courses(monkeypatch, ["111"])
+    captured = {}
+    monkeypatch.setattr(tools, "_enqueue_sync",
+                        lambda course_id, scopes=None: captured.update(
+                            course_id=course_id, scopes=scopes) or "plan-1")
+    monkeypatch.setattr(tools, "_wait_for_plan",
+                        lambda plan_id, **kwargs: {"state": "succeeded"})
+
+    result = tools.refresh_mirror("111")
+    assert result["ok"] is True
+    assert captured["course_id"] == "111"
+    assert "roster" in captured["scopes"]
+    assert "course.refresh" in captured["scopes"]
+
+
 def test_refresh_mirror_reports_syncing_while_running(monkeypatch):
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id: "plan-1")
+    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
     monkeypatch.setattr(tools, "_wait_for_plan",
                         lambda plan_id, **kwargs: {"state": "running"})
 
@@ -1086,7 +1105,7 @@ def test_refresh_mirror_reports_syncing_while_running(monkeypatch):
 
 def test_refresh_mirror_reports_failure(monkeypatch):
     _set_active_courses(monkeypatch, ["111"])
-    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id: "plan-1")
+    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
     monkeypatch.setattr(tools, "_wait_for_plan",
                         lambda plan_id, **kwargs: {"state": "failed"})
 
@@ -1098,7 +1117,7 @@ def test_refresh_mirror_reports_failure(monkeypatch):
 def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
     _set_active_courses(monkeypatch, ["111"])
 
-    def _raise(course_id):
+    def _raise(course_id, scopes=None):
         raise ValueError("Not a Current course.")
 
     monkeypatch.setattr(tools, "_enqueue_sync", _raise)
