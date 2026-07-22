@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+from api.webui import workspace
 from api.webui.source_materials import estimate_text_tokens
 
 from .packet import safe_ai_packet_name
@@ -92,6 +93,22 @@ def _split_batches(student_blocks: list[dict], available_studentwork_tokens: int
     return batches
 
 
+def _needs_compact_layout(safe_dir: str, packet_name: str, assignment_name: str) -> bool:
+    """Determine whether the deep workspace forces compact batch layout.
+
+    Projects the normal readable batch file path.  If it exceeds the
+    230-char budget, compact layout is selected.
+    """
+    safe_dir = os.path.abspath(safe_dir)
+    safe_name = _safe_assignment_name(assignment_name)
+    normal_path = os.path.join(
+        safe_dir, packet_name, "Copilot Batches",
+        "Batch 99 of 99",
+        f"03 - {safe_name} - StudentWork - SAFE - Batch 99 of 99.md",
+    )
+    return len(normal_path) > workspace.TEACHER_VISIBLE_BUDGET
+
+
 def build_copilot_batches(
     *,
     assignment_name: str,
@@ -104,19 +121,33 @@ def build_copilot_batches(
     safety_margin_tokens: int = COPILOT_SAFETY_MARGIN_TOKENS,
     batch_id_prefix: str | None = None,
     safe_bundle_path: str | None = None,
+    assignment_id: str = "",
 ) -> dict:
     """Build fresh-chat Copilot batch folders from a SAFE LLM bundle.
+
+    Selects the normal (readable) or compact layout based on path budget.
+    Compact layout uses ``Packet-<stable-id>/Batches/Batch-<n>/`` with numbered
+    upload files (01-info.md, 02-rubric.md, 03-work.md) and a shorter README.
 
     Args:
         batch_id_prefix: Optional prefix for batch IDs (e.g. 'late-20260715-142200').
             Initial batches use 'batch-01'; late batches use '<prefix>-batch-01'.
         safe_bundle_path: Absolute path to the SAFE bundle JSON. Each batch stores
             its own absolute safe_bundle path for validation.
+        assignment_id: Canvas assignment ID for stable compact identifiers.
     """
     safe_dir = os.path.abspath(safe_dir)
     safe_name = _safe_assignment_name(assignment_name)
-    packet_folder = os.path.abspath(os.path.join(safe_dir, safe_ai_packet_name(assignment_name), "Copilot Batches"))
-    os.makedirs(packet_folder, exist_ok=True)
+    packet_name = safe_ai_packet_name(assignment_name, assignment_id=assignment_id)
+    packet_folder = os.path.abspath(os.path.join(safe_dir, packet_name))
+
+    # Determine if compact layout is needed by projecting batch paths.
+    compact = _needs_compact_layout(safe_dir, packet_name, assignment_name)
+
+    if compact:
+        bat_container = os.path.abspath(os.path.join(safe_dir, packet_name, "Batches"))
+    else:
+        bat_container = os.path.abspath(os.path.join(safe_dir, packet_name, "Copilot Batches"))
 
     file_01_text = support.assignment_info_text(assignment_name, llm_bundle)
     file_02_text = support.rubric_persona_text(assignment_name, rubric_text, persona)
@@ -135,7 +166,10 @@ def build_copilot_batches(
     total_batches = len(raw_batches)
     batches: list[dict] = []
 
-    readme_path = os.path.join(packet_folder, "README - Copilot Steps.md")
+    readme_path = os.path.join(bat_container, "README - Copilot Steps.md")
+    if compact:
+        # README is a bit shorter to keep paths within budget
+        readme_path = os.path.join(bat_container, "README.md")
     readme_lines = [
         "# Copilot Steps",
         "",
@@ -156,9 +190,14 @@ def build_copilot_batches(
     ]
 
     for index, raw_batch in enumerate(raw_batches, start=1):
-        label = f"Batch {index} of {total_batches}"
-        folder = os.path.abspath(os.path.join(packet_folder, f"Batch {index:02d} of {total_batches:02d}"))
-        os.makedirs(folder, exist_ok=True)
+        if compact:
+            label = f"Batch-{index}"
+            folder = os.path.abspath(os.path.join(bat_container, f"Batch-{index}"))
+        else:
+            label = f"Batch {index} of {total_batches}"
+            folder = os.path.abspath(os.path.join(bat_container, f"Batch {index:02d} of {total_batches:02d}"))
+
+        os.makedirs(workspace.extended_path(folder), exist_ok=True)
 
         # Compute the batch_id: prefix + 'batch-XX' for late, or 'batch-XX' for initial
         if batch_id_prefix:
@@ -166,18 +205,42 @@ def build_copilot_batches(
         else:
             batch_id_value = f"batch-{index:02d}"
 
-        assignment_info_path = os.path.join(folder, f"01 - {safe_name} - Assignment Information - SAFE.md")
-        rubric_persona_path = os.path.join(folder, f"02 - {safe_name} - Rubric and TA Personality - SAFE.md")
-        student_work_path = os.path.join(
-            folder,
-            f"03 - {safe_name} - StudentWork - SAFE - Batch {index:02d} of {total_batches:02d}.md",
-        )
+        if compact:
+            assignment_info_path = os.path.join(folder, "01-info.md")
+            rubric_persona_path = os.path.join(folder, "02-rubric.md")
+            student_work_path = os.path.join(folder, "03-work.md")
+        else:
+            assignment_info_path = os.path.join(folder, f"01 - {safe_name} - Assignment Information - SAFE.md")
+            rubric_persona_path = os.path.join(folder, f"02 - {safe_name} - Rubric and TA Personality - SAFE.md")
+            student_work_path = os.path.join(
+                folder,
+                f"03 - {safe_name} - StudentWork - SAFE - Batch {index:02d} of {total_batches:02d}.md",
+            )
+
+        # Validate every batch file path against the budget before writing
+        for path in (assignment_info_path, rubric_persona_path, student_work_path, readme_path):
+            apath = os.path.abspath(path)
+            actual_len = len(apath)
+            if actual_len > workspace.TEACHER_VISIBLE_BUDGET:
+                raise workspace.TeacherVisiblePathBudgetError(
+                    f"Batch file path exceeds budget "
+                    f"({actual_len} > {workspace.TEACHER_VISIBLE_BUDGET}): {apath}"
+                )
+
         student_work_text = support.student_work_text(
             assignment_name=assignment_name,
             batch_number=index,
             total_batches=total_batches,
             entries=raw_batch["entries"],
         )
+        if compact:
+            # Compact mode: student_work_text uses short label
+            student_work_text = support.student_work_text(
+                assignment_name=assignment_name,
+                batch_number=index,
+                total_batches=total_batches,
+                entries=raw_batch["entries"],
+            )
         support.write_text(assignment_info_path, file_01_text)
         support.write_text(rubric_persona_path, file_02_text)
         support.write_text(student_work_path, student_work_text)
@@ -221,7 +284,7 @@ def build_copilot_batches(
         "packet_type": "copilot_batches",
         "mode": "fresh_chat_per_batch",
         "assignment_name": assignment_name,
-        "packet_folder": packet_folder,
+        "packet_folder": os.path.abspath(bat_container),
         "readme_path": os.path.abspath(readme_path),
         "budget": {
             "effective_context_tokens": effective_context_tokens,

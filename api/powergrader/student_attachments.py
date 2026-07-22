@@ -12,6 +12,7 @@ import mimetypes
 import os
 from pathlib import Path
 
+from api.webui import workspace
 from api.webui.source_material_extractors import _collapse_ws, _decode_bytes
 
 
@@ -190,22 +191,27 @@ def ingest_local_file(path: str, *, attempt_dir: str, original_filename: str | N
     """Extract approved local content and write a teacher-readable text sidecar."""
     source = Path(path)
     filename = os.path.basename(original_filename or source.name)
-    data = source.read_bytes()
+    # os-level I/O through extended_path: a deep attempt folder can push these
+    # past Windows' 260-char limit, and pathlib strips the \\?\ prefix.
+    with open(workspace.extended_path(path), "rb") as fh:
+        data = fh.read()
     result = route_bytes(filename, data)
     result.update({"filename": filename, "local_path": str(source),
                    "declared_size": declared_size, "attempt": attempt,
                    "item_id": str(item_id or ""), "download_status": "downloaded"})
     if result.get("text"):
-        text_dir = Path(attempt_dir) / "Extracted Text"
-        text_dir.mkdir(parents=True, exist_ok=True)
-        text_path = text_dir / f"{Path(filename).stem}__extracted.txt"
+        text_dir = os.path.join(attempt_dir, "Extracted Text")
+        os.makedirs(workspace.extended_path(text_dir), exist_ok=True)
+        stem = Path(filename).stem
+        text_path = os.path.join(text_dir, f"{stem}__extracted.txt")
         n = 2
-        while text_path.exists():
-            text_path = text_dir / f"{Path(filename).stem}__extracted ({n}).txt"
+        while os.path.exists(workspace.extended_path(text_path)):
+            text_path = os.path.join(text_dir, f"{stem}__extracted ({n}).txt")
             n += 1
-        text_path.write_text(result["text"], encoding="utf-8")
-        result["extracted_text_path"] = str(text_path)
-    result["actual_size"] = source.stat().st_size
+        with open(workspace.extended_path(text_path), "w", encoding="utf-8") as fh:
+            fh.write(result["text"])
+        result["extracted_text_path"] = text_path
+    result["actual_size"] = os.path.getsize(workspace.extended_path(path))
     return result
 
 
@@ -233,7 +239,7 @@ def eligibility_decision(attachments: list[dict], *, expected_count: int | None 
         if "download_status" in item and item.get("download_status") != "downloaded":
             reasons.append(f"{filename}: {item.get('download_status') or 'download status missing'}")
         local_path = item.get("local_path")
-        if "download_status" in item and (not local_path or not os.path.isfile(local_path)):
+        if "download_status" in item and (not local_path or not os.path.isfile(workspace.extended_path(local_path))):
             reasons.append(f"{filename}: original file is unavailable locally")
         declared = item.get("declared_size")
         actual = item.get("actual_size")
@@ -254,9 +260,15 @@ def eligibility_decision(attachments: list[dict], *, expected_count: int | None 
             "expected_count": expected_count, "attachment_count": len(items)}
 
 
-def write_safe_derivatives(route: dict, destination_dir: str, *, pseudonym: str, item_id: str) -> list[dict]:
-    """Persist only synthetic, metadata-stripped media derivatives for AI use."""
-    os.makedirs(destination_dir, exist_ok=True)
+def write_safe_derivatives(route: dict, destination_dir: str, *, pseudonym: str, item_id: str,
+                            compact: bool = False) -> list[dict]:
+    """Persist only synthetic, metadata-stripped media derivatives for AI use.
+
+    When *compact* is True, uses shorter media filenames:
+    ``<pseudonym-hash>-<index>.<ext>`` under ``S/<pseudonym-hash>/`` (the
+    destination_dir is expected to already include the per-student subfolder).
+    """
+    os.makedirs(workspace.extended_path(destination_dir), exist_ok=True)
     outputs = []
     media = route.get("media_derivative")
     if isinstance(media, list):
@@ -267,10 +279,15 @@ def write_safe_derivatives(route: dict, destination_dir: str, *, pseudonym: str,
         entries = []
     for index, entry in enumerate(entries, start=1):
         ext = ".jpg" if entry.get("media_type") == "image/jpeg" else ".png"
-        filename = f"{str(pseudonym).replace(' ', '-')}_{str(item_id)}_image-{index}{ext}"
+        if compact:
+            # Compact: use a short deterministic hash of pseudonym + item_id
+            short_id = workspace._deterministic_hash(f"{pseudonym}_{item_id}", 8)
+            filename = f"{short_id}-{index}{ext}"
+        else:
+            filename = f"{str(pseudonym).replace(' ', '-')}_{str(item_id)}_image-{index}{ext}"
         filename = "".join(c if c.isalnum() or c in "-_." else "_" for c in filename)
         path = os.path.join(destination_dir, filename)
-        with open(path, "wb") as f:
+        with open(workspace.extended_path(path), "wb") as f:
             f.write(entry["data"])
         outputs.append({"local_path": path, "filename": filename,
                         "media_type": entry.get("media_type") or "image/png",

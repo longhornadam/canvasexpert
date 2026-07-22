@@ -87,10 +87,10 @@ def _require_dir(course_id, root):
 
 
 def _read_document(path, validator):
-    if not path or not os.path.exists(path):
+    if not path or not os.path.exists(workspace.extended_path(path)):
         return None
     try:
-        with open(path, encoding="utf-8") as handle:
+        with open(workspace.extended_path(path), encoding="utf-8") as handle:
             return validator(json.load(handle))
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return None
@@ -326,12 +326,12 @@ def read_quiz(course_id, assignment_id, *, root=None):
 
 def list_assignment_ids(course_id, *, root=None):
     directory = new_quizzes_dir(course_id, root)
-    if not directory or not os.path.isdir(directory):
+    if not directory or not os.path.isdir(workspace.extended_path(directory)):
         return []
     result = []
-    for name in os.listdir(directory):
+    for name in os.listdir(workspace.extended_path(directory)):
         child = os.path.join(directory, name)
-        if os.path.isdir(child) and os.path.isfile(os.path.join(child, QUIZ_FILENAME)):
+        if os.path.isdir(workspace.extended_path(child)) and os.path.isfile(workspace.extended_path(os.path.join(child, QUIZ_FILENAME))):
             result.append(name)
     return sorted(result)
 
@@ -568,7 +568,7 @@ def write_response_snapshot(course_id, assignment_id, *, assignment=None, quiz=N
             existing_ids.discard(uid)
         for uid in existing_ids:
             try:
-                os.remove(student_path(course_id, assignment_id, uid, root))
+                os.remove(workspace.extended_path(student_path(course_id, assignment_id, uid, root)))
             except OSError:
                 pass
         _record_sync(course_id, kind="responses", assignment_id=str(assignment_id),
@@ -585,10 +585,10 @@ def read_student(course_id, assignment_id, user_id, *, root=None):
 
 def list_student_ids(course_id, assignment_id, *, root=None):
     directory = students_dir(course_id, assignment_id, root)
-    if not directory or not os.path.isdir(directory):
+    if not directory or not os.path.isdir(workspace.extended_path(directory)):
         return []
     suffix = ".v2.json"
-    return sorted(name[:-len(suffix)] for name in os.listdir(directory) if name.endswith(suffix))
+    return sorted(name[:-len(suffix)] for name in os.listdir(workspace.extended_path(directory)) if name.endswith(suffix))
 
 
 def _response_envelope(course_id, assignment_id, *, root=None):
@@ -885,7 +885,7 @@ def sync_metadata(course_id, assignments, *, canvas_get_all, root=None, now=None
                 directory = quiz_dir(course_id, assignment_id, root)
                 if directory:
                     import shutil
-                    shutil.rmtree(directory)
+                    shutil.rmtree(workspace.extended_path(directory))
             except OSError:
                 pass
     capability_now = store.read_new_quiz_capability(course_id, root=root)["capability"]

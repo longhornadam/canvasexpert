@@ -739,7 +739,7 @@ def _download_item_files(target, item_results, course_id, assignment_id, *, sess
         error = _native_error("destination_unavailable", "The local workspace destination was unavailable.")
         _mark_expected_failure(target, error)
         return 0, error
-    os.makedirs(attempt_dir, exist_ok=True)
+    os.makedirs(workspace.extended_path(attempt_dir), exist_ok=True)
     clean = download or _download_signed_url
     count = 0
     for item_id, expected in expected_by_item.items():
@@ -752,7 +752,7 @@ def _download_item_files(target, item_results, course_id, assignment_id, *, sess
                 stem, ext = os.path.splitext(filename)
                 dest = os.path.join(attempt_dir, filename)
                 number = 2
-                while os.path.exists(dest) or os.path.exists(dest + ".partial"):
+                while os.path.exists(workspace.extended_path(dest)) or os.path.exists(workspace.extended_path(dest + ".partial")):
                     dest = os.path.join(attempt_dir, f"{stem} ({number}){ext}")
                     number += 1
             meta = {
@@ -783,7 +783,7 @@ def _download_item_files(target, item_results, course_id, assignment_id, *, sess
             reuse = (reusable_records or {}).get(str(file_identity))
             expected_indicator = {"size": value.get("size")} if value.get("size") is not None else {}
             if (reuse and reuse.get("content_indicator") == expected_indicator
-                    and reuse.get("local_path") and os.path.isfile(reuse["local_path"])):
+                    and reuse.get("local_path") and os.path.isfile(workspace.extended_path(reuse["local_path"]))):
                 meta.update({key: value for key, value in reuse.items() if key not in {"url", "headers", "signed_url"}})
                 meta["download_status"] = "reused"
                 item_file.update(meta); top_file.update(meta)
@@ -845,16 +845,16 @@ def _download_signed_url(url, dest, *, declared_size=None, http_session=None, fr
     if parsed.scheme.lower() != "https":
         raise ValueError("download requires HTTPS")
     parent = os.path.dirname(os.path.abspath(dest))
-    os.makedirs(parent, exist_ok=True)
+    os.makedirs(workspace.extended_path(parent), exist_ok=True)
     expected = int(declared_size) if declared_size not in (None, "") else None
     if free_space is None:
-        free_space = shutil.disk_usage(parent).free
+        free_space = shutil.disk_usage(workspace.extended_path(parent)).free
     if expected is not None and expected > free_space:
         raise OSError("insufficient local storage")
     partial = dest + ".partial"
     try:
-        if os.path.exists(partial):
-            os.unlink(partial)
+        if os.path.exists(workspace.extended_path(partial)):
+            os.unlink(workspace.extended_path(partial))
         client = http_session or requests.Session()
         # No headers argument and no inherited Canvas session are intentional.
         response = client.get(str(url), stream=True, allow_redirects=True, timeout=DOWNLOAD_TIMEOUT)
@@ -864,7 +864,7 @@ def _download_signed_url(url, dest, *, declared_size=None, http_session=None, fr
         if getattr(response, "status_code", 0) < 200 or getattr(response, "status_code", 0) >= 300:
             raise ValueError("storage download returned an HTTP error")
         actual = 0
-        with open(partial, "wb") as output:
+        with open(workspace.extended_path(partial), "wb") as output:
             for chunk in response.iter_content(chunk_size=64 * 1024):
                 if not chunk:
                     continue
@@ -874,12 +874,12 @@ def _download_signed_url(url, dest, *, declared_size=None, http_session=None, fr
                 output.write(chunk)
         if expected is not None and actual != expected:
             raise ValueError("download size did not match Canvas metadata")
-        os.replace(partial, dest)
+        os.replace(workspace.extended_path(partial), workspace.extended_path(dest))
         return {"actual_size": actual, "declared_size": expected}
     except Exception:
         try:
-            if os.path.exists(partial):
-                os.unlink(partial)
+            if os.path.exists(workspace.extended_path(partial)):
+                os.unlink(workspace.extended_path(partial))
         except OSError:
             pass
         raise

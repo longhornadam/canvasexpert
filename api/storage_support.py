@@ -4,8 +4,29 @@ from __future__ import annotations
 import os
 import tempfile
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
+
+from api.webui import workspace
+
+
+def _replace_with_retry(source: str, target: str, *, attempts: int = 10) -> None:
+    """os.replace, tolerant of transient Windows rename contention.
+
+    Antivirus and the search indexer briefly open a just-closed file, so the
+    replace can fail with WinError 5 (access denied) / 32 (sharing violation),
+    both surfaced as PermissionError. These clear in milliseconds — retry a few
+    times with a short backoff before giving up. Elsewhere it is a single call.
+    """
+    for attempt in range(attempts):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == attempts - 1:
+                raise
+            time.sleep(0.02 * (attempt + 1))
 
 
 _REGISTRY_LOCK = threading.Lock()
@@ -39,9 +60,11 @@ def interprocess_lock(lock_path: Path):
     os_lock_acquired = False
     try:
         if acquired_os_lock:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            handle = target.open("a+b")
-            if target.stat().st_size == 0:
+            # os-level via extended_path: pathlib strips the \\?\ prefix, so a
+            # deep lock path (e.g. mirror tree) would otherwise fail past 260.
+            os.makedirs(workspace.extended_path(str(target.parent)), exist_ok=True)
+            handle = open(workspace.extended_path(str(target)), "a+b")
+            if os.stat(workspace.extended_path(str(target))).st_size == 0:
                 handle.write(b"0")
                 handle.flush()
             handle.seek(0)
@@ -76,9 +99,12 @@ def interprocess_lock(lock_path: Path):
 def atomic_write_bytes(path: Path, payload: bytes) -> None:
     """Flush a same-directory temporary file, then atomically replace target."""
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
+    # os-level via extended_path so deep targets (mirror/catalog trees) survive
+    # Windows' 260-char limit; mkstemp(dir=extended) yields an already-prefixed
+    # temporary, so os.replace/os.unlink below inherit long-path safety.
+    os.makedirs(workspace.extended_path(str(target.parent)), exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{target.name}-", suffix=".tmp", dir=str(target.parent)
+        prefix=f".{target.name}-", suffix=".tmp", dir=workspace.extended_path(str(target.parent))
     )
     try:
         with os.fdopen(descriptor, "wb") as handle:
@@ -86,7 +112,7 @@ def atomic_write_bytes(path: Path, payload: bytes) -> None:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, target)
+        _replace_with_retry(temporary, workspace.extended_path(str(target)))
     except Exception:
         if descriptor is not None:
             try:

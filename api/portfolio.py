@@ -17,6 +17,7 @@ from docx import Document
 from docx.shared import Inches
 
 from api.nq_report import constructed_responses, html_to_text
+from api.webui import workspace
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
@@ -77,8 +78,8 @@ def render_student_docx(student: dict, dest: str, quiz_title: str = "New Quiz") 
                      if poss is not None else f"Points earned: {ep:g}")
             doc.add_paragraph(label).italic = True
 
-    os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
-    doc.save(dest)
+    os.makedirs(workspace.extended_path(os.path.dirname(os.path.abspath(dest))), exist_ok=True)
+    doc.save(workspace.extended_path(dest))
     return dest
 
 
@@ -199,6 +200,6 @@ def render_merged_docx(student_name: str, entries: list, dest: str,
             label = (f"Points earned: {earned:g} ({poss:g} possible)"
                      if poss is not None else f"Points earned: {earned:g}")
             doc.add_paragraph(label).italic = True
-    os.makedirs(os.path.dirname(os.path.abspath(dest)), exist_ok=True)
-    doc.save(dest)
+    os.makedirs(workspace.extended_path(os.path.dirname(os.path.abspath(dest))), exist_ok=True)
+    doc.save(workspace.extended_path(dest))
     return dest

@@ -16,7 +16,7 @@ from api.submission_transport import (
     fetch_submission as _fetch_submission,
     get_all_pages as _get_all_pages,
 )
-from api.webui.workspace import safe_component
+from api.webui.workspace import safe_component, extended_path
 
 
 def safe_name(value, max_len=80):
@@ -76,7 +76,7 @@ def _render_info_docx(dest, student_name, course_name, blocks):
                 doc.add_paragraph(ln, style="List Bullet")
         else:
             doc.add_paragraph("None on record.")
-    doc.save(dest)
+    doc.save(extended_path(dest))
 
 
 # ── Data shaping (neutral language lives HERE) ──────────────────────────────
@@ -164,10 +164,10 @@ def build_packet(user_id, student_name, sections, courses, base, token,
 
     stu_root = os.path.join(reports_root, safe_name(student_name))
     file_tag = _student_file_tag({"name": student_name}, user_id)
-    os.makedirs(stu_root, exist_ok=True)
+    os.makedirs(extended_path(stu_root), exist_ok=True)
     man_path = os.path.join(stu_root, "_manifest.json")
     try:
-        with open(man_path, encoding="utf-8") as f:
+        with open(extended_path(man_path), encoding="utf-8") as f:
             manifest = json.load(f)
     except Exception:
         manifest = {}
@@ -235,12 +235,12 @@ def build_packet(user_id, student_name, sections, courses, base, token,
 
         course_dir = os.path.join(stu_root, safe_name(cname))
         info_dir = os.path.join(course_dir, "Info")
-        os.makedirs(info_dir, exist_ok=True)
+        os.makedirs(extended_path(info_dir), exist_ok=True)
 
         # work samples (original formats) → Assignments/
         if "work" in sections:
             asg_dir = os.path.join(course_dir, "Assignments")
-            os.makedirs(asg_dir, exist_ok=True)
+            os.makedirs(extended_path(asg_dir), exist_ok=True)
             if used_local:
                 # The local path never stores attachments (signed URLs are never
                 # cached) — a focused, single-submission live call is the only
@@ -263,7 +263,7 @@ def build_packet(user_id, student_name, sections, courses, base, token,
                         _work_filename(assignment_name, file_tag, ".html"),
                         used_filenames,
                     )
-                    with open(os.path.join(asg_dir, fname), "w", encoding="utf-8") as f:
+                    with open(extended_path(os.path.join(asg_dir, fname)), "w", encoding="utf-8") as f:
                         f.write(body)
                     n += 1
                 url = (s.get("url") or "").strip()
@@ -272,7 +272,7 @@ def build_packet(user_id, student_name, sections, courses, base, token,
                         _work_filename(assignment_name, file_tag, ".txt", "URL"),
                         used_filenames,
                     )
-                    with open(os.path.join(asg_dir, fname), "w", encoding="utf-8") as f:
+                    with open(extended_path(os.path.join(asg_dir, fname)), "w", encoding="utf-8") as f:
                         f.write(url + "\n")
                     n += 1
                 for att in (s.get("attachments") or []):
@@ -301,7 +301,7 @@ def build_packet(user_id, student_name, sections, courses, base, token,
 
     if not any_course:
         yield "· student not found in any selected course"
-    with open(man_path, "w", encoding="utf-8") as f:
+    with open(extended_path(man_path), "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
     report_local_reads.write_source_manifest(stu_root, manifest_entries)
     yield f"FOLDER: {stu_root}"

@@ -24,6 +24,7 @@ import json
 import os
 import tempfile
 
+from api.webui import workspace
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.work_registry.providers.home_attention import _PROVEN_STAFF_ROLES, _author_role
@@ -219,7 +220,7 @@ def write_source_manifest(dest_dir, entries):
     """
     path = os.path.join(dest_dir, "_source_manifest.json")
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(workspace.extended_path(path), encoding="utf-8") as f:
             manifest = json.load(f)
         if not isinstance(manifest, dict):
             manifest = {}
@@ -227,13 +228,16 @@ def write_source_manifest(dest_dir, entries):
         manifest = {}
     manifest.update(entries)
 
-    fd, tmp_path = tempfile.mkstemp(prefix="_source_manifest.", suffix=".tmp", dir=dest_dir)
+    # mkstemp(dir=extended) returns an already-\\?\-prefixed tmp_path, so the
+    # os.replace/os.remove below inherit long-path safety; wrap `path` too.
+    fd, tmp_path = tempfile.mkstemp(prefix="_source_manifest.", suffix=".tmp",
+                                    dir=workspace.extended_path(dest_dir))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(manifest, f, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, path)
+        os.replace(tmp_path, workspace.extended_path(path))
     except Exception:
         try:
             os.remove(tmp_path)

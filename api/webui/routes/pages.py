@@ -369,25 +369,38 @@ def _allowed_open_roots():
 def api_open_path(path: str = Form(...)):
     """Reveal a file/folder in the OS file manager. Local-only desktop app, but
     restricted to existing paths inside app-known roots so a stray localhost POST
-    can't launch an arbitrary executable."""
-    rp = os.path.realpath(path)
+    can't launch an arbitrary executable.
+
+    Only invokes the OS opener with plain (unprefixed) paths that fit within
+    the teacher-visible budget.  A legacy deep path is resolved through the
+    extended fallback for containment/read purposes, but the opener action
+    is refused with a fixed safe error if the plain form exceeds the limit.
+    """
+    # Resolve through extended fallback for containment checks
+    rp = os.path.realpath(workspace.extended_path(path))
+    plain_rp = os.path.abspath(path)
     if not os.path.exists(rp):
-        return JSONResponse({"ok": False, "error": "path not found"})
+        return JSONResponse({"ok": False, "error": "The file or folder was not found."})
     inside = False
     for root in _allowed_open_roots():
         try:
-            if os.path.commonpath([rp, root]) == root:
+            if os.path.commonpath([os.path.normcase(rp), os.path.normcase(root)]) == os.path.normcase(root):
                 inside = True
                 break
         except ValueError:
             continue
     if not inside:
-        return JSONResponse({"ok": False, "error": "path not allowed"})
+        return JSONResponse({"ok": False, "error": "The path is not inside the workspace."})
+    # Only open with the plain (unprefixed) path; reject if it exceeds budget
+    if len(plain_rp) > workspace.TEACHER_VISIBLE_BUDGET:
+        return JSONResponse(
+            {"ok": False, "error": "The path is too deep to open in the file manager."}
+        )
     try:
-        _open_in_os(rp)
+        _open_in_os(plain_rp)
         return JSONResponse({"ok": True})
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)})
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not open the file or folder."})
 
 
 # --------------------------------------------------------------------------

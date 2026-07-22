@@ -503,7 +503,14 @@
       fd.set('watch_late', watchLate && watchLate.checked ? 'true' : 'false');
       fd.set('auto_post', autoPostEnabled ? 'true' : 'false');
       fetch('/api/powergrader/start', {method:'POST', body: fd})
-        .then(function(r){ return r.json(); })
+        .then(function(r){
+          return r.text().then(function(text){
+            try { return JSON.parse(text); }
+            catch (e) {
+              return { ok: false, error: 'PowerGrader hit a server error (HTTP ' + r.status + '). Check the Canvas Expert server console for the full traceback.' };
+            }
+          });
+        })
         .then(function(d){
           if (d.ok) {
             setStatus((d.mode_label || 'Session') + ' created (' + d.student_count + ' students)…', false);
