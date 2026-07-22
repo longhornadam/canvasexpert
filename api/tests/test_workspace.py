@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from api.webui import config, workspace
 from api.webui.config import _io as config_io
@@ -180,6 +183,30 @@ def test_canonical_course_first_paths_keep_ids_and_bound_long_names(tmp_path, mo
     assert "course_fictional" in path and "assignment_fictional" in path and "student_fictional" in path
     assert path.endswith("Attempt 3")
     assert len(path) <= workspace.MAX_PATH_LENGTH
+
+
+def test_extended_path_leaves_short_paths_unchanged(monkeypatch):
+    # Short paths keep their exact current behavior — no \\?\ prefix — so normal
+    # I/O is never perturbed by the long-path workaround.
+    monkeypatch.setattr(workspace.os, "name", "nt")
+    short = r"C:\Users\user\OneDrive\deep\file.txt"
+    assert workspace.extended_path(short) == short
+    assert workspace.extended_path("") == ""
+
+
+@pytest.mark.skipif(os.name != "nt", reason="\\\\?\\ prefixing is Windows-only")
+def test_extended_path_prefixes_paths_near_the_limit():
+    long_path = r"C:\Users\user\OneDrive" + ("\\" + "x" * 30) * 8 + r"\file.txt"
+    assert len(long_path) >= workspace.MAX_PATH_LENGTH
+    out = workspace.extended_path(long_path)
+    assert out == "\\\\?\\" + long_path
+    assert workspace.extended_path(out) == out  # idempotent
+
+
+def test_extended_path_is_noop_off_windows(monkeypatch):
+    monkeypatch.setattr(workspace.os, "name", "posix")
+    assert workspace.extended_path("/home/user/deep/file.txt") == "/home/user/deep/file.txt"
+    assert workspace.extended_path("") == ""
 
 
 def test_legacy_feedback_is_read_only_and_new_roots_are_seeded(tmp_path, monkeypatch):

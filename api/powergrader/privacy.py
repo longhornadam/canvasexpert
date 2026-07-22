@@ -54,14 +54,14 @@ def write_privacy_audit_file(
     privacy_artifacts: dict,
 ) -> str | None:
     try:
-        os.makedirs(private_folder, exist_ok=True)
+        os.makedirs(workspace.extended_path(private_folder), exist_ok=True)
         audit_root = workspace.audits_dir() or private_folder
-        os.makedirs(audit_root, exist_ok=True)
+        os.makedirs(workspace.extended_path(audit_root), exist_ok=True)
         path = os.path.join(
             audit_root,
             f"{fp._safe(assignment_name)}__powergrader-privacy-audit-{fp._safe(session_id)}.json",
         )
-        with open(path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
             json.dump({
                 "session_id": session_id,
                 "course_id": course_id,
@@ -95,7 +95,7 @@ def write_openrouter_debug_file(
         return None
     try:
         debug_root = workspace.system_folder("PowerGrader") or private_folder
-        os.makedirs(debug_root, exist_ok=True)
+        os.makedirs(workspace.extended_path(debug_root), exist_ok=True)
         path = os.path.join(
             debug_root,
             f"{fp._safe(assignment_name)}__openrouter-debug-{fp._safe(session_id)}.json",
@@ -128,7 +128,7 @@ def write_openrouter_debug_file(
                 "Raw real-name student submissions are not written here; inspect the Safe AI Packet and Private decoder files if needed.",
             ],
         }
-        with open(path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
         return path
     except Exception:

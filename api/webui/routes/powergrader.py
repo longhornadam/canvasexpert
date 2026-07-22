@@ -567,10 +567,14 @@ def pg_download_packet(session_id: str):
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     artifacts = session.get("privacy_artifacts") or {}
     packet_zip = artifacts.get("packet_zip") or ""
-    if not packet_zip or not os.path.isfile(packet_zip):
+    # The ZIP can live past Windows' 260-char MAX_PATH in a deep workspace;
+    # resolve through extended_path so both the existence check and the send
+    # reach it (no-op on non-Windows / short paths).
+    resolved_zip = workspace.extended_path(packet_zip) if packet_zip else ""
+    if not resolved_zip or not os.path.isfile(resolved_zip):
         return JSONResponse({"ok": False, "error": "Safe AI Packet ZIP not found."}, status_code=404)
     filename = os.path.basename(packet_zip)
-    return FileResponse(packet_zip, media_type="application/zip", filename=filename)
+    return FileResponse(resolved_zip, media_type="application/zip", filename=filename)
 
 
 @router.post("/api/powergrader/session/{session_id}/import-results")

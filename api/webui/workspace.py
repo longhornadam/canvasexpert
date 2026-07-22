@@ -7,6 +7,7 @@ state under the historical ``FeedbackExpert`` folder.
 
 from __future__ import annotations
 
+import fnmatch
 import glob
 import json
 import os
@@ -140,6 +141,38 @@ def bounded_join(base: str, *parts: str, max_path: int = MAX_PATH_LENGTH) -> str
         if len(path) <= max_path or not changed:
             break
     return path
+
+
+def extended_path(path: str) -> str:
+    """Return a form of ``path`` safe for file I/O past Windows' 260-char limit.
+
+    ``bounded_join`` keeps our *directory* names short, but a deep workspace
+    (e.g. a long OneDrive root + long course/assignment names) can still push a
+    full *file* path over the legacy MAX_PATH ceiling — at which point
+    ``open()``/``makedirs`` raise ``FileNotFoundError [Errno 2]`` even though the
+    parent directory exists. On Windows, prefixing an absolute, backslash-only
+    path with ``\\\\?\\`` opts that single call out of MAX_PATH (raising the
+    limit to ~32,767), the supported way to reach such files without the OS-wide
+    LongPathsEnabled policy.
+
+    The prefix is applied ONLY when the absolute path approaches the limit
+    (>= ``MAX_PATH_LENGTH``). Short paths are returned unchanged so the vast
+    majority of I/O keeps its exact current behavior — the ``\\\\?\\`` form
+    disables normalization and has subtle edge cases, so it is used only where a
+    normal call would actually fail. Non-Windows paths and already-prefixed
+    paths are returned as-is (idempotent).
+    """
+    if os.name != "nt" or not path:
+        return path
+    if path.startswith("\\\\?\\") or path.startswith("\\\\.\\"):
+        return path
+    abs_path = os.path.abspath(path)
+    if len(abs_path) < MAX_PATH_LENGTH:
+        return path
+    if abs_path.startswith("\\\\"):
+        # UNC share: \\server\share -> \\?\UNC\server\share
+        return "\\\\?\\UNC\\" + abs_path[2:]
+    return "\\\\?\\" + abs_path
 
 
 def _root_or_workspace(root=None):
@@ -303,10 +336,20 @@ def assignment_evidence_conflicts(course_name, course_id, assignment_name, assig
     if not path:
         return []
     directory = os.path.dirname(path)
-    if not os.path.isdir(directory):
+    if not os.path.isdir(extended_path(directory)):
         return []
-    return [candidate for candidate in glob.glob(os.path.join(directory, "*assignment_evidence_manifest*.json"))
-            if os.path.normcase(os.path.abspath(candidate)) != os.path.normcase(os.path.abspath(path))]
+    # os.listdir(extended) + fnmatch instead of glob: it enumerates a deep
+    # (>260) directory correctly and keeps candidates as plain paths, so the
+    # canonical-path comparison below is unaffected by any \\?\ prefix.
+    canonical = os.path.normcase(os.path.abspath(path))
+    conflicts = []
+    for name in os.listdir(extended_path(directory)):
+        if not fnmatch.fnmatch(name, "*assignment_evidence_manifest*.json"):
+            continue
+        candidate = os.path.join(directory, name)
+        if os.path.normcase(os.path.abspath(candidate)) != canonical:
+            conflicts.append(candidate)
+    return conflicts
 
 
 def read_assignment_evidence_manifest(course_name, course_id, assignment_name, assignment_id, root=None):
@@ -314,7 +357,7 @@ def read_assignment_evidence_manifest(course_name, course_id, assignment_name, a
     if not path or assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root):
         return None
     try:
-        with open(path, encoding="utf-8") as handle:
+        with open(extended_path(path), encoding="utf-8") as handle:
             data = json.load(handle)
     except (OSError, ValueError, TypeError):
         return None
@@ -330,14 +373,16 @@ def write_assignment_evidence_manifest(manifest: dict, *, course_name, course_id
         return None
     if assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root):
         return None
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".assignment_evidence_", suffix=".partial", dir=os.path.dirname(path), text=True)
+    # os-level via extended_path so a deep assignment folder survives Windows'
+    # 260-char limit; mkstemp(dir=extended) yields an already-prefixed temporary.
+    os.makedirs(extended_path(os.path.dirname(path)), exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".assignment_evidence_", suffix=".partial", dir=extended_path(os.path.dirname(path)), text=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(manifest, handle, indent=2, sort_keys=True)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        os.replace(temporary, extended_path(path))
         return path
     finally:
         if os.path.exists(temporary):

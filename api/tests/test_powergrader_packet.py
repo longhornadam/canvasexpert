@@ -1,11 +1,15 @@
 import json
+import os
 import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from api.feedback_vault import Vault
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from api.webui import workspace
 from api.webui.routes import powergrader
 from api.powergrader import packet, privacy, session_builder
 
@@ -54,6 +58,29 @@ def test_build_safe_ai_packet_writes_teacher_facing_zip(tmp_path):
     assert "Student Responses - readable.txt" in names
     assert "Source Materials.txt" in names
     assert "Paste Results Back Here - Format.txt" in names
+
+
+@pytest.mark.skipif(os.name != "nt", reason="MAX_PATH 260-char limit is Windows-only")
+def test_build_safe_ai_packet_survives_long_windows_path(tmp_path):
+    """Regression for the SummerTime Brain Work crash: a deep workspace pushes
+    the packet's own file paths past Windows' 260-char MAX_PATH, which used to
+    raise FileNotFoundError inside build_safe_ai_packet."""
+    pad = max(1, 210 - len(str(tmp_path)) - 1)
+    safe_dir = tmp_path / ("S" * pad)
+    os.makedirs(safe_dir)
+
+    info = packet.build_safe_ai_packet(
+        "Essay",
+        str(safe_dir),
+        {"how_to_score": "", "student_txts": []},
+        _bundle(),
+    )
+
+    instructions = os.path.join(info["packet_folder"], "START HERE - Instructions for your AI.txt")
+    assert len(instructions) > 259  # the exact write that used to fail
+    assert os.path.isfile(workspace.extended_path(instructions))
+    with zipfile.ZipFile(workspace.extended_path(info["packet_zip"])) as zf:
+        assert "START HERE - Instructions for your AI.txt" in set(zf.namelist())
 
 
 def test_import_results_updates_session_ai_suggestions(tmp_path, monkeypatch):

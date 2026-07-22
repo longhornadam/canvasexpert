@@ -7,6 +7,7 @@ from api.nq_report import constructed_responses, html_to_text
 from api.feedback_vault import Vault
 from api import feedback_scrub, feedback_safety
 from api.powergrader import student_attachments
+from api.webui import workspace
 from api.feedback_contract import (
     CONTRACT_VERSION,
     _REVIEW_NOTE,
@@ -66,9 +67,9 @@ def _extracted_upload_text(files: list) -> str | None:
             return None
         path = file.get("extracted_text_path")
         text = ""
-        if path and os.path.isfile(path):
+        if path and os.path.isfile(workspace.extended_path(path)):
             try:
-                with open(path, encoding="utf-8") as f:
+                with open(workspace.extended_path(path), encoding="utf-8") as f:
                     text = f.read().strip()
             except OSError:
                 text = ""
@@ -270,12 +271,12 @@ def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str) -> tuple[dict, 
         media_dir = os.path.join(safe_dir, "Students", pseudo.replace(" ", "-"))
         for index, attachment in enumerate(attachments, start=1):
             local_path = attachment.get("local_path")
-            if not local_path or not os.path.isfile(local_path):
+            if not local_path or not os.path.isfile(workspace.extended_path(local_path)):
                 excluded.append(pseudo)
                 log.append(f"!! HELD {pseudo} — downloaded attachment is no longer available locally")
                 break
             try:
-                with open(local_path, "rb") as source:
+                with open(workspace.extended_path(local_path), "rb") as source:
                     raw_attachment = source.read()
                 routed = student_attachments.route_bytes(
                     f"attachment-{index}{os.path.splitext(attachment.get('filename') or '')[1]}",
@@ -359,8 +360,8 @@ def write_safe_and_private(
         "log": [str, ...],
     }
     """
-    os.makedirs(safe_dir, exist_ok=True)
-    os.makedirs(private_dir, exist_ok=True)
+    os.makedirs(workspace.extended_path(safe_dir), exist_ok=True)
+    os.makedirs(workspace.extended_path(private_dir), exist_ok=True)
     log: list[str] = []
     attachment_only: list[dict] = []
     excluded: list[str] = []
@@ -433,12 +434,12 @@ def write_safe_and_private(
 
     # Step 4: write SAFE bundle
     bpath = os.path.join(safe_dir, f"{stem}__bundle.json")
-    with open(bpath, "w", encoding="utf-8") as f:
+    with open(workspace.extended_path(bpath), "w", encoding="utf-8") as f:
         json.dump(safe, f, indent=2, ensure_ascii=False)
     # Write HOW-TO-SCORE.txt — rubric inlined so the file is self-contained for the
     # teacher's own LLM (prompt context lives in the bundle; rubric travels here).
     cpath = os.path.join(safe_dir, f"{stem}__HOW-TO-SCORE.txt")
-    with open(cpath, "w", encoding="utf-8") as f:
+    with open(workspace.extended_path(cpath), "w", encoding="utf-8") as f:
         f.write(build_contract_text(ai_ta_name, rubric_text=rubric_text, persona=persona))
     log.append(f"✓ {stem}: SAFE bundle ({len(safe['students'])} student(s))")
 
@@ -448,7 +449,7 @@ def write_safe_and_private(
         shared.get("assignment_description") or shared.get("materials")
     ):
         shared_context_path = os.path.join(safe_dir, f"{stem}__SHARED-CONTEXT.txt")
-        with open(shared_context_path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(shared_context_path), "w", encoding="utf-8") as f:
             f.write(f"Assignment: {stem}\n")
             f.write(f"{'='*50}\n\n")
             if shared.get("assignment_description"):
@@ -473,7 +474,7 @@ def write_safe_and_private(
         pseudo = s.get("pseudonym", "unknown")
         safe_name = pseudo.replace(" ", "-")
         txt_path = os.path.join(safe_dir, f"{safe_name}__SAFE.txt")
-        with open(txt_path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(txt_path), "w", encoding="utf-8") as f:
             f.write(f"Pseudonym: {pseudo}\n")
             f.write(f"Assignment: {stem}\n")
             f.write(f"{'='*50}\n\n")
@@ -487,13 +488,13 @@ def write_safe_and_private(
 
     # Step 6: write PRIVATE raw bundle
     priv_path = os.path.join(private_dir, f"{stem}__PRIVATE.json")
-    with open(priv_path, "w", encoding="utf-8") as f:
+    with open(workspace.extended_path(priv_path), "w", encoding="utf-8") as f:
         json.dump(bundle, f, indent=2, ensure_ascii=False)
     log.append(f"✓ {stem}: PRIVATE raw bundle saved")
 
     # Step 7: write who-is-who.csv to PRIVATE (all vault entries for context)
     who_path = os.path.join(private_dir, f"{stem}__who-is-who.csv")
-    with open(who_path, "w", encoding="utf-8", newline="") as f:
+    with open(workspace.extended_path(who_path), "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["Real Name", "Canvas ID", "SIS ID", "Pseudonym", "Nicknames"])
         for e in vault.entries():

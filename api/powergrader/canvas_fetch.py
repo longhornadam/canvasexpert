@@ -297,15 +297,15 @@ def _download_canvas_attachment(url: str, dest: str, *, declared_size=None,
     if expected is not None and expected < 0:
         raise ValueError("attachment size metadata was negative")
     parent = os.path.dirname(os.path.abspath(dest))
-    os.makedirs(parent, exist_ok=True)
-    free_space = shutil.disk_usage(parent).free
+    os.makedirs(workspace.extended_path(parent), exist_ok=True)
+    free_space = shutil.disk_usage(workspace.extended_path(parent)).free
     if expected is not None and expected > free_space:
         raise OSError("insufficient local storage")
     partial = dest + ".partial"
     client = http_session or requests.Session()
     try:
-        if os.path.exists(partial):
-            os.unlink(partial)
+        if os.path.exists(workspace.extended_path(partial)):
+            os.unlink(workspace.extended_path(partial))
         current_url = raw_url
         on_canvas_host = True
         for redirect_count in range(MAX_REDIRECTS + 1):
@@ -359,7 +359,7 @@ def _download_canvas_attachment(url: str, dest: str, *, declared_size=None,
                 raise ValueError("off-host Canvas attachment responses must use HTTPS without Canvas credentials")
             actual = 0
             try:
-                with open(partial, "wb") as output:
+                with open(workspace.extended_path(partial), "wb") as output:
                     for chunk in response.iter_content(chunk_size=64 * 1024):
                         if not chunk:
                             continue
@@ -369,15 +369,15 @@ def _download_canvas_attachment(url: str, dest: str, *, declared_size=None,
                         output.write(chunk)
                 if expected is not None and actual != expected:
                     raise ValueError("download size did not match Canvas metadata")
-                os.replace(partial, dest)
+                os.replace(workspace.extended_path(partial), workspace.extended_path(dest))
                 return {"actual_size": actual, "declared_size": expected}
             finally:
                 _close_response(response)
         raise ValueError("Canvas attachment redirect processing failed")
     finally:
         try:
-            if os.path.exists(partial):
-                os.unlink(partial)
+            if os.path.exists(workspace.extended_path(partial)):
+                os.unlink(workspace.extended_path(partial))
         except OSError:
             pass
 
@@ -398,12 +398,12 @@ def _target_path(*, course_name: str, course_id: str, assignment_name: str,
     )
     if not attempt_dir:
         return None, attempt
-    os.makedirs(attempt_dir, exist_ok=True)
+    os.makedirs(workspace.extended_path(attempt_dir), exist_ok=True)
     safe_name = workspace.safe_component(filename, 150)
     stem, ext = os.path.splitext(safe_name)
     dest = os.path.join(attempt_dir, safe_name)
     number = 2
-    while os.path.exists(dest) or os.path.exists(dest + ".partial"):
+    while os.path.exists(workspace.extended_path(dest)) or os.path.exists(workspace.extended_path(dest + ".partial")):
         dest = os.path.join(attempt_dir, f"{stem} ({number}){ext}")
         number += 1
     return dest, attempt
@@ -489,7 +489,7 @@ def ingest_ordinary_attachments(
                 continue
             reuse = (reusable_records or {}).get(str(evidence_id))
             if (reuse and reuse.get("content_indicator") == meta["content_indicator"]
-                    and reuse.get("local_path") and os.path.isfile(reuse["local_path"])):
+                    and reuse.get("local_path") and os.path.isfile(workspace.extended_path(reuse["local_path"]))):
                 meta.update({key: value for key, value in reuse.items() if key not in {"url", "headers", "signed_url"}})
                 meta["download_status"] = "reused"
                 records.append(meta)
@@ -584,10 +584,11 @@ def enrich_with_code_files(subs):
         files = []
         for attachment in (submission.get("attachments") or []):
             path = attachment.get("local_path")
-            if not path or not os.path.isfile(path):
+            if not path or not os.path.isfile(workspace.extended_path(path)):
                 continue
             try:
-                text = Path(path).read_text(encoding="utf-8")
+                with open(workspace.extended_path(path), encoding="utf-8") as fh:
+                    text = fh.read()
             except (OSError, UnicodeError):
                 continue
             files.append({"filename": attachment.get("filename", ""), "text": text})

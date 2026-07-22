@@ -61,42 +61,53 @@ def estimate_text_tokens(text: str) -> int:
 
 def list_source_files() -> list[dict]:
     folder = ensure_source_folder()
-    if not folder or not os.path.isdir(folder):
+    if not folder or not os.path.isdir(workspace.extended_path(folder)):
         return []
     out: list[dict] = []
-    root = Path(folder).resolve()
-    for path in sorted(root.rglob("*")):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in SUPPORTED_EXTS | UNSUPPORTED_LEGACY_EXTS:
-            continue
-        rel = str(path.relative_to(root))
-        out.append({
-            "name": path.name,
-            "relpath": rel,
-            "path": str(path),
-            "size": path.stat().st_size,
-            "supported": path.suffix.lower() in SUPPORTED_EXTS,
-        })
+    # os.walk over an extended root: teacher subfolders can nest past Windows'
+    # 260-char limit, where Path.rglob silently skips files. Relative paths are
+    # computed against the extended root (the \\?\ prefix cancels out), then the
+    # public "path" is rebuilt plain so callers/UI stay prefix-free.
+    plain_root = os.path.abspath(folder)
+    ext_root = workspace.extended_path(plain_root)
+    for dirpath, _dirnames, filenames in os.walk(ext_root):
+        for name in filenames:
+            suffix = os.path.splitext(name)[1].lower()
+            if suffix not in SUPPORTED_EXTS | UNSUPPORTED_LEGACY_EXTS:
+                continue
+            ext_full = os.path.join(dirpath, name)
+            rel = os.path.relpath(ext_full, ext_root)
+            out.append({
+                "name": name,
+                "relpath": rel,
+                "path": os.path.join(plain_root, rel),
+                "size": os.path.getsize(ext_full),
+                "supported": suffix in SUPPORTED_EXTS,
+            })
+    out.sort(key=lambda item: item["relpath"])
     return out
 
 
-def _resolve_folder_file(relpath: str) -> Path:
+def _resolve_folder_file(relpath: str) -> str:
     folder = ensure_source_folder()
     if not folder:
         raise ValueError("No Source Materials folder is available.")
-    root = Path(folder).resolve()
-    candidate = (root / relpath).resolve()
-    if root not in candidate.parents and candidate != root:
+    # abspath + commonpath containment (blocks .. traversal) instead of
+    # Path.resolve(), which does realpath I/O that can fail past MAX_PATH.
+    root = os.path.abspath(folder)
+    candidate = os.path.abspath(os.path.join(root, relpath))
+    if os.path.commonpath([root, candidate]) != root:
         raise ValueError("Source-material path is outside the workspace folder.")
-    if not candidate.is_file():
+    if not os.path.isfile(workspace.extended_path(candidate)):
         raise ValueError(f"Source-material file not found: {relpath}")
     return candidate
 
 
 def extract_folder_file(relpath: str) -> tuple[str, list[str]]:
     path = _resolve_folder_file(relpath)
-    return extract_text_from_bytes(path.name, path.read_bytes())
+    with open(workspace.extended_path(path), "rb") as handle:
+        data = handle.read()
+    return extract_text_from_bytes(os.path.basename(path), data)
 
 
 def parse_source_files_json(value: str) -> list[str]:

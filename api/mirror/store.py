@@ -471,10 +471,10 @@ def _read_document(path, validator):
     """Read + validate, or None. The mirror is disposable (design law #1):
     a missing, unparseable, or invalid file is simply absent — the next sync
     pass rewrites it. Never raise out of a read."""
-    if not path or not os.path.exists(path):
+    if not path or not os.path.exists(workspace.extended_path(path)):
         return None
     try:
-        with open(path, encoding="utf-8") as handle:
+        with open(workspace.extended_path(path), encoding="utf-8") as handle:
             document = json.load(handle)
         return validator(document)
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
@@ -793,16 +793,16 @@ def prune_submission_files(course_id, keep_assignment_ids, *, root=None) -> list
     """Full-pass deletion true-up: remove mirror files for assignments that no
     longer exist in Canvas. Returns the removed assignment ids."""
     directory = submissions_dir(course_id, root)
-    if not directory or not os.path.isdir(directory):
+    if not directory or not os.path.isdir(workspace.extended_path(directory)):
         return []
     keep = {f"{workspace.safe_id(a)}.v1.json" for a in keep_assignment_ids}
     removed = []
     with course_lock(course_id):
-        for name in os.listdir(directory):
+        for name in os.listdir(workspace.extended_path(directory)):
             if not name.endswith(".v1.json") or name in keep:
                 continue
             try:
-                os.remove(os.path.join(directory, name))
+                os.remove(workspace.extended_path(os.path.join(directory, name)))
                 removed.append(name[: -len(".v1.json")])
             except OSError:
                 continue
@@ -945,9 +945,9 @@ def read_submissions(course_id, assignment_id, *, root=None) -> dict | None:
 
 def list_submission_assignment_ids(course_id, *, root=None) -> list[str]:
     directory = submissions_dir(course_id, root)
-    if not directory or not os.path.isdir(directory):
+    if not directory or not os.path.isdir(workspace.extended_path(directory)):
         return []
-    return sorted(name[: -len(".v1.json")] for name in os.listdir(directory)
+    return sorted(name[: -len(".v1.json")] for name in os.listdir(workspace.extended_path(directory))
                   if name.endswith(".v1.json"))
 
 

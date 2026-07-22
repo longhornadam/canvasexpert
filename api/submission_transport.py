@@ -3,6 +3,8 @@ import os
 
 import requests
 
+from api.webui import workspace
+
 
 def get_all_pages(session, url, params=None):
     results, params = [], dict(params or {})
@@ -22,8 +24,8 @@ def get_all_pages(session, url, params=None):
 def download_binary(session, url, destination):
     response = session.get(url, stream=True, allow_redirects=True, timeout=120)
     response.raise_for_status()
-    os.makedirs(os.path.dirname(destination), exist_ok=True)
-    with open(destination, "wb") as output:
+    os.makedirs(workspace.extended_path(os.path.dirname(destination)), exist_ok=True)
+    with open(workspace.extended_path(destination), "wb") as output:
         for chunk in response.iter_content(chunk_size=16_384):
             if chunk:
                 output.write(chunk)

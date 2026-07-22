@@ -14,6 +14,7 @@ environment variables. See runner.py. Push logic is never touched by this UI.
 """
 import os
 import threading
+import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -123,6 +124,28 @@ async def _onboarding_gate(request: Request, call_next):
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse(url="/welcome", status_code=303)
         return await call_next(request)
+
+
+@app.exception_handler(Exception)
+async def _api_errors_return_json(request: Request, exc: Exception):
+    """Keep the local API contract 'always JSON'.
+
+    Every /api/ route is consumed by fetch() callers that parse the body with
+    response.json(). Without this, an unhandled exception falls through to
+    Starlette's default 500 handler, whose body is the plain text
+    'Internal Server Error'; the browser's response.json() then raises the
+    misleading 'Unexpected token I ... is not valid JSON', masking the true
+    cause. Convert unhandled errors on API routes into a structured payload so
+    the real reason reaches the teacher, and always print the traceback to the
+    server console for debugging. Non-API (HTML) routes keep the plain-text 500.
+    """
+    print("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            {"ok": False, "error": f"Unexpected server error: {type(exc).__name__}: {exc}"},
+            status_code=500,
+        )
+    return PlainTextResponse("Internal Server Error", status_code=500)
 
 
 app.include_router(_onboarding_router)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+from api.webui import workspace
 from api.webui.source_materials import estimate_text_tokens
 
 from .packet import safe_ai_packet_name
@@ -116,7 +117,7 @@ def build_copilot_batches(
     safe_dir = os.path.abspath(safe_dir)
     safe_name = _safe_assignment_name(assignment_name)
     packet_folder = os.path.abspath(os.path.join(safe_dir, safe_ai_packet_name(assignment_name), "Copilot Batches"))
-    os.makedirs(packet_folder, exist_ok=True)
+    os.makedirs(workspace.extended_path(packet_folder), exist_ok=True)
 
     file_01_text = support.assignment_info_text(assignment_name, llm_bundle)
     file_02_text = support.rubric_persona_text(assignment_name, rubric_text, persona)
@@ -158,7 +159,7 @@ def build_copilot_batches(
     for index, raw_batch in enumerate(raw_batches, start=1):
         label = f"Batch {index} of {total_batches}"
         folder = os.path.abspath(os.path.join(packet_folder, f"Batch {index:02d} of {total_batches:02d}"))
-        os.makedirs(folder, exist_ok=True)
+        os.makedirs(workspace.extended_path(folder), exist_ok=True)
 
         # Compute the batch_id: prefix + 'batch-XX' for late, or 'batch-XX' for initial
         if batch_id_prefix:

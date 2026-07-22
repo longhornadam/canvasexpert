@@ -10,6 +10,7 @@ import os
 import zipfile
 
 from api import feedback_pipeline as fp
+from api.webui import workspace
 
 
 def safe_ai_packet_name(assignment_name: str) -> str:
@@ -115,26 +116,30 @@ def build_safe_ai_packet(
     """Create a teacher-facing packet folder + ZIP from the SAFE artifacts."""
     paths = packet_paths(safe_dir, assignment_name)
     packet_dir = paths["dir"]
-    os.makedirs(packet_dir, exist_ok=True)
+    # A deep workspace can push these packet paths past Windows' 260-char
+    # MAX_PATH ceiling; extended_path() lets each write reach the file anyway
+    # (no-op on non-Windows). Human-readable originals are kept in `files` for
+    # the ZIP arcnames and the returned metadata.
+    os.makedirs(workspace.extended_path(packet_dir), exist_ok=True)
 
     files: list[str] = []
 
     def write_packet_file(name: str, text: str):
         path = os.path.join(packet_dir, name)
-        with open(path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
             f.write(text)
         files.append(path)
 
     how_to_path = write_result.get("how_to_score")
-    if how_to_path and os.path.isfile(how_to_path):
-        with open(how_to_path, encoding="utf-8") as f:
+    if how_to_path and os.path.isfile(workspace.extended_path(how_to_path)):
+        with open(workspace.extended_path(how_to_path), encoding="utf-8") as f:
             instructions = f.read()
     else:
         instructions = fp.build_contract_text("your teaching assistant", persona=persona)
     write_packet_file("START HERE - Instructions for your AI.txt", instructions)
 
     bundle_path = os.path.join(packet_dir, "Student Responses.json")
-    with open(bundle_path, "w", encoding="utf-8") as f:
+    with open(workspace.extended_path(bundle_path), "w", encoding="utf-8") as f:
         json.dump(llm_bundle, f, indent=2, ensure_ascii=False)
     files.append(bundle_path)
 
@@ -148,15 +153,15 @@ def build_safe_ai_packet(
     write_packet_file("Paste Results Back Here - Format.txt", paste_format_text(llm_bundle, persona))
 
     for student_txt in write_result.get("student_txts") or []:
-        if os.path.isfile(student_txt):
+        if os.path.isfile(workspace.extended_path(student_txt)):
             dest = os.path.join(packet_dir, os.path.basename(student_txt))
-            with open(student_txt, "rb") as src, open(dest, "wb") as out:
+            with open(workspace.extended_path(student_txt), "rb") as src, open(workspace.extended_path(dest), "wb") as out:
                 out.write(src.read())
             files.append(dest)
 
-    with zipfile.ZipFile(paths["zip"], "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(workspace.extended_path(paths["zip"]), "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in files:
-            zf.write(path, arcname=os.path.basename(path))
+            zf.write(workspace.extended_path(path), arcname=os.path.basename(path))
 
     return {
         "packet_name": paths["name"],
