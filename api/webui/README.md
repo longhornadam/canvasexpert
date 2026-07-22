@@ -123,7 +123,7 @@ the legacy direct-push presentation and routes are retired.
   `api/feedback_contract.py`, `api/feedback_results.py`, `api/feedback_vault.py`,
   `api/feedback_scrub.py`, `api/feedback_safety.py`
 
-For privacy-sensitive ownership, see `docs/reference/feedbackexpert-module-map.md`.
+For privacy-sensitive ownership, see `docs/reference/powergrader-scoring-map.md`.
 
 ---
 

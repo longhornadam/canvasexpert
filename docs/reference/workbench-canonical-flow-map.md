@@ -14,7 +14,7 @@
 | 4 | **Roster & student-group actions** | `/roster` | `roster.html` (`layouts/workspace.html`, `left-main`) | `roster.js` + `roster/*.js` | `routes/roster.py` + `routes/roster_*.py`, `routes/names.py` | `roster-module-map.md` | V3: Canvas groups are source of truth; V2 tier/planned_group writes rejected; vault is PRIVATE |
 | 5 | **Student reports** | `/students/reports` | `student_reports.html` (`layouts/document.html`, `wide`) | `course_expert/student_reports.js`, `course_expert/portfolio.js` | `routes/pages.py::student_reports_page`, `routes/reports.py` | `roster-module-map.md` | Private report roots, monitored-student data, CSV handling, and portfolio behavior remain owned by the existing report routes; no data migration or new Canvas write path. |
 | 6 | **PowerGrader** – setup, review, push | `/powergrader` → `/powergrader/session/{id}` | `powergrader_setup.html` / `powergrader_queue.html` (`layouts/workspace.html`, `full`) | `powergrader_setup.js` + `powergrader/setup_*.js` / `powergrader_queue.js` + `powergrader/queue_*.js` | `routes/powergrader.py`, `api/powergrader/` | `powergrader-module-map.md` | SAFE pseudonymized packet; review is the default. Scheduled auto-push is one job/assignment opt-in and interactive automatic posting is one new session opt-in; both are default-off, fresh-state/policy/idempotency/receipt guarded, and hold uncertain rows for review. Fast and quiz modes are excluded. |
-| 7 | **FeedbackExpert compatibility entry** | `/feedback-expert` → `/powergrader?advanced=import` | PowerGrader setup/queue | `powergrader/setup_advanced.js`, `powergrader/queue_import.js` | `routes/pages.py`, `routes/powergrader.py`, `routes/feedback_library.py`, `api/feedback_*.py` | `feedbackexpert-module-map.md`, `feedback-scoring-contract.md` | SAFE artifacts remain pseudonymized, not anonymous; imported results are session-bound and teacher-reviewed before a PowerGrader write |
+| 7 | **Legacy grading page (compatibility entry)** | `/feedback-expert` → `/powergrader?advanced=import` | PowerGrader setup/queue | `powergrader/setup_advanced.js`, `powergrader/queue_import.js` | `routes/pages.py`, `routes/powergrader.py`, `routes/feedback_library.py`, `api/feedback_*.py` | `powergrader-scoring-map.md`, `feedback-scoring-contract.md` | SAFE artifacts remain pseudonymized, not anonymous; imported results are session-bound and teacher-reviewed before a PowerGrader write |
 | 8 | **Settings & first-run** | `/settings` (first-run: `/welcome`) | `settings.html` (`layouts/workspace.html`, `left-main`) / `welcome.html` (`layouts/wizard.html`) | `settings.js` + `settings/*.js` / `welcome.js` | `routes/settings.py`, `routes/calendar.py`, `routes/onboarding.py`, `config/` | `settings-module-map.md` | Token in OS credential store only; no district defaults in source; local-only bind |
 | 9 | **Routines** | `/routines` | `routines.html` (`layouts/document.html`, `wide`) | inline / route-driven | `routes/routines.py` + `routes/routines_builtin.py` + `routes/routines_custom.py` + `routes/routines_powergrader.py` | `operation-ledger-release-status.md` (routines integration) | Local automations only; no cloud scheduler; writes gated by routine definitions |
 
@@ -24,7 +24,7 @@
 |---|---|---|
 | Gradebook extra-time tab (`/gradebook?tab=extra-time`) | Roster extra-time lens (`/roster?focus=extra-time`) | Convenience view within gradebook context; reads same config; no independent write path |
 | `/name-manager` → 302 redirect to `/roster` | `/roster` safety lens | Clean redirect; no duplicate surface |
-| `/feedback-expert` → 307 redirect to `/powergrader?advanced=import` | PowerGrader advanced import | Legacy bookmarks retain a session-bound import/review entry; no direct FeedbackExpert push route remains |
+| `/feedback-expert` → 307 redirect to `/powergrader?advanced=import` | PowerGrader advanced import | Legacy bookmarks retain a session-bound import/review entry; no direct legacy push route remains |
 | `/course` (Course Info detail page) | N/A – distinct outcome | Read-only course inspection; not a duplicate of any other surface |
 | `/ai-expert` (AI helper files) | N/A – distinct outcome | Paste-ready LLM skill files; not a duplicate |
 | `/about` | N/A – distinct outcome | Explainer page |
@@ -77,7 +77,7 @@
 | `/name-manager` → 302 redirect | Already a clean redirect; no duplicate surface to retire |
 | `gradebook_service.py` curve migration | Data migration, not a surface; no teacher-visible behavior |
 | `app_context.js` localStorage migration | One-time data migration, not a surface |
-| FeedbackExpert SAFE/PRIVATE workspace artifacts | Compatibility-read safety boundary; PowerGrader owns active review/write flow |
+| Legacy SAFE/PRIVATE workspace artifacts | Compatibility-read safety boundary; PowerGrader owns active review/write flow |
 | Operation-ledger recovery seams | Required safety boundary; not migration overlap |
 
 ## Template inheritance summary

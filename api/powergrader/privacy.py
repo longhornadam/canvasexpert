@@ -26,7 +26,8 @@ def feedback_artifact_dirs(
     assignment_name: str = "", assignment_id: str = "",
     mode: str = "assisted", run_timestamp: str | None = None,
 ) -> tuple[str | None, str | None]:
-    """Resolve new AI/private homes; no new FeedbackExpert tree is created."""
+    """Resolve new AI/private homes; never recreates the legacy workspace folder
+    (see ``workspace.LEGACY_FEEDBACK_NAME``)."""
     workspace.ensure_workspace()
     if course_id and assignment_id:
         safe = workspace.ai_run_folder(

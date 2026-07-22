@@ -44,7 +44,7 @@ Use only the row relevant to the active handoff.
 | Connections / diagnostics | `api/README.md`, then the exact owners named by the handoff | Read-only diagnostics; never edit client config, install software, change `PATH`, elevate, or start tunnels. |
 | Gradebook | `docs/reference/gradebook-module-map.md` | Grade/status operations and roster context are private; write work is high risk. |
 | Roster | `docs/reference/roster-module-map.md` | Names, IDs, groups, accommodations, and monitored notes are student data. |
-| FeedbackExpert compatibility | `docs/reference/feedbackexpert-module-map.md`, `docs/contracts/feedback-scoring-contract.md` | AI results are drafts; review and Canvas writes belong to PowerGrader. |
+| PowerGrader scoring / privacy engines | `docs/reference/powergrader-scoring-map.md`, `docs/contracts/feedback-scoring-contract.md` | AI results are drafts; review and Canvas writes belong to PowerGrader. |
 | PowerGrader | `docs/reference/powergrader-module-map.md` | Sessions are private; Canvas posting is review-first except for the two narrow default-off opt-ins documented there. |
 | Routines | `api/custom_routines/AUTHORING.md` | Local jobs only; scheduled Canvas posting requires a specific teacher opt-in and the PowerGrader write safeguards. |
 | CanvasMirror | `docs/mirror.md` for current behavior; exact sections of `docs/reference/canvasmirror-1.0beta-information-spine.md` for target design | The vision is section-routed only and never read wholesale for execution; cached state never authorizes a write. |
