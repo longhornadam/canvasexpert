@@ -48,7 +48,7 @@ def _drop(folder, name: str, body: str, *, marker: str | None = "__auto__"):
 
 def test_inbox_folder_resolves_under_workspace_inbox_and_creates_it(tmp_path):
     folder = runtime_paths.inbox_folder("quiz")
-    assert folder == tmp_path / "Inbox" / "Quizzes"
+    assert folder == tmp_path / "To Review" / "Quizzes"
     assert folder.is_dir()
 
 
@@ -63,9 +63,9 @@ def test_inbox_folder_distinct_per_kind():
 
 def test_inbox_folder_distinct_from_teachers_library_folder():
     inbox = runtime_paths.inbox_folder("quiz")
-    library = runtime_paths.workspace_folder("Quizzes")
+    library = runtime_paths.library_folder("Quizzes")
     assert inbox != library
-    assert inbox.parent.name == "Inbox"
+    assert inbox.parent.name == "To Review"
 
 
 def test_inbox_folder_returns_none_when_workspace_unavailable(monkeypatch):
@@ -157,7 +157,7 @@ def test_list_inbox_files_does_not_pick_up_teachers_library_files(tmp_path):
     # The teacher's own Quizzes library folder is a sibling of Inbox/Quizzes,
     # not the same directory -- library files must never leak into the
     # marker-gated inbox listing even if named identically.
-    library = runtime_paths.workspace_folder("Quizzes")
+    library = runtime_paths.library_folder("Quizzes")
     library.mkdir(parents=True, exist_ok=True)
     _write(os.path.join(str(library), "teacher_authored.txt"), "teacher content")
 

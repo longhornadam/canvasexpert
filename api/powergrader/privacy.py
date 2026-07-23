@@ -26,8 +26,8 @@ def feedback_artifact_dirs(
     assignment_name: str = "", assignment_id: str = "",
     mode: str = "assisted", run_timestamp: str | None = None,
 ) -> tuple[str | None, str | None]:
-    """Resolve new AI/private homes; never recreates the legacy workspace folder
-    (see ``workspace.LEGACY_FEEDBACK_NAME``).
+    """Resolve the SAFE (``For AI/``) and PRIVATE (``Student Work/Grading Keys/``)
+    homes for one PowerGrader run.
 
     The *reserve* value accounts for the deepest PowerGrader child layout
     (packet folder, batch folder, batch file name) so the root SAFE and PRIVATE
@@ -44,13 +44,13 @@ def feedback_artifact_dirs(
             mode or "assisted", run_timestamp=run_timestamp,
             reserve=pg_child_reserve,
         )
-        private = workspace.assignment_folder(
+        private = workspace.grading_keys_assignment_folder(
             course_name or course_id, course_id,
             assignment_name or assignment_id, assignment_id,
             reserve=pg_child_reserve,
         )
         return safe, private
-    return workspace.ai_packets_root(), workspace.courses_root()
+    return workspace.for_ai_root(), workspace.grading_keys_root()
 
 
 def write_privacy_audit_file(

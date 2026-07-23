@@ -219,7 +219,7 @@ def _default_vault() -> feedback_vault.Vault:
     fallback would misplace the re-identification map outside the protected
     workspace and hand out unstable pseudonyms, so student-data tools must
     refuse instead."""
-    root = workspace.identity_vault_dir() or workspace.feedback_folder("_vault")
+    root = workspace.identity_vault_dir()
     if not root:
         raise _VaultUnavailable(_VAULT_UNAVAILABLE_ERROR)
     return feedback_vault.Vault(os.path.join(root, "vault.json"))

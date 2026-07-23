@@ -30,7 +30,7 @@ REPO_ROOT = os.path.dirname(API_DIR)
 # importable even before the workspace is set up.
 def _calendars_dir():
     from . import workspace as _ws
-    return _ws.folder("Calendars")
+    return _ws.library_folder("Calendars")
 
 
 def _calendar_label(filename: str) -> str:
@@ -72,9 +72,9 @@ def _workspace_folder(name: str):
 
 
 def _exports_dir():
-    """Where printable (DOCX) versions land: the synced workspace Exports folder
-    when OneDrive is present, else the repo-local Finished_Exports fallback."""
-    return runtime_paths.exports_dir()
+    """Where printable (DOCX) versions land: the synced workspace Printables
+    folder when OneDrive is present, else the repo-local Finished_Exports fallback."""
+    return runtime_paths.printables_dir()
 
 
 # Stable compatibility facade; workspace-derived paths remain call-time only.

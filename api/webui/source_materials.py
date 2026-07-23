@@ -41,7 +41,7 @@ RESPONSE_PRESETS = {
 
 
 def source_folder() -> str | None:
-    return workspace.folder(SOURCE_FOLDER_NAME)
+    return workspace.library_folder(SOURCE_FOLDER_NAME)
 
 
 def ensure_source_folder() -> str | None:

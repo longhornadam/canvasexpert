@@ -79,7 +79,7 @@ def pg_open_assignment_folder(course_id: str = Form(""), assignment_id: str = Fo
     if error:
         return JSONResponse({"ok": False, "error": error})
     course_id, assignment_id, course_name = context_value
-    path = workspace.assignment_folder(course_name, course_id, assignment_id, assignment_id)
+    path = workspace.grading_keys_assignment_folder(course_name, course_id, assignment_id, assignment_id)
     if not path or not workspace.path_within_workspace(path):
         return JSONResponse({"ok": False, "error": "The local assignment folder is unavailable."})
     try:
@@ -118,8 +118,8 @@ def powergrader_setup(request: Request):
             default_openrouter_model=config.DEFAULT_OPENROUTER_MODEL,
             openrouter_model_presets=config.openrouter_model_presets(),
             has_workspace=bool(workspace.workspace_root()),
-            rubrics_folder=workspace.folder("Rubrics"),
-            ai_ta_folder=workspace.folder("AI-TA"),
+            rubrics_folder=workspace.library_folder("Rubrics"),
+            ai_ta_folder=workspace.library_folder("AI-TA"),
             persona_folder=persona_dir,
             source_materials_folder=source_dir,
             source_material_files=source_materials.list_source_files(),

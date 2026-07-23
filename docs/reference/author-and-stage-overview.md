@@ -8,7 +8,7 @@ Any MCP-capable AI assistant, whichever one the teacher chooses to use, helps th
 create Canvas content and stages it for review and push. The assistant never writes to
 Canvas and
 never pushes anything. It reads what it needs through the MCP, writes a draft file into a
-synced Inbox folder, and the teacher reviews and pushes that draft through the review flow
+synced To Review folder, and the teacher reviews and pushes that draft through the review flow
 Canvas Expert already has.
 
 The loop:
@@ -16,7 +16,7 @@ The loop:
 1. The assistant reads the course's module structure and the authoring contract for the
    content type it is writing (new MCP reads).
 2. The assistant authors a Forge envelope and drops it as a `.txt` file into a per-kind
-   Inbox folder in the workspace (a plain filesystem write, not an MCP call).
+   To Review folder in the workspace (a plain filesystem write, not an MCP call).
 3. The file appears in the teacher's push tab. The teacher validates it and runs
    prepare -> review -> apply through the operation ledger, exactly as they do today for a
    file they authored themselves.
@@ -43,7 +43,7 @@ The audit that preceded this doc found most of the machinery is already here:
   `read_service.catalog_modules` and the `/api/course-catalog` route; `/api/modules`
   prefers local and falls back to live only when stale.
 - **Contracts**: the Forge authoring contracts live in `LLM_Modules/*_Base.md`, with
-  teacher/agent instructions in the AI-TA folder.
+  teacher/agent instructions in the Library/AI-TA folder.
 
 So the push half, the validators, the review UI, and module storage are all built. The
 gap is that an assistant cannot see modules or contracts through a supported channel, and
@@ -53,7 +53,7 @@ there is no clean place for it to drop a draft.
 
 1. **See (new).** Two MCP read tools: `get_modules(course_id)` and
    `get_authoring_contract(kind)`.
-2. **Stage (new, small).** Per-kind Inbox drop folders in the workspace, globbed
+2. **Stage (new, small).** Per-kind To Review drop folders in the workspace, globbed
    alongside the existing library; atomic write plus a done-marker.
 3. **Push (exists).** The operation ledger review -> apply. No new code.
 4. **Orient (docs).** START HERE / LEARN / the MCP instruction block so the assistant
@@ -66,12 +66,12 @@ there is no clean place for it to drop a draft.
    SDK, API key, or vendor-specific workflow. As CanvasMirror and Canvas Expert grow, the
    abilities available to every connected assistant grow with them.
 1. The MCP never writes to Canvas and never writes content files. The new tools are reads
-   only. The draft drop is the assistant's own filesystem write into the synced Inbox, not
+   only. The draft drop is the assistant's own filesystem write into the synced To Review, not
    an MCP tool. The push stays human-driven through the operation ledger. This preserves
    the existing safety posture whole: the assistant's only path to Canvas is to stage a
    file that a human then reviews and applies locally.
 2. Read path is new MCP tools: `get_modules(course_id)` and `get_authoring_contract(kind)`.
-3. Drop path is dedicated per-kind Inbox folders in the workspace, globbed alongside the
+3. Drop path is dedicated per-kind To Review folders in the workspace, globbed alongside the
    existing library so drafts show up in the push tabs while staying visually distinct from
    the teacher's own hand-authored files.
 4. `get_modules` returns structural, non-PII data, so it needs no identity vault and no
@@ -96,7 +96,7 @@ there is no clean place for it to drop a draft.
   through it.
 - No new Canvas write path anywhere. Pushing remains the operation ledger behind the
   local-mutation guard (CSRF + loopback + same-origin).
-- Inbox drafts live in pseudonym space with no real IDs on disk.
+- To Review drafts live in pseudonym space with no real IDs on disk.
 
 ## Slice map
 
@@ -109,10 +109,10 @@ needs no slice; it already exists.
   modules via MCP" ask.
 - **Slice B — `get_authoring_contract` MCP tool.** Serve the Forge contract for a kind from
   `LLM_Modules` so any assistant can author a valid envelope unattended. Independent of A.
-- **Slice C — per-kind Inbox drop folders.** Extend `content_folders` and the `deps.py`
-  glob to include a workspace Inbox per kind. Pickup ignores half-synced drops via the
+- **Slice C — per-kind To Review drop folders.** Extend `content_folders` and the `deps.py`
+  glob to include a workspace To Review per kind. Pickup ignores half-synced drops via the
   done-marker convention. This is the CE-side plumbing that makes a dropped file discoverable.
-- **Slice D — Inbox surfacing and validation in the push tabs.** Show assistant-staged
+- **Slice D — To Review surfacing and validation in the push tabs.** Show assistant-staged
   drafts distinctly (badged pending review), run the existing validators on them, and show
   problems inline so a malformed draft is visible rather than silently failing. The
   teacher-facing half of staging.
@@ -122,7 +122,7 @@ needs no slice; it already exists.
 - **Slice F — orientation docs.** MCP instruction block gains a short capability line
   pointing at `get_authoring_contract`; START HERE and LEARN_CANVASEXPERT gain the
   author-and-stage loop; the AI-TA authoring instructions are reframed from "paste into the
-  web UI" to "author, then drop into the Inbox," vendor-neutral throughout.
+  web UI" to "author, then drop into To Review," vendor-neutral throughout.
 - **Slice G (optional) — converge push preview onto the ledger planner.** Retire the legacy
   `qf_pusher` CLI dry-run path so the preview and the apply come from the same code. This is
   pre-existing tech debt the audit surfaced, not strictly part of author-and-stage, but it
@@ -130,7 +130,7 @@ needs no slice; it already exists.
 
 ## Open questions to settle before a build brief
 
-- Exact Inbox folder naming and whether the push tabs should badge assistant drafts
+- Exact To Review folder naming and whether the push tabs should badge assistant drafts
   distinctly from teacher files.
 - Module staleness behavior for `get_modules`: return stale-with-label, or refuse and ask
   the teacher to refresh (mirror-consistent). Recommendation: stale-with-explicit-label for

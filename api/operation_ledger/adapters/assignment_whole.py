@@ -397,7 +397,7 @@ def allowed_printable_roots():
 
     roots = []
     try:
-        roots.append(os.path.realpath(runtime_paths.exports_dir()))
+        roots.append(os.path.realpath(runtime_paths.printables_dir()))
     except Exception:
         pass
     try:

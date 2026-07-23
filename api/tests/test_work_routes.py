@@ -456,7 +456,7 @@ def test_stale_and_unknown_mutations_fail_closed(monkeypatch, tmp_path):
     assert client.post("/api/work/job-route-1/ignore", json=stale, headers=headers).status_code == 409
     assert client.post("/api/work/missing/ignore", json={"material_version": job["material_version"]}, headers=headers).status_code == 409
     assert client.post("/api/work/job-route-1/snooze", json={"material_version": job["material_version"], "until": "not-a-date"}, headers=headers).status_code == 409
-    assert not (tmp_path / "workspace" / "_system" / "workbench" / "suppressions.v1.json").exists()
+    assert not (tmp_path / "workspace" / "_System" / "workbench" / "suppressions.v1.json").exists()
 
 
 def test_complete_only_intentional_and_no_canvas_calls(monkeypatch, tmp_path):
@@ -479,7 +479,7 @@ def test_complete_only_intentional_and_no_canvas_calls(monkeypatch, tmp_path):
     response = client.post("/api/work/job-route-1/complete", json={"material_version": intentional["material_version"]}, headers=headers)
     assert response.status_code == 200
     assert response.json()["job"]["status"] == "completed"
-    disk = (tmp_path / "workspace" / "_system" / "workbench" / "registry.v1.json").read_text(encoding="utf-8")
+    disk = (tmp_path / "workspace" / "_System" / "workbench" / "registry.v1.json").read_text(encoding="utf-8")
     assert "student" not in disk.lower()
     assert "submission" not in disk.lower()
     assert "presentations" not in disk.lower()

@@ -55,10 +55,6 @@ def queue_path() -> str | None:
     return os.path.join(d, QUEUE_FILENAME)
 
 
-def _legacy_queue_paths() -> list[str]:
-    return workspace.compatibility_paths(QUEUE_FILENAME, kind="job")
-
-
 def _default_queue() -> dict:
     return {"version": QUEUE_VERSION, "jobs": []}
 
@@ -73,15 +69,13 @@ def load_queue() -> dict:
 
 def _load_queue_unlocked(path: str | None = None) -> dict:
     path = path or queue_path()
-    candidates = ([path] if path and os.path.isfile(path) else []) + _legacy_queue_paths()
     data = None
-    for candidate in candidates:
+    if path and os.path.isfile(path):
         try:
-            with open(candidate, encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
-            break
         except Exception:
-            continue
+            data = None
     if data is None:
         return _default_queue()
     if not isinstance(data, dict):

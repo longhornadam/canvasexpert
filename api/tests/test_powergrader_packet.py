@@ -221,15 +221,19 @@ def test_packet_workflow_compact_fallback_deep_workspace(tmp_path, monkeypatch):
     """Build the complete packet workflow under a deep synthetic root (80-char
     padded) with 120-char fictional labels.  Assert every returned path is plain
     and at most 230 characters.  Verify compact folder names match the locked spec."""
-    # Pad the root to 80 characters
-    padding = max(1, 80 - len(str(tmp_path)))
+    # Pad the root so it alone is deep enough to force the compact packet
+    # layout (the normal "Safe AI Packet - <name>" layout must overflow the
+    # 230-char budget, while the compact "Packet-<hash>" layout must still
+    # fit) -- computed dynamically since pytest's own tmp_path length varies
+    # considerably by machine/username.
+    padding = max(1, 150 - len(str(tmp_path)))
     deep_root = tmp_path / ("D" * padding)
     deep_root.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(deep_root))
     workspace.ensure_workspace()
 
-    safe_dir = str(deep_root / "AI Packets (Pseudonymized)" / "run")
-    private_dir = str(deep_root / "Courses" / "private")
+    safe_dir = str(deep_root / "For AI" / "run")
+    private_dir = str(deep_root / "Student Work" / "Grading Keys" / "private")
     os.makedirs(workspace.extended_path(safe_dir), exist_ok=True)
     os.makedirs(workspace.extended_path(private_dir), exist_ok=True)
 
@@ -327,9 +331,11 @@ def test_packet_workflow_normal_layout_short_root(tmp_path, monkeypatch):
 def test_packet_workflow_budget_exception_stops_before_writes(tmp_path, monkeypatch):
     """A root so deep that even the compact deepest path exceeds 230 raises
     the dedicated exception before any directory/file is written."""
-    # Use a path deep enough to trigger the budget exception but shallow
-    # enough for Windows to create (tmp_path ~120 chars + 60 padding = 180)
-    very_deep = tmp_path / ("X" * 60)
+    # Pad dynamically so the base path alone already exceeds the budget,
+    # regardless of how long pytest's own tmp_path happens to be on this
+    # machine (username length varies the base considerably).
+    padding = max(60, (workspace.TEACHER_VISIBLE_BUDGET + 50) - len(str(tmp_path)))
+    very_deep = tmp_path / ("X" * padding)
     very_deep.mkdir(parents=True, exist_ok=True)
     safe_dir = str(very_deep / "SAFE")
     os.makedirs(workspace.extended_path(safe_dir), exist_ok=True)

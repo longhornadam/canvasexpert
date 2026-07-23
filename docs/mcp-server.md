@@ -37,7 +37,7 @@ Tool schema version 7.
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
 | `get_authoring_contract(kind)` | The Forge authoring contract (envelope format) for one content kind (`quiz`, `assignment`, `page`, `rubric`), served verbatim from `LLM_Modules/*_Base.md` | No |
-| `list_staged_content(kind="")` | Drafts already staged in the per-kind Inbox, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
+| `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
 | `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
@@ -59,7 +59,7 @@ quiz, assignment, page, or rubric so the resulting file validates.
 
 `list_staged_content(kind="")` also takes no `course_id` and carries no student data, so
 it likewise needs no course gate, no identity vault, and no safety scan. It reuses
-`webui.deps.list_inbox_files` (the same marker-gated Inbox listing the push tabs use) and
+`webui.deps.list_inbox_files` (the same marker-gated To Review listing the push tabs use) and
 returns only each draft's label, never its absolute path. Pass `kind` to narrow to one of
 `quiz`, `assignment`, `page`, or `rubric`; omit it to see everything staged across all four.
 

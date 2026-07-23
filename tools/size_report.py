@@ -19,7 +19,6 @@ DEFAULT_SKIP_DIRS = {
     "temp",
     "Finished_Exports",
     "PowerGrader",
-    "FeedbackExpert",  # legacy workspace folder name (see workspace.LEGACY_FEEDBACK_NAME)
 }
 
 

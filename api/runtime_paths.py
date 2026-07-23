@@ -50,8 +50,17 @@ def workspace_folder(name: str) -> Path | None:
     return Path(value) if value else None
 
 
-def exports_dir() -> Path:
-    return workspace_folder("Exports") or (app_root() / "Finished_Exports")
+def library_folder(name: str) -> Path | None:
+    value = _workspace_module().library_folder(name)
+    return Path(value) if value else None
+
+
+def printables_dir() -> Path:
+    return workspace_folder("Printables") or (app_root() / "Finished_Exports" / "Printables")
+
+
+def canvas_uploads_dir() -> Path:
+    return workspace_folder("Canvas Uploads") or (app_root() / "Finished_Exports" / "Canvas Uploads")
 
 
 def temp_dir() -> Path:
@@ -73,11 +82,7 @@ def content_folders(kind: str) -> list[Path]:
 
     folders: list[Path] = []
     if kind == "quiz":
-        folders.extend([
-            api_root() / "qf_materials" / "qf quiz examples",
-            app_root() / "DropZone",
-            app_root() / "Finished_Exports",
-        ])
+        folders.append(api_root() / "qf_materials" / "qf quiz examples")
     elif kind == "assignment":
         folders.extend([
             api_root() / "qf_materials" / "assignment examples",
@@ -86,7 +91,7 @@ def content_folders(kind: str) -> list[Path]:
     elif kind == "page":
         folders.append(api_root() / "qf_materials" / "qf quiz examples")
 
-    current = workspace_folder(workspace_name)
+    current = library_folder(workspace_name)
     if current:
         if kind == "rubric":
             folders.insert(0, current)
@@ -98,12 +103,12 @@ def content_folders(kind: str) -> list[Path]:
 
 
 def inbox_folder(kind: str) -> Path | None:
-    """Per-kind Inbox drop folder where an MCP-capable assistant stages a
+    """Per-kind To Review drop folder where an MCP-capable assistant stages a
     draft for the teacher to review and push.
 
     Distinct from the teacher's own library folders returned by
-    ``content_folders`` (Quizzes/Assignments/Pages/Rubrics): this is a
-    separate, marker-gated pickup surface -- see
+    ``content_folders`` (Library/Quizzes, Assignments, Pages, Rubrics): this is
+    a separate, marker-gated pickup surface -- see
     ``webui.deps.list_inbox_files``. Not included in ``content_folders``'s
     plain glob, since that glob has no marker gate and would surface a
     half-synced drop.
@@ -120,13 +125,13 @@ def inbox_folder(kind: str) -> Path | None:
     root = workspace_root()
     if not root:
         return None
-    folder = root / "Inbox" / workspace_name
+    folder = root / "To Review" / workspace_name
     folder.mkdir(parents=True, exist_ok=True)
     return folder
 
 
 def ai_ta_dir() -> Path:
-    return workspace_folder("AI-TA") or (app_root() / "AI-TA")
+    return library_folder("AI-TA") or (app_root() / "AI-TA")
 
 
 def rubric_folders() -> list[Path]:

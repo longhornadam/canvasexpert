@@ -169,9 +169,9 @@ names used throughout the app. Internally, `active_courses()` is the compatibili
 named Current-course boundary and the persisted `active` field remains unchanged.
 
 ### Academic calendars
-Load one or more calendars from your workspace **Calendars** folder, or paste a
+Load one or more calendars from your workspace **Library/Calendars** folder, or paste a
 custom CSV. The repo ships **no district data** — only a blank `calendar_template.csv`
-and a fictional `Summer_Session_Sample.csv` (seeded into the Calendars folder on
+and a fictional `Summer_Session_Sample.csv` (seeded into the Library/Calendars folder on
 first run). Whatever CSVs you drop into that folder appear as one-click "Load"
 buttons in Settings. Two CSV formats accepted:
 
@@ -340,7 +340,7 @@ file requests one, a student explainer page.
 ### Assignment evidence refresh
 Downloads student work from the **focused** course. Load assignments, filter by
 type and due-date range (All / Fall / Spring / 30d / 90d presets), select, download
-to a canonical course-first folder tree: `Courses/<Course>/Assignments/<Assignment>/Student Work/<Student>/Attempt <n>/`,
+to a canonical course-first folder tree: `Student Work/Submissions/<Course>/Assignments/<Assignment>/<Student>/Attempt <n>/`,
 `_index.csv` per assignment, `_portfolio.csv` per student. Files are named
 `<Asgn> - <F Last>.html`, `<Asgn> - <F Last> - URL.txt`, or
 `<Asgn> - <F Last> - <original file>`.
@@ -465,8 +465,8 @@ Modes:
 
 - **Grade Myself** — fetches submitted work and opens the queue with no AI packet
   or API call.
-- **Use My AI Chat** — writes reviewed pseudonymized artifacts under `AI Packets
-  (Pseudonymized)/` and private originals/state under the canonical workspace,
+- **Use My AI Chat** — writes reviewed pseudonymized artifacts under `For AI/`
+  and private originals/state under the canonical workspace,
   keeps the legacy
   Safe AI Packet ZIP, and also creates Copilot-friendly batch folders. Each batch
   folder has exactly three numbered upload files: assignment information, rubric
@@ -510,13 +510,13 @@ external chat tool.
 ## AI Helper Files (`/ai-expert`)
 
 Equips the teacher's LLM (MagicSchool, Copilot, …) with paste-ready plain-text
-skill files, served from the AI-TA library (`/api/ai-ta/file?name=…`):
+skill files, served from the Library/AI-TA folder (`/api/ai-ta/file?name=…`):
 
 - **Start here** — orients any LLM to Canvas Expert.
 - **Authoring skills** — Author a Quiz / Assignment / Page / Rubric (the Forge
   contracts as skills). These same files power the Work tools inline
   "Forge one with your LLM" copy buttons.
-- **Scoring skills** — one per rubric in the Rubrics folder; paste a skill, then
+- **Scoring skills** — one per rubric in the Library/Rubrics folder; paste a skill, then
   paste essays one at a time.
 - **MagicSchool Toolkit** — setup recipes for building dedicated MagicSchool tools.
 

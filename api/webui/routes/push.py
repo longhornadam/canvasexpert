@@ -14,7 +14,7 @@ from .push_validation import register_validation_routes
 router = APIRouter(tags=["push"])
 register_validation_routes(
     router,
-    exports_dir_func=runtime_paths.exports_dir,
+    printables_dir_func=runtime_paths.printables_dir,
     workspace_folder_func=runtime_paths.workspace_folder,
 )
 

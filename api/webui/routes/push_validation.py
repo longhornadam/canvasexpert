@@ -12,7 +12,7 @@ from ..deps import TEMP_DIR, REPO_ROOT
 
 def register_validation_routes(
     router,
-    exports_dir_func=runtime_paths.exports_dir,
+    printables_dir_func=runtime_paths.printables_dir,
     workspace_folder_func=runtime_paths.workspace_folder,
 ):
     @router.post("/api/temp-upload")
@@ -84,7 +84,7 @@ def register_validation_routes(
                 quiz.questions = balance_answers(quiz.questions)
             except Exception:
                 pass
-            base = exports_dir_func()
+            base = printables_dir_func()
             os.makedirs(base, exist_ok=True)
             folder = create_quiz_folder(_Path(base), quiz.title)
             results = generate_physical_outputs(quiz, str(folder))
@@ -110,7 +110,7 @@ def register_validation_routes(
             for k in ("quiz_path", "quiz_pdf_path", "key_path", "key_pdf_path", "rationale_path")
             if results.get(k)
         ]
-        fallback = not bool(workspace_folder_func("Exports"))
+        fallback = not bool(workspace_folder_func("Printables"))
         return JSONResponse({"ok": True, "folder": str(folder),
                              "files": files, "warnings": warnings,
                              "warning": warnings[0] if warnings else "",

@@ -21,7 +21,7 @@ def budget_error_message(budget: dict) -> str:
 
 
 def vault():
-    root = workspace.identity_vault_dir() or workspace.feedback_folder("_vault")
+    root = workspace.identity_vault_dir()
     return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
 
 
@@ -55,7 +55,7 @@ def load_rubric_text(rubric_name):
 
 def audit(entry: dict):
     """Append a content-free provenance line to _audit/audit.log."""
-    path = os.path.join(workspace.audits_dir() or workspace.feedback_folder("_audit") or ".", "audit.log")
+    path = os.path.join(workspace.audits_dir() or ".", "audit.log")
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         entry = {"ts": datetime.now().isoformat(timespec="seconds"), **entry}

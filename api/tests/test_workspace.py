@@ -39,22 +39,24 @@ def test_ensure_workspace_creates_and_seeds_rubrics(tmp_path, monkeypatch):
     monkeypatch.setattr(workspace, "CONFIG_PATH", str(tmp_path / "config.json"))
     monkeypatch.setattr(workspace, "DEFAULT_DOCS_DIR", str(source_api / "default_docs"))
 
-    seeded = root / "Rubrics" / "ELA7_Classroom_Writing_Rubric.txt"
+    seeded = root / "Library" / "Rubrics" / "ELA7_Classroom_Writing_Rubric.txt"
     seeded.parent.mkdir(parents=True, exist_ok=True)
     seeded.write_text("user edited version", encoding="utf-8")
 
     resolved = workspace.ensure_workspace()
     assert resolved == str(root)
 
-    for folder in ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports", "Source Materials"]:
+    for folder in ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Calendars", "Source Materials"]:
+        assert (root / "Library" / folder).is_dir()
+    for folder in ["Printables", "Canvas Uploads", "To Review", "Student Work", "For AI", "_System"]:
         assert (root / folder).is_dir()
 
     assert seeded.read_text(encoding="utf-8") == "user edited version"
-    assert (root / "Rubrics" / "New_Default_Rubric.txt").read_text(encoding="utf-8") == "new default"
+    assert (root / "Library" / "Rubrics" / "New_Default_Rubric.txt").read_text(encoding="utf-8") == "new default"
 
     (source_rubrics / "Later_Default_Rubric.txt").write_text("later default", encoding="utf-8")
     workspace.ensure_workspace()
-    assert (root / "Rubrics" / "Later_Default_Rubric.txt").read_text(encoding="utf-8") == "later default"
+    assert (root / "Library" / "Rubrics" / "Later_Default_Rubric.txt").read_text(encoding="utf-8") == "later default"
 
 
 def test_config_split_writes_workspace_settings_when_available(tmp_path, monkeypatch):
@@ -111,7 +113,7 @@ def test_adding_a_saved_previous_course_makes_it_current(tmp_path, monkeypatch):
 def test_personas_seed_once_then_follow_folder_changes(tmp_path, monkeypatch):
     root = tmp_path / "CanvasExpert"
     root.mkdir()
-    monkeypatch.setattr(workspace, "folder", lambda name: str(root / name))
+    monkeypatch.setattr(workspace, "library_folder", lambda name, _root=None, _base=root: str(_base / name))
     monkeypatch.setattr(config._io, "_synced_state", lambda: {})
 
     first = config.list_personas()
@@ -179,7 +181,7 @@ def test_canonical_course_first_paths_keep_ids_and_bound_long_names(tmp_path, mo
         "A" * 400, "course/fictional", "B" * 400, "assignment/fictional",
         "C" * 400, "student/fictional", 3,
     )
-    assert "Courses" in path and "Assignments" in path and "Student Work" in path
+    assert "Student Work" in path and "Submissions" in path and "Assignments" in path
     assert "course_fictional" in path and "assignment_fictional" in path and "student_fictional" in path
     assert path.endswith("Attempt 3")
     assert len(path) <= workspace.MAX_PATH_LENGTH
@@ -209,44 +211,22 @@ def test_extended_path_is_noop_off_windows(monkeypatch):
     assert workspace.extended_path("") == ""
 
 
-def test_legacy_feedback_is_read_only_and_new_roots_are_seeded(tmp_path, monkeypatch):
+def test_ensure_workspace_does_not_touch_a_stray_legacy_folder(tmp_path, monkeypatch):
+    """ensure_workspace() only ever creates the v2 tree; it never reads, renames,
+    or deletes an unrelated pre-existing folder (clean break, no migration)."""
     root = tmp_path / "CanvasExpert"
-    legacy = root / "FeedbackExpert" / "_system" / "vault"
-    legacy.mkdir(parents=True)
-    marker = legacy / "vault.json"
-    marker.write_text("legacy", encoding="utf-8")
+    stray = root / "FeedbackExpert" / "_system" / "vault"
+    stray.mkdir(parents=True)
+    marker = stray / "vault.json"
+    marker.write_text("untouched", encoding="utf-8")
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
 
     workspace.ensure_workspace()
-    assert marker.read_text(encoding="utf-8") == "legacy"
-    assert (root / "Courses").is_dir()
-    assert (root / "AI Packets (Pseudonymized)").is_dir()
+    assert marker.read_text(encoding="utf-8") == "untouched"
+    assert (root / "Student Work" / "Submissions").is_dir()
+    assert (root / "For AI").is_dir()
     assert (root / "_System" / "Identity Vault").is_dir()
     assert not (root / "_System" / "Identity Vault" / "vault.json").exists()
-
-
-def test_powergrader_compatibility_reads_are_new_first_and_non_destructive(tmp_path, monkeypatch):
-    from api.powergrader import autoscore_queue, session_store
-
-    root = tmp_path / "CanvasExpert"
-    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
-    monkeypatch.setattr(session_store.workspace, "workspace_root", lambda: str(root))
-    monkeypatch.setattr(autoscore_queue.workspace, "workspace_root", lambda: str(root))
-    legacy = root / "PowerGrader"
-    legacy.mkdir(parents=True)
-    old_session = legacy / "sid_session.json"
-    old_session.write_text(json.dumps({"session_id": "sid", "created": "old", "students": []}), encoding="utf-8")
-    old_queue = legacy / "autoscore_queue.json"
-    old_queue.write_text(json.dumps({"version": 1, "jobs": [{"job_id": "old"}]}), encoding="utf-8")
-
-    assert session_store.load_session("sid")["created"] == "old"
-    assert autoscore_queue.load_queue()["jobs"][0]["job_id"] == "old"
-    session_store.save_session({"session_id": "sid", "created": "new", "students": []})
-    assert old_session.read_text(encoding="utf-8").find('"old"') >= 0
-    assert session_store.load_session("sid")["created"] == "new"
-    autoscore_queue.save_queue({"version": 1, "jobs": [{"job_id": "new"}]})
-    assert old_queue.read_text(encoding="utf-8").find('"old"') >= 0
-    assert autoscore_queue.load_queue()["jobs"][0]["job_id"] == "new"
 
 
 def test_assignment_evidence_manifest_is_atomic_identity_checked_and_conflict_fail_closed(tmp_path, monkeypatch):

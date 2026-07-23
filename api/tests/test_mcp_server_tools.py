@@ -144,7 +144,6 @@ def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch):
     No _vault_factory override here: this exercises the real _default_vault."""
     _set_active_courses(monkeypatch, ["111"])
     monkeypatch.setattr(workspace, "identity_vault_dir", lambda *a, **k: None)
-    monkeypatch.setattr(workspace, "feedback_folder", lambda *a, **k: None)
     for result in (
         tools.get_roster("111"),
         tools.get_seating_context("111", "Period 1"),

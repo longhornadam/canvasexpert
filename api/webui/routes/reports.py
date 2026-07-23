@@ -295,8 +295,7 @@ async def portfolio_merged(course_id: str = Form(...),
     if not token:
         return JSONResponse({"ok": False, "error": "No Canvas token saved."})
 
-    course = next((c for c in config.saved_courses() if str(c["id"]) == str(course_id)),
-                  {"id": course_id, "name": str(course_id)})
+    course = {"id": course_id, "name": config.course_display_name(course_id) or str(course_id)}
 
     if cohort == "monitored":
         students = [{"id": uid, "name": v["name"]}

@@ -40,7 +40,7 @@ FEEDBACK_PATTERNS_DEFAULT = [
 
 
 def _persona_folder() -> str | None:
-    ai_ta_dir = workspace.folder("AI-TA")
+    ai_ta_dir = workspace.library_folder("AI-TA")
     if not ai_ta_dir:
         return None
     return os.path.join(ai_ta_dir, "Personas")

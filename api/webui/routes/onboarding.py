@@ -45,5 +45,9 @@ def set_workspace(path: str = Form(...)):
     return JSONResponse({
         "ok": True,
         "root": root,
-        "subfolders": workspace.WORKSPACE_SUBFOLDERS,
+        "subfolders": [
+            workspace.LIBRARY_NAME, workspace.TO_REVIEW_NAME,
+            workspace.PRINTABLES_NAME, workspace.CANVAS_UPLOADS_NAME,
+            workspace.STUDENT_WORK_NAME, workspace.FOR_AI_NAME,
+        ],
     })

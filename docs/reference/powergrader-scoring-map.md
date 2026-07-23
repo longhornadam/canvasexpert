@@ -5,9 +5,11 @@ result imports, or the shared scoring/privacy engines. It is not global executor
 
 PowerGrader is the single teacher-facing owner of scoring student work and AI feedback.
 The legacy grading page is retired: `/feedback-expert` returns a 307 redirect to
-`/powergrader?advanced=import`. Existing legacy workspace artifacts (the historical
-`FeedbackExpert/` folder, held under `workspace.LEGACY_FEEDBACK_NAME`) remain
-compatibility-read data and are never automatically copied or deleted.
+`/powergrader?advanced=import`. The legacy compatibility layer for the historical
+`FeedbackExpert/` workspace folder (`workspace.LEGACY_FEEDBACK_NAME`, `FEEDBACK_NAME`,
+`FEEDBACK_SUBFOLDERS`, `legacy_feedback_root`, `feedback_folder`, etc.) has been removed
+entirely; it is a clean break with no migration path, and no code reads that old folder
+anymore.
 
 ## Active ownership
 

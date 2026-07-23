@@ -15,9 +15,9 @@ def get_student_reports_root() -> str:
     state = _io_mod._machine_load()
     if state.get("student_reports_root"):
         return state["student_reports_root"]
-    root = workspace.workspace_root()
+    root = workspace.student_work_reports_root()
     if root:
-        return os.path.join(root, "Student Reports")
+        return root
     return STUDENT_REPORTS_DEFAULT
 
 

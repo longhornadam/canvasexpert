@@ -47,7 +47,7 @@ def _root() -> Path | None:
 
 def workbench_dir() -> Path | None:
     root = _root()
-    return root / "_system" / "workbench" if root else None
+    return root / workspace.SYSTEM_NAME / "workbench" if root else None
 
 
 def quarantine_dir() -> Path | None:

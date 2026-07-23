@@ -24,7 +24,7 @@ names_router = APIRouter(prefix="/api/names", tags=["names"])
 
 
 def _vault():
-    root = workspace.identity_vault_dir() or workspace.feedback_folder("_vault")
+    root = workspace.identity_vault_dir()
     return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
 
 
@@ -136,11 +136,11 @@ def scrub_test(text: str = Form(""), course_id: str = Form("")):
 
 @names_router.post("/who-is-who")
 def export_who_is_who(course_id: str = Form("")):
-    """Write a who-is-who.csv to PRIVATE/ and return the path."""
+    """Write a who-is-who.csv to Student Work/Grading Keys/ and return the path."""
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
     vault = _vault()
-    private_dir = workspace.courses_root()
+    private_dir = workspace.grading_keys_root()
     if not private_dir:
         return JSONResponse({"ok": False, "error": "No workspace configured."})
     os.makedirs(private_dir, exist_ok=True)

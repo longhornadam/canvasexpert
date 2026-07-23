@@ -230,7 +230,7 @@ var WIZARD = {
       var form = document.getElementById('calendar-form');
       var checkboxes = document.getElementById('calendar-checkboxes');
       if (!d.available || d.available.length === 0) {
-        container.innerHTML = '<p class="hint">No calendar files found in your workspace Calendars folder. You can add them later in <a href="/settings">Settings</a>.</p>';
+        container.innerHTML = '<p class="hint">No calendar files found in your workspace Library/Calendars folder. You can add them later in <a href="/settings">Settings</a>.</p>';
         return;
       }
       container.innerHTML = '';

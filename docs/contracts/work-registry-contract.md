@@ -22,7 +22,7 @@ The registry is stored under the configured workspace, never in the repository a
 never inside `settings.json`:
 
 ```text
-<workspace>/_system/workbench/
+<workspace>/_System/workbench/
 ├── registry.v1.json
 ├── suppressions.v1.json
 ├── discovery-cache.v1.json
