@@ -6,7 +6,7 @@ conversation inside that one file's instructions.
 
 File categories:
 - START HERE: Canvas Expert overview and how the system fits together.
-- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, RubricForge, and TAForge.
+- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, and RubricForge.
 - Scoring skills: one file per valid rubric in the default rubric library.
 - Reference: supporting material some authoring skills point to.
 - MagicSchool Toolkit: setup recipes for building these as reusable custom tools in MagicSchool.ai.

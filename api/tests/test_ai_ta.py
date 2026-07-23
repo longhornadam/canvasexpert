@@ -16,7 +16,6 @@ def test_build_library_writes_expected_files(tmp_path):
     assert "Author an Assignment (AssignmentForge).txt" in names
     assert "Author a Page (PageForge).txt" in names
     assert "Author a Rubric (RubricForge).txt" in names
-    assert "Author a TA (TAForge).txt" in names
     assert "About This Folder.txt" in names
     assert "Score with - ELA 7 Standard Writing Rubric.txt" in names
 
@@ -29,7 +28,9 @@ def test_build_library_writes_expected_files(tmp_path):
         assert "{TAG}" not in text
 
     quiz_text = (target / "Author a Quiz (QuizForge).txt").read_text(encoding="utf-8")
-    assert "PASTE THIS WHOLE FILE" in quiz_text
+    # Preamble stripped: the file IS the contract, with no teacher-paste framing.
+    assert "PASTE THIS WHOLE FILE" not in quiz_text
+    assert quiz_text.lstrip().startswith("# QuizForge")
     assert "STIMULUS is for actual content students must reference" in quiz_text
 
     score_text = (target / "Score with - ELA 7 Standard Writing Rubric.txt").read_text(encoding="utf-8")

@@ -1,14 +1,36 @@
 #!/bin/sh
-# Block accidental commit of a Canvas access token (pattern: NNNN~<40+ alnum>).
-# Secrets belong only in api/.env (gitignored). This is a backstop against a
-# token sneaking into a tracked file. Shared via: git config core.hooksPath .githooks
-match=$(git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+' | grep -E '[0-9]{3,6}~[A-Za-z0-9]{40,}')
-if [ -n "$match" ]; then
+# Backstop against committing secrets or PII into tracked files. The
+# suite-enforced gate is api/tests/test_repo_privacy_scan.py; this hook blocks
+# the highest-signal cases at commit time so they never reach history.
+# Activate in each clone with: git config core.hooksPath .githooks
+
+added=$(git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+')
+
+# 1) Canvas access token (pattern: NNNN~<40+ alnum>). Belongs only in api/.env.
+token=$(printf '%s\n' "$added" | grep -E '[0-9]{3,6}~[A-Za-z0-9]{40,}')
+if [ -n "$token" ]; then
   echo "" >&2
   echo "COMMIT BLOCKED: a possible Canvas access token is in your staged changes." >&2
-  echo "$match" | sed -E 's/([0-9]{3,6}~[A-Za-z0-9]{4})[A-Za-z0-9]+/\1.../g' >&2
+  printf '%s\n' "$token" | sed -E 's/([0-9]{3,6}~[A-Za-z0-9]{4})[A-Za-z0-9]+/\1.../g' >&2
   echo "Remove it. The token belongs only in api/.env (gitignored)." >&2
   echo "" >&2
   exit 1
 fi
+
+# 2) Real (non-synthetic) email address = committed PII. Synthetic domains are
+# allowed, mirroring test_repo_privacy_scan.py: anything containing "example",
+# @anthropic.com (co-author trailer), and *localhost.
+emails=$(printf '%s\n' "$added" \
+  | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' \
+  | grep -viE '@[A-Za-z0-9.-]*example[A-Za-z0-9.-]*|@anthropic\.com|@[A-Za-z0-9.-]*localhost' \
+  | sort -u)
+if [ -n "$emails" ]; then
+  echo "" >&2
+  echo "COMMIT BLOCKED: a real email address (PII) is in your staged changes:" >&2
+  printf '%s\n' "$emails" >&2
+  echo "PII must not enter tracked files. Remove it; see api/tests/test_repo_privacy_scan.py." >&2
+  echo "" >&2
+  exit 1
+fi
+
 exit 0

@@ -15,6 +15,11 @@ Do not preload archived handoffs, every module map, `TOOLS.md`, or a whole archi
 vision. A handoff that cites a long document must name the required numbered sections.
 Historical handoffs are never implementation authority.
 
+Before deciding whether work is in scope, read `docs/reference/project-state.md`: Canvas
+Expert is pre-launch with a single user through the first semester, so migration,
+backward-compatibility, and legacy-record code is out of scope by default — prefer clean
+breaks, and keep one source of truth per artifact.
+
 ## Repository boundary
 
 - `api/` is the live, local-only FastAPI app and CLI surface. It holds the Canvas token,

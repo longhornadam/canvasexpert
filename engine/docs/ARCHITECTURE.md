@@ -52,7 +52,7 @@ Key files:
 ## Boundaries
 
 - `engine/` does not call Canvas APIs. Live Canvas behavior belongs in `api/`.
-- Authoring contracts remain canonical in `../../LLM_Modules/*_Base.md`.
+- Authoring contracts remain canonical in `api/default_docs/AI Authoring/Author a *.txt`.
 - Renderers should not become validators; validation happens before rendering.
 - Test fixtures must stay fictional and must not include student data.
 

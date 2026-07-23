@@ -142,10 +142,10 @@ filename stems). Add a test.
 
 ### Task 5 — Minor: git identity (optional, do last)
 
-Commits across this arc alternate `longhornadam <adambeckham@gmail.com>` and
-`WorldForge Developer <adambeckham@live.com>` — same person, two machine
-configs. Not a code issue; align the Windows machine's `git config user.*`
-before committing so this session's history is consistent.
+Commits across this arc alternate between two git identities (`longhornadam` and
+`WorldForge Developer`) — same person, two machine configs. Not a code issue;
+align the Windows machine's `git config user.*` before committing so this
+session's history is consistent.
 
 ## Out of scope
 

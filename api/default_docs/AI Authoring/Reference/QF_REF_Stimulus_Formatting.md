@@ -242,9 +242,9 @@ if passage_type == "auto":
 
 ---
 
-## Practical Guidance for LLM Modules
+## Practical Guidance for the Authoring Contracts
 
-### For QuizForge_Base.md (JSON Output)
+### For QuizForge (JSON Output)
 1. **Fences in JSON strings:** Use explicit `\n` for newlines:
    ```json
    "prompt": "```python\nfor i in range(5):\n    print(i)\n```"
