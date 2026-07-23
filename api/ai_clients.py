@@ -26,10 +26,10 @@ import json
 import os
 import shutil
 import tomllib
-from datetime import datetime, timezone
 from pathlib import Path
 
 from api import runtime_paths
+from api.storage_support import utc_compact_stamp
 
 
 __all__ = [
@@ -113,7 +113,7 @@ def _entry_matches(entry: object) -> bool:
 # Backups and rollback (shared)
 # --------------------------------------------------------------------------- #
 def _timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return utc_compact_stamp()
 
 
 def _backup(path: Path) -> Path | None:

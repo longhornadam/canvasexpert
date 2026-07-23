@@ -26,6 +26,15 @@ def _make_session_state(session):
     return state, load_session, save_session
 
 
+def test_make_late_batch_id_matches_run_stamp_format():
+    """late-<workspace.RUN_STAMP_FORMAT> -- one shared stamp convention with
+    the other PowerGrader "For AI/" run-folder names."""
+    import re
+
+    batch_id = late_catchup.make_late_batch_id()
+    assert re.fullmatch(r"late-\d{8}-\d{6}-\d{6}", batch_id)
+
+
 def _base_late_watch():
     return {
         "enabled": True,

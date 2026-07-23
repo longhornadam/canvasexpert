@@ -2,9 +2,7 @@ from __future__ import annotations
 
 """PowerGrader late catch-up helpers."""
 
-from datetime import datetime
-
-from api.webui import config
+from api.webui import config, workspace
 from api.webui.schooldays import _parse_iso_local, _school_days_late_detail
 
 
@@ -51,12 +49,18 @@ def initial_missing_user_ids(submissions: list[dict]) -> list[str]:
 
 
 def make_late_batch_id(now=None) -> str:
-    """Return stable label like late-YYYYMMDD-HHMMSS."""
+    """Return stable label like late-YYYYMMDD-HHMMSS-ffffff.
+
+    Matches workspace.RUN_STAMP_FORMAT -- this label becomes part of a
+    teacher-visible "For AI/" run-folder name (see powergrader_late.py's
+    artifact_name), so it uses the same stamp convention as every other
+    PowerGrader run folder.
+    """
     if now is None:
-        now = datetime.now()
+        return f"late-{workspace.run_stamp()}"
     if hasattr(now, "astimezone"):
         now = now.astimezone()
-    return f"late-{now.strftime('%Y%m%d-%H%M%S')}"
+    return f"late-{now.strftime(workspace.RUN_STAMP_FORMAT)}"
 
 
 def compute_late_meta(

@@ -345,7 +345,7 @@ def write_safe_and_private(
     protected: set[str] | None = None,
     submissions: list | None = None,
     rubric_text: str = "",
-    compact: bool = False,
+    compact: bool | None = None,
 ) -> dict:
     """Write a scrubbed SAFE bundle + unscrubbed PRIVATE copy + who-is-who.
 
@@ -356,9 +356,12 @@ def write_safe_and_private(
     4. Write PRIVATE/ raw bundle + who-is-who.csv.
     5. Track attachment-only submissions (excluded from SAFE).
 
-    When *compact* is True, uses shorter leaf names suitable for deep workspaces:
+    *compact* selects shorter leaf names suitable for deep workspaces:
     ``bundle.json``, ``how-to-score.txt``, ``context.txt``, ``private.json``,
-    ``who-is-who.csv``, and per-student files as ``s-<hash>.txt``.
+    ``who-is-who.csv``, and per-student files as ``s-<hash>.txt``. Left as
+    ``None`` (the default), it is auto-detected the same way PowerGrader's
+    Safe AI Packet and Copilot batches are: project the readable name and go
+    compact only if it would exceed the teacher-visible budget.
 
     Returns {
         "safe_bundle": path,
@@ -377,6 +380,14 @@ def write_safe_and_private(
     excluded: list[str] = []
     shared_context_excluded = False
     stem = _safe(bundle.get("quiz_title", "assignment"))
+
+    if compact is None:
+        # Longest fixed suffix written into each directory: if that alone
+        # would overflow the budget, everything shorter overflows too.
+        compact = (
+            workspace.needs_compact_layout(safe_dir, f"{stem}__SHARED-CONTEXT.txt")
+            or workspace.needs_compact_layout(private_dir, f"{stem}__who-is-who.csv")
+        )
 
     # Step 1: convert approved local evidence, then scrub text.
     prepared, attachment_excluded, attachment_log = _prepare_attachment_safe_bundle(bundle, safe_dir, compact=compact)

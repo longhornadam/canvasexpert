@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -249,6 +250,25 @@ def test_managed_evidence_path_uses_identity_not_filename_suffix(tmp_path):
     assert first != second and "file-1" in first and "file-2" in second
 
 
+def test_managed_evidence_path_reads_filename_first_then_id(tmp_path):
+    """The readable filename leads and the stable ID trails it, matching
+    named_id_folder's "<display> — <id>" convention (not id-first)."""
+    result = workspace.managed_evidence_path(
+        "Course", "course", "Essay", "assignment", "Student", "user", 1, "48213", "essay.docx", tmp_path)
+    assert os.path.basename(result) == "essay — 48213.docx"
+
+
+def test_managed_evidence_path_keeps_id_intact_when_display_must_shrink(tmp_path):
+    """When the projected path is too long, bounded_join shortens the display
+    portion, never the identity suffix after the em dash."""
+    long_filename = ("a very long original upload name " * 4) + ".docx"
+    result = workspace.managed_evidence_path(
+        "Course", "course", "Assignment", "assignment", "Student", "user", 1,
+        "evidence-9001", long_filename, tmp_path)
+    assert result.endswith("evidence-9001.docx")
+    assert len(result) <= workspace.MAX_PATH_LENGTH
+
+
 def test_teacher_visible_path_fits_under_budget(tmp_path):
     """teacher_visible_path returns a path at most 230 chars."""
     base = str(tmp_path)
@@ -325,3 +345,25 @@ def test_teacher_visible_path_deterministic_hash_distinct(tmp_path):
     )
     # Both should fit (no deep base)
     assert len(r1) <= workspace.TEACHER_VISIBLE_BUDGET
+
+
+def test_run_stamp_matches_expected_shape():
+    stamp = workspace.run_stamp()
+    assert re.fullmatch(r"\d{8}-\d{6}-\d{6}", stamp)
+
+
+def test_needs_compact_layout_false_for_short_path(tmp_path):
+    assert workspace.needs_compact_layout(str(tmp_path), "Essay__bundle.json") is False
+
+
+def test_needs_compact_layout_true_when_over_budget(tmp_path):
+    deep_base = os.path.join(str(tmp_path), "x" * 250)
+    assert workspace.needs_compact_layout(deep_base, "Essay__bundle.json") is True
+
+
+def test_needs_compact_layout_joins_every_child_component(tmp_path):
+    base = str(tmp_path)
+    shallow = workspace.needs_compact_layout(base, "a", "b.txt")
+    deep = workspace.needs_compact_layout(base, "a" * 100, "b" * 100, "c" * 100)
+    assert shallow is False
+    assert deep is True

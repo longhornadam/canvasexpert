@@ -99,14 +99,11 @@ def _needs_compact_layout(safe_dir: str, packet_name: str, assignment_name: str)
     Projects the normal readable batch file path.  If it exceeds the
     230-char budget, compact layout is selected.
     """
-    safe_dir = os.path.abspath(safe_dir)
     safe_name = _safe_assignment_name(assignment_name)
-    normal_path = os.path.join(
-        safe_dir, packet_name, "Copilot Batches",
-        "Batch 99 of 99",
+    return workspace.needs_compact_layout(
+        safe_dir, packet_name, "Copilot Batches", "Batch 99 of 99",
         f"03 - {safe_name} - StudentWork - SAFE - Batch 99 of 99.md",
     )
-    return len(normal_path) > workspace.TEACHER_VISIBLE_BUDGET
 
 
 def build_copilot_batches(

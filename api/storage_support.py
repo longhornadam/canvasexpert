@@ -2,13 +2,40 @@
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 import threading
 import time
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from api.webui import workspace
+
+UTC_COMPACT_STAMP_FORMAT = "%Y%m%dT%H%M%S%fZ"
+
+
+def utc_compact_stamp() -> str:
+    """Return a fresh, sortable UTC timestamp for internal backup/quarantine
+    filenames -- the one shared format instead of each caller picking its own
+    (or its own precision)."""
+    return datetime.now(timezone.utc).strftime(UTC_COMPACT_STAMP_FORMAT)
+
+
+def quarantine_corrupt_file(path: Path, target_dir: Path) -> None:
+    """Move a corrupt document to *target_dir* as ``<name>.<stamp>.corrupt``.
+
+    Best-effort: swallows OSError so a failed quarantine never blocks the
+    caller's fallback to an empty document.
+    """
+    if not os.path.isfile(workspace.extended_path(str(path))):
+        return
+    os.makedirs(workspace.extended_path(str(target_dir)), exist_ok=True)
+    target = Path(target_dir) / f"{Path(path).name}.{utc_compact_stamp()}.corrupt"
+    try:
+        shutil.move(workspace.extended_path(str(path)), workspace.extended_path(str(target)))
+    except OSError:
+        pass
 
 
 def _replace_with_retry(source: str, target: str, *, attempts: int = 10) -> None:

@@ -19,6 +19,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from engine.utils.text_utils import safe_filename_component
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 API_DIR = os.path.dirname(MODULE_DIR)
@@ -63,7 +64,6 @@ CANVAS_MIRROR_NAME = "Canvas Mirror"
 MAX_COMPONENT_LENGTH = 120
 MAX_PATH_LENGTH = 240
 TEACHER_VISIBLE_BUDGET = 230
-_BAD_COMPONENT = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _BAD_ID = re.compile(r"[^A-Za-z0-9._-]+")
 
 # Deterministic short-hash length for compact path components.
@@ -188,6 +188,19 @@ def teacher_visible_path(
     )
 
 
+def needs_compact_layout(base_dir: str, *deepest_child: str, budget: int = TEACHER_VISIBLE_BUDGET) -> bool:
+    """Return True when the readable-name projected path for the deepest
+    expected child under *base_dir* would exceed the teacher-visible budget.
+
+    Every writer that falls back to a shorter compact naming scheme on deep
+    workspaces (PowerGrader's Safe AI Packet, Copilot batches, SAFE/PRIVATE
+    bundle files) should probe with this instead of hand-rolling the same
+    path-length comparison.
+    """
+    projected = os.path.join(os.path.abspath(base_dir), *deepest_child)
+    return len(projected) > budget
+
+
 def _machine_config():
     if not os.path.exists(CONFIG_PATH):
         return {}
@@ -224,17 +237,7 @@ def safe_component(value, max_len: int = MAX_COMPONENT_LENGTH, fallback: str = "
     The result is deliberately not an identity scrubber; Canvas IDs are kept in
     the containing folder name as the stable, private collision suffix.
     """
-    text = _BAD_COMPONENT.sub("_", str(value or ""))
-    text = re.sub(r"\s+", " ", text).strip(" .")
-    if not text:
-        text = fallback
-    text = text[:max(1, int(max_len))].rstrip(" .") or fallback
-    if text.upper().split(".", 1)[0] in {
-        "CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
-        *(f"LPT{i}" for i in range(1, 10)),
-    }:
-        text += "_"
-    return text
+    return safe_filename_component(value, max_len=max_len, fallback=fallback)
 
 
 def safe_id(value, fallback: str = "unknown") -> str:
@@ -515,7 +518,11 @@ def grading_keys_assignment_folder(course_name, course_id, assignment_name, assi
                        "Assignments", named_id_folder(assignment_name, assignment_id))
 
 
-ASSIGNMENT_EVIDENCE_MANIFEST = "assignment_evidence_manifest.json"
+# Leading underscore matches the app's other internal-bookkeeping sidecar
+# files (``_manifest.json``, ``_source_manifest.json``): this file lives
+# inside a folder the teacher browses (alongside per-student attempt
+# folders) but isn't meant for them to open.
+ASSIGNMENT_EVIDENCE_MANIFEST = "_assignment_evidence_manifest.json"
 
 
 def assignment_evidence_manifest_path(course_name, course_id, assignment_name, assignment_id, root=None):
@@ -526,12 +533,20 @@ def assignment_evidence_manifest_path(course_name, course_id, assignment_name, a
 
 def managed_evidence_path(course_name, course_id, assignment_name, assignment_id,
                           student_name, user_id, attempt, evidence_id, filename, root=None):
-    """Return a deterministic managed-original path; filenames are never identity."""
+    """Return a deterministic managed-original path; filenames are never identity.
+
+    The stable evidence ID is a suffix after the readable filename --
+    ``<name> — <id><ext>`` -- matching ``named_id_folder``'s "<display> — <id>"
+    convention rather than leading with the ID. This also keeps
+    ``bounded_join``'s length-shortening pass shrinking the display name, not
+    the identity suffix, if the path ever needs to shrink.
+    """
     base = attempt_folder(course_name, course_id, assignment_name, assignment_id,
                           student_name, user_id, attempt, root)
     if not base or not evidence_id:
         return None
-    return bounded_join(base, f"{safe_id(evidence_id)} — {safe_component(filename, 150)}")
+    stem, ext = os.path.splitext(safe_component(filename, 150))
+    return bounded_join(base, f"{stem} — {safe_id(evidence_id)}{ext}")
 
 
 def assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root=None):
@@ -601,12 +616,25 @@ def ai_assignment_root(course_name, course_id, assignment_name, assignment_id, r
                         named_id_folder(assignment_name, assignment_id))
 
 
+RUN_STAMP_FORMAT = "%Y%m%d-%H%M%S-%f"
+
+
+def run_stamp() -> str:
+    """Return a fresh, sortable, collision-safe local-time stamp.
+
+    The one shared format for teacher-visible run/batch names -- PowerGrader
+    "For AI/" run folders, late-catchup batch labels, vault backups -- so
+    they read consistently instead of each caller picking its own.
+    """
+    return datetime.now().strftime(RUN_STAMP_FORMAT)
+
+
 def ai_run_folder(course_name, course_id, assignment_name, assignment_id,
                   mode="assisted", *, run_timestamp=None, root=None, reserve=0):
     base = _root_or_workspace(root)
     if not base:
         return None
-    stamp = run_timestamp or datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    stamp = run_timestamp or run_stamp()
     if reserve:
         return teacher_visible_path(
             base,
@@ -626,7 +654,7 @@ def ai_student_folder(course_name, course_id, assignment_name, assignment_id,
     base = _root_or_workspace(root)
     if not base:
         return None
-    stamp = run_timestamp or datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    stamp = run_timestamp or run_stamp()
     return bounded_join(base, FOR_AI_NAME, named_id_folder(course_name, course_id),
                         named_id_folder(assignment_name, assignment_id),
                         f"{safe_component(stamp, 32)} — {safe_component(mode, 32)}",

@@ -1,6 +1,32 @@
 """Text processing utilities shared across modules."""
 
+import re
 import uuid
+
+_BAD_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_RESERVED_WINDOWS_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+
+
+def safe_filename_component(value, max_len: int = 120, fallback: str = "_unnamed") -> str:
+    """Return a readable Windows/POSIX-safe filename or folder-name component.
+
+    Replaces characters illegal on Windows, collapses whitespace, and guards
+    reserved device names (CON, PRN, ...). This is the one shared sanitizer
+    for teacher-visible names across the app -- reuse it rather than adding
+    another variant.
+    """
+    text = _BAD_FILENAME_CHARS.sub("_", str(value or ""))
+    text = re.sub(r"\s+", " ", text).strip(" .")
+    if not text:
+        text = fallback
+    text = text[:max(1, int(max_len))].rstrip(" .") or fallback
+    if text.upper().split(".", 1)[0] in _RESERVED_WINDOWS_NAMES:
+        text += "_"
+    return text
 
 
 def rand8() -> str:

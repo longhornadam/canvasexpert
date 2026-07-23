@@ -149,23 +149,11 @@ def build_safe_ai_packet(
     projected paths fit within the teacher-visible 230-character budget.
     All returned metadata paths are plain (unprefixed) and at most 230 chars.
     """
-    # Determine whether the deep workspace forces compact layout.
-    # Project the compact path first; if it fits, try normal.
-    compact = False
-    for try_compact in (False, True):
-        paths = packet_paths(safe_dir, assignment_name, assignment_id=assignment_id,
-                             compact=try_compact)
-        packet_dir = paths["dir"]
-        # Project deepest expected file in this packet: a per-student SAFE
-        # text file or the bundle JSON (longest plausible name).
-        test_path = os.path.join(packet_dir, "Student Responses.json")
-        test_len = len(test_path)
-        if test_len <= workspace.TEACHER_VISIBLE_BUDGET:
-            compact = try_compact
-            break
-    else:
-        # Even compact form doesn't fit — will raise below at write time.
-        compact = True
+    # Determine whether the deep workspace forces compact layout: project the
+    # readable packet name plus its deepest expected child (the bundle JSON).
+    # If even compact doesn't fit, _validate_packet_budget raises below.
+    readable_name = safe_ai_packet_name(assignment_name, assignment_id=assignment_id)
+    compact = workspace.needs_compact_layout(safe_dir, readable_name, "Student Responses.json")
 
     paths = packet_paths(safe_dir, assignment_name, assignment_id=assignment_id, compact=compact)
     packet_dir = paths["dir"]

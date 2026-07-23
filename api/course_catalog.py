@@ -12,7 +12,6 @@ import fnmatch
 import json
 import os
 import re
-import shutil
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,6 +24,7 @@ from api.assignment_collection import (
     AssignmentCollectionReceipt,
     acquire_assignment_collection,
 )
+from api.storage_support import quarantine_corrupt_file
 from api.webui import workspace
 
 
@@ -717,15 +717,7 @@ def _catalog_conflicts(course_id: str, root=None) -> list[Path]:
 
 
 def _quarantine(path: Path) -> None:
-    # os-level via extended_path so a deep catalog dir survives MAX_PATH; pathlib
-    # would strip the \\?\ prefix.
-    if not os.path.isfile(workspace.extended_path(str(path))):
-        return
-    target_dir = path.parent / "quarantine"
-    os.makedirs(workspace.extended_path(str(target_dir)), exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    target = target_dir / f"{path.name}.{stamp}.corrupt"
-    shutil.move(workspace.extended_path(str(path)), workspace.extended_path(str(target)))
+    quarantine_corrupt_file(path, path.parent / "quarantine")
 
 
 def _read_valid(path: Path) -> dict | None:

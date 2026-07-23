@@ -8,6 +8,7 @@ import os
 from . import rf
 
 from api import runtime_paths
+from engine.utils.text_utils import safe_filename_component
 
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -92,11 +93,7 @@ def _make_authoring_text(kind, tag, contract_path):
 
 
 def _sanitize_filename(text):
-    bad = '\\/:*?"<>|'
-    out = text
-    for ch in bad:
-      out = out.replace(ch, "-")
-    return out.strip() or "Rubric"
+    return safe_filename_component(text, fallback="Rubric")
 
 
 def _make_rubric_score_text(data):
@@ -290,7 +287,7 @@ def build_library(target_dir, rubric_folders=None):
 
     files = {
         "START HERE - What is Canvas Expert.txt": _make_start_here_text(),
-        "_about this folder.txt": _about_text(),
+        "About This Folder.txt": _about_text(),
     }
 
     for filename, (kind, tag, contract_path) in CONTRACT_FILES.items():

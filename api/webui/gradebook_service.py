@@ -7,7 +7,6 @@ unit-testable without HTTP.
 import json
 import hashlib
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
@@ -15,6 +14,7 @@ from .deps import WEBUI_DIR
 from .schooldays import _parse_iso_local, _add_school_days
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
+from api.storage_support import utc_compact_stamp
 
 CURVE_EVENTS_PATH = os.path.join(WEBUI_DIR, "curve_events.json")
 LEGACY_CURVE_EVENTS_PATH = CURVE_EVENTS_PATH
@@ -94,8 +94,7 @@ def _migrate_legacy_curve_events(legacy_path, live_path):
     raw, events = _read_legacy_curve_events(legacy_path)
     try:
         backup_dir = ledger_paths.curve_migration_backups_dir()
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        backup_path = backup_dir / f"curve_events.{stamp}.json"
+        backup_path = backup_dir / f"curve_events.{utc_compact_stamp()}.json"
         source_checksum = _checksum_prefix(raw)
         ledger_storage.atomic_write_bytes(backup_path, raw)
         if _checksum_prefix(backup_path.read_bytes()) != source_checksum:

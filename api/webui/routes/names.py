@@ -10,7 +10,6 @@ import csv
 import json
 import os
 import shutil
-from datetime import datetime
 
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
@@ -169,7 +168,6 @@ def backup_vault():
         return JSONResponse({"ok": False, "error": "No vault file found."})
     backup_dir = os.path.join(os.path.dirname(vault_path), "backups")
     os.makedirs(backup_dir, exist_ok=True)
-    date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    backup_path = os.path.join(backup_dir, f"vault-{date_str}.json")
+    backup_path = os.path.join(backup_dir, f"vault-{workspace.run_stamp()}.json")
     shutil.copy2(vault_path, backup_path)
     return JSONResponse({"ok": True, "path": backup_path, "entries": len(vault)})

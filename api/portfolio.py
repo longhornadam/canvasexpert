@@ -10,7 +10,6 @@ PII: portfolio documents are real student work — callers must write them only 
 synced student-reports root / gitignored output, never into the repo.
 """
 import os
-import re
 from datetime import datetime
 
 from docx import Document
@@ -18,15 +17,14 @@ from docx.shared import Inches
 
 from api.nq_report import constructed_responses, html_to_text
 from api.webui import workspace
+from engine.utils.text_utils import safe_filename_component
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
 
 def _safe(name: str, max_len: int = 80) -> str:
-    """Filesystem-safe stem (local copy so this module stays import-light)."""
-    cleaned = re.sub(r'[^\w\- ]+', "", (name or "").strip())
-    cleaned = re.sub(r'\s+', " ", cleaned)
-    return (cleaned[:max_len] or "student").strip()
+    """Filesystem-safe stem (imports the shared sanitizer, not a heavy module)."""
+    return safe_filename_component(name, max_len=max_len, fallback="student")
 
 
 def render_student_docx(student: dict, dest: str, quiz_title: str = "New Quiz") -> str:
