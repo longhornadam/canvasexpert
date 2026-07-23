@@ -11,7 +11,7 @@ Every agent reads this file. An implementation executor then reads:
 1. the single direct brief in `docs/handoffs/`;
 2. only the files and exact document sections named by that brief.
 
-Do not preload archived handoffs, every module map, `TOOLS.md`, or a whole architecture
+Do not preload archived handoffs, every module map, `tools/TOOLS.md`, or a whole architecture
 vision. A handoff that cites a long document must name the required numbered sections.
 Historical handoffs are never implementation authority.
 
@@ -196,7 +196,7 @@ console errors.
 
 ## Tool routing
 
-Tool discovery is conditional, not mandatory reading. Consult `TOOLS.md` and only the
+Tool discovery is conditional, not mandatory reading. Consult `tools/TOOLS.md` and only the
 relevant manifest before brute-force inspection of a large/repetitive document, log, diff,
 HTML/API response, or unfamiliar repository area. Skip it when the active brief already
 names a small set of files and symbols. A `planned` tool is unavailable and must not block

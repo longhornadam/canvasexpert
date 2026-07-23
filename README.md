@@ -19,7 +19,7 @@ Step 3 - Double-click `Open Canvas Expert.bat`. First run sets itself up automat
 
 ## Learn more
 
-Want more detail? Give `LEARN_CANVASEXPERT.md` to a chatbot and ask it anything.
+Want more detail? Give `docs/LEARN_CANVASEXPERT.md` to a chatbot and ask it anything.
 
 For developers: see `AGENTS.md` and `docs/README.md`.
 
