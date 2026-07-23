@@ -17,12 +17,12 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
     for label in ("one", "two"):
         root = tmp_path / label
         (root / "Library" / "Rubrics").mkdir(parents=True)
-        (root / "Library" / "AI-TA").mkdir(parents=True)
+        (root / "Library" / "AI Authoring").mkdir(parents=True)
         (root / "Library" / "Rubrics" / f"{label}-rubric.txt").write_text(
             f"{label} rubric marker\n", encoding="utf-8"
         )
-        (root / "Library" / "AI-TA" / f"{label}-ai-ta.txt").write_text(
-            f"{label} AI-TA marker\n", encoding="utf-8"
+        (root / "Library" / "AI Authoring" / f"{label}-ai-authoring.txt").write_text(
+            f"{label} AI Authoring marker\n", encoding="utf-8"
         )
 
     monkeypatch.setattr(
@@ -54,8 +54,8 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
         lambda data: f"rubric marker: {data['title']}",
     )
     built = ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
-    assert (tmp_path / "two" / "Library" / "AI-TA" / "Score with - Workspace Two Marker.txt").exists()
-    assert not (tmp_path / "one" / "Library" / "AI-TA" / "Score with - Workspace Two Marker.txt").exists()
+    assert (tmp_path / "two" / "Library" / "AI Authoring" / "Score with - Workspace Two Marker.txt").exists()
+    assert not (tmp_path / "one" / "Library" / "AI Authoring" / "Score with - Workspace Two Marker.txt").exists()
     assert all(Path(path).is_relative_to(tmp_path / "two") for path in built)
 
     rebuilt = json.loads(library.api_ai_ta_rebuild().body)

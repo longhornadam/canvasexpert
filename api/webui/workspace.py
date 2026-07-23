@@ -32,9 +32,11 @@ WORKSPACE_NAME = "CanvasExpert"
 # Charts" is a locked name reserved for a future feature and is deliberately
 # absent here -- do not create it until that feature ships.
 LIBRARY_NAME = "Library"
+AI_AUTHORING_SUBFOLDER = "AI Authoring"
+LEGACY_AI_TA_SUBFOLDER = "AI-TA"
 LIBRARY_SUBFOLDERS = [
-    "AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Calendars",
-    "Source Materials",
+    AI_AUTHORING_SUBFOLDER, "Rubrics", "Quizzes", "Assignments", "Pages",
+    "Calendars", "Source Materials",
 ]
 
 # Assistant-staged drafts waiting for the teacher to push to Canvas.
@@ -689,6 +691,31 @@ def _seed_folder_if_missing(source_dir, target_dir):
             shutil.copy2(source, target)
 
 
+def _migrate_ai_ta_library(root):
+    """One-time, non-destructive folder rename: ``Library/AI-TA`` -> ``Library/AI
+    Authoring``. Copies any file the teacher already has into the new folder
+    (skip-if-exists, so it must run *before* the new folder is seeded from
+    ``default_docs`` -- otherwise a fresh default would win over the teacher's
+    edit). Never deletes or modifies anything in the old folder; only adds a
+    retirement notice there once."""
+    old_dir = os.path.join(root, LIBRARY_NAME, LEGACY_AI_TA_SUBFOLDER)
+    if not os.path.isdir(old_dir):
+        return
+    new_dir = os.path.join(root, LIBRARY_NAME, AI_AUTHORING_SUBFOLDER)
+    os.makedirs(new_dir, exist_ok=True)
+    _seed_folder_if_missing(old_dir, new_dir)
+    notice_path = os.path.join(old_dir, "_RETIRED - moved to AI Authoring.txt")
+    if not os.path.exists(notice_path):
+        with open(notice_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(
+                "This folder has moved.\n\n"
+                "Canvas Expert now uses Library/AI Authoring for these files.\n"
+                "Everything that was in this AI-TA folder has been copied there\n"
+                "(nothing here was changed or deleted). Keep using this folder if\n"
+                "you like, or remove it once you've checked the new one.\n"
+            )
+
+
 def _seed_workspace_readme(root):
     path = os.path.join(root, "README (workspace privacy).txt")
     if os.path.exists(path):
@@ -705,7 +732,7 @@ def _seed_workspace_readme(root):
             "Review every file before sharing; pseudonyms do not guarantee anonymity and\n"
             "visible content may still identify a student.\n\n"
             "Library/ holds the reusable material you author or keep (quizzes, rubrics,\n"
-            "assignments, pages, calendars, source materials, AI-TA instructions).\n\n"
+            "assignments, pages, calendars, source materials, AI Authoring instructions).\n\n"
             "To Review/ holds assistant-staged drafts waiting for you to push to Canvas.\n\n"
             "Printables/ is for PDF/DOCX output to print or photocopy.\n"
             "Canvas Uploads/ holds QTI/.imscc import packages.\n\n"
@@ -722,6 +749,7 @@ def ensure_workspace():
     os.makedirs(root, exist_ok=True)
 
     os.makedirs(os.path.join(root, LIBRARY_NAME), exist_ok=True)
+    _migrate_ai_ta_library(root)
     for subfolder in LIBRARY_SUBFOLDERS:
         target_dir = os.path.join(root, LIBRARY_NAME, subfolder)
         os.makedirs(target_dir, exist_ok=True)

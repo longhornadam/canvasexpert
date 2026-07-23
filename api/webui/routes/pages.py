@@ -317,7 +317,7 @@ def settings_page(request: Request):
         "calendar_files": list_calendar_files(),
         "workspace_root": root,
         "workspace_files": [
-            {"name": "Library / AI-TA", "path": workspace.library_folder("AI-TA")},
+            {"name": "Library / AI Authoring", "path": workspace.library_folder("AI Authoring")},
             {"name": "Library / Rubrics", "path": workspace.library_folder("Rubrics")},
             {"name": "Library / Quizzes", "path": workspace.library_folder("Quizzes")},
             {"name": "Library / Assignments", "path": workspace.library_folder("Assignments")},

@@ -115,8 +115,8 @@ Expert loads that bundle first, then the shared push cards, then the page-specif
 
 ## Guardrails
 
-Do not change `LLM_Modules/*_Base.md` or Forge authoring contracts as part of UI
-or routing work. Preserve DOM ids, `_push_common_scripts.html` load order, and
+Do not change `api/default_docs/AI Authoring/Author a *.txt` or Forge authoring contracts
+as part of UI or routing work. Preserve DOM ids, `_push_common_scripts.html` load order, and
 legacy globals (`window.CE_PUSH`, `localToISO`, `pushContent`, `targetCourses`,
 `initFileSource`, `copySkill`) unless all legacy pages and feature scripts are
 updated in the same change.

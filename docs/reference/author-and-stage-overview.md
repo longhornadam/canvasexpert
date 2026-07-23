@@ -42,8 +42,8 @@ The audit that preceded this doc found most of the machinery is already here:
   items:[{id, type, title, position, content_id}]}`. Readable with no Canvas call via
   `read_service.catalog_modules` and the `/api/course-catalog` route; `/api/modules`
   prefers local and falls back to live only when stale.
-- **Contracts**: the Forge authoring contracts live in `LLM_Modules/*_Base.md`, with
-  teacher/agent instructions in the Library/AI-TA folder.
+- **Contracts**: the Forge authoring contracts live in `api/default_docs/AI Authoring/`,
+  which is also seeded as teacher/agent instructions into the Library/AI Authoring folder.
 
 So the push half, the validators, the review UI, and module storage are all built. The
 gap is that an assistant cannot see modules or contracts through a supported channel, and
@@ -81,8 +81,8 @@ there is no clean place for it to drop a draft.
    apply), so the tool reports freshness and leaves refresh to the teacher's existing
    on-demand catalog refresh, the same indirection principle as `refresh_mirror`.
 5. `get_authoring_contract(kind)` serves the canonical Forge contract from one source
-   (`LLM_Modules`), so the contract lives in exactly one place and the always-on
-   instruction points to it rather than restating it.
+   (`api/default_docs/AI Authoring/`), so the contract lives in exactly one place and the
+   always-on instruction points to it rather than restating it.
 6. Draft files carry no real Canvas identifiers. Anything student-specific stays in
    pseudonym space in the file; the teacher's push flow resolves real targets. This keeps
    the vault boundary intact even though the draft is a plain file on disk.
@@ -108,7 +108,8 @@ needs no slice; it already exists.
   frozen v1-v4 kept. Smallest, fully independent, and directly answers the original "see
   modules via MCP" ask.
 - **Slice B — `get_authoring_contract` MCP tool.** Serve the Forge contract for a kind from
-  `LLM_Modules` so any assistant can author a valid envelope unattended. Independent of A.
+  `api/default_docs/AI Authoring/` so any assistant can author a valid envelope unattended.
+  Independent of A.
 - **Slice C — per-kind To Review drop folders.** Extend `content_folders` and the `deps.py`
   glob to include a workspace To Review per kind. Pickup ignores half-synced drops via the
   done-marker convention. This is the CE-side plumbing that makes a dropped file discoverable.
@@ -121,7 +122,7 @@ needs no slice; it already exists.
   the loop.
 - **Slice F — orientation docs.** MCP instruction block gains a short capability line
   pointing at `get_authoring_contract`; START HERE and LEARN_CANVASEXPERT gain the
-  author-and-stage loop; the AI-TA authoring instructions are reframed from "paste into the
+  author-and-stage loop; the AI Authoring instructions are reframed from "paste into the
   web UI" to "author, then drop into To Review," vendor-neutral throughout.
 - **Slice G (optional) — converge push preview onto the ledger planner.** Retire the legacy
   `qf_pusher` CLI dry-run path so the preview and the apply come from the same code. This is

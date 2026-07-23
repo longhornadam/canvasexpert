@@ -503,6 +503,38 @@ def test_get_authoring_contract_missing_file_returns_structured_error(monkeypatc
     assert "quiz" in result["error"]
 
 
+def test_get_authoring_contract_matches_the_one_canonical_repo_file():
+    """Each kind has exactly one repository file under api/default_docs/AI
+    Authoring/; the MCP tool must return that file's bytes exactly (plus the
+    staging appendix), never a regenerated or forked copy."""
+    for kind, filename in tools._CONTRACT_FILES.items():
+        canonical_path = os.path.join(
+            tools.REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
+        with open(canonical_path, encoding="utf-8") as f:
+            canonical_text = f.read()
+        result = tools.get_authoring_contract(kind)
+        assert result["ok"] is True
+        assert result["contract"].startswith(canonical_text)
+
+
+def test_download_contract_route_returns_the_same_bytes_as_the_mcp_tool():
+    from api.webui.routes import library
+
+    kind_by_download_name = {
+        "QuizForge_Base": "quiz",
+        "AssignmentForge_Base": "assignment",
+        "PageForge_Base": "page",
+        "RubricForge_Base": "rubric",
+    }
+    for download_name, kind in kind_by_download_name.items():
+        response = library.api_download_contract(download_name)
+        with open(response.path, encoding="utf-8") as f:
+            downloaded_text = f.read()
+        mcp_result = tools.get_authoring_contract(kind)
+        assert mcp_result["ok"] is True
+        assert mcp_result["contract"].startswith(downloaded_text)
+
+
 # --- list_staged_content (no course_id, no student data -> no gates) -------
 
 def test_list_staged_content_one_kind_lists_label_only(monkeypatch):

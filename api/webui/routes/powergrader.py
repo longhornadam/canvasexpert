@@ -119,7 +119,7 @@ def powergrader_setup(request: Request):
             openrouter_model_presets=config.openrouter_model_presets(),
             has_workspace=bool(workspace.workspace_root()),
             rubrics_folder=workspace.library_folder("Rubrics"),
-            ai_ta_folder=workspace.library_folder("AI-TA"),
+            ai_ta_folder=workspace.library_folder("AI Authoring"),
             persona_folder=persona_dir,
             source_materials_folder=source_dir,
             source_material_files=source_materials.list_source_files(),

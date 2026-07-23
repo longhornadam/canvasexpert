@@ -6,7 +6,7 @@ Each MC/MA item with per-choice rationales is rendered as a 4-column table:
 
     Letter | Choice Text | ✓ / ✗ | Rationale
 
-Per-choice rationale contract: LLM_Modules/QuizForge_Base.md §11 (canonical).
+Per-choice rationale contract: api/default_docs/AI Authoring/Author a Quiz (QuizForge).txt §11 (canonical).
 
 Usage::
 

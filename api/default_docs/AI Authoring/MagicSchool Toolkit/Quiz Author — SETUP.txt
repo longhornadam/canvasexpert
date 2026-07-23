@@ -5,13 +5,14 @@ Suggested Tool Name: Quiz Author
 Suggested Tool Description: Helps a teacher author a Canvas-ready QuizForge JSON quiz from a description.
 
 Instructions (upload or paste):
-  File: Quiz Author — INSTRUCTIONS.txt
-  (Upload this file in the Instructions field, or paste its entire contents.)
+  File: ../Author a Quiz (QuizForge).txt
+  (One folder up, in the main AI Authoring folder. Upload this file in the
+  Instructions field, or paste its entire contents.)
 
 Knowledge file(s) to attach:
-  - Quiz Author — KNOWLEDGE QuizForge_example_quiz.txt
-  - Quiz Author — KNOWLEDGE QF_MOD_ELA_Question_Design.txt
-  (Attach these in the Knowledge section of the tool.)
+  - ../Reference/QuizForge_example_quiz.txt
+  - ../Reference/QF_MOD_ELA_Question_Design.md
+  (Paths are relative to this folder. Attach these in the Knowledge section of the tool.)
   Note: MagicSchool field limits are ~75,000 words — far above any of our files.
 
 Customize (suggested starting text):

@@ -450,20 +450,21 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
 
 
 _CONTRACT_FILES = {
-    "quiz": "QuizForge_Base.md",
-    "assignment": "AssignmentForge_Base.md",
-    "page": "PageForge_Base.md",
-    "rubric": "RubricForge_Base.md",
+    "quiz": "Author a Quiz (QuizForge).txt",
+    "assignment": "Author an Assignment (AssignmentForge).txt",
+    "page": "Author a Page (PageForge).txt",
+    "rubric": "Author a Rubric (RubricForge).txt",
 }
 
 
 def _staging_appendix(kind: str) -> str:
     """A short "how to stage this for the teacher" section appended to the
     contract an assistant pulls. Kept here rather than in the shared
-    ``LLM_Modules/*_Base.md`` files so the web UI's own download-contract stays
-    the pure envelope format, while an MCP assistant that authors a draft
-    learns where to drop it and how to mark it complete. The detailed steps
-    ride this response, so they cost context only when authoring."""
+    ``api/default_docs/AI Authoring/`` files so the web UI's own
+    download-contract stays the pure envelope format, while an MCP assistant
+    that authors a draft learns where to drop it and how to mark it complete.
+    The detailed steps ride this response, so they cost context only when
+    authoring."""
     folder = runtime_paths.inbox_folder(kind)
     where = str(folder) if folder else (
         f"the {kind.capitalize()} Inbox folder in the Canvas Expert workspace")
@@ -489,10 +490,10 @@ def _staging_appendix(kind: str) -> str:
 
 def get_authoring_contract(kind: str) -> dict:
     """The Forge authoring contract (envelope format) for one content kind,
-    served verbatim from ``LLM_Modules/{Kind}Forge_Base.md`` — the same
+    served verbatim from ``api/default_docs/AI Authoring/`` — the same
     on-disk source ``/api/download-contract`` reads. No course_id, no
     student data — no course gate, no vault, no safety gate. The contract is
-    a single markdown document, returned as a plain string, not tabulated."""
+    a single plain-text document, returned as a string, not tabulated."""
     filename = _CONTRACT_FILES.get(kind)
     if filename is None:
         return {
@@ -501,7 +502,7 @@ def get_authoring_contract(kind: str) -> dict:
                       f"{', '.join(_CONTRACT_FILES)}"),
         }
 
-    path = os.path.join(REPO_ROOT, "LLM_Modules", filename)
+    path = os.path.join(REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
     try:
         with open(path, encoding="utf-8") as handle:
             contract_text = handle.read()

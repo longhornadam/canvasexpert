@@ -86,7 +86,7 @@ async def _lifespan(app):
     try:
         ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
     except Exception as e:
-        print(f"AI-TA library build failed: {e}")
+        print(f"AI Authoring library build failed: {e}")
     try:
         # Reconcile any operation-ledger targets left claimed/sent_unknown by a
         # crash mid-write, before the routines heartbeat can claim the same

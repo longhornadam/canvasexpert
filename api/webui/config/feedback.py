@@ -1,4 +1,4 @@
-"""Feedback tools configuration — AI-TA persona library and feedback patterns (synced).
+"""Feedback tools configuration — AI Authoring persona library and feedback patterns (synced).
 
 Uses lazy module-reference so monkeypatches to config._io propagate correctly.
 """
@@ -40,7 +40,7 @@ FEEDBACK_PATTERNS_DEFAULT = [
 
 
 def _persona_folder() -> str | None:
-    ai_ta_dir = workspace.library_folder("AI-TA")
+    ai_ta_dir = workspace.library_folder("AI Authoring")
     if not ai_ta_dir:
         return None
     return os.path.join(ai_ta_dir, "Personas")

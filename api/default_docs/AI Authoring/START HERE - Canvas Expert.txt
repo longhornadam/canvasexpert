@@ -57,8 +57,8 @@ Each Forge has its own authoring contract (the exact file format). You never
 need to learn the format yourself — the authoring skill files teach it to
 your AI assistant.
 
-## The AI-TA Library (this folder)
-The folder this file lives in is a library of paste-ready "skills" — single
+## The AI Authoring folder (this folder)
+The folder this file lives in is a collection of paste-ready "skills" — single
 files you paste whole into MagicSchool, Copilot, or any AI chat:
 
 - **START HERE** (this file): the overview.

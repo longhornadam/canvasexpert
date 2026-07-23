@@ -27,12 +27,12 @@ administrator access.
 
 | Contract | File | Role |
 |---|---|---|
-| **QuizForge** | `../LLM_Modules/QuizForge_Base.md` (v3.0-json) | Quiz authoring: 12 question types, rationales, tiers |
-| **AssignmentForge** | `../LLM_Modules/AssignmentForge_Base.md` (v1.0-json) | Assignment authoring: submissions, scaffolding tiers |
-| **PageForge** | `../LLM_Modules/PageForge_Base.md` (v1.0-json) | Page authoring: unit hubs, placeholders |
-| **RubricForge** | `../LLM_Modules/RubricForge_Base.md` (v1.0-json) | Rubric authoring: criteria, explainer page, scoring prompt |
+| **QuizForge** | `default_docs/AI Authoring/Author a Quiz (QuizForge).txt` (v3.0-json) | Quiz authoring: 12 question types, rationales, tiers |
+| **AssignmentForge** | `default_docs/AI Authoring/Author an Assignment (AssignmentForge).txt` (v1.0-json) | Assignment authoring: submissions, scaffolding tiers |
+| **PageForge** | `default_docs/AI Authoring/Author a Page (PageForge).txt` (v1.0-json) | Page authoring: unit hubs, placeholders |
+| **RubricForge** | `default_docs/AI Authoring/Author a Rubric (RubricForge).txt` (v1.0-json) | Rubric authoring: criteria, explainer page, scoring prompt |
 
-Each contract is canonical in `../LLM_Modules/` — this backend consumes, never forks.
+Each contract is canonical in `default_docs/AI Authoring/` — this backend consumes, never forks.
 Token security: the repo is **private**; a `pre-commit` hook blocks the token pattern;
 Netlify publishes only `web/`, so nothing here is served. Keep the token only in
 `api/.env` (CLI) or OS credential store (Web UI, via `keyring`).
@@ -81,7 +81,7 @@ lives in `api/webui/config.json` (gitignored).
 ## Workspace & multi-PC
 
 When OneDrive is available, teacher-authored content lives in
-`OneDrive\CanvasExpert\` with `Library\AI-TA\`, `Library\Rubrics\`,
+`OneDrive\CanvasExpert\` with `Library\AI Authoring\`, `Library\Rubrics\`,
 `Library\Quizzes\`, `Library\Assignments\`, `Library\Pages\`, `Printables\`,
 `Canvas Uploads\`, and synced `settings.json`. Human-facing student work is
 canonical under `Student Work\Submissions\<Course>\Assignments\<Assignment>\`;
@@ -159,7 +159,7 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `../engine/rendering/physical/` | Local printable DOCX/PDF render stack (Edge via Playwright for PDF, Pandoc for DOCX) |
 | `powergrader/` | PowerGrader backend helpers: Canvas fetch, privacy artifacts, Safe AI Packet ZIP, Copilot batch folders, import validation, session mutations, start-workflow assembly, autoscore claim/queue helpers, auto-push policy helpers |
 | `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, split feature scripts, subprocess/SSE runner |
-| `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `../LLM_Modules/QuizForge_Base.md`) |
+| `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `default_docs/AI Authoring/Author a Quiz (QuizForge).txt`) |
 
 ## Setup
 

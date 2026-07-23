@@ -15,7 +15,7 @@ changes again.
 - Feature files: `api/webui/static/settings/*.js`
 - Settings route owner: `api/webui/routes/settings.py`
 - Calendar routes: `api/webui/routes/calendar.py`
-- AI-TA file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
+- AI Authoring file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
 - Persistence facade: `api/webui/config/__init__.py`
 - Persistence modules: `api/webui/config/*.py`
 
@@ -31,7 +31,7 @@ reports; this map intentionally does not maintain line-count snapshots.
 - Canvas base/token reveal, save, and connection test flow
 - OpenRouter key/model save, test, and current-model price loading
 - Canvas course browser plus Current/Previous and removal actions
-- download root, workspace folder open, and AI-TA folder/rebuild actions
+- download root, workspace folder open, and AI Authoring folder/rebuild actions
 - academic calendar list, built-in load/remove, custom CSV parse, preview, save,
   and copy-LLM-prompt behavior
 
@@ -41,7 +41,7 @@ Current split:
 - `settings/account.js` - Canvas token/base URL and connection testing
 - `settings/openrouter.js` - OpenRouter key/model/model-list UX
 - `settings/courses.js` - Canvas course browser and Current/Previous actions
-- `settings/workspace.js` - download root, workspace, AI-TA file actions
+- `settings/workspace.js` - download root, workspace, AI Authoring file actions
 - `settings/calendars.js` - calendar list/load/parse/save/copy prompt
 
 ## Backend Routing
@@ -69,7 +69,7 @@ unless there is a strong reason.
   `config/courses.py`
 - calendar parse/load problems: `settings/calendars.js`, `settings.js`, `routes/calendar.py`,
   `config/calendars.py`
-- workspace/AI-TA folder issues: `settings.html`, `settings/workspace.js`, `settings.js`,
+- workspace/AI Authoring folder issues: `settings.html`, `settings/workspace.js`, `settings.js`,
   `api/webui/workspace.py`, `api/webui/ai_ta.py`
 
 ## Guardrails

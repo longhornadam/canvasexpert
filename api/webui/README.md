@@ -510,7 +510,7 @@ external chat tool.
 ## AI Helper Files (`/ai-expert`)
 
 Equips the teacher's LLM (MagicSchool, Copilot, …) with paste-ready plain-text
-skill files, served from the Library/AI-TA folder (`/api/ai-ta/file?name=…`):
+skill files, served from the Library/AI Authoring folder (`/api/ai-ta/file?name=…`):
 
 - **Start here** — orients any LLM to Canvas Expert.
 - **Authoring skills** — Author a Quiz / Assignment / Page / Rubric (the Forge

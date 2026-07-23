@@ -47,7 +47,7 @@ def test_ensure_workspace_creates_and_seeds_rubrics(tmp_path, monkeypatch):
     resolved = workspace.ensure_workspace()
     assert resolved == str(root)
 
-    for folder in ["AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Calendars", "Source Materials"]:
+    for folder in ["AI Authoring", "Rubrics", "Quizzes", "Assignments", "Pages", "Calendars", "Source Materials"]:
         assert (root / "Library" / folder).is_dir()
     for folder in ["Printables", "Canvas Uploads", "To Review", "Student Work", "For AI", "_System"]:
         assert (root / folder).is_dir()
@@ -58,6 +58,64 @@ def test_ensure_workspace_creates_and_seeds_rubrics(tmp_path, monkeypatch):
     (source_rubrics / "Later_Default_Rubric.txt").write_text("later default", encoding="utf-8")
     workspace.ensure_workspace()
     assert (root / "Library" / "Rubrics" / "Later_Default_Rubric.txt").read_text(encoding="utf-8") == "later default"
+
+
+def test_ensure_workspace_migrates_ai_ta_into_ai_authoring_without_overwriting(tmp_path, monkeypatch):
+    onedrive = tmp_path / "OneDrive"
+    root = onedrive / "CanvasExpert"
+    source_api = tmp_path / "api"
+    source_ai_authoring = source_api / "default_docs" / "AI Authoring"
+    source_ai_authoring.mkdir(parents=True)
+    (source_ai_authoring / "START HERE - Canvas Expert.txt").write_text("default start here", encoding="utf-8")
+
+    monkeypatch.setenv("OneDrive", str(onedrive))
+    monkeypatch.delenv("OneDriveCommercial", raising=False)
+    monkeypatch.setattr(workspace, "API_DIR", str(source_api))
+    monkeypatch.setattr(workspace, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(workspace, "DEFAULT_DOCS_DIR", str(source_api / "default_docs"))
+
+    # A teacher who already has the old Library/AI-TA folder, with an edited
+    # default file and a file of their own the app never shipped.
+    old_dir = root / "Library" / "AI-TA"
+    old_dir.mkdir(parents=True)
+    (old_dir / "START HERE - Canvas Expert.txt").write_text("teacher's edited start here", encoding="utf-8")
+    (old_dir / "My Custom Prompt.txt").write_text("custom teacher content", encoding="utf-8")
+
+    workspace.ensure_workspace()
+
+    new_dir = root / "Library" / "AI Authoring"
+    assert new_dir.is_dir()
+    # The teacher's edit wins over the fresh default, and their own file moved too.
+    assert (new_dir / "START HERE - Canvas Expert.txt").read_text(encoding="utf-8") == "teacher's edited start here"
+    assert (new_dir / "My Custom Prompt.txt").read_text(encoding="utf-8") == "custom teacher content"
+
+    # The old folder is left exactly as it was, plus a retirement notice.
+    assert (old_dir / "START HERE - Canvas Expert.txt").read_text(encoding="utf-8") == "teacher's edited start here"
+    assert (old_dir / "My Custom Prompt.txt").read_text(encoding="utf-8") == "custom teacher content"
+    assert (old_dir / "_RETIRED - moved to AI Authoring.txt").is_file()
+
+    # Idempotent: a second run changes nothing and does not error.
+    workspace.ensure_workspace()
+    assert (new_dir / "START HERE - Canvas Expert.txt").read_text(encoding="utf-8") == "teacher's edited start here"
+    assert (old_dir / "My Custom Prompt.txt").read_text(encoding="utf-8") == "custom teacher content"
+
+
+def test_ensure_workspace_fresh_install_has_no_legacy_ai_ta_folder(tmp_path, monkeypatch):
+    onedrive = tmp_path / "OneDrive"
+    root = onedrive / "CanvasExpert"
+    source_api = tmp_path / "api"
+    (source_api / "default_docs" / "AI Authoring").mkdir(parents=True)
+
+    monkeypatch.setenv("OneDrive", str(onedrive))
+    monkeypatch.delenv("OneDriveCommercial", raising=False)
+    monkeypatch.setattr(workspace, "API_DIR", str(source_api))
+    monkeypatch.setattr(workspace, "CONFIG_PATH", str(tmp_path / "config.json"))
+    monkeypatch.setattr(workspace, "DEFAULT_DOCS_DIR", str(source_api / "default_docs"))
+
+    workspace.ensure_workspace()
+
+    assert (root / "Library" / "AI Authoring").is_dir()
+    assert not (root / "Library" / "AI-TA").exists()
 
 
 def test_config_split_writes_workspace_settings_when_available(tmp_path, monkeypatch):
@@ -118,7 +176,7 @@ def test_personas_seed_once_then_follow_folder_changes(tmp_path, monkeypatch):
     monkeypatch.setattr(config._io, "_synced_state", lambda: {})
 
     first = config.list_personas()
-    persona_dir = root / "AI-TA" / "Personas"
+    persona_dir = root / "AI Authoring" / "Personas"
     assert any(p["id"] == "sage" for p in first)
     assert (persona_dir / "Sage.json").exists()
 

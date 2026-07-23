@@ -131,7 +131,7 @@ def inbox_folder(kind: str) -> Path | None:
 
 
 def ai_ta_dir() -> Path:
-    return library_folder("AI-TA") or (app_root() / "AI-TA")
+    return library_folder("AI Authoring") or (app_root() / "AI Authoring")
 
 
 def rubric_folders() -> list[Path]:

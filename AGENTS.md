@@ -21,8 +21,8 @@ Historical handoffs are never implementation authority.
   handles private student data, and may perform Canvas writes.
 - `engine/` is the offline parse/validate/render/package library. It has no token, network,
   or student data.
-- `LLM_Modules/*_Base.md` are the canonical authoring contracts. Do not change their
-  meaning in backend code. Read `api/README.md` before changing Canvas push behavior.
+- `api/default_docs/AI Authoring/Author a *.txt` are the canonical authoring contracts. Do not
+  change their meaning in backend code. Read `api/README.md` before changing Canvas push behavior.
 
 ## Branch policy
 

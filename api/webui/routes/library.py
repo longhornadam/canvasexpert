@@ -135,15 +135,25 @@ def api_ai_ta_rebuild():
     return JSONResponse({"ok": True, "files": [os.path.basename(p) for p in files]})
 
 
+_CONTRACT_FILE_MAP = {
+    "AssignmentForge_Base": "Author an Assignment (AssignmentForge).txt",
+    "PageForge_Base": "Author a Page (PageForge).txt",
+    "QuizForge_Base": "Author a Quiz (QuizForge).txt",
+    "RubricForge_Base": "Author a Rubric (RubricForge).txt",
+}
+
+
 @router.get("/api/download-contract")
 def api_download_contract(name: str):
-    """Download a Forge contract file (e.g. AssignmentForge_Base, PageForge_Base)."""
-    valid_names = {"AssignmentForge_Base", "PageForge_Base", "QuizForge_Base",
-                   "RubricForge_Base"}
-    if name not in valid_names:
+    """Download a Forge contract file (e.g. AssignmentForge_Base, PageForge_Base).
+
+    ``name`` is a stable identifier kept for URL compatibility; it maps to the
+    one canonical file under ``api/default_docs/AI Authoring/`` that get_authoring_contract
+    (the MCP tool) also reads, so both readers return the same bytes."""
+    filename = _CONTRACT_FILE_MAP.get(name)
+    if filename is None:
         return JSONResponse({"error": "unknown contract"}, status_code=400)
-    path = os.path.join(REPO_ROOT, "LLM_Modules", f"{name}.md")
+    path = os.path.join(REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
     if not os.path.isfile(path):
         return JSONResponse({"error": "file not found"}, status_code=404)
-    return FileResponse(path, media_type="text/markdown",
-                        filename=f"{name}.md")
+    return FileResponse(path, media_type="text/plain", filename=filename)

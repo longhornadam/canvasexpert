@@ -1,6 +1,7 @@
 """Unit tests specifically for meta-answer detection in length bias validation.
 
-Tests the standardized meta-answer system defined in LLM_Modules/QuizForge_Base.md Section 10.
+Tests the standardized meta-answer system defined in Section 10 of the QuizForge contract
+embedded in api/default_docs/AI Authoring/Author a Quiz (QuizForge).txt.
 Only exact phrasings are recognized; variations are intentionally rejected to enforce
 consistency across all quizzes.
 """

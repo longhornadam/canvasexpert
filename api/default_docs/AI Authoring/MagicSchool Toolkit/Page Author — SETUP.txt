@@ -5,8 +5,9 @@ Suggested Tool Name: Page Author
 Suggested Tool Description: Helps a teacher author a Canvas-ready PageForge JSON unit hub or resource page.
 
 Instructions (upload or paste):
-  File: Page Author — INSTRUCTIONS.txt
-  (Upload this file in the Instructions field, or paste its entire contents.)
+  File: ../Author a Page (PageForge).txt
+  (One folder up, in the main AI Authoring folder. Upload this file in the
+  Instructions field, or paste its entire contents.)
 
 Knowledge: none — the contract is embedded in the Instructions file.
 
