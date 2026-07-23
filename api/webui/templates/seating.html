@@ -25,7 +25,9 @@
   </section>
 
   <div id="seating-workspace" hidden>
-    <section class="seating-card" aria-labelledby="seating-layouts-title">
+    <div class="seating-workspace-layout">
+      <aside class="seating-sidebar" aria-label="Seating setup controls">
+        <section class="seating-card" aria-labelledby="seating-layouts-title">
       <div class="seating-heading">
         <div>
           <h2 id="seating-layouts-title">Layouts</h2>
@@ -68,9 +70,9 @@
           <div id="seating-near-teacher-seats" class="seating-near-teacher-seats"></div>
         </div>
       </div>
-    </section>
+        </section>
 
-    <section class="seating-card" aria-labelledby="seating-modes-title">
+        <section class="seating-card" aria-labelledby="seating-modes-title">
       <div class="seating-heading">
         <div>
           <h2 id="seating-modes-title">Modes</h2>
@@ -118,9 +120,11 @@
           <button type="button" id="seating-delete-mode" class="small">Delete mode</button>
         </div>
       </div>
-    </section>
+        </section>
+      </aside>
 
-    <section id="seating-chart-card" class="seating-card" hidden aria-labelledby="seating-chart-title">
+      <main class="seating-chart-pane">
+        <section id="seating-chart-card" class="seating-card" hidden aria-labelledby="seating-chart-title">
       <div class="seating-heading">
         <div>
           <h2 id="seating-chart-title">Current chart</h2>
@@ -139,9 +143,9 @@
         <button type="button" id="seating-clear-seat" class="small">Clear seat</button>
       </div>
       <div id="seating-chart" class="seating-chart" aria-label="Manual seating chart"></div>
-    </section>
+        </section>
 
-    <section id="seating-proposal-card" class="seating-card" hidden aria-labelledby="seating-proposal-title">
+        <section id="seating-proposal-card" class="seating-card" hidden aria-labelledby="seating-proposal-title">
       <div class="seating-heading">
         <div>
           <h2 id="seating-proposal-title">Temporary proposal</h2>
@@ -195,7 +199,9 @@
       </div>
       <div id="seating-proposal-results" class="seating-proposal-results"></div>
       <div id="seating-proposal-chart" class="seating-chart seating-proposal-chart" aria-label="Temporary seating proposal"></div>
-    </section>
+        </section>
+      </main>
+    </div>
   </div>
 
   <section id="seating-print-chart" class="seating-print-chart" aria-hidden="true"></section>

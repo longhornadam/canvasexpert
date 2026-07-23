@@ -1,9 +1,11 @@
 .seating-shell { display: grid; gap: var(--ce-space-3); max-width: 1180px; }
+.seating-workspace-layout { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); align-items: start; gap: var(--ce-space-3); }
+.seating-sidebar, .seating-chart-pane { display: grid; gap: var(--ce-space-3); min-width: 0; }
 .seating-intro h1, .seating-heading h2 { margin: 0; }
 .seating-intro p, .seating-heading p { margin: var(--ce-space-1) 0 0; }
 .seating-course-bar, .seating-controls { display: flex; align-items: end; flex-wrap: wrap; gap: var(--ce-space-2); }
 .seating-course-bar, .seating-card { padding: var(--ce-space-3) var(--ce-space-4); border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); }
-.seating-card { margin-top: var(--ce-space-3); }
+.seating-card { margin: 0; }
 .seating-heading { display: flex; justify-content: space-between; gap: var(--ce-space-3); }
 .seating-controls { margin-top: var(--ce-space-3); }
 .seating-controls label { display: grid; gap: var(--ce-space-1); color: var(--ce-ink-muted); font-size: 12px; font-weight: 600; }
@@ -41,6 +43,15 @@
 .seating-pasted-proposal textarea { resize: vertical; }
 .seating-print-chart { display: none; }
 
+@media (min-width: 721px) {
+  .seating-sidebar .seating-heading { align-items: start; flex-direction: column; }
+  .seating-sidebar .seating-controls { align-items: stretch; flex-direction: column; }
+  .seating-sidebar .seating-controls label,
+  .seating-sidebar .seating-controls input,
+  .seating-sidebar .seating-controls select { width: 100%; min-width: 0; }
+  .seating-sidebar .seating-controls button { align-self: start; }
+}
+
 @media print {
   body * { visibility: hidden !important; }
   #seating-print-chart, #seating-print-chart * { visibility: visible !important; }
@@ -50,6 +61,10 @@
   .seating-print-seat { min-height: 58px; padding: 8px; border: 1px solid #000; break-inside: avoid; }
   .seating-print-label { display: block; font-size: 11px; }
   .seating-print-name { display: block; margin-top: 5px; font-size: 14px; }
+}
+
+@media (max-width: 900px) {
+  .seating-workspace-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
