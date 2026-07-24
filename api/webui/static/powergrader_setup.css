@@ -25,8 +25,6 @@
   margin: 0 0 4px;
 }
 
-.pg-setup-header .hint { margin-top: 0; }
-
 .pg-setup-header { margin-bottom: 24px; }
 
 .pg-step-title {
@@ -45,11 +43,56 @@
   margin-top: 16px;
 }
 
-/* ── Section 1: Choose work ────────────────────────────────────────── */
-.pg-work-grid {
-  display: grid;
-  gap: 20px;
+/* ── Rail: course/assignment/session summary ───────────────────────── */
+.pg-rail { display: flex; flex-direction: column; gap: 14px; }
+
+.pg-rail-kicker {
+  margin: 0; color: var(--ce-ink-muted); font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
 }
+
+.pg-rail-rule { border: 0; border-top: 1px solid var(--ce-rule); margin: 0; }
+
+.pg-rail-sessions { display: flex; flex-direction: column; gap: 6px; }
+
+.pg-rail-sess-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 9px; border: 1px solid var(--ce-rule); background: var(--ce-surface-raised);
+  text-decoration: none; color: var(--ce-ink);
+}
+
+.pg-rail-sess-row:hover { border-color: var(--ce-accent-canvas); }
+
+.pg-rail-sess-row.is-attention { border-left: 3px solid var(--ce-attention); }
+
+.pg-rail-sess-label { font-size: 12.5px; font-weight: 600; }
+
+.pg-rail-sess-count {
+  font-size: 12px; font-weight: 700; min-width: 20px; text-align: center;
+  padding: 1px 7px; background: var(--ce-surface-soft); color: var(--ce-ink);
+}
+
+.pg-rail-sess-row.is-attention .pg-rail-sess-count { background: var(--ce-attention-soft); color: var(--ce-attention); }
+
+.pg-rail-view-all {
+  align-self: flex-start; font-size: 12.5px; font-weight: 600;
+  color: var(--ce-accent-canvas); text-decoration: none;
+}
+
+.pg-rail-view-all:hover { text-decoration: underline; }
+
+/* Rail column is narrow at any viewport width, so assignment search/module
+   controls always stack instead of only stacking below the mobile breakpoint. */
+.pg-rail .pg-assignment-tools { flex-direction: column; align-items: stretch; }
+
+.pg-rail .pg-assignment-tools input[type="search"] { width: 100%; min-width: 0; flex: 0 0 auto; }
+
+.pg-rail .pg-assignment-group-control {
+  width: 100%; min-width: 0; max-width: none; flex: 0 0 auto;
+  display: grid; grid-template-columns: auto 1fr; gap: 6px;
+}
+
+.pg-rail .pg-assignment-group-control select { width: 100%; min-width: 0; }
 
 .pg-field {
   display: flex;
@@ -404,8 +447,8 @@
 
 /* ── Desktop layout (above 980px) ──────────────────────────────────── */
 @media (min-width: 981px) {
-  .pg-work-grid {
-    grid-template-columns: minmax(260px, .75fr) minmax(0, 1.45fr);
+  .pg-setup-body .ce-workspace--left-main .ce-workspace__grid {
+    grid-template-columns: 296px minmax(0, 1fr);
   }
 
   .pg-safety-body {
@@ -429,10 +472,6 @@
 
 /* ── Intermediate layout (max-width: 980px) ────────────────────────── */
 @media (max-width: 980px) {
-  .pg-work-grid {
-    grid-template-columns: 1fr;
-  }
-
   .pg-ai-grid {
     grid-template-columns: 1fr;
   }

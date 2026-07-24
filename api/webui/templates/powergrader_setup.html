@@ -1,19 +1,84 @@
 {% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail %}
 {% block title %}PowerGrader — Canvas Expert{% endblock %}
+{% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}pg-setup-body{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/powergrader_setup.css?v={{ asset_v }}">
 {% endblock %}
+
+{% block left_rail %}
+{% call rail('left', 'Choose work and sessions') %}
+  <div class="pg-rail">
+    <p class="pg-rail-kicker">Choose work</p>
+
+    <div class="pg-field pg-course-field">
+      <label for="pg-course">Course</label>
+      <select id="pg-course" name="course_id" required form="pg-start-form">
+        <option value="">— select a course —</option>
+        {% for c in saved_courses %}
+        <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="pg-course-catalog-actions">
+        <button type="button" class="small" id="pg-sync-course-list" disabled>Sync course list</button>
+        <small id="pg-course-catalog-status" class="lbl-hint" aria-live="polite"></small>
+      </div>
+    </div>
+
+    <hr class="pg-rail-rule">
+
+    <div class="pg-field pg-assignment-field">
+      <label for="pg-assignment">Assignment</label>
+      <div class="pg-assignment-tools" id="pg-assignment-tools" hidden>
+        <input type="search" id="pg-assignment-search" placeholder="Search assignments..." autocomplete="off"
+               aria-label="Search all assignments and quizzes">
+        <div class="pg-assignment-group-control">
+          <label for="pg-assignment-group-by">Modules</label>
+          <select id="pg-assignment-group-by">
+            <option value="last_three">Last 3 modules</option>
+          </select>
+        </div>
+      </div>
+      <select id="pg-assignment" name="assignment_id" required disabled form="pg-start-form">
+        <option value="">— select course first —</option>
+      </select>
+      <div class="ce-actions pg-assignment-evidence-actions ce-u-mt-2">
+        <span class="lbl-hint">Assignment evidence</span>
+        <button type="button" class="small" id="pg-refresh-assignment" disabled>Refresh from Canvas</button>
+        <button type="button" class="small" id="pg-open-assignment-folder" disabled>Open local folder</button>
+      </div>
+      <small id="pg-evidence-status" class="lbl-hint" aria-live="polite"></small>
+      <small id="pg-assignment-unsupported-hint" class="lbl-hint" hidden>
+        New Quizzes are reviewed from a local snapshot: teacher-approved feedback posts to Canvas as assignment comments, and item scores are entered in the Canvas grader. Classic Quizzes remain unsupported.
+      </small>
+    </div>
+
+    <hr class="pg-rail-rule">
+
+    <div class="pg-rail-sessions">
+      <p class="pg-rail-kicker">Sessions</p>
+      <a class="pg-rail-sess-row is-attention" href="#pg-attention">
+        <span class="pg-rail-sess-label">Ready to post</span>
+        <span class="pg-rail-sess-count" id="pg-rail-attention-count">0</span>
+      </a>
+      <a class="pg-rail-sess-row" href="#pg-continue">
+        <span class="pg-rail-sess-label">In progress</span>
+        <span class="pg-rail-sess-count" id="pg-rail-continue-count">0</span>
+      </a>
+      <a class="pg-rail-view-all" href="#pg-sessions-card">View all sessions →</a>
+    </div>
+  </div>
+{% endcall %}
+{% endblock %}
+
 {% block primary %}
 
-<div class="pg-workbench-content ce-drafting-grid">
+<div class="pg-workbench-content">
 
 <section class="ce-panel pg-setup-card">
   <div class="pg-setup-header">
     <h1>PowerGrader</h1>
-    <p class="hint">
-      Grade locally, prepare a pseudonymized packet for your AI chat, or draft-score with OpenRouter.
-    </p>
   </div>
 
   {% if not has_workspace %}
@@ -22,54 +87,9 @@
 
   <form id="pg-start-form" enctype="multipart/form-data">
 
-    <!-- ═══ Section 1: Choose work ═══ -->
-    <section class="pg-step pg-step-work" aria-labelledby="pg-step-work-title">
-      <h2 id="pg-step-work-title" class="pg-step-title">1. Choose work</h2>
-      <div class="pg-work-grid">
-        <div class="pg-field pg-course-field">
-          <label for="pg-course">Course</label>
-          <select id="pg-course" name="course_id" required>
-            <option value="">— select a course —</option>
-            {% for c in saved_courses %}
-            <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
-            {% endfor %}
-          </select>
-          <div class="pg-course-catalog-actions">
-            <button type="button" class="small" id="pg-sync-course-list" disabled>Sync course list</button>
-            <small id="pg-course-catalog-status" class="lbl-hint" aria-live="polite"></small>
-          </div>
-        </div>
-        <div class="pg-field pg-assignment-field">
-          <label for="pg-assignment">Assignment</label>
-          <div class="pg-assignment-tools" id="pg-assignment-tools" hidden>
-            <input type="search" id="pg-assignment-search" placeholder="Search assignments..." autocomplete="off"
-                   aria-label="Search all assignments and quizzes">
-            <div class="pg-assignment-group-control">
-              <label for="pg-assignment-group-by">Modules</label>
-              <select id="pg-assignment-group-by">
-                <option value="last_three">Last 3 modules</option>
-              </select>
-            </div>
-          </div>
-          <select id="pg-assignment" name="assignment_id" required disabled>
-            <option value="">— select course first —</option>
-          </select>
-          <div class="ce-actions pg-assignment-evidence-actions ce-u-mt-2">
-            <span class="lbl-hint">Assignment evidence</span>
-            <button type="button" class="small" id="pg-refresh-assignment" disabled>Refresh from Canvas</button>
-            <button type="button" class="small" id="pg-open-assignment-folder" disabled>Open local folder</button>
-          </div>
-          <small id="pg-evidence-status" class="lbl-hint" aria-live="polite"></small>
-          <small id="pg-assignment-unsupported-hint" class="lbl-hint" hidden>
-            New Quizzes are reviewed from a local snapshot: teacher-approved feedback posts to Canvas as assignment comments, and item scores are entered in the Canvas grader. Classic Quizzes remain unsupported.
-          </small>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══ Section 2: Choose how to grade ═══ -->
+    <!-- ═══ Section 1: Choose how to grade ═══ -->
     <section class="pg-step pg-step-route" aria-labelledby="pg-step-route-title">
-      <h2 id="pg-step-route-title" class="pg-step-title">2. Choose how to grade</h2>
+      <h2 id="pg-step-route-title" class="pg-step-title">1. Choose how to grade</h2>
       <div class="pg-route-box">
         <div class="pg-route-grid">
           <label class="pg-route-card is-selected">
@@ -97,10 +117,10 @@
       <input type="hidden" name="mode" id="pg-mode" value="fast">
     </section>
 
-    <!-- ═══ Section 3A: Grade-myself configuration ═══ -->
+    <!-- ═══ Section 2A: Grade-myself configuration ═══ -->
     <section id="pg-rubric-fast" class="pg-step pg-configuration pg-configuration-fast"
              aria-labelledby="pg-fast-title">
-      <h2 id="pg-fast-title" class="pg-step-title">3. Grading setup</h2>
+      <h2 id="pg-fast-title" class="pg-step-title">2. Grading setup</h2>
       <div class="pg-fast-row">
         <div class="pg-fast-field">
           <div class="pg-control-head">
@@ -119,10 +139,10 @@
       </div>
     </section>
 
-    <!-- ═══ Section 3B: AI configuration ═══ -->
+    <!-- ═══ Section 2B: AI configuration ═══ -->
     <section id="pg-ai-options" class="pg-step pg-configuration pg-configuration-ai"
              aria-labelledby="pg-ai-title" hidden>
-      <h2 id="pg-ai-title" class="pg-step-title">3. AI setup and source material</h2>
+      <h2 id="pg-ai-title" class="pg-step-title">2. AI setup and source material</h2>
       <div class="pg-ai-grid">
         <div class="pg-ai-settings">
           <h3 class="pg-panel-title">AI setup</h3>

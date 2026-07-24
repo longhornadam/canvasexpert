@@ -80,6 +80,8 @@
     setText('pg-continue-count', lanes.continue.length);
     setText('pg-completed-count', lanes.completed.length);
     setText('pg-completed-summary-count', lanes.completed.length);
+    setText('pg-rail-attention-count', lanes.attention.length);
+    setText('pg-rail-continue-count', lanes.continue.length);
     setText('pg-sessions-status', courseId
       ? filtered.length + (filtered.length === 1 ? ' local session in this course' : ' local sessions in this course')
       : filtered.length + (filtered.length === 1 ? ' local session' : ' local sessions'));
@@ -90,7 +92,7 @@
       var target = document.getElementById('pg-' + lane + '-list');
       if (target) target.innerHTML = '<p class="pg-session-empty pg-session-error">Sessions could not be loaded. Try refreshing this page.</p>';
     });
-    ['pg-attention-count', 'pg-continue-count', 'pg-completed-count', 'pg-completed-summary-count'].forEach(function(id){ setText(id, 0); });
+    ['pg-attention-count', 'pg-continue-count', 'pg-completed-count', 'pg-completed-summary-count', 'pg-rail-attention-count', 'pg-rail-continue-count'].forEach(function(id){ setText(id, 0); });
     setText('pg-sessions-status', 'Could not load sessions');
   }
 
