@@ -4,7 +4,10 @@
 # the highest-signal cases at commit time so they never reach history.
 # Activate in each clone with: git config core.hooksPath .githooks
 
-added=$(git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+')
+# Strip the diff's own leading "+" before scanning: kept, it reads as an email
+# local part, so any added line starting with "@" (a decorator, a CSS at-rule)
+# false-positives as PII. A real address still matches once the marker is gone.
+added=$(git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+' | sed 's/^+//')
 
 # 1) Canvas access token (pattern: NNNN~<40+ alnum>). Belongs only in api/.env.
 token=$(printf '%s\n' "$added" | grep -E '[0-9]{3,6}~[A-Za-z0-9]{40,}')
