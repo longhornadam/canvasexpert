@@ -1,6 +1,6 @@
-.ce-shell { width: 100%; min-width: 0; background: var(--ce-surface); color: var(--ce-ink); }
+.ce-shell { width: 100%; min-width: 0; color: var(--ce-ink); }
 .ce-panel { min-width: 0; padding: var(--ce-space-5); background: var(--ce-surface-raised); border: 1px solid var(--ce-rule); border-radius: var(--ce-radius); box-shadow: var(--ce-shadow-panel); }
-.ce-rail { min-width: 0; padding: 0 var(--ce-space-4); border-color: var(--ce-rule-strong); }
+.ce-rail { min-width: 0; padding: 0 var(--ce-space-4); background: var(--ce-surface); border-color: var(--ce-rule-strong); }
 .ce-page-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ce-space-4); margin-bottom: var(--ce-space-4); padding-bottom: var(--ce-space-2); border-bottom: 1px solid var(--ce-rule-strong); }
 .ce-page-header h1, .ce-page-header h2, .ce-page-header p { margin: 0; }
 .ce-page-header h1, .ce-page-header h2, .ce-display { font-family: var(--ce-font-display); letter-spacing: -.025em; }

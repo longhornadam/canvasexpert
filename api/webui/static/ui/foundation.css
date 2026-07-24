@@ -1,6 +1,19 @@
 *, *::before, *::after { box-sizing: border-box; }
-html { min-width: 0; overflow-x: hidden; background: var(--ce-surface); }
-body { min-width: 0; margin: 0; background: var(--ce-surface); color: var(--ce-ink); font-family: var(--ce-font-body); line-height: 1.45; }
+
+/* Instrument-panel grid: a faint drafting-table ruling behind every page,
+   fixed to the viewport so it reads as one continuous surface rather than
+   a texture that resets at each scrolling container's edge. */
+html, .ce-drafting-grid {
+  background-image:
+    linear-gradient(var(--ce-grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ce-grid-major) 1px, transparent 1px),
+    linear-gradient(var(--ce-grid-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ce-grid-minor) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+  background-attachment: fixed;
+}
+html { min-width: 0; overflow-x: hidden; background-color: var(--ce-surface); }
+body { min-width: 0; margin: 0; background: transparent; color: var(--ce-ink); font-family: var(--ce-font-body); line-height: 1.45; }
 button, input, select, textarea { color: inherit; font: inherit; }
 button, select, input, textarea { min-width: 0; }
 button { cursor: pointer; }

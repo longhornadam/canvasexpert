@@ -9,16 +9,38 @@
 {% call rail('left', 'Settings sections') %}
   <nav class="ce-settings-index" aria-label="Settings sections">
     <p class="ce-settings-index__title">Settings</p>
-    <div class="ce-settings-index__links">
-      <a href="#workspace-card">Canvas account</a>
-      <a href="#openrouter-card">AI assistance</a>
-      <a href="#tier-tags-card">Differentiation tags</a>
-      <a href="#workspace-settings-card">Workspace</a>
-      <a href="#mirror-card">Canvas data</a>
-      <a href="#current-courses-card">Courses</a>
-      <a href="#download-root-card">Downloads</a>
-      <a href="#ai-ta-card">AI Authoring</a>
-      <a href="#cal">Academic calendars</a>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">Canvas connection</p>
+      <div class="ce-settings-index__links">
+        <a href="#workspace-card" data-rail-link>Canvas account</a>
+        <a href="#mirror-card" data-rail-link>Canvas data</a>
+      </div>
+    </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">Courses</p>
+      <div class="ce-settings-index__links">
+        <a href="#current-courses-card" data-rail-link>Courses</a>
+      </div>
+    </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">AI &amp; authoring</p>
+      <div class="ce-settings-index__links">
+        <a href="#openrouter-card" data-rail-link>AI assistance</a>
+        <a href="#tier-tags-card" data-rail-link>Differentiation tags</a>
+        <a href="#ai-ta-card" data-rail-link>AI Authoring</a>
+      </div>
+    </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">Files &amp; calendars</p>
+      <div class="ce-settings-index__links">
+        <a href="#workspace-settings-card" data-rail-link>Workspace</a>
+        <a href="#download-root-card" data-rail-link>Downloads</a>
+        <a href="#cal" data-rail-link>Academic calendars</a>
+      </div>
     </div>
   </nav>
 {% endcall %}
@@ -481,6 +503,7 @@
 <script src="/static/settings/courses.js?v={{ asset_v }}"></script>
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
 <script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
+<script src="/static/settings/rail_nav.js?v={{ asset_v }}"></script>
 
 <script>
 (function () {
