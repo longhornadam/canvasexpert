@@ -218,3 +218,25 @@ def test_student_reports_redirect_is_preserved(monkeypatch):
         response = _client().get(url, follow_redirects=False)
         assert response.status_code == 307, url
         assert response.headers["location"] == "/roster?focus=reports", url
+
+
+def test_create_first_session_notice_is_present_only_without_current_courses(monkeypatch):
+    _configure_fictional(monkeypatch)
+    monkeypatch.setattr(pages.config, "active_courses", lambda: [])
+    empty_render = _client().get("/course-expert").text
+    assert empty_render.count('data-ce-hook="first-session-course-notice"') == 1
+    assert '/settings#add-courses-card' in empty_render
+    assert empty_render.index('data-ce-hook="first-session-course-notice"') < empty_render.index('class="ce-panel ce-forge-start"')
+    assert "Start in your assistant" in empty_render
+    assert 'data-ce-hook="course-tab"' in empty_render
+
+    _configure_fictional(monkeypatch)
+    configured_render = _client().get("/course-expert").text
+    assert 'data-ce-hook="first-session-course-notice"' not in configured_render
+
+
+def test_create_title_matches_its_navigation_and_page_title(monkeypatch):
+    _configure_fictional(monkeypatch)
+    text = _client().get("/course-expert").text
+    assert "<title>Create — Canvas Expert</title>" in text
+    assert ">Create<" in text

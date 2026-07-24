@@ -74,6 +74,7 @@
 .inbox-pending-status.err { color: var(--ce-danger); background: var(--ce-danger-soft); }
 .inbox-pending-problems { margin: 0; padding-left: var(--ce-space-4); color: var(--ce-danger); font-size: 12px; }
 .inbox-pending-list .err { color: var(--ce-danger); }
+.inbox-pending-degraded { margin: var(--ce-space-2) 0 0; color: var(--ce-danger); font-size: 12px; }
 .log { width: 100%; max-height: 300px; overflow: auto; padding: var(--ce-space-3); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
 .ce-work-rail { display: grid; align-content: start; gap: var(--ce-space-4); }
 .ce-work-rail-head { padding-bottom: var(--ce-space-2); border-bottom: 1px solid var(--ce-rule-strong); }

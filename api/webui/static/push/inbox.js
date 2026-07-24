@@ -47,21 +47,46 @@
     var refreshBtn = root.querySelector(".inbox-pending-refresh");
     if (!kind || !listEl) return;
 
-    // Staging is the automatic path, so this section stays out of the way until
-    // there is something to review. Nothing staged and load failures both mean
-    // "nothing to show a teacher here".
     var lastLoad = 0;
+    var requestGeneration = 0;
+
+    function setState(state) {
+      root.dataset.inboxState = state;
+    }
+
+    function renderDegraded() {
+      root.hidden = false;
+      setState("degraded");
+      listEl.innerHTML = '<p class="inbox-pending-degraded">Staged drafts couldn\'t be checked. Paste or upload still works.</p>';
+    }
 
     function load() {
       lastLoad = Date.now();
+      var generation = ++requestGeneration;
+      if (root.dataset.inboxState === "degraded" || root.hidden) root.hidden = true;
+      setState("loading");
       fetch("/api/inbox-files?kind=" + encodeURIComponent(kind))
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          var files = (d.ok && d.files) || [];
-          root.hidden = !files.length;
-          if (files.length) renderList(listEl, files);
+        .then(function (r) {
+          if (!r.ok) throw new Error("inbox request failed");
+          return r.json();
         })
-        .catch(function () { root.hidden = true; });
+        .then(function (d) {
+          if (generation !== requestGeneration) return;
+          if (!d || d.ok !== true || !Array.isArray(d.files)) throw new Error("invalid inbox response");
+          if (!d.files.length) {
+            listEl.innerHTML = "";
+            root.hidden = true;
+            setState("empty");
+            return;
+          }
+          renderList(listEl, d.files);
+          root.hidden = false;
+          setState("ready");
+        })
+        .catch(function () {
+          if (generation !== requestGeneration) return;
+          renderDegraded();
+        });
     }
 
     if (refreshBtn) refreshBtn.addEventListener("click", load);

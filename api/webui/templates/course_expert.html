@@ -1,6 +1,6 @@
 {% extends "layouts/workspace.html" %}
 {% from "ui/_macros.html" import rail, page_header %}
-{% block title %}Work Tools — Canvas Expert{% endblock %}
+{% block title %}Create — Canvas Expert{% endblock %}
 {% block workspace_variant %}three{% endblock %}
 {% block workspace_body_class %}ce-screen{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/course_expert.css?v={{ asset_v }}">{% endblock %}
@@ -39,11 +39,16 @@
 {% if not token_is_set %}
 <div class="ce-notice ce-course-expert-notice">No Canvas token saved — <a href="/settings">go to Settings</a> to add one.</div>
 {% else %}
+{% if not saved_courses %}
+<div class="ce-notice ce-course-expert-notice" data-ce-hook="first-session-course-notice">
+  No Current courses yet. <a href="/settings#add-courses-card">Add a course in Settings</a> before sending to Canvas; you can still draft and validate here now.
+</div>
+{% endif %}
 <section class="ce-panel ce-forge-start">
   <h2>Start in your assistant</h2>
   <p class="ce-hint">
-    Canvas Expert does not write your content. Claude or ChatGPT writes it, using one of these
-    instruction files, and hands you back a file you bring here.
+    Use the AI chat you already use to write your content with one of these instruction files,
+    then bring its finished draft back here for validation and review.
   </p>
   <ol class="ce-forge-steps">
     <li>
@@ -63,8 +68,8 @@
         {% endfor %}
       </span>
     </li>
-    <li>Paste the instructions into Claude Desktop or ChatGPT, then tell it what you want.</li>
-    <li>Bring the file it gives you back here: <strong>Paste JSON</strong> or <strong>Upload</strong> on the tab below.</li>
+    <li>Ask your assistant for the content you want. For example, you might use ChatGPT, Claude, or another AI chat.</li>
+    <li>Paste JSON or upload the returned file on the tab below, then validate it before review.</li>
   </ol>
   <p class="ce-hint ce-u-m0">All the instruction files live in your AI Authoring folder. <a href="/ai-expert">See them all</a></p>
 </section>
