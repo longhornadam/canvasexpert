@@ -11,9 +11,9 @@
   }
 
   function modeLabel(mode) {
-    if (mode === 'packet') return 'Prepare for my AI chat';
-    if (mode === 'assisted') return 'Draft-score with OpenRouter';
-    return 'Grade myself';
+    if (mode === 'packet') return 'Score with AI chat';
+    if (mode === 'assisted') return 'Auto-score with AI';
+    return 'Score myself';
   }
 
   function createdLabel(value) {

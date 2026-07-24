@@ -1,7 +1,10 @@
 {% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import page_header %}
 {% block title %}AI Connections — Canvas Expert{% endblock %}
 {% block workspace_body_class %}ce-connections-page{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/connections.css?v={{ asset_v }}">{% endblock %}
+
+{% block workspace_header %}{{ page_header('AI Connections', 'Connect your assistant so it can read your Canvas data through Canvas Expert on this computer. Student data comes pseudonymized.') }}{% endblock %}
 
 {% block primary %}
 {% macro client_card(c, app_label, connect_label, restart_note) %}
@@ -49,11 +52,6 @@
 {% endmacro %}
 
 <div class="ce-connections-stack">
-  <section class="ce-ai-hero">
-    <h1>Connect your AI assistant</h1>
-    <p class="ce-hint">Connect your assistant so it can pull your Canvas data for you. It works through Canvas Expert on this computer, and student data comes pseudonymized.</p>
-  </section>
-
   <div class="ce-ai-cards">
     {{ client_card(connection.clients.claude, "Claude Desktop", "Connect to Claude Desktop", "Restart Claude Desktop to finish.") }}
     {{ client_card(connection.clients.chatgpt, "ChatGPT desktop", "Connect to ChatGPT", "Restart ChatGPT to finish.") }}

@@ -2,7 +2,7 @@
 .ce-ai-expert__intro { margin: 0; }
 .ce-ai-expert__intro--lead { font-size: 15px; font-weight: 600; }
 .ai-section { margin: 0; }
-.ai-section h2 { margin: 0 0 var(--ce-space-3); padding-top: var(--ce-space-3); border-top: 2px solid var(--ce-rule); font-size: 20px; }
+.ai-section h2 { margin: 0 0 var(--ce-space-3); padding-top: var(--ce-space-3); border-top: 2px solid var(--ce-rule); }
 .ai-section:first-of-type h2 { padding-top: 0; border-top: 0; }
 .ai-skill-row { display: flex; align-items: start; flex-wrap: wrap; gap: var(--ce-space-3); padding: var(--ce-space-3) 0; border-bottom: 1px solid var(--ce-rule); }
 .ai-skill-body { flex: 1 1 360px; min-width: 0; }
@@ -14,7 +14,7 @@
 .ce-ai-scoring-note, .ce-ai-toolkit-note { margin: 0 0 var(--ce-space-3); }
 .ce-ai-inline-status { display: inline-block; margin-left: var(--ce-space-2); font-size: 13px; }
 .toolkit-card { margin-bottom: var(--ce-space-3); padding: var(--ce-space-4); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
-.toolkit-card h3 { margin: 0 0 var(--ce-space-2); font-size: 16px; }
+.toolkit-card h3 { margin: 0 0 var(--ce-space-2); }
 .toolkit-setup { max-height: 320px; margin: var(--ce-space-2) 0 0; padding: var(--ce-space-3); overflow: auto; border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); font-size: 13px; white-space: pre-wrap; }
 .ce-ai-footer { margin: 0; }
 .ce-ai-workspace { margin: var(--ce-space-2) 0 0; font-size: 13px; }

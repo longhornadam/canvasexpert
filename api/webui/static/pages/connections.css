@@ -19,8 +19,6 @@
 @media (max-width: 1050px) { .ce-connections-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* AI Connections redesign */
-.ce-ai-hero { margin: 0; }
-.ce-ai-hero h1 { margin-bottom: var(--ce-space-2); }
 .ce-ai-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ce-space-4); align-items: start; }
 .ce-ai-card { min-width: 0; margin: 0; }
 .ce-ai-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--ce-space-2); }

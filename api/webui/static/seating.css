@@ -1,8 +1,8 @@
 .seating-shell { display: grid; gap: var(--ce-space-3); max-width: 1180px; }
 .seating-workspace-layout { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); align-items: start; gap: var(--ce-space-3); }
 .seating-sidebar, .seating-chart-pane { display: grid; gap: var(--ce-space-3); min-width: 0; }
-.seating-intro h1, .seating-heading h2 { margin: 0; }
-.seating-intro p, .seating-heading p { margin: var(--ce-space-1) 0 0; }
+.seating-heading h2 { margin: 0; }
+.seating-heading p { margin: var(--ce-space-1) 0 0; }
 .seating-course-bar, .seating-controls { display: flex; align-items: end; flex-wrap: wrap; gap: var(--ce-space-2); }
 .seating-course-bar, .seating-card { padding: var(--ce-space-3) var(--ce-space-4); border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); }
 .seating-card { margin: 0; }

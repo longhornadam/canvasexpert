@@ -190,7 +190,7 @@
   var apiPrivacyTail = [
     { id: "safe_payload", label: "Load the Safe AI Packet for scoring", status: "pending", detail: "The inspected packet is the LLM payload." },
     { id: "price_check", label: "Verify model price estimate", status: "pending", detail: "Premium models are allowed when pricing is known." },
-    { id: "llm_send", label: "Send only the Safe AI Packet to OpenRouter", status: "pending", detail: "No real names are included." },
+    { id: "llm_send", label: "Send only the Safe AI Packet to the AI service", status: "pending", detail: "No real names are included." },
     { id: "reidentify", label: "Reattach real names locally", status: "pending", detail: "Results are joined back on this machine before review." }
   ];
 

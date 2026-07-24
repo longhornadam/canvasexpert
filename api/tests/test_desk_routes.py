@@ -107,27 +107,34 @@ def test_desk_active_courses_use_teacher_names_saved_order_and_empty_state(monke
     assert "None selected" in empty_response.text
 
 
-def test_student_reports_has_a_direct_students_page_and_old_tab_redirect(monkeypatch):
+def test_student_reports_is_a_view_inside_the_students_page(monkeypatch):
     _configure(monkeypatch)
 
-    redirected = _client().get("/course-expert?tab=students", follow_redirects=False)
-    response = _client().get("/students/reports")
+    old_tab = _client().get("/course-expert?tab=students", follow_redirects=False)
+    old_page = _client().get("/students/reports", follow_redirects=False)
     roster = _client().get("/roster")
     create = _client().get("/course-expert?tab=assignment")
 
-    assert redirected.status_code == 307
-    assert redirected.headers["location"] == "/students/reports"
-    assert response.status_code == 200
+    # Both old entry points land on the Students page's reports view.
+    assert old_tab.status_code == 307
+    assert old_tab.headers["location"] == "/roster?focus=reports"
+    assert old_page.status_code == 307
+    assert old_page.headers["location"] == "/roster?focus=reports"
+
+    # The reports controls and scripts live on the Students page itself.
+    assert roster.status_code == 200
+    for control in ("sr-course", "sr-student", "sr-generate", "nqp-file", "mp-generate"):
+        assert f'id="{control}"' in roster.text
+    assert "/static/course_expert/student_reports.js" in roster.text
+    assert "/static/course_expert/portfolio.js" in roster.text
+    assert 'data-lens="reports"' in roster.text
+    assert 'nav-section-manage' in roster.text
+
+    # Create keeps its own tabs and none of the report scripts.
     assert create.status_code == 200
     assert 'id="ce-tab-assignment"' in create.text
-    for control in ("sr-course", "sr-student", "sr-generate", "nqp-file", "mp-generate"):
-        assert f'id="{control}"' in response.text
-    assert "/static/course_expert/student_reports.js" in response.text
-    assert "/static/course_expert/portfolio.js" in response.text
     assert "/static/course_expert/student_reports.js" not in create.text
     assert "/static/course_expert/portfolio.js" not in create.text
-    assert 'nav-section-manage' in response.text
-    assert 'href="/students/reports"' in roster.text
 
 
 def test_desk_populated_render_uses_registry_and_real_receipt_projection(monkeypatch):

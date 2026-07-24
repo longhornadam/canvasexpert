@@ -1,5 +1,7 @@
+{# One title block per page, in the same place on every page. A div, not <header>:
+   the app header is the page's only <header>. #}
 {% macro page_header(title, lede='') -%}
-<header class="ce-page-header"><div><h1>{{ title }}</h1>{% if lede %}<p class="ce-hint">{{ lede }}</p>{% endif %}</div></header>
+<div class="ce-page-header"><div><h1>{{ title }}</h1>{% if lede %}<p class="ce-hint">{{ lede }}</p>{% endif %}</div></div>
 {%- endmacro %}
 {% macro panel(title='') -%}
 <section class="ce-panel">{% if title %}<h2 class="ce-display">{{ title }}</h2>{% endif %}{{ caller() }}</section>
@@ -14,5 +16,5 @@
 <div class="ce-actions">{{ caller() }}</div>
 {%- endmacro %}
 {% macro rail(side='left', label='') -%}
-<aside class="ce-rail ce-rail--{{ side }}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</aside>
+<aside class="ce-rail ce-rail--{{ side }}"{% if label %} aria-label="{{ label }}"{% endif %}><div class="ce-rail__inner">{{ caller() }}</div></aside>
 {%- endmacro %}

@@ -89,9 +89,9 @@ def _read_json(path: str) -> dict | None:
 
 def mode_label(mode: str) -> str:
     return {
-        "fast": "Grade Myself",
-        "packet": "Use My AI Chat",
-        "assisted": "Auto-Score With API",
+        "fast": "Score myself",
+        "packet": "Score with AI chat",
+        "assisted": "Auto-score with AI",
     }.get(mode or "", mode or "Grade Myself")
 
 

@@ -1,28 +1,12 @@
 (function () {
   "use strict";
 
-  /* Instrument view — expanded creation preview/delivery comparison.
+  /* Instrument view: expanded creation preview and delivery comparison.
+     Developer view, reached with Ctrl+Shift+I. No button on the page.
      Depends on CE_COURSE_EXPERT being initialized by tabs.js. */
 
   var expert = window.CE_COURSE_EXPERT;
   if (!expert || !expert.activateTab) return;
-
-  /* ── Instrument toggle button ──────────────────────────────────────── */
-  function addInstrumentToggle() {
-    var center = document.querySelector('[data-ce-hook="course-shell"]');
-    if (!center) return;
-    var existing = document.getElementById("ce-instrument-toggle");
-    if (existing) return;
-
-    var toggle = document.createElement("button");
-    toggle.id = "ce-instrument-toggle";
-    toggle.type = "button";
-    toggle.className = "ce-instrument-toggle";
-    toggle.setAttribute("data-instrument-toggle", "");
-    toggle.textContent = "🔍 Instrument view";
-    toggle.title = "Toggle expanded Instrument view";
-    center.insertBefore(toggle, center.firstChild);
-  }
 
   /* ── Update toggle label on view change ────────────────────────────── */
   function updateToggleLabel() {
@@ -52,6 +36,6 @@
   }
 
   /* ── Init ──────────────────────────────────────────────────────────── */
-  addInstrumentToggle();
+  // No on-page toggle: this view is for development, reached with Ctrl+Shift+I.
   updateToggleLabel();
 })();

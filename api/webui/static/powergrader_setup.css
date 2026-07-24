@@ -19,16 +19,7 @@
 .pg-sessions-card { margin: 24px 0; padding: 24px; }
 
 /* ── Visual hierarchy ──────────────────────────────────────────────── */
-.pg-setup-header h1 {
-  font-size: 22px;
-  font-weight: 800;
-  margin: 0 0 4px;
-}
-
-.pg-setup-header { margin-bottom: 24px; }
-
 .pg-step-title {
-  font-size: 15px;
   font-weight: 700;
   margin: 0 0 12px;
   color: var(--ce-ink);
@@ -124,11 +115,18 @@
 .pg-route-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
 
 .pg-route-card {
-  display:flex; gap:8px; align-items:flex-start; padding:10px;
+  display:grid; gap:6px; align-content:start; padding:10px;
   border:1px solid var(--ce-rule);
-  background:var(--ce-surface-raised); cursor:pointer; min-width:0;
+  background:var(--ce-surface-raised); min-width:0;
+}
+
+.pg-route-choice {
+  display:flex; gap:8px; align-items:flex-start; cursor:pointer;
   margin:0; font-weight:400;
 }
+
+.pg-what summary { color:var(--ce-ink-muted); cursor:pointer; font-size:11.5px; font-weight:700; }
+.pg-what p { margin:6px 0 0; color:var(--ce-ink-muted); font-size:11.5px; line-height:1.4; }
 
 .pg-route-card input[type="radio"] {
   width:auto; min-width:0; margin:2px 0 0; flex:0 0 auto;
@@ -142,7 +140,8 @@
 
 .pg-route-card.is-selected { border-color:var(--ce-accent-canvas); }
 
-.pg-route-card.is-disabled { opacity:.55; cursor:not-allowed; }
+.pg-route-card.is-disabled { opacity:.55; }
+.pg-route-card.is-disabled .pg-route-choice { cursor:not-allowed; }
 
 /* ── Safety details ────────────────────────────────────────────────── */
 .pg-safety-popout {
@@ -172,12 +171,12 @@
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 16px; margin-bottom: 12px;
 }
-.pg-section-heading h2 { margin: 0; font-size: 17px; }
+.pg-section-heading h2 { margin: 0; }
 .pg-section-heading p { margin: 2px 0 0; }
 .pg-session-lane {
   padding: 14px 0; border-top: 1px solid var(--ce-rule); scroll-margin-top: 16px;
 }
-.pg-session-lane h3 { margin: 0; font-size: 14px; }
+.pg-session-lane h3 { margin: 0; }
 .pg-lane-description { margin: 2px 0 8px; color: var(--ce-ink-muted); font-size: 12px; }
 .pg-session-list { display: grid; gap: 8px; }
 .pg-session-item {

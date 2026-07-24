@@ -3,13 +3,13 @@
 .about-hero p { max-width: 760px; margin: 0 auto; font-size: 17px; line-height: 1.65; }
 .about-content { display: grid; gap: clamp(var(--ce-space-5), 4vw, 44px); padding: var(--ce-space-5) 0 var(--ce-space-6); }
 .about-section { margin: 0; }
-.about-section h2 { margin: 0 0 var(--ce-space-3); font-size: 22px; }
+.about-section h2 { margin: 0 0 var(--ce-space-3); }
 .about-section p { line-height: 1.7; }
 .about-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ce-space-4); }
 .about-card { padding: var(--ce-space-4); border: 1px solid var(--ce-rule); border-top: 4px solid var(--ce-accent-canvas); background: var(--ce-surface-raised); }
 .about-card.ac-gb { border-top-color: var(--ce-grade); }
 .about-card.ac-ai { border-top-color: var(--ce-accent-model); }
-.about-card h3 { margin: 0 0 var(--ce-space-2); font-size: 17px; }
+.about-card h3 { margin: 0 0 var(--ce-space-2); }
 .about-card p { margin: var(--ce-space-2) 0; font-size: 14px; }
 .philosophy-list, .security-list { margin: 0; padding: 0; list-style: none; }
 .philosophy-list li, .security-list li { position: relative; padding: var(--ce-space-2) 0 var(--ce-space-2) 30px; line-height: 1.65; }

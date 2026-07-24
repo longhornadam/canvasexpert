@@ -17,10 +17,6 @@
   }
 
   function renderList(listEl, files) {
-    if (!files.length) {
-      listEl.innerHTML = '<p class="hint inbox-pending-empty">No drafts staged.</p>';
-      return;
-    }
     listEl.innerHTML = files.map(function (f) {
       var status = f.ok
         ? '<span class="inbox-pending-status ok">Valid</span>'
@@ -51,23 +47,30 @@
     var refreshBtn = root.querySelector(".inbox-pending-refresh");
     if (!kind || !listEl) return;
 
+    // Staging is the automatic path, so this section stays out of the way until
+    // there is something to review. Nothing staged and load failures both mean
+    // "nothing to show a teacher here".
+    var lastLoad = 0;
+
     function load() {
-      listEl.innerHTML = '<p class="hint">Loading…</p>';
+      lastLoad = Date.now();
       fetch("/api/inbox-files?kind=" + encodeURIComponent(kind))
         .then(function (r) { return r.json(); })
         .then(function (d) {
-          if (!d.ok) {
-            listEl.innerHTML = '<p class="hint err">' + esc(d.error || "Could not load drafts.") + "</p>";
-            return;
-          }
-          renderList(listEl, d.files || []);
+          var files = (d.ok && d.files) || [];
+          root.hidden = !files.length;
+          if (files.length) renderList(listEl, files);
         })
-        .catch(function () {
-          listEl.innerHTML = '<p class="hint err">Could not load drafts.</p>';
-        });
+        .catch(function () { root.hidden = true; });
     }
 
     if (refreshBtn) refreshBtn.addEventListener("click", load);
+
+    // A teacher stages a draft in Claude or ChatGPT and alt-tabs back, so look
+    // again on focus rather than making them reload the page.
+    window.addEventListener("focus", function () {
+      if (Date.now() - lastLoad > 3000) load();
+    });
 
     listEl.addEventListener("click", function (event) {
       var btn = event.target.closest(".inbox-pending-use");

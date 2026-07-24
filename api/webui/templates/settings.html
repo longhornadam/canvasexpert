@@ -1,5 +1,5 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import rail %}
+{% from "ui/_macros.html" import rail, page_header %}
 {% block title %}Settings — Canvas Expert{% endblock %}
 {% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}ce-settings-page{% endblock %}
@@ -8,8 +8,6 @@
 {% block left_rail %}
 {% call rail('left', 'Settings sections') %}
   <nav class="ce-settings-index" aria-label="Settings sections">
-    <p class="ce-settings-index__title">Settings</p>
-
     <div class="ce-settings-index__group">
       <p class="ce-settings-index__kicker">Canvas connection</p>
       <div class="ce-settings-index__links">
@@ -45,6 +43,8 @@
   </nav>
 {% endcall %}
 {% endblock %}
+
+{% block workspace_header %}{{ page_header('Settings', 'Your Canvas connection, courses, AI keys, folders, and calendars.') }}{% endblock %}
 
 {% block primary %}
 

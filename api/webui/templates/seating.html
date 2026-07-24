@@ -1,16 +1,14 @@
 {% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import page_header %}
 {% block title %}Seating — Canvas Expert{% endblock %}
 {% block workspace_body_class %}seating-page{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/seating.css?v={{ asset_v }}">
 {% endblock %}
+{% block workspace_header %}{{ page_header('Seating', 'Build room layouts and place the students loaded on the Students page.') }}{% endblock %}
+
 {% block primary %}
 <div class="seating-shell">
-  <section class="seating-intro">
-    <h1>Seating</h1>
-    <p class="hint">Build local room layouts and manually place the students already loaded from Roster.</p>
-  </section>
-
   <section class="seating-course-bar" aria-label="Seating course selection">
     <label>Course
       <select id="seating-course">

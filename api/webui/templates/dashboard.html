@@ -1,7 +1,10 @@
 {% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import page_header %}
 {% block title %}Home · Canvas Expert{% endblock %}
 {% block workspace_body_class %}ce-desk-page{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/dashboard.css?v={{ asset_v }}">{% endblock %}
+{% block workspace_header %}{{ page_header('Home', 'Start a task, pick up open work, and see what needs review.') }}{% endblock %}
+
 {% block primary %}
 <div id="desk-root" class="ce-desk-shell" aria-label="Home">
   <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "presentations": initial_presentations, "operations": initial_operations, "receipts": initial_receipts} | tojson }}</script>
@@ -36,7 +39,7 @@
           </div>
         </section>
         <section class="ce-desk-launch-group" aria-labelledby="desk-grade-title">
-          <h3 id="desk-grade-title" class="ce-grade-mark">Grade</h3>
+          <h3 id="desk-grade-title" class="ce-grade-mark">PowerGrader</h3>
           <div class="ce-desk-launch-list">
             <a href="/powergrader">Grade an assignment <span aria-hidden="true">→</span></a>
             <a href="/gradebook">Gradebook <span aria-hidden="true">→</span></a>
@@ -46,13 +49,13 @@
           <h3 id="desk-manage-title" class="ce-attention-mark">Students</h3>
           <div class="ce-desk-launch-list">
             <a href="/roster">Students <span aria-hidden="true">→</span></a>
-            <a href="/students/reports">Student reports <span aria-hidden="true">→</span></a>
+            <a href="/roster?focus=reports">Student reports <span aria-hidden="true">→</span></a>
           </div>
         </section>
         <section class="ce-desk-launch-group" aria-labelledby="desk-automate-title">
           <h3 id="desk-automate-title" class="ce-prepared-mark">Automations</h3>
           <div class="ce-desk-launch-list">
-            <a href="/routines">Routines <span aria-hidden="true">→</span></a>
+            <a href="/routines">Automations <span aria-hidden="true">→</span></a>
           </div>
         </section>
       </div>

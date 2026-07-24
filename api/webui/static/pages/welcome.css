@@ -6,7 +6,7 @@
 .wiz-step.active { border-color: var(--ce-accent-canvas); background: var(--ce-accent-canvas); color: var(--ce-on-accent); }
 .wiz-step.done { border-color: var(--ce-ok); background: var(--ce-ok-soft); color: var(--ce-ok); }
 .wizard-panel { margin: 0; }
-.wizard-panel h2 { margin: 0 0 var(--ce-space-2); font-size: 18px; }
+.wizard-panel h2 { margin: 0 0 var(--ce-space-2); }
 .wizard-panel label { margin: var(--ce-space-3) 0 var(--ce-space-2); }
 .wizard-panel .ce-actions { margin-top: var(--ce-space-4); }
 .ce-wizard-initially-hidden { display: none; }

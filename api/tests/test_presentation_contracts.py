@@ -16,13 +16,12 @@ TEMPLATES = ROOT / "api" / "webui" / "templates"
 EXPECTED_PRESENTATION = {
     "/": ("dashboard.html", "workspace", "full", 0, True),
     "/course-expert": ("course_expert.html", "workspace", "three", 2, True),
-    "/powergrader": ("powergrader_setup.html", "workspace", "full", 0, True),
+    "/powergrader": ("powergrader_setup.html", "workspace", "left-main", 1, True),
     "/powergrader/session/{session_id}": ("powergrader_queue.html", "workspace", "full", 0, True),
     "/gradebook": ("gradebook.html", "workspace", "left-main", 1, True),
     "/roster": ("roster.html", "workspace", "left-main", 1, True),
     "/settings": ("settings.html", "workspace", "left-main", 1, True),
     "/routines": ("routines.html", "document", "wide", 0, True),
-    "/students/reports": ("student_reports.html", "document", "wide", 0, True),
     "/course": ("course.html", "document", "wide", 0, True),
     "/about": ("about.html", "document", "wide", 0, True),
     "/ai-expert": ("ai_expert.html", "document", "standard", 0, True),
@@ -119,7 +118,7 @@ def _configure_fictional(monkeypatch):
 
 
 def test_registry_is_the_full_program_route_map():
-    assert len(EXPECTED_PRESENTATION) == 13
+    assert len(EXPECTED_PRESENTATION) == 12
     assert set(MIGRATED_ROUTES) == set(EXPECTED_PRESENTATION)
 
 
@@ -182,7 +181,6 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/roster": "/roster",
         "/settings": "/settings",
         "/routines": "/routines",
-        "/students/reports": "/students/reports",
         "/course": "/course",
         "/about": "/about",
         "/ai-expert": "/ai-expert",
@@ -216,6 +214,7 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
 
 def test_student_reports_redirect_is_preserved(monkeypatch):
     _configure_fictional(monkeypatch)
-    response = _client().get("/course-expert?tab=students", follow_redirects=False)
-    assert response.status_code == 307
-    assert response.headers["location"] == "/students/reports"
+    for url in ("/course-expert?tab=students", "/students/reports"):
+        response = _client().get(url, follow_redirects=False)
+        assert response.status_code == 307, url
+        assert response.headers["location"] == "/roster?focus=reports", url

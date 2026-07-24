@@ -71,18 +71,31 @@
   }
 
   /* ── Active rail item tracking ─────────────────────────────────────── */
-  document.addEventListener("click", function (e) {
-    var tabBtn = e.target.closest('[data-ce-hook="course-tab"][data-tab]');
-    if (!tabBtn) return;
-    var tab = tabBtn.getAttribute("data-tab");
+  function syncActive(tab) {
     railItems.forEach(function (item) {
       item.classList.toggle(
         "ce-work-rail-item--active",
         item.getAttribute("data-rail-tab") === tab
       );
     });
+  }
+
+  function currentTab() {
+    var active = document.querySelector('[data-ce-hook="course-tab"][aria-selected="true"]')
+      || document.querySelector('[data-ce-hook="course-tab"].active');
+    return active ? active.getAttribute("data-tab") : "";
+  }
+
+  document.addEventListener("click", function (e) {
+    var tabBtn = e.target.closest('[data-ce-hook="course-tab"][data-tab]');
+    if (!tabBtn) return;
+    syncActive(tabBtn.getAttribute("data-tab"));
   });
 
   /* ── Initial load ──────────────────────────────────────────────────── */
+  // Mark the tab the page opened on, including a ?tab= deep link, so the rail
+  // never sits blank while the stage shows a tab.
+  syncActive(currentTab());
+  window.addEventListener("load", function () { syncActive(currentTab()); });
   fetchWork();
 })();

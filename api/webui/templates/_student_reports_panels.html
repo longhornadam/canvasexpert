@@ -1,11 +1,5 @@
-{% extends "layouts/document.html" %}
-{% block title %}Student reports · Canvas Expert{% endblock %}
-{% block document_variant %}wide{% endblock %}
-{% block head_extra %}
-<link rel="stylesheet" href="/static/pages/student_reports.css?v={{ asset_v }}">
-{% endblock %}
-{% block primary %}
-
+{# Student reports panels. Lives inside the Students page as its Reports view;
+   needs token_is_set and saved_courses in the context. #}
 {% if not token_is_set %}
 <div class="ce-notice">
   No Canvas token saved — <a href="/settings">go to Settings</a> to add one.
@@ -13,10 +7,10 @@
 {% else %}
 <div class="ce-student-reports">
   <section class="ce-panel">
-    <h1 class="ce-display">Student reports</h1>
+    <h2>Student packet</h2>
     <p class="hint ce-student-reports__lede">
-      Pick a student and compile copies of their work plus summaries across every
-      Current course they're in. Saved to your Student Work/Reports folder (synced via OneDrive).
+      One student's work and grade summary from every current course they are in.
+      Saved to your Student Work/Reports folder, synced via OneDrive.
     </p>
 
     <div class="sr-pick">
@@ -110,8 +104,3 @@
   </section>
 </div>
 {% endif %}
-{% endblock %}
-{% block document_scripts %}
-<script src="/static/course_expert/student_reports.js?v={{ asset_v }}"></script>
-<script src="/static/course_expert/portfolio.js?v={{ asset_v }}"></script>
-{% endblock %}

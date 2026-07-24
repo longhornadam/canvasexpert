@@ -91,7 +91,7 @@ def dashboard(request: Request):
 @router.get("/course-expert", response_class=HTMLResponse)
 def course_expert_page(request: Request):
     if request.query_params.get("tab") == "students":
-        return RedirectResponse("/students/reports", status_code=307)
+        return RedirectResponse("/roster?focus=reports", status_code=307)
     skills = list_ai_ta_files()
     return templates.TemplateResponse(request, "course_expert.html", {
         **_push_base_ctx(request),
@@ -107,13 +107,10 @@ def course_expert_page(request: Request):
     })
 
 
-@router.get("/students/reports", response_class=HTMLResponse)
-def student_reports_page(request: Request):
-    """Dedicated Student Reports presentation; report APIs remain in reports.py."""
-    return templates.TemplateResponse(request, "student_reports.html", {
-        **_push_base_ctx(request),
-        "nav_section": "manage",
-    })
+@router.get("/students/reports")
+def student_reports_page():
+    """Reports are a view inside the Students page; keep old links working."""
+    return RedirectResponse("/roster?focus=reports", status_code=307)
 
 
 def _authoring_skill(skills: list, prefix: str) -> str:
