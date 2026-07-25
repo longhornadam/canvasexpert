@@ -179,12 +179,14 @@ def list_inbox_files(kind: str):
         if expected != actual:
             continue
         abspath = os.path.abspath(path)
-        try:
-            label = os.path.relpath(path, REPO_ROOT)
-        except ValueError:
-            label = os.path.basename(path)
+        # The other list_*_files helpers read folders inside the repo, so they
+        # label entries relative to REPO_ROOT. The Inbox lives in the teacher's
+        # synced workspace instead, where that relpath climbs out through
+        # "..\..\Documents\OneDrive - ..." and shows the teacher a path instead
+        # of a draft name. The panel heading and the push tab already say where
+        # these came from, so the file name is the whole useful label.
         found.append({
-            "label": label,
+            "label": os.path.basename(path),
             "path": abspath,
             "source": "inbox",
         })

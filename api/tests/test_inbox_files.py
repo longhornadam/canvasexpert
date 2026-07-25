@@ -100,7 +100,26 @@ def test_list_inbox_files_lists_when_marker_matches_actual_size():
     entry = result[0]
     assert entry["path"] == os.path.abspath(os.path.join(str(folder), "draft1.txt"))
     assert entry["source"] == "inbox"
-    assert "label" in entry
+    assert entry["label"] == "draft1.txt"
+
+
+def test_list_inbox_files_label_is_the_bare_file_name_not_a_path():
+    """The label is shown to the teacher verbatim, in the staged-drafts panel and
+    again in the file-source dropdown as "Assistant draft: <label>".
+
+    It used to be os.path.relpath(path, REPO_ROOT), copied from the sibling
+    list_*_files helpers that read folders inside the repo. The Inbox lives in
+    the teacher's synced workspace instead, so that relpath climbed out and the
+    teacher saw "..\\..\\Documents\\OneDrive - <District>\\...\\draft.txt".
+    """
+    folder = runtime_paths.inbox_folder("quiz")
+    _drop(folder, "cell-transport-check", "hello world")
+
+    label = deps.list_inbox_files("quiz")[0]["label"]
+    assert label == "cell-transport-check.txt"
+    assert os.sep not in label
+    assert "/" not in label
+    assert ".." not in label
 
 
 def test_list_inbox_files_skips_when_marker_missing():
