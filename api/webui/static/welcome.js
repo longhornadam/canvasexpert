@@ -51,6 +51,31 @@ var WIZARD = {
 
   // ── Step 0: Workspace ─────────────────────────────────────────────────
 
+  browseWorkspace: function (e) {
+    var btn = e.target;
+    var input = document.getElementById('workspace-path');
+    btn.disabled = true;
+    var originalLabel = btn.textContent;
+    btn.textContent = 'Choosing…';
+
+    fetch('/welcome/browse-workspace', { method: 'POST' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.ok && d.path) {
+        input.value = d.path;
+      } else if (!d.ok) {
+        WIZARD.showResult('workspace-result', 'Could not open a folder picker on this computer. Type the path instead.', true);
+      }
+    })
+    .catch(function () {
+      WIZARD.showResult('workspace-result', 'Network error. Please try again.', true);
+    })
+    .finally(function () {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    });
+  },
+
   saveWorkspace: function (e) {
     e.preventDefault();
     var path = document.getElementById('workspace-path').value.trim();
@@ -335,6 +360,8 @@ var wizardFinish = WIZARD.finish.bind(WIZARD);
   // Step 0: workspace form
   var wsForm = document.getElementById('workspace-form');
   if (wsForm) wsForm.addEventListener('submit', WIZARD.saveWorkspace.bind(WIZARD));
+  var wsBrowseBtn = document.getElementById('workspace-browse');
+  if (wsBrowseBtn) wsBrowseBtn.addEventListener('click', WIZARD.browseWorkspace.bind(WIZARD));
 
   // Step 1: Canvas URL form
   var urlForm = document.getElementById('canvas-url-form');
