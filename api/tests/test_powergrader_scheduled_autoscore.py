@@ -8,15 +8,22 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from api.webui import workspace
 from api.webui.routes import routines
 from api.webui.routes import routines_powergrader
 
 
 @pytest.fixture(autouse=True)
-def _current_course_scope(monkeypatch):
+def _current_course_scope(monkeypatch, tmp_path):
     monkeypatch.setattr(routines.config, "active_courses", lambda: [{
         "id": "course-1", "name": "Period 1", "nickname": "Period 1", "active": True,
     }])
+    # Hermetic workspace root: session_store.pg_dir() and autoscore_queue.queue_dir()
+    # both resolve through workspace.workspace_root(), which otherwise depends on
+    # whatever happens to be ambient -- a live OneDrive workspace on a developer
+    # machine, None in a clean CI environment. Neither should decide whether a
+    # scheduled-autoscore test passes or whether the queue actually persists.
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path / "OneDrive" / "CanvasExpert"))
 
 
 def _queue_job(**overrides):
