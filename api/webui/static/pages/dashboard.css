@@ -1,6 +1,7 @@
 .ce-desk-shell { padding: 0; }
-.ce-desk-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, auto) auto; align-items: center; gap: var(--ce-space-4); margin: 0 0 var(--ce-space-5); padding: var(--ce-space-3) 0; border-top: 1px solid var(--ce-rule-strong); border-bottom: 1px solid var(--ce-rule); color: var(--ce-ink-muted); font-size: 12px; }
+.ce-desk-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, auto) auto; align-items: center; gap: var(--ce-space-4); margin: 0 0 var(--ce-space-2); padding: var(--ce-space-3) 0; color: var(--ce-ink-muted); font-size: 12px; }
 .ce-desk-active-courses { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px var(--ce-space-2); min-width: 0; margin: 0; }
+.ce-desk-agent-link { margin: 0 0 var(--ce-space-5); }
 .ce-desk-active-courses strong { color: var(--ce-ink); white-space: nowrap; }
 .ce-desk-active-courses span { min-width: 0; overflow-wrap: anywhere; }
 .ce-desk-active-courses a { color: var(--ce-accent-canvas); font-weight: 700; white-space: nowrap; }

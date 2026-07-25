@@ -1,10 +1,7 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import page_header %}
 {% block title %}Home · Canvas Expert{% endblock %}
 {% block workspace_body_class %}ce-desk-page{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/dashboard.css?v={{ asset_v }}">{% endblock %}
-{% block workspace_header %}{{ page_header('Home', 'Start a task, pick up open work, and see what needs review.') }}{% endblock %}
-
 {% block primary %}
 <div id="desk-root" class="ce-desk-shell" aria-label="Home">
   <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "presentations": initial_presentations, "operations": initial_operations, "receipts": initial_receipts} | tojson }}</script>
@@ -21,6 +18,9 @@
     </p>
     <button type="button" id="desk-sync" class="ce-desk-button ce-desk-button--primary">Sync now</button>
   </div>
+  <p class="ce-desk-active-courses ce-desk-agent-link">
+    <a href="/api/download-contract?name=CanvasAgent" download>Download CanvasAgent instructions</a>
+  </p>
 
   <div class="ce-desk-grid">
     <section class="ce-panel ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
