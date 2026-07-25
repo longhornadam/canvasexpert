@@ -46,9 +46,38 @@
     });
   }
 
+  // Unlike postJson below, this returns a normalised object rather than
+  // throwing. Its callers are the validate/preview handlers, which branch on
+  // `d.ok` / `d.error` and are not written around try/catch, so every failure
+  // has to arrive in that shape. Same four cases gradebook.js's postForm
+  // handles, and only the first was covered here:
+  //   1. the request never lands (offline, app closed) -> outer catch
+  //   2. non-2xx carrying valid JSON: HTTPException emits {"detail": ...},
+  //      which has neither ok nor error, so callers showed "Error: undefined"
+  //   3. non-2xx carrying no readable JSON at all
+  //   4. 2xx whose body is not JSON (a proxy or error page in the way)
   async function postForm(url, fields) {
     return fetch(url, { method: "POST", body: new URLSearchParams(fields) })
-      .then(function (r) { return r.json(); });
+      .then(function (r) {
+        return r.json().then(
+          function (data) { return { r: r, data: data, readable: true }; },
+          function () { return { r: r, data: {}, readable: false }; }
+        );
+      })
+      .then(function (res) {
+        var data = res.data;
+        if (!res.r.ok && !data.error) {
+          data.ok = false;
+          data.error = data.detail || ("Canvas Expert refused that request (HTTP " + res.r.status + ").");
+        } else if (!res.readable && !data.error) {
+          data.ok = false;
+          data.error = "Canvas Expert sent back a response that could not be read.";
+        }
+        return data;
+      })
+      .catch(function () {
+        return { ok: false, error: "Could not reach Canvas Expert. Check your connection and try again." };
+      });
   }
 
   function renderBanner(el, results, exitOk) {

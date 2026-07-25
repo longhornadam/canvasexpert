@@ -17,7 +17,6 @@
   <!-- ── START HERE ──────────────────────────────────────────────────────── -->
   <div class="ai-section" id="start">
     <h2>Start here</h2>
-    {% set start_file = ai_ta_files | selectattr("label", "equalto", "START HERE - What is Canvas Expert.txt") | first | default(none) %}
     {% for f in ai_ta_files %}{% if "start here" in f.label|lower %}
     <div class="ai-skill-row">
       <div class="ai-skill-body">

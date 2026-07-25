@@ -201,7 +201,7 @@ def _load_snapshot(course_id: str):
 
 _VAULT_UNAVAILABLE_ERROR = (
     "Canvas Expert cannot find your workspace, so student data is withheld. "
-    "Open Canvas Expert on this computer once (or reconnect from AI Connections), "
+    "Open Canvas Expert on this computer once (or reconnect from the CanvasAgent page), "
     "then try again."
 )
 

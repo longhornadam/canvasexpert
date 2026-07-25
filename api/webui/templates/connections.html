@@ -1,10 +1,10 @@
 {% extends "layouts/workspace.html" %}
 {% from "ui/_macros.html" import page_header %}
-{% block title %}AI Connections — Canvas Expert{% endblock %}
+{% block title %}CanvasAgent — Canvas Expert{% endblock %}
 {% block workspace_body_class %}ce-connections-page{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/connections.css?v={{ asset_v }}">{% endblock %}
 
-{% block workspace_header %}{{ page_header('AI Connections', 'Connect your assistant so it can read your Canvas data through Canvas Expert on this computer. Student data comes pseudonymized.') }}{% endblock %}
+{% block workspace_header %}{{ page_header('CanvasAgent', 'Turn the AI you already use into a partner for your Canvas work. The file below is all you need. Connecting an assistant is optional, and lets it read your course data directly, pseudonymized.') }}{% endblock %}
 
 {% block primary %}
 {% macro client_card(c, app_label, connect_label, restart_note) %}
@@ -53,32 +53,39 @@
 
 <div class="ce-connections-stack">
   <section class="ce-panel ce-agent-card" id="canvasagent-card">
-    <div class="ce-agent-card__head">
-      <h2>CanvasAgent</h2>
-      <span class="ce-eyebrow">Works with any AI</span>
-    </div>
-    <p class="ce-hint ce-agent-card__lede">
-      Instructions that turn whatever AI you already use into an agent for your Canvas work.
-      It learns what Canvas Expert can do and how to write coursework this app can check and
-      send to Canvas. Nothing to connect and nothing to install, so this works even with an
-      assistant that cannot connect below.
-    </p>
+    <h2 class="ce-agent-card__title">Download this file, put it in the AI you already use, and talk to it.</h2>
     <div class="ce-actions ce-agent-card__actions">
-      <button type="button" class="button primary" data-agent-copy="core">Copy the short version</button>
-      <button type="button" class="button" data-agent-copy="full">Copy all of it</button>
-      <a class="button" href="/api/download-contract?name=CanvasAgent" download>Download</a>
+      <a class="button primary" href="/api/download-contract?name=CanvasAgent" download>Download CanvasAgent</a>
+      <button type="button" class="button" data-agent-copy="full">Copy instead</button>
+      <button type="button" class="button" data-agent-copy="core">Copy short version</button>
     </div>
     <p class="ce-hint ce-agent-card__note">
-      Paste the short version into your assistant's custom-instructions box, the one with a
-      length limit. Paste all of it straight into a chat when there is no limit to worry about.
+      The file explains the rest, including how to install and run Canvas Expert. Use the short
+      version if your assistant's instructions box has a length limit.
     </p>
     <p class="ce-agent-card__result" data-agent-result role="status" aria-live="polite"></p>
   </section>
 
+  <h2 class="ce-agent-section-title">Connect an assistant, optional</h2>
+  <p class="ce-hint ce-agent-section-note">
+    Connecting lets an assistant read your course data itself instead of you pasting it in.
+    CanvasAgent works either way.
+  </p>
   <div class="ce-ai-cards">
     {{ client_card(connection.clients.claude, "Claude Desktop", "Connect to Claude Desktop", "Restart Claude Desktop to finish.") }}
     {{ client_card(connection.clients.chatgpt, "ChatGPT desktop", "Connect to ChatGPT", "Restart ChatGPT to finish.") }}
   </div>
+
+  <section class="ce-panel ce-agent-files">
+    <h2>More files for your AI</h2>
+    <p class="ce-hint">
+      One authoring file per kind of content, one scoring file per rubric in your library, and
+      setup recipes for building these as reusable tools in MagicSchool.
+    </p>
+    <div class="ce-actions">
+      <a class="button" href="/ai-expert">Open the file list</a>
+    </div>
+  </section>
 
   <details class="ce-panel ce-ai-advanced">
     <summary>Advanced &amp; other clients</summary>

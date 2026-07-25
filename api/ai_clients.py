@@ -46,7 +46,7 @@ __all__ = [
 
 SERVER_NAME = "canvas-expert"
 _MARKER_COMMENT = (
-    "# Canvas Expert (read-only). Managed by the Canvas Expert AI Connections page."
+    "# Canvas Expert (read-only). Managed by the Canvas Expert CanvasAgent page."
 )
 _MAX_BACKUPS = 5
 

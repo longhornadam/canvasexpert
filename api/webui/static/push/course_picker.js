@@ -211,7 +211,12 @@
       btn.dataset.nick = nick;
       var focusBtn = btn.closest(".cc-row")?.querySelector(".cc-focus");
       if (focusBtn) focusBtn.textContent = nick;
+      return;
     }
+    // This row has no status line to write to, and the rename already speaks
+    // through prompt(), so say plainly that the nickname did not save rather
+    // than leave the old one sitting there looking accepted.
+    alert(d.error || "That nickname could not be saved. The course keeps its previous name.");
   }
 
   function bindChecklist() {

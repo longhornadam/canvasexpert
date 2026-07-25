@@ -162,7 +162,8 @@ def test_connections_page_and_mcpb_use_runtime_paths_without_client_config_write
     monkeypatch.setattr(server.config, "get_canvas_base", lambda: "https://canvas.invalid")
     response = TestClient(server.app).get("/connections")
     assert response.status_code == 200
-    assert response.text.count("Connections") >= 1
+    # The page is titled CanvasAgent now; it used to be "AI Connections".
+    assert response.text.count("CanvasAgent") >= 1
     assert "Canvas Expert runs from this unzipped folder." in response.text
     assert TestClient(server.app).get("/api/connections/health").status_code == 200
     assert TestClient(server.app).post("/api/connections/claude-package").status_code == 200
