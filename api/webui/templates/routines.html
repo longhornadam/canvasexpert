@@ -1,7 +1,7 @@
-{% extends "layouts/document.html" %}
+{% extends "layouts/workspace.html" %}
 {% from "ui/_macros.html" import page_header %}
 {% block title %}Routines — Canvas Expert{% endblock %}
-{% block document_variant %}wide{% endblock %}
+{% block workspace_variant %}full{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/routines.css?v={{ asset_v }}">{% endblock %}
 {% block primary %}
 {{ page_header('Automations', 'Checks and chores that run on this computer while Canvas Expert is open, across your '

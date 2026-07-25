@@ -1,4 +1,8 @@
-.rt-page { max-width: 880px; margin: 0 auto; }
+/* The page header lives in the workspace shell, so the panel must not re-center
+   itself inside that shell or the title's rule and the content edge disagree. */
+.rt-page { min-width: 0; }
+/* Toggle rows and prose stay at a readable measure without shifting the left edge. */
+.rt-list, .rt-list-head, .rt-byo { max-width: var(--ce-width-doc); }
 .rt-how { display: flex; gap: var(--ce-space-3); flex-wrap: wrap; margin-bottom: 28px; }
 .rt-how-item { display: flex; flex: 1 1 200px; align-items: flex-start; gap: var(--ce-space-2); padding: var(--ce-space-3) var(--ce-space-4); border: 1px solid var(--ce-rule); background: var(--ce-surface-raised); }
 .rt-how-ico { flex: 0 0 auto; color: var(--ce-accent-canvas); font-size: 16px; line-height: 1.5; }
@@ -36,7 +40,7 @@
 .rt-byo-cols h3 { margin: 0 0 var(--ce-space-2); }
 .rt-byo-cols ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.9; }
 .ce-routines-loading { padding: var(--ce-space-2) var(--ce-space-1); }
-.ce-routines-notice { max-width: 600px; margin: 32px auto; }
+.ce-routines-notice { max-width: 600px; margin: 32px 0; }
 @media (max-width: 760px) {
   .rt-row { flex-wrap: wrap; }
   .rt-row .rt-run { margin-left: auto; }

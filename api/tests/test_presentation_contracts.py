@@ -21,7 +21,9 @@ EXPECTED_PRESENTATION = {
     "/gradebook": ("gradebook.html", "workspace", "left-main", 1, True),
     "/roster": ("roster.html", "workspace", "left-main", 1, True),
     "/settings": ("settings.html", "workspace", "left-main", 1, True),
-    "/routines": ("routines.html", "document", "wide", 0, True),
+    # Automations sits on the workspace layout so its title shares a left edge
+    # with the other primary-nav pages instead of jumping inward.
+    "/routines": ("routines.html", "workspace", "full", 0, True),
     "/course": ("course.html", "document", "wide", 0, True),
     "/about": ("about.html", "document", "wide", 0, True),
     "/ai-expert": ("ai_expert.html", "document", "standard", 0, True),
