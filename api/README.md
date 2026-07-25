@@ -15,13 +15,14 @@ pushes content to live courses via the REST and New Quizzes APIs:
 
 Local-only, never served. See `AGENTS.md` Guardrails.
 
-The 0.75 beta version is `0.75.0-beta.0`. The supported launcher is
+The current version is `1.0.0-beta.2` (see `api/__init__.py`). The supported launcher is
 `py qf_ui.py` from `api/` or `py api/qf_ui.py` from the repository root; it binds
 only to `127.0.0.1` and preserves the `--port` and `--no-browser` options.
-The `/connections` page reports the current interpreter and app-root paths and
-offers copy-only client snippets or a support bundle. It never edits client
-configuration, installs software, changes `PATH`, starts a tunnel, or requests
-administrator access.
+The `/connections` page leads with **CanvasAgent**, the single paste-into-your-AI
+instruction file (download it, or copy the full/short text). Connecting Claude
+Desktop or the ChatGPT desktop app is optional and one click; it writes only that
+app's own config file, with a backup kept. It never installs software, changes
+`PATH`, starts a tunnel, or requests administrator access.
 
 ## Contracts consumed
 
