@@ -27,6 +27,53 @@
     });
   });
 
+  // CanvasAgent: fetch the canonical file and copy either the whole thing or
+  // just its CORE block. Splitting here rather than server-side keeps the file
+  // as the single source; the markers are pinned by
+  // api/tests/test_canvasagent_instructions.py so this stays in step with it.
+  var AGENT_URL = "/api/download-contract?name=CanvasAgent";
+  var AGENT_CORE_BEGIN = "CORE: begin";
+  var AGENT_CORE_END = "CORE: end";
+
+  function agentCoreOf(text) {
+    var start = text.indexOf(AGENT_CORE_BEGIN);
+    var end = text.indexOf(AGENT_CORE_END);
+    if (start === -1 || end === -1 || end < start) return null;
+    var body = text.slice(text.indexOf("\n", start) + 1, end);
+    return body.replace(/=+\s*$/, "").trim();
+  }
+
+  document.querySelectorAll("[data-agent-copy]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var want = button.getAttribute("data-agent-copy");
+      var result = document.querySelector("[data-agent-result]");
+      var original = button.textContent;
+      function say(message) { if (result) result.textContent = message; }
+      button.disabled = true;
+      say("");
+      fetch(AGENT_URL)
+        .then(function (r) {
+          if (!r.ok) throw new Error("http " + r.status);
+          return r.text();
+        })
+        .then(function (text) {
+          var payload = want === "core" ? agentCoreOf(text) : text;
+          if (!payload) throw new Error("core block not found");
+          return copyText(payload).then(function () {
+            button.textContent = "Copied";
+            say(want === "core"
+              ? "The short version is on your clipboard. Paste it into your assistant's instructions box."
+              : "The whole file is on your clipboard. Paste it into a chat.");
+            setTimeout(function () { button.textContent = original; }, 1600);
+          });
+        })
+        .catch(function () {
+          say("That could not be copied. Use Download instead, then open the file and copy from there.");
+        })
+        .then(function () { button.disabled = false; });
+    });
+  });
+
   function pillFor(status) {
     if (status.error) return { cls: "off", text: "Status unavailable" };
     if (status.connected && status.current) return { cls: "on", text: "Connected" };

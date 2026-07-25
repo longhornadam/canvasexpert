@@ -44,3 +44,13 @@
 .ce-ai-flow__arrow { color: var(--ce-ink-muted); }
 .ce-ai-flow__note { margin: 0; font-size: 12px; color: var(--ce-ink-muted); line-height: 1.6; }
 @media (max-width: 800px) { .ce-ai-cards { grid-template-columns: minmax(0, 1fr); } }
+
+/* CanvasAgent: the first thing on the page, since it works with any assistant
+   and needs nothing connected. */
+.ce-agent-card { border-color: var(--ce-accent-canvas); }
+.ce-agent-card__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ce-space-3); flex-wrap: wrap; }
+.ce-agent-card__head h2 { margin: 0; }
+.ce-agent-card__lede { max-width: 68ch; }
+.ce-agent-card__actions { margin-top: var(--ce-space-3); flex-wrap: wrap; }
+.ce-agent-card__note { max-width: 68ch; margin-top: var(--ce-space-3); }
+.ce-agent-card__result { min-height: 1.2em; margin-top: var(--ce-space-2); color: var(--ce-ink-muted); font-size: 13px; }

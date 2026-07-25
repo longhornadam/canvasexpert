@@ -149,6 +149,53 @@ def test_a_retired_name_that_still_ships_cannot_churn():
         )
 
 
+def test_the_download_route_serves_it():
+    """The AI Connections card links here, so the name must stay mapped."""
+    from fastapi.testclient import TestClient
+
+    from api.webui.server import app
+
+    with TestClient(app) as client:
+        r = client.get("/api/download-contract", params={"name": "CanvasAgent"})
+    assert r.status_code == 200, r.text
+    assert "attachment" in r.headers.get("content-disposition", "")
+    assert AGENT_NAME in r.headers["content-disposition"].replace("%20", " ")
+    assert r.text.lstrip().startswith("CanvasAgent")
+
+
+def test_the_connections_js_core_markers_match_the_file():
+    """connections.js slices the CORE block client-side using literal markers.
+
+    Renaming the markers in the text file would break the "Copy the short
+    version" button with no error anywhere, so pin the two together.
+    """
+    js_path = os.path.join(
+        ai_ta.API_DIR, "webui", "static", "connections.js"
+    )
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    for marker in (CORE_BEGIN, CORE_END):
+        assert f'"{marker}"' in js, (
+            f"connections.js does not use the marker {marker!r} that the "
+            "instruction set actually contains"
+        )
+
+
+def test_the_connections_page_offers_the_agent_prominently():
+    """A teacher has to be able to find this, which was the point of adding it."""
+    page = os.path.join(
+        ai_ta.API_DIR, "webui", "templates", "connections.html"
+    )
+    with open(page, encoding="utf-8") as f:
+        html = f.read()
+    assert 'id="canvasagent-card"' in html
+    assert 'data-agent-copy="core"' in html
+    assert 'data-agent-copy="full"' in html
+    assert "name=CanvasAgent" in html
+    # First thing in the stack, ahead of the per-client connection cards.
+    assert html.index("canvasagent-card") < html.index('class="ce-ai-cards"')
+
+
 # --------------------------------------------------------------------------
 # Retirement behaviour
 # --------------------------------------------------------------------------

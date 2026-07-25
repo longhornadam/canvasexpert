@@ -140,6 +140,9 @@ _CONTRACT_FILE_MAP = {
     "PageForge_Base": "Author a Page (PageForge).txt",
     "QuizForge_Base": "Author a Quiz (QuizForge).txt",
     "RubricForge_Base": "Author a Rubric (RubricForge).txt",
+    # Not a Forge contract, but the same "hand this text to an AI" delivery and
+    # the same canonical source, so it reuses this route rather than adding one.
+    "CanvasAgent": "START HERE - CanvasAgent.txt",
 }
 
 

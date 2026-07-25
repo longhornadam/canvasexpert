@@ -52,6 +52,29 @@
 {% endmacro %}
 
 <div class="ce-connections-stack">
+  <section class="ce-panel ce-agent-card" id="canvasagent-card">
+    <div class="ce-agent-card__head">
+      <h2>CanvasAgent</h2>
+      <span class="ce-eyebrow">Works with any AI</span>
+    </div>
+    <p class="ce-hint ce-agent-card__lede">
+      Instructions that turn whatever AI you already use into an agent for your Canvas work.
+      It learns what Canvas Expert can do and how to write coursework this app can check and
+      send to Canvas. Nothing to connect and nothing to install, so this works even with an
+      assistant that cannot connect below.
+    </p>
+    <div class="ce-actions ce-agent-card__actions">
+      <button type="button" class="button primary" data-agent-copy="core">Copy the short version</button>
+      <button type="button" class="button" data-agent-copy="full">Copy all of it</button>
+      <a class="button" href="/api/download-contract?name=CanvasAgent" download>Download</a>
+    </div>
+    <p class="ce-hint ce-agent-card__note">
+      Paste the short version into your assistant's custom-instructions box, the one with a
+      length limit. Paste all of it straight into a chat when there is no limit to worry about.
+    </p>
+    <p class="ce-agent-card__result" data-agent-result role="status" aria-live="polite"></p>
+  </section>
+
   <div class="ce-ai-cards">
     {{ client_card(connection.clients.claude, "Claude Desktop", "Connect to Claude Desktop", "Restart Claude Desktop to finish.") }}
     {{ client_card(connection.clients.chatgpt, "ChatGPT desktop", "Connect to ChatGPT", "Restart ChatGPT to finish.") }}
