@@ -28,24 +28,44 @@ DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 DEFAULT_AI_TA_DIR = os.path.join(DEFAULT_DOCS_DIR, "AI Authoring")
 
 
-# Files a newer file replaces, mapped to every version of them we ever shipped.
-# Both seeding helpers below skip a path that already exists, so rewriting a
-# shipped file's contents would never reach a teacher who already has the old
-# one: they would keep the stale copy and gain the new one, leaving two files
-# disagreeing with each other. Retiring the old name is what actually
-# consolidates. A teacher's copy is removed only when it still matches
-# something we shipped, so a file they have edited by hand is left alone, per
-# this module's promise.
+# Seeded files that a newer version replaces, mapped to every version of them
+# we previously shipped.
+#
+# Both seeding helpers below skip a path that already exists, which is a
+# deliberate promise to teachers who hand-edit these files. The side effect is
+# that new contents never reach anyone who already has the file: they keep the
+# stale copy. Deleting the stale copy first, so the current one seeds back in
+# on the same run, is what actually updates them. A copy is only deleted when
+# it still hashes to something we shipped, so a hand-edited file survives.
+#
+# This covers two cases with one mechanism:
+#   * a rename, where the old name is listed and no longer ships
+#   * a content update under the same name, where the name still ships and its
+#     PREVIOUS hashes are listed
+#
+# Maintenance: when the text of a listed file changes, append the hash of the
+# version being replaced. Get it with
+#   git log --format=%H -- <path>
+#   git show <rev>:<path> | sha256sum      (normalise CRLF to LF first)
+# Listing the CURRENT shipped hash would delete and re-seed forever, which
+# test_a_retired_name_that_still_ships_cannot_churn guards against.
 RETIRED_FILES = {
     # Superseded by "START HERE - CanvasAgent.txt".
     "START HERE - Canvas Expert.txt": frozenset({
         "d7b59318f61d733380349846b948858a98ad06aed969ba15f2b8eeceea5d6eed",
     }),
     # Indexed the file above, so an unedited copy is stale the moment it goes.
-    # Removing it lets the corrected version seed back in on the same run.
     "About This Folder.txt": frozenset({
         "c3d90d2d29fd36ac9b3fecbc8982b9681d967a409fcda69c3d4d65d9e70e63b6",
         "00a7c1d978e5d02effde0f4b6d0a96d7d131ca324372eea641be2ee1cd247115",
+    }),
+    # Same-name updates. Teachers are told to hand this file to an AI, so a
+    # stale copy answers setup questions wrongly rather than harmlessly.
+    "START HERE - CanvasAgent.txt": frozenset({
+        # First release, before the procedure-first rewrite.
+        "66fb445401ff147e03b727d01d70e08f8337563f94d954ef6ac6fae9dfa0706b",
+        # Procedure-first rewrite, before Appendix A on installing and running.
+        "e5e4023c419e14de58339f32c3b6da5bafd81528aae91d41477640c5f27b21b6",
     }),
 }
 

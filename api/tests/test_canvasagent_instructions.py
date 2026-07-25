@@ -149,14 +149,81 @@ def test_a_retired_name_that_still_ships_cannot_churn():
         )
 
 
+REPO_ROOT = os.path.dirname(ai_ta.API_DIR)
+
+
+def test_setup_appendix_exists_and_comes_first():
+    """Someone emailed this file may not have installed CanvasExpert at all, so
+    setup sits in the first appendix rather than the last."""
+    with open(AGENT_PATH, encoding="utf-8") as f:
+        body = f.read()
+    assert "Appendix A. Getting CanvasExpert running" in body
+    others = [body.index(f"Appendix {letter}.") for letter in "BCDEF"
+              if f"Appendix {letter}." in body]
+    assert others, "no other appendices found"
+    assert body.index("Appendix A.") < min(others)
+
+
+def test_every_file_the_setup_appendix_tells_them_to_click_exists(text):
+    """A doc naming a launcher that was renamed sends teachers hunting."""
+    for filename in ("Open Canvas Expert.bat", "Repair.bat"):
+        assert filename in text, f"setup guidance never mentions {filename}"
+        assert os.path.isfile(os.path.join(REPO_ROOT, filename)), (
+            f"{filename} is named in the instructions but is not in the repo root"
+        )
+
+
+def test_the_port_matches_the_launcher(text):
+    """The doc tells a teacher to type this address when the browser does not
+    open on its own, so a drifted port sends them to a dead page."""
+    with open(os.path.join(ai_ta.API_DIR, "qf_ui.py"), encoding="utf-8") as f:
+        port = re.search(r"DEFAULT_PORT\s*=\s*(\d+)", f.read()).group(1)
+    assert f"127.0.0.1:{port}" in text, (
+        f"instructions do not name the real default port {port}"
+    )
+
+
+def test_the_python_floor_matches_the_launcher(text):
+    """Both the batch file and the instructions state a minimum version."""
+    with open(os.path.join(REPO_ROOT, "Open Canvas Expert.bat"), encoding="utf-8") as f:
+        bat = f.read()
+    wanted = re.search(r"Python (\d+\.\d+) or newer", bat)
+    assert wanted, "launcher no longer states a Python version"
+    assert f"Python {wanted.group(1)} or newer" in text, (
+        f"launcher requires Python {wanted.group(1)} but the instructions disagree"
+    )
+
+
+def test_it_does_not_claim_python_installs_itself(text):
+    """The launcher prints a message and exits when Python is missing; it does
+    not install it. The doc this replaced claimed otherwise, and that claim is
+    the single most likely first-run question."""
+    setup = text.split("Appendix A.", 1)[1].split("Appendix B.", 1)[0]
+    assert "without installing it" in setup, (
+        "the setup appendix no longer makes clear that Python is the teacher's "
+        "own one-time step"
+    )
+    # And the launcher must still behave that way.
+    with open(os.path.join(REPO_ROOT, "Open Canvas Expert.bat"), encoding="utf-8") as f:
+        bat = f.read()
+    assert "exit /b 1" in bat.split("where py", 1)[1].split("REM", 1)[0], (
+        "the launcher now does something other than bail when Python is absent, "
+        "so the setup appendix needs rewriting"
+    )
+
+
 def test_the_download_route_serves_it():
     """The AI Connections card links here, so the name must stay mapped."""
     from fastapi.testclient import TestClient
 
     from api.webui.server import app
 
-    with TestClient(app) as client:
-        r = client.get("/api/download-contract", params={"name": "CanvasAgent"})
+    # Deliberately not `with TestClient(app)`. The context manager runs the
+    # app's lifespan, and startup calls ai_ta.build_library against the real
+    # workspace, so the test would seed and retire files in the developer's own
+    # OneDrive folder. Plain construction skips lifespan and still routes.
+    client = TestClient(app)
+    r = client.get("/api/download-contract", params={"name": "CanvasAgent"})
     assert r.status_code == 200, r.text
     assert "attachment" in r.headers.get("content-disposition", "")
     assert AGENT_NAME in r.headers["content-disposition"].replace("%20", " ")

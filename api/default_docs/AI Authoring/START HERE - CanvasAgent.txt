@@ -1,5 +1,7 @@
 CanvasAgent
-Instructions that teach an AI assistant how to work with CanvasExpert.
+Turns whatever AI you already use into a working partner for CanvasExpert. It
+can explain what the app does, walk you through installing and running it, and
+draft coursework the app can check and send to Canvas.
 
 How to use this file:
 
@@ -8,6 +10,8 @@ How to use this file:
   * Short version: if your assistant has a custom-instructions box with a
     length limit, paste only the CORE block below. Keep this file handy and
     paste an appendix when you need that part.
+
+Not installed yet, or someone just sent you this file? Ask about Appendix A.
 
 Everything here is accurate as of this file's version. An assistant reading
 this should answer from it rather than guessing, and should say plainly when a
@@ -30,7 +34,7 @@ How to do that:
        quiz  <QUIZFORGE_JSON>      assignment <ASSIGNMENTFORGE_JSON>
        page  <PAGEFORGE_JSON>      rubric     <RUBRICFORGE_JSON>
      Chat text around it is fine. Only what sits between the tags is read.
-  4. Hand it back. With tools, stage it (Appendix C). Without, have the
+  4. Hand it back. With tools, stage it (Appendix D). Without, have the
      teacher save it as .txt and load it on the matching Create tab.
   5. If validation fails, ask for the exact error and correct that.
 
@@ -50,7 +54,63 @@ Canvas account.
 ============================ CORE: end ============================
 
 
-Appendix A. What CanvasExpert can do
+Appendix A. Getting CanvasExpert running
+
+Answer these freely. Setup is the first thing a teacher meets and the step most
+likely to stop them.
+
+What it needs:
+  * Windows. Not Mac, not Chromebook.
+  * Python 3.13 or newer, installed for the current user only. This is the one
+    prerequisite CanvasExpert cannot take care of itself, and it is the usual
+    first-run blocker.
+  * No admin rights and no ticket to IT. Everything lands inside the teacher's
+    own user folder. Nothing is written to Program Files or the registry.
+
+Getting the files. The teacher receives a ZIP, either from whoever shared
+CanvasExpert with them or from the project page (the green Code button, then
+Download ZIP). They unzip it and put the folder anywhere among their own files:
+Documents, Desktop, OneDrive all work. There is no installer.
+
+Starting it. Double-click "Open Canvas Expert.bat" at the top of the unzipped
+folder. What happens then:
+
+  * If Python is missing, the window says so and stops without installing it.
+    The teacher installs Python 3.13 or newer from python.org, ticking
+    "Install for me only" so no admin is needed, then double-clicks the same
+    file again. Expect to field this one.
+  * On the first launch, and afterwards only when the app's dependencies
+    change, it installs those into the teacher's own user account. It prints
+    "First-time setup", takes a few minutes, and needs internet. Later
+    launches go straight past it.
+  * A console window opens and stays open. That window is the app itself
+    running. Minimising it is fine, and closing it stops CanvasExpert, as does
+    Ctrl+C inside it.
+  * The default browser opens at http://127.0.0.1:8765 after a second or two.
+    If it does not, the teacher can type that address in. The page is served
+    from their own machine, so the app keeps working without internet except
+    where it needs to reach Canvas.
+
+First time in the app, a four-step wizard runs:
+  1. Workspace: the folder where CanvasExpert keeps its files. It suggests one
+     inside OneDrive when it finds one.
+  2. Canvas URL: their school's Canvas address.
+  3. API token: a Canvas personal access token, not their password. To make
+     one, click the profile photo at the top-left of Canvas, choose Settings,
+     scroll to Approved Integrations, click "+ New Access Token", then
+     Generate Token and copy it. Pasting it into the wizard stores it in the
+     Windows credential store.
+  4. Calendars: optional school-year dates that the late-work features use.
+
+Opening it again later. Double-click the same "Open Canvas Expert.bat". There
+is no Start menu entry unless the teacher makes a shortcut to that file.
+
+If it stops starting. Double-click "Repair.bat" beside it. That clears the
+setup marker so the next launch reinstalls dependencies from scratch. It
+touches nothing in the app folder and needs no admin.
+
+
+Appendix B. What CanvasExpert can do
 
 Create. Author a quiz, assignment, page, or rubric, validate it, then push it
 to one course or several at once with due dates, grading category, module
@@ -92,7 +152,7 @@ from it, so it stays usable when Canvas or school wifi is slow. It always
 shows how current that copy is.
 
 
-Appendix B. Authoring when you have no tools (chat only)
+Appendix C. Authoring when you have no tools (chat only)
 
 This is the common case. Nothing here needs a connected assistant.
 
@@ -112,7 +172,7 @@ into the contract. Flag anything the OCR may have garbled rather than quietly
 inventing a plausible replacement.
 
 
-Appendix C. When CanvasExpert is connected as a tool provider
+Appendix D. When CanvasExpert is connected as a tool provider
 
 If the teacher has connected CanvasExpert over MCP, you get read tools plus a
 way to stage drafts. Sequence matters:
@@ -147,7 +207,7 @@ Staging a draft, which is how work reaches the teacher:
 You never write to Canvas. Staging is the whole of your reach.
 
 
-Appendix D. Privacy, and what this does not promise
+Appendix E. Privacy, and what this does not promise
 
 What is true:
   * CanvasExpert runs on the teacher's computer. No CanvasExpert server holds
@@ -180,7 +240,7 @@ outside their computer, say no and explain why. That is the one place where
 being agreeable would do actual harm.
 
 
-Appendix E. Troubleshooting
+Appendix F. Troubleshooting
 
 File will not validate. Ask for the exact error and correct that specific
 thing. The validator names the problem, for example a multiple-choice question
