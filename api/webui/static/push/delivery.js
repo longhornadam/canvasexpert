@@ -77,10 +77,20 @@
     return sel.selectedOptions[0].text;
   }
 
+  // Focusing a different course (course_picker.js's setFocus) re-triggers
+  // both loaders below without cancelling a slower earlier request, so a
+  // stale response could land last and fill these pickers with the
+  // previous course's categories/modules while a different course is now
+  // focused. Stamp each request and let only the newest one write, the
+  // same way inbox.js does.
+  var aggroupsGeneration = 0;
+  var modulesGeneration = 0;
+
   function loadAssignmentGroups(courseId) {
     var sels = Array.from(document.querySelectorAll(".js-aggroups"));
     var hints = Array.from(document.querySelectorAll(".js-ag-hint"));
     if (!sels.length || !courseId) return;
+    var generation = ++aggroupsGeneration;
     sels.forEach(function (sel) {
       sel.disabled = true;
       while (sel.options.length > 1) sel.remove(1);
@@ -89,6 +99,7 @@
     fetch("/api/assignment-groups?course_id=" + encodeURIComponent(courseId))
       .then(function (r) { return r.json(); })
       .then(function (d) {
+        if (generation !== aggroupsGeneration) return;
         sels.forEach(function (sel) { sel.disabled = false; });
         if (!d.ok) {
           hints.forEach(function (h) { h.textContent = "Could not load categories"; });
@@ -106,6 +117,7 @@
         });
       })
       .catch(function () {
+        if (generation !== aggroupsGeneration) return;
         sels.forEach(function (sel) { sel.disabled = false; });
       });
   }
@@ -127,16 +139,19 @@
     var sels = Array.from(document.querySelectorAll(".js-modules"));
     var hints = Array.from(document.querySelectorAll(".js-mod-hint"));
     if (!sels.length || !courseId) return;
+    var generation = ++modulesGeneration;
     sels.forEach(function (s) { s.disabled = true; });
     hints.forEach(function (h) { h.textContent = "Loading…"; });
     fetch("/api/modules?course_id=" + encodeURIComponent(courseId))
       .then(function (r) { return r.json(); })
       .then(function (d) {
+        if (generation !== modulesGeneration) return;
         var mods = (d.ok && d.modules) ? d.modules : [];
         sels.forEach(function (s) { fillModuleSelect(s, mods); });
         hints.forEach(function (h) { h.textContent = d.ok ? "" : "Could not load modules"; });
       })
       .catch(function () {
+        if (generation !== modulesGeneration) return;
         sels.forEach(function (s) { s.disabled = false; });
       });
   }

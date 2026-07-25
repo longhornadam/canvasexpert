@@ -28,6 +28,13 @@
   var courseLoadHooks = [];
   var tableRenderHooks = [];
 
+  // Switching courses (or clicking Refresh again) starts a new request
+  // without cancelling the old one, so a slower earlier response could land
+  // last and fill the roster table with the previous course's students while
+  // the new course sits selected. Stamp each request and let only the
+  // newest one write, the same way inbox.js does.
+  var loadGeneration = 0;
+
   function setStatus(msg, isOk) {
     statusEl.textContent = msg;
     statusEl.className = "hint" + (isOk ? " ok" : " error");
@@ -88,6 +95,7 @@
   }
 
   function loadCourse() {
+    var generation = ++loadGeneration;
     var cid = courseSelect.value;
     // The relationship editor holds private, course-scoped context. Hide it
     // before every reload so a prior course can never remain visible while a
@@ -111,6 +119,7 @@
     fetch("/api/roster?course_id=" + encodeURIComponent(cid))
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (generation !== loadGeneration) return;
         if (!data.ok) {
           setStatus(data.error || "Failed to load roster.", false);
           return;
@@ -143,6 +152,7 @@
         }
       })
       .catch(function (e) {
+        if (generation !== loadGeneration) return;
         setStatus("Network error: " + e.message, false);
       });
   }

@@ -12,12 +12,20 @@
     return false;
   }
 
+  // Switching courses re-triggers this loader (see gradebook.js's
+  // _autoloadTab) without cancelling a slower earlier request, so a stale
+  // response could land last and fill the roster with the previous course's
+  // students while the new course sits selected. Stamp each request and let
+  // only the newest one write, the same way inbox.js does.
+  var loadGeneration = 0;
+
   // ── Extra-time roster (auto-loaded) ───────────────────────────────────
 
   window.CE_GRADEBOOK.loadRoster = async function _loadRoster() {
     if (!requireReady()) return;
     var id = gb.gbCourseId();
     if (!id) return;
+    var generation = ++loadGeneration;
     gb._markLoaded("extra-time");
     var st = document.getElementById("xt-status");
     if (st) { st.className = "status hint"; st.textContent = "Loading\u2026"; }
@@ -28,6 +36,7 @@
         fetch("/api/students/list?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); }),
         fetch("/api/extra-time?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); }),
       ]);
+      if (generation !== loadGeneration) return;
       var stu = response[0], saved = response[1];
       if (!stu.ok) {
         if (st) { st.className = "status error"; st.textContent = "Error: " + stu.error; }
@@ -56,6 +65,9 @@
       }
       var sb = document.getElementById("btn-save-roster");
       if (sb) sb.hidden = false;
+    } catch (e) {
+      if (generation !== loadGeneration) return;
+      if (st) { st.className = "status error"; st.textContent = "Could not load the roster. Try Reload."; }
     } finally {
       if (reloadBtn) reloadBtn.disabled = false;
     }

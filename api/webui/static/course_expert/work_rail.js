@@ -20,13 +20,22 @@
   });
 
   /* ── In-progress / review summaries ────────────────────────────────── */
+  // No freshness line lives on this page (unlike desk.js's Home cards), so a
+  // failed check must say so rather than leave the server's default markup
+  // ("None.") standing in for a real answer -- that silence is exactly what
+  // makes a broken check look identical to nothing-in-progress.
   function fetchWork() {
     fetch("/api/work?section=all", {
       headers: { Accept: "application/json" },
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error("work request failed");
+        return r.json();
+      })
       .then(function (body) {
-        if (!body.ok || !Array.isArray(body.jobs)) return;
+        if (!body || body.ok !== true || !Array.isArray(body.jobs)) {
+          throw new Error("invalid work response");
+        }
         var jobs = body.jobs;
         renderList(continueEl, jobs.filter(function (j) {
           return ["draft", "ready", "in_progress"].indexOf(j.status) !== -1;
@@ -35,7 +44,15 @@
           return j.status === "attention";
         }), "Review");
       })
-      .catch(function () { /* silent */ });
+      .catch(function () {
+        renderDegraded(continueEl);
+        renderDegraded(attentionEl);
+      });
+  }
+
+  function renderDegraded(container) {
+    if (!container) return;
+    container.innerHTML = '<p class="ce-work-rail-empty">Work status couldn&rsquo;t be checked. Starting new work above still works.</p>';
   }
 
   function renderList(container, jobs, label) {

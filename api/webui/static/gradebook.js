@@ -53,7 +53,14 @@
 
   async function postForm(url, fields) {
     return fetch(url, { method: "POST", body: new URLSearchParams(fields) })
-      .then(r => r.json());
+      .then(r => r.json())
+      .catch(function () {
+        // Network failure or a non-JSON response (e.g. a crashed request):
+        // resolve to a normal ok:false shape so every caller's existing
+        // `if (d.ok) ... else ...` / `if (d.error && !d.results) ...` branch
+        // runs instead of leaving an unhandled rejection.
+        return { ok: false, error: "Could not reach Canvas Expert. Check your connection and try again." };
+      });
   }
 
   function _renderBanner(el, results, exitOk) {

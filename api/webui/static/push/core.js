@@ -302,13 +302,22 @@
     }
   }
 
+  // Like work_rail.js's rail panels, this list has no freshness line to fall
+  // back on, so a failed check must overwrite "Canvas unchanged." rather than
+  // leave it standing -- that reassurance is misleading once it might be stale.
   function renderOperationsList() {
     var container = document.getElementById("ce-operations-list");
     if (!container) return;
     fetch("/api/operations")
-      .then(function (response) { return response.json(); })
+      .then(function (response) {
+        if (!response.ok) throw new Error("operations request failed");
+        return response.json();
+      })
       .then(function (data) {
-        var ops = data.operations || [];
+        if (!data || data.ok !== true || !Array.isArray(data.operations)) {
+          throw new Error("invalid operations response");
+        }
+        var ops = data.operations;
         if (!ops.length) {
           container.innerHTML = '<p class="ce-operations-empty">Canvas unchanged.</p>';
           return;
@@ -336,7 +345,9 @@
           }
         });
       })
-      .catch(function () {});
+      .catch(function () {
+        container.innerHTML = '<p class="ce-operations-empty">Operation history couldn&rsquo;t be checked. Preparing new operations still works.</p>';
+      });
   }
 
   var operationPollers = Object.create(null);

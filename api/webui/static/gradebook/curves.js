@@ -16,12 +16,21 @@
     return false;
   }
 
+  // Switching courses re-triggers this loader (see gradebook.js's
+  // _autoloadTab) without cancelling a slower earlier request, so a stale
+  // response could land last and fill the assignment picker with the
+  // previous course's assignments while the new course sits selected.
+  // Stamp each request and let only the newest one write, the same way
+  // inbox.js does.
+  var loadGeneration = 0;
+
   // ── Curves (auto-loaded on tab activate) ──────────────────────────────
 
   window.CE_GRADEBOOK.loadCurveAssignments = async function _loadCurveAssignments() {
     if (!requireReady()) return;
     var id = gb.gbCourseId();
     if (!id) return;
+    var generation = ++loadGeneration;
     gb._markLoaded("curves");
     var hint = document.getElementById("cv-assign-hint");
     if (hint) hint.textContent = "loading\u2026";
@@ -29,6 +38,11 @@
     if (btn) btn.disabled = true;
     try {
       var d = await fetch("/api/curve/assignments?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); });
+      if (generation !== loadGeneration) return;
+      if (!d.ok) {
+        if (hint) hint.textContent = "Could not load the assignment list: " + (d.error || "unknown error");
+        return;
+      }
       var sel = document.getElementById("cv-assignment");
       if (sel) {
         sel.innerHTML = '<option value="">\u2014 select assignment \u2014</option>';
@@ -42,7 +56,8 @@
       }
       if (hint) hint.textContent = (d.assignments || []).length + " assignments";
     } catch (e) {
-      if (hint) hint.textContent = "error loading";
+      if (generation !== loadGeneration) return;
+      if (hint) hint.textContent = "Could not load the assignment list. Try Reload.";
     } finally {
       if (btn) btn.disabled = false;
     }

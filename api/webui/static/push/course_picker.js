@@ -117,14 +117,23 @@
     renderCourseScopeSummaries();
   }
 
+  // Focusing a different course row re-triggers this without cancelling a
+  // slower earlier request, so a stale response could land last and point
+  // "Open folder" at the previous course's downloads while a different
+  // course is now focused. Stamp each request and let only the newest one
+  // write, the same way inbox.js does.
+  var folderLoadGeneration = 0;
+
   function loadCourseFolder(courseName) {
     var row = document.getElementById("folder-row");
     var path = document.getElementById("folder-path");
     var note = document.getElementById("folder-note");
     if (!row || !courseName) return;
+    var generation = ++folderLoadGeneration;
     fetch("/api/course-folder?course_name=" + encodeURIComponent(courseName))
       .then(function (r) { return r.json(); })
       .then(function (d) {
+        if (generation !== folderLoadGeneration) return;
         row.hidden = false;
         path.textContent = d.path;
         path.title = d.path;

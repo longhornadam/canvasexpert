@@ -40,6 +40,9 @@
       remove.innerHTML='<option value="">— none —</option>' + (payload.personas || []).filter(function(p){return !p.builtin;}).map(function(p){
         return '<option value="' + String(p.id).replace(/"/g, '&quot;') + '">' + String(p.name) + '</option>';
       }).join('');
+    }).catch(function () {
+      var status=byId('pg-custom-persona-status');
+      if (status) status.textContent='Custom personas couldn\'t be loaded; built-in personas still work.';
     });
   }
   var personaForm=byId('pg-custom-persona-form');
@@ -77,6 +80,9 @@
       patterns=payload.patterns || []; var select=byId('pg-pattern-edit'); if(!select)return;
       select.innerHTML=patterns.map(function(pattern){return '<option value="' + String(pattern.id).replace(/"/g, '&quot;') + '">' + String(pattern.name) + '</option>';}).join('');
       if(patterns[0])fillPattern(patterns[0]);
+    }).catch(function () {
+      var status=byId('pg-pattern-status');
+      if (status) status.textContent='Feedback patterns couldn\'t be loaded; the default pattern still works.';
     });
   }
   var patternSelect=byId('pg-pattern-edit');
