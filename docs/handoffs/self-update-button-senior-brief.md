@@ -1,6 +1,6 @@
 # Update Canvas Expert from inside the app
 
-**Status:** CURRENT direct execution brief
+**Status:** ACCEPTED (GREEN) 2026-07-25 -- see final update at the end of Execution result
 **Executor:** one Claude Sonnet 5 implementation agent, running the whole slice in a new session
 **Branch:** `dev`
 **Base:** current `origin/dev` after the executor's preflight fetch
@@ -554,3 +554,30 @@ needed).
    here; worth a look separately.
 4. `.github/` must survive the next `main` orphan-snapshot rebuild (per D9) -- it does not
    exist on `main` yet.
+
+### Senior close-out, 2026-07-25
+
+Accepted GREEN. Independently verified the executor's report against real machine state
+rather than the report alone (see `verify-subagent-reports-against-real-state` memory) --
+found and fixed a bigger real-data-loss gap than the executor's own incident note covered
+(six keys' worth of real configured state silently dropped from the live OneDrive
+`settings.json`, restored from a 2-day-old conflict copy). Also added a global
+`api/tests/conftest.py` isolation fixture (`7b5b857`) after discovering the executor's
+per-site CONFIG_PATH patches weren't the only real-path leak; two more PowerGrader test
+files had the same class of bug, fixed the same way.
+
+Closed the versioning gap this brief's criterion 2 exposed: no release existed with real
+build assets to test against, because the repo's only prior tag (`v1.0.0-beta.1`) predates
+this brief's `release.yml` and was cut without ever bumping `__version__`. Bumped to
+`1.0.0-beta.2` (`09082cf`), pushed `dev`, tagged, and let the new workflow cut a real
+release with `CanvasExpert.zip` + `SHA256SUMS.txt`.
+
+The user then ran the actual live test on their own desktop: checked for updates, saw
+`1.0.0-beta.2` available, downloaded, clicked Restart and update, and the app closed and
+reopened reporting `1.0.0-beta.2` -- confirming criterion 2 (the OS-level `start`-spawned
+handoff) end-to-end, which the executor's sandboxed environment could not do. Criteria
+1, 3-6, 8-10 already held from the executor's own verification. Criterion 7 (robocopy
+mid-apply failure) remains verified by code reading only, not induced live; acceptable
+given the rest of the mechanism is now proven for real.
+
+This brief is closed. Do not route a future executor here.
