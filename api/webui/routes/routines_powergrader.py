@@ -233,7 +233,7 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                     privacy_steps=privacy_steps,
                     privacy_artifacts=privacy_artifacts,
                     students=students,
-                    mode_label="Auto-Score With API",
+                    mode_label="Auto-score with AI",
                     copilot_packet=session_ai.get("copilot_packet"),
                     late_watch=late_watch,
                 )

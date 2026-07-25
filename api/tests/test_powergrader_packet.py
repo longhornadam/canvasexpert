@@ -185,7 +185,7 @@ def test_build_session_stores_copilot_packet_metadata():
         privacy_steps=[],
         privacy_artifacts={},
         students=[],
-        mode_label="Use My AI Chat",
+        mode_label="Score with AI chat",
         copilot_packet=copilot_packet,
     )
 

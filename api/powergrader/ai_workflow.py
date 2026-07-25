@@ -54,8 +54,8 @@ def run_ai_workflow(
 
     if mode not in {"packet", "assisted"}:
         privacy_steps.append(privacy.privacy_step(
-            "fast_mode", "Grade Myself selected", "warn",
-            "Grade Myself selected. No AI packet or API call was requested.",
+            "fast_mode", "Score myself selected", "warn",
+            "Score myself selected. No AI packet or API call was requested.",
         ))
         return ai_workflow_support.workflow_result(
             ok=True,

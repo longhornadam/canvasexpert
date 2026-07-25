@@ -201,7 +201,7 @@
         { id: "manual_ai_chat", label: "Ready for your AI chat", status: "pending", detail: "Nothing is sent automatically." }
       ]);
     }
-    return [{ id: "download", label: "Download submitted work from Canvas", status: "running", detail: "Grade Myself stays local and skips AI packet creation." }];
+    return [{ id: "download", label: "Download submitted work from Canvas", status: "running", detail: "Score myself stays local and skips AI packet creation." }];
   }
 
   function renderPrivacySteps(steps) {

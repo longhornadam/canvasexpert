@@ -92,7 +92,7 @@ def mode_label(mode: str) -> str:
         "fast": "Score myself",
         "packet": "Score with AI chat",
         "assisted": "Auto-score with AI",
-    }.get(mode or "", mode or "Grade Myself")
+    }.get(mode or "", mode or "Score myself")
 
 
 def load_session(session_id: str) -> dict | None:

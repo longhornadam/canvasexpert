@@ -475,7 +475,7 @@ def pg_late_watch(
             return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
         session_actions.invalidate_pending_review(session)
         if session.get("mode") not in ("assisted", "packet"):
-            return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-Score With API or AI Chat mode."})
+            return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-score with AI or AI chat mode."})
         if not (session.get("late_watch") or {}).get("supported"):
             return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
         late_watch = session.get("late_watch") or {}

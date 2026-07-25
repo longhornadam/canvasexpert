@@ -60,7 +60,7 @@ def _assist_session():
         "assignment_description": "Explain the text.",
         "points_possible": 10,
         "mode": "assisted",
-        "mode_label": "Auto-Score With API",
+        "mode_label": "Auto-score with AI",
         "rubric_name": "Rubric A",
         "persona_id": "sage",
         "model_id": "model-a",
@@ -331,7 +331,7 @@ def test_late_routes_reject_non_assisted_session(monkeypatch):
         data = _response_json(route("sid"))
         assert data == {
             "ok": False,
-            "error": "Late catch-up requires Auto-Score With API or AI Chat mode.",
+            "error": "Late catch-up requires Auto-score with AI or AI chat mode.",
         }
     assert state["mode"] == "fast"
 

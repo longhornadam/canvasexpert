@@ -28,12 +28,12 @@ def build_late_watch_state(
     elif not watch_late_enabled:
         late_reason = "Late catch-up is disabled for this session."
     elif mode == "assisted" and not has_openrouter_key:
-        late_reason = "Late catch-up requires Auto-Score With API and a saved OpenRouter key."
+        late_reason = "Late catch-up requires Auto-score with AI and a saved OpenRouter key."
         watch_late_enabled = False
     elif mode == "packet":
         late_reason = ""  # Packet mode late generation is separate from scoring
     elif mode not in ("assisted", "packet"):
-        late_reason = "Late catch-up requires Auto-Score With API or AI Chat mode."
+        late_reason = "Late catch-up requires Auto-score with AI or AI chat mode."
         watch_late_enabled = False
 
     return {

@@ -10,12 +10,6 @@
     return node.innerHTML;
   }
 
-  function modeLabel(mode) {
-    if (mode === 'packet') return 'Score with AI chat';
-    if (mode === 'assisted') return 'Auto-score with AI';
-    return 'Score myself';
-  }
-
   function createdLabel(value) {
     return value ? String(value).replace('T', ' ').slice(0, 16) : 'Date unavailable';
   }
@@ -40,7 +34,7 @@
       '<div class="pg-session-main">' +
         '<strong class="pg-session-name">' + esc(session.assignment_name || 'Untitled assignment') + '</strong>' +
         '<div class="pg-session-meta">' +
-          '<span>' + esc(session.mode_label || modeLabel(session.mode)) + '</span>' +
+          '<span>' + esc(session.mode_label) + '</span>' +
           '<span>' + esc(createdLabel(session.created)) + '</span>' +
           '<span>' + posted + ' / ' + total + ' posted</span>' +
         '</div>' + attention +

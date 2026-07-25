@@ -56,7 +56,7 @@ import features. Preserve `window.CE_POWERGRADER_SETUP` and existing queue names
     idempotency, and receipt checks;
   - one newly created assisted/packet interactive session, under the per-session lock from
     authoritative reload through final save.
-- Interactive auto-post is unavailable to Grade Myself, Classic Quiz, and New Quiz.
+- Interactive auto-post is unavailable to Score myself, Classic Quiz, and New Quiz.
   Packet late generation never writes; only a valid import against that late batch's SAFE
   bundle may trigger the scoped path. Uncertain results remain drafts.
 - New Quiz sessions have a separate teacher-reviewed item-finalization lane for item scores

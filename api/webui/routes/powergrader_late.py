@@ -13,7 +13,7 @@ def _late_watch_error(session: dict, *, require_key: bool = False, require_sourc
         return "Session not found."
     mode = session.get("mode", "")
     if mode not in ("assisted", "packet"):
-        return "Late catch-up requires Auto-Score With API or AI Chat mode."
+        return "Late catch-up requires Auto-score with AI or AI chat mode."
     late_watch = session.get("late_watch") or {}
     if not late_watch:
         return "Late catch-up is not configured for this session."

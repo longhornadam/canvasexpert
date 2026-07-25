@@ -49,7 +49,7 @@ Source tests never substitute for rendered verification.
 | `/students/reports` | **Student reports** — packet and portfolio tools under Students | `student_reports.html` + `course_expert/student_reports.js` + `course_expert/portfolio.js` |
 | `/gradebook` | **Gradebook tools** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
 | `/roster` | **Rosters** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
-| `/powergrader` | **PowerGrader** — grade one assignment with three routes: Grade myself, Prepare for my AI chat, or Draft-score with OpenRouter | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
+| `/powergrader` | **PowerGrader** — grade one assignment with three routes: Score myself, Prepare for my AI chat, or Draft-score with OpenRouter | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
 | `/ai-expert` | **AI helper files** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
@@ -439,7 +439,7 @@ The setup page uses a wide responsive workspace with:
 - **Side-by-side course/assignment selection** on desktop — Course takes about 35%
   of the available width and Assignment takes about 65%, with course-wide search
   and module filtering unchanged.
-- **Mode-aware fast versus AI configuration** — Grade myself shows a compact
+- **Mode-aware fast versus AI configuration** — Score myself shows a compact
   rubric-only panel; AI modes show a two-column AI setup/source material layout.
 - **Course-wide search** that scans all assignments regardless of the selected
   module view, and module filtering that defaults to the last three modules.
@@ -463,9 +463,9 @@ the whole course, including assignments and quizzes outside the selected module 
 
 Modes:
 
-- **Grade Myself** — fetches submitted work and opens the queue with no AI packet
+- **Score myself** — fetches submitted work and opens the queue with no AI packet
   or API call.
-- **Use My AI Chat** — writes reviewed pseudonymized artifacts under `For AI/`
+- **Score with AI chat** — writes reviewed pseudonymized artifacts under `For AI/`
   and private originals/state under the canonical workspace,
   keeps the legacy
   Safe AI Packet ZIP, and also creates Copilot-friendly batch folders. Each batch
@@ -473,7 +473,7 @@ Modes:
   and TA personality, and that batch's pseudonymized student work. Teachers start
   a fresh Copilot chat per batch, then paste each JSON response back into the
   matching batch panel in the same PowerGrader session.
-- **Auto-Score With API** — sends only the SAFE pseudonymized packet to the
+- **Auto-score with AI** — sends only the SAFE pseudonymized packet to the
   configured OpenRouter model after price checks, then loads AI suggestions into
   the same review queue.
 
@@ -490,7 +490,7 @@ the teacher explicitly enables one of two narrow automatic-post paths:
 - A scheduled Auto-Score job may opt one job/assignment into scheduled auto-push.
 - A newly created assisted or packet PowerGrader session may opt only that session into
   **Automatically post eligible AI results to Canvas**. The checkbox is default-off and
-  non-sticky. Grade Myself, Classic Quiz, and New Quiz sessions cannot enable it.
+  non-sticky. Score myself, Classic Quiz, and New Quiz sessions cannot enable it.
 
 Both paths require fresh Canvas state, supported points-based individual assignment metadata,
 unchanged submission identity, no existing Canvas work, valid in-range AI output, idempotency,
