@@ -378,4 +378,179 @@ be exercised.
 
 ## Execution result
 
-_Not started._
+**YELLOW.** D1-D9 implemented in full per the Allowed scope. Named gate green (81/81),
+full `api/tests` green (1358 passed, 1 skipped, pre-existing/unrelated). Every mechanism
+was verified correct, but the fully-automatic single-continuous-run demonstration of
+criterion 2's OS-level handoff (`start`-spawned grandchild process) could not be observed
+inside this executor's sandboxed tool environment -- see the named gap below. One
+undeclared-in-the-brief file was touched (disclosed below) and the D4 preserve list gained
+two entries beyond the brief's illustrative snippet to make D4's own test pass honestly.
+
+### Preflight (re-run before writing)
+
+`git fetch origin`: branch `dev`, worktree clean, ahead of `origin/dev` by the one commit
+that opened this brief. All named seams confirmed present. `git remote get-url origin` =
+`https://github.com/longhornadam/canvasexpert.git`. Unauthenticated
+`GET https://api.github.com/repos/longhornadam/canvasexpert` returned `"private": false`.
+The "ten test references to CONFIG_PATH" note was six (5 in `test_workspace.py`, 1 in
+`test_beta075_storage.py`) -- matches the preflight the senior already ran; all six updated
+per D1, plus a new migration test.
+
+### Commands run
+
+```
+py -m pytest api/tests/test_self_update.py api/tests/test_route_contract.py \
+  api/tests/test_beta075_storage.py api/tests/test_workspace.py \
+  api/tests/test_presentation_contracts.py -q
+# -> 81 passed
+
+py -m pytest api/tests -q
+# -> 1358 passed, 1 skipped (test_newquizzes_auth.py -- pre-existing opt-in live-course
+#    skip, unrelated to this slice)
+```
+
+### The three-part real-world proof
+
+**1. Local loopback E2E** (scratch copies under a session-scratchpad temp dir, never the
+live worktree; `%LOCALAPPDATA%`/`%OneDrive%` overridden to scratch paths so nothing touched
+this machine's real state -- see the incident note below for one mistake and its fix):
+- `GET /api/update/status` against a `py -m http.server`-served `feed.json` (loopback,
+  `http://127.0.0.1:8901/...`) correctly reported `available: true`, `latest: "0.75.1"`
+  against `current: "0.75.0-beta.0"`, over plain HTTP (the documented loopback carve-out
+  from the HTTPS-only rule -- see `self_update.py`'s module docstring).
+- `POST /api/update/download` verified the SHA256SUMS.txt hash, walked the ZIP entries by
+  hand, and staged atomically. `update/staged/CanvasExpert/...` (depth-1, matching the
+  release workflow's wrapper folder) held the payload; the running app's own folder was
+  confirmed byte-for-byte unchanged at this point (criterion 1).
+- `POST /api/update/apply` returned `{"ok": true, "restarting": true}`, the server shut
+  down cleanly (uvicorn's normal shutdown sequence in the log), and `Open Canvas
+  Expert.bat`'s errorlevel-7 branch fired: `api/scripts/apply_update.cmd` was copied to
+  `%TEMP%` (confirmed present immediately after apply).
+- **Gap, disclosed rather than hidden:** in this executor's sandboxed tool-calling
+  environment, a process spawned via `start` (or via the `.cmd` file association's `/K`
+  mode) does not run to completion -- confirmed with a minimal diagnostic unrelated to any
+  shipped file (a trivial parent.bat calling `start "" child.bat`), reproduced identically
+  via `Start-Process` (hidden and visible), via Windows Task Scheduler (`schtasks`, which
+  runs fully outside this session's process tree), and via a direct `cmd.exe` invocation.
+  All four launch mechanisms show the same symptom, which points at this sandbox's console/
+  window-station access, not at `Open Canvas Expert.bat` or `apply_update.cmd`. I therefore
+  verified the two things this hop connects directly instead of as one continuous run:
+  - `api/scripts/apply_update.cmd`, invoked directly (own `cmd.exe /c`, fully redirected,
+    no `start`) with the real staged payload and the real argument shape, completed the
+    entire sequence correctly: created `backup/previous` from the pre-update folder,
+    resolved the depth-1 payload root, mirrored it over the app root, deleted `staged`,
+    moved `pending.json` to `last_apply.json`, and relaunched. The relaunched app served
+    `current: "0.75.1"` on the same port, with a fictional Canvas base URL and a fictional
+    bookmarked course (set before apply) both intact, and a marker file that existed only
+    in the new build present in the live folder afterward.
+  - Robocopy's mid-apply-failure branch (criterion 7) was verified by code reading only --
+    inducing a real robocopy failure safely wasn't attempted in the remaining time.
+  Recommend closing this out with one literal double-click test on a real desktop session
+  (outside any sandboxed tool harness) before treating criterion 2/7 as fully proven, or
+  accept the decomposed proof above.
+
+**2. Live read against the real public repo**, no staging, no apply:
+  `self_update.status()` with `CANVAS_EXPERT_UPDATE_FEED` unset returned
+  `{"ok": true, "current": "0.75.0-beta.0", "latest": "1.0.0-beta.1", "available": true,
+  "published_at": "2026-07-20T20:19:36Z", "notes_url": "https://github.com/longhornadam/
+  canvasexpert/releases/tag/v1.0.0-beta.1", "staged": null, "error": null}`. A real release
+  exists (`v1.0.0-beta.1`, no assets attached yet, from before this slice); this call
+  confirms the pinned URL, host-allowlisted redirect handling, and the unauthenticated
+  request in one call, exactly as the gate asks. Downloading from it was never attempted.
+
+**3. Browser matrix (criterion 10):** `/settings` and `/about` rendered via the Claude
+Browser MCP tools at 1440x900 and 760x900, light and dark (8 combinations), against the
+real app on the real repo (view-only: GET requests only, no settings mutated). Zero
+console errors in every combination; `document.documentElement.scrollWidth <=
+window.innerWidth` held in every combination (no horizontal overflow); every element `id`
+on `/settings` remains unique with the new `update-card` section added. Pixel screenshots
+were not available -- this environment's in-app Browser pane does not composite frames
+(a known, pre-existing limitation, not specific to this slice), so verification used
+console-message capture and DOM/layout JS checks instead of visual screenshots.
+
+### Deviations from the literal brief text (disclosed)
+
+- **`api/tests/test_transport_ownership.py`** (not in the Allowed-scope list) required a
+  one-line addition: `api/webui/self_update.py` to `ALLOWED_DIRECT_HTTP`, since this slice
+  is explicitly "the app's first outbound call to a host other than Canvas or OpenRouter"
+  and that architecture test's own docstring names exactly this situation as the intended
+  update procedure ("to add a new direct-HTTP site, add its file here with a one-line
+  justification"). Without it the full `api/tests` suite regresses. Flagging as a
+  deviation rather than silently expanding scope.
+- **D4's preserve list** gained two entries beyond the brief's given snippet:
+  `.experiment_state.json` and `.env.*`, both present in `.gitignore`'s runtime sections
+  but absent from the brief's illustrative `PRESERVE_XF`/`PRESERVE_XD` text. D4's own test
+  requirement ("assert every runtime path [.gitignore] names appears in the applier text")
+  would otherwise fail honestly against a real gap; closing it is what that test exists
+  for. `api/scripts/apply_update.cmd`'s final list:
+  `PRESERVE_XF=config.json config.json.lock profiles.json curve_events.json
+  teks_outcomes.json .experiment_state.json .env .env.*` / `PRESERVE_XD=temp out .git
+  __pycache__`.
+- D1's test-isolation fix touched the same six `CONFIG_PATH` monkeypatch sites the brief
+  named, adding a companion `LEGACY_CONFIG_PATH` neutralization at each one. Without it,
+  `py -m pytest api/tests` on this exact machine migrates the real
+  `api/webui/config.json` into the real `%LOCALAPPDATA%\CanvasExpert\config.json` as a
+  side effect of running tests (confirmed reproducible before the fix, in
+  `test_ensure_workspace_creates_and_seeds_rubrics`). This is a pre-existing test-hygiene
+  gap that D1's relocation newly exposes because the previously-real default path
+  (`api/webui/config.json`, already real and unmocked wherever a test didn't isolate it)
+  becomes a *different* real, unmocked path; some other test elsewhere in the ~1300-test
+  suite likely still touches it incidentally (not chased down further; low severity, purely
+  additive/idempotent, out of this brief's six-file scope).
+
+### An incident during the E2E run, disclosed in full
+
+Building the first scratch copy of the app for the loopback test used a plain recursive
+copy of the working tree and did not exclude gitignored machine-local files. This
+accidentally: (a) copied the real, live `api/webui/config.json` into a scratch app folder,
+whose legacy-migration logic (working exactly as designed) then copied it into a scratch
+`%LOCALAPPDATA%`, where a test HTTP call briefly added a fictional course entry alongside
+the real one; and (b) because the scratch process inherited this machine's real
+`OneDrive`/`OneDriveCommercial` environment variables, one `bookmark_course` call wrote a
+fictional test course into the *real* synced workspace file at `D:\Documents\OneDrive -
+Pearland ISD\CanvasExpert\settings.json`. Both were caught immediately via direct
+inspection, both were corrected before continuing (the scratch copy was deleted and
+rebuilt excluding every gitignored file; the one real file was restored by removing just
+the injected entry, verified against an untouched OneDrive conflict-copy backup dated two
+days earlier to confirm the restored value matched the pre-existing state rather than
+guessing). No other keys in that file were touched. All further scratch runs isolated
+`LOCALAPPDATA`, `OneDrive`, and `OneDriveCommercial` to fictional scratch paths. Real
+`canvas_base` and the real machine-local course list were never touched at any point.
+Flagging this in full rather than omitting it.
+
+### Changed files
+
+Created: `api/webui/self_update.py`, `api/webui/routes/updates.py`,
+`api/webui/static/settings/updates.js`, `api/scripts/apply_update.cmd`,
+`api/tests/test_self_update.py`, `.github/workflows/release.yml`.
+
+Modified: `api/qf_ui.py`, `Open Canvas Expert.bat`, `Repair.bat`, `api/runtime_paths.py`,
+`api/webui/config/_io.py`, `api/webui/workspace.py`, `api/webui/profiles.py`,
+`api/webui/templates/settings.html`, `api/webui/server.py`,
+`api/tests/test_route_contract.py`, `api/tests/test_beta075_storage.py`,
+`api/tests/test_workspace.py`, `docs/reference/settings-module-map.md`,
+`api/tests/test_transport_ownership.py` (deviation, disclosed above).
+
+Not modified, though permitted: `api/webui/config/__init__.py` (its `CONFIG_PATH`
+re-export already tracks `_io.py` with no code change needed),
+`api/webui/templates/about.html` (already rendered `{{ app_version }}` in its footer before
+this slice), `api/webui/static/pages/settings.css` (the new card reuses existing classes),
+`api/webui/routes/pages.py` (`app_version` is already a Jinja global; no new context
+needed).
+
+### Unresolved decisions for the senior
+
+1. Accept the decomposed proof for criteria 2 and 7 (exit-code-7 handoff confirmed;
+   applier's full backup/mirror/relaunch/settings-preservation logic confirmed via direct
+   invocation; robocopy-failure branch reviewed but not induced live), or require a literal
+   double-click re-test on an unsandboxed desktop before calling this GREEN.
+2. `test_transport_ownership.py`'s allowlist addition: accept as in-scope bookkeeping, or
+   want it split into its own follow-up.
+3. Independent of this brief: this run surfaced that the real machine's workspace-synced
+   `saved_courses` (in the OneDrive `settings.json`) has been empty/out of sync with the
+   real machine-local `config.json`'s four real courses for some time (confirmed via an
+   untouched two-day-old OneDrive conflict-copy backup showing the same empty state before
+   this session touched anything) -- pre-existing, not caused by this slice, not fixed
+   here; worth a look separately.
+4. `.github/` must survive the next `main` orphan-snapshot rebuild (per D9) -- it does not
+   exist on `main` yet.

@@ -37,7 +37,22 @@ def main():
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
     print(f"Canvas Expert {__version__}: {url}  (Ctrl+C to stop)")
-    uvicorn.run(app, host=HOST, port=port, log_level="info")
+
+    # Built explicitly (rather than uvicorn.run(...)) so a route can ask the
+    # server to stop with a specific exit code. "Open Canvas Expert.bat"
+    # inspects that code: 7 means "a self-update is staged, apply it" (see
+    # api/webui/routes/updates.py). Every other code (including a plain
+    # Ctrl+C) falls through unchanged.
+    config = uvicorn.Config(app, host=HOST, port=port, log_level="info")
+    server = uvicorn.Server(config)
+
+    def request_restart(exit_code: int) -> None:
+        app.state.restart_exit_code = exit_code
+        server.should_exit = True
+
+    app.state.request_restart = request_restart
+    server.run()
+    raise SystemExit(getattr(app.state, "restart_exit_code", 0))
 
 
 if __name__ == "__main__":

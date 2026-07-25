@@ -40,6 +40,13 @@
         <a href="#cal" data-rail-link>Academic calendars</a>
       </div>
     </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">About this app</p>
+      <div class="ce-settings-index__links">
+        <a href="#update-card" data-rail-link>Updates</a>
+      </div>
+    </div>
   </nav>
 {% endcall %}
 {% endblock %}
@@ -491,7 +498,42 @@
   </details>
 </section>
 
-<p class="ce-settings-version">CanvasExpert v{{ app_version }}</p>
+<section class="ce-panel ce-settings-panel" id="update-card">
+  <h2>Updates</h2>
+  <p class="ce-hint">
+    Canvas Expert can update itself in place. Every setting, saved course,
+    and workspace file stays exactly where it is.
+  </p>
+
+  <p class="ce-settings-version" id="update-current">You are on {{ app_version }}.</p>
+  <div class="ce-actions">
+    <button type="button" id="btn-update-check">Check for updates</button>
+  </div>
+
+  <div id="update-available" class="ce-settings-section-gap" hidden>
+    <p class="ce-hint">
+      <strong id="update-available-version"></strong> is available
+      (<span id="update-available-date"></span>).
+      <a id="update-notes-link" href="#" target="_blank" rel="noopener">Read what's new ↗</a>
+    </p>
+    <div class="ce-actions">
+      <button type="button" id="btn-update-download" class="primary">Download update</button>
+    </div>
+  </div>
+
+  <div id="update-ready" class="ce-settings-section-gap" hidden>
+    <p class="ce-hint">
+      Version <strong id="update-ready-version"></strong> is ready to install.
+      The app will close and reopen on its own — this takes a few seconds.
+    </p>
+    <div class="ce-actions">
+      <button type="button" id="btn-update-apply" class="primary">Restart and update</button>
+      <button type="button" id="btn-update-cancel" class="small">Cancel</button>
+    </div>
+  </div>
+
+  <p id="update-status" class="status ce-settings-status"></p>
+</section>
 
  </div>
 {% endblock %}
@@ -503,6 +545,7 @@
 <script src="/static/settings/courses.js?v={{ asset_v }}"></script>
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
 <script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
+<script src="/static/settings/updates.js?v={{ asset_v }}"></script>
 <script src="/static/settings/rail_nav.js?v={{ asset_v }}"></script>
 
 <script>

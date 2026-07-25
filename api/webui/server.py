@@ -65,6 +65,7 @@ from .routes.support import router as _support_router
 from .routes.work import router as _work_router
 from .routes.operations import router as _operations_router
 from .routes.mirror import router as _mirror_router
+from .routes.updates import router as _updates_router
 from .mirror_service import _mirror_heartbeat
 
 
@@ -175,3 +176,4 @@ app.include_router(_support_router)
 app.include_router(_work_router)
 app.include_router(_operations_router)
 app.include_router(_mirror_router)
+app.include_router(_updates_router)

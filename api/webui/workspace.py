@@ -19,12 +19,19 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from api import runtime_paths
 from engine.utils.text_utils import safe_filename_component
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 API_DIR = os.path.dirname(MODULE_DIR)
 REPO_ROOT = os.path.dirname(API_DIR)
-CONFIG_PATH = os.path.join(MODULE_DIR, "config.json")
+# Pre-0.75 machine-local config lived inside the app folder, which a
+# self-update mirrors wholesale -- see runtime_paths.migrate_legacy_file().
+# Kept in step with config/_io.py's own CONFIG_PATH/LEGACY_CONFIG_PATH pair:
+# both resolve to the same physical file, computed independently because the
+# two modules already read machine config independently (see config/_io.py).
+LEGACY_CONFIG_PATH = os.path.join(MODULE_DIR, "config.json")
+CONFIG_PATH = str(runtime_paths.local_app_dir() / "config.json")
 DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 WORKSPACE_NAME = "CanvasExpert"
 
@@ -203,6 +210,7 @@ def needs_compact_layout(base_dir: str, *deepest_child: str, budget: int = TEACH
 
 
 def _machine_config():
+    runtime_paths.migrate_legacy_file(LEGACY_CONFIG_PATH, CONFIG_PATH)
     if not os.path.exists(CONFIG_PATH):
         return {}
     try:

@@ -18,6 +18,8 @@ changes again.
 - AI Authoring file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
 - Persistence facade: `api/webui/config/__init__.py`
 - Persistence modules: `api/webui/config/*.py`
+- Self-update download/verify/stage: `api/webui/self_update.py`
+- Update routes: `api/webui/routes/updates.py`
 
 ## Source-size reports
 
@@ -34,6 +36,8 @@ reports; this map intentionally does not maintain line-count snapshots.
 - download root, workspace folder open, and AI Authoring folder/rebuild actions
 - academic calendar list, built-in load/remove, custom CSV parse, preview, save,
   and copy-LLM-prompt behavior
+- checking for, downloading, and applying an in-app update (teacher-initiated
+  only; no automatic check, ever)
 
 Current split:
 
@@ -43,6 +47,7 @@ Current split:
 - `settings/courses.js` - Canvas course browser and Current/Previous actions
 - `settings/workspace.js` - download root, workspace, AI Authoring file actions
 - `settings/calendars.js` - calendar list/load/parse/save/copy prompt
+- `settings/updates.js` - update check/download/apply/cancel UX
 
 ## Backend Routing
 
@@ -55,6 +60,10 @@ Current split:
 - `/settings/courses/{course_id}/set-active`
 - `/settings/download-root`
 - `/settings/test-connection`
+
+`routes/updates.py` owns the self-update surface:
+
+- `/api/update/status`, `/api/update/download`, `/api/update/apply`, `/api/update/cancel`
 
 Config persistence is already split under `api/webui/config/`. Keep the
 `from .. import config` facade stable; callers should not import submodules directly
@@ -84,3 +93,5 @@ unless there is a strong reason.
 - `config.active_courses()` is the compatibility-named Current-course boundary for
   normal pickers, Desk discovery, and automatic work. `saved_courses()` includes both
   Current and Previous courses.
+- The self-update downloader only ever talks to the pinned public GitHub repo (or a
+  loopback feed for local testing); never add a teacher-configurable update source.

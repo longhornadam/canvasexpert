@@ -9,11 +9,17 @@ import os
 
 import keyring
 
+from api import runtime_paths
+
 SERVICE = "quizforge-api"
-PROFILES_PATH = os.path.join(os.path.dirname(__file__), "profiles.json")
+# Pre-0.75 profiles lived inside the app folder, which a self-update mirrors
+# wholesale -- see runtime_paths.migrate_legacy_file().
+LEGACY_PROFILES_PATH = os.path.join(os.path.dirname(__file__), "profiles.json")
+PROFILES_PATH = str(runtime_paths.local_app_dir() / "profiles.json")
 
 
 def _load():
+    runtime_paths.migrate_legacy_file(LEGACY_PROFILES_PATH, PROFILES_PATH)
     if not os.path.exists(PROFILES_PATH):
         return {"profiles": []}
     with open(PROFILES_PATH, encoding="utf-8") as f:
