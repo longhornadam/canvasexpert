@@ -1,15 +1,19 @@
 About this folder
 
-This folder contains paste-ready single-file skills for MagicSchool.ai and
-M365 Copilot. Paste one whole file into your chat assistant, then keep the
-conversation inside that one file's instructions.
+Paste-ready single-file skills for whatever AI assistant you already use:
+Claude, ChatGPT, MagicSchool.ai, M365 Copilot. Paste one whole file into your
+chat, then keep that conversation inside that one file's instructions.
 
 File categories:
-- START HERE: Canvas Expert overview and how the system fits together.
+- START HERE - CanvasAgent: what CanvasExpert is and how an assistant should
+  work with it. Paste the whole file into a chat, or just its CORE block into a
+  custom-instructions box if yours has a length limit. Read this one first.
 - Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, and RubricForge.
 - Scoring skills: one file per valid rubric in the default rubric library.
 - Reference: supporting material some authoring skills point to.
 - MagicSchool Toolkit: setup recipes for building these as reusable custom tools in MagicSchool.ai.
 
 Canvas Expert seeds missing files in this folder, then leaves existing files
-alone so you can refine them by hand.
+alone so you can refine them by hand. When one file is replaced by a newer one,
+the old file is removed only if you never edited it. If you did edit it, your
+version stays and the new file arrives alongside it.

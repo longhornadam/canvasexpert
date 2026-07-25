@@ -11,7 +11,11 @@ def test_build_library_writes_expected_files(tmp_path):
     names = sorted(p.name for p in target.iterdir() if p.is_file())
 
     assert len(names) >= 7
-    assert "START HERE - Canvas Expert.txt" in names
+    # Renamed from "START HERE - Canvas Expert.txt" when the CanvasAgent
+    # instruction set absorbed that explainer. The old name is retired by
+    # ai_ta.RETIRED_FILES rather than shipped alongside it.
+    assert "START HERE - CanvasAgent.txt" in names
+    assert "START HERE - Canvas Expert.txt" not in names
     assert "Author a Quiz (QuizForge).txt" in names
     assert "Author an Assignment (AssignmentForge).txt" in names
     assert "Author a Page (PageForge).txt" in names
@@ -36,7 +40,7 @@ def test_build_library_writes_expected_files(tmp_path):
     score_text = (target / "Score with - ELA 7 Standard Writing Rubric.txt").read_text(encoding="utf-8")
     assert "Conventions & Language" in score_text
 
-    sentinel = target / "START HERE - Canvas Expert.txt"
+    sentinel = target / "START HERE - CanvasAgent.txt"
     sentinel.write_text(sentinel.read_text(encoding="utf-8") + "\nSENTINEL\n", encoding="utf-8")
 
     second = ai_ta.build_library(target)
@@ -85,7 +89,7 @@ def test_build_library_seeds_repo_default_docs_first(tmp_path, monkeypatch):
     default_toolkit = default_ai_ta / "MagicSchool Toolkit"
     default_toolkit.mkdir(parents=True)
 
-    (default_ai_ta / "START HERE - Canvas Expert.txt").write_text(
+    (default_ai_ta / "START HERE - CanvasAgent.txt").write_text(
         "repo start here\n", encoding="utf-8"
     )
     (default_toolkit / "Essay Scorer — INSTRUCTIONS.txt").write_text(
@@ -97,5 +101,5 @@ def test_build_library_seeds_repo_default_docs_first(tmp_path, monkeypatch):
     target = tmp_path / "seeded"
     ai_ta.build_library(target)
 
-    assert (target / "START HERE - Canvas Expert.txt").read_text(encoding="utf-8") == "repo start here\n"
+    assert (target / "START HERE - CanvasAgent.txt").read_text(encoding="utf-8") == "repo start here\n"
     assert (target / "MagicSchool Toolkit" / "Essay Scorer — INSTRUCTIONS.txt").read_text(encoding="utf-8") == "repo toolkit instructions\n"

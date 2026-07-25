@@ -19,7 +19,10 @@ Step 3 - Double-click `Open Canvas Expert.bat`. First run sets itself up automat
 
 ## Learn more
 
-Want more detail? Give `docs/LEARN_CANVASEXPERT.md` to a chatbot and ask it anything.
+Want more detail? Give `api/default_docs/AI Authoring/START HERE - CanvasAgent.txt` to a
+chatbot and ask it anything. That file is also the CanvasAgent instruction set: paste the
+whole thing into an AI chat, or just its CORE block into a custom-instructions box, and the
+assistant knows how to draft coursework CanvasExpert can validate and push.
 
 For developers: see `AGENTS.md` and `docs/README.md`.
 

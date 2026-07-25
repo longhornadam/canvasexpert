@@ -11,6 +11,7 @@ which cannot be static since it depends on the teacher's own rubric library.
 Pure module: builds plain-text output files only. The web UI / server owns the
 HTTP routes and startup hook.
 """
+import hashlib
 import os
 import shutil
 
@@ -25,6 +26,59 @@ API_DIR = os.path.dirname(MODULE_DIR)
 REPO_ROOT = os.path.dirname(API_DIR)
 DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 DEFAULT_AI_TA_DIR = os.path.join(DEFAULT_DOCS_DIR, "AI Authoring")
+
+
+# Files a newer file replaces, mapped to every version of them we ever shipped.
+# Both seeding helpers below skip a path that already exists, so rewriting a
+# shipped file's contents would never reach a teacher who already has the old
+# one: they would keep the stale copy and gain the new one, leaving two files
+# disagreeing with each other. Retiring the old name is what actually
+# consolidates. A teacher's copy is removed only when it still matches
+# something we shipped, so a file they have edited by hand is left alone, per
+# this module's promise.
+RETIRED_FILES = {
+    # Superseded by "START HERE - CanvasAgent.txt".
+    "START HERE - Canvas Expert.txt": frozenset({
+        "d7b59318f61d733380349846b948858a98ad06aed969ba15f2b8eeceea5d6eed",
+    }),
+    # Indexed the file above, so an unedited copy is stale the moment it goes.
+    # Removing it lets the corrected version seed back in on the same run.
+    "About This Folder.txt": frozenset({
+        "c3d90d2d29fd36ac9b3fecbc8982b9681d967a409fcda69c3d4d65d9e70e63b6",
+        "00a7c1d978e5d02effde0f4b6d0a96d7d131ca324372eea641be2ee1cd247115",
+    }),
+}
+
+
+def _shipped_hash(raw):
+    """Hash with line endings normalised.
+
+    A Windows checkout stores these files CRLF while the committed blob is LF,
+    so the same shipped text has two different raw byte hashes. Comparing
+    without normalising would never match and would quietly retire nothing.
+    """
+    return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+
+
+def _retire_superseded(target_dir):
+    """Delete superseded seeded files the teacher has not modified."""
+    removed = []
+    for name, shipped_hashes in RETIRED_FILES.items():
+        path = os.path.join(target_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "rb") as f:
+                if _shipped_hash(f.read()) not in shipped_hashes:
+                    continue
+        except OSError:
+            continue
+        try:
+            os.remove(path)
+        except OSError:
+            continue
+        removed.append(path)
+    return removed
 
 
 def _write_text_if_missing(path, text):
@@ -68,6 +122,7 @@ def build_library(target_dir, rubric_folders=None):
     if rubric_folders is None:
         rubric_folders = runtime_paths.rubric_folders()
     os.makedirs(target_dir, exist_ok=True)
+    _retire_superseded(target_dir)
     written = _copy_tree_if_missing(DEFAULT_AI_TA_DIR, target_dir)
 
     for folder in rubric_folders:

@@ -121,7 +121,7 @@ needs no slice; it already exists.
   landed and see what is already pending, so it does not duplicate or lose track. Closes
   the loop.
 - **Slice F — orientation docs.** MCP instruction block gains a short capability line
-  pointing at `get_authoring_contract`; START HERE and LEARN_CANVASEXPERT gain the
+  pointing at `get_authoring_contract`; the CanvasAgent instruction set gains the
   author-and-stage loop; the AI Authoring instructions are reframed from "paste into the
   web UI" to "author, then drop into To Review," vendor-neutral throughout.
 - **Slice G (optional) — converge push preview onto the ledger planner.** Retire the legacy
