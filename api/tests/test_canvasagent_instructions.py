@@ -78,6 +78,25 @@ def test_the_never_push_rule_is_in_the_core(core):
     assert "review" in lowered and "push" in lowered
 
 
+def test_core_routes_to_every_appendix(text, core):
+    """CORE carries the loop and delegates the rest, which is the only way it
+    fits its budget. An appendix CORE never names is unreachable for the
+    teacher who pasted CORE alone, and invisible to the assistant."""
+    letters = sorted(set(re.findall(r"^Appendix ([A-Z])\.", text, re.M)))
+    assert letters, "no appendices found"
+    missing = [letter for letter in letters
+               if not re.search(rf"\b{letter} [a-z]|Appendix {letter}\b", core)]
+    assert not missing, f"CORE routes to no appendix for {missing}"
+
+
+def test_core_carries_the_tracked_choice(core):
+    """The assistant must ask rather than infer, and cannot ask about a choice
+    it was never told exists. This line was dropped once for budget; the
+    concision pass that made room for it is what this pins."""
+    lowered = core.lower()
+    assert "tracked" in lowered and "not tracked" in lowered
+
+
 def test_core_names_every_envelope_tag(core):
     """An assistant that guesses a tag produces a file that cannot validate."""
     for tag in ("QUIZFORGE_JSON", "ASSIGNMENTFORGE_JSON",

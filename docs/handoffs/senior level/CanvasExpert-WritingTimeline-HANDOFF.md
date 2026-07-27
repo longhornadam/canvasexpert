@@ -80,6 +80,26 @@ the routines timeline attach is now live and covered end to end by
 bug fix, not a policy change: those code-extension assignments never produced a scored
 result. They now classify `needs_attention` for teacher review.
 
+**2026-07-27 assistant knowledge landed — the docs half of the next batch, not the code
+half.** A connected assistant could not tell this feature existed: the MCP tool list,
+server instructions, and every authoring contract were silent on it, so a Claude Desktop
+session asked about the writing timeline answered, confidently, that CanvasExpert has no
+such feature. Closed by adding one canonical assistant-facing document,
+`api/default_docs/AI Authoring/Writing Timeline (tracked assignments).txt` (classification,
+handout and lock steps, §8 honest limits, the SAFE boundary, multi-draft planning), served
+verbatim by the new MCP `get_product_guide(topic)` tool (schema v9) and by
+`/api/download-contract?name=WritingTimeline`, so a connected and a pasted assistant read
+one text. The always-on server instructions now point there and say to check before
+telling a teacher a feature does not exist; AssignmentForge §4 carries the authoring rule
+("the submission shape *is* the intent, ask, never infer"); the CanvasAgent briefing
+Appendix B carries the feature and Appendix D the tool. CORE had no room for the tracked
+line at first (1,485 of its 1,500-character budget), so it was rewritten to carry the
+authoring loop and route everything else by appendix letter: 1,385 chars, the tracked ask
+included, and two new tests pin both the routing and that ask. Still **not** done, and still the
+next batch: the required explicit envelope field, the Create tracked/not-tracked control
+and teacher override, the automatic student notice, and handout derivation. Until those
+land the assistant is told to ask, and the teacher hand-prepares the locked handout.
+
 **Current next-batch pointer:** CanvasAgent/Create tracked intent and handout preparation.
 Required context is this document §5 **Template**, **Authoring and distribution flow**,
 and §11 **Appendix G structure**, plus

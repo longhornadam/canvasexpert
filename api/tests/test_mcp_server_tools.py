@@ -535,6 +535,89 @@ def test_download_contract_route_returns_the_same_bytes_as_the_mcp_tool():
         assert mcp_result["contract"].startswith(downloaded_text)
 
 
+# --- get_product_guide (no course_id, no student data -> no gates) ----------
+
+def test_get_product_guide_defaults_to_the_overview_briefing():
+    result = tools.get_product_guide()
+    assert result["ok"] is True
+    assert result["topic"] == "overview"
+    # Every response advertises the other topics, so an assistant learns the
+    # writing-timeline guide exists without having to guess a topic name.
+    assert result["topics"] == ["overview", "writing_timeline"]
+    assert "CanvasAgent" in result["guide"]
+
+
+def test_get_product_guide_writing_timeline_states_the_tracked_rule():
+    """The whole point of this guide: an assistant must be able to learn that
+    Writing Timeline exists and that tracked means DOCX-only File Upload, the
+    exact shape ``writing_timeline.is_tracked_assignment`` classifies."""
+    from api.powergrader import writing_timeline
+
+    result = tools.get_product_guide("writing_timeline")
+    assert result["ok"] is True
+    assert result["topic"] == "writing_timeline"
+    guide = result["guide"]
+    assert "Writing Timeline" in guide
+    assert "not tracked" in guide
+    assert '"allowed_extensions": ["docx"]' in guide
+    # The rule the guide states must be the rule the code applies.
+    assert writing_timeline.is_tracked_assignment(
+        {"submission_types": ["online_upload"], "allowed_extensions": ["docx"]}) is True
+    assert writing_timeline.is_tracked_assignment(
+        {"submission_types": ["online_upload"], "allowed_extensions": ["docx", "pdf"]}) is False
+
+
+def test_get_product_guide_topic_is_case_and_space_tolerant():
+    assert tools.get_product_guide("  Writing_Timeline ")["topic"] == "writing_timeline"
+
+
+def test_get_product_guide_unknown_topic_returns_structured_error():
+    result = tools.get_product_guide("seating")
+    assert result == {
+        "ok": False,
+        "error": ("unknown topic 'seating'; expected one of: "
+                  "overview, writing_timeline (or omit for overview)"),
+    }
+
+
+def test_get_product_guide_missing_file_returns_structured_error(monkeypatch):
+    monkeypatch.setitem(tools._GUIDE_FILES, "overview", "NoSuchGuide.txt")
+    result = tools.get_product_guide()
+    assert result["ok"] is False
+    assert "overview" in result["error"]
+
+
+def test_every_guide_stays_pastable_plain_text():
+    """These files are also handed to a chat-only assistant by copy-paste and
+    read back on a cp1252 console, so they follow the CanvasAgent text rules:
+    ASCII only, no em-dashes or smart punctuation."""
+    banned = {"—": "em-dash", "–": "en-dash", "‘": "curly quote",
+              "’": "curly apostrophe", "“": "curly quote",
+              "”": "curly quote"}
+    for topic in tools._GUIDE_FILES:
+        guide = tools.get_product_guide(topic)["guide"]
+        found = sorted({name for ch, name in banned.items() if ch in guide})
+        assert not found, f"{topic} guide contains {found}"
+        offenders = sorted({ch for ch in guide if ord(ch) > 127})
+        assert not offenders, (
+            f"{topic} guide is not ASCII: {[hex(ord(c)) for c in offenders]}")
+
+
+def test_download_contract_route_serves_the_same_guides_as_the_mcp_tool():
+    """One canonical file per guide: the paste-into-a-chat download and the
+    connected assistant's tool must never drift apart."""
+    from api.webui.routes import library
+
+    for download_name, topic in (("CanvasAgent", "overview"),
+                                 ("WritingTimeline", "writing_timeline")):
+        response = library.api_download_contract(download_name)
+        with open(response.path, encoding="utf-8") as f:
+            downloaded_text = f.read()
+        mcp_result = tools.get_product_guide(topic)
+        assert mcp_result["ok"] is True
+        assert mcp_result["guide"] == downloaded_text
+
+
 # --- list_staged_content (no course_id, no student data -> no gates) -------
 
 def test_list_staged_content_one_kind_lists_label_only(monkeypatch):
@@ -1271,7 +1354,7 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_eleven_read_only_tools():
+def test_server_registers_exactly_the_twelve_read_only_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
@@ -1279,7 +1362,7 @@ def test_server_registers_exactly_the_eleven_read_only_tools():
         "list_courses", "list_sections", "get_course_assignments", "get_modules",
         "get_roster", "get_seating_context", "get_submissions",
         "get_gradebook_snapshot", "refresh_mirror", "get_authoring_contract",
-        "list_staged_content",
+        "get_product_guide", "list_staged_content",
     }
 
 

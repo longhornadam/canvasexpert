@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Eleven thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Twelve thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -32,7 +32,11 @@ _FERPA_NOTICE = (
     "Results are compact JSON, with list data as {columns, rows} tables. "
     "Prefer narrow calls: include_text=false or specific pseudonyms first. To "
     "help the teacher create content, call get_authoring_contract for the kind "
-    "and follow the staging steps in its response."
+    "and follow the staging steps in its response. Before answering what "
+    "CanvasExpert itself can do, or planning writing work, call "
+    "get_product_guide: it carries the app's surfaces and the tracked / "
+    "not-tracked Writing Timeline choice every writing assignment makes. Check "
+    "it before telling a teacher a feature does not exist."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -126,6 +130,16 @@ def get_authoring_contract(kind: str) -> str:
     assignment, page, or rubric. Pull this before authoring so the file
     validates. No student data."""
     return _compact(tools.get_authoring_contract(kind))
+
+
+@mcp.tool()
+def get_product_guide(topic: str = "") -> str:
+    """What CanvasExpert itself can do, so you plan and answer from the product
+    rather than guessing. Omit topic for the whole briefing (surfaces, the hard
+    lines, staging, privacy); topic="writing_timeline" for tracked vs
+    not-tracked writing assignments and what the timeline can and cannot show.
+    Every response lists the available topics. No student data."""
+    return _compact(tools.get_product_guide(topic))
 
 
 @mcp.tool()

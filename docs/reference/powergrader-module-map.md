@@ -114,6 +114,13 @@ Invariants worth protecting:
   `writing_timeline.sanitize_process_observation`, not by the prompt alone.
 - The UI states "describes editing process, not authorship or intent" on every timeline
   render, including the unavailable and not-examined paths.
+- **The assistant-facing copy of this rule has one home.** `api/default_docs/AI Authoring/
+  Writing Timeline (tracked assignments).txt` states the DOCX-only classification, the
+  handout and lock steps, and the honest limits; MCP `get_product_guide(topic=
+  "writing_timeline")` and `/api/download-contract?name=WritingTimeline` both serve that
+  file verbatim. Change what `is_tracked_assignment` accepts and that file is wrong, and a
+  connected assistant will state the stale rule confidently. `test_mcp_server_tools.py`
+  pins the two together.
 
 ## Symptom routing
 

@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 10 MCP tools.
+"""Plain, testable implementations of the 12 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -8,9 +8,9 @@ monkeypatch them without touching the real Canvas API or identity vault
 
 Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses``,
-``get_authoring_contract``, and ``list_staged_content`` are the only tools
-with no ``course_id`` and no student data, so they skip both the course gate
-and the outbound safety gate.
+``get_authoring_contract``, ``get_product_guide``, and
+``list_staged_content`` are the only tools with no ``course_id`` and no
+student data, so they skip both the course gate and the outbound safety gate.
 
 Strict mirror-only law: get_roster, get_submissions, and
 get_gradebook_snapshot serve ONLY from the local CanvasMirror and refuse
@@ -456,6 +456,30 @@ _CONTRACT_FILES = {
     "rubric": "Author a Rubric (RubricForge).txt",
 }
 
+# Product knowledge the tool surface does not imply. An assistant that only
+# sees the tool list cannot tell that Writing Timeline exists, or that every
+# writing assignment is tracked or not tracked — so it guesses, or worse,
+# tells the teacher a feature they use every week isn't real. These are the
+# same canonical files the web UI hands out for pasting into a chat-only
+# assistant, so connected and pasted assistants read one text, not two.
+_GUIDE_FILES = {
+    "overview": "START HERE - CanvasAgent.txt",
+    "writing_timeline": "Writing Timeline (tracked assignments).txt",
+}
+_DEFAULT_GUIDE_TOPIC = "overview"
+
+
+def _read_authoring_doc(filename: str, label: str) -> tuple[str | None, str | None]:
+    """Read one file from ``api/default_docs/AI Authoring/`` verbatim — the same
+    on-disk source ``/api/download-contract`` serves, so each document lives in
+    exactly one place. Returns ``(text, None)`` or ``(None, error)``."""
+    path = os.path.join(REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read(), None
+    except OSError as error:
+        return None, f"Could not read the {label}: {error}"
+
 
 def _staging_appendix(kind: str) -> str:
     """A short "how to stage this for the teacher" section appended to the
@@ -502,18 +526,40 @@ def get_authoring_contract(kind: str) -> dict:
                       f"{', '.join(_CONTRACT_FILES)}"),
         }
 
-    path = os.path.join(REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
-    try:
-        with open(path, encoding="utf-8") as handle:
-            contract_text = handle.read()
-    except OSError as error:
-        return {
-            "ok": False,
-            "error": f"Could not read the {kind} authoring contract: {error}",
-        }
+    contract_text, error = _read_authoring_doc(filename, f"{kind} authoring contract")
+    if error:
+        return {"ok": False, "error": error}
 
     return {"ok": True, "kind": kind,
             "contract": contract_text + _staging_appendix(kind)}
+
+
+def get_product_guide(topic: str = "") -> dict:
+    """One CanvasExpert product guide, served verbatim from the same
+    ``api/default_docs/AI Authoring/`` source the web UI hands out. No
+    course_id, no student data — no course gate, no vault, no safety gate.
+
+    ``topic`` defaults to the whole CanvasAgent briefing (what the app can do,
+    the hard lines, the staging loop, privacy, troubleshooting).
+    ``writing_timeline`` is the tracked / not-tracked reference. Every response
+    lists the available topics so the assistant learns what else it can pull
+    without a second guess."""
+    requested = str(topic or "").strip().lower() or _DEFAULT_GUIDE_TOPIC
+    filename = _GUIDE_FILES.get(requested)
+    if filename is None:
+        return {
+            "ok": False,
+            "error": (f"unknown topic '{requested}'; expected one of: "
+                      f"{', '.join(_GUIDE_FILES)} (or omit for "
+                      f"{_DEFAULT_GUIDE_TOPIC})"),
+        }
+
+    guide_text, error = _read_authoring_doc(filename, f"{requested} guide")
+    if error:
+        return {"ok": False, "error": error}
+
+    return {"ok": True, "topic": requested,
+            "topics": list(_GUIDE_FILES), "guide": guide_text}
 
 
 def list_staged_content(kind: str = "") -> dict:

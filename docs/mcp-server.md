@@ -29,14 +29,16 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 7.
+Tool schema version 9.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
+| `list_sections(course_id)` | Section names from the local mirror roster; how to find the exact `section_name` `get_seating_context` requires | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
 | `get_authoring_contract(kind)` | The Forge authoring contract (envelope format) for one content kind (`quiz`, `assignment`, `page`, `rubric`), served verbatim from `api/default_docs/AI Authoring/` | No |
+| `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
 | `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
@@ -56,6 +58,17 @@ needs no course gate, no identity vault, and no safety scan. It reads the same
 `api/default_docs/AI Authoring/` file the web UI's own `/api/download-contract` route
 serves, so the Forge envelope format lives in exactly one place. Pull it before authoring
 a quiz, assignment, page, or rubric so the resulting file validates.
+
+`get_product_guide(topic="")` closes the gap between what the tool list implies and what
+the app actually does — an assistant that sees only the read tools cannot tell that
+Writing Timeline exists, or that every writing assignment is *tracked* (File Upload alone,
+`docx` alone, so PowerGrader reads the submitted document's revision history) or *not
+tracked*. It reads the same canonical files `/api/download-contract` hands out for pasting
+into a chat-only assistant (`CanvasAgent`, `WritingTimeline`), so a connected assistant and
+a pasted one work from one text rather than two that drift. Same gate posture as
+`get_authoring_contract`: no `course_id`, no vault, no safety scan. Every response also
+lists the available topics. The always-on server instructions point here rather than
+restating any of it.
 
 `list_staged_content(kind="")` also takes no `course_id` and carries no student data, so
 it likewise needs no course gate, no identity vault, and no safety scan. It reuses
