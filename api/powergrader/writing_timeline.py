@@ -137,7 +137,7 @@ _central_zone = None
 
 
 def central_timezone():
-    """Return America/Chicago, or the machine's own zone if tzdata is missing.
+    """Return the America/Chicago zone, or None if no tz database is available.
 
     Every timeline timestamp is Central, end to end -- parsed report, SAFE
     projection, and teacher UI alike.  This is not cosmetic: a 6:04pm-9:48pm
@@ -145,17 +145,17 @@ def central_timezone():
     like overnight work.  A feature whose whole purpose is to avoid implying
     things about a student must not hand the teacher a misleading clock.
 
-    The fallback is the machine's local zone, matching the `datetime.now()`
-    convention used elsewhere in the app, and never UTC -- silently reverting to
-    UTC would restore exactly the misreading this exists to prevent.
+    None means "convert through the machine's own clock instead" -- see
+    `_normalize_timestamp`.  Never UTC: silently reverting to UTC would restore
+    exactly the misreading this exists to prevent.
     """
     global _central_zone
     if _central_zone is None:
         try:
             _central_zone = ZoneInfo(CENTRAL_TZ_NAME)
         except Exception:
-            _central_zone = datetime.now().astimezone().tzinfo
-    return _central_zone
+            _central_zone = False  # cached "unavailable"; retrying per call is pointless
+    return _central_zone or None
 
 
 def _normalize_timestamp(raw: str | None) -> str | None:
@@ -170,7 +170,13 @@ def _normalize_timestamp(raw: str | None) -> str | None:
         # Word writes w:date in UTC.  A bare timestamp is read as UTC rather than
         # guessed at, so the Central conversion below stays correct.
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(central_timezone()).replace(microsecond=0).isoformat()
+    zone = central_timezone()
+    # Argument-less astimezone() asks the OS for the offset at *that instant*, so the
+    # no-tzdata path still tracks DST.  Converting through a captured
+    # `datetime.now().astimezone().tzinfo` would not: that is a frozen offset, and it
+    # would put every timestamp in the opposite DST season an hour out.
+    central = parsed.astimezone(zone) if zone is not None else parsed.astimezone()
+    return central.replace(microsecond=0).isoformat()
 
 
 def _block_text(element: ET.Element) -> str:

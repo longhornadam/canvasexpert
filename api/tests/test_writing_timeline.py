@@ -740,21 +740,48 @@ def test_normalized_timestamps_are_idempotent():
     assert writing_timeline._normalize_timestamp(once) == once
 
 
-def test_central_timezone_never_falls_back_to_utc(monkeypatch):
-    """A missing tz database degrades to machine-local, never to UTC.
+def test_missing_tz_database_still_tracks_dst_and_never_yields_utc(monkeypatch):
+    """Without tzdata the machine clock is used, and it must still track DST.
 
-    Reverting to UTC would restore the exact misreading Central exists to prevent:
-    an evening writing session displayed as overnight work.
+    A captured `datetime.now().astimezone().tzinfo` is a FROZEN offset: converting
+    through it would report one clock all year and put every timestamp in the
+    opposite DST season an hour out. Argument-less `astimezone()` asks the OS per
+    instant instead. Falling back to UTC is never acceptable either -- that restores
+    the exact misreading Central exists to prevent.
+
+    This test is meaningful only on a Central-configured machine, which is the
+    only platform this Windows-only, single-district tool runs on.
     """
     monkeypatch.setattr(writing_timeline, "_central_zone", None)
     monkeypatch.setattr(
         writing_timeline, "ZoneInfo",
         lambda _name: (_ for _ in ()).throw(RuntimeError("no tz database")),
     )
-    fallback = writing_timeline.central_timezone()
-    assert fallback is not None
-    assert fallback == datetime.now().astimezone().tzinfo
+    assert writing_timeline.central_timezone() is None
+
+    summer = writing_timeline._normalize_timestamp("2026-07-26T23:04:00Z")
+    winter = writing_timeline._normalize_timestamp("2026-01-15T18:00:00Z")
+    frozen = datetime.now().astimezone().utcoffset()
+
+    for value in (summer, winter):
+        assert not value.endswith("Z")
+        assert "+00:00" not in value
+    # The two seasons must NOT share an offset. A frozen-offset fallback would make
+    # them identical, which is the bug this guards.
+    assert summer[-6:] != winter[-6:], (summer, winter)
+    assert summer.endswith("-05:00") and winter.endswith("-06:00")
+    # And at least one season must differ from whatever offset is current right now,
+    # proving the conversion is per-instant rather than "now".
+    assert {summer[-6:], winter[-6:]} != {_offset_text(frozen)}
+
     monkeypatch.setattr(writing_timeline, "_central_zone", None)
+
+
+def _offset_text(delta) -> str:
+    total = int(delta.total_seconds())
+    sign = "-" if total < 0 else "+"
+    total = abs(total)
+    return f"{sign}{total // 3600:02d}:{(total % 3600) // 60:02d}"
 
 
 def test_safe_projection_timestamps_are_central(tmp_path):
