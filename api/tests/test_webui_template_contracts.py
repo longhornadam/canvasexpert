@@ -9,6 +9,7 @@ redesign-slice implementation snapshots are covered by rendered-route
 verification per AGENTS.md testing policy.
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -428,17 +429,338 @@ def test_powergrader_writing_timeline_surfaces_tracked_state_and_disclaimer():
 
     `writing_timeline_tracked` was previously persisted on the session and read by
     nothing, so a teacher had no way to know an assignment was tracked and the queue
-    could not distinguish "tracked, no trail" from "not tracked".
+    could not distinguish "tracked, no trail" from "not tracked". `renderWritingTimeline`
+    has since moved out of queue_core.js into the dedicated queue_writing_timeline.js
+    module; the disclaimer sentence must still appear on every render path, now split
+    across the two files it lives in.
     """
     queue_html = _slurp("api/webui/templates/powergrader_queue.html")
     core = _slurp("api/webui/static/powergrader/queue_core.js")
+    timeline = _slurp("api/webui/static/powergrader/queue_writing_timeline.js")
     assert 'id="pg-timeline-badge"' in queue_html
     assert "pg-timeline-badge" in core
     assert "session.writing_timeline_tracked" in core
-    # Every render path — available, unavailable, and not-examined — carries the
-    # same limit statement.
-    assert core.count("describes editing process, not authorship or intent") == 3
     assert "No DOCX document was examined for this submission" in core
+    # renderWritingTimeline moved out of queue_core.js verbatim.
+    assert "function renderWritingTimeline" not in core
+    # The not-examined path stays in queue_core.js and keeps its own copy of the
+    # limit statement.
+    assert core.count("describes editing process, not authorship or intent") == 1
+    # The unavailable and available render paths both live in the new module now.
+    assert timeline.count("describes editing process, not authorship or intent") == 2
+
+
+def test_powergrader_writing_timeline_module_wired_after_queue_core():
+    """The new module must load after queue_core.js, and the strip mount must exist."""
+    queue_html = _slurp("api/webui/templates/powergrader_queue.html")
+    core_idx = queue_html.index("/static/powergrader/queue_core.js")
+    timeline_idx = queue_html.index("/static/powergrader/queue_writing_timeline.js")
+    assert timeline_idx > core_idx, "queue_writing_timeline.js must load after queue_core.js"
+    assert 'id="pg-timeline-strip"' in queue_html
+
+
+def test_powergrader_writing_timeline_module_registers_frozen_api():
+    """The module must register all three frozen API names on the shared namespace."""
+    js = _slurp("api/webui/static/powergrader/queue_writing_timeline.js")
+    assert "window.CE_POWERGRADER_QUEUE" in js
+    assert "queue.writingTimelineSignals" in js
+    assert "queue.renderWritingTimelineStrip" in js
+    assert "queue.renderWritingTimeline" in js
+
+
+def test_powergrader_writing_timeline_strip_copy_matches_spec():
+    """Strip copy must use the exact, non-accusatory phrasing specified for the feature."""
+    js = _slurp("api/webui/static/powergrader/queue_writing_timeline.js")
+    for phrase in (
+        "Counts describe editing process, not authorship or intent.",
+        "with no revision trail",
+        "with another name on the file",
+        "with tracking lock absent",
+        "could not be read",
+        "with no document",
+        # "submissions examined", not "documents examined": a student who uploaded no
+        # DOCX has a submission but no document, so the headline denominator counts
+        # submissions. Saying "documents" would imply one exists for every student.
+        "submissions examined",
+    ):
+        assert phrase in js, f"Missing strip copy: {phrase!r}"
+    assert "documents examined" not in js
+
+
+def _hex_hsl(hex_code: str):
+    hex_code = hex_code.lstrip("#")
+    if len(hex_code) == 3:
+        hex_code = "".join(ch * 2 for ch in hex_code)
+    r, g, b = (int(hex_code[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+    mx, mn = max(r, g, b), min(r, g, b)
+    lightness = (mx + mn) / 2
+    if mx == mn:
+        return 0.0, 0.0, lightness
+    d = mx - mn
+    sat = d / (2 - mx - mn) if lightness > 0.5 else d / (mx + mn)
+    if mx == r:
+        hue = ((g - b) / d) % 6
+    elif mx == g:
+        hue = (b - r) / d + 2
+    else:
+        hue = (r - g) / d + 4
+    hue *= 60
+    return hue, sat, lightness
+
+
+def _looks_red_or_orange(hex_code: str) -> bool:
+    hue, sat, lightness = _hex_hsl(hex_code)
+    if sat < 0.3 or lightness < 0.15 or lightness > 0.9:
+        return False
+    return hue <= 45 or hue >= 345
+
+
+def test_powergrader_writing_timeline_module_avoids_alarm_language_and_colors():
+    """No-alarm contract: the feature reports without accusing.
+
+    This is the most important test in the set — the entire premise of the writing
+    timeline feature is that it describes editing process without implying cheating
+    or misconduct, in wording and in color.
+    """
+    js = _slurp("api/webui/static/powergrader/queue_writing_timeline.js")
+    lowered = js.lower()
+    banned_terms = (
+        "suspicious", "suspicion", "cheat", "plagiar", "integrity",
+        "flagged", "alert", "warning", "misconduct",
+    )
+    hits = [term for term in banned_terms if term in lowered]
+    assert not hits, f"Accusatory language found in writing timeline module: {hits}"
+    assert "--ce-attention" not in js
+    assert "--ce-danger" not in js
+    hex_codes = re.findall(r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b", js)
+    alarming = [code for code in hex_codes if _looks_red_or_orange(code)]
+    assert not alarming, f"Hardcoded red/orange hex colors found: {alarming}"
+
+
+def test_powergrader_writing_timeline_signals_membership_and_robustness():
+    """writingTimelineSignals exact index membership across clean, edge, and malformed input."""
+    module_path = ROOT / "api/webui/static/powergrader/queue_writing_timeline.js"
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+
+global.window = {};
+global.document = {
+  getElementById: () => null,
+  querySelector: () => null,
+  querySelectorAll: () => [],
+  createElement: () => ({}),
+  addEventListener: () => {}
+};
+
+vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"));
+const queue = window.CE_POWERGRADER_QUEUE;
+if (!queue || typeof queue.writingTimelineSignals !== "function") {
+  console.error("writingTimelineSignals not registered on window.CE_POWERGRADER_QUEUE");
+  process.exit(2);
+}
+
+function availableReport(overrides) {
+  return Object.assign({
+    status: "available",
+    trail_present: true,
+    tracking_lock_present: true,
+    properties: {
+      creator_category: "submission_author",
+      last_modified_by_category: "submission_author",
+      total_time_minutes: 4,
+      revision: 1
+    },
+    blocks: [],
+    largest_insertions: []
+  }, overrides);
+}
+
+const students = [
+  // 0: clean available report
+  { attachments: [{ writing_timeline: availableReport({}) }] },
+  // 1: no revision trail
+  { attachments: [{ writing_timeline: availableReport({ trail_present: false }) }] },
+  // 2: tracking lock absent
+  { attachments: [{ writing_timeline: availableReport({ tracking_lock_present: false }) }] },
+  // 3: creator_category ALONE must NOT trigger otherName. Creator is the tool or
+  //    template that made the file ("Microsoft Office User", a district template, a
+  //    lab image), so it reads as an unrecognized author on nearly every honest
+  //    document. Counting it would fire on everything and point at innocent students.
+  { attachments: [{ writing_timeline: availableReport({
+      properties: { creator_category: "other_roster_author", last_modified_by_category: "submission_author" }
+  }) }] },
+  // 4: other name ONLY inside blocks[].author_category
+  { attachments: [{ writing_timeline: availableReport({
+      blocks: [{ type: "insertion", timestamp: "2026-01-01T00:00:00.000Z", character_count: 20, word_count: 4, author_category: "unrecognized_author_present" }]
+  }) }] },
+  // 5: unreadable (status invalid)
+  { attachments: [{ writing_timeline: { status: "invalid", trail_present: null, tracking_lock_present: null } }] },
+  // 6: no document (empty attachments)
+  { attachments: [] },
+  // 7: no document (null attachments)
+  { attachments: null },
+  // 8: available but missing properties/blocks entirely (must not throw)
+  { attachments: [{ writing_timeline: { status: "available" } }] },
+  // 9: non-object attachment entries mixed with a non-timeline attachment (must not throw)
+  { attachments: [null, "garbage", 42, { filename: "plain.docx" }] },
+  // 10: non-object student
+  null,
+  // 11: non-object student
+  "not-an-object",
+  // 12: other name via last_modified_by_category — someone else saved the file last.
+  //     Unlike creator, this DOES trigger.
+  { attachments: [{ writing_timeline: availableReport({
+      properties: { creator_category: "submission_author", last_modified_by_category: "other_roster_author" }
+  }) }] }
+];
+
+let signals;
+try {
+  signals = queue.writingTimelineSignals(students);
+} catch (e) {
+  console.error("writingTimelineSignals threw: " + (e && e.stack || e));
+  process.exit(3);
+}
+
+function eq(name, actual, expected) {
+  const a = JSON.stringify((actual || []).slice().sort((x, y) => x - y));
+  const e = JSON.stringify(expected);
+  if (a !== e) {
+    console.error(name + " expected " + e + " got " + a);
+    process.exit(4);
+  }
+}
+
+eq("examined", signals.examined, [0, 1, 2, 3, 4, 8, 12]);
+eq("noTrail", signals.noTrail, [1]);
+eq("lockAbsent", signals.lockAbsent, [2]);
+// 3 is absent on purpose: creator_category alone must not count. 4 = block author,
+// 12 = last_modified_by.
+eq("otherName", signals.otherName, [4, 12]);
+eq("unreadable", signals.unreadable, [5]);
+eq("noDocument", signals.noDocument, [6, 7, 9, 10, 11]);
+'''
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(module_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_powergrader_writing_timeline_render_sparkline_and_text_equivalent():
+    """renderWritingTimeline sparkline + its aria text-equivalent, per the frozen spec."""
+    module_path = ROOT / "api/webui/static/powergrader/queue_writing_timeline.js"
+    script = r'''
+import fs from "node:fs";
+import vm from "node:vm";
+
+class EscNode {
+  set textContent(v) { this._text = String(v == null ? "" : v); }
+  get textContent() { return this._text || ""; }
+  get innerHTML() {
+    return (this._text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+}
+
+global.window = {};
+global.document = {
+  getElementById: () => null,
+  querySelector: () => null,
+  querySelectorAll: () => [],
+  createElement: () => new EscNode(),
+  addEventListener: () => {}
+};
+
+vm.runInThisContext(fs.readFileSync(process.argv[1], "utf8"));
+const queue = window.CE_POWERGRADER_QUEUE;
+if (!queue || typeof queue.renderWritingTimeline !== "function") {
+  console.error("renderWritingTimeline not registered on window.CE_POWERGRADER_QUEUE");
+  process.exit(2);
+}
+
+const report = {
+  status: "available",
+  trail_present: true,
+  tracking_lock_present: true,
+  properties: { creator_category: "submission_author", last_modified_by_category: "submission_author", total_time_minutes: 22, revision: 4 },
+  blocks: [
+    { type: "insertion", timestamp: "2026-01-01T00:00:00.000Z", character_count: 60, word_count: 12, author_category: "submission_author" },
+    { type: "deletion", timestamp: "2026-01-01T01:00:00.000Z", character_count: 25, word_count: 4, author_category: "submission_author" },
+    { type: "insertion", timestamp: "2026-01-01T02:00:00.000Z", character_count: 40, word_count: 8, author_category: "submission_author" }
+  ],
+  largest_insertions: []
+};
+
+const html = queue.renderWritingTimeline(report);
+
+const svgMatches = html.match(/<svg\b[^>]*>/g) || [];
+if (svgMatches.length !== 1) { console.error("expected exactly one <svg>, got " + svgMatches.length + ": " + JSON.stringify(svgMatches)); process.exit(3); }
+const svgTag = svgMatches[0];
+if (!svgTag.includes("class=\"pg-timeline-spark\"")) { console.error("missing spark class: " + svgTag); process.exit(4); }
+if (!svgTag.includes("aria-hidden=\"true\"")) { console.error("missing aria-hidden: " + svgTag); process.exit(5); }
+if (!svgTag.includes("height=\"40\"")) { console.error("missing height: " + svgTag); process.exit(6); }
+if (!svgTag.includes("viewBox=\"0 0 300 40\"")) { console.error("missing viewBox: " + svgTag); process.exit(7); }
+if (svgTag.includes("preserveAspectRatio")) { console.error("unexpected preserveAspectRatio: " + svgTag); process.exit(8); }
+
+if (!html.includes("fill=\"var(--ce-prepared)\"")) { console.error("missing insertion fill var(--ce-prepared)"); process.exit(9); }
+if (!html.includes("fill=\"var(--ce-ink-muted)\"")) { console.error("missing deletion fill var(--ce-ink-muted)"); process.exit(10); }
+if (!html.includes("opacity=\"0.55\"")) { console.error("missing deletion opacity 0.55"); process.exit(11); }
+
+const lineMatches = html.match(/<line\b[^>]*>/g) || [];
+const baseline = lineMatches.find(tag => tag.includes("y1=\"36.5\"") && tag.includes("y2=\"36.5\"") && tag.includes("stroke=\"var(--ce-rule)\""));
+if (!baseline) { console.error("no baseline <line> found among: " + JSON.stringify(lineMatches)); process.exit(12); }
+
+const expectedSentence = "3 revision blocks from 2026-01-01T00:00:00.000Z to 2026-01-01T02:00:00.000Z. Largest single insertion is 60 characters, 60% of inserted text.";
+if (!html.includes(expectedSentence)) { console.error("missing text equivalent sentence. Got html:\n" + html); process.exit(13); }
+
+const svgEndIdx = html.indexOf(svgTag) + svgTag.length;
+const sentenceIdx = html.indexOf(expectedSentence);
+if (sentenceIdx < svgEndIdx) { console.error("text equivalent must immediately follow the svg"); process.exit(14); }
+
+// All blocks have character_count 0: sparkline (and its text equivalent) must be
+// omitted entirely, with no placeholder.
+const zeroReport = {
+  status: "available",
+  trail_present: true,
+  tracking_lock_present: true,
+  properties: { creator_category: "submission_author", last_modified_by_category: "submission_author" },
+  blocks: [
+    { type: "insertion", timestamp: "2026-01-01T00:00:00.000Z", character_count: 0, word_count: 0, author_category: "submission_author" },
+    { type: "deletion", timestamp: "2026-01-01T01:00:00.000Z", character_count: 0, word_count: 0, author_category: "submission_author" }
+  ],
+  largest_insertions: []
+};
+const zeroHtml = queue.renderWritingTimeline(zeroReport);
+if (zeroHtml.includes("<svg")) { console.error("sparkline should be omitted when no blocks qualify. Got html:\n" + zeroHtml); process.exit(15); }
+if (/revision block/.test(zeroHtml)) { console.error("text equivalent should be omitted when no blocks qualify. Got html:\n" + zeroHtml); process.exit(16); }
+
+// Only a deletion qualifies: sparkline renders (k=1, singular phrasing), but the
+// "Largest single insertion" sentence is omitted since no characters were inserted.
+const deletionOnlyReport = {
+  status: "available",
+  trail_present: true,
+  tracking_lock_present: true,
+  properties: {},
+  blocks: [
+    { type: "deletion", timestamp: "2026-01-01T00:00:00.000Z", character_count: 15, word_count: 3, author_category: "submission_author" }
+  ],
+  largest_insertions: []
+};
+const delHtml = queue.renderWritingTimeline(deletionOnlyReport);
+if (!delHtml.includes("<svg")) { console.error("sparkline should render when a deletion block qualifies. Got html:\n" + delHtml); process.exit(17); }
+if (!/1 revision block\b/.test(delHtml)) { console.error("singular phrasing missing for k=1. Got html:\n" + delHtml); process.exit(18); }
+if (/Largest single insertion/.test(delHtml)) { console.error("Largest single insertion sentence should be omitted when nothing was inserted. Got html:\n" + delHtml); process.exit(19); }
+'''
+    result = subprocess.run(
+        ["node", "--input-type=module", "-e", script, str(module_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_powergrader_config_has_workspace():

@@ -29,12 +29,12 @@ namespace shims.
 | AI workflow and SAFE artifacts | `ai_workflow.py`, `ai_workflow_support.py`, `queue_privacy.js` |
 | Copilot packets/import | `copilot_packet.py`, `copilot_packet_support.py`, `import_results.py`, `queue_import.js` |
 | Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `new_quiz_fetch.py`, `student_attachments.py` |
-| Writing Timeline | `writing_timeline.py`, `student_attachments.py::attach_writing_timelines`, `queue_core.js::renderWritingTimeline` |
+| Writing Timeline | `writing_timeline.py`, `student_attachments.py::attach_writing_timelines`, `queue_writing_timeline.js` |
 | Late catch-up | `late_catchup.py`, `routes/powergrader_late.py`, `queue_late_catchup.js` |
 | Scheduled autoscore | `autoscore_queue.py`, `autoscore_claims.py`, `scheduled_autoscore_support.py`, `routes/routines_powergrader.py` |
 | Automatic-post policy | `autopush_policy.py`, `autopush_policy_result.py`, `push_context.py`, `interactive_autopush.py` |
 | Setup/catalog flow | `setup_core.js`, `setup_sessions.js`, `setup_autoscore.js`, `course_catalog.py`, `routes/course_catalog.py` |
-| Queue state/rendering | `queue_core.js`, `queue_review.js`, `queue_import.js`, `queue_late_catchup.js`, `queue_privacy.js` |
+| Queue state/rendering | `queue_core.js`, `queue_review.js`, `queue_import.js`, `queue_late_catchup.js`, `queue_privacy.js`, `queue_writing_timeline.js` |
 | Source-material context | `api/webui/source_materials.py`, `api/webui/source_material_extractors.py` |
 
 Browser load order is template-owned. Setup loads the shim before sessions, core, and

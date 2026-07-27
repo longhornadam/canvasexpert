@@ -97,6 +97,7 @@
         var timelineBadge = document.getElementById('pg-timeline-badge');
         if (timelineBadge) timelineBadge.hidden = session.writing_timeline_tracked !== true;
         if (queue.renderPrivacyAudit) queue.renderPrivacyAudit(session);
+        if (queue.renderWritingTimelineStrip) queue.renderWritingTimelineStrip(session);
         if (queue.renderLateWatch) queue.renderLateWatch(session);
         if (queue.renderPacketPanel) queue.renderPacketPanel(session);
         if (queue.renderAutoPost) queue.renderAutoPost(session);
@@ -259,7 +260,9 @@
     if (session && session.writing_timeline_tracked === true) {
       var timelined = allAtts.filter(function(a){ return a && a.writing_timeline; });
       if (timelined.length) {
-        timelined.forEach(function(a){ subHtml += renderWritingTimeline(a.writing_timeline); });
+        timelined.forEach(function(a){
+          subHtml += (queue.renderWritingTimeline ? queue.renderWritingTimeline(a.writing_timeline) : '');
+        });
       } else {
         // "Not examined" must never be mistaken for "no revision trail".
         subHtml += '<div class="pg-sub-section"><div class="pg-sub-label">Writing Timeline</div>' +
@@ -293,68 +296,6 @@
       }
     }
     if (queue.renderNewQuizItems) queue.renderNewQuizItems(st);
-  }
-
-  function authorCategoryLabel(value) {
-    if (value === 'submission_author') return 'submission author';
-    if (value === 'other_roster_author') return 'other roster author';
-    if (value === 'unrecognized_author_present') return 'unrecognized author present';
-    return 'not available';
-  }
-
-  function renderWritingTimeline(report) {
-    var html = '<div class="pg-sub-section"><div class="pg-sub-label">Writing Timeline</div>';
-    if (!report || report.status !== 'available') {
-      html += '<p class="pg-no-text">Timeline unavailable for this document.</p>';
-      html += '<p class="pg-no-text">This timeline describes editing process, not authorship or intent.</p></div>';
-      return html;
-    }
-
-    var properties = report.properties || {};
-    html += '<ul class="pg-att-list">';
-    html += '<li>Revision trail: <strong>' + (report.trail_present ? 'present' : 'absent') + '</strong></li>';
-    html += '<li>Tracking lock: <strong>' + (report.tracking_lock_present ? 'present' : 'absent') + '</strong></li>';
-    if (typeof properties.total_time_minutes === 'number') {
-      html += '<li>Editing time: ' + properties.total_time_minutes + ' minute' +
-        (properties.total_time_minutes === 1 ? '' : 's') + '</li>';
-    }
-    if (typeof properties.revision === 'number') {
-      html += '<li>Document revision: ' + properties.revision + '</li>';
-    }
-    if (properties.creator_category) {
-      html += '<li>Creator match: ' + esc(authorCategoryLabel(properties.creator_category)) + '</li>';
-    }
-    if (properties.last_modified_by_category) {
-      html += '<li>Last modified by match: ' + esc(authorCategoryLabel(properties.last_modified_by_category)) + '</li>';
-    }
-    html += '</ul>';
-
-    if (!report.trail_present) {
-      html += '<p class="pg-no-text">No revision history — did the student write in the provided file?</p>';
-    }
-
-    var largest = (report.largest_insertions || []).filter(function(block){
-      return block && Number(block.character_count) > 0;
-    }).slice(0, 3);
-    html += '<div class="pg-sub-label">Three largest insertion blocks</div>';
-    if (largest.length) {
-      html += '<ol class="pg-att-list">';
-      largest.forEach(function(block){
-        var words = Number(block.word_count) || 0;
-        var chars = Number(block.character_count) || 0;
-        var when = block.timestamp ? ' at ' + esc(block.timestamp) : '';
-        var author = block.author_category
-          ? ' · ' + esc(authorCategoryLabel(block.author_category))
-          : '';
-        html += '<li><strong>' + words + ' word' + (words === 1 ? '' : 's') +
-          '</strong> (' + chars + ' characters) inserted as one block' + when + author + '</li>';
-      });
-      html += '</ol>';
-    } else {
-      html += '<p class="pg-no-text">No non-empty insertion blocks recorded.</p>';
-    }
-    html += '<p class="pg-no-text">This timeline describes editing process, not authorship or intent.</p></div>';
-    return html;
   }
 
   function buildSrcdoc(bodyHtml) {

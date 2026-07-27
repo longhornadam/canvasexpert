@@ -40,6 +40,8 @@
   <div id="pg-privacy-steps" class="pg-privacy-steps"></div>
 </div>
 
+<div id="pg-timeline-strip" class="pg-privacy-strip" hidden></div>
+
 <div id="pg-late-strip" class="pg-privacy-strip" hidden>
   <div class="pg-privacy-head">
     <strong>Late catch-up</strong>
@@ -174,6 +176,7 @@
 {% block workspace_scripts %}
 <script src="/static/powergrader_queue.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_core.js?v={{ asset_v }}"></script>
+<script src="/static/powergrader/queue_writing_timeline.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_review.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_new_quiz.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_privacy.js?v={{ asset_v }}"></script>
