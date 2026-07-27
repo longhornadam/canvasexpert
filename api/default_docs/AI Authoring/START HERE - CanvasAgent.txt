@@ -220,6 +220,10 @@ What is true:
   * Before anything goes to an AI model, student names and ID numbers are
     swapped for stand-ins, and real identities are reattached afterward on the
     teacher's own computer.
+  * Visible DOCX and free-response text is checked against the local roster and
+    scrubbed before it can enter a SAFE AI artifact. Writing Timeline metadata
+    is reduced to counts, times, booleans, and author-match categories; raw
+    Office authors and document properties stay local.
   * Installing and running it needs no admin rights and no IT ticket.
   * The code is open source under the MIT license.
 
@@ -227,10 +231,10 @@ What is not promised, stated plainly because overstating it would be worse
 than useless:
   * This is not a certified FERPA-safe or anonymous system. It is a set of
     strong, honest habits, not a compliance stamp.
-  * Pseudonymization swaps names and IDs. It does not scrub the body of a
-    student's free-response answer. If a student typed their own name or
-    personal details into an essay, that text is not independently cleaned, so
-    a teacher should still use judgment before sending student work anywhere.
+  * Pseudonymization and roster-aware scrubbing are not anonymity guarantees.
+    A student can include personal details that are not in the roster, and no
+    automatic scrub can recognize every identifying fact. Teachers should
+    still review SAFE artifacts before sending student work anywhere.
   * Windows only at present. Not Mac, not Chromebook.
   * The optional AI features need the teacher's own account with an outside
     provider, which may cost money. Nothing else in the app requires it.

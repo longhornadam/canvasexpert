@@ -6,7 +6,7 @@ import os
 from api.nq_report import constructed_responses, html_to_text
 from api.feedback_vault import Vault
 from api import feedback_scrub, feedback_safety
-from api.powergrader import student_attachments
+from api.powergrader import student_attachments, writing_timeline
 from api.webui import workspace
 from api.feedback_contract import (
     CONTRACT_VERSION,
@@ -23,6 +23,7 @@ def _attachment_meta(attachment: dict) -> dict:
         "detected_media_type", "media_type", "download_status", "extraction_status",
         "extracted_text_path", "attempt", "item_id", "item_link", "ai_eligible",
         "local_only", "warnings", "error_code", "error_message",
+        "writing_timeline",
     }
     return {k: attachment.get(k) for k in allowed if k in attachment}
 
@@ -301,6 +302,11 @@ def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str,
             for response in student.get("responses") or []:
                 if attachment.get("item_id") and str(response.get("item_id")) != str(attachment.get("item_id")):
                     continue
+                timeline = writing_timeline.safe_projection(attachment.get("writing_timeline"))
+                if timeline is not None:
+                    response.setdefault("writing_timeline", {"documents": []})[
+                        "documents"
+                    ].append(timeline)
                 if routed.get("text"):
                     response["response"] = (response.get("response") or "") + "\n\n" + (
                         f"Attachment {index} text:\n{routed['text']}"

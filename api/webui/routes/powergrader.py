@@ -17,7 +17,7 @@ from api.powergrader import (ai_workflow, assignment_refresh, canvas_fetch, cont
                              import_results, late_catchup, privacy,
                              new_quiz_csv, new_quiz_grader,
                              session_actions, session_builder, session_store,
-                             start_workflow)
+                             start_workflow, student_attachments, writing_timeline)
 from .powergrader_helpers import (
     build_late_preview_payload,
     build_late_watch_state,
@@ -279,6 +279,12 @@ def pg_start(
     if not submitted:
         return JSONResponse({"ok": False, "error": "No submitted work found for this assignment.",
                              "privacy_steps": []})
+    writing_timeline_tracked = writing_timeline.is_tracked_assignment(adata)
+    if writing_timeline_tracked:
+        student_attachments.attach_writing_timelines(
+            submitted,
+            roster_submissions=subs,
+        )
 
     initial_missing_user_ids = late_catchup.initial_missing_user_ids(subs or [])
     submitted_user_ids = sorted({str(s.get("user_id", "")) for s in submitted if s.get("user_id")})
@@ -390,6 +396,7 @@ def pg_start(
         evidence_status=refresh.get("status", "unknown"),
         auto_post_enabled=auto_post_enabled,
     )
+    session["writing_timeline_tracked"] = writing_timeline_tracked
     _save_session(session)
 
     # For assisted mode with auto_post, run the initial trigger under the session lock

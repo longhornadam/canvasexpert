@@ -128,6 +128,7 @@ def import_results_into_session(
             continue
         st["ai_score"] = row.get("score")
         st["ai_feedback"] = row.get("feedback")
+        st["writing_process_observations"] = row.get("writing_process_observations", "")
         st["ai_item_results"] = item_by_uid.get(uid, [])
         updated_user_ids.add(uid)
     updated = len(updated_user_ids)

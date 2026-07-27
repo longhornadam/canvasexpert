@@ -13,6 +13,7 @@ def _attachment_metadata(attachment: dict) -> dict:
         "extraction_status", "extracted_text_path", "attempt", "item_id",
         "item_link", "ai_eligible", "local_only", "warnings", "error_code",
         "error_message",
+        "writing_timeline",
     )
     return {key: attachment.get(key) for key in allowed if key in attachment}
 
@@ -89,6 +90,7 @@ def build_students(
             "status":        "pending",
             "ai_score":      ai.get("score"),
             "ai_feedback":   ai.get("feedback"),
+            "writing_process_observations": ai.get("writing_process_observations", ""),
             "ai_item_results": [dict(item) for item in ai_items],
             **({"ai_scoring_error": ai_failure} if ai_failure else {}),
             "teacher_score": None,

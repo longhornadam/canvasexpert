@@ -154,6 +154,10 @@ def validate_results(results, bundle: dict = None, vault: Vault = None,
         fb = r.get("feedback")
         if not isinstance(fb, str) or not fb.strip():
             errors.append(f"{where}: 'feedback' must be non-empty text")
+        if "writing_process_observations" in r and not isinstance(
+            r.get("writing_process_observations"), str
+        ):
+            errors.append(f"{where}: 'writing_process_observations' must be text")
         sc = r.get("score", None)
         if sc is not None and not isinstance(sc, (int, float)):
             errors.append(f"{where}: 'score' must be a number or null")
@@ -186,6 +190,9 @@ def reidentify(results: list, vault: Vault) -> list:
     for r in results:
         who = vault.reverse(r.get("pseudonym", ""))
         disclosure = r.get("disclosure", "")
+        writing_observation = r.get("writing_process_observations", "")
+        if not isinstance(writing_observation, str):
+            writing_observation = ""
         out.append({
             "resolved":  who is not None,
             "real_name": (who or {}).get("real_name", ""),
@@ -195,6 +202,7 @@ def reidentify(results: list, vault: Vault) -> list:
             "score":     r.get("score"),
             "feedback":  normalize_ai_feedback(r.get("feedback", ""), disclosure),
             "disclosure": disclosure,
+            "writing_process_observations": writing_observation,
         })
     return out
 
@@ -240,6 +248,11 @@ def merge_rows_by_uid(rows: list) -> dict:
             "item_id": ",".join(str(item.get("item_id") or "") for item in items),
             "score": total,
             "feedback": feedback,
+            "writing_process_observations": "\n\n".join(
+                str(item.get("writing_process_observations") or "").strip()
+                for item in items
+                if str(item.get("writing_process_observations") or "").strip()
+            ),
         }
     return merged
 

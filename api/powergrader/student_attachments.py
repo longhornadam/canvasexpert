@@ -14,6 +14,7 @@ from pathlib import Path
 
 from api.webui import workspace
 from api.webui.source_material_extractors import _collapse_ws, _decode_bytes
+from api.powergrader import writing_timeline
 
 
 TRUSTED_TEXT_EXTS = {
@@ -213,6 +214,43 @@ def ingest_local_file(path: str, *, attempt_dir: str, original_filename: str | N
         result["extracted_text_path"] = text_path
     result["actual_size"] = os.path.getsize(workspace.extended_path(path))
     return result
+
+
+def attach_writing_timelines(
+    submissions: list[dict],
+    *,
+    roster_submissions: list[dict] | None = None,
+) -> list[dict]:
+    """Parse and categorize private timelines for a tracked assignment.
+
+    The caller owns assignment classification. This helper never guesses from a
+    filename alone whether an assignment is tracked; it only handles the DOCX
+    attachments the classified caller supplies.
+    """
+    roster = writing_timeline.roster_records(roster_submissions or submissions)
+    for submission in submissions or []:
+        canvas_id = str(submission.get("user_id") or "")
+        for attachment in submission.get("attachments") or []:
+            if not isinstance(attachment, dict):
+                continue
+            filename = attachment.get("filename") or attachment.get("display_name") or ""
+            if Path(str(filename)).suffix.lower() != ".docx":
+                continue
+            local_path = attachment.get("local_path")
+            if not local_path or not os.path.isfile(workspace.extended_path(local_path)):
+                report = writing_timeline.unavailable_report()
+            else:
+                try:
+                    with open(workspace.extended_path(local_path), "rb") as source:
+                        report = writing_timeline.parse_docx(source.read())
+                except OSError:
+                    report = writing_timeline.unavailable_report()
+            attachment["writing_timeline"] = writing_timeline.categorize_authors(
+                report,
+                submission_canvas_id=canvas_id,
+                roster=roster,
+            )
+    return submissions
 
 
 def eligibility_decision(attachments: list[dict], *, expected_count: int | None = None) -> dict:

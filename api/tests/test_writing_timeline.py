@@ -1,0 +1,691 @@
+from __future__ import annotations
+
+import io
+import json
+import zipfile
+from pathlib import Path
+
+import pytest
+from docx import Document
+
+from api import feedback_artifacts, feedback_contract, feedback_results, feedback_safety
+from api.feedback_vault import Vault
+from api.powergrader import autopush_executor, autopush_policy
+from api.powergrader import session_builder, student_attachments, writing_timeline
+from api.webui.routes import powergrader as powergrader_routes
+
+
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def _base_docx(body_text: str = "A fictional visible response.") -> bytes:
+    document = Document()
+    document.add_paragraph(body_text)
+    output = io.BytesIO()
+    document.save(output)
+    return output.getvalue()
+
+
+def _rewrite_docx(base: bytes, replacements: dict[str, bytes], additions: dict[str, bytes] | None = None) -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(base)) as source, zipfile.ZipFile(
+        output, "w", zipfile.ZIP_DEFLATED
+    ) as target:
+        for info in source.infolist():
+            if info.filename in replacements:
+                target.writestr(info, replacements[info.filename])
+            else:
+                target.writestr(info, source.read(info.filename))
+        existing = set(source.namelist())
+        for name, payload in (additions or {}).items():
+            if name not in existing:
+                target.writestr(name, payload)
+    return output.getvalue()
+
+
+def _revision_xml(
+    kind: str,
+    text: str,
+    *,
+    author: str,
+    timestamp: str = "2026-07-27T10:00:00-05:00",
+) -> str:
+    tag = "ins" if kind == "insertion" else "del"
+    text_tag = "t" if kind == "insertion" else "delText"
+    return (
+        f'<w:{tag} w:author="{author}" w:date="{timestamp}">'
+        f"<w:r><w:{text_tag}>{text}</w:{text_tag}></w:r>"
+        f"</w:{tag}>"
+    )
+
+
+def _timeline_docx(
+    *,
+    blocks: list[tuple[str, str, str]] | None = None,
+    track_revisions: bool = True,
+    protection: str = "none",
+    creator: str = "Fictional Learner",
+    last_modified: str = "Fictional Learner",
+    total_time: str = "37",
+    revision: str = "8",
+    stories: dict[str, str] | None = None,
+    body_text: str = "A fictional visible response.",
+) -> bytes:
+    base = _base_docx(body_text)
+    with zipfile.ZipFile(io.BytesIO(base)) as archive:
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+    revision_nodes = "".join(
+        _revision_xml(kind, text, author=author)
+        for kind, text, author in (blocks or [])
+    )
+    document_xml = document_xml.replace("</w:body>", f"<w:p>{revision_nodes}</w:p></w:body>")
+    protection_xml = ""
+    if protection == "unlocked":
+        protection_xml = '<w:documentProtection w:edit="trackedChanges" w:enforcement="0"/>'
+    elif protection == "locked":
+        protection_xml = '<w:documentProtection w:edit="trackedChanges" w:enforcement="1"/>'
+    settings_xml = (
+        f'<w:settings xmlns:w="{W_NS}">'
+        + ("<w:trackRevisions/>" if track_revisions else "")
+        + protection_xml
+        + "</w:settings>"
+    )
+    core_xml = (
+        '<cp:coreProperties '
+        'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+        'xmlns:dc="http://purl.org/dc/elements/1.1/">'
+        f"<dc:creator>{creator}</dc:creator>"
+        f"<cp:lastModifiedBy>{last_modified}</cp:lastModifiedBy>"
+        "</cp:coreProperties>"
+    )
+    app_xml = (
+        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
+        f"<TotalTime>{total_time}</TotalTime><Revision>{revision}</Revision>"
+        "</Properties>"
+    )
+    story_parts = {}
+    for name, inner in (stories or {}).items():
+        story_parts[name] = (
+            f'<w:hdr xmlns:w="{W_NS}"><w:p>{inner}</w:p></w:hdr>'
+        ).encode("utf-8")
+    return _rewrite_docx(
+        base,
+        {
+            "word/document.xml": document_xml.encode("utf-8"),
+            "word/settings.xml": settings_xml.encode("utf-8"),
+            "docProps/core.xml": core_xml.encode("utf-8"),
+            "docProps/app.xml": app_xml.encode("utf-8"),
+        },
+        story_parts,
+    )
+
+
+@pytest.mark.parametrize(
+    ("submission_types", "allowed_extensions", "expected"),
+    [
+        (["online_upload"], ["docx"], True),
+        (["ONLINE_UPLOAD"], [".DOCX"], True),
+        (["online_upload", "online_text_entry"], ["docx"], False),
+        (["online_upload"], ["docx", "pdf"], False),
+        (["online_upload"], [], False),
+        ([], ["docx"], False),
+        (["online_text_entry"], ["docx"], False),
+    ],
+)
+def test_exact_assignment_classification(submission_types, allowed_extensions, expected):
+    assert writing_timeline.is_tracked_assignment(
+        {
+            "submission_types": submission_types,
+            "allowed_extensions": allowed_extensions,
+        }
+    ) is expected
+
+
+def test_parser_captures_blocks_story_parts_and_stable_largest_three():
+    header_revision = _revision_xml(
+        "insertion",
+        "header words",
+        author="Header Workstation",
+        timestamp="2026-07-27T17:00:00Z",
+    )
+    payload = _timeline_docx(
+        blocks=[
+            ("insertion", "small typed phrase", "Fictional Learner"),
+            ("insertion", "x" * 210, "Fictional Learner"),
+            ("deletion", "removed words", "Fictional Learner"),
+            ("insertion", "y" * 210, "Fictional Learner"),
+            ("insertion", "", "Fictional Learner"),
+            ("insertion", "z" * 400, "Fictional Learner"),
+        ],
+        protection="locked",
+        stories={"word/header1.xml": header_revision},
+    )
+
+    report = writing_timeline.parse_docx(payload)
+
+    assert report["status"] == "available"
+    assert report["trail_present"] is True
+    assert report["track_revisions_present"] is True
+    assert report["tracking_protection_present"] is True
+    assert report["tracking_protection_enforced"] is True
+    assert report["tracking_lock_present"] is True
+    assert report["properties"]["total_time_minutes"] == 37
+    assert report["properties"]["revision"] == 8
+    assert len(report["blocks"]) == 7
+    assert any(block["type"] == "deletion" for block in report["blocks"])
+    assert any(block["story_part"] == "word/header1.xml" for block in report["blocks"])
+    assert [block["character_count"] for block in report["largest_insertions"]] == [400, 210, 210]
+    assert [block["document_order"] for block in report["largest_insertions"][1:]] == [1, 3]
+    assert all(block["character_count"] > 0 for block in report["largest_insertions"])
+    assert report["blocks"][0]["timestamp"] == "2026-07-27T15:00:00Z"
+
+
+@pytest.mark.parametrize(
+    ("track_revisions", "protection", "expected_lock"),
+    [
+        (False, "none", False),
+        (True, "none", False),
+        (True, "unlocked", False),
+        (True, "locked", True),
+    ],
+)
+def test_parser_distinguishes_tracking_setting_and_lock(track_revisions, protection, expected_lock):
+    report = writing_timeline.parse_docx(
+        _timeline_docx(
+            blocks=[],
+            track_revisions=track_revisions,
+            protection=protection,
+        )
+    )
+    assert report["status"] == "available"
+    assert report["trail_present"] is False
+    assert report["track_revisions_present"] is track_revisions
+    assert report["tracking_lock_present"] is expected_lock
+
+
+def test_parser_reports_missing_and_malformed_parts_without_crashing():
+    malformed_zip = writing_timeline.parse_docx(b"not a zip")
+    assert malformed_zip["status"] == "invalid"
+    assert malformed_zip["observations"][0]["reason"] == "malformed_zip"
+
+    empty_zip = io.BytesIO()
+    with zipfile.ZipFile(empty_zip, "w"):
+        pass
+    missing = writing_timeline.parse_docx(empty_zip.getvalue())
+    assert missing["status"] == "unavailable"
+    assert any(item["reason"] == "missing_part" for item in missing["observations"])
+
+    malformed_document = _rewrite_docx(
+        _base_docx(),
+        {"word/document.xml": b"<w:document"},
+    )
+    invalid = writing_timeline.parse_docx(malformed_document)
+    assert invalid["status"] == "invalid"
+    assert any(item["reason"] == "malformed_xml" for item in invalid["observations"])
+
+    malformed_properties = _rewrite_docx(
+        _timeline_docx(blocks=[]),
+        {
+            "docProps/app.xml": (
+                '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
+                "<TotalTime>not-a-number</TotalTime><Revision>-2</Revision></Properties>"
+            ).encode("utf-8"),
+            "docProps/core.xml": b"<core",
+        },
+    )
+    partial = writing_timeline.parse_docx(malformed_properties)
+    assert partial["status"] == "available"
+    assert partial["properties"]["total_time_minutes"] is None
+    assert partial["properties"]["revision"] is None
+    assert any(item["status"] == "invalid" for item in partial["observations"])
+
+
+def test_author_categories_require_exact_unique_multiword_roster_match():
+    report = writing_timeline.parse_docx(
+        _timeline_docx(
+            blocks=[
+                ("insertion", "one", "Fictional Learner"),
+                ("insertion", "two", "Fictional Peer"),
+                ("insertion", "three", "Grace"),
+                ("insertion", "four", "Shared Lab"),
+            ],
+            creator="Fictional Learner",
+            last_modified="Fictional Peer",
+        )
+    )
+    roster = [
+        {"canvas_id": "learner", "real_name": "Fictional Learner"},
+        {"canvas_id": "peer", "real_name": "Fictional Peer"},
+        {"canvas_id": "grace", "real_name": "Grace Example"},
+        {"canvas_id": "lab-1", "real_name": "Shared Lab"},
+        {"canvas_id": "lab-2", "real_name": "Shared Lab"},
+    ]
+
+    categorized = writing_timeline.categorize_authors(
+        report,
+        submission_canvas_id="learner",
+        roster=roster,
+    )
+
+    assert categorized["properties"]["creator_category"] == "submission_author"
+    assert categorized["properties"]["last_modified_by_category"] == "other_roster_author"
+    assert [block["author_category"] for block in categorized["blocks"]] == [
+        "submission_author",
+        "other_roster_author",
+        "unrecognized_author_present",
+        "unrecognized_author_present",
+    ]
+
+
+def test_safe_artifact_strips_raw_office_metadata_and_preserves_only_projection(tmp_path):
+    raw_values = {
+        "learner": "Fictional Learner",
+        "peer": "Fictional Peer",
+        "unknown": "Private Lab Profile",
+        "header": "Private Header Name",
+    }
+    header_revision = _revision_xml(
+        "insertion",
+        "header-only text",
+        author=raw_values["header"],
+    )
+    payload = _timeline_docx(
+        blocks=[
+            ("insertion", "fictional work", raw_values["learner"]),
+            ("deletion", "fictional removal", raw_values["peer"]),
+            ("insertion", "more fictional work", raw_values["unknown"]),
+        ],
+        creator=raw_values["learner"],
+        last_modified=raw_values["peer"],
+        stories={"word/header1.xml": header_revision},
+        body_text="Fictional Learner wrote a visible fictional response.",
+    )
+    local_file = tmp_path / "private-evidence.docx"
+    local_file.write_bytes(payload)
+    submission = {
+        "user_id": "learner",
+        "user": {"name": raw_values["learner"], "sortable_name": raw_values["learner"]},
+        "assignment": {
+            "id": "assignment-1",
+            "description": "Write a fictional response.",
+            "points_possible": 10,
+        },
+        "body": "",
+        "expected_attachment_count": 1,
+        "attachments": [{
+            "filename": "private-evidence.docx",
+            "local_path": str(local_file),
+            "declared_size": len(payload),
+            "actual_size": len(payload),
+            "download_status": "downloaded",
+            "extraction_status": "extracted",
+            "ai_eligible": True,
+            "local_only": False,
+            "item_id": "assignment-1",
+        }],
+    }
+    peer_roster_row = {
+        "user_id": "peer",
+        "user": {"name": raw_values["peer"], "sortable_name": raw_values["peer"]},
+    }
+    student_attachments.attach_writing_timelines(
+        [submission],
+        roster_submissions=[submission, peer_roster_row],
+    )
+
+    vault = Vault(str(tmp_path / "vault.json"))
+    bundle = feedback_artifacts.pseudonymize_submissions(
+        [submission], vault, "Fictional Assignment"
+    )
+    safe_dir = tmp_path / "SAFE"
+    private_dir = tmp_path / "PRIVATE"
+    result = feedback_artifacts.write_safe_and_private(
+        bundle,
+        vault,
+        str(safe_dir),
+        str(private_dir),
+        submissions=[submission],
+    )
+
+    safe = json.loads(Path(result["safe_bundle"]).read_text(encoding="utf-8"))
+    private_text = Path(result["private_bundle"]).read_text(encoding="utf-8")
+    safe_text = json.dumps(safe)
+    for raw in raw_values.values():
+        assert raw not in safe_text
+    assert str(local_file) not in safe_text
+    assert local_file.name not in safe_text
+    assert "header-only text" not in safe_text
+    assert raw_values["unknown"] in private_text
+    assert raw_values["header"] in private_text
+
+    timeline = safe["students"][0]["responses"][0]["writing_timeline"]["documents"][0]
+    assert timeline["properties"]["creator_category"] == "submission_author"
+    assert timeline["properties"]["last_modified_by_category"] == "other_roster_author"
+    assert {block.get("author_category") for block in timeline["blocks"]} == {
+        "submission_author",
+        "other_roster_author",
+        "unrecognized_author_present",
+    }
+    assert feedback_safety.assert_scrubbed(safe, vault)["green"] is True
+
+
+def test_optional_teacher_observation_round_trips_but_never_enters_write_fields(tmp_path):
+    vault = Vault(str(tmp_path / "vault.json"))
+    pseudonym = vault.get_or_assign("learner", "Fictional Learner", "")
+    bundle = {
+        "students": [{
+            "pseudonym": pseudonym,
+            "responses": [{"item_id": "assignment-1", "possible": 10}],
+        }]
+    }
+    observation = "Several insertion blocks appear across multiple timestamps."
+    result = [{
+        "pseudonym": pseudonym,
+        "item_id": "assignment-1",
+        "score": 8,
+        "feedback": "Student-facing feedback only.",
+        "writing_process_observations": observation,
+    }]
+    verdict = feedback_results.validate_results(result, bundle, vault)
+    assert verdict["ok"] is True
+    rows = feedback_results.reidentify(result, vault)
+    merged = feedback_results.merge_rows_by_uid(rows)
+    assert merged["learner"]["writing_process_observations"] == observation
+    assert observation not in merged["learner"]["feedback"]
+
+    missing = [{key: value for key, value in result[0].items() if key != "writing_process_observations"}]
+    assert feedback_results.validate_results(missing, bundle, vault)["ok"] is True
+    malformed = [{**result[0], "writing_process_observations": 42}]
+    assert feedback_results.validate_results(malformed, bundle, vault)["ok"] is False
+
+    student = {
+        "user_id": "learner",
+        "ai_score": 8,
+        "ai_feedback": "Student-facing feedback only.",
+        "writing_process_observations": observation,
+    }
+    payload = autopush_executor._build_canvas_payload(
+        {"grade_push_allowed": True, "comment_push_allowed": True},
+        {"points_possible": 10},
+        student,
+        {"score_text": "8"},
+    )
+    assert payload == {
+        "submission": {"posted_grade": "8"},
+        "comment": {"text_comment": "Student-facing feedback only."},
+    }
+    score, feedback = autopush_policy._effective_score_feedback(student, None)
+    assert score == 8
+    assert feedback == "Student-facing feedback only."
+    assert observation not in json.dumps(payload)
+
+    sends = []
+    context = {
+        "course_id": "course-1",
+        "assignment_id": "assignment-1",
+        "auto_push": True,
+        "status": "session_ready",
+        "push_policy": {
+            "enabled": True,
+            "allow_grade_push": True,
+            "allow_comment_push": True,
+            "policy_version": 2,
+        },
+    }
+    assignment = {
+        "id": "assignment-1",
+        "course_id": "course-1",
+        "points_possible": 10,
+        "grading_type": "points",
+        "submission_types": ["online_text_entry"],
+        "allowed_extensions": [],
+        "group_category_id": None,
+    }
+    student.update({
+        "submission_id": "submission-1",
+        "body": "Fictional submitted work.",
+        "submission_baseline": {
+            "attempt": 1,
+            "submitted_at": "2026-07-27T10:00:00Z",
+        },
+        "posted": False,
+        "status": "pending",
+    })
+    canvas_state = {
+        "canvas_state_present": True,
+        "user_id": "learner",
+        "submission_id": "submission-1",
+        "workflow_state": "submitted",
+        "attempt": 1,
+        "submitted_at": "2026-07-27T10:00:00Z",
+        "excused": False,
+        "score": None,
+        "submission_comments": [],
+    }
+    summary = autopush_executor.run_autopush_for_session(
+        context=context,
+        session={"students": [student]},
+        assignment=assignment,
+        canvas_states_by_user={"learner": canvas_state},
+        canvas_send=lambda method, path, body: sends.append(
+            {"method": method, "path": path, "body": body}
+        ) or {"ok": True},
+        receipt_dir=str(tmp_path / "receipts"),
+        now="2026-07-27T12:00:00Z",
+    )
+    assert summary["pushed"] == 1, summary
+    assert observation not in json.dumps(sends)
+    assert observation not in json.dumps(summary["receipts"])
+    receipt_text = " ".join(
+        path.read_text(encoding="utf-8")
+        for path in (tmp_path / "receipts").glob("*.json")
+    )
+    assert observation not in receipt_text
+
+    prompt = feedback_contract.build_contract_text()
+    assert "observational, teacher-only" in prompt
+    assert "must not change the score" in prompt
+    assert "penalty recommendation" in prompt
+
+
+def test_session_builder_keeps_private_timeline_and_teacher_observation():
+    report = writing_timeline.categorize_authors(
+        writing_timeline.parse_docx(
+            _timeline_docx(
+                blocks=[("insertion", "fictional work", "Fictional Learner")],
+            )
+        ),
+        submission_canvas_id="learner",
+        roster=[{"canvas_id": "learner", "real_name": "Fictional Learner"}],
+    )
+    students = session_builder.build_students(
+        submitted=[{
+            "user_id": "learner",
+            "user": {"name": "Fictional Learner"},
+            "attachments": [{
+                "filename": "answer.docx",
+                "download_status": "downloaded",
+                "extraction_status": "extracted",
+                "ai_eligible": True,
+                "local_only": False,
+                "writing_timeline": report,
+            }],
+            "expected_attachment_count": 1,
+        }],
+        ai_by_uid={
+            "learner": {
+                "score": 8,
+                "feedback": "Student-facing only.",
+                "writing_process_observations": "Teacher-only observation.",
+            }
+        },
+        roster_settings={},
+        tier_map={},
+        monitored={},
+        extra_time_map={},
+    )
+    assert students[0]["attachments"][0]["writing_timeline"]["blocks"][0]["author"] == "Fictional Learner"
+    assert students[0]["writing_process_observations"] == "Teacher-only observation."
+
+
+@pytest.mark.parametrize("mode", ["fast", "packet", "assisted"])
+def test_pg_start_persists_tracked_classification_and_timeline_in_every_mode(
+    mode, monkeypatch, tmp_path
+):
+    payload = _timeline_docx(
+        blocks=[("insertion", "fictional work", "Fictional Learner")],
+    )
+    local_file = tmp_path / "answer.docx"
+    local_file.write_bytes(payload)
+    submission = {
+        "id": "submission-1",
+        "user_id": "learner",
+        "user": {"name": "Fictional Learner", "sortable_name": "Fictional Learner"},
+        "submission_type": "online_upload",
+        "workflow_state": "submitted",
+        "attempt": 1,
+        "body": "",
+        "attachments": [{
+            "filename": "answer.docx",
+            "local_path": str(local_file),
+            "declared_size": len(payload),
+            "actual_size": len(payload),
+            "download_status": "downloaded",
+            "extraction_status": "extracted",
+            "ai_eligible": True,
+            "local_only": False,
+            "item_id": "assignment-1",
+        }],
+        "expected_attachment_count": 1,
+    }
+    assignment = {
+        "id": "assignment-1",
+        "name": "Fictional Assignment",
+        "points_possible": 10,
+        "submission_types": ["ONLINE_UPLOAD"],
+        "allowed_extensions": [".DOCX"],
+    }
+    saved = {}
+    monkeypatch.setattr(powergrader_routes.workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        powergrader_routes.assignment_refresh,
+        "refresh_assignment",
+        lambda *args, **kwargs: ([submission], assignment, {"status": "complete"}),
+    )
+    monkeypatch.setattr(
+        powergrader_routes.ai_workflow,
+        "run_ai_workflow",
+        lambda **kwargs: {
+            "ok": True,
+            "privacy_steps": [],
+            "privacy_artifacts": {},
+            "ai_by_uid": {},
+            "ai_item_by_uid": {},
+            "ai_failures": {},
+            "source_context": {},
+        },
+    )
+    monkeypatch.setattr(powergrader_routes.config, "course_display_name", lambda _course_id: "Fictional Course")
+    monkeypatch.setattr(powergrader_routes.config, "get_openrouter_model", lambda: "synthetic/model")
+    monkeypatch.setattr(powergrader_routes.config, "has_openrouter_key", lambda: False)
+    monkeypatch.setattr(powergrader_routes.config, "get_roster_student_settings", lambda _course_id: {})
+    monkeypatch.setattr(powergrader_routes.config, "roster_tier_by_id", lambda _course_id: {})
+    monkeypatch.setattr(powergrader_routes.config, "get_monitored_students", lambda: {})
+    monkeypatch.setattr(powergrader_routes.config, "get_extra_time", lambda _course_id: [])
+    monkeypatch.setattr(powergrader_routes, "_save_session", lambda value: saved.update(value))
+
+    response = powergrader_routes.pg_start(
+        course_id="course-1",
+        assignment_id="assignment-1",
+        mode=mode,
+        watch_late="true",
+        auto_post="false",
+        rubric_name="",
+        persona_id="sage",
+        feedback_pattern_id="",
+        model_id="",
+        response_kind="scr",
+        source_text="",
+        source_files_json="",
+        source_uploads=None,
+    )
+
+    assert json.loads(response.body)["ok"] is True
+    assert saved["writing_timeline_tracked"] is True
+    timeline = saved["students"][0]["attachments"][0]["writing_timeline"]
+    assert timeline["status"] == "available"
+    assert timeline["largest_insertions"][0]["author_category"] == "submission_author"
+
+
+def test_non_tracked_session_skips_timeline_parsing(monkeypatch, tmp_path):
+    payload = _timeline_docx(
+        blocks=[("insertion", "fictional work", "Fictional Learner")],
+    )
+    local_file = tmp_path / "answer.docx"
+    local_file.write_bytes(payload)
+    submission = {
+        "user_id": "learner",
+        "user": {"name": "Fictional Learner"},
+        "submission_type": "online_upload",
+        "workflow_state": "submitted",
+        "attachments": [{
+            "filename": "answer.docx",
+            "local_path": str(local_file),
+            "download_status": "downloaded",
+            "extraction_status": "extracted",
+            "ai_eligible": True,
+            "local_only": False,
+        }],
+    }
+    assignment = {
+        "name": "Fictional Mixed Assignment",
+        "points_possible": 10,
+        "submission_types": ["online_upload"],
+        "allowed_extensions": ["docx", "pdf"],
+    }
+    saved = {}
+    monkeypatch.setattr(powergrader_routes.workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        powergrader_routes.assignment_refresh,
+        "refresh_assignment",
+        lambda *args, **kwargs: ([submission], assignment, {"status": "complete"}),
+    )
+    monkeypatch.setattr(
+        powergrader_routes.ai_workflow,
+        "run_ai_workflow",
+        lambda **kwargs: {
+            "ok": True,
+            "privacy_steps": [],
+            "privacy_artifacts": {},
+            "ai_by_uid": {},
+            "source_context": {},
+        },
+    )
+    monkeypatch.setattr(powergrader_routes.config, "course_display_name", lambda _course_id: "Course")
+    monkeypatch.setattr(powergrader_routes.config, "get_openrouter_model", lambda: "synthetic/model")
+    monkeypatch.setattr(powergrader_routes.config, "has_openrouter_key", lambda: False)
+    monkeypatch.setattr(powergrader_routes.config, "get_roster_student_settings", lambda _course_id: {})
+    monkeypatch.setattr(powergrader_routes.config, "roster_tier_by_id", lambda _course_id: {})
+    monkeypatch.setattr(powergrader_routes.config, "get_monitored_students", lambda: {})
+    monkeypatch.setattr(powergrader_routes.config, "get_extra_time", lambda _course_id: [])
+    monkeypatch.setattr(powergrader_routes, "_save_session", lambda value: saved.update(value))
+
+    response = powergrader_routes.pg_start(
+        course_id="course-1",
+        assignment_id="assignment-1",
+        mode="fast",
+        watch_late="true",
+        auto_post="false",
+        rubric_name="",
+        persona_id="sage",
+        feedback_pattern_id="",
+        model_id="",
+        response_kind="scr",
+        source_text="",
+        source_files_json="",
+        source_uploads=None,
+    )
+
+    assert json.loads(response.body)["ok"] is True
+    assert saved["writing_timeline_tracked"] is False
+    assert "writing_timeline" not in saved["students"][0]["attachments"][0]
