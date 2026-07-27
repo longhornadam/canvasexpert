@@ -18,6 +18,41 @@ fictional tracked queue rendered successfully in light and dark themes; the loca
 file control worked and both pages produced zero browser warnings/errors. No live Canvas
 or AI call was made.
 
+**2026-07-27 adversarial audit — three defects fixed, one finding downgraded.** The SAFE
+boundary itself held: raw Office authors reach the bundle only via `local_attachments`,
+which is popped before the SAFE bundle is written, and held students are dropped entirely.
+XML entity expansion is rejected by ElementTree. Author matching already failed toward not
+accusing (single-token names untrusted, ambiguous aliases collapse to
+`unrecognized_author_present`). What was wrong:
+
+1. **Uncapped `blocks` in the SAFE projection.** `largest_insertions` was capped at three;
+   the full block array was not. A well-formed 75 KB tracked DOCX measured 60,000 blocks
+   and 8.6 MB of outbound JSON per student, billed to the teacher's own AI key, with no
+   consumer anywhere — the UI reads only trail/lock/properties/largest, and the counts
+   already carry volume. The array is no longer projected at all.
+2. **Only one of three `build_students` callers attached timelines.** `pg_start` did;
+   `powergrader_late.py` and `routines_powergrader.py` did not. Late submitters on a
+   tracked assignment got no timeline and no explanation, indistinguishable from "no
+   revision trail". Both paths now attach and set `writing_timeline_tracked`. The late
+   gap was live; the routines gap was **latent** — `is_tracked_assignment` requires
+   `allowed_extensions == {docx}` while pure-upload autoscore eligibility requires an
+   extension in `READABLE_UPLOAD_EXTS`, which excludes `docx`, so scheduled autoscore
+   cannot currently reach a tracked assignment. The routines fix is defensive; a test
+   fails on purpose if `docx` is ever added to that set.
+3. **`writing_timeline_tracked` was written but never read** by any route, template, or
+   JS — so the teacher had no way to know an assignment was tracked, and the queue could
+   not distinguish "tracked, no trail" from "not tracked". Now surfaced as a topbar badge,
+   plus an explicit not-examined state per submission.
+4. **The teacher-only observation had no server-side guard.** The contract forbade
+   integrity conclusions in prose; `validate_results` only type-checked. A well-formed
+   `"This student likely used AI"` would have validated and displayed verbatim.
+   `writing_timeline.sanitize_process_observation` now enforces it at `reidentify`, the
+   single funnel from model output to teacher-facing row, and fails closed.
+
+Still open, judged not worth changing now: the timeline appends once per response when an
+attachment carries no `item_id` (`feedback_artifacts.py`), latent only because the
+assignments path builds a single response per student. Revisit if that ever changes.
+
 **Current next-batch pointer:** CanvasAgent/Create tracked intent and handout preparation.
 Required context is this document §5 **Template**, **Authoring and distribution flow**,
 and §11 **Appendix G structure**, plus

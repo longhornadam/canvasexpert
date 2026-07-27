@@ -50,7 +50,7 @@ rubric and the scoring instructions (`build_contract_text`).
                 "block_count": 12,
                 "insertion_count": 10,
                 "deletion_count": 2,
-                "blocks": [
+                "largest_insertions": [
                   {
                     "type": "insertion",
                     "timestamp": "2026-07-27T15:42:00Z",
@@ -58,8 +58,7 @@ rubric and the scoring instructions (`build_contract_text`).
                     "word_count": 33,
                     "author_category": "submission_author"
                   }
-                ],
-                "largest_insertions": []
+                ]
               }
             ]
           }
@@ -80,6 +79,12 @@ rubric and the scoring instructions (`build_contract_text`).
   `unrecognized_author_present` author categories. It contains no raw Office
   author/property value, filename, path, excerpt, header/body text, real ID/name,
   or another student's pseudonym.
+- The projection carries **no per-block array**. Volume is expressed by
+  `block_count` / `insertion_count` / `deletion_count`, and per-block detail is
+  limited to at most three entries in `largest_insertions`. A full block list is
+  deliberately excluded: nothing downstream reads it, and a heavily tracked DOCX
+  grows it without bound — a 75 KB upload measures 60,000 blocks and 8.6 MB of
+  outbound JSON, billed against the teacher's own AI key.
 - Contains **no** identity fields. `feedback_safety.scan_payload` hard-blocks if any leak.
 
 ## Direction 2 - Results (LLM -> app)
@@ -125,6 +130,15 @@ Rules enforced by `validate_results`:
 - `writing_process_observations` is additive and optional. Its absence preserves
   current behavior. When present, PowerGrader keeps it in the private session and
   teacher UI only; it is not concatenated into `feedback`.
+- The "never an integrity conclusion" rule above is **enforced in code, not only in
+  the prompt**. `reidentify` passes the string through
+  `writing_timeline.sanitize_process_observation`, which replaces any observation
+  reading as an integrity verdict, hedged authorship claim, or penalty/escalation
+  recommendation with a fixed withheld notice. `validate_results` still only
+  type-checks the field, so a well-formed accusation passes validation and is
+  caught at re-identification — the single funnel where model output becomes a
+  teacher-facing row. The guard fails closed: a false positive costs one
+  observation, a false negative puts an accusation in front of a teacher.
 
 ### Future (not in v1)
 

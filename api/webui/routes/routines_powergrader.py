@@ -46,6 +46,8 @@ class PowerGraderRoutineDeps:
     privacy: Any
     session_builder: Any
     session_store: Any
+    student_attachments: Any
+    writing_timeline: Any
 
 
 # --------------------------------------------------------------------------
@@ -151,6 +153,15 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                     assignment_name=adata.get("name") or job_ref.get("assignment_name") or assignment_id,
                     assignment_id=assignment_id,
                 )
+            # Scheduled runs get the same timeline pass as an interactive start.
+            # Gated on `not session` because it must follow attachment ingestion —
+            # without a local_path every document would report as unavailable.
+            writing_timeline_tracked = deps.writing_timeline.is_tracked_assignment(adata)
+            if not session and writing_timeline_tracked:
+                deps.student_attachments.attach_writing_timelines(
+                    submitted,
+                    roster_submissions=subs,
+                )
             settings = job_ref.get("settings") or {}
             selected_model = str(settings.get("model_id") or deps.config.get_openrouter_model()).strip() or deps.config.get_openrouter_model()
             persona_id = str(settings.get("persona_id") or "sage").strip() or "sage"
@@ -237,6 +248,7 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                     copilot_packet=session_ai.get("copilot_packet"),
                     late_watch=late_watch,
                 )
+                session["writing_timeline_tracked"] = writing_timeline_tracked
                 if privacy_artifacts.get("private_folder"):
                     audit_path = deps.privacy.write_privacy_audit_file(
                         privacy_artifacts["private_folder"],

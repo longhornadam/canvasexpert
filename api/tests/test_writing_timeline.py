@@ -10,9 +10,11 @@ from docx import Document
 
 from api import feedback_artifacts, feedback_contract, feedback_results, feedback_safety
 from api.feedback_vault import Vault
-from api.powergrader import autopush_executor, autopush_policy
+from api.powergrader import autopush_executor, autopush_policy, autoscore_queue
 from api.powergrader import session_builder, student_attachments, writing_timeline
+from api.webui import workspace
 from api.webui.routes import powergrader as powergrader_routes
+from api.webui.routes import routines as routines_routes
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -361,7 +363,14 @@ def test_safe_artifact_strips_raw_office_metadata_and_preserves_only_projection(
     timeline = safe["students"][0]["responses"][0]["writing_timeline"]["documents"][0]
     assert timeline["properties"]["creator_category"] == "submission_author"
     assert timeline["properties"]["last_modified_by_category"] == "other_roster_author"
-    assert {block.get("author_category") for block in timeline["blocks"]} == {
+    # The per-block array is not projected at all: it has no consumer and grows
+    # without bound on a heavily tracked document.  Counts carry the volume, and
+    # `largest_insertions` carries the per-block author categories.
+    assert "blocks" not in timeline
+    assert timeline["block_count"] >= 3
+    assert timeline["insertion_count"] + timeline["deletion_count"] == timeline["block_count"]
+    assert len(timeline["largest_insertions"]) <= 3
+    assert {block.get("author_category") for block in timeline["largest_insertions"]} <= {
         "submission_author",
         "other_roster_author",
         "unrecognized_author_present",
@@ -689,3 +698,217 @@ def test_non_tracked_session_skips_timeline_parsing(monkeypatch, tmp_path):
     assert json.loads(response.body)["ok"] is True
     assert saved["writing_timeline_tracked"] is False
     assert "writing_timeline" not in saved["students"][0]["attachments"][0]
+
+
+# ---------------------------------------------------------------------------
+# Teacher-only observation guard
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("observation", [
+    "The student likely used AI to write this.",
+    "This looks like plagiarism.",
+    "Clear evidence of cheating.",
+    "The submission was AI-generated.",
+    "Someone else wrote this essay.",
+    "This student did not write the response.",
+    "I recommend a penalty for academic dishonesty.",
+    "Give them a zero and report this to the office.",
+    "Suspicious editing pattern suggests misconduct.",
+    "Probably copied from another source.",
+    "This should be investigated as an honor code violation.",
+    "Written by an AI, not the student.",
+])
+def test_integrity_conclusions_never_reach_the_teacher(observation):
+    assert (
+        writing_timeline.sanitize_process_observation(observation)
+        == writing_timeline.OBSERVATION_WITHHELD_NOTICE
+    )
+
+
+@pytest.mark.parametrize("observation", [
+    "The revision trail shows steady additions across three sittings.",
+    "One insertion accounts for most of the text; the rest are small edits.",
+    "Editing time is 42 minutes across 7 revisions.",
+    "The document has no revision trail at all.",
+    "Most insertions are short and evenly spaced.",
+])
+def test_process_descriptions_survive_the_guard(observation):
+    assert writing_timeline.sanitize_process_observation(observation) == observation
+
+
+def test_blank_observation_stays_blank():
+    assert writing_timeline.sanitize_process_observation(None) == ""
+    assert writing_timeline.sanitize_process_observation("   ") == ""
+
+
+def test_reidentify_replaces_integrity_conclusion_with_notice(tmp_path):
+    vault = Vault(str(tmp_path / "vault.json"))
+    pseudonym = vault.get_or_assign("learner", "Fictional Learner", "")
+    accusation = "This was almost certainly AI-generated; recommend a zero."
+    result = [{
+        "pseudonym": pseudonym,
+        "item_id": "assignment-1",
+        "score": 8,
+        "feedback": "Student-facing feedback only.",
+        "writing_process_observations": accusation,
+    }]
+
+    # A prompt rule is not an enforcement boundary: the string is well-typed, so
+    # validation passes, and the guard has to catch it on the way to the teacher.
+    bundle = {"students": [{
+        "pseudonym": pseudonym,
+        "responses": [{"item_id": "assignment-1", "possible": 10}],
+    }]}
+    assert feedback_results.validate_results(result, bundle, vault)["ok"] is True
+
+    merged = feedback_results.merge_rows_by_uid(feedback_results.reidentify(result, vault))
+    observation = merged["learner"]["writing_process_observations"]
+    assert observation == writing_timeline.OBSERVATION_WITHHELD_NOTICE
+    assert "AI-generated" not in observation
+    assert "zero" not in observation
+    assert merged["learner"]["feedback"] == "Student-facing feedback only."
+
+
+# ---------------------------------------------------------------------------
+# Coverage parity: every path that builds students must attach timelines
+# ---------------------------------------------------------------------------
+
+def _tracked_docx_submission(user_id: str, name: str, local_file: Path) -> dict:
+    payload = _timeline_docx(blocks=[("insertion", "fictional work", name)])
+    local_file.write_bytes(payload)
+    return {
+        "user_id": user_id,
+        "submission_type": "online_upload",
+        "workflow_state": "submitted",
+        "submitted_at": "2026-09-11T15:20:00Z",
+        "cached_due_date": "2026-09-10T23:59:00Z",
+        "attempt": 1,
+        "body": "",
+        "user": {"name": name, "sortable_name": name},
+        "assignment": {"id": "assignment-1", "name": "Essay"},
+        "attachments": [{
+            "filename": "answer.docx",
+            "local_path": str(local_file),
+            "declared_size": len(payload),
+            "actual_size": len(payload),
+            "download_status": "downloaded",
+            "extraction_status": "extracted",
+            "ai_eligible": True,
+            "local_only": False,
+            "item_id": "assignment-1",
+        }],
+        "expected_attachment_count": 1,
+    }
+
+
+_TRACKED_ASSIGNMENT = {
+    "id": "assignment-1",
+    "name": "Essay",
+    "description": "<p>Explain the text.</p>",
+    "points_possible": 10,
+    "submission_types": ["online_upload"],
+    "allowed_extensions": ["docx"],
+    "grading_type": "points",
+    "due_at": "2026-06-28T23:59:00-05:00",
+}
+
+
+def test_late_catchup_attaches_timelines_for_tracked_assignment(monkeypatch, tmp_path):
+    """A late submitter must get the same timeline pass as an on-time one."""
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path / "ws"))
+    existing = _tracked_docx_submission("1", "Existing Student", tmp_path / "one.docx")
+    late = _tracked_docx_submission("2", "Late Student", tmp_path / "two.docx")
+    session = {
+        "session_id": "sid",
+        "course_id": "course-1",
+        "assignment_id": "assignment-1",
+        "assignment_name": "Essay",
+        "assignment_description": "Explain the text.",
+        "points_possible": 10,
+        "mode": "assisted",
+        "model_id": "model-a",
+        "response_kind": "scr",
+        "rubric_name": "",
+        "persona_id": "sage",
+        "students": [{"user_id": "1", "real_name": "Existing Student", "status": "pending"}],
+        "late_watch": {
+            "enabled": True,
+            "supported": True,
+            "reason": "",
+            "initial_missing_user_ids": ["2"],
+            "known_user_ids": ["1"],
+            "scored_user_ids": [],
+            "last_checked": None,
+            "last_scored": None,
+            "last_summary": "",
+            "source_context": {"sentinel": "keep-me"},
+            "response_kind": "scr",
+        },
+        "push_log": [],
+    }
+
+    monkeypatch.setattr(powergrader_routes, "_load_session", lambda _sid: session)
+    monkeypatch.setattr(powergrader_routes, "_save_session", lambda value: None)
+    monkeypatch.setattr(
+        powergrader_routes.canvas_fetch, "fetch_submissions",
+        lambda course_id, assignment_id: ([existing, late], dict(_TRACKED_ASSIGNMENT), None),
+    )
+    monkeypatch.setattr(
+        powergrader_routes.canvas_fetch, "ingest_ordinary_attachments",
+        lambda subs, **kwargs: subs,
+    )
+    monkeypatch.setattr(
+        powergrader_routes.ai_workflow, "run_ai_workflow",
+        lambda **kwargs: {
+            "ok": True, "error": "", "status_code": 200,
+            "privacy_steps": [], "privacy_artifacts": {},
+            "ai_by_uid": {}, "ai_item_by_uid": {}, "ai_failures": {},
+            "source_context": {}, "copilot_packet": None,
+            "packet_zip": None, "budget": None, "debug_path": None,
+        },
+    )
+    for name, value in (
+        ("get_roster_student_settings", lambda course_id: {}),
+        ("roster_tier_by_id", lambda course_id: {}),
+        ("get_monitored_students", lambda: {}),
+        ("get_extra_time", lambda course_id: []),
+        ("get_sweep_settings", lambda: {"skip_weekends": True, "holidays": []}),
+        ("get_combined_calendar_for_range", lambda: {"no_count_dates": []}),
+        ("get_openrouter_model", lambda: "model-a"),
+        ("has_openrouter_key", lambda: True),
+        ("course_display_name", lambda course_id: "Fictional Course"),
+    ):
+        monkeypatch.setattr(powergrader_routes.config, name, value)
+
+    response = powergrader_routes.pg_late_score("sid")
+
+    assert json.loads(response.body)["ok"] is True
+    assert session["writing_timeline_tracked"] is True
+    appended = [st for st in session["students"] if str(st.get("user_id")) == "2"]
+    assert len(appended) == 1
+    timeline = appended[0]["attachments"][0]["writing_timeline"]
+    assert timeline["status"] == "available"
+    assert timeline["largest_insertions"][0]["author_category"] == "submission_author"
+
+
+def test_tracked_assignments_are_gated_out_of_scheduled_autoscore():
+    """The tracked shape and scheduled-autoscore eligibility are mutually exclusive.
+
+    `is_tracked_assignment` requires allowed_extensions == {docx}; autoscore
+    eligibility for a pure upload requires an extension in READABLE_UPLOAD_EXTS,
+    which does not include docx.  So scheduled autoscore cannot currently reach a
+    tracked assignment, and the routines path attaches timelines defensively
+    rather than actively.  If docx is ever added to READABLE_UPLOAD_EXTS this test
+    fails, which is the point: that change must be a deliberate decision.
+    """
+    assert "docx" not in autoscore_queue.READABLE_UPLOAD_EXTS
+    assert writing_timeline.is_tracked_assignment(_TRACKED_ASSIGNMENT) is True
+    eligibility, _reason = autoscore_queue.classify_assignment_for_autoscore(_TRACKED_ASSIGNMENT)
+    assert eligibility != "eligible"
+
+
+def test_routine_deps_expose_timeline_modules():
+    """Wiring guard: the routines path cannot attach what it was never handed."""
+    deps = routines_routes._powergrader_routine_deps()
+    assert deps.writing_timeline is writing_timeline
+    assert deps.student_attachments is student_attachments

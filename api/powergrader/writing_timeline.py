@@ -481,13 +481,69 @@ def safe_projection(report: dict | None) -> dict | None:
         if safe_properties:
             projection["properties"] = safe_properties
 
-    projection["blocks"] = [
-        _safe_block(item) for item in report.get("blocks") or []
-        if isinstance(item, dict) and item.get("type") in {"insertion", "deletion"}
-    ]
+    # The per-block array is deliberately NOT projected.  Counts above already
+    # carry the volume signal, nothing downstream reads it, and a heavily tracked
+    # DOCX inflates it without bound: a 75 KB upload measured 60,000 blocks and
+    # 8.6 MB of outbound JSON, billed against the teacher's own AI key.
     projection["largest_insertions"] = [
         _safe_block(item) for item in report.get("largest_insertions") or []
         if isinstance(item, dict) and item.get("type") == "insertion"
         and int(item.get("character_count") or 0) > 0
     ][:3]
     return projection
+
+
+OBSERVATION_WITHHELD_NOTICE = (
+    "Observation withheld: the model returned an integrity conclusion, which this "
+    "feature does not report. The timeline facts above are unchanged."
+)
+
+_INTEGRITY_CONCLUSION_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        # Named integrity verdicts.
+        r"\bcheat\w*\b",
+        r"\bplagiari\w*\b",
+        r"\bacademic (dis)?(honesty|integrity)\b",
+        r"\bmisconduct\b",
+        r"\bghost.?writ\w*\b",
+        r"\bsuspicio\w*\b",
+        r"\bsuspect\w*\b",
+        r"\b(honor|honour) code\b",
+        # Attribution to a generator or to another person.
+        r"\bai.?(generated|written|authored)\b",
+        r"\b(generated|written|authored) by (an? )?(ai|llm|bot|chatbot|machine)\b",
+        r"\b(chatgpt|copilot|gemini|llm|chatbot)\b",
+        r"\bsomeone else (wrote|authored|typed|did)\b",
+        r"\bnot (the )?(real |actual )?author\b",
+        r"\bdid ?n[o']?t (write|author)\b",
+        # Hedged authorship claims — the contract forbids probability, not just verdicts.
+        r"\b(likely|probably|possibly|may have|might have|appears? to have|"
+        r"seems? to have|evidently|clearly)\b[^.!?]{0,60}\b(wrote|written|authored?|"
+        r"copied|outside help|another person|used ai)\b",
+        # Penalty or escalation recommendations.
+        r"\bpenal\w*\b",
+        r"\bdiscipl\w*\b",
+        r"\b(give|assign|award)\w* (them |the student )?a? ?zero\b",
+        r"\bscore of zero\b",
+        r"\b(report|refer|escalate) (this |them |the student )?to\b",
+        r"\bshould be investigated\b",
+    )
+)
+
+
+def sanitize_process_observation(value) -> str:
+    """Blank a teacher-only observation that reads as an integrity conclusion.
+
+    The scoring contract forbids these in prose, but a prompt rule is not an
+    enforcement boundary.  This fails closed on purpose: a false positive costs
+    one observation, while a false negative puts an accusation about a real
+    student in front of a teacher.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    for pattern in _INTEGRITY_CONCLUSION_PATTERNS:
+        if pattern.search(text):
+            return OBSERVATION_WITHHELD_NOTICE
+    return text

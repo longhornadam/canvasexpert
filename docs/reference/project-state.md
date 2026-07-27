@@ -49,6 +49,12 @@ slice-specific.
   already provide it (Claude Cowork, MagicSchool, ChatGPT Work). Rely on the host
   assistant's own conversational ability; ship the contract, not a harness around
   it.
+- **The app reports; it never accuses.** Where a feature could be read as an
+  integrity judgement about a student — the Writing Timeline being the current
+  example — it reports observable facts and states its own limits, and any rule
+  against concluding is enforced in code rather than in prompt text. A model
+  instruction is not an enforcement boundary. See
+  `docs/reference/powergrader-module-map.md` → *Writing Timeline*.
 
 See also `AGENTS.md` → *Lean engineering defaults* for the engineering-side
 expression of the same instinct.

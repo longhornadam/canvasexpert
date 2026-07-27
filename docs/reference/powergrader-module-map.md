@@ -29,6 +29,7 @@ namespace shims.
 | AI workflow and SAFE artifacts | `ai_workflow.py`, `ai_workflow_support.py`, `queue_privacy.js` |
 | Copilot packets/import | `copilot_packet.py`, `copilot_packet_support.py`, `import_results.py`, `queue_import.js` |
 | Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `new_quiz_fetch.py`, `student_attachments.py` |
+| Writing Timeline | `writing_timeline.py`, `student_attachments.py::attach_writing_timelines`, `queue_core.js::renderWritingTimeline` |
 | Late catch-up | `late_catchup.py`, `routes/powergrader_late.py`, `queue_late_catchup.js` |
 | Scheduled autoscore | `autoscore_queue.py`, `autoscore_claims.py`, `scheduled_autoscore_support.py`, `routes/routines_powergrader.py` |
 | Automatic-post policy | `autopush_policy.py`, `autopush_policy_result.py`, `push_context.py`, `interactive_autopush.py` |
@@ -68,6 +69,39 @@ import features. Preserve `window.CE_POWERGRADER_SETUP` and existing queue names
   SpeedGrader fallback. New Quiz scheduled, late-catch-up, and interactive automatic posting
   remain unavailable. See `docs/reference/new-quizzes-grading-transport.md`.
 
+## Writing Timeline
+
+Local OOXML revision metadata for an **exactly** DOCX-only online-upload assignment
+(`writing_timeline.is_tracked_assignment`). Two shapes, never confused:
+
+- **Private report** (`parse_docx` + `categorize_authors`) — keeps raw Office
+  `creator` / `last_modified_by` / per-block `author` and every parsed block. Lives in
+  the session under `<workspace>/_System/PowerGrader/` and in the teacher UI only.
+- **SAFE projection** (`safe_projection`) — rebuilt from a value whitelist, never
+  filtered from the private report, so a new private field cannot ride along. Counts,
+  booleans, normalized timestamps, editing-time/revision integers, at most three
+  `largest_insertions`, and only the three allowed author categories. No per-block
+  array. See `docs/contracts/feedback-scoring-contract.md`.
+
+Invariants worth protecting:
+
+- **Every path that builds students must attach timelines.** `build_students` has three
+  callers — `powergrader.py::pg_start`, `powergrader_late.py`, and
+  `routines_powergrader.py`. If one attaches and another does not, the teacher sees a
+  timeline for some students and nothing for others, which reads as "no revision trail"
+  rather than "not examined". That ambiguity is the one thing this feature must not create.
+- Attachment must run **after** attachment ingestion. Without a `local_path` every
+  document reports as unavailable.
+- Scheduled autoscore currently **cannot** reach a tracked assignment: eligibility for a
+  pure upload requires an extension in `autoscore_queue.READABLE_UPLOAD_EXTS`, which
+  excludes `docx`. The routines path attaches defensively so the gap cannot open silently
+  if that set ever changes. `test_tracked_assignments_are_gated_out_of_scheduled_autoscore`
+  fails on purpose if it does.
+- The teacher-only `writing_process_observations` string is guarded in code by
+  `writing_timeline.sanitize_process_observation`, not by the prompt alone.
+- The UI states "describes editing process, not authorship or intent" on every timeline
+  render, including the unavailable and not-examined paths.
+
 ## Symptom routing
 
 | Symptom | Start with |
@@ -82,6 +116,7 @@ import features. Preserve `window.CE_POWERGRADER_SETUP` and existing queue names
 | Auto-post eligibility/idempotency | `autopush_policy.py`, `push_context.py`, `interactive_autopush.py`, `autoscore_claims.py` |
 | Scheduled routine | `routines_powergrader.py`, `scheduled_autoscore_support.py`, `autoscore_queue.py` |
 | Privacy/SAFE artifacts | `queue_privacy.js`, `ai_workflow.py`, `ai_workflow_support.py` |
+| Writing Timeline missing or wrong | `writing_timeline.py`, `student_attachments.py`, whichever route built the students |
 
 ## Test routing
 
@@ -91,6 +126,7 @@ Core focused regressions:
 - `api/tests/test_powergrader_copilot_packet.py`
 - `api/tests/test_powergrader_import_results.py`
 - `api/tests/test_powergrader_late_catchup.py`
+- `api/tests/test_writing_timeline.py`
 - `api/tests/test_route_contract.py`
 
 The handoff must add the focused policy/idempotency tests owned by any changed high-risk

@@ -423,6 +423,24 @@ def test_powergrader_advanced_import_controls_are_session_bound():
     assert 'id="pg-feedback-pattern-form"' in html
     assert 'id="pg-import-result-file"' in queue
 
+def test_powergrader_writing_timeline_surfaces_tracked_state_and_disclaimer():
+    """The tracked flag must reach the browser, and no timeline path may conclude.
+
+    `writing_timeline_tracked` was previously persisted on the session and read by
+    nothing, so a teacher had no way to know an assignment was tracked and the queue
+    could not distinguish "tracked, no trail" from "not tracked".
+    """
+    queue_html = _slurp("api/webui/templates/powergrader_queue.html")
+    core = _slurp("api/webui/static/powergrader/queue_core.js")
+    assert 'id="pg-timeline-badge"' in queue_html
+    assert "pg-timeline-badge" in core
+    assert "session.writing_timeline_tracked" in core
+    # Every render path — available, unavailable, and not-examined — carries the
+    # same limit statement.
+    assert core.count("describes editing process, not authorship or intent") == 3
+    assert "No DOCX document was examined for this submission" in core
+
+
 def test_powergrader_config_has_workspace():
     """POWERGRADER_SETUP_CONFIG contains hasWorkspace from has_workspace."""
     html = _slurp("api/webui/templates/powergrader_setup.html")

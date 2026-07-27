@@ -49,6 +49,10 @@ engine-accurate names.
 - `api/feedback_results.py` — parse, validate, normalize, re-identify, CSV
 - `api/feedback_safety.py` / `api/feedback_scrub.py` — safety scanning/scrubbing
 - `api/feedback_vault.py` — local private vault
+- `api/powergrader/writing_timeline.py` — local OOXML revision parsing, author-match
+  categorization, the whitelist-rebuilt SAFE projection, and the teacher-only
+  observation guard. `feedback_results.reidentify` and `feedback_artifacts` both
+  depend on it; it imports nothing from `api/` in return.
 - `api/ai_transmission.py` — the single authorization boundary for live OpenRouter sends
 - `api/operational_log.py` — sanitized local support/transport event log
 - `docs/contracts/feedback-scoring-contract.md` — scoring contract
@@ -67,3 +71,10 @@ engine-accurate names.
   content remain private and never enter catalogs, generic receipts, or test fixtures.
 - Imported AI results are drafts until reviewed in PowerGrader. No import path bypasses
   PowerGrader's current-state, idempotency, or post-write verification.
+- **The Writing Timeline never concludes anything.** It reports editing-process facts:
+  counts, times, booleans, and author-match categories. Raw Office authors and document
+  properties stay in the private session. The optional teacher-only
+  `writing_process_observations` string is never an integrity conclusion, a probability,
+  or a penalty recommendation — enforced by
+  `writing_timeline.sanitize_process_observation` in `reidentify`, not by prompt text
+  alone. It never reaches `feedback`, a score, a Canvas write, or a receipt.

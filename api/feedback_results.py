@@ -6,6 +6,7 @@ import re
 
 from api.feedback_vault import Vault
 from api.feedback_contract import CONTRACT_VERSION
+from api.powergrader import writing_timeline
 
 _SECTION_LABELS = (
     r"Score|Glows?|Grows?|Next(?:\s+step| steps?)?|Strategy|Overall|"
@@ -193,6 +194,10 @@ def reidentify(results: list, vault: Vault) -> list:
         writing_observation = r.get("writing_process_observations", "")
         if not isinstance(writing_observation, str):
             writing_observation = ""
+        # The contract forbids integrity conclusions here; enforce it rather than
+        # trusting the prompt.  This is the single funnel where model results
+        # become teacher-facing rows, so the guard belongs here.
+        writing_observation = writing_timeline.sanitize_process_observation(writing_observation)
         out.append({
             "resolved":  who is not None,
             "real_name": (who or {}).get("real_name", ""),

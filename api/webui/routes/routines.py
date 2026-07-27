@@ -23,6 +23,8 @@ from api.powergrader import (
     privacy,
     session_builder,
     session_store,
+    student_attachments,
+    writing_timeline,
 )
 from .routines_builtin import (
     _run_routine_sweep, _run_routine_download, _run_routine_curve,
@@ -131,6 +133,8 @@ def _powergrader_routine_deps():
         privacy=privacy,
         session_builder=session_builder,
         session_store=session_store,
+        student_attachments=student_attachments,
+        writing_timeline=writing_timeline,
     )
 
 
