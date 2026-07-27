@@ -156,6 +156,7 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
             # Scheduled runs get the same timeline pass as an interactive start.
             # Gated on `not session` because it must follow attachment ingestion —
             # without a local_path every document would report as unavailable.
+            # A tracked DOCX assignment is autoscore-eligible, so this path is live.
             writing_timeline_tracked = deps.writing_timeline.is_tracked_assignment(adata)
             if not session and writing_timeline_tracked:
                 deps.student_attachments.attach_writing_timelines(

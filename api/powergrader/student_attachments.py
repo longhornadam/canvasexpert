@@ -25,6 +25,13 @@ RASTER_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 LOCAL_ONLY_EXTS = {".pdf", ".doc", ".docm", ".xls", ".xlsx", ".ppt", ".pptx"}
 MAX_AI_TEXT_CHARS = 750_000
 
+# The extensions `route_bytes` turns into AI-sendable response *text*.  This is the
+# single source of truth for "can PowerGrader read this student's work"; the
+# scheduled-autoscore gate derives its own set from this one rather than keeping a
+# parallel hand-maintained list.  Rasters are AI-eligible too, but they carry no
+# response text, so they are deliberately excluded.
+AI_TEXT_EXTS = TRUSTED_TEXT_EXTS | {".docx"}
+
 
 def _media_type(filename: str, data: bytes = b"") -> str:
     ext = Path(filename or "").suffix.lower()

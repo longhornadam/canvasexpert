@@ -92,11 +92,13 @@ Invariants worth protecting:
   rather than "not examined". That ambiguity is the one thing this feature must not create.
 - Attachment must run **after** attachment ingestion. Without a `local_path` every
   document reports as unavailable.
-- Scheduled autoscore currently **cannot** reach a tracked assignment: eligibility for a
-  pure upload requires an extension in `autoscore_queue.READABLE_UPLOAD_EXTS`, which
-  excludes `docx`. The routines path attaches defensively so the gap cannot open silently
-  if that set ever changes. `test_tracked_assignments_are_gated_out_of_scheduled_autoscore`
-  fails on purpose if it does.
+- **Tracking changes the file format, not the scoring path.** A tracked assignment is an
+  ordinary DOCX upload as far as content scoring is concerned: `route_bytes` extracts its
+  text and inline images, marks it `ai_eligible`, and it flows through the same
+  eligibility, SAFE-derivative, and bundle-inlining steps as a `.txt` upload. The timeline
+  is additive metadata on the attachment and never gates or alters scoring. Tracked
+  assignments are therefore scheduled-autoscore eligible, and the routines path attaches
+  timelines actively.
 - The teacher-only `writing_process_observations` string is guarded in code by
   `writing_timeline.sanitize_process_observation`, not by the prompt alone.
 - The UI states "describes editing process, not authorship or intent" on every timeline

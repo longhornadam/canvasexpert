@@ -891,20 +891,40 @@ def test_late_catchup_attaches_timelines_for_tracked_assignment(monkeypatch, tmp
     assert timeline["largest_insertions"][0]["author_category"] == "submission_author"
 
 
-def test_tracked_assignments_are_gated_out_of_scheduled_autoscore():
-    """The tracked shape and scheduled-autoscore eligibility are mutually exclusive.
+def test_tracked_assignment_is_autoscore_eligible_like_any_readable_upload():
+    """Tracking changes the file format, not whether the content can be scored.
 
-    `is_tracked_assignment` requires allowed_extensions == {docx}; autoscore
-    eligibility for a pure upload requires an extension in READABLE_UPLOAD_EXTS,
-    which does not include docx.  So scheduled autoscore cannot currently reach a
-    tracked assignment, and the routines path attaches timelines defensively
-    rather than actively.  If docx is ever added to READABLE_UPLOAD_EXTS this test
-    fails, which is the point: that change must be a deliberate decision.
+    A tracked assignment is a DOCX-only upload, and `route_bytes` extracts DOCX
+    text in full, so it must reach scheduled auto-score on the same terms as a
+    .txt upload. The gate is derived from the router's capability precisely so
+    these two cannot disagree again.
     """
-    assert "docx" not in autoscore_queue.READABLE_UPLOAD_EXTS
+    assert "docx" in autoscore_queue.READABLE_UPLOAD_EXTS
     assert writing_timeline.is_tracked_assignment(_TRACKED_ASSIGNMENT) is True
-    eligibility, _reason = autoscore_queue.classify_assignment_for_autoscore(_TRACKED_ASSIGNMENT)
-    assert eligibility != "eligible"
+    eligibility, reason = autoscore_queue.classify_assignment_for_autoscore(_TRACKED_ASSIGNMENT)
+    assert eligibility == "eligible", reason
+
+
+def test_autoscore_gate_matches_what_the_attachment_router_can_read():
+    """The gate must never promise auto-score for work PowerGrader cannot read.
+
+    These were two independent hand-maintained lists and drifted in both
+    directions: the gate promised 20 code extensions that `route_bytes` sends to
+    local_only (every student held, nothing scored, teacher still charged) while
+    excluding `.docx`, which it extracts in full.
+    """
+    assert autoscore_queue.READABLE_UPLOAD_EXTS == {
+        ext.lstrip(".") for ext in student_attachments.AI_TEXT_EXTS
+    }
+    # And AI_TEXT_EXTS must itself match observed router behavior, or the
+    # derivation above just moves the drift one level down.
+    payloads = {".docx": _base_docx("A fictional visible response.")}
+    for ext in sorted(student_attachments.AI_TEXT_EXTS):
+        data = payloads.get(ext, b"fictional content")
+        routed = student_attachments.route_bytes(f"work{ext}", data)
+        assert routed["ai_eligible"] is True, f"{ext} is gated eligible but routes to local_only"
+    for ext in (".java", ".ipynb", ".pdf", ".pptx"):
+        assert student_attachments.route_bytes(f"work{ext}", b"x")["ai_eligible"] is False
 
 
 def test_routine_deps_expose_timeline_modules():
@@ -912,3 +932,91 @@ def test_routine_deps_expose_timeline_modules():
     deps = routines_routes._powergrader_routine_deps()
     assert deps.writing_timeline is writing_timeline
     assert deps.student_attachments is student_attachments
+
+
+def test_scheduled_routine_attaches_timelines_for_tracked_assignment(monkeypatch, tmp_path):
+    """Scheduled autoscore must not produce timeline-free sessions.
+
+    Now reachable end to end: a tracked DOCX assignment is autoscore-eligible.
+    """
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path / "ws"))
+    monkeypatch.setattr(routines_routes.config, "active_courses", lambda: [{
+        "id": "course-1", "name": "Period 1", "nickname": "Period 1", "active": True,
+    }])
+    submission = _tracked_docx_submission("1", "Sparky McGee", tmp_path / "one.docx")
+    job = {
+        "job_id": "course-1_assignment-1",
+        "course_id": "course-1",
+        "course_name": "Period 1",
+        "assignment_id": "assignment-1",
+        "assignment_name": "Essay",
+        "status": "scheduled",
+        "eligibility": "eligible",
+        "reason": "file upload includes extensions PowerGrader can read as text",
+        "due_at": "2026-06-28T23:59:00-05:00",
+        "delay_hours": 6,
+        "scheduled_at": "2026-06-29T05:59:00-05:00",
+        "auto_push": False,
+        "push_policy": {
+            "enabled": False, "allow_grade_push": True,
+            "allow_comment_push": True, "policy_version": 1,
+        },
+        "assignment": dict(_TRACKED_ASSIGNMENT),
+        "settings": {
+            "model_id": "model-a", "persona_id": "sage",
+            "response_kind": "scr", "rubric_name": "", "watch_late": False,
+        },
+        "session_id": "",
+        "last_error": "",
+    }
+    queue = {"version": 1, "jobs": [job]}
+    saved_sessions = []
+
+    for name, value in (
+        ("has_openrouter_key", lambda: True),
+        ("get_openrouter_model", lambda: "model-a"),
+        ("get_roster_student_settings", lambda course_id: {}),
+        ("roster_tier_by_id", lambda course_id: {}),
+        ("get_monitored_students", lambda: {}),
+        ("get_extra_time", lambda course_id: []),
+    ):
+        monkeypatch.setattr(routines_routes.config, name, value)
+    monkeypatch.setattr(routines_routes.autoscore_queue, "load_queue", lambda: queue)
+    monkeypatch.setattr(routines_routes.autoscore_queue, "due_jobs", lambda q, now=None: q["jobs"])
+    monkeypatch.setattr(routines_routes.autoscore_queue, "save_queue", lambda q: None)
+    monkeypatch.setattr(
+        routines_routes.canvas_fetch, "fetch_submissions",
+        lambda course_id, assignment_id: ([submission], dict(_TRACKED_ASSIGNMENT), None),
+    )
+    monkeypatch.setattr(
+        routines_routes.canvas_fetch, "ingest_ordinary_attachments",
+        lambda subs, **kwargs: subs,
+    )
+    monkeypatch.setattr(
+        routines_routes, "_canvas_send",
+        lambda *args, **kwargs: pytest.fail("scheduled autoscore must not write to Canvas"),
+    )
+    monkeypatch.setattr(
+        routines_routes.ai_workflow, "run_ai_workflow",
+        lambda **kwargs: {
+            "ok": True, "error": "", "status_code": 200,
+            "privacy_steps": [], "privacy_artifacts": {},
+            "ai_by_uid": {}, "ai_item_by_uid": {}, "ai_failures": {},
+            "packet_zip": None, "budget": None, "debug_path": None,
+            "copilot_packet": None, "source_context": {"materials": []},
+        },
+    )
+    monkeypatch.setattr(
+        routines_routes.session_store, "save_session",
+        lambda session: saved_sessions.append(session),
+    )
+
+    result = routines_routes._run_routine_powergrader_scheduled_autoscore({"max_jobs": 10})
+
+    assert result["ok"] is True
+    assert saved_sessions, result["lines"]
+    saved = saved_sessions[-1]
+    assert saved["writing_timeline_tracked"] is True
+    timeline = saved["students"][0]["attachments"][0]["writing_timeline"]
+    assert timeline["status"] == "available"
+    assert timeline["largest_insertions"][0]["author_category"] == "submission_author"

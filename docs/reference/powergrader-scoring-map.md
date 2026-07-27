@@ -57,6 +57,24 @@ engine-accurate names.
 - `api/operational_log.py` — sanitized local support/transport event log
 - `docs/contracts/feedback-scoring-contract.md` — scoring contract
 
+## One readable-work capability, one gate
+
+"Can PowerGrader read this student's work?" has exactly one answer, and it lives in
+`student_attachments.AI_TEXT_EXTS` — the extensions `route_bytes` turns into
+AI-sendable response text (the trusted text/code set plus `.docx`). Rasters are
+AI-eligible but carry no response text, so they are excluded.
+
+`autoscore_queue.READABLE_UPLOAD_EXTS` is **derived** from that set, never
+hand-maintained. The two were independent lists for a month and drifted in both
+directions: the gate promised scheduled auto-score for 20 code extensions
+(`.java`, `.ts`, `.sql`, `.ipynb`, …) that `route_bytes` routes to `local_only`, so
+every student would be held and nothing scored while the teacher was still charged
+for the run — the precise failure the original design forbade — while excluding
+`.docx`, which the router extracts in full. Anything that changes what the router
+can read must change this one set, and
+`test_autoscore_gate_matches_what_the_attachment_router_can_read` pins the
+derivation against observed `route_bytes` behavior so it cannot drift again.
+
 ## Guardrails
 
 - **Single grading surface:** PowerGrader is the only code that writes a Canvas

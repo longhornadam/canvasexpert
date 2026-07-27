@@ -36,9 +36,10 @@ accusing (single-token names untrusted, ambiguous aliases collapse to
    revision trail". Both paths now attach and set `writing_timeline_tracked`. The late
    gap was live; the routines gap was **latent** — `is_tracked_assignment` requires
    `allowed_extensions == {docx}` while pure-upload autoscore eligibility requires an
-   extension in `READABLE_UPLOAD_EXTS`, which excludes `docx`, so scheduled autoscore
-   cannot currently reach a tracked assignment. The routines fix is defensive; a test
-   fails on purpose if `docx` is ever added to that set.
+   extension in `READABLE_UPLOAD_EXTS`, which excluded `docx`, so scheduled autoscore
+   could not reach a tracked assignment. **Superseded the same day** — see the follow-up
+   below: that exclusion turned out to be a stale list, not a policy, and the routines
+   path is now live.
 3. **`writing_timeline_tracked` was written but never read** by any route, template, or
    JS — so the teacher had no way to know an assignment was tracked, and the queue could
    not distinguish "tracked, no trail" from "not tracked". Now surfaced as a topbar badge,
@@ -52,6 +53,32 @@ accusing (single-token names untrusted, ambiguous aliases collapse to
 Still open, judged not worth changing now: the timeline appends once per response when an
 attachment carries no `item_id` (`feedback_artifacts.py`), latent only because the
 assignments path builds a single response per student. Revisit if that ever changes.
+
+**2026-07-27 follow-up — tracked assignments now auto-score, and a two-list defect is
+closed.** The question was whether a tracked assignment could run the same PowerGrader
+content path as any other upload so scheduled auto-score would be available. It already
+did: `route_bytes` extracts DOCX text and inline images and marks it `ai_eligible`
+(landed 2026-07-14), and the timeline is additive metadata that never gates scoring. The
+only blocker was `autoscore_queue.READABLE_UPLOAD_EXTS`, written **2026-07-01** — two
+weeks before DOCX extraction existed — and never revisited.
+
+Investigating it surfaced a worse defect in the opposite direction. The gate and the
+router were independent hand-maintained lists that had never agreed:
+
+- The gate promised scheduled auto-score for **20 extensions** `route_bytes` refuses to
+  send (`.java`, `.ts`, `.sql`, `.cpp`, `.go`, `.rs`, `.ipynb`, `.yml`, `.xml`, `.tsv`,
+  …). Such an assignment was queued and a session created, then every student was held
+  with nothing scorable — the exact outcome the Stage 1 design forbade: "Do not silently
+  charge the teacher for an assignment where most work cannot be read."
+- It excluded `.docx` and `.markdown`, which the router extracts in full.
+
+Fixed at the root: `student_attachments.AI_TEXT_EXTS` is now the single source of truth
+for readable student work, and `READABLE_UPLOAD_EXTS` is derived from it. Tracked
+assignments became autoscore-eligible as a consequence rather than as a special case, so
+the routines timeline attach is now live and covered end to end by
+`test_scheduled_routine_attaches_timelines_for_tracked_assignment`. The narrowing is a
+bug fix, not a policy change: those code-extension assignments never produced a scored
+result. They now classify `needs_attention` for teacher review.
 
 **Current next-batch pointer:** CanvasAgent/Create tracked intent and handout preparation.
 Required context is this document §5 **Template**, **Authoring and distribution flow**,
