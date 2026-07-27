@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -72,12 +73,13 @@ def _timeline_docx(
     revision: str = "8",
     stories: dict[str, str] | None = None,
     body_text: str = "A fictional visible response.",
+    timestamp: str = "2026-07-27T10:00:00-05:00",
 ) -> bytes:
     base = _base_docx(body_text)
     with zipfile.ZipFile(io.BytesIO(base)) as archive:
         document_xml = archive.read("word/document.xml").decode("utf-8")
     revision_nodes = "".join(
-        _revision_xml(kind, text, author=author)
+        _revision_xml(kind, text, author=author, timestamp=timestamp)
         for kind, text, author in (blocks or [])
     )
     document_xml = document_xml.replace("</w:body>", f"<w:p>{revision_nodes}</w:p></w:body>")
@@ -179,7 +181,12 @@ def test_parser_captures_blocks_story_parts_and_stable_largest_three():
     assert [block["character_count"] for block in report["largest_insertions"]] == [400, 210, 210]
     assert [block["document_order"] for block in report["largest_insertions"][1:]] == [1, 3]
     assert all(block["character_count"] > 0 for block in report["largest_insertions"])
-    assert report["blocks"][0]["timestamp"] == "2026-07-27T15:00:00Z"
+    # Central, not UTC. The fixture's w:date is 10:00-05:00, already Central summer.
+    assert report["blocks"][0]["timestamp"] == "2026-07-27T10:00:00-05:00"
+    # The header revision's 17:00Z becomes 12:00 CDT rather than staying UTC.
+    header_block = next(b for b in report["blocks"] if b["story_part"] == "word/header1.xml")
+    assert header_block["timestamp"] == "2026-07-27T12:00:00-05:00"
+    assert header_block["raw_timestamp"] == "2026-07-27T17:00:00Z"
 
 
 @pytest.mark.parametrize(
@@ -698,6 +705,72 @@ def test_non_tracked_session_skips_timeline_parsing(monkeypatch, tmp_path):
     assert json.loads(response.body)["ok"] is True
     assert saved["writing_timeline_tracked"] is False
     assert "writing_timeline" not in saved["students"][0]["attachments"][0]
+
+
+# ---------------------------------------------------------------------------
+# Central time, end to end
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(("raw", "expected"), [
+    # Central Daylight Time, UTC-5.
+    ("2026-07-26T23:04:00Z", "2026-07-26T18:04:00-05:00"),
+    # Central Standard Time, UTC-6. A fixed offset would get this wrong.
+    ("2026-01-15T18:00:00Z", "2026-01-15T12:00:00-06:00"),
+    # Already Central: unchanged, not double-shifted.
+    ("2026-07-27T10:00:00-05:00", "2026-07-27T10:00:00-05:00"),
+    # Word writes w:date in UTC; a bare timestamp is read as UTC, not guessed.
+    ("2026-07-26T23:04:00", "2026-07-26T18:04:00-05:00"),
+    # Either side of both DST transitions.
+    ("2026-03-08T07:30:00Z", "2026-03-08T01:30:00-06:00"),
+    ("2026-03-08T08:30:00Z", "2026-03-08T03:30:00-05:00"),
+    ("2026-11-01T06:30:00Z", "2026-11-01T01:30:00-05:00"),
+    ("2026-11-01T07:30:00Z", "2026-11-01T01:30:00-06:00"),
+    # Unusable input stays None rather than inventing a time.
+    ("garbage", None),
+    ("", None),
+    (None, None),
+])
+def test_timestamps_normalize_to_central_across_dst(raw, expected):
+    assert writing_timeline._normalize_timestamp(raw) == expected
+
+
+def test_normalized_timestamps_are_idempotent():
+    """safe_projection re-normalizes an already-normalized value; it must not shift."""
+    once = writing_timeline._normalize_timestamp("2026-07-26T23:04:00Z")
+    assert writing_timeline._normalize_timestamp(once) == once
+
+
+def test_central_timezone_never_falls_back_to_utc(monkeypatch):
+    """A missing tz database degrades to machine-local, never to UTC.
+
+    Reverting to UTC would restore the exact misreading Central exists to prevent:
+    an evening writing session displayed as overnight work.
+    """
+    monkeypatch.setattr(writing_timeline, "_central_zone", None)
+    monkeypatch.setattr(
+        writing_timeline, "ZoneInfo",
+        lambda _name: (_ for _ in ()).throw(RuntimeError("no tz database")),
+    )
+    fallback = writing_timeline.central_timezone()
+    assert fallback is not None
+    assert fallback == datetime.now().astimezone().tzinfo
+    monkeypatch.setattr(writing_timeline, "_central_zone", None)
+
+
+def test_safe_projection_timestamps_are_central(tmp_path):
+    payload = _timeline_docx(
+        blocks=[("insertion", "x" * 120, "Fictional Learner")],
+        timestamp="2026-07-26T23:04:00Z",
+    )
+    report = writing_timeline.categorize_authors(
+        writing_timeline.parse_docx(payload),
+        submission_canvas_id="learner",
+        roster=[{"canvas_id": "learner", "user": {"name": "Fictional Learner"}}],
+    )
+    projection = writing_timeline.safe_projection(report)
+    stamps = [b.get("timestamp") for b in projection["largest_insertions"]]
+    assert stamps == ["2026-07-26T18:04:00-05:00"]
+    assert not any(str(s).endswith("Z") for s in stamps)
 
 
 # ---------------------------------------------------------------------------

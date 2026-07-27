@@ -8,6 +8,31 @@
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  /* ── Central time ───────────────────────────────────────────────────── */
+
+  // Every timeline clock the teacher reads is Central, with the CST/CDT marker
+  // spelled out. The backend already normalizes to Central, but rendering through
+  // an explicit time zone means even a stray UTC value displays correctly rather
+  // than turning an evening writing session into apparent overnight work.
+  var CENTRAL_FORMAT = {
+    timeZone: 'America/Chicago',
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+  };
+
+  function formatCentral(value) {
+    var raw = String(value || '');
+    if (!raw) return '';
+    var parsed = new Date(raw);
+    if (isNaN(parsed.getTime())) return raw;
+    try {
+      return parsed.toLocaleString('en-US', CENTRAL_FORMAT);
+    } catch (e) {
+      return raw;
+    }
+  }
+  queue.formatWritingTimelineTime = formatCentral;
+
   /* ── Signal derivation ──────────────────────────────────────────────── */
 
   function isOtherAuthorCategory(value) {
@@ -199,7 +224,7 @@
     });
 
     var text = (k === 1 ? '1 revision block' : k + ' revision blocks') +
-      ' from ' + esc(first) + ' to ' + esc(last) + '.';
+      ' from ' + esc(formatCentral(first)) + ' to ' + esc(formatCentral(last)) + '.';
     if (insertionSum > 0) {
       var pct = Math.round(100 * largestInsertion / insertionSum);
       text += ' Largest single insertion is ' + largestInsertion + ' characters, ' + pct + '% of inserted text.';
@@ -250,7 +275,7 @@
       largest.forEach(function(block){
         var words = Number(block.word_count) || 0;
         var chars = Number(block.character_count) || 0;
-        var when = block.timestamp ? ' at ' + esc(block.timestamp) : '';
+        var when = block.timestamp ? ' at ' + esc(formatCentral(block.timestamp)) : '';
         var author = block.author_category
           ? ' · ' + esc(authorCategoryLabel(block.author_category))
           : '';

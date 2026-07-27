@@ -99,6 +99,12 @@ Invariants worth protecting:
   is additive metadata on the attachment and never gates or alters scoring. Tracked
   assignments are therefore scheduled-autoscore eligible, and the routines path attaches
   timelines actively.
+- **All timestamps are US Central (`America/Chicago`), end to end** — parsed report,
+  SAFE projection, and UI. `_normalize_timestamp` converts through
+  `central_timezone()`, which falls back to the machine's own zone but never to UTC;
+  the browser then renders with an explicit `CST`/`CDT` marker. A bare `w:date` with
+  no offset is read as UTC (what Word writes) before converting. Requires the
+  `tzdata` package on Windows, which is why it is pinned in `api/requirements.txt`.
 - The teacher-only `writing_process_observations` string is guarded in code by
   `writing_timeline.sanitize_process_observation`, not by the prompt alone.
 - The UI states "describes editing process, not authorship or intent" on every timeline

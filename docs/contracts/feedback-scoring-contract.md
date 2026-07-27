@@ -53,7 +53,7 @@ rubric and the scoring instructions (`build_contract_text`).
                 "largest_insertions": [
                   {
                     "type": "insertion",
-                    "timestamp": "2026-07-27T15:42:00Z",
+                    "timestamp": "2026-07-27T10:42:00-05:00",
                     "character_count": 210,
                     "word_count": 33,
                     "author_category": "submission_author"
@@ -79,6 +79,13 @@ rubric and the scoring instructions (`build_contract_text`).
   `unrecognized_author_present` author categories. It contains no raw Office
   author/property value, filename, path, excerpt, header/body text, real ID/name,
   or another student's pseudonym.
+- **Every timestamp is US Central (`America/Chicago`), never UTC** — in the parsed
+  report, in this projection, and in the teacher UI. The offset therefore varies
+  with daylight saving (`-05:00` CDT / `-06:00` CST). This is deliberate: a
+  6:04pm-9:48pm writing session normalized to UTC reads as "23:04Z to 02:48Z",
+  which looks like overnight work, and a UTC midnight is really the previous
+  evening locally. A model that echoes a time in
+  `writing_process_observations` therefore quotes the same clock the teacher sees.
 - The projection carries **no per-block array**. Volume is expressed by
   `block_count` / `insertion_count` / `deletion_count`, and per-block detail is
   limited to at most three entries in `largest_insertions`. A full block list is

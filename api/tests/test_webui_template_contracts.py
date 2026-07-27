@@ -691,10 +691,16 @@ const report = {
     { type: "deletion", timestamp: "2026-01-01T01:00:00.000Z", character_count: 25, word_count: 4, author_category: "submission_author" },
     { type: "insertion", timestamp: "2026-01-01T02:00:00.000Z", character_count: 40, word_count: 8, author_category: "submission_author" }
   ],
-  largest_insertions: []
+  // Populated so the "Three largest insertion blocks" list — the OTHER place a
+  // timestamp reaches the teacher — is covered by the Central assertions below.
+  largest_insertions: [
+    { type: "insertion", timestamp: "2026-01-01T00:00:00.000Z", character_count: 60, word_count: 12, author_category: "submission_author" }
+  ]
 };
 
 const html = queue.renderWritingTimeline(report);
+
+if (!html.includes("at Dec 31, 2025, 6:00 PM CST")) { console.error("largest-insertion timestamp not rendered in Central:\n" + html); process.exit(17); }
 
 const svgMatches = html.match(/<svg\b[^>]*>/g) || [];
 if (svgMatches.length !== 1) { console.error("expected exactly one <svg>, got " + svgMatches.length + ": " + JSON.stringify(svgMatches)); process.exit(3); }
@@ -713,8 +719,15 @@ const lineMatches = html.match(/<line\b[^>]*>/g) || [];
 const baseline = lineMatches.find(tag => tag.includes("y1=\"36.5\"") && tag.includes("y2=\"36.5\"") && tag.includes("stroke=\"var(--ce-rule)\""));
 if (!baseline) { console.error("no baseline <line> found among: " + JSON.stringify(lineMatches)); process.exit(12); }
 
-const expectedSentence = "3 revision blocks from 2026-01-01T00:00:00.000Z to 2026-01-01T02:00:00.000Z. Largest single insertion is 60 characters, 60% of inserted text.";
+// Central, with the CST/CDT marker spelled out. Note what this fixture proves: a
+// UTC midnight is really the PREVIOUS evening in Central, so a raw UTC clock would
+// show a New Year's Day session that was actually New Year's Eve at 6pm. That whole
+// class of misreading is what Central exists to prevent.
+const expectedSentence = "3 revision blocks from Dec 31, 2025, 6:00 PM CST to Dec 31, 2025, 8:00 PM CST. Largest single insertion is 60 characters, 60% of inserted text.";
 if (!html.includes(expectedSentence)) { console.error("missing text equivalent sentence. Got html:\n" + html); process.exit(13); }
+// The teacher must never be shown a UTC clock anywhere in a timeline render.
+if (/\d{2}:\d{2}:\d{2}(\.\d+)?Z/.test(html)) { console.error("raw UTC timestamp leaked into rendered timeline:\n" + html); process.exit(15); }
+if (html.includes("UTC")) { console.error("UTC label in rendered timeline"); process.exit(16); }
 
 const svgEndIdx = html.indexOf(svgTag) + svgTag.length;
 const sentenceIdx = html.indexOf(expectedSentence);

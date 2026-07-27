@@ -15,6 +15,7 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from xml.etree import ElementTree as ET
+from zoneinfo import ZoneInfo
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -131,6 +132,32 @@ def _read_xml(
     return root
 
 
+CENTRAL_TZ_NAME = "America/Chicago"
+_central_zone = None
+
+
+def central_timezone():
+    """Return America/Chicago, or the machine's own zone if tzdata is missing.
+
+    Every timeline timestamp is Central, end to end -- parsed report, SAFE
+    projection, and teacher UI alike.  This is not cosmetic: a 6:04pm-9:48pm
+    writing session normalized to UTC reads as "23:04Z to 02:48Z", which looks
+    like overnight work.  A feature whose whole purpose is to avoid implying
+    things about a student must not hand the teacher a misleading clock.
+
+    The fallback is the machine's local zone, matching the `datetime.now()`
+    convention used elsewhere in the app, and never UTC -- silently reverting to
+    UTC would restore exactly the misreading this exists to prevent.
+    """
+    global _central_zone
+    if _central_zone is None:
+        try:
+            _central_zone = ZoneInfo(CENTRAL_TZ_NAME)
+        except Exception:
+            _central_zone = datetime.now().astimezone().tzinfo
+    return _central_zone
+
+
 def _normalize_timestamp(raw: str | None) -> str | None:
     text = str(raw or "").strip()
     if not text:
@@ -140,9 +167,10 @@ def _normalize_timestamp(raw: str | None) -> str | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(microsecond=0).isoformat()
-    utc = parsed.astimezone(timezone.utc).replace(microsecond=0)
-    return utc.isoformat().replace("+00:00", "Z")
+        # Word writes w:date in UTC.  A bare timestamp is read as UTC rather than
+        # guessed at, so the Central conversion below stays correct.
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(central_timezone()).replace(microsecond=0).isoformat()
 
 
 def _block_text(element: ET.Element) -> str:
