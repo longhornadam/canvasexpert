@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 12 MCP tools.
+"""Plain, testable implementations of the 13 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -11,17 +11,24 @@ Current-course scope the web UI uses. ``list_courses``,
 ``get_authoring_contract``, ``get_product_guide``, and
 ``list_staged_content`` are the only tools with no ``course_id`` and no
 student data, so they skip both the course gate and the outbound safety gate.
+``get_writing_history`` breaks that pairing on purpose: it has no
+``course_id`` either (the daily-writing store has no course concept), but it
+is student data, so it still runs the identity vault and the outbound safety
+gate.
 
 Strict mirror-only law: get_roster, get_submissions, and
 get_gradebook_snapshot serve ONLY from the local CanvasMirror and refuse
 (rather than falling back to a live Canvas fetch) when it isn't fresh
 enough. refresh_mirror is the assistant's only way to move that forward —
 it triggers Canvas Expert's own sync engine and reports freshness, never
-Canvas data, keeping the AI's whole path to Canvas indirect."""
+Canvas data, keeping the AI's whole path to Canvas indirect. get_writing_history
+is not mirror-backed (the daily-writing store is not Canvas data at all), so
+no staleness refusal applies to it."""
 from __future__ import annotations
 
 import os
 from contextlib import contextmanager
+from datetime import date, timedelta
 
 from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, roster_context, roster_service
 from api.mirror import queries as mirror_queries
@@ -34,6 +41,10 @@ from api.webui import deps
 from api import feedback_vault
 from api.course_catalog import read_catalog
 from api import runtime_paths
+from api.dailywriting import projection as dailywriting_projection
+from api.dailywriting.store.identity import IdentityError
+from api.dailywriting.store.repo import Repository as DailyWritingRepository
+from api.dailywriting.store.repo import StoreError as DailyWritingStoreError
 
 from . import pseudonym
 
@@ -54,6 +65,15 @@ _ORIGINAL_ROSTER_FETCH_SECTIONS = roster_service.fetch_sections
 # these at a fake coordinator without starting the real background workers.
 _enqueue_sync = mirror_service.enqueue_sync
 _wait_for_plan = mirror_service.wait_for_plan
+
+# Bound so tests can point get_writing_history at a tmp_path store with a
+# fixture MappingResolver instead of the real workspace + identity vault
+# (same reason _vault_factory exists). `pseudonym.gate` is bound too: the
+# tool's own parameter is named `pseudonym` (locked by the brief, matching
+# the read pattern), which would otherwise shadow the `pseudonym` module
+# inside that one function.
+_dailywriting_repository_factory = DailyWritingRepository.default
+_pseudonym_gate = pseudonym.gate
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +485,7 @@ _CONTRACT_FILES = {
 _GUIDE_FILES = {
     "overview": "START HERE - CanvasAgent.txt",
     "writing_timeline": "Writing Timeline (tracked assignments).txt",
+    "writing_record": "Writing Record (longitudinal writing history).txt",
 }
 _DEFAULT_GUIDE_TOPIC = "overview"
 
@@ -541,9 +562,11 @@ def get_product_guide(topic: str = "") -> dict:
 
     ``topic`` defaults to the whole CanvasAgent briefing (what the app can do,
     the hard lines, the staging loop, privacy, troubleshooting).
-    ``writing_timeline`` is the tracked / not-tracked reference. Every response
-    lists the available topics so the assistant learns what else it can pull
-    without a second guess."""
+    ``writing_timeline`` is the tracked / not-tracked reference.
+    ``writing_record`` covers get_writing_history: the per-student
+    longitudinal writing record, what it returns, and what it does not have
+    yet. Every response lists the available topics so the assistant learns
+    what else it can pull without a second guess."""
     requested = str(topic or "").strip().lower() or _DEFAULT_GUIDE_TOPIC
     filename = _GUIDE_FILES.get(requested)
     if filename is None:
@@ -807,6 +830,93 @@ def get_submissions(course_id: str, assignment_id: str,
                    else tuple(c for c in _SUBMISSION_COLUMNS if c != "text"))
         result["submissions"] = _tabulate(result["submissions"], columns)
     return result
+
+
+# A student's writing history has no session lookback of its own to borrow, and
+# the substrate landed 2026-07-27 -- so any student's real history today is far
+# shorter than this. Two years keeps the default call cheap and bounded rather
+# than scanning from date.min, while being generous enough that "since"/"until"
+# only need to be passed when someone actually wants to narrow the window.
+_DEFAULT_HISTORY_LOOKBACK_DAYS = 730
+
+
+def get_writing_history(pseudonym: str, since: str = "", until: str = "",
+                        include_text: bool = False,
+                        max_text_chars: int = _DEFAULT_MAX_TEXT_CHARS) -> dict:
+    """One student's daily-writing record across time, pseudonym-first: dated
+    submissions in ascending order (score/possible, tier, student word count,
+    observation signal, and the checklist prompt), directive uptake, and the
+    rolling coaching profile. Read from the private per-student store
+    (``api/dailywriting``), never from a course or the CanvasMirror -- there
+    is no ``course_id`` here because the store has no course concept and
+    nothing to refresh, but the identity vault and the outbound safety gate
+    still apply: this is the first tool to carry student data with no
+    ``course_id`` gate.
+
+    No trend, streak, or aggregate judgment is computed here -- only what the
+    store already recorded; reasoning about the arc is left to the model.
+    ``since``/``until`` are ``YYYY-MM-DD`` dates (both default to a two-year
+    lookback from today). ``include_text=False`` (the default) omits every
+    span quoted from student writing; ``include_text=True`` includes them
+    trimmed to ``max_text_chars`` (0 = full), trimmed BEFORE the gate scans
+    them. The checklist prompt is teacher-authored, not student data, and is
+    always included."""
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
+
+    try:
+        until_date = date.fromisoformat(until) if until else date.today()
+        since_date = (date.fromisoformat(since) if since else
+                      until_date - timedelta(days=_DEFAULT_HISTORY_LOOKBACK_DAYS))
+    except ValueError as error:
+        return {"ok": False,
+                "error": f"since/until must be YYYY-MM-DD dates: {error}"}
+    if since_date > until_date:
+        return {"ok": False, "error": "since is after until"}
+
+    try:
+        repository = _dailywriting_repository_factory()
+    except DailyWritingStoreError as error:
+        return {"ok": False, "error": str(error)}
+
+    try:
+        submissions = repository.submissions_in_window(
+            pseudonym, since_date, until_date)
+        scores = repository.scores_for(
+            [s.submission_id for s in submissions])
+        observations = repository.observations_in_window(
+            pseudonym, since_date, until_date)
+        directives = repository.directives_for(pseudonym)
+        profile = repository.read_profile(pseudonym)
+        current_tier = repository.current_tier(pseudonym)
+        reps = {}
+        for submission in submissions:
+            if submission.rep_id not in reps:
+                reps[submission.rep_id] = repository.read_rep(submission.rep_id)
+    except IdentityError:
+        return {
+            "ok": False,
+            "error": (f"'{pseudonym}' is not a known pseudonym in the "
+                      "identity vault; sync the roster for this student's "
+                      "section in the CanvasExpert web UI, then retry."),
+        }
+
+    payload = dailywriting_projection.build_history_payload(
+        pseudonym_id=pseudonym,
+        current_tier=current_tier,
+        since=since_date,
+        until=until_date,
+        submissions=submissions,
+        scores=scores,
+        observations=observations,
+        reps=reps,
+        directives=directives,
+        profile=profile,
+        include_text=include_text,
+        max_text_chars=max_text_chars,
+    )
+    return _pseudonym_gate(payload, vault)
 
 
 def get_gradebook_snapshot(course_id: str) -> dict:

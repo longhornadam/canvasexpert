@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Twelve thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Thirteen thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -36,7 +36,12 @@ _FERPA_NOTICE = (
     "CanvasExpert itself can do, or planning writing work, call "
     "get_product_guide: it carries the app's surfaces and the tracked / "
     "not-tracked Writing Timeline choice every writing assignment makes. Check "
-    "it before telling a teacher a feature does not exist."
+    "it before telling a teacher a feature does not exist. get_writing_history "
+    "reads a separate, private per-student writing record that some teachers "
+    "keep for daily or weekly short-writing practice -- pseudonym-first, no "
+    "course_id, for coaching a writer's development over time rather than "
+    "grading one assignment; call get_product_guide(topic=\"writing_record\") "
+    "before assuming it does not exist."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -116,6 +121,24 @@ def get_submissions(course_id: str, assignment_id: str,
 
 
 @mcp.tool()
+def get_writing_history(pseudonym: str, since: str = "", until: str = "",
+                        include_text: bool = False,
+                        max_text_chars: int = 2000) -> str:
+    """One student's daily-writing record across time, pseudonym-first: dated
+    submissions (score/possible, tier, word count, observation signal, the
+    checklist prompt) plus directive uptake and the rolling coaching profile.
+    No course_id -- this reads a private per-student store, not a course.
+    since/until are YYYY-MM-DD (both default to a two-year lookback).
+    include_text=false (default) omits every span quoted from student
+    writing; true includes it trimmed to max_text_chars (0 = full). Call
+    get_product_guide(topic="writing_record") first if unsure this exists."""
+    return _compact(tools.get_writing_history(
+        pseudonym, since=since, until=until,
+        include_text=include_text, max_text_chars=max_text_chars,
+    ))
+
+
+@mcp.tool()
 def get_gradebook_snapshot(course_id: str) -> str:
     """Whole-course grading snapshot: class totals plus {columns, rows} tables
     of per-assignment stats (title, due_at, points, submitted, graded, missing,
@@ -137,8 +160,10 @@ def get_product_guide(topic: str = "") -> str:
     """What CanvasExpert itself can do, so you plan and answer from the product
     rather than guessing. Omit topic for the whole briefing (surfaces, the hard
     lines, staging, privacy); topic="writing_timeline" for tracked vs
-    not-tracked writing assignments and what the timeline can and cannot show.
-    Every response lists the available topics. No student data."""
+    not-tracked writing assignments and what the timeline can and cannot show;
+    topic="writing_record" for get_writing_history, the per-student
+    longitudinal writing record. Every response lists the available topics.
+    No student data."""
     return _compact(tools.get_product_guide(topic))
 
 

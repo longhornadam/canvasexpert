@@ -1,0 +1,89 @@
+Writing Record - one student's writing history over time
+
+Reference for an AI assistant helping a teacher coach a writer, not just grade
+one assignment, in CanvasExpert. Accurate as of this file's version. Answer
+from it rather than guessing, and say plainly when a question goes past what
+it covers.
+
+
+What the Writing Record is
+
+Separate from a Canvas course entirely. Some teachers run a daily or weekly
+short-writing practice (a "rep") that CanvasExpert scores automatically
+against a published checklist and keeps a private, per-student record of over
+time: every piece, its score, dated noticings about patterns in the writing,
+and specific instructions the teacher gave that student and whether they
+followed them. get_writing_history(pseudonym) reads that record. It is
+pseudonym-first, not course-first or assignment-first, because the question it
+answers is "how is this writer developing," and no other tool can answer that.
+
+This has nothing to do with Writing Timeline. Writing Timeline reads a
+submitted Word document's own revision history for one assignment. The
+Writing Record is a running history across many short pieces, built by
+CanvasExpert's own scoring, not by anything in the document.
+
+
+What it returns
+
+Dated submissions in ascending order, oldest first. Each one carries its
+score and the total possible, the tier it was checked against, how many words
+the student actually wrote, and how many dated observations exist for it. Also
+the checklist prompt the student was writing to, and the per-criterion
+checklist outcome for that piece. Alongside the submissions: any standing
+instructions the teacher has given this student and whether the student has
+been following them, and the rolling coaching profile CanvasExpert already
+keeps for the student: per-criterion rates, active patterns, what to focus on
+next, and whether the student looks ready to move up a tier.
+
+There is no trend, streak, or overall judgment baked into the tool's answer.
+It hands you dated records; reasoning about the arc, and saying so to the
+teacher, is your job as the assistant reading it, the same way a teacher would
+read a folder of a student's work over a semester.
+
+include_text defaults to false, which leaves out every span quoted from the
+student's own writing: the piece's own text, the exact sentence behind an
+observation, the quote behind a checklist outcome. Call with include_text=true
+only when you actually need to read the words, and prefer max_text_chars to
+trim what comes back rather than pulling everything by default: a long arc of
+full text is a large payload, billed to the teacher's own AI key. The
+checklist prompt itself is not student data and always comes through, because
+without it a piece's purpose is impossible to read: a narrative piece scored
+lower than an argument piece the week before is not decline, it is a
+different assignment, and the prompt is the only thing here that says so.
+
+
+What it does not have yet
+
+Only two of the three things a teacher would want are here. The prompt and
+scaffolding the student was given: yes. The student's actual submission,
+attributed sentence by sentence to where it came from (the assignment, a
+scaffold, the student, a quoted source) so a student who copies the prompt
+and adds four words is credited with four words, not a whole essay: yes.
+The feedback the student actually received, in the teacher's or the model's
+own words as the student read it: not yet. What you can see instead is the
+structured half only, the checklist outcome and directive follow-through, not
+the delivered sentences.
+
+There is no rubric here either, on purpose. A rubric answers "why this score,"
+which is PowerGrader's question and belongs there. This tool answers "how is
+this writer developing," and per-criterion checklist outcomes already carry
+that signal without several hundred words of grading-descriptor prose eating
+the context window before you have read a word the student wrote.
+
+Extended constructed responses, the kind PowerGrader scores against a full
+rubric with a Writing Timeline attached, are not in this record. What is here
+is short daily or weekly practice writing only.
+
+A piece's purpose, narrative versus argument versus explanation and so on, is
+not a separate stored field yet. Infer it from the checklist prompt text if
+you need it, and say when you are inferring rather than reading a fact.
+
+
+Privacy
+
+Pseudonym-first the same way every other student-data tool here is: real
+names, Canvas IDs, and SIS IDs never leave the machine. The record is private
+to the teacher's own workspace and does not exist in Canvas, in the AI
+Authoring folder, or anywhere outbound except through this one gated read.
+Quoted spans, when you ask for them with include_text=true, pass through the
+same outbound safety scan every other tool here does before they reach you.

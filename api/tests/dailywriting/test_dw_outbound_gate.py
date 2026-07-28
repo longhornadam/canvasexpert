@@ -41,10 +41,18 @@ def vault() -> _FixtureVault:
 
 
 # Every free-text field this subsystem can put student writing into.
+# "score_note" is the outbound key for ItemResult.note
+# (api/dailywriting/projection.py's _item_result_row): several of
+# core.scoring's notes interpolate a slice of the student's own thesis,
+# argument, or commentary, so the field is exactly as identity-bearing as a
+# quoted span, not machine-only prose. Named "score_note" rather than the
+# model's own "note" because a bare "note" key already has different,
+# non-text semantics elsewhere in this codebase -- see the comment above
+# feedback_safety._TEXT_FIELDS.
 DAILYWRITING_TEXT_FIELDS = (
     "raw_text", "evidence_span", "claim_text", "next_focus",
     "student_facing_text", "prompt_text", "strong_text", "near_miss_text",
-    "one_thing", "acknowledgment",
+    "one_thing", "acknowledgment", "score_note",
 )
 
 
