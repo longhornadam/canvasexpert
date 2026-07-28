@@ -171,21 +171,41 @@ this writer." If stored: written on delivery not generation; exemplar pairs held
 multi-student data.
 
 **`AssignmentContext` purpose field.** A short closed set (narrative / argument /
-explanation / analysis / reflection) plus optional audience. Not yet earned: it becomes
-load-bearing once the record spans genres, because a narrative following an argument reads
-as regression to a reader who cannot see the task changed. Until then the assistant infers
-purpose from `prompt_text`.
+explanation / analysis / reflection) plus optional audience. The original argument was that it
+becomes load-bearing once the record spans genres, because a narrative following an argument
+reads as regression to a reader who cannot see the task changed.
+
+**Recommend closing this as not earned** (2026-07-28). `prompt_text` is teacher-authored, is
+never gated by `include_text`, and is always emitted, so the reader *can* see the task changed.
+The only real gap is an assignment whose Canvas description is empty, and nothing yet says how
+often that happens — revisit with a measurement from the live run rather than building the field
+first. There is also nothing to derive it from: a Canvas assignment carries no genre, and the
+rubric files carry `flavor`, `family` and `applies_to` but no mode (checked).
+
+**Recommend closing "which assignments feed the record" as decided** (2026-07-28). Option 1 has
+now shipped twice, in `401c7c0` and `8960bda`, and needed no mechanism either time. Leaving it
+listed as open invites someone to build the flag it was decided against.
 
 ## Known defects and dead ends
 
-**Unfixed: paragraph-break span loss in `core/scoring.py`.** `CheckInput.commentary` rejoins
-sentences with `" ".join(...)` while a submission stores `"\n\n"` between paragraphs, so once
-commentary spans a paragraph break the reconstruction is no longer a substring of
-`scored_text`. `_span_of` (`core/scoring.py:135`) returns `None`, and `observations.py` drops
-the observation because INV-3 requires evidence. The score still records *unmet* and nothing
-reaches the record — a silent drop. Needs two commentary sentences straddling a break.
-Latent today: daily reps are single-paragraph and unscored ECRs never reach these checks.
-**Fix it in whatever batch next touches `core/scoring.py`.**
+**Unfixed and NOT latent: unmet criteria are silently dropped for want of a locatable span.**
+`_span_of` (`core/scoring.py:135`) is an exact `find`, and several checks hand it a fragment they
+rebuilt by rejoining sentences with `" ".join(...)`. When the rebuild is not a substring of the
+text it came from, the span is `None`, `observations.py:277` drops the noticing because INV-3
+requires evidence, and the score still records *unmet*. Nothing counts it, flags it, or logs it.
+
+Measured 2026-07-28 on a real tier-4 rep through the real scorer, ordinary text:
+
+| | verdicts with no locatable span | unmet items dropped |
+|---|---|---|
+| single paragraph | 3 of 11 | **2 of 3** |
+| two paragraphs, commentary straddling the break | 7 of 11 | 2 of 3 |
+
+An earlier version of this entry called the defect latent, on the grounds that reps are
+single-paragraph and ECRs are unscored. That was wrong: there are two mechanisms, and the one
+affecting the evidence family fires on single-paragraph reps today. The paragraph-break mechanism
+is the second, and it widens the loss rather than causing it. **This is the active brief's
+subject** — `docs/handoffs/CanvasExpert-WritingRecord-EvidenceSpans-BRIEF.md`.
 
 **Scoring inverts on extended writing, which is why ECRs ingest unscored.** Tier 2-4
 checklists say "my thesis is one sentence, and my argument comes after it", so
