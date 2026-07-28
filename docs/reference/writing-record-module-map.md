@@ -113,8 +113,19 @@ Three things about it are load-bearing:
   be attributed to the student by segmentation, and be quoted back as evidence. A plain essay
   carries none of them — measured, and pinned by a test.
 
-Only `.docx`, 10 MB cap enforced on the declared size and again while streaming, nothing written
-to disk, and a re-run re-downloads because Canvas's signed URLs expire.
+The acquisition decisions, so they need not be re-derived: a typed body wins over an attachment
+(the mirror already holds it, and reading the attachment instead would cost a live call on every
+typed row); when a student uploaded several `.docx`, the latest by `created_at` wins and the
+earlier ones are named in the log — the teacher's call, made 2026-07-28; only `.docx`, with no
+OCR and no PDF; 10 MB cap, enforced on Canvas's declared size before a request is spent and again
+while streaming; nothing written to disk; a per-student failure is named and counted and never
+ends the run; and a re-run re-downloads, because Canvas's signed URLs expire.
+
+**Carried for review:** the annotation-stripping rule above was flagged YELLOW when the batch
+landed, because the brief named "`_docx_segments` output needs post-processing" as a stop
+condition. The reasoning and the alternatives considered are in that brief's Section 12
+(`git show 5b44efa:docs/handoffs/CanvasExpert-WritingRecord-DocxIngest-BRIEF.md`). Nothing
+downstream depends on the choice; reversing it is a one-function change.
 
 ## Delivered batches
 
@@ -129,7 +140,13 @@ Read the commit, not a summary, when the detail matters.
 | DOCX ingest | `8960bda` | `canvas_attachments.py`, the subsystem's first live Canvas calls, `canvas_stream_get` |
 | Scrub narrowed to the vault | `0a9e713` | Heuristic capitalised-token pass removed; roster names, nicknames and ids remain |
 
-Retired briefs are recoverable: `git show <commit>:docs/handoffs/<name>`.
+Retired briefs are recoverable, and these are the commits where each one still exists — pinned,
+because a path alone stops resolving the moment the brief is retired:
+
+| Brief | Read it at |
+|---|---|
+| Canvas typed ingest | `git show 401c7c0:docs/handoffs/CanvasExpert-WritingRecord-CanvasIngest-BRIEF.md` |
+| DOCX ingest (with its Section 12 execution result) | `git show 5b44efa:docs/handoffs/CanvasExpert-WritingRecord-DocxIngest-BRIEF.md` |
 
 ## Open decisions
 
@@ -212,3 +229,7 @@ and `test_powergrader_packet.py::test_packet_workflow_budget_exception_stops_bef
 and `test_beta075_storage.py::test_spawned_vault_writers_preserve_both_students` is
 load-sensitive under full-suite contention. Do not assume this list transfers. Establish the
 baseline on a clean checkout first: `git stash`, run, record, restore.
+
+Evidence that it does not transfer: on 2026-07-28, the DOCX-ingest batch baselined all three of
+those as **passing** — 1572 passed, 0 failed on a clean checkout. So on that machine any failure
+during a batch is the batch's, and the list above is history rather than an allowance to spend.

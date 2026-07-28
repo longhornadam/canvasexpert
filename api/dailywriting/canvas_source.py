@@ -4,8 +4,10 @@ make a re-ingest overwrite rather than duplicate.
 Pure: every function here takes already-read catalog/mirror dicts and returns
 typed values. No I/O, no Canvas import -- the driver that actually reads the
 catalog and the mirror lives in `canvas_ingest.py`. This split exists because
-the mapping decisions below (docs/handoffs/CanvasExpert-WritingRecord-CanvasIngest-BRIEF.md
-Section 5) are the part worth testing in isolation from disk and the vault.
+the mapping decisions below are the part worth testing in isolation from disk
+and the vault. Their reasoning is Section 5 of that batch's brief, retired when
+the batch landed and readable at
+`git show 401c7c0:docs/handoffs/CanvasExpert-WritingRecord-CanvasIngest-BRIEF.md`.
 
 Decisions, one per required `AssignmentContext` field that has no direct
 Canvas source:
