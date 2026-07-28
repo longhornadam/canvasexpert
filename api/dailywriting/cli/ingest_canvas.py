@@ -1,9 +1,13 @@
-"""Ingest one Canvas assignment's typed submissions into the writing record.
+"""Ingest one Canvas assignment's submissions into the writing record.
 
     py -m api.dailywriting.cli.ingest_canvas --course-id 111 --assignment-id 700010
 
-Reads only the local course catalog and the local CanvasMirror -- no network
-call, no Canvas write. Calls the same driver the web UI's ingest route calls
+Typed responses come from the local course catalog and CanvasMirror with no
+network call at all. An uploaded Word document has no text in the mirror to
+read, so each one costs one focused Canvas fetch and one bounded download --
+see `api.dailywriting.canvas_attachments`. Nothing is ever written to Canvas.
+
+Calls the same driver the web UI's ingest route calls
 (`api.dailywriting.canvas_ingest.ingest_canvas_assignment`), so this command
 exists to make that path runnable and testable without the web UI, not as a
 second implementation of it.

@@ -101,8 +101,16 @@ def _response_bytes(response) -> int:
             return 0
 
 
-def _physical_get(url, *, headers, params, timeout):
-    """One physical GET, with cooperative yielding and bounded Canvas 429 retry."""
+def _physical_get(url, *, headers, params, timeout, stream=False):
+    """One physical GET, with cooperative yielding and bounded Canvas 429 retry.
+
+    ``stream=True`` hands back an unread response for a caller that reads the
+    body in bounded chunks (a file download). The default is unchanged, so no
+    existing caller's behavior moves; the only difference under ``stream`` is
+    that byte accounting is left to that caller, because touching
+    ``response.content`` here would consume the very stream it is meant to
+    hand over.
+    """
     telemetry = _GET_TELEMETRY.get()
     for attempt in range(3):
         try:
@@ -119,8 +127,13 @@ def _physical_get(url, *, headers, params, timeout):
         if cancelled:
             return None, "cancelled"
         started = time.monotonic()
+        # Passed only when streaming, so a non-streaming call reaches
+        # `requests.get` with exactly the arguments it always did -- including
+        # in the tests that stand in for it.
+        streaming = {"stream": True} if stream else {}
         try:
-            response = requests.get(url, headers=headers, params=params, timeout=timeout)
+            response = requests.get(url, headers=headers, params=params, timeout=timeout,
+                                    **streaming)
         except requests.RequestException as error:
             if telemetry is not None:
                 telemetry.physical_count += 1
@@ -129,7 +142,8 @@ def _physical_get(url, *, headers, params, timeout):
             raise error
         if telemetry is not None:
             telemetry.physical_count += 1
-            telemetry.byte_count += _response_bytes(response)
+            if not stream:
+                telemetry.byte_count += _response_bytes(response)
             telemetry.transport_ms += max(0, int((time.monotonic() - started) * 1000))
             status_class = f"http_{response.status_code}"
             telemetry.status_classes[status_class] = telemetry.status_classes.get(status_class, 0) + 1
@@ -182,6 +196,48 @@ def _canvas_get(path, params=None, timeout=20):
         raise
     _emit_canvas("canvas.get", started, "ok", status_code=r.status_code)
     return data, None
+
+
+def canvas_stream_get(url, timeout=120):
+    """Open one streamed GET on an absolute Canvas URL — returns (response, error).
+
+    For a file the caller must read in bounded chunks, so it cannot go through
+    ``_canvas_get`` (which prefixes the configured base and parses JSON). It
+    shares ``_physical_get``, and with it the ``Retry-After`` 429 retry and the
+    mirror coordinator's cooperative yield and cancellation — the reason a
+    class-wide unattended download loop belongs on this layer rather than on a
+    session of its own.
+
+    The response is returned unread and open; the caller owns closing it.
+    ``requests`` drops the ``Authorization`` header when a redirect crosses to
+    another host (``Session.rebuild_auth``), so a Canvas file URL that hands
+    off to a CDN does not carry the token with it.
+    """
+    started = time.monotonic()
+    telemetry = _GET_TELEMETRY.get()
+    if telemetry is not None:
+        telemetry.logical_count += 1
+    hdrs, _base = _canvas_headers()
+    if not hdrs:
+        _emit_canvas("canvas.download", started, "unconfigured")
+        return None, "No Canvas token saved — go to Settings."
+    try:
+        response, stopped = _physical_get(url, headers=hdrs, params=None,
+                                          timeout=timeout, stream=True)
+        if stopped:
+            _emit_canvas("canvas.download", started, "blocked")
+            return None, "cancelled"
+    except requests.RequestException as e:
+        _emit_canvas("canvas.download", started, "failed", error_class=type(e))
+        # A RequestException's text can carry the configured URL; the class
+        # name is enough for a per-student progress line.
+        return None, f"connection failed ({type(e).__name__})"
+    if response.status_code != 200:
+        _emit_canvas("canvas.download", started, "failed", status_code=response.status_code)
+        response.close()
+        return None, f"HTTP {response.status_code}"
+    _emit_canvas("canvas.download", started, "ok", status_code=response.status_code)
+    return response, None
 
 
 def _next_canvas_page_url(response) -> str | None:

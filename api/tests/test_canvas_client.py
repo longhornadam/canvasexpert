@@ -126,3 +126,104 @@ def test_get_telemetry_keeps_scope_priority_and_actual_queue_wait_identifier_fre
     assert record["priority"] == "post_write"
     assert record["queue_wait_ms"] >= 17
     assert "url" not in record and "course_id" not in record
+
+
+# --- streamed file download -------------------------------------------------
+#
+# The writing record reads an uploaded Word document through this seam rather
+# than through a session of its own, so that a class-wide unattended loop
+# inherits this layer's 429 retry and coordinator yield. These tests are what
+# make that inheritance a fact rather than a claim in a docstring.
+
+class FakeStreamResponse:
+    def __init__(self, chunks, *, status_code=200):
+        self._chunks = chunks
+        self.status_code = status_code
+        self.headers = {}
+        self.text = ""
+        self.closed = False
+        self.consumed = False
+
+    @property
+    def content(self):  # pragma: no cover - reaching this is the bug
+        raise AssertionError("a streamed body must not be read by the client")
+
+    def iter_content(self, chunk_size=16_384):
+        self.consumed = True
+        yield from self._chunks
+
+    def close(self):
+        self.closed = True
+
+
+def _stream_client_with(monkeypatch, responses, *, token=True):
+    calls = []
+    queue = iter(responses)
+    monkeypatch.setattr(canvas_client, "_canvas_headers", lambda: (
+        ({"Authorization": "Bearer test"}, "https://canvas.test") if token
+        else (None, None)))
+
+    def get(url, *, headers, params, timeout, **kwargs):
+        calls.append({"url": url, "timeout": timeout, "headers": headers, **kwargs})
+        return next(queue)
+
+    monkeypatch.setattr(canvas_client.requests, "get", get)
+    return calls
+
+
+def test_stream_get_asks_for_a_stream_and_hands_the_body_over_unread(monkeypatch):
+    response = FakeStreamResponse([b"PK\x03\x04", b"rest"])
+    calls = _stream_client_with(monkeypatch, [response])
+
+    got, error = canvas_client.canvas_stream_get("https://files.canvas.test/1/download")
+
+    assert (got, error) == (response, None)
+    assert calls[0]["stream"] is True
+    assert calls[0]["headers"] == {"Authorization": "Bearer test"}
+    assert calls[0]["timeout"] == 120
+    # Unread: byte accounting and closing belong to the bounded reader.
+    assert response.consumed is False
+    assert response.closed is False
+
+
+def test_stream_get_closes_a_failed_response_instead_of_returning_it(monkeypatch):
+    response = FakeStreamResponse([], status_code=404)
+    _stream_client_with(monkeypatch, [response])
+
+    got, error = canvas_client.canvas_stream_get("https://files.canvas.test/1/download")
+
+    assert got is None
+    assert error == "HTTP 404"
+    assert response.closed is True
+
+
+def test_stream_get_shares_the_429_retry_discipline(monkeypatch):
+    throttled = FakeStreamResponse([], status_code=429)
+    throttled.headers["Retry-After"] = "2"
+    ok = FakeStreamResponse([b"bytes"])
+    _stream_client_with(monkeypatch, [throttled, ok])
+    sleeps = []
+    monkeypatch.setattr(canvas_client.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    got, error = canvas_client.canvas_stream_get("https://files.canvas.test/1/download")
+
+    assert (got, error) == (ok, None)
+    assert sleeps == [2.0]
+
+
+def test_stream_get_refuses_without_a_token_and_never_calls_out(monkeypatch):
+    calls = _stream_client_with(monkeypatch, [], token=False)
+
+    got, error = canvas_client.canvas_stream_get("https://files.canvas.test/1/download")
+
+    assert got is None
+    assert "No Canvas token" in error
+    assert calls == []
+
+
+def test_stream_get_does_not_count_an_unread_body_in_telemetry(monkeypatch):
+    _stream_client_with(monkeypatch, [FakeStreamResponse([b"12345"])])
+    with canvas_client.canvas_get_telemetry("dailywriting.ingest", "manual") as telemetry:
+        canvas_client.canvas_stream_get("https://files.canvas.test/1/download")
+    assert telemetry.physical_count == 1
+    assert telemetry.byte_count == 0

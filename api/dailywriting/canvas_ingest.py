@@ -1,4 +1,4 @@
-"""Drive one Canvas assignment's typed submissions into the writing record.
+"""Drive one Canvas assignment's submissions into the writing record.
 
 Pointing this at an assignment IS the opt-in (brief Section 8, option 1): no
 persistent flag, no new store, no staleness to track for a flag nobody has
@@ -6,7 +6,7 @@ asked for yet. Re-running is safe and cheap -- `canvas_source.rep_id_for` /
 `submission_id_for` are deterministic, so a second run overwrites the same
 rep and the same submissions rather than duplicating them.
 
-Reads only two local, disk-only sources, never Canvas:
+Two local, disk-only sources decide everything:
 
   - the course catalog (`api.course_catalog`), for the assignment's prompt
     and dates -- read directly, not through `get_course_assignments`, so the
@@ -14,16 +14,29 @@ Reads only two local, disk-only sources, never Canvas:
   - the CanvasMirror (`api.mirror.read_service`), for the roster (so the
     scrub map covers every enrolled student, exactly the discipline
     `get_submissions` documents -- brief, "a correctness trap") and each
-    student's current typed submission body.
+    student's current submission record.
+
+The mirror is the only source of text this driver reads by itself. A typed
+submission needs nothing else, and no network call is made for one. An
+uploaded Word document has no text in the mirror to read -- filenames are
+captured, bytes are not -- so for those rows, and only those rows,
+`canvas_attachments` makes one focused Canvas fetch and one bounded download.
+See that module for why that is permitted and for the constraint that comes
+with it: this path must never be exposed as an MCP tool.
+
+A submission carrying both a typed body and an upload keeps the typed body.
+The mirror already holds it, so it costs no Canvas call and cannot arrive
+truncated, and Canvas leaves `body` empty for a genuine `online_upload` --
+so the overlap is a resubmission that changed type, not the normal case.
 
 A stale or missing catalog/mirror is refused outright (`CanvasIngestError`),
-the same posture the MCP tools take toward a stale mirror, for the same
-reason: there is no live fallback to paper over it with, because this module
-imports no Canvas transport at all (AC8). A missing identity-vault entry for
-one submission's author is different -- not every enrolled student submitted,
-but a submission from someone the roster sync did not cover is a data gap
-worth surfacing, not a reason to withhold everyone else's rep (AC5): that one
-submission is skipped and counted, the run continues.
+the same posture the MCP tools take toward a stale mirror; so is a missing
+Canvas token when some submission on the assignment needs one. Both are
+raised before any store write, so a refusal never leaves a partly ingested
+assignment. Per-submission problems are different -- an author with no
+identity-vault entry, no timestamp, no readable Word document, a file over
+the size cap, a failed fetch. Each is skipped, named in the progress lines,
+and counted in the summary, and the run continues for the rest of the class.
 """
 from __future__ import annotations
 
@@ -31,7 +44,7 @@ from collections.abc import Iterator
 from datetime import datetime
 
 from api import course_catalog, roster_service
-from api.dailywriting import canvas_source
+from api.dailywriting import canvas_attachments, canvas_source
 from api.dailywriting.core import ingest as ingest_module
 from api.dailywriting.store.identity import IdentityError
 from api.dailywriting.store.repo import Repository
@@ -70,6 +83,13 @@ def _stale_mirror_error(course_id: str) -> str:
     )
 
 
+def _no_token_error(count: int) -> str:
+    return (f"{count} submission(s) on this assignment are uploaded files, and "
+            "reading a file needs a Canvas token on this machine. Save one in "
+            "the CanvasExpert web UI (Settings), then try again. Typed "
+            "submissions never need it.")
+
+
 def _typed_text(row: dict) -> str:
     return html_to_text(row.get("body") or "").strip()
 
@@ -77,11 +97,13 @@ def _typed_text(row: dict) -> str:
 def ingest_canvas_assignment(
     course_id: str, assignment_id: str, *, repository: Repository | None = None,
 ) -> Iterator[str]:
-    """Ingest one assignment's typed submissions. Yields progress lines.
+    """Ingest one assignment's submissions. Yields progress lines.
 
     Raises `CanvasIngestError` (before any write) when the catalog or mirror
-    cannot serve. Per-submission gaps (no identity-vault entry, no body, no
-    submitted_at) are skipped and counted, not raised -- see module docstring.
+    cannot serve, or when an upload needs a Canvas token this machine does not
+    have. Per-submission gaps (no identity-vault entry, no text, no
+    submitted_at, an unreadable or oversized upload, a failed fetch) are
+    skipped, named and counted, not raised -- see module docstring.
     """
     course_id, assignment_id = str(course_id), str(assignment_id)
 
@@ -100,6 +122,18 @@ def ingest_canvas_assignment(
         course_id, max_age_hours=max_age_hours)
     if roster_scope["state"] != "current" or submissions_scope["state"] != "current":
         raise CanvasIngestError(_stale_mirror_error(course_id))
+
+    rows = [row for row in submissions_scope["records"]
+            if str(row.get("assignment_id")) == assignment_id]
+
+    # Before the first write, not partway through the loop: if any submission's
+    # text lives in an uploaded file, this machine needs a token to read it, and
+    # finding that out after storing the rep would leave the caller wondering
+    # whose work landed. A typed-only assignment never reaches this check.
+    upload_rows = [row for row in rows
+                   if not _typed_text(row) and canvas_attachments.is_upload_row(row)]
+    if upload_rows and not canvas_attachments.transport_ready():
+        raise CanvasIngestError(_no_token_error(len(upload_rows)))
 
     repository = repository or Repository.default()
     vault = repository.vault
@@ -120,13 +154,14 @@ def ingest_canvas_assignment(
     yield (f"rep {rep_id} stored: date={context.date.isoformat()}, "
            f"prompt={prompt_note}, unscored (tier={context.tier})")
 
-    rows = [row for row in submissions_scope["records"]
-            if str(row.get("assignment_id")) == assignment_id]
-
     processed = no_text = no_timestamp = no_identity = 0
+    acquisition_skips: dict[str, int] = {}
     for row in rows:
         text = _typed_text(row)
-        if not text:
+        # An upload's text is not in the mirror; everything else with no body
+        # has nothing to ingest at all, and costs no Canvas call to find out.
+        from_upload = not text and canvas_attachments.is_upload_row(row)
+        if not text and not from_upload:
             no_text += 1
             continue
         submitted_at_raw = row.get("submitted_at")
@@ -144,6 +179,21 @@ def ingest_canvas_assignment(
             no_identity += 1
             continue
 
+        # Identity is resolved before the fetch below deliberately: a submission
+        # whose author has no vault entry is skipped either way, and skipping it
+        # first spends no Canvas call and no download on it.
+        source = "typed response"
+        if from_upload:
+            acquired = canvas_attachments.text_for(
+                course_id, assignment_id, canvas_user_id)
+            for note in acquired.notes:
+                yield f"{pseudonym_id}: {note}"
+            if not acquired.text:
+                acquisition_skips[acquired.outcome] = (
+                    acquisition_skips.get(acquired.outcome, 0) + 1)
+                continue
+            text, source = acquired.text, acquired.source
+
         submission_id = canvas_source.submission_id_for(
             course_id, assignment_id, canvas_user_id)
         result = ingest_module.ingest_unscored(
@@ -158,11 +208,21 @@ def ingest_canvas_assignment(
         repository.append_submission(result.submission)
         repository.append_observations(result.observations)
         processed += 1
-        yield (f"{pseudonym_id}: ingested, "
+        yield (f"{pseudonym_id}: ingested from {source}, "
                f"{result.submission.student_word_count} student word(s)")
 
     summary = f"{processed} submission(s) ingested for {rep_id}."
     skips = []
+    for outcome, wording in (
+            ("no_docx", "skipped (an upload with no Word document -- only .docx "
+                        "is read in this version)"),
+            ("too_large", "skipped (a Word document over the size cap)"),
+            ("unreadable", "skipped (a Word document that could not be read)"),
+            ("transport_failed", "skipped (could not be read from Canvas -- "
+                                 "transient, so re-running picks them up)"),
+    ):
+        if acquisition_skips.get(outcome):
+            skips.append(f"{acquisition_skips[outcome]} {wording}")
     if no_identity:
         skips.append(f"{no_identity} skipped (no identity-vault entry for "
                      "the author -- sync the roster and re-run to pick "

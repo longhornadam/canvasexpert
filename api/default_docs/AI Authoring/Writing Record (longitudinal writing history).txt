@@ -99,18 +99,38 @@ How work enters the record
 
 There is no automatic feed and no per-assignment flag to turn on. A teacher
 points CanvasExpert at one Canvas assignment (from the CanvasExpert web UI,
-or the equivalent CLI command) and every typed student response on that
-assignment enters the record, pseudonymously, unscored, the same day. That
-one action is the opt-in -- there is nothing else to configure, and nothing
-happens to an assignment nobody has pointed CanvasExpert at.
+or the equivalent CLI command) and every student response on that assignment
+enters the record, pseudonymously, unscored, the same day. That one action is
+the opt-in -- there is nothing else to configure, and nothing happens to an
+assignment nobody has pointed CanvasExpert at.
 
-This only reaches typed (online text entry) submissions read from Canvas
-Expert's own local mirror -- never a live Canvas call. A DOCX upload or a
-handwritten photo does not enter the record this way yet. Re-running the
-same assignment is safe: it replaces that assignment's rep and each
-student's submission rather than duplicating them, so pointing CanvasExpert
-at an assignment again after a due-date change or a new late submission
-does not create a second copy of anyone's work.
+Two kinds of submission reach the record. A typed response (online text
+entry) is read from CanvasExpert's own local mirror. An uploaded Word
+document (.docx) is read too: the mirror keeps filenames but not file
+contents, so CanvasExpert reads that one file from Canvas at ingest time and
+extracts its text. Both then follow the identical path -- same pseudonyms,
+same name scrubbing before anything is stored, unscored either way.
+
+What is skipped, and always reported by filename rather than dropped
+silently: any upload that is not a .docx (a PDF, a photo of handwriting --
+there is no OCR here, and handwriting is not read at all), a Word document
+over the size cap, one that cannot be opened as a Word document, and any
+student whose file could not be fetched from Canvas at that moment. A
+submission carrying both typed text and an upload keeps the typed text. If a
+student uploaded more than one Word document, the most recently uploaded one
+is the one that enters the record and the earlier ones are named as skipped.
+A skipped student is skipped alone -- everyone else on the assignment still
+ingests, and re-running picks up whoever was missed.
+
+Re-running the same assignment is safe: it replaces that assignment's rep and
+each student's submission rather than duplicating them, so pointing
+CanvasExpert at an assignment again after a due-date change or a new late
+submission does not create a second copy of anyone's work. A re-run does
+re-read each uploaded file from Canvas, because Canvas's file links expire
+and cannot be reused.
+
+Ingest is a teacher action on the teacher's own surfaces, the web UI and the
+CLI. It is deliberately not something you as the assistant can trigger.
 
 
 Privacy
