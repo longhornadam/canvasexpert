@@ -1,0 +1,143 @@
+"""One rep, start to finish.
+
+Not in the handoff's file list, but something has to own the order, and the
+order is where the invariants live:
+
+    scrub -> segment -> score -> observe -> evaluate directives
+
+Scrubbing is first because every span quoted downstream comes out of the text
+this step produced (INV-7). Scoring comes before observing and before directive
+evaluation because neither of those may influence it (INV-1), and it receives
+segments rather than raw text so provided words cannot be mistaken for the
+student's (INV-2 is what the later steps are for).
+
+Nothing here writes to Canvas or touches a gradebook.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Iterable
+
+from api.dailywriting.core import directives as directives_module
+from api.dailywriting.core import observations as observations_module
+from api.dailywriting.core import scoring, scrub, segmentation
+from api.dailywriting.core.directives import Acknowledgment
+from api.dailywriting.core.models import (
+    AssignmentContext,
+    CriteriaSet,
+    Directive,
+    Observation,
+    Score,
+    Submission,
+    utc_now,
+)
+
+
+@dataclass(frozen=True)
+class IngestResult:
+    submission: Submission
+    score: Score
+    observations: list[Observation] = field(default_factory=list)
+    directives: list[Directive] = field(default_factory=list)
+    acknowledgments: list[Acknowledgment] = field(default_factory=list)
+
+    @property
+    def acknowledgment(self) -> Acknowledgment | None:
+        """The one acknowledgment this feedback message gets."""
+        return directives_module.choose_acknowledgment(self.acknowledgments)
+
+
+def ingest(
+    *,
+    submission_id: str,
+    rep_id: str,
+    pseudonym_id: str,
+    submitted_at: datetime,
+    text: str,
+    context: AssignmentContext,
+    criteria_set: CriteriaSet,
+    open_directives: Iterable[Directive] = (),
+    vault=None,
+    roster_map: list[tuple] | None = None,
+    protected: set[str] | None = None,
+    now: datetime | None = None,
+) -> IngestResult:
+    """Process one submission into a stored-shape record set.
+
+    Raises `scoring.CriteriaNotPublishedError` when the checklist postdates the
+    work, before doing anything else: measuring a student against criteria they
+    had not been shown is not a result worth computing.
+    """
+    stamped = now or utc_now()
+
+    scoring.assert_criteria_published(criteria_set.published_at, submitted_at)
+
+    corpus = [context.prompt_text, *[b.template for b in context.scaffold_blocks],
+              *context.source_texts]
+    scrubbed = scrub.scrub_writing(
+        text, vault=vault, roster_map=roster_map, protected=protected,
+        assignment_corpus=corpus)
+
+    segmented = segmentation.segment_submission(scrubbed.text, context)
+
+    flags = list(segmented.flags)
+    if scrubbed.general_name_hits:
+        flags.append(segmentation.SegmentationFlag(
+            code="unscrubbed_name_removed",
+            detail=(f"{scrubbed.general_name_hits} name(s) not on the roster "
+                    "were removed from this submission; confirm the redaction "
+                    "did not eat a word from the passage"),
+        ))
+
+    submission = Submission(
+        submission_id=submission_id,
+        rep_id=rep_id,
+        pseudonym_id=pseudonym_id,
+        submitted_at=submitted_at,
+        raw_text=scrubbed.text,
+        segments=segmented.segments,
+        student_word_count=segmented.student_word_count,
+        flags=flags,
+        scrub_findings=scrubbed.findings,
+    )
+
+    score = scoring.score_submission(
+        submission.segments_for_scoring(),
+        criteria_set,
+        context,
+        submission_id=submission_id,
+        now=stamped,
+    )
+
+    observations = observations_module.observe_submission(
+        submission, score, criteria_set, now=stamped, vault=vault)
+
+    updated_directives, acknowledgments = directives_module.evaluate_all(
+        list(open_directives), submission, tier=context.tier, now=stamped,
+        rep_id=rep_id)
+
+    return IngestResult(
+        submission=submission,
+        score=score,
+        observations=observations,
+        directives=updated_directives,
+        acknowledgments=acknowledgments,
+    )
+
+
+def record_gap(
+    open_directives: Iterable[Directive],
+    rep_id: str,
+    *,
+    now: datetime | None = None,
+) -> list[Directive]:
+    """Log a rep a student did not turn in.
+
+    Absence is `na`, not `unmet`. A student who was out sick on Thursday has
+    not broken a streak, and a system that says otherwise teaches them that
+    follow-through is luck.
+    """
+    updated, _acks = directives_module.evaluate_all(
+        list(open_directives), None, now=now, rep_id=rep_id)
+    return updated

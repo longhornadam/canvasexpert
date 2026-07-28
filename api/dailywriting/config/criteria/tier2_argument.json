@@ -1,0 +1,51 @@
+{
+  "criteria_set_id": "tier2_argument.v1",
+  "tier": 2,
+  "version": 1,
+  "published_at": "2026-09-08T08:00:00-05:00",
+  "spot_emphasis": null,
+  "items": [
+    {
+      "item_id": "answers_prompt",
+      "label": "Answers the prompt",
+      "student_facing_text": "My thesis answers the question the prompt actually asked.",
+      "check_description": "The response engages the prompt's subject rather than a nearby one.",
+      "check_id": "answers_prompt"
+    },
+    {
+      "item_id": "arguable",
+      "label": "Arguable position",
+      "student_facing_text": "Someone could disagree with my thesis.",
+      "check_description": "Takes a side. Fails when the thesis restates the prompt or states a fact nobody would contest.",
+      "check_id": "thesis_arguable"
+    },
+    {
+      "item_id": "specific",
+      "label": "Specific",
+      "student_facing_text": "My thesis names something specific, not just 'things' or 'society'.",
+      "check_description": "Carries concrete content words rather than leaning on vague nouns.",
+      "check_id": "thesis_specific"
+    },
+    {
+      "item_id": "thesis_separate",
+      "label": "Thesis stands on its own",
+      "student_facing_text": "My thesis is one sentence, and my argument comes after it.",
+      "check_description": "The response has more than one sentence and the opening sentence is not carrying the argument inside it. Distinct from tier 1's one_sentence, which measures the whole response.",
+      "check_id": "thesis_separate_from_argument"
+    },
+    {
+      "item_id": "argument_stated",
+      "label": "Argument stated",
+      "student_facing_text": "I said why I think my thesis is true.",
+      "check_description": "A reason follows the thesis rather than a restatement of it.",
+      "check_id": "argument_stated"
+    },
+    {
+      "item_id": "argument_matches_thesis",
+      "label": "Argument matches thesis",
+      "student_facing_text": "My argument is about the same thing as my thesis.",
+      "check_description": "The argument shares the thesis's subject rather than drifting to a new one.",
+      "check_id": "argument_matches_thesis"
+    }
+  ]
+}
