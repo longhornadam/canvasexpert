@@ -24,6 +24,7 @@ Writing Timeline, which reads one submitted DOCX's own revision history.
 - Private store: `api/dailywriting/store/` — see `store/SCHEMA.md`
 - Outbound projection: `api/dailywriting/projection.py`
 - Canvas mapping and ingest driver: `api/dailywriting/canvas_source.py`, `canvas_ingest.py`
+- Uploaded-file acquisition (the only live Canvas path): `api/dailywriting/canvas_attachments.py`
 - CLI: `api/dailywriting/cli/`
 - Web trigger: `api/webui/routes/dailywriting.py`
 - Assistant read: `get_writing_history` in `api/mcp_server/tools.py`
@@ -73,6 +74,34 @@ carries structural-id semantics elsewhere.
 been outrun by the spans quoted out of the text. This is the whole of INV-7's defence and it
 constrains every future acquisition route.
 
+## The one live Canvas path (`8960bda`)
+
+Typed submissions are served entirely from the mirror and make zero HTTP calls — asserted, not
+assumed. An uploaded file cannot be: the mirror keeps `attachment_names` but never bytes, and
+Canvas leaves `body` empty for an `online_upload`. So `canvas_attachments` makes one focused
+submission fetch plus one bounded download, and only for a mirror row that is an upload with no
+body.
+
+Three things about it are load-bearing:
+
+- **It must never become an MCP tool.** `docs/mirror.md` design law 6 scopes the mirror-only law
+  to the AI-facing tools; putting a live path under the assistant is what it forbids. An AST
+  guard in `test_dw_canvas_ingest.py` holds the line, and the CLI and web route are the only
+  triggers.
+- **`canvas_client` is the only Canvas caller.** Not `api/submission_transport.py`, which has
+  neither 429 retry nor the coordinator's yield and cancellation — fine for one teacher-watched
+  report, not for thirty unattended sequential fetches. `canvas_stream_get` is the streamed seam;
+  `_physical_get`'s `stream` keyword is passed to `requests.get` only when set, so non-streaming
+  callers see the arguments they always did.
+- **`_docx_segments`' annotations are not student text.** `[Inline image N]`, `[Table]`,
+  `[Heading N] ` are the extractor talking to a reader. `canvas_attachments.submission_text`
+  strips exactly those and rewrites nothing else, or they would inflate `student_word_count`,
+  be attributed to the student by segmentation, and be quoted back as evidence. A plain essay
+  carries none of them — measured, and pinned by a test.
+
+Only `.docx`, 10 MB cap enforced on the declared size and again while streaming, nothing written
+to disk, and a re-run re-downloads because Canvas's signed URLs expire.
+
 ## Delivered batches
 
 Read the commit, not a summary, when the detail matters.
@@ -83,6 +112,7 @@ Read the commit, not a summary, when the detail matters.
 | Assistant read path | `b2b89a0` | `get_writing_history`, `projection.py`, MCP schema v10 |
 | Extended-writing substrate | `ef40e01` | `ingest_unscored`, mid-prompt fragment detection, dead `Origin` value removed |
 | Canvas typed ingest | `401c7c0` | `canvas_source.py`, `canvas_ingest.py`, CLI + web trigger |
+| DOCX ingest | `8960bda` | `canvas_attachments.py`, the subsystem's first live Canvas calls, `canvas_stream_get` |
 
 Retired briefs are recoverable: `git show <commit>:docs/handoffs/<name>`.
 
@@ -133,6 +163,13 @@ does — and then the hook is scored as the thesis and `arguable`, `specific`, a
 `answers_prompt` fail together. Measured on 446/803/1356-word essays: `thesis_arguable`
 failed on all three with the stance in sentence two; `commentary_connects` drifted
 33% → 67% → 80% on the same argument as length grew.
+
+**Known, deliberate, and surprising: the general scrub pass over-redacts.** Any capitalised token
+with no lexicon entry is treated as a name, sentence-initial included, so an essay opening "Dogs
+make better pets" is stored as "[name] make better pets". Privacy-first by design
+(`core/scrub.py` `_general_pass`), identical for typed and uploaded text, and unchanged by any
+batch so far — but it will read as a bug the first time a teacher sees a real record, and test
+fixtures in this subsystem are written around it on purpose.
 
 **Dead end, do not re-attempt: `SequenceMatcher` reuse in segmentation.** Segmentation
 dominates ingest cost (~13 ms/word on a tier-3 rep with a source passage; 96/288/576 words

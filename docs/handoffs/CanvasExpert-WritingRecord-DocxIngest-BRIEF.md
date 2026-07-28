@@ -178,6 +178,137 @@ Return RED if an MCP tool, a Canvas write, or a scoring change appears necessary
 
 ## 12. Execution result
 
-_To be completed by the executor: traffic light, commit hash, changed files, commands and
-counts, each §5 decision as made with its reason, the fixture-corpus diff result,
-deviations, unresolved decisions._
+**YELLOW** — the batch is complete and green; one stop condition in §10 fired and was handled
+rather than guessed past. See *Stop condition that fired* below. Commit `8960bda`.
+
+### Changed files
+
+| File | Change |
+|---|---|
+| `api/dailywriting/canvas_attachments.py` | New. Fetch, choose, bounded download, extract, annotation strip. |
+| `api/dailywriting/canvas_ingest.py` | One branch in the loop, a pre-write token check, new named skip counters, docstring. |
+| `api/webui/canvas_client.py` | `stream` keyword on `_physical_get`; `canvas_stream_get`. |
+| `api/webui/routes/dailywriting.py`, `api/dailywriting/cli/ingest_canvas.py` | Docstrings: no longer "never Canvas". |
+| `api/default_docs/AI Authoring/Writing Record (longitudinal writing history).txt` | The `writing_record` guide topic: uploads included, what is skipped, re-run behaviour. |
+| `api/tests/dailywriting/test_dw_canvas_ingest.py` | 12 tests added, 1 guard replaced (below). |
+| `api/tests/test_canvas_client.py` | 5 tests for the streamed seam. |
+
+### Commands and counts
+
+```
+python -m pytest api/tests -q                                  # baseline, clean checkout: 1572 passed, 0 failed
+python -m pytest api/tests/dailywriting api/tests/test_mcp_server_tools.py -q   # named gate: 236 passed
+python -m pytest api/tests -q                                  # after: 1592 passed, 0 failed
+```
+
+**The route card's known environmental failures did not transfer to this machine.** Baseline was
+established on a clean checkout before any edit, exactly as the card instructs, and all 1572
+passed — including the two 260-character-path tests and the load-sensitive vault test. So on this
+machine any failure is real, and there were none. Net +20 tests.
+
+Fixture-corpus diff: **identical**. `student_word_count`, the ordered origin list, and the flag
+set for all nine `singles.json` fixtures, captured before (via `git stash`) and after, diffed
+byte for byte. No drift.
+
+Manual route check: `POST /api/dailywriting/ingest-canvas` exercised once against a fixture
+mirror through FastAPI's `TestClient` with the tests' `workspace.workspace_root` monkeypatch —
+the real machine config was never pointed anywhere. One DOCX student ingested (17 student words),
+one PDF student skipped and named, one download, and the unknown-assignment refusal still returns
+`ok: false` with the catalog message. The route is API-only and no template posts to it, so there
+is no browser surface to console-check and none was added.
+
+### The §5 decisions as made
+
+1. **Body wins.** An attachment is read only when the mirror has no body. It is the §4 seam as
+   written, it keeps AC8 intact (a typed row costs no call), and Canvas leaves `body` empty for a
+   genuine upload, so the overlap is a resubmission that changed type. Precedence is observable
+   without spending a call on typed rows: the per-student line now names its source — `ingested
+   from typed response` or `ingested from essay.docx`.
+2. **Latest-uploaded `.docx` wins**, by the teacher's decision when asked. Ordered by Canvas's
+   per-attachment `created_at`, falling back to upload order when it is missing or unparseable;
+   every earlier `.docx` is named as skipped. Refuse-and-report was the recommendation; the
+   teacher chose latest-wins, which never blocks a student's work on a stray upload.
+3. **10 MB**, enforced on the declared size before a request is spent and again while streaming.
+   Teacher sees `skipped huge.docx (10.0 MB exceeds the 10 MB limit for one document)`; the run
+   continues and nothing is stored for that student.
+4. **A transport failure is skipped, named, and counted**, distinctly from "no Word document" and
+   from "no submission found" — `_canvas_get` returns an error string (an HTTP code or a
+   connection-error class name, never a token or URL) where `submission_transport.fetch_submission`
+   would have collapsed both into `None`. Not fatal, because `CanvasIngestError` means nothing was
+   written and raising it mid-loop would break that for students already ingested. The summary
+   says the cause is transient and a re-run picks them up, which stable ids make true.
+5. **A re-run re-downloads.** Signed URLs expire, so no cached URL is reusable, and skip-if-unchanged
+   would need a per-submission size or hash in the store — out of scope. Asserted: two runs, two
+   downloads, one record, identical `get_writing_history` output.
+
+### Stop condition that fired (§10, third)
+
+`_docx_segments` annotates its own output: `[Inline image N]` on its own line, `[Table]` above a
+table's rows, `[Heading N] ` before a heading-styled paragraph. Measured first, before writing
+anything: **a plain essay produces none of them** — paragraphs joined by `\n\n`, the same shape a
+typed submission already stores, pinned now by
+`test_a_real_docx_round_trips_through_the_extractor_without_annotations`.
+
+They do appear the moment a student uses a heading or pastes a graphic organiser, and left alone
+they would be counted by `student_word_count`, attributed to the student by segmentation, and
+quoted back as evidence in an observation. So `canvas_attachments.submission_text` strips them
+under one rule — *remove the extractor's own annotations, never rewrite student text*: drop an
+inline-image marker line, drop the `[Table]` marker while keeping its rows, drop the `[Heading N] `
+prefix while keeping the title. Nothing else is touched, and `_docx_segments` itself is unchanged.
+
+Flagging YELLOW because the brief named exactly this as a stop condition. The judgement was that
+a documented three-form strip of our own annotations is one coherent rule rather than a guess, and
+that shipping the markers into a student's record would have been the worse call. Worth a senior's
+review; nothing downstream depends on the choice, so reversing it is a one-function change.
+
+### Deviations
+
+1. **The bounded download went to `canvas_client`, not `api/submission_transport.py`** as the §4
+   scope table directed. Putting it in `submission_transport` meant either re-implementing the 429
+   retry and the coordinator's yield and cancellation there — the third uncoordinated Canvas
+   caller §3.4 forbids — or leaving a class-wide unattended loop with neither. So
+   `_physical_get` gained a `stream` keyword and a thin `canvas_stream_get` wrapper, and
+   `submission_transport` is **not touched at all**: no new parameter, no wrapper, so
+   `portfolio_service` and `student_packet` cannot be affected, which is a stronger guarantee than
+   a preserving default would have been. `stream` is passed to `requests.get` only when set, so a
+   non-streaming call — including the test doubles standing in for it — sees the exact arguments it
+   always did. Five tests now hold that seam: stream requested, body handed over unread, non-200
+   closed rather than returned, 429 retry shared, no token means no call.
+2. **An existing guard was replaced, deliberately.** `test_no_new_module_imports_canvas_transport`
+   asserted `canvas_ingest` imports no Canvas transport. That is now false by design. In its place:
+   a runtime assertion that a typed-only assignment makes **zero** HTTP calls (a call counter
+   cannot lie about a call the way an unused import can), plus an AST guard that the MCP package
+   cannot import `canvas_ingest` or `canvas_attachments`. Called out here rather than done quietly,
+   because the route card is right that a green suite is evidence about the tests.
+
+### Notes worth a senior's attention
+
+- **A bug this batch's own tests caught, not the suite.** The acquisition seam first ran its
+  telemetry under priority `"interactive"`, which `api/operational_log.py` rejects by raising —
+  it accepts a fixed set. Every dailywriting test stubs `_canvas_get` above that layer, so all of
+  them passed. `test_acquisition_goes_through_the_real_client_and_emits_a_valid_scope` stands in
+  one layer lower, at `requests.get`, so the real client, telemetry context and log all run; the
+  priority is now `"manual"`, as `mirror_service` uses for a teacher-triggered pass. Confirmed the
+  test goes red on the old value and green on the new one.
+- **`api/mcp_server/tools.py:38` imports `_canvas_get_all` and never calls it** — dead, and the one
+  thing in the repo that makes "the MCP surface does not reach Canvas transport" look untrue at a
+  glance. Left alone rather than widening this batch into the most safety-sensitive module in the
+  repo; raised as its own task.
+- **Pre-existing scrub behaviour worth knowing, not a regression.** The general scrub pass treats
+  any capitalised token with no lexicon entry as a name, sentence-initial included, so an essay
+  opening "Dogs make better pets" stores "[name] make better pets". Identical for typed text and
+  entirely outside this batch's scope (`core/scrub.py`), but it will read oddly the first time a
+  teacher sees a real record, and the DOCX fixtures here are written around it on purpose.
+- **The seeded copy of the guide.** `get_product_guide` serves `api/default_docs/` directly, so a
+  connected assistant reads the updated text immediately. A teacher's already-seeded copy in their
+  AI Authoring folder would not refresh — `ai_ta.RETIRED_FILES` is the mechanism for that, and it
+  needs the *previous* version's hash listed. Not added: pre-launch, 0 users, nobody holds a stale
+  copy. If this guide changes again after launch, that entry becomes necessary.
+
+### Unresolved
+
+Nothing new. The two decisions the route card already carries forward stay open and untouched:
+which assignments feed the record (built against option 1, the ingest action as the opt-in), and
+whether delivered feedback becomes a stored record. No `AssignmentContext` purpose field was added.
+The paragraph-break span defect in `core/scoring.py` is still unfixed — this batch never entered
+that file.
