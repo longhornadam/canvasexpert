@@ -139,6 +139,7 @@ Read the commit, not a summary, when the detail matters.
 | Canvas typed ingest | `401c7c0` | `canvas_source.py`, `canvas_ingest.py`, CLI + web trigger |
 | DOCX ingest | `8960bda` | `canvas_attachments.py`, the subsystem's first live Canvas calls, `canvas_stream_get` |
 | Scrub narrowed to the vault | `0a9e713` | Heuristic capitalised-token pass removed; roster names, nicknames and ids remain |
+| Evidence spans | `634484d` | Raw-text span geometry, literal unknown-quotation evidence, and digest-visible unlocatable-span flags |
 
 Retired briefs are recoverable, and these are the commits where each one still exists — pinned,
 because a path alone stops resolving the moment the brief is retired:
@@ -147,6 +148,7 @@ because a path alone stops resolving the moment the brief is retired:
 |---|---|
 | Canvas typed ingest | `git show 401c7c0:docs/handoffs/CanvasExpert-WritingRecord-CanvasIngest-BRIEF.md` |
 | DOCX ingest (with its Section 12 execution result) | `git show 5b44efa:docs/handoffs/CanvasExpert-WritingRecord-DocxIngest-BRIEF.md` |
+| Evidence spans (with its Section 12 execution result) | `git show 1f35770:docs/handoffs/CanvasExpert-WritingRecord-EvidenceSpans-BRIEF.md` |
 
 ## Open decisions
 
