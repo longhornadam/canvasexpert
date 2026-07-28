@@ -8,7 +8,10 @@ documents.
 
 ## Location
 
-`<workspace>/_System/Daily Writing/`
+`<workspace>/_System/WritingReps/`
+
+The folder name is `config.naming.SYSTEM_NAME`, derived by `repo.STORE_FOLDER`
+rather than written twice.
 
 `_System` is the workspace's PRIVATE machine-state tier, alongside the identity
 vault and PowerGrader's sessions. Nothing here belongs in the repository, in
@@ -17,7 +20,7 @@ vault and PowerGrader's sessions. Nothing here belongs in the repository, in
 ## Layout
 
 ```
-Daily Writing/
+WritingReps/
   submissions/2026-09.json      append-only, partitioned by month
   scores/2026-09.json           append-only, partitioned by month
   observations/2026-09.json     append-only, partitioned by month

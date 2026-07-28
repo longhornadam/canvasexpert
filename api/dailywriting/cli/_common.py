@@ -14,7 +14,7 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 
-from api.dailywriting.config import criteria_loader
+from api.dailywriting.config import criteria_loader, naming
 from api.dailywriting.core.models import CriteriaSet
 from api.dailywriting.store.identity import MappingResolver
 from api.dailywriting.store.repo import Repository, workspace_store_root
@@ -28,7 +28,7 @@ def add_store_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--store-root", type=Path, default=None,
         help="where records live. Defaults to the workspace's private "
-             "_System/Daily Writing folder.")
+             f"_System/{naming.SYSTEM_NAME} folder.")
     parser.add_argument(
         "--identity-map", type=Path, default=None,
         help="JSON object mapping canvas id to pseudonym, for running without "

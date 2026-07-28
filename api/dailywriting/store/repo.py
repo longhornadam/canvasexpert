@@ -35,12 +35,15 @@ from api.dailywriting.core.models import (
     Score,
     Submission,
 )
+from api.dailywriting.config import naming
 from api.dailywriting.core.scrub import assert_clean_for_storage
 from api.dailywriting.store import codec
 from api.dailywriting.store.identity import IdentityResolver, VaultResolver
 from api.storage_support import atomic_write_json, interprocess_lock
 
-STORE_FOLDER = "Daily Writing"
+# Derived, not repeated: `config.naming` is the single source for the system
+# name, and a second literal here would drift from it.
+STORE_FOLDER = naming.SYSTEM_NAME
 
 SUBMISSIONS = "submissions"
 SCORES = "scores"
@@ -52,7 +55,7 @@ class StoreError(RuntimeError):
 
 
 def workspace_store_root() -> Path:
-    """`_System/Daily Writing` inside the synced workspace.
+    """`_System/<system name>` inside the synced workspace.
 
     `_System` is the PRIVATE machine-state tier, which is where PowerGrader's
     sessions and the identity vault already live. Raises when there is no
