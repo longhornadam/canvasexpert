@@ -205,9 +205,11 @@ that contradicts §2 and the batch is mis-scoped.
   change: :18, :28 (full prompt copy), :59, :79 (quoted source), :84 (tiling).
 - `docs/reference/project-state.md` — pre-launch, 0 users, 1 through ~Dec 2026, clean breaks
   over migrations.
-- Previous brief (closed GREEN, in Git history):
-  `CanvasExpert-WritingRecord-AssistantRead-BRIEF.md` §8.1 (ECR decision + measurement),
-  §8.1b (paragraph-break span defect), §8a.1 (rubrics out, purpose in).
+- Previous brief, closed GREEN and retired. Recover with
+  `git show b2b89a0:docs/handoffs/CanvasExpert-WritingRecord-AssistantRead-BRIEF.md`.
+  Relevant sections: §8.1 (ECR decision + measurement), §8.1a (ingest unscored), §8.1b
+  (paragraph-break span defect), §8a.1 (rubrics out, purpose in). Read only if a decision
+  here is unclear — this brief is the authority.
 
 ## 12. Execution result
 
