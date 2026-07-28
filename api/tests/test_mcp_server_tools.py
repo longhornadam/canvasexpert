@@ -1061,6 +1061,56 @@ def test_get_writing_history_returns_dated_rows_with_no_identity_leak(monkeypatc
         assert leak not in dumped, f"{leak!r} leaked into payload: {dumped}"
 
 
+def test_get_writing_history_unscored_submission_has_null_score_fields(
+        monkeypatch, tmp_path):
+    """ECR substrate brief Sec 5 AC2: a submission ingested through
+    `core.ingest.ingest_unscored` and stored with `Repository.append_submission`
+    (no `append_score` call -- there is no `Score` to append) comes back
+    through the real `get_writing_history` tool with total/possible/status all
+    null. Asserted through the actual store write/read and the real tool
+    function, not by constructing the projection payload directly, which is
+    what distinguishes this from a projection-only unit test."""
+    from datetime import datetime, timezone
+
+    from api.dailywriting.core import ingest as ingest_module
+    from api.dailywriting.fixtures import loader as dw_loader
+    from api.dailywriting.store.repo import Repository as DWRepository
+
+    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(),
+                        vault=None)
+    roster_map = dw_loader.roster_map()
+    raw = dw_loader.single(1)  # rep_t1_phones, canvas_id 990001
+    context = dw_loader.rep(raw["rep_id"])
+    pseudonym = dw_loader.pseudonym_for(raw["canvas_id"])
+    repo.put_rep(context)
+
+    essay = " ".join(["mill", "river", "town", "families", "shift"] * 30) + "."
+    result = ingest_module.ingest_unscored(
+        submission_id="ecr-history-1", rep_id=context.rep_id,
+        pseudonym_id=pseudonym,
+        submitted_at=datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc),
+        text=essay, context=context, roster_map=roster_map, protected=set(),
+    )
+    repo.append_submission(result.submission)
+    if result.observations:
+        repo.append_observations(result.observations)
+    # Deliberately no repo.append_score(): an unscored piece has no Score.
+
+    _use_dailywriting_repo(monkeypatch, repo)
+    _use_dailywriting_vault(monkeypatch)
+
+    response = tools.get_writing_history(
+        pseudonym, since="2026-01-01", until="2026-12-31")
+    assert response["ok"] is True
+    rows = response["submissions"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["total"] is None
+    assert row["possible"] is None
+    assert row["status"] is None
+    assert row["student_word_count"] == 150
+
+
 def test_get_writing_history_scan_payload_green_with_include_text(monkeypatch, tmp_path):
     """AC2: fixture 8's INPUT text has "Marcus" (a roster real name) and
     "Diego" (a non-roster sibling name) -- but `core.ingest` scrubs at ingest

@@ -24,6 +24,22 @@ STEM_MIN_LITERAL_TOKENS = 2
 # longer source passage. Below this, common phrasing produces false quotes.
 EMBEDDED_QUOTE_MIN_TOKENS = 5
 
+# Mid-prompt fragment detection only runs on a response at least this long.
+# The fixture corpus's longest single response is 74 tokens and every daily
+# rep sits well under 100; extended writing, the case that stage exists for,
+# runs 400-1500 words. A handful of verbatim prompt words is structurally
+# different depending on which side of that gap they land on: near the top of
+# a 20-40 word rep they are usually most of the response's own thesis
+# (measured: fixture 2's 12-word answer lost 10 of them, fixture 6's strong
+# 38-word answer lost 5), which is either genuine prompt-restatement --
+# already the job of `observations.py`'s `restates_prompt` tag -- or simply
+# the student answering the question in the question's own words, not
+# evidence of copying. Three paragraphs into a several-hundred-word piece the
+# same five words are a rounding error, and nothing shorter is watching for
+# them. 150 sits with a wide margin on both sides rather than pinned to
+# either edge.
+MID_PROMPT_FRAGMENT_MIN_RESPONSE_TOKENS = 150
+
 # Cross-submission repetition: identical residual text appearing in this many
 # students' work on the same rep is probably provided text the authoring
 # record missed. Flags for human eyes; never changes a segment's origin.

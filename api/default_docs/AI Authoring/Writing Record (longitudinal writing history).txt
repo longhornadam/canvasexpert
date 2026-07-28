@@ -70,9 +70,25 @@ this writer developing," and per-criterion checklist outcomes already carry
 that signal without several hundred words of grading-descriptor prose eating
 the context window before you have read a word the student wrote.
 
-Extended constructed responses, the kind PowerGrader scores against a full
-rubric with a Writing Timeline attached, are not in this record. What is here
-is short daily or weekly practice writing only.
+Extended constructed responses -- the kind PowerGrader scores against a full
+rubric with a Writing Timeline attached -- can be held here too, as an
+ordinary dated piece alongside the short daily reps, but unscored: a
+checklist written for a one-sentence rep cannot honestly grade a 400-1500
+word essay, so a long piece's total, possible, and per-criterion outcomes all
+come back null rather than a number that would misrepresent what was
+checked. student_word_count and the flag-derived observations
+(no_student_text, exceeds_word_cap) still apply, because those come from
+segmentation, not from a checklist.
+
+A long piece is truncated the same as any other quoted text when you ask for
+it: with include_text=true, its raw_text is cut at max_text_chars and the
+rest is dropped from what comes back, not just hidden. student_word_count is
+never truncated, so it is what tells you how much of the piece you did not
+just see -- a piece reporting 900 student words against a raw_text you only
+received the first 2000 characters of is missing most of itself. Raise
+max_text_chars deliberately when you actually need to read an extended
+piece rather than a rep; the default is sized for short daily writing, not
+an essay.
 
 A piece's purpose, narrative versus argument versus explanation and so on, is
 not a separate stored field yet. Infer it from the checklist prompt text if

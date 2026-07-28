@@ -48,6 +48,68 @@ class IngestResult:
         return directives_module.choose_acknowledgment(self.acknowledgments)
 
 
+@dataclass(frozen=True)
+class UnscoredIngestResult:
+    """An extended piece (an ECR), ingested and segmented but not scored.
+
+    No `Score`, on purpose: a checklist written for a one-sentence daily rep
+    cannot honestly grade a 400-1500 word essay. `observations` carries only
+    flag-derived noticings -- `no_student_text` and `exceeds_word_cap`, from
+    `core.observations.observe_flags` -- because a criteria-derived
+    observation requires a comparison this path never runs.
+    """
+    submission: Submission
+    observations: list[Observation] = field(default_factory=list)
+
+
+def _process(
+    *,
+    submission_id: str,
+    rep_id: str,
+    pseudonym_id: str,
+    submitted_at: datetime,
+    text: str,
+    context: AssignmentContext,
+    vault=None,
+    roster_map: list[tuple] | None = None,
+    protected: set[str] | None = None,
+) -> Submission:
+    """Scrub, segment, and build the `Submission` record.
+
+    Shared by `ingest()` and `ingest_unscored()` so the scored path's
+    behaviour cannot drift from what an unscored piece goes through: both
+    call this one function rather than two copies of the same five lines.
+    """
+    corpus = [context.prompt_text, *[b.template for b in context.scaffold_blocks],
+              *context.source_texts]
+    scrubbed = scrub.scrub_writing(
+        text, vault=vault, roster_map=roster_map, protected=protected,
+        assignment_corpus=corpus)
+
+    segmented = segmentation.segment_submission(scrubbed.text, context)
+
+    flags = list(segmented.flags)
+    if scrubbed.general_name_hits:
+        flags.append(segmentation.SegmentationFlag(
+            code="unscrubbed_name_removed",
+            detail=(f"{scrubbed.general_name_hits} name(s) not on the roster "
+                    "were removed from this submission; confirm the redaction "
+                    "did not eat a word from the passage"),
+        ))
+
+    return Submission(
+        submission_id=submission_id,
+        rep_id=rep_id,
+        pseudonym_id=pseudonym_id,
+        submitted_at=submitted_at,
+        raw_text=scrubbed.text,
+        segments=segmented.segments,
+        student_word_count=segmented.student_word_count,
+        flags=flags,
+        scrub_findings=scrubbed.findings,
+    )
+
+
 def ingest(
     *,
     submission_id: str,
@@ -73,33 +135,10 @@ def ingest(
 
     scoring.assert_criteria_published(criteria_set.published_at, submitted_at)
 
-    corpus = [context.prompt_text, *[b.template for b in context.scaffold_blocks],
-              *context.source_texts]
-    scrubbed = scrub.scrub_writing(
-        text, vault=vault, roster_map=roster_map, protected=protected,
-        assignment_corpus=corpus)
-
-    segmented = segmentation.segment_submission(scrubbed.text, context)
-
-    flags = list(segmented.flags)
-    if scrubbed.general_name_hits:
-        flags.append(segmentation.SegmentationFlag(
-            code="unscrubbed_name_removed",
-            detail=(f"{scrubbed.general_name_hits} name(s) not on the roster "
-                    "were removed from this submission; confirm the redaction "
-                    "did not eat a word from the passage"),
-        ))
-
-    submission = Submission(
-        submission_id=submission_id,
-        rep_id=rep_id,
-        pseudonym_id=pseudonym_id,
-        submitted_at=submitted_at,
-        raw_text=scrubbed.text,
-        segments=segmented.segments,
-        student_word_count=segmented.student_word_count,
-        flags=flags,
-        scrub_findings=scrubbed.findings,
+    submission = _process(
+        submission_id=submission_id, rep_id=rep_id, pseudonym_id=pseudonym_id,
+        submitted_at=submitted_at, text=text, context=context, vault=vault,
+        roster_map=roster_map, protected=protected,
     )
 
     score = scoring.score_submission(
@@ -128,6 +167,38 @@ def ingest(
         directives=updated_directives,
         acknowledgments=acknowledgments,
     )
+
+
+def ingest_unscored(
+    *,
+    submission_id: str,
+    rep_id: str,
+    pseudonym_id: str,
+    submitted_at: datetime,
+    text: str,
+    context: AssignmentContext,
+    vault=None,
+    roster_map: list[tuple] | None = None,
+    protected: set[str] | None = None,
+) -> UnscoredIngestResult:
+    """Ingest an extended piece without checklist scoring.
+
+    A sibling to `ingest()`, not an optional `criteria_set` on it:
+    `IngestResult.score` is a required field with four consumers, and
+    threading `None` through them to serve one new case would be worse than
+    a second entry point that shares `_process`. Takes no `criteria_set` and
+    calls no `CriteriaNotPublishedError` check, because there is no criteria
+    comparison to publish a date against. Runs no directive evaluation
+    either: directives are checked against checklist-scored reps.
+    """
+    submission = _process(
+        submission_id=submission_id, rep_id=rep_id, pseudonym_id=pseudonym_id,
+        submitted_at=submitted_at, text=text, context=context, vault=vault,
+        roster_map=roster_map, protected=protected,
+    )
+    observations = observations_module.observe_flags(
+        submission, now=submitted_at, vault=vault)
+    return UnscoredIngestResult(submission=submission, observations=observations)
 
 
 def record_gap(

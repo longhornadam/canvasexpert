@@ -196,6 +196,60 @@ def detect_formulaic_commentary(commentary: str,
     return False, ""
 
 
+# Shared verbatim between `observe_submission` and `observe_flags`: the same
+# noticing must read the same way whether or not a `Score` exists to reach it
+# from, and a copy in each function is how those two wordings would drift.
+_NO_STUDENT_TEXT_CLAIM = ("This submission contains no writing of the "
+                          "student's own; every word matches text they were "
+                          "given.")
+
+
+def _word_cap_observations(submission: Submission, add) -> None:
+    for flag in submission.flags:
+        if flag.code == "exceeds_word_cap":
+            add("exceeds_word_cap", f"Over the word cap: {flag.detail}.",
+                _first_sentence(submission.raw_text))
+
+
+def observe_flags(
+    submission: Submission,
+    *,
+    now: datetime | None = None,
+    vault=None,
+) -> list[Observation]:
+    """Flag-derived observations for a submission with no `Score`.
+
+    `core.ingest.ingest_unscored` calls this instead of `observe_submission`:
+    an extended piece earns no criteria-derived observation, because there is
+    no criteria comparison that ran, but `no_student_text` and
+    `exceeds_word_cap` come from segmentation flags rather than from a
+    checklist and are real noticings either way (ECR substrate brief, locked
+    decision 3).
+    """
+    stamped = now or submission.submitted_at or utc_now()
+    observations: list[Observation] = []
+
+    def add(pattern_tag: str, claim: str, span: str) -> None:
+        if not (span or "").strip():
+            return
+        observations.append(make_observation(
+            pseudonym_id=submission.pseudonym_id,
+            submission_id=submission.submission_id,
+            observed_at=stamped,
+            pattern_tag=pattern_tag,
+            claim_text=claim,
+            evidence_span=span.strip(),
+            vault=vault,
+        ))
+
+    if any(flag.code == "no_student_text" for flag in submission.flags):
+        add("no_student_text", _NO_STUDENT_TEXT_CLAIM,
+            _first_sentence(submission.raw_text) or submission.raw_text[:120])
+    _word_cap_observations(submission, add)
+
+    return observations
+
+
 def observe_submission(
     submission: Submission,
     score: Score,
@@ -237,9 +291,7 @@ def observe_submission(
         ))
 
     if score.status == "no_student_text":
-        add("no_student_text",
-            "This submission contains no writing of the student's own; every "
-            "word matches text they were given.",
+        add("no_student_text", _NO_STUDENT_TEXT_CLAIM,
             _first_sentence(submission.raw_text) or submission.raw_text[:120])
         return observations
 
@@ -280,9 +332,6 @@ def observe_submission(
                 f"The commentary backs away from its own claim (\"{hedge}\").",
                 commentary, "commentary_beyond_restatement")
 
-    for flag in submission.flags:
-        if flag.code == "exceeds_word_cap":
-            add("exceeds_word_cap", f"Over the word cap: {flag.detail}.",
-                _first_sentence(submission.raw_text))
+    _word_cap_observations(submission, add)
 
     return observations

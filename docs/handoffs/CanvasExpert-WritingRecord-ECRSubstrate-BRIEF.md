@@ -213,5 +213,68 @@ that contradicts §2 and the batch is mis-scoped.
 
 ## 12. Execution result
 
-_To be completed by the executor: traffic light, commit hash, changed files, commands and
-counts, deviations, unresolved decisions._
+**GREEN.** No commit made (left in the worktree for review, per instructions). Branch `dev`
+at b2ee610 when started; worktree was clean (the AssistantRead brief's stale git-status
+snapshot from before the two retirement/pin commits did not reflect actual working-tree state).
+
+**Changed files:**
+- `api/dailywriting/core/ingest.py` -- extracted `_process()` (scrub -> segment -> `Submission`)
+  out of `ingest()`; added `UnscoredIngestResult` and `ingest_unscored()`.
+- `api/dailywriting/core/observations.py` -- added `observe_flags()` for the unscored path;
+  factored the `no_student_text` claim text and the `exceeds_word_cap` loop into shared
+  helpers (`_NO_STUDENT_TEXT_CLAIM`, `_word_cap_observations`) so `observe_submission` and
+  `observe_flags` cannot drift on wording.
+- `api/dailywriting/core/segmentation.py` -- inserted stage 5 (mid-prompt fragment) between
+  the old stages 4 and 5 (now 6); parametrized `_claim_embedded_quote` with an `origin`
+  argument (default `"quoted_source"`, unchanged call sites) and reused it for
+  `origin="assignment"` against `context.prompt_text`; removed the dead `owner[first] or
+  "unknown"` fallback in `_coalesce` now that stage 6 guarantees no `None` survives to it.
+- `api/dailywriting/core/models.py` -- dropped `"unknown"` from the `Origin` literal.
+- `api/default_docs/AI Authoring/Writing Record (longitudinal writing history).txt` -- replaced
+  the stale "extended constructed responses ... are not in this record" claim with the actual
+  behavior (held unscored, with why) and added the truncation/`student_word_count`/
+  `max_text_chars` guidance AC7 asks for. ASCII-checked against `test_every_guide_stays_pastable_plain_text`.
+- `api/tests/dailywriting/test_dw_segmentation.py` -- added the mid-prompt-fragment test (AC4),
+  a full-prompt-copy-precedent regression test at the unit level the new stage touches (AC5),
+  and the dead-Origin-value test (AC6, segmentation half).
+- `api/tests/dailywriting/test_dw_ecr_substrate.py` (new) -- unscored-ingest correctness (AC1,
+  including the flag-derived-observation-still-fires companion case), the `IngestResult.score`
+  required-field structural test (AC3), and the store round-trip half of AC6.
+- `api/tests/test_mcp_server_tools.py` -- added the `get_writing_history` end-to-end null-score
+  test (AC2), reusing the existing `_use_dailywriting_repo`/`_use_dailywriting_vault` harness so
+  it runs through the real tool function, not just the projection.
+
+**Commands and counts:**
+```
+python -m pytest api/tests/dailywriting api/tests/test_mcp_server_tools.py -q
+194 passed
+```
+```
+python -m pytest api/tests -q
+1542 passed, 2 failed
+```
+The 2 failures are exactly two of the three named environmental baseline failures (§6):
+`test_feedback_pipeline.py::test_write_safe_and_private_auto_detects_compact_on_deep_path` and
+`test_powergrader_packet.py::test_packet_workflow_budget_exception_stops_before_writes` (both
+Windows long-path). The third (`test_beta075_storage.py::test_spawned_vault_writers_preserve_both_students`,
+load-sensitive) did not fire this run, consistent with its "only under full-suite contention"
+description -- its absence is not a regression, and its presence would not have been either.
+No failure traces to this batch's changes.
+
+**Deviations from the brief:** none of substance. Two additions beyond the letter of the scope
+table, both within the stated boundaries: (1) `observe_submission`'s `no_student_text` claim
+text and `exceeds_word_cap` loop were factored into helpers shared with the new `observe_flags`,
+to make the two paths' wording provably unable to drift apart -- a pure extraction, verified by
+the full existing `api/tests/dailywriting` suite passing unchanged; (2) one extra regression
+test (`test_full_prompt_copy_precedent_is_unaffected_by_the_new_stage`) pinning AC5's claim at
+the unit level the new segmentation stage actually touches, alongside the untouched fixture
+tests already named by the brief.
+
+**Unresolved decisions:** none. No §10 stop condition fired: the shared `_process()` extraction
+is a mechanical relocation of the same five statements with no logic change (confirmed by the
+untouched scored-path tests); the new segmentation stage claims only tokens stage 1-4 left
+unclaimed, verified against both the full-prompt-copy precedent and the six-fixture tiling test;
+and removing `"unknown"` required no codec change because `store/codec.py` never validated
+`origin` against the `Literal` in the first place -- it was a static-typing-only value with no
+runtime reachability, confirmed by grepping the whole `api/dailywriting` package for any other
+reference to it (none) before removing it.

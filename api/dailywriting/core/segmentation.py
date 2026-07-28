@@ -13,7 +13,18 @@ Stages run in order and first match wins:
   3. stem alignment, the important one, because stems are designed to be
      completed and the interior of a completed stem is the student's writing
   4. quoted-source detection, which is a different origin from scaffold
-  5. residual, which is the student
+  5. mid-prompt fragment detection, gated to long responses only: a short
+     verbatim run lifted out of the *middle* of the prompt and buried inside
+     otherwise-original writing, which stage 1/2's whole-prompt-length
+     matching cannot see (below). Gated because the same shape -- a handful
+     of prompt words verbatim, near the start of the response -- is also
+     what a short rep's opening thesis naturally looks like, whether it is
+     genuinely restating the prompt (`observations.py`'s `restates_prompt`
+     tag exists to catch exactly that, one layer up, and must see those
+     words as the student's) or just answering a question using the
+     question's own topic words. Below the length gate, this stage does not
+     run at all, so it cannot compete with that mechanism.
+  6. residual, which is the student
 
 Stem alignment is allowed to re-read tokens stage 1 already called `scaffold`,
 because confirming the same origin costs nothing and a blanked template's
@@ -304,7 +315,10 @@ def _coalesce(text: str, tokens: list[Token], owner: list[Origin | None],
             span_start = 0
         span_end = (len(text) if position == len(groups) - 1
                     else tokens[groups[position + 1][0]].start)
-        origin = owner[first] or "unknown"
+        # `owner[first]` is never None here: stage 6 relabels every unclaimed
+        # token `student` before `_coalesce` runs, which is what makes
+        # `Origin`'s vocabulary exactly the four values `Segment` can hold.
+        origin = owner[first]
         segments.append(Segment(
             span_start=span_start,
             span_end=span_end,
@@ -404,7 +418,23 @@ def segment_submission(
         _claim_embedded_quote(text, tokens, hay, needle, owner, methods,
                               confidences)
 
-    # Stage 5: residual is the student.
+    # Stage 5: mid-prompt fragment. Claims only what stage 1/2 could not,
+    # because both are already-run and first-match-wins: a whole-prompt copy
+    # or reword is claimed there. This stage exists for the shape neither can
+    # see -- a short run lifted out of the *middle* of the prompt, buried
+    # inside an otherwise-original response -- and reuses the same alignment
+    # `_claim_embedded_quote` already does for a quoted source passage. Gated
+    # to responses at or above `thresholds.MID_PROMPT_FRAGMENT_MIN_RESPONSE_TOKENS`
+    # (see its own comment): below that length this stage does not run at all,
+    # so a short rep's opening thesis is never a candidate for it in the first
+    # place, regardless of how much it happens to echo the prompt.
+    if len(tokens) >= thresholds.MID_PROMPT_FRAGMENT_MIN_RESPONSE_TOKENS:
+        prompt_needle = _norms(tokenize(context.prompt_text))
+        if prompt_needle:
+            _claim_embedded_quote(text, tokens, hay, prompt_needle, owner,
+                                  methods, confidences, origin="assignment")
+
+    # Stage 6: residual is the student.
     for index in range(len(tokens)):
         if owner[index] is None:
             owner[index] = "student"
@@ -447,10 +477,21 @@ def segment_submission(
 def _claim_embedded_quote(text: str, tokens: list[Token], hay: list[str],
                           needle: list[str], owner: list[Origin | None],
                           methods: list[SegmentMethod | None],
-                          confidences: list[float]) -> None:
-    """Claim the run of submission tokens the student lifted from the passage.
+                          confidences: list[float],
+                          origin: Origin = "quoted_source") -> None:
+    """Claim the run of submission tokens lifted verbatim from `needle`.
 
-    The ordinary tier-3 case: a student quotes one line out of a paragraph.
+    The ordinary tier-3 case: a student quotes one line out of a source
+    paragraph (`origin="quoted_source"`, the default). Stage 5 below reuses
+    this same alignment for a short run lifted out of the middle of the
+    *prompt* instead (`origin="assignment"`): stage 1/2 already handle a
+    whole-prompt copy or a whole-prompt reword, but both pin their window
+    widths to the full prompt's own token length, so a five-word fragment
+    buried three paragraphs into a long response is never even considered as
+    a window. The alignment problem is identical either way -- find the
+    longest unclaimed run that appears verbatim inside the source text -- so
+    only the origin it is claimed under differs.
+
     A run that starts just after a quotation mark wins over a longer run that
     does not, because otherwise the student's own signal phrase gets absorbed
     into the quotation whenever it happens to echo the source, and words they
@@ -476,7 +517,7 @@ def _claim_embedded_quote(text: str, tokens: list[Token], hay: list[str],
     if best:
         opens_quote, length, start = best
         _claim(owner, methods, confidences, start, start + length,
-               "quoted_source", "exact_match", 1.0)
+               origin, "exact_match", 1.0)
 
 
 def flag_cross_submission_repetition(

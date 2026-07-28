@@ -18,7 +18,7 @@ from typing import Literal
 
 # --- Vocabulary -------------------------------------------------------------
 
-Origin = Literal["assignment", "scaffold", "student", "quoted_source", "unknown"]
+Origin = Literal["assignment", "scaffold", "student", "quoted_source"]
 
 SegmentMethod = Literal[
     "exact_match", "fuzzy_match", "stem_align", "classifier", "residual"
