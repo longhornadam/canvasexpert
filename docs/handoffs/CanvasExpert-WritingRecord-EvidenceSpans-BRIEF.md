@@ -195,6 +195,79 @@ in criteria JSON rather than in code.
 
 ## 12. Execution result
 
-_To be completed by the executor: traffic light, commit hash, changed files, commands and
-counts, each §5 decision as made with its reason, the before/after scoring-path snapshot with
-every changed item listed, deviations, unresolved decisions._
+**GREEN.** Implementation commit: `634484d1942a35e08d53ab1d34c4c949d1f7f5b2`.
+
+Changed: `core/scoring.py`, `core/ingest.py`, `cli/score.py`, `core/observations.py`,
+`core/models.py`, `core/digest.py`, the history-blind signature test, the new focused
+`test_dw_evidence_spans.py`, and the Writing Record route card.
+
+### Locked decisions
+
+1. **Every stored `Span` is relative to `Submission.raw_text`.** This is the scrubbed text a
+   teacher can actually open. The scorer still reasons only over student and quoted-source
+   segments; it now maps the scorer-string match through those segments' raw offsets and stores
+   the literal inclusive raw slice. A provided scaffold between two selected segments remains in
+   that literal slice rather than being silently omitted or reconstructed.
+2. **An unlocatable observation is a submission flag, rendered in the weekly digest.**
+   `unlocatable_evidence_span` names the unmet pattern-bearing criterion ids in a private detail
+   string. INV-3 still refuses to create the free-floating observation; the teacher sees the
+   failure under *Needs human eyes* instead of having to inspect a log.
+3. **The two mechanisms were distinct but compatible.** Paragraph/scaffold reconstruction was
+   a text-geometry failure, fixed by scorer-to-raw offset mapping and whitespace-tolerant match.
+   The evidence family had no span at all for an unknown literal quotation, fixed by using that
+   literal quotation as evidence geometry only. It remains an unknown-source quotation, so every
+   verdict is unchanged.
+4. **A `dailywriting-score` replay alone does not recover old observations.** It now produces
+   correct raw-relative score spans, but its append-only path does not re-run or replace
+   observations. No local records exist, so this batch did not run it; replaying stored dropped
+   observations needs a deliberately scoped observation-rebuild operation later.
+
+### Before/after scoring-path snapshots
+
+Legend: `M` / `U` is met / unmet; `S` / `-` is evidence span present / absent.
+
+The required tier-4 reproduction changed only span availability and the two resulting
+observations; no verdict changed.
+
+| Input | Before | After |
+|---|---|---|
+| single paragraph | `evidence_present=M-`, `evidence_relevant=U-`, `evidence_integrated=U-`; 2 observations | `evidence_present=MS`, `evidence_relevant=US`, `evidence_integrated=US`; 4 observations |
+| two paragraphs | `argument_stated=M-`, `argument_matches_thesis=M-`, `evidence_present=M-`, `evidence_relevant=U-`, `evidence_integrated=U-`, `commentary_connects=M-`, `commentary_beyond_restatement=M-`; 2 observations | every item carries `S`; 4 observations, the same four `(criterion, pattern)` pairs as the single paragraph |
+
+Pinned `singles.json` scoring snapshot (before equals after for every row; therefore no changed
+verdicts or observation counts):
+
+```text
+F1  words=24 origins=student observations=0
+    answers_prompt=MS arguable=MS specific=MS one_sentence=M-
+F2  words=12 origins=student observations=1
+    answers_prompt=MS arguable=US specific=MS one_sentence=M-
+F3  words=8 origins=assignment,student observations=1
+    answers_prompt=MS arguable=US specific=MS one_sentence=M-
+F4  words=13 origins=scaffold,student observations=3
+    answers_prompt=US arguable=US specific=MS thesis_separate=US argument_stated=U- argument_matches_thesis=U- evidence_present=U- evidence_relevant=U- evidence_integrated=U- commentary_connects=U- commentary_beyond_restatement=U-
+F5  words=0 origins=scaffold observations=1
+    answers_prompt=U- arguable=U- specific=U- thesis_separate=U- argument_stated=U- argument_matches_thesis=U- evidence_present=U- evidence_relevant=U- evidence_integrated=U- commentary_connects=U- commentary_beyond_restatement=U-
+F6  words=38 origins=quoted_source,student observations=1
+    answers_prompt=MS arguable=MS specific=MS thesis_separate=MS argument_stated=MS argument_matches_thesis=MS evidence_present=MS evidence_relevant=US evidence_integrated=MS
+F7  words=17 origins=quoted_source,student observations=2
+    answers_prompt=MS arguable=US specific=MS thesis_separate=MS argument_stated=MS argument_matches_thesis=MS evidence_present=MS evidence_relevant=MS evidence_integrated=US
+F8  words=18 origins=student observations=0
+    answers_prompt=MS arguable=MS specific=MS one_sentence=M-
+F12 words=60 origins=quoted_source,scaffold,student observations=2
+    answers_prompt=MS arguable=MS specific=MS thesis_separate=MS argument_stated=MS argument_matches_thesis=MS evidence_present=MS evidence_relevant=US evidence_integrated=MS commentary_connects=MS commentary_beyond_restatement=MS
+```
+
+The source values for `student_word_count` and segment origins were also compared before/after
+for every fixture above; all are identical. The focused corpus test asserts every present span is
+an exact `raw_text[start:end]` slice. It failed on pre-fix `HEAD` at F3 / `answers_prompt`.
+
+### Commands and counts
+
+- Detached clean-checkout baseline: `python -m pytest api/tests -q` — **1594 passed** in 82.12s.
+- New focused assertions before the fix: `python -m pytest api/tests/dailywriting/test_dw_evidence_spans.py -q` — **2 failed** (the two dropped evidence observations and absent visibility flag).
+- Raw-slice corpus assertion against pre-fix `HEAD` — failed at **F3 / `answers_prompt`**.
+- Named gate: `python -m pytest api/tests/dailywriting api/tests/test_mcp_server_tools.py -q` — **242 passed** in 30.16s.
+- Full API suite: `python -m pytest api/tests -q` — **1597 passed** in 81.55s.
+
+No deviations from the locked scope and no unresolved decisions.
