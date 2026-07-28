@@ -72,7 +72,6 @@ def _process(
     context: AssignmentContext,
     vault=None,
     roster_map: list[tuple] | None = None,
-    protected: set[str] | None = None,
 ) -> Submission:
     """Scrub, segment, and build the `Submission` record.
 
@@ -80,22 +79,8 @@ def _process(
     behaviour cannot drift from what an unscored piece goes through: both
     call this one function rather than two copies of the same five lines.
     """
-    corpus = [context.prompt_text, *[b.template for b in context.scaffold_blocks],
-              *context.source_texts]
-    scrubbed = scrub.scrub_writing(
-        text, vault=vault, roster_map=roster_map, protected=protected,
-        assignment_corpus=corpus)
-
+    scrubbed = scrub.scrub_writing(text, vault=vault, roster_map=roster_map)
     segmented = segmentation.segment_submission(scrubbed.text, context)
-
-    flags = list(segmented.flags)
-    if scrubbed.general_name_hits:
-        flags.append(segmentation.SegmentationFlag(
-            code="unscrubbed_name_removed",
-            detail=(f"{scrubbed.general_name_hits} name(s) not on the roster "
-                    "were removed from this submission; confirm the redaction "
-                    "did not eat a word from the passage"),
-        ))
 
     return Submission(
         submission_id=submission_id,
@@ -105,7 +90,7 @@ def _process(
         raw_text=scrubbed.text,
         segments=segmented.segments,
         student_word_count=segmented.student_word_count,
-        flags=flags,
+        flags=list(segmented.flags),
         scrub_findings=scrubbed.findings,
     )
 
@@ -122,7 +107,6 @@ def ingest(
     open_directives: Iterable[Directive] = (),
     vault=None,
     roster_map: list[tuple] | None = None,
-    protected: set[str] | None = None,
     now: datetime | None = None,
 ) -> IngestResult:
     """Process one submission into a stored-shape record set.
@@ -138,7 +122,7 @@ def ingest(
     submission = _process(
         submission_id=submission_id, rep_id=rep_id, pseudonym_id=pseudonym_id,
         submitted_at=submitted_at, text=text, context=context, vault=vault,
-        roster_map=roster_map, protected=protected,
+        roster_map=roster_map,
     )
 
     score = scoring.score_submission(
@@ -179,7 +163,6 @@ def ingest_unscored(
     context: AssignmentContext,
     vault=None,
     roster_map: list[tuple] | None = None,
-    protected: set[str] | None = None,
 ) -> UnscoredIngestResult:
     """Ingest an extended piece without checklist scoring.
 
@@ -194,7 +177,7 @@ def ingest_unscored(
     submission = _process(
         submission_id=submission_id, rep_id=rep_id, pseudonym_id=pseudonym_id,
         submitted_at=submitted_at, text=text, context=context, vault=vault,
-        roster_map=roster_map, protected=protected,
+        roster_map=roster_map,
     )
     observations = observations_module.observe_flags(
         submission, now=submitted_at, vault=vault)

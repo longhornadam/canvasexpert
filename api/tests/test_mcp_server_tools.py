@@ -29,7 +29,7 @@ from api import feedback_safety, feedback_scrub, gradebook_queries, roster_servi
 from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
 from api.mirror import store as mirror_store
-from api.webui import workspace
+from api.webui import canvas_client, workspace
 
 FIXTURE_USERS = [
     {
@@ -953,7 +953,7 @@ def _build_dailywriting_repo(tmp_path, fixture_numbers):
             pseudonym_id=dw_loader.pseudonym_for(raw["canvas_id"]),
             submitted_at=dw_loader.submitted_at(raw), text=raw["text"],
             context=context, criteria_set=criteria_cache[context.tier],
-            roster_map=roster_map, protected=set(),
+            roster_map=roster_map,
         )
         repo.put_rep(context)
         repo.append_submission(result.submission)
@@ -1007,7 +1007,7 @@ def test_get_writing_history_returns_dated_rows_with_no_identity_leak(monkeypatc
             pseudonym_id=pseudonym,
             submitted_at=datetime(2026, 9, day, 9, 0, tzinfo=timezone.utc),
             text=raw["text"], context=context, criteria_set=criteria,
-            roster_map=roster_map, protected=set(),
+            roster_map=roster_map,
         )
         repo.append_submission(result.submission)
         repo.append_score(result.score, pseudonym)
@@ -1089,7 +1089,7 @@ def test_get_writing_history_unscored_submission_has_null_score_fields(
         submission_id="ecr-history-1", rep_id=context.rep_id,
         pseudonym_id=pseudonym,
         submitted_at=datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc),
-        text=essay, context=context, roster_map=roster_map, protected=set(),
+        text=essay, context=context, roster_map=roster_map,
     )
     repo.append_submission(result.submission)
     if result.observations:
@@ -1392,12 +1392,27 @@ def _explode_live(*_args, **_kwargs):
     raise AssertionError("live Canvas read attempted")
 
 
+def _forbid_live_reads(monkeypatch):
+    """Make any HTTP read reaching Canvas fail the test.
+
+    Patches the seams inside ``canvas_client`` rather than a wrapper
+    re-exported into ``tools``, so a read that arrives by any route --
+    including a helper that lazily imports ``_canvas_get_all`` at call time,
+    the way ``roster_service`` does -- still trips this. ``_canvas_headers``
+    is covered alongside the physical GET because every read consults it
+    first and bails early when no token is saved; without it the tripwire
+    would quietly stop working on a machine with no Canvas token.
+    """
+    monkeypatch.setattr(canvas_client, "_canvas_headers", _explode_live)
+    monkeypatch.setattr(canvas_client, "_physical_get", _explode_live)
+
+
 def test_get_roster_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path):
     _mount_mirror(monkeypatch, tmp_path)
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, [MIRROR_COURSE])
     _populate_mirror(str(tmp_path))
-    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+    _forbid_live_reads(monkeypatch)
 
     result = tools.get_roster(MIRROR_COURSE)
     assert result["ok"] is True
@@ -1449,7 +1464,7 @@ def test_get_seating_context_is_mirror_only_pseudonymized_and_scrubbed(monkeypat
             "type": "keep_apart", "reason": "private local reason",
         }]}},
     )
-    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+    _forbid_live_reads(monkeypatch)
 
     result = tools.get_seating_context(MIRROR_COURSE, "Period 1")
 
@@ -1495,7 +1510,7 @@ def test_get_seating_context_refuses_stale_mirror_and_vault_conflict(monkeypatch
         root=str(tmp_path), attempted_at=_STALE_STAMP,
     )
     _set_seating_context(monkeypatch)
-    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+    _forbid_live_reads(monkeypatch)
     assert tools.get_seating_context(MIRROR_COURSE, "Period 1") == {
         "ok": False, "error": tools._MIRROR_UNAVAILABLE_ROSTER_ERROR,
     }
@@ -1515,7 +1530,7 @@ def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypa
     _use_vault(monkeypatch, tmp_path)
     _set_active_courses(monkeypatch, [MIRROR_COURSE])
     _populate_mirror(str(tmp_path))
-    monkeypatch.setattr(tools, "_canvas_get_all", _explode_live)
+    _forbid_live_reads(monkeypatch)
 
     result = tools.get_submissions(MIRROR_COURSE, "700010")
     assert result["ok"] is True

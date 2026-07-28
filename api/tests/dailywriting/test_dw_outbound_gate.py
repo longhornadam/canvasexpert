@@ -87,7 +87,7 @@ def test_a_properly_scrubbed_span_still_passes(vault, roster_map):
     """The gate must not become so broad that clean pseudonymised text fails."""
     scrubbed = scrub.scrub_writing(
         "My brother Diego says Marcus texts him all through science class.",
-        roster_map=roster_map, protected=set())
+        roster_map=roster_map)
     verdict = feedback_safety.scan_payload(
         {"evidence_span": scrubbed.text}, vault)
     assert verdict["green"], verdict

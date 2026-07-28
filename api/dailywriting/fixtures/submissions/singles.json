@@ -78,8 +78,9 @@
       "rep_id": "rep_t1_phones",
       "canvas_id": "990004",
       "submitted_at": "2026-09-14T09:28:00-05:00",
-      "expect": "roster name replaced by its pseudonym, non-roster sibling name redacted; neither survives storage",
-      "names_that_must_not_survive": ["Marcus", "Diego"],
+      "expect": "roster name replaced by its pseudonym; the non-roster sibling name is left alone, because the scrubber removes what the vault knows and guesses at nothing",
+      "names_that_must_not_survive": ["Marcus", "Marc"],
+      "names_that_survive_by_decision": ["Diego"],
       "text": "My brother Diego says Marcus texts him all through science class, which proves phones ruin focus for everybody."
     },
     {

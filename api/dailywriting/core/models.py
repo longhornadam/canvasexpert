@@ -102,9 +102,13 @@ class ScrubFinding:
     `detail` never carries the removed value: a finding is written to the same
     private store as everything else, and a "we redacted Diego" note would
     reintroduce exactly what the redaction removed.
+
+    Only the roster kinds exist. The scrubber removes what the vault knows and
+    guesses at nothing, so there is no third "we thought this looked like a
+    name" kind -- see `core/scrub.py` for why that pass was removed.
     """
 
-    kind: Literal["roster_name", "roster_id", "general_name"]
+    kind: Literal["roster_name", "roster_id"]
     replacement: str
     span_start: int
     span_end: int
@@ -121,7 +125,6 @@ class SegmentationFlag:
         "low_confidence_segment",
         "cross_submission_repeat",
         "exceeds_word_cap",
-        "unscrubbed_name_removed",
     ]
     detail: str
     span: Span | None = None

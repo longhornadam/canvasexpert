@@ -1,7 +1,10 @@
-"""INV-7: names never leave the tenant. Acceptance test T-6.
+"""INV-7: roster names never leave the tenant. Acceptance test T-6.
 
-The hard case is the one the existing roster scrubber cannot see: a student
-writes about his brother, who is on no roster anywhere.
+What is scrubbed is what the vault knows: real names, the nicknames the teacher
+entered, and Canvas/SIS ids. Nothing is inferred from capitalisation. The tests
+below hold both halves of that -- every roster alias goes, and ordinary
+capitalised writing is returned untouched -- because the second half used to be
+false and quietly destroyed the records this product exists to keep.
 """
 from __future__ import annotations
 
@@ -12,8 +15,8 @@ from api.dailywriting.core.observations import assert_span_storable
 from api.dailywriting.fixtures import loader
 
 
-def test_t6_neither_the_classmate_nor_the_sibling_survives(ingest_fixture):
-    """T-6: both names absent from stored text and from every stored span."""
+def test_t6_no_roster_name_or_alias_survives_anywhere(ingest_fixture):
+    """T-6: absent from stored text and from every stored span."""
     raw = loader.single(8)
     result = ingest_fixture(8)
 
@@ -50,16 +53,27 @@ def test_t6_outbound_representation_requires_scrubbed_text(ingest_fixture):
     assert "Sparky McGee" not in outbound.text
 
 
-def test_t6_roster_name_becomes_its_pseudonym_and_the_sibling_is_redacted(
-        ingest_fixture):
+def test_a_roster_name_becomes_its_pseudonym(ingest_fixture):
     result = ingest_fixture(8)
-    text = result.submission.raw_text
-    # The classmate resolves to the stable pseudonym the vault already assigned.
-    assert "Sparky" in text
-    # The sibling is on no roster, so there is no pseudonym to resolve to.
-    assert scrub.NAME_PLACEHOLDER in text
+    assert "Sparky" in result.submission.raw_text
     kinds = {finding.kind for finding in result.submission.scrub_findings}
-    assert "general_name" in kinds
+    assert kinds <= {"roster_name", "roster_id"}
+
+
+def test_a_non_roster_name_is_left_alone_deliberately(ingest_fixture):
+    """The trade this product makes, asserted so it cannot drift back.
+
+    Fixture 8 is "My brother Diego says Marcus texts him...". Marcus is on the
+    roster and goes. Diego is a sibling on no roster, and stays: the accepted
+    residual risk is a non-roster first name reaching the teacher's own AI
+    tenant inside a quoted sentence. The alternative -- guessing at capitalised
+    tokens -- redacted 30 of 37 capitalised tokens in ordinary seventh-grade
+    writing, every one of them wrong.
+    """
+    result = ingest_fixture(8)
+    raw = loader.single(8)
+    for name in raw["names_that_survive_by_decision"]:
+        assert name in result.submission.raw_text
 
 
 def test_findings_never_record_the_value_they_removed(ingest_fixture):
@@ -72,104 +86,114 @@ def test_findings_never_record_the_value_they_removed(ingest_fixture):
             assert name.lower() not in finding.replacement.lower()
 
 
-def test_general_pass_leaves_ordinary_capitalised_words_alone():
-    text = ("Students should not lose recess. The article says that Monday "
-            "practice was cancelled. However, that is not the same problem.")
-    result = scrub.scrub_writing(text, protected=set())
-    assert result.text == text, result.text
-    assert result.general_name_hits == 0
+# --- the regression this file exists to prevent ------------------------------
+
+ACADEMIC_WRITING = [
+    # (label, text) -- no roster name in any of them, so a single character of
+    # difference after scrubbing is a bug.
+    ("argument",
+     "Dogs make better pets than cats for a busy family. Golden Retrievers are "
+     "loyal and can be trained in a few weeks."),
+    ("history",
+     "The Battle of Gettysburg was the turning point of the Civil War. General "
+     "Lee marched north into Pennsylvania. Union soldiers held the high ground "
+     "at Cemetery Ridge."),
+    ("science",
+     "Photosynthesis happens in the chloroplast. Sunlight, water, and carbon "
+     "dioxide go in. Plants near the Equator get more light all year, so they "
+     "grow faster than plants in Canada."),
+    ("literary analysis",
+     "Ponyboy changes the most in the novel. Johnny dies, and after that "
+     "Ponyboy stops seeing the Socs as only enemies."),
+    ("narrative",
+     "Last summer my family drove to Colorado. Mountains looked purple in the "
+     "morning. Wednesday was the day we hiked the highest trail."),
+]
 
 
-def test_general_pass_catches_a_bare_first_name_with_no_cue():
-    result = scrub.scrub_writing("Yesterday Tobias forgot his folder again.",
-                                 protected=set())
-    assert "Tobias" not in result.text
-    assert result.general_name_hits == 1
+@pytest.mark.parametrize("label,text", ACADEMIC_WRITING,
+                         ids=[label for label, _ in ACADEMIC_WRITING])
+def test_ordinary_capitalised_writing_is_returned_untouched(label, text, roster_map):
+    """Every one of these lost content to the old heuristic pass.
+
+    Measured before it was removed: "The [name] of [name] was the turning point
+    of the [name] [name]." Stored, not displayed -- so the record, the quoted
+    evidence behind every observation, and the input to every checklist check
+    all inherited it. Run with a real roster map, because production always has
+    one and it must not change this answer.
+    """
+    result = scrub.scrub_writing(text, roster_map=roster_map)
+    assert result.text == text
+    assert result.findings == []
 
 
-def test_a_kinship_cue_beats_the_ordinary_word_lexicon():
-    """"My friend Grace" is a person even though "grace" is a common word."""
-    plain = scrub.scrub_writing("Grace is what the author is describing here.",
-                                protected=set())
-    assert "Grace" in plain.text
-
-    cued = scrub.scrub_writing("My friend Grace said the same thing.",
-                               protected=set())
-    assert "Grace" not in cued.text
-
-
-def test_an_ambiguous_name_word_is_redacted_mid_sentence():
-    """Sentence-initial capitals are grammar; mid-sentence capitals are evidence."""
-    opener = scrub.scrub_writing("Will is the word the author repeats.",
-                                 protected=set())
-    assert "Will" in opener.text
-
-    middle = scrub.scrub_writing("I told Will about the assignment.",
-                                 protected=set())
-    assert "Will" not in middle.text
+def test_no_redaction_placeholder_reaches_stored_text(ingest_fixture):
+    """A cheap guard on the whole decision: nothing in the ingest path may put
+    a `[name]` marker into a stored record. The only legitimate use of that
+    placeholder is `model_ready_text`, on the way out of the tenant."""
+    for number in loader.single_numbers():
+        result = ingest_fixture(number)
+        assert scrub.NAME_PLACEHOLDER not in result.submission.raw_text
+        for segment in result.submission.segments:
+            assert scrub.NAME_PLACEHOLDER not in segment.text
 
 
-def test_a_title_marks_the_following_word_as_a_surname():
-    result = scrub.scrub_writing("Coach Whitlock made us run it again.",
-                                 protected=set())
-    assert "Whitlock" not in result.text
+# --- the vault is the mechanism ---------------------------------------------
+
+def test_a_nickname_the_teacher_entered_is_covered(roster_map):
+    """The answer to "what about the name you did not catch": enter it.
+
+    "Marc" is a nickname on Marcus Bell's vault entry, and it resolves to the
+    same pseudonym the full name does. This is the supported way to extend
+    coverage, and it is why no heuristic is needed to guess at one.
+    """
+    result = scrub.scrub_writing("Marc sat next to me during the test.",
+                                 roster_map=roster_map)
+    assert "Marc " not in result.text
+    assert "Sparky McGee" in result.text
 
 
-def test_the_assignment_corpus_shields_names_from_the_passage():
-    """A name in the source passage is course content, not a disclosure."""
-    context = loader.rep("rep_t3_forest")
-    text = ("The mill owner in Blackwood Hollow keeps cutting because money "
-            "matters more to him than the pines do.")
-    without = scrub.scrub_writing(text, protected=set())
-    assert "Blackwood" not in without.text
-
-    with_corpus = scrub.scrub_writing(
-        text, protected=set(),
-        assignment_corpus=[context.prompt_text,
-                           "The mill in Blackwood Hollow ran for eighty years."])
-    assert "Blackwood Hollow" in with_corpus.text
-
-
-def test_protected_literary_names_survive_the_general_pass():
-    """Quoting Ponyboy is the assignment, not a privacy problem."""
-    text = "Ponyboy learns that the Socs are afraid of being ordinary."
-    redacted = scrub.scrub_writing(text, protected=set())
-    assert "Ponyboy" not in redacted.text
-
-    kept = scrub.scrub_writing(text, protected={"ponyboy", "socs"})
-    assert "Ponyboy" in kept.text
-
-
-def test_a_roster_name_is_scrubbed_even_when_it_is_also_protected(roster_map):
-    """Privacy wins over a literary match, matching feedback_scrub's ordering."""
-    result = scrub.scrub_writing(
-        "Marcus said the same thing in class.",
-        roster_map=roster_map, protected={"marcus"})
+def test_a_roster_first_name_alone_is_still_caught(roster_map):
+    result = scrub.scrub_writing("Marcus said the same thing in class.",
+                                 roster_map=roster_map)
     assert "Marcus" not in result.text
     assert "Sparky" in result.text
 
 
-def test_the_pseudonym_the_roster_pass_introduced_is_not_then_redacted(
-        roster_map):
+def test_a_full_roster_name_maps_to_the_full_pseudonym(roster_map):
     result = scrub.scrub_writing("Priya Raman disagreed with me.",
-                                 roster_map=roster_map, protected=set())
+                                 roster_map=roster_map)
     assert result.text.strip().startswith("Waffles Pinkerton")
-    assert scrub.NAME_PLACEHOLDER not in result.text
 
 
-def test_scrubbing_preserves_the_student_word_count(ingest_fixture):
-    """Redaction replaces a token with a token, so nobody loses credit for it."""
+def test_id_placeholder_is_used_for_a_real_id_in_free_text(roster_map):
+    result = scrub.scrub_writing("My number is F990001 if you need it.",
+                                 roster_map=roster_map)
+    assert "990001" not in result.text
+    assert any(f.kind == "roster_id" for f in result.findings)
+
+
+def test_no_roster_map_scrubs_nothing_and_says_so():
+    """Passing neither vault nor roster_map removes nothing. That is right for a
+    fixture and wrong in production, which is what `assert_clean_for_storage`
+    exists to catch -- it raises rather than letting the text be stored."""
+    text = "Marcus said the same thing in class."
+    assert scrub.scrub_writing(text).text == text
+
+
+def test_the_student_is_credited_for_every_word_they_wrote(ingest_fixture):
+    """18, not the 17 this fixture used to report.
+
+    A roster name replaced by a pseudonym still counts, because a pseudonym is
+    a word. `[name]` did not: the old heuristic pass cost this student a word
+    off their own count for writing "Diego". So the removed pass was not only
+    mangling the text, it was quietly understating how much each kid wrote --
+    which is one of the few numbers the record uses to describe a writer.
+    """
     result = ingest_fixture(8)
-    assert result.submission.student_word_count == 17
+    assert result.submission.student_word_count == 18
 
 
 def test_an_observation_without_a_span_is_refused():
     with pytest.raises(Exception):
         assert_span_storable("   ")
-
-
-def test_id_placeholder_is_used_for_a_real_id_in_free_text(roster_map):
-    result = scrub.scrub_writing("My number is F990001 if you need it.",
-                                 roster_map=roster_map, protected=set())
-    assert "990001" not in result.text
-    assert any(f.kind == "roster_id" for f in result.findings)

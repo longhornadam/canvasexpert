@@ -31,7 +31,7 @@ def roster_map():
 def ingest_fixture(criteria, roster_map):
     """Run one numbered single fixture through the whole ingest path."""
 
-    def _run(fixture_number: int, *, protected: set[str] | None = None):
+    def _run(fixture_number: int):
         raw = loader.single(fixture_number)
         context = loader.rep(raw["rep_id"])
         return ingest_module.ingest(
@@ -43,7 +43,6 @@ def ingest_fixture(criteria, roster_map):
             context=context,
             criteria_set=criteria[context.tier],
             roster_map=roster_map,
-            protected=protected if protected is not None else set(),
         )
 
     return _run
@@ -89,7 +88,6 @@ def run_sequence(criteria, roster_map):
                 criteria_set=criteria[context.tier],
                 open_directives=live,
                 roster_map=roster_map,
-                protected=set(),
                 now=loader.submitted_at(entry),
             )
             live = result.directives

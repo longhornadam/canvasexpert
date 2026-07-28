@@ -1,33 +1,38 @@
 """Name removal for student writing (INV-7).
 
-Names appear inside student writing. A kid writes about his brother, or names
-a classmate in a paragraph about the assigned reading. Canvas Expert's
-existing scrubber (`api.feedback_scrub`) is a high-precision denylist built
-from the roster vault, which is exactly right for the classmate and blind to
-the brother, because the brother is not on any roster.
+Names appear inside student writing: a kid names a classmate in a paragraph
+about the assigned reading. So every submission is scrubbed against the roster
+vault, which is the authoritative list of the people this product is
+responsible for. `api.feedback_scrub` maps every real name, nickname and id in
+the vault to that student's stable pseudonym, case-insensitively and
+word-bounded, longest match first. The teacher supplies the names and the
+nicknames; a name that needs covering and is not there yet is added directly,
+in the names screen, where a teacher can see and correct it.
 
-So this module runs two passes, in this order:
+This module used to run a second, heuristic pass on top: any capitalised token
+with no entry in a hand-maintained lexicon was assumed to be a name and
+replaced. It was removed deliberately, and should not come back.
 
-  1. Roster pass. Delegates to `api.feedback_scrub`, which maps every real
-     name, nickname, and id in the vault to that student's stable pseudonym.
-     Authoritative, and it always wins.
-  2. General pass. Heuristic capitalized-token detection for every name the
-     roster does not know. Replaces with `NAME_PLACEHOLDER` and records a
-     finding so the teacher digest can show what was touched.
+The reasoning, measured on realistic seventh-grade responses with no roster
+name anywhere in them, so every removal was wrong: 30 of 37 capitalised
+tokens redacted. `Gettysburg`, `Photosynthesis`, `Canada`, `Equator`, `Dogs`.
+A history paragraph stored as "The [name] of [name] was the turning point of
+the [name] [name]." The assignment's own text was exempt, which only helped
+when the prompt happened to name the same proper nouns; a student writing past
+the prompt, which is the writing most worth coaching, was hit hardest. And
+because scrubbing happens before storage, that was the stored record, the
+quoted evidence behind every observation, and the input to every checklist
+check.
 
-The general pass exempts three sets, in order of how much they are trusted:
-the pseudonyms the roster pass just introduced (redacting the safe substitute
-would be absurd), the assignment's own provided text (a capitalized name in
-the prompt or source passage is course content, not a private disclosure),
-and the teacher's enabled literary packs (quoting Ponyboy is the assignment).
-A roster name is never exempt: privacy wins over a literary match, which is
-the ordering `api.feedback_scrub` already established.
-
-The pass order matters and is not interchangeable. `NAME_PLACEHOLDER`
-contains word characters, so it is only safe because the roster pass, whose
-rules are `\\b`-bounded and case-insensitive, has already finished by the time
-the placeholder exists. The general pass cannot match its own output, because
-every candidate needs a capital initial.
+Over-redaction was defended as the safe direction. It is not safe, it is
+destructive: this product exists to help a teacher read how a student's
+writing is developing, and it cannot do that from text with holes punched
+through it. The residual risk the removal accepts is a non-roster first name
+-- a cousin, a kid at another school -- reaching the teacher's own AI tenant
+inside a quoted sentence. That is the trade this product makes, and it is the
+same one `api/feedback_pipeline.py` already makes on the PowerGrader path,
+which has never done heuristic detection and sends student writing to a model
+every week.
 
 Scrubbing happens at ingest, before segmentation, and the unscrubbed text is
 never persisted. That ordering is the whole defence: a scrub bolted on later
@@ -40,121 +45,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Iterable
 
 from api.dailywriting.core.models import ScrubFinding
 
-# Readable in a teacher's digest, unlike an opaque token. Safe against
-# re-matching because every candidate pattern requires a capital initial.
+# Used only by `model_ready_text`, to strip the vault's safe pseudonyms out of
+# a payload leaving the tenant. Readable in a teacher's digest, unlike an
+# opaque token.
 NAME_PLACEHOLDER = "[name]"
-
-# Candidate shape: a capitalised word, optionally hyphenated ("Two-Bit").
-# Deliberately excludes single letters ("I") and all-caps acronyms ("STAAR").
-_CANDIDATE = re.compile(r"\b[A-Z][a-z]+(?:-[A-Z][a-z]+)*\b")
-
-# A capitalised token straight after one of these is a person, even when the
-# token itself sits in the ordinary-word lexicon. "My friend Grace" beats the
-# fact that "grace" is a common word.
-_PERSON_CUES = frozenset({
-    "brother", "sister", "mom", "mother", "dad", "father", "stepdad",
-    "stepmom", "stepbrother", "stepsister", "friend", "bestfriend", "cousin",
-    "uncle", "aunt", "grandma", "grandmother", "grandpa", "grandfather",
-    "neighbor", "neighbour", "teammate", "classmate", "partner", "buddy",
-    "boyfriend", "girlfriend", "babysitter", "nephew", "niece", "twin",
-    "coach", "teacher", "principal", "counselor", "nurse", "officer",
-    "named", "called",
-})
-
-# Titles: the following token is a surname.
-_TITLES = frozenset({
-    "mr", "mrs", "ms", "miss", "dr", "coach", "principal", "officer",
-    "sergeant", "captain", "professor", "pastor", "sir", "madam",
-})
-
-# Ordinary words that arrive capitalised, chiefly at the start of a sentence.
-# Not exhaustive and not meant to be: anything missing gets redacted and
-# flagged, which is the failure direction the teacher can actually see.
-_NON_NAME_WORDS = frozenset({
-    # determiners, pronouns, conjunctions, prepositions
-    "the", "a", "an", "and", "but", "or", "nor", "for", "so", "yet",
-    "if", "then", "than", "that", "this", "these", "those", "there", "their",
-    "they", "them", "he", "she", "it", "its", "his", "her", "hers", "him",
-    "we", "us", "our", "ours", "you", "your", "yours", "my", "mine", "me",
-    "who", "whom", "whose", "which", "what", "when", "where", "why", "how",
-    "while", "whenever", "wherever", "whereas", "although", "though",
-    "because", "since", "unless", "until", "after", "before", "during",
-    "about", "above", "across", "against", "along", "among", "around", "at",
-    "behind", "below", "beneath", "beside", "besides", "between", "beyond",
-    "by", "despite", "down", "from", "in", "inside", "into", "like", "near",
-    "of", "off", "on", "onto", "out", "outside", "over", "past", "through",
-    "throughout", "to", "toward", "towards", "under", "up", "upon", "with",
-    "within", "without",
-    # common sentence openers and verbs
-    "is", "are", "was", "were", "be", "been", "being", "am", "do", "does",
-    "did", "done", "have", "has", "had", "can", "could", "will", "would",
-    "shall", "should", "may", "might", "must", "let", "lets",
-    "according", "also", "always", "another", "any", "anyone", "anything",
-    "both", "each", "either", "even", "every", "everyone", "everybody",
-    "everything", "few", "first", "second", "third", "finally", "however",
-    "instead", "just", "many", "more", "most", "much", "neither", "never",
-    "next", "no", "nobody", "none", "not", "nothing", "now", "once", "one",
-    "only", "other", "others", "overall", "perhaps", "really", "same",
-    "several", "similarly", "some", "someone", "something", "sometimes",
-    "still", "such", "sure", "then", "therefore", "thus", "together", "too",
-    "usually", "very", "well", "whether", "yes",
-    # words a 7th grader opens an argument with
-    "adults", "author", "authors", "book", "books", "character", "characters",
-    "chapter", "class", "classes", "college", "kid", "kids", "child",
-    "children", "essay", "evidence", "example", "family", "families",
-    "grade", "grades", "homework", "however", "human", "humans", "life",
-    "money", "narrator", "page", "paragraph", "parents", "people", "person",
-    "phone", "phones", "quote", "reader", "readers", "reading", "reasons",
-    "school", "schools", "science", "society", "sports", "story", "stories",
-    "student", "students", "teachers", "teens", "teenagers", "test", "tests",
-    "text", "time", "today", "writing", "world", "year", "years", "youth",
-    # calendar and time
-    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
-    "sunday", "january", "february", "march", "april", "may", "june",
-    "july", "august", "september", "october", "november", "december",
-    "yesterday", "today", "tomorrow", "tonight", "morning", "afternoon",
-    "evening", "night", "week", "weekend", "month", "winter", "spring",
-    "autumn", "recently", "lately", "later", "earlier", "meanwhile",
-    "afterward", "afterwards", "eventually", "suddenly", "immediately",
-    # sentence-opening adverbs
-    "actually", "basically", "honestly", "personally", "obviously",
-    "clearly", "unfortunately", "luckily", "hopefully", "especially",
-    "generally", "mostly", "probably", "definitely", "certainly", "surely",
-    "maybe", "often", "rarely", "sadly", "truthfully", "frankly",
-    "furthermore", "moreover", "nevertheless", "nonetheless", "regardless",
-    "meanwhile", "otherwise", "likewise", "consequently", "additionally",
-    # places, languages, subjects that arrive capitalised legitimately
-    "america", "american", "americans", "english", "spanish", "texas",
-    "texan", "earth", "internet", "google", "canvas", "chromebook",
-    "youtube", "christmas", "thanksgiving", "halloween",
-})
-
-
-def _ambiguous_name_words() -> frozenset[str]:
-    """Words that are ordinary English and also common given names.
-
-    Reuses `api.feedback_scrub.COMMON_WORDS`, which the repository already
-    curates for exactly this ambiguity ("Grace", "Will", "Rose", "Mark").
-    Duplicating that judgement here would give two lists that drift apart.
-
-    These are redacted only mid-sentence. Sentence-initial capitalisation is
-    forced by grammar and so carries no evidence that the word is a name;
-    capitalisation in the middle of a sentence does.
-    """
-    from api.feedback_scrub import COMMON_WORDS
-    return frozenset(COMMON_WORDS)
-
-
-def _sentence_initial(text: str, index: int) -> bool:
-    """Is the token at `index` the first word of a sentence or a line?"""
-    head = text[:index].rstrip(" \t\"'“”([")
-    if not head:
-        return True
-    return head[-1] in ".!?\n"
 
 
 class ScrubLeakError(RuntimeError):
@@ -170,11 +68,6 @@ class ScrubResult:
     text: str
     findings: list[ScrubFinding]
 
-    @property
-    def general_name_hits(self) -> int:
-        """Non-roster names removed. These are the ones worth human eyes."""
-        return sum(1 for f in self.findings if f.kind == "general_name")
-
 
 @dataclass(frozen=True)
 class ModelReadyText:
@@ -188,65 +81,14 @@ class ModelReadyText:
     text: str
 
 
-def load_protected_names() -> set[str]:
-    """Teacher-enabled literary packs plus custom protected names, lowercased.
-
-    Returns an empty set when there is no workspace to read, which is the
-    normal state under test. Empty means the general pass redacts literary
-    names too, which is the safe direction to fail.
-    """
-    try:
-        from api.webui.config import protected_names
-        return set(protected_names.active_protected_names())
-    except Exception:
-        return set()
-
-
 def build_roster_map(vault) -> list[tuple]:
     """Compiled roster replacement rules for `vault`, longest match first."""
     from api import feedback_scrub
-    return feedback_scrub.build_replacement_map(
-        vault.entries(), load_protected_names()
-    )
-
-
-def corpus_allowlist(*texts: str | Iterable[str]) -> set[str]:
-    """Capitalised tokens appearing in provided text, lowercased.
-
-    A name in the prompt or the source passage is the assignment, not a
-    student's private disclosure. High precision, because the authoring record
-    holds this text exactly.
-    """
-    allow: set[str] = set()
-    for item in texts:
-        if item is None:
-            continue
-        chunks: Sequence[str]
-        chunks = [item] if isinstance(item, str) else list(item)
-        for chunk in chunks:
-            for match in _CANDIDATE.finditer(chunk or ""):
-                token = match.group()
-                allow.add(token.lower())
-                for part in token.split("-"):
-                    allow.add(part.lower())
-    return allow
-
-
-def _replacement_tokens(roster_map: list[tuple]) -> set[str]:
-    """Lowercased tokens of every pseudonym the roster pass can introduce."""
-    tokens: set[str] = set()
-    for _pattern, replacement in roster_map or []:
-        for token in re.findall(r"[A-Za-z]+", replacement or ""):
-            tokens.add(token.lower())
-    return tokens
-
-
-def _preceding_word(text: str, index: int) -> str:
-    """Lowercased word ending just before `index`, ignoring punctuation."""
-    head = text[:index].rstrip()
-    head = head.rstrip(".,;:!?\"'()[]-")
-    match = re.search(r"([A-Za-z]+)\s*$", head)
-    return match.group(1).lower() if match else ""
+    # The second argument is `protected`, which `build_replacement_map`
+    # accepts and ignores; `api/mcp_server/pseudonym.py` passes an empty set
+    # for the same reason. Roster identity is the only thing scrubbed here, so
+    # there is nothing to shield from it.
+    return feedback_scrub.build_replacement_map(vault.entries(), set())
 
 
 def _locate_findings(text: str, needle: str, kind: str) -> list[ScrubFinding]:
@@ -296,88 +138,24 @@ def _roster_pass(text: str, roster_map: list[tuple]) -> tuple[str, list[ScrubFin
     return scrubbed, findings
 
 
-def _general_pass(
-    text: str,
-    *,
-    exempt: set[str],
-) -> tuple[str, list[ScrubFinding]]:
-    """Redact capitalised tokens that look like people and are not exempt.
-
-    Single left-to-right pass over the original string, building the output as
-    we go, so recorded offsets are real offsets in the returned text.
-    """
-    out: list[str] = []
-    findings: list[ScrubFinding] = []
-    cursor = 0
-    written = 0  # length of "".join(out), tracked so offsets stay O(n)
-    ambiguous = _ambiguous_name_words()
-
-    for match in _CANDIDATE.finditer(text):
-        token = match.group()
-        lowered = token.lower()
-        parts = [p.lower() for p in token.split("-")]
-
-        cue = _preceding_word(text, match.start())
-        forced = cue in _PERSON_CUES or cue in _TITLES
-
-        if not forced:
-            if lowered in exempt or any(p in exempt for p in parts):
-                continue
-            if (lowered in ambiguous
-                    and not _sentence_initial(text, match.start())):
-                # ``Will`` and friends are ordinary words at a sentence
-                # opening, but their capitalisation in the middle of a
-                # sentence is evidence of a name.  This check must precede
-                # the general ordinary-word lexicon, which also contains
-                # "will" as a modal verb.
-                pass
-            elif lowered in _NON_NAME_WORDS:
-                continue
-            elif (lowered in ambiguous
-                  and _sentence_initial(text, match.start())):
-                # "Grace is what the author means" opens a sentence, so the
-                # capital proves nothing. "I told Grace" does not.
-                continue
-            # A capitalised word we have no lexicon entry for is treated as a
-            # name. Sentence-initial words reach here too, which is why the
-            # lexicon above carries the common openers.
-        elif lowered in exempt:
-            # Even a cue does not override the assignment's own text or the
-            # teacher's literary packs: "my friend Ponyboy" in an Outsiders
-            # essay is a character, not a classmate.
-            continue
-
-        lead = text[cursor:match.start()]
-        out.append(lead)
-        written += len(lead)
-        out.append(NAME_PLACEHOLDER)
-        findings.append(ScrubFinding(
-            kind="general_name",
-            replacement=NAME_PLACEHOLDER,
-            span_start=written,
-            span_end=written + len(NAME_PLACEHOLDER),
-        ))
-        written += len(NAME_PLACEHOLDER)
-        cursor = match.end()
-
-    out.append(text[cursor:])
-    return "".join(out), findings
-
-
 def scrub_writing(
     text: str,
     *,
     vault=None,
     roster_map: list[tuple] | None = None,
-    protected: set[str] | None = None,
-    assignment_corpus: Iterable[str] = (),
 ) -> ScrubResult:
     """Scrub student writing for storage. Call this at ingest, before anything
     reads or quotes the text.
 
-    Supply either `vault` or a prebuilt `roster_map`; pass neither and only
-    the general pass runs, which is the right behaviour for a fixture with no
-    roster but never the right behaviour in production.
+    Supply either `vault` or a prebuilt `roster_map`. Pass neither and nothing
+    is removed, which is right for a fixture with no roster and never right in
+    production -- `assert_clean_for_storage` is the backstop that catches a
+    caller who forgot, and it raises rather than storing the text.
+
+    Everything the roster knows goes: real name, first, last, every nickname
+    the teacher entered, and Canvas/SIS ids. Nothing else is guessed at. A name
+    that keeps appearing and is not covered belongs in the vault, added in the
+    names screen, not inferred here from capitalisation.
     """
     if text is None:
         return ScrubResult(text="", findings=[])
@@ -385,18 +163,8 @@ def scrub_writing(
     rules = roster_map
     if rules is None and vault is not None:
         rules = build_roster_map(vault)
-    rules = rules or []
 
-    scrubbed, findings = _roster_pass(text, rules)
-
-    exempt: set[str] = set()
-    exempt |= _replacement_tokens(rules)
-    exempt |= corpus_allowlist(assignment_corpus)
-    exempt |= (protected if protected is not None else load_protected_names())
-
-    scrubbed, general_findings = _general_pass(scrubbed, exempt=exempt)
-    findings.extend(general_findings)
-
+    scrubbed, findings = _roster_pass(text, rules or [])
     return ScrubResult(text=scrubbed, findings=findings)
 
 

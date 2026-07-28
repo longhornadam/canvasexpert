@@ -74,6 +74,20 @@ carries structural-id semantics elsewhere.
 been outrun by the spans quoted out of the text. This is the whole of INV-7's defence and it
 constrains every future acquisition route.
 
+**The scrubber removes what the vault knows and guesses at nothing.** Real names, the nicknames
+the teacher entered, Canvas and SIS ids. A heuristic second pass that treated any capitalised
+token with no lexicon entry as a name was removed at `<commit>`; do not reintroduce it, and read
+`core/scrub.py`'s header before proposing anything like it. On ordinary seventh-grade responses
+containing no roster name at all, it redacted 30 of 37 capitalised tokens — `Gettysburg`,
+`Photosynthesis`, `Canada`, `Dogs` — and because scrub precedes storage, that was the stored
+record. On the one fixture in the corpus with a non-roster name it also cost the student a word
+off `student_word_count` and split their single sentence into three segments, one of them
+attributed to `assignment` origin, so part of a kid's own writing was credited to the prompt.
+The accepted residual risk is a non-roster first name reaching the teacher's own AI tenant inside
+a quoted sentence — the same trade `api/feedback_pipeline.py` has always made on the PowerGrader
+path. Coverage is extended by entering the name or nickname in the names screen, which is a thing
+a teacher can see and correct.
+
 ## The one live Canvas path (`8960bda`)
 
 Typed submissions are served entirely from the mirror and make zero HTTP calls — asserted, not
@@ -163,13 +177,6 @@ does — and then the hook is scored as the thesis and `arguable`, `specific`, a
 `answers_prompt` fail together. Measured on 446/803/1356-word essays: `thesis_arguable`
 failed on all three with the stance in sentence two; `commentary_connects` drifted
 33% → 67% → 80% on the same argument as length grew.
-
-**Known, deliberate, and surprising: the general scrub pass over-redacts.** Any capitalised token
-with no lexicon entry is treated as a name, sentence-initial included, so an essay opening "Dogs
-make better pets" is stored as "[name] make better pets". Privacy-first by design
-(`core/scrub.py` `_general_pass`), identical for typed and uploaded text, and unchanged by any
-batch so far — but it will read as a bug the first time a teacher sees a real record, and test
-fixtures in this subsystem are written around it on purpose.
 
 **Dead end, do not re-attempt: `SequenceMatcher` reuse in segmentation.** Segmentation
 dominates ingest cost (~13 ms/word on a tier-3 rep with a source passage; 96/288/576 words

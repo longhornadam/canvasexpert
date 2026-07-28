@@ -60,7 +60,7 @@ def test_ingest_unscored_produces_a_correct_unscored_submission(roster_map):
         submission_id="ecr-ac1", rep_id=context.rep_id,
         pseudonym_id=pseudonym_id,
         submitted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        text=text, context=context, roster_map=roster_map, protected=set(),
+        text=text, context=context, roster_map=roster_map,
     )
 
     assert result.submission.student_word_count == 900
@@ -85,7 +85,6 @@ def test_ingest_unscored_still_keeps_flag_derived_observations(roster_map):
         pseudonym_id=loader.pseudonym_for(raw["canvas_id"]),
         submitted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         text=raw["text"], context=context, roster_map=roster_map,
-        protected=set(),
     )
 
     assert result.submission.student_word_count == 0
@@ -119,7 +118,6 @@ def test_unscored_submission_round_trips_with_no_dead_origin_value(
         pseudonym_id=pseudonym_id,
         submitted_at=datetime(2026, 10, 2, tzinfo=timezone.utc),
         text=raw["text"], context=context, roster_map=roster_map,
-        protected=set(),
     )
     origins_before = {s.origin for s in result.submission.segments}
     assert "quoted_source" in origins_before  # a non-trivial origin is present

@@ -31,7 +31,7 @@ def _ingest_one(fixture_number: int, roster_map):
         pseudonym_id=loader.pseudonym_for(raw["canvas_id"]),
         submitted_at=loader.submitted_at(raw), text=raw["text"],
         context=context, criteria_set=criteria,
-        roster_map=roster_map, protected=set(),
+        roster_map=roster_map,
     )
     return context, result
 
@@ -121,7 +121,7 @@ def test_build_history_payload_sorts_regardless_of_input_order():
             pseudonym_id=pseudonym,
             submitted_at=datetime(2026, 9, day, 9, 0, tzinfo=timezone.utc),
             text=raw["text"], context=context, criteria_set=criteria,
-            roster_map=roster_map, protected=set(),
+            roster_map=roster_map,
         ).submission
 
     early, late = _submission_on(5), _submission_on(20)

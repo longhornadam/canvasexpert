@@ -329,8 +329,7 @@ def build_digest(
         for submission in in_week
         for flag in submission.flags
         if flag.code in ("low_confidence_segment", "cross_submission_repeat",
-                         "empty_stem_blank", "no_student_text",
-                         "unscrubbed_name_removed")
+                         "empty_stem_blank", "no_student_text")
     ]
 
     coverage: list[str] = []
