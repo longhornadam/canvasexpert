@@ -230,5 +230,132 @@ contradicts §2 and §3 and the batch is mis-scoped.
 
 ## 12. Execution result
 
-_To be completed by the executor: traffic light, commit hash, changed files, commands and
-counts, each §5 decision as made, deviations, unresolved decisions._
+**GREEN.** Not committed (per boundaries) — working tree at parent commit `348411a` plus
+the changes below, left for review.
+
+### Changed / added files
+
+- `api/dailywriting/canvas_source.py` (new) — pure mapping: `AssignmentContext` from a
+  catalog assignment record, `rep_id_for`/`submission_id_for` deterministic ids,
+  `UNSCORABLE_TIER`/`UNSCORABLE_CRITERIA_SET_ID` sentinels, `is_unscorable()`.
+- `api/dailywriting/canvas_ingest.py` (new) — the driver: reads the course catalog +
+  CanvasMirror, refuses (`CanvasIngestError`) on missing catalog/assignment or a
+  stale/missing mirror, syncs the roster into the vault, calls `ingest_unscored` per typed
+  submission, writes through `Repository`. Generator of progress strings.
+- `api/dailywriting/cli/ingest_canvas.py` (new) — CLI wrapper over the same driver.
+- `api/dailywriting/cli/score.py` — added the explicit `canvas_source.is_unscorable(context)`
+  refusal before `criteria_for()`, with a message naming the reason.
+- `api/webui/routes/dailywriting.py` (new) — `POST /api/dailywriting/ingest-canvas`,
+  consumes the driver generator into one JSON response (`{ok, log}` /
+  `{ok: false, error, log}`), same shape as `portfolio_merged` (`routes/reports.py:283-341`).
+- `api/webui/server.py` — registered the new router.
+- `api/default_docs/AI Authoring/Writing Record (longitudinal writing history).txt` — added
+  "How work enters the record" (the served `writing_record` guide topic; single canonical
+  text, no second copy).
+- `api/tests/dailywriting/test_dw_canvas_ingest.py` (new) — 16 tests, see below.
+- `api/tests/test_route_contract.py` — added the new frozen route (the test's own stated
+  purpose: a deliberate, reviewed surface change).
+
+### Commands and counts
+
+```
+python -m pytest api/tests/dailywriting api/tests/test_mcp_server_tools.py -q
+=> 222 passed
+python -m pytest api/tests -q
+=> 2 failed, 1570 passed
+   (test_feedback_pipeline.py::test_write_safe_and_private_auto_detects_compact_on_deep_path,
+    test_powergrader_packet.py::test_packet_workflow_budget_exception_stops_before_writes --
+    exactly the two declared Windows long-path baseline failures, nothing else)
+```
+
+Before `test_route_contract.py` was updated, the full run showed a third failure
+(`test_route_contract`) — expected, since it is the deliberate-edit tripwire the new route
+is supposed to trip; fixed in the same batch, not a leftover.
+
+### Fixture-corpus diff (§7)
+
+Computed `{student_word_count, sorted origin set}` for every `singles.json` fixture via
+`segmentation.segment_submission`, before touching any file and again after the full
+change: **byte-identical**, both matching the existing pinned values in
+`test_dw_segmentation.py` (`_EXPECTED_FIXTURE_RESULTS`). Expected — nothing in this batch
+touches `core/scoring.py`, `core/segmentation.py`, `core/scrub.py`, `core/models.py`, the
+store, or the codec — but computed rather than assumed, per the instruction.
+
+### Each §5 decision, as made
+
+1. **`date`** — `due_at`, then `unlock_at`, then `created_at` (`canvas_source.rep_date`).
+   In that order because that is how much each one means "when this was assigned as a
+   school day"; `created_at` is a last resort (record-authored time, not assignment time,
+   but still real). If none of the three parse, **refuse** (`DateDerivationError` ->
+   `CanvasIngestError`) rather than fabricate "today": `date` is what `get_writing_history`
+   sorts on, and an invented date is a silent corruption of that ordering.
+2. **`section_id`** — left `None`. A Canvas assignment carries no section; fanning out one
+   rep per roster section was the alternative, but nothing yet consumes
+   `Repository.reps(section_id=...)` for Canvas-sourced work, so `None` opts these reps out
+   of that filter reversibly, cheaper than a fan-out with no current reader.
+3. **`tier` / `criteria_set_id`** — `UNSCORABLE_TIER = 0` / `UNSCORABLE_CRITERIA_SET_ID =
+   "unscored:canvas-typed"`. Both are real `AssignmentContext` field types (`int`, `str`),
+   so no store model or codec change was needed. `cli/score.py` now checks
+   `canvas_source.is_unscorable(context)` explicitly and refuses with a message naming the
+   reason, before `criteria_for()`/`assert_criteria_published` are ever reached — which is
+   also why an edited assignment's changed `due_at` (§5.5) can never retroactively
+   invalidate a Canvas-sourced rep: the comparison it would invalidate is never run on this
+   rep at all.
+4. **`scaffold_blocks`, `source_texts`, `word_cap`** — empty/`None`, exactly as directed;
+   no attempt to parse a stem or a word cap out of description prose.
+5. **Re-ingest of an edited assignment** — confirmed inert: see point 3. `put_rep` still
+   overwrites in place by `rep_id` (unchanged, deterministic), so a re-run reflects the
+   latest catalog state, but a Canvas-sourced rep can never reach
+   `scoring.assert_criteria_published` regardless of what `date` says.
+
+### AC5 behaviour: skip-and-report, not refuse-all
+
+A submission whose author has no identity-vault entry after the full roster sync (an
+edge case — enrolled-but-unsynced is normal; submitted-but-not-on-the-current-roster is
+not) is skipped and counted (`no_identity`), not raised. Rationale: an assignment's
+submission list can include one anomalous student (roster drift, a dropped/late add)
+without that one gap being a reason to withhold every other enrolled student's rep for the
+day. `CanvasIngestError` (refuse-all) is reserved for conditions that make the whole
+read untrustworthy (no catalog, no such assignment, stale/missing mirror) — never for one
+student's identity gap. Tested in `test_unknown_author_is_skipped_and_reported_not_fatal`.
+
+### Manual web-route check (§7)
+
+Read-only verification server (`py -m uvicorn api.webui.server:app --lifespan off`, port
+8766, via the existing `canvas-expert-verify` launch config). The real machine config
+(`%LOCALAPPDATA%\CanvasExpert\config.json`) was temporarily pointed at a scratch
+workspace seeded with fabricated catalog + CanvasMirror fixture data (fake "Learner
+One"/"Learner Two" roster, never real district data), then restored byte-for-byte
+immediately after — verified by diff. Real OneDrive workspace was never touched.
+
+- Home (`/`) loaded with zero console/server errors.
+- `POST /api/dailywriting/ingest-canvas` (course 111 / assignment 700010) via `fetch()`:
+  `{"ok": true, "log": ["rep canvas:111:700010 stored: ...", "<pseudonym>: ingested, 9
+  student word(s)", "<pseudonym>: ingested, 5 student word(s)", "2 submission(s)
+  ingested..."]}`, HTTP 200, zero new console/server errors.
+- Re-running the identical request returned the same two pseudonyms and the same counts
+  (idempotent re-run over real HTTP, not just in-process).
+- An unknown `assignment_id` returned a structured `{"ok": false, "error": "No assignment
+  999999..."}`, HTTP 200, no server exception, zero console errors.
+
+### Deviations from a literal reading of the brief
+
+- The web route is a plain `POST` JSON endpoint with no dedicated UI page/button yet. §4's
+  insertion-point table names only `api/webui/routes/`, not a template/JS file, and the
+  cited precedent (`portfolio_merged`) is itself the same shape (a route consuming a
+  progress-string generator into one JSON response) rather than literal SSE. Wiring a
+  course/assignment picker into an existing page (Course Info reads live Canvas, not the
+  catalog/mirror this batch reads, so it was not a clean fit) was judged out of scope for
+  this batch; flagging as a candidate follow-on if the teacher wants a button rather than
+  an API call.
+- The route does not gate on `active_courses()`/"Current courses," matching
+  `portfolio_merged`'s convention for web routes (unlike the MCP tools' `_course_gate_check`);
+  the brief did not call this out as a required gate for this batch.
+- `AssignmentContext.tier` (0) is exposed as-is in `get_writing_history`'s `tier` field for
+  a Canvas-sourced rep (faithful to what is stored, not hidden) — flagged here since it is
+  a visible, if harmless, side effect of the sentinel choice.
+
+### Unresolved
+
+None found during execution; §8 (which assignments feed the record) was pre-decided by the
+senior as option 1 (the ingest action is the opt-in) and built accordingly.

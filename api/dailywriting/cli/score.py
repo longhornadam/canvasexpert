@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 
+from api.dailywriting import canvas_source
 from api.dailywriting.cli import _common
 from api.dailywriting.core import scoring
 
@@ -60,6 +61,20 @@ def main(argv=None) -> int:
                 skipped += 1
                 print(f"{pseudonym:24} {submission.rep_id:18} skipped: the rep "
                       "is not stored, so there is no prompt to score against")
+                continue
+            if canvas_source.is_unscorable(context):
+                # A Canvas-sourced extended piece (ingested via
+                # `ingest_unscored`) carries the UNSCORABLE_TIER /
+                # UNSCORABLE_CRITERIA_SET_ID sentinel on purpose (brief
+                # Section 3.4): a checklist chosen by `tier` would otherwise
+                # silently grade a 400-1500 word essay against criteria
+                # written for a one-sentence daily rep.
+                skipped += 1
+                print(f"{pseudonym:24} {submission.rep_id:18} skipped: this "
+                      "rep was ingested unscored from Canvas (tier "
+                      f"{context.tier} is not a real tier); a checklist "
+                      "written for a daily rep cannot honestly grade it, so "
+                      "it is never checklist-scored")
                 continue
             criteria = _common.criteria_for(context.tier, criteria_cache)
             try:

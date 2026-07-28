@@ -47,6 +47,7 @@ EXPECTED = [
     ('/api/curve/events', ('GET',)),
     ('/api/curve/preview', ('POST',)),
     ('/api/curve/revert', ('POST',)),
+    ('/api/dailywriting/ingest-canvas', ('POST',)),
     ('/api/download-contract', ('GET',)),
     ('/api/download-root', ('GET',)),
     ('/api/extend-due', ('POST',)),

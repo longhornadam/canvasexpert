@@ -95,6 +95,24 @@ not a separate stored field yet. Infer it from the checklist prompt text if
 you need it, and say when you are inferring rather than reading a fact.
 
 
+How work enters the record
+
+There is no automatic feed and no per-assignment flag to turn on. A teacher
+points CanvasExpert at one Canvas assignment (from the CanvasExpert web UI,
+or the equivalent CLI command) and every typed student response on that
+assignment enters the record, pseudonymously, unscored, the same day. That
+one action is the opt-in -- there is nothing else to configure, and nothing
+happens to an assignment nobody has pointed CanvasExpert at.
+
+This only reaches typed (online text entry) submissions read from Canvas
+Expert's own local mirror -- never a live Canvas call. A DOCX upload or a
+handwritten photo does not enter the record this way yet. Re-running the
+same assignment is safe: it replaces that assignment's rep and each
+student's submission rather than duplicating them, so pointing CanvasExpert
+at an assignment again after a due-date change or a new late submission
+does not create a second copy of anyone's work.
+
+
 Privacy
 
 Pseudonym-first the same way every other student-data tool here is: real
