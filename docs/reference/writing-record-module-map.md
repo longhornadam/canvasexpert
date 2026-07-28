@@ -188,24 +188,19 @@ listed as open invites someone to build the flag it was decided against.
 
 ## Known defects and dead ends
 
-**Unfixed and NOT latent: unmet criteria are silently dropped for want of a locatable span.**
-`_span_of` (`core/scoring.py:135`) is an exact `find`, and several checks hand it a fragment they
-rebuilt by rejoining sentences with `" ".join(...)`. When the rebuild is not a substring of the
-text it came from, the span is `None`, `observations.py:277` drops the noticing because INV-3
-requires evidence, and the score still records *unmet*. Nothing counts it, flags it, or logs it.
+**Resolved 2026-07-28: evidence-backed noticings no longer disappear because the scorer rebuilt
+their text.** The scorer maps its selected-segment text back to offsets in the scrubbed
+`Submission.raw_text`, then stores that literal raw slice. This preserves paragraph breaks and any
+provided scaffold between selected fragments instead of persisting a reconstructed string. An
+unknown quotation now supplies the existing evidence-family verdicts with its literal quote span;
+it does not become a source match, so no verdict changes.
 
-Measured 2026-07-28 on a real tier-4 rep through the real scorer, ordinary text:
-
-| | verdicts with no locatable span | unmet items dropped |
-|---|---|---|
-| single paragraph | 3 of 11 | **2 of 3** |
-| two paragraphs, commentary straddling the break | 7 of 11 | 2 of 3 |
-
-An earlier version of this entry called the defect latent, on the grounds that reps are
-single-paragraph and ECRs are unscored. That was wrong: there are two mechanisms, and the one
-affecting the evidence family fires on single-paragraph reps today. The paragraph-break mechanism
-is the second, and it widens the loss rather than causing it. **This is the active brief's
-subject** — `docs/handoffs/CanvasExpert-WritingRecord-EvidenceSpans-BRIEF.md`.
+If an unmet, pattern-bearing criterion still has no locatable span, INV-3 still refuses to store
+the observation and adds `unlocatable_evidence_span` to the submission. The weekly digest renders
+that flag under *Needs human eyes*, including the item ids, so this is a defect signal rather than
+a silent loss. The focused reproduction moved from two dropped observations out of three unmet
+items to zero in both one- and two-paragraph forms; the pinned fixture corpus retained every
+verdict, word count, origin set, and observation count.
 
 **Scoring inverts on extended writing, which is why ECRs ingest unscored.** Tier 2-4
 checklists say "my thesis is one sentence, and my argument comes after it", so

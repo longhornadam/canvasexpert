@@ -80,7 +80,8 @@ def main(argv=None) -> int:
             try:
                 score = scoring.score_submission(
                     submission.segments_for_scoring(), criteria, context,
-                    submission_id=submission.submission_id)
+                    submission_id=submission.submission_id,
+                    raw_text=submission.raw_text)
             except scoring.CriteriaNotPublishedError as exc:
                 skipped += 1
                 print(f"{pseudonym:24} {submission.rep_id:18} skipped: {exc}")

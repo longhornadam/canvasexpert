@@ -29,10 +29,11 @@ FORBIDDEN_IMPORT_TOKENS = (
     "segmentation", "scrub",
 )
 
-# `now` is a clock and `submission_id` names the artifact, not the person.
-# Neither can be exchanged for a student, because the import check above
+# `now` is a clock, `submission_id` names the artifact, and `raw_text` gives
+# the scorer only the scrubbed text geometry needed to return exact evidence
+# slices. None can be exchanged for a student, because the import check above
 # proves this module cannot reach anything that would do the exchanging.
-ALLOWED_EXTRA_PARAMS = {"now", "submission_id"}
+ALLOWED_EXTRA_PARAMS = {"now", "submission_id", "raw_text"}
 
 HISTORY_PARAM_NAMES = {
     "profile", "pseudonym_id", "pseudonym", "history", "record", "records",

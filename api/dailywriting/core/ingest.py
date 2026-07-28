@@ -130,6 +130,7 @@ def ingest(
         criteria_set,
         context,
         submission_id=submission_id,
+        raw_text=submission.raw_text,
         now=stamped,
     )
 

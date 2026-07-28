@@ -132,13 +132,63 @@ def _contains_any(text: str, needles: tuple[str, ...]) -> str | None:
     return None
 
 
-def _span_of(text: str, fragment: str, base: int = 0) -> Span | None:
+def _span_for_match(
+    text: str,
+    match: re.Match[str],
+    *,
+    raw_text: str | None = None,
+    offsets: list[int] | None = None,
+    base: int = 0,
+) -> Span:
+    if raw_text is not None and offsets is not None:
+        start = offsets[match.start()]
+        end = offsets[match.end() - 1] + 1
+        return Span(start, end, raw_text[start:end])
+    return Span(base + match.start(), base + match.end(), match.group())
+
+
+def _span_of(
+    text: str,
+    fragment: str,
+    base: int = 0,
+    *,
+    raw_text: str | None = None,
+    offsets: list[int] | None = None,
+) -> Span | None:
+    """Locate a scorer fragment without storing its reconstructed spelling.
+
+    Checks reason over sentence lists, which deliberately normalise whitespace.
+    The stored span must instead be a literal slice of the scrubbed submission,
+    including its original paragraph breaks and spacing.
+    """
     if not fragment:
         return None
-    index = (text or "").find(fragment)
-    if index < 0:
+    words = re.split(r"\s+", fragment.strip())
+    if not words:
         return None
-    return Span(base + index, base + index + len(fragment), fragment)
+    match = re.search(r"\s+".join(re.escape(word) for word in words), text or "")
+    if match is None:
+        return None
+    return _span_for_match(text, match, raw_text=raw_text, offsets=offsets,
+                           base=base)
+
+
+def _quoted_span(
+    text: str,
+    *,
+    raw_text: str | None = None,
+    offsets: list[int] | None = None,
+) -> Span | None:
+    """Return the first literal quotation only as evidence geometry.
+
+    This does not change the checker’s distinction between a quotation that
+    matches assigned source text and quotation marks of unknown provenance.
+    It merely gives the existing verdict an honest, quoteable location.
+    """
+    match = re.search(r'["“][^"”]+["”]', text or "")
+    if match is None:
+        return None
+    return _span_for_match(text, match, raw_text=raw_text, offsets=offsets)
 
 
 # --- The bundle a check sees -------------------------------------------------
@@ -153,6 +203,8 @@ class CheckInput:
     """
 
     scored_text: str      # student prose plus legitimately quoted source
+    raw_text: str         # stored scrubbed submission; every Span points here
+    scored_offsets: list[int] | None  # scored_text positions into raw_text
     student_text: str     # student prose only
     quoted_text: str      # quoted source only
     provided_text: str    # prompt and scaffolds, labeled context
@@ -190,6 +242,18 @@ class CheckInput:
                     return " ".join(found[index + 1:])
         return self.after_thesis
 
+    def span_of(self, fragment: str) -> Span | None:
+        return _span_of(self.scored_text, fragment, raw_text=self.raw_text,
+                        offsets=self.scored_offsets)
+
+    @property
+    def evidence_span(self) -> Span | None:
+        found = self.span_of(self.quoted_text.strip())
+        if found is None and '"' in self.scored_text:
+            return _quoted_span(self.scored_text, raw_text=self.raw_text,
+                                offsets=self.scored_offsets)
+        return found
+
 
 CheckFn = Callable[[CheckInput], ItemResult]
 
@@ -213,7 +277,7 @@ def check_answers_prompt(inp: CheckInput) -> ItemResult:
     return _result(
         "answers_prompt", met,
         f"{share:.0%} of the prompt's key words appear in the response",
-        span=_span_of(inp.scored_text, inp.thesis),
+        span=inp.span_of(inp.thesis),
     )
 
 
@@ -226,20 +290,20 @@ def check_thesis_arguable(inp: CheckInput) -> ItemResult:
             "thesis_arguable", False,
             f"{borrowed:.0%} of this thesis is the prompt's own wording, so it "
             "restates the question instead of taking a side",
-            span=_span_of(inp.scored_text, inp.thesis),
+            span=inp.span_of(inp.thesis),
         )
     marker = _contains_any(inp.thesis, _STANCE_MARKERS)
     if marker:
         return _result(
             "thesis_arguable", True,
             f"takes a position someone could disagree with (\"{marker}\")",
-            span=_span_of(inp.scored_text, inp.thesis),
+            span=inp.span_of(inp.thesis),
         )
     return _result(
         "thesis_arguable", False,
         "no stance language found; a reader could not tell what is being "
         "argued. Needs a human or model read before this counts as settled",
-        span=_span_of(inp.scored_text, inp.thesis),
+        span=inp.span_of(inp.thesis),
         needs_judgment=True,
     )
 
@@ -252,7 +316,7 @@ def check_thesis_specific(inp: CheckInput) -> ItemResult:
         return _result(
             "thesis_specific", False,
             f"{len(thesis_words)} words is too thin to be specific",
-            span=_span_of(inp.scored_text, inp.thesis),
+            span=inp.span_of(inp.thesis),
         )
     if len(concrete) < 2:
         return _result(
@@ -260,12 +324,12 @@ def check_thesis_specific(inp: CheckInput) -> ItemResult:
             "leans on general words (" +
             ", ".join(sorted(content & _VAGUE_NOUNS)) + ") with little "
             "concrete detail",
-            span=_span_of(inp.scored_text, inp.thesis),
+            span=inp.span_of(inp.thesis),
         )
     return _result(
         "thesis_specific", True,
         f"names something concrete ({len(concrete)} specific content words)",
-        span=_span_of(inp.scored_text, inp.thesis),
+        span=inp.span_of(inp.thesis),
     )
 
 
@@ -275,7 +339,7 @@ def check_thesis_one_sentence(inp: CheckInput) -> ItemResult:
         return _result(
             "thesis_one_sentence", False,
             f"{len(found)} sentences; a tier-1 thesis is one",
-            span=_span_of(inp.scored_text, found[1]),
+            span=inp.span_of(found[1]),
         )
     cap = inp.context.word_cap
     if cap is not None and inp.student_word_count > cap:
@@ -302,7 +366,7 @@ def check_thesis_separate_from_argument(inp: CheckInput) -> ItemResult:
             "thesis_separate_from_argument", False,
             "everything is in one sentence, so the thesis and the argument "
             "are not separated",
-            span=_span_of(inp.scored_text, inp.thesis),
+            span=inp.span_of(inp.thesis),
         )
     thesis_words = len(_words(inp.thesis))
     if thesis_words > 30:
@@ -310,11 +374,11 @@ def check_thesis_separate_from_argument(inp: CheckInput) -> ItemResult:
             "thesis_separate_from_argument", False,
             f"the opening sentence runs to {thesis_words} words; the thesis is "
             "carrying the argument inside it",
-            span=_span_of(inp.scored_text, inp.thesis),
+            span=inp.span_of(inp.thesis),
         )
     return _result("thesis_separate_from_argument", True,
                    f"the thesis is a {thesis_words}-word sentence of its own",
-                   span=_span_of(inp.scored_text, inp.thesis))
+                   span=inp.span_of(inp.thesis))
 
 
 def check_argument_stated(inp: CheckInput) -> ItemResult:
@@ -327,16 +391,16 @@ def check_argument_stated(inp: CheckInput) -> ItemResult:
     if marker:
         return _result("argument_stated", True,
                        f"gives a reason (\"{marker}\")",
-                       span=_span_of(inp.scored_text, rest))
+                       span=inp.span_of(rest))
     if len(_content_words(rest)) >= 3:
         return _result(
             "argument_stated", True,
             "states a supporting idea after the thesis",
-            span=_span_of(inp.scored_text, rest),
+            span=inp.span_of(rest),
         )
     return _result("argument_stated", False,
                    "what follows the thesis is too thin to be an argument",
-                   span=_span_of(inp.scored_text, rest))
+                   span=inp.span_of(rest))
 
 
 def check_argument_matches_thesis(inp: CheckInput) -> ItemResult:
@@ -351,19 +415,20 @@ def check_argument_matches_thesis(inp: CheckInput) -> ItemResult:
         "argument_matches_thesis", met,
         f"the argument shares {share:.0%} of the thesis's key words"
         + ("" if met else ", so it is arguing something else"),
-        span=_span_of(inp.scored_text, inp.after_thesis),
+        span=inp.span_of(inp.after_thesis),
     )
 
 
 def check_evidence_present(inp: CheckInput) -> ItemResult:
     if inp.quoted_text.strip():
         return _result("evidence_present", True, "quotes the passage",
-                       span=_span_of(inp.scored_text, inp.quoted_text.strip()))
+                       span=inp.evidence_span)
     if '"' in inp.scored_text:
         return _result(
             "evidence_present", True,
             "uses quotation marks, though the quoted words do not match the "
             "assigned passage",
+            span=inp.evidence_span,
             needs_judgment=True,
         )
     return _result("evidence_present", False, "no evidence from the passage")
@@ -372,10 +437,11 @@ def check_evidence_present(inp: CheckInput) -> ItemResult:
 def check_evidence_relevant(inp: CheckInput) -> ItemResult:
     evidence_words = _content_words(inp.quoted_text)
     if not evidence_words:
-        return _result("evidence_relevant", False, "no evidence to judge")
+        return _result("evidence_relevant", False, "no evidence to judge",
+                       span=inp.evidence_span)
     thesis_words = _content_words(inp.thesis)
     share = _share_present(thesis_words, evidence_words)
-    span = _span_of(inp.scored_text, inp.quoted_text.strip())
+    span = inp.evidence_span
     if share >= thresholds.ON_THESIS_OVERLAP:
         return _result(
             "evidence_relevant", True,
@@ -408,7 +474,8 @@ def check_evidence_relevant(inp: CheckInput) -> ItemResult:
 def check_evidence_integrated(inp: CheckInput) -> ItemResult:
     quote = inp.quoted_text.strip()
     if not quote:
-        return _result("evidence_integrated", False, "no evidence to integrate")
+        return _result("evidence_integrated", False, "no evidence to integrate",
+                       span=inp.evidence_span)
     for sentence in inp.sentences:
         if quote[:24] not in sentence:
             continue
@@ -417,18 +484,18 @@ def check_evidence_integrated(inp: CheckInput) -> ItemResult:
             return _result(
                 "evidence_integrated", True,
                 f"introduces the quotation (\"{before[:40]}\")",
-                span=_span_of(inp.scored_text, sentence),
+                span=inp.span_of(sentence),
             )
         return _result(
             "evidence_integrated", False,
             "the quotation is dropped in as its own sentence with no signal "
             "phrase leading into it",
-            span=_span_of(inp.scored_text, sentence),
+                span=inp.span_of(sentence),
         )
     return _result(
         "evidence_integrated", False,
         "the quotation stands apart from the surrounding sentences",
-        span=_span_of(inp.scored_text, quote),
+        span=inp.evidence_span,
     )
 
 
@@ -444,7 +511,7 @@ def check_commentary_connects(inp: CheckInput) -> ItemResult:
         "commentary_connects", met,
         f"the commentary shares {share:.0%} of the claim's key words"
         + ("" if met else ", so it does not tie the evidence back to the claim"),
-        span=_span_of(inp.scored_text, commentary),
+        span=inp.span_of(commentary),
     )
 
 
@@ -461,20 +528,20 @@ def check_commentary_beyond_restatement(inp: CheckInput) -> ItemResult:
             "commentary_beyond_restatement", False,
             f"{echo:.0%} of the commentary is the quotation's own words, so it "
             "restates the evidence rather than interpreting it",
-            span=_span_of(inp.scored_text, commentary),
+            span=inp.span_of(commentary),
         )
     marker = _contains_any(commentary, _INTERPRETIVE_MARKERS)
     if marker:
         return _result(
             "commentary_beyond_restatement", True,
             f"reaches past the quotation (\"{marker}\")",
-            span=_span_of(inp.scored_text, commentary),
+            span=inp.span_of(commentary),
         )
     return _result(
         "commentary_beyond_restatement", False,
         "adds words after the evidence without an interpretive move. Needs a "
         "human or model read before this counts as settled",
-        span=_span_of(inp.scored_text, commentary),
+        span=inp.span_of(commentary),
         needs_judgment=True,
     )
 
@@ -537,6 +604,7 @@ def score_submission(
     assignment_context: AssignmentContext,
     *,
     submission_id: str = "",
+    raw_text: str | None = None,
     now: datetime | None = None,
 ) -> Score:
     """Score one submission against one published checklist.
@@ -561,8 +629,24 @@ def score_submission(
                            if s.origin == "student" and s.text.strip())
     quoted_text = " ".join(s.text.strip() for s in student_segments
                            if s.origin == "quoted_source" and s.text.strip())
-    scored_text = " ".join(s.text.strip() for s in student_segments
-                           if s.text.strip())
+    scored_segments = [s for s in student_segments if s.text.strip()]
+    scored_text = " ".join(s.text.strip() for s in scored_segments)
+    span_text = raw_text if raw_text is not None else scored_text
+    scored_offsets: list[int] | None = None
+    if raw_text is not None:
+        # The scorer excludes supplied segments, but a span may bridge across
+        # one. Map every scorer character to its original raw position so the
+        # stored slice keeps any intervening raw text rather than persisting a
+        # reconstructed version of the student's submission.
+        scored_offsets = []
+        for index, segment in enumerate(scored_segments):
+            stripped = segment.text.strip()
+            leading = len(segment.text) - len(segment.text.lstrip())
+            if index:
+                scored_offsets.append(segment.span_start + leading - 1)
+            scored_offsets.extend(range(segment.span_start + leading,
+                                        segment.span_start + leading
+                                        + len(stripped)))
     provided_text = "\n".join(
         [assignment_context.prompt_text]
         + [b.template for b in assignment_context.scaffold_blocks]
@@ -592,6 +676,8 @@ def score_submission(
 
     bundle = CheckInput(
         scored_text=scored_text,
+        raw_text=span_text,
+        scored_offsets=scored_offsets,
         student_text=student_text,
         quoted_text=quoted_text,
         provided_text=provided_text,

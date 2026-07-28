@@ -125,6 +125,7 @@ class SegmentationFlag:
         "low_confidence_segment",
         "cross_submission_repeat",
         "exceeds_word_cap",
+        "unlocatable_evidence_span",
     ]
     detail: str
     span: Span | None = None

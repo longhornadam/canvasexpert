@@ -31,6 +31,7 @@ from api.dailywriting.core.models import (
     Observation,
     PatternTagError,
     Score,
+    SegmentationFlag,
     Submission,
     utc_now,
 )
@@ -272,6 +273,24 @@ def observe_submission(
     """
     stamped = now or submission.submitted_at or utc_now()
     observations: list[Observation] = []
+
+    unlocatable = sorted(
+        item.item_id
+        for item in criteria_set.items
+        if (result := score.per_item.get(item.item_id)) is not None
+        and not result.met
+        and result.evidence_span is None
+        and (item.item_id == "arguable" or item.item_id in _ITEM_PATTERNS)
+    )
+    if (unlocatable
+            and not any(flag.code == "unlocatable_evidence_span"
+                        for flag in submission.flags)):
+        submission.flags.append(SegmentationFlag(
+            code="unlocatable_evidence_span",
+            detail=("Unmet criterion could not be recorded because its "
+                    "evidence span was not locatable: "
+                    + ", ".join(unlocatable)),
+        ))
 
     def add(pattern_tag: str, claim: str, span: str,
             criterion_id: str | None = None) -> None:
