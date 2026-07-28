@@ -76,7 +76,7 @@ constrains every future acquisition route.
 
 **The scrubber removes what the vault knows and guesses at nothing.** Real names, the nicknames
 the teacher entered, Canvas and SIS ids. A heuristic second pass that treated any capitalised
-token with no lexicon entry as a name was removed at `<commit>`; do not reintroduce it, and read
+token with no lexicon entry as a name was removed at `0a9e713`; do not reintroduce it, and read
 `core/scrub.py`'s header before proposing anything like it. On ordinary seventh-grade responses
 containing no roster name at all, it redacted 30 of 37 capitalised tokens — `Gettysburg`,
 `Photosynthesis`, `Canada`, `Dogs` — and because scrub precedes storage, that was the stored
@@ -127,6 +127,7 @@ Read the commit, not a summary, when the detail matters.
 | Extended-writing substrate | `ef40e01` | `ingest_unscored`, mid-prompt fragment detection, dead `Origin` value removed |
 | Canvas typed ingest | `401c7c0` | `canvas_source.py`, `canvas_ingest.py`, CLI + web trigger |
 | DOCX ingest | `8960bda` | `canvas_attachments.py`, the subsystem's first live Canvas calls, `canvas_stream_get` |
+| Scrub narrowed to the vault | `0a9e713` | Heuristic capitalised-token pass removed; roster names, nicknames and ids remain |
 
 Retired briefs are recoverable: `git show <commit>:docs/handoffs/<name>`.
 
