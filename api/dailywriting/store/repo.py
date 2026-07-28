@@ -28,6 +28,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from api.dailywriting.core.models import (
+    AssignmentContext,
     Directive,
     Observation,
     RollingProfile,
@@ -218,6 +219,63 @@ class Repository:
             atomic_write_json(path, {"schema": codec.DOCUMENT_VERSION,
                                      "tiers": tiers})
 
+    def put_rep(self, context: AssignmentContext) -> None:
+        """Store a rep's prompt, scaffolds, and passage.
+
+        Carries no student data, so it is the one document here that is safe to
+        hand to anyone. Kept because a submission cannot be re-scored without
+        the text it was written against.
+        """
+        path = self._single("reps")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with interprocess_lock(path.with_suffix(".lock")):
+            entries = self._read(path, "reps")
+            record = codec.rep_to_dict(context)
+            for index, entry in enumerate(entries):
+                if entry.get("rep_id") == context.rep_id:
+                    entries[index] = record
+                    break
+            else:
+                entries.append(record)
+            atomic_write_json(path, {"schema": codec.DOCUMENT_VERSION,
+                                     "reps": entries})
+
+    def read_rep(self, rep_id: str) -> AssignmentContext | None:
+        for entry in self._read(self._single("reps"), "reps"):
+            if entry.get("rep_id") == rep_id:
+                return codec.rep_from_dict(entry)
+        return None
+
+    def reps(self, *, section_id: str | None = None) -> list[AssignmentContext]:
+        found = [codec.rep_from_dict(entry)
+                 for entry in self._read(self._single("reps"), "reps")]
+        if section_id:
+            found = [rep for rep in found if rep.section_id == section_id]
+        return sorted(found, key=lambda rep: (rep.date, rep.rep_id))
+
+    def known_pseudonyms(self) -> list[str]:
+        """Students who have any record in this store.
+
+        Not a roster. A student who has never turned anything in has no record
+        here, so callers that need "who is missing work" must supply the real
+        roster rather than infer it from this.
+        """
+        seen: set[str] = set()
+        for kind in (SUBMISSIONS, OBSERVATIONS):
+            for path in self._partitions(kind):
+                key = "submissions" if kind == SUBMISSIONS else "observations"
+                for entry in self._read(path, key):
+                    canvas_id = entry.get("canvas_id")
+                    if canvas_id:
+                        seen.add(str(canvas_id))
+        resolved: list[str] = []
+        for canvas_id in sorted(seen):
+            try:
+                resolved.append(self.resolver.to_pseudonym(canvas_id))
+            except Exception:
+                continue
+        return resolved
+
     def put_profile(self, profile: RollingProfile) -> None:
         canvas_id = self.resolver.to_canvas_id(profile.pseudonym_id)
         path = self.root / "profiles" / f"{canvas_id}.json"
@@ -227,6 +285,50 @@ class Repository:
                 profile, canvas_id=canvas_id))
 
     # --- reads ------------------------------------------------------------
+
+    def put_calibration(self, sample) -> None:
+        """Store a blind-scoring sample.
+
+        Deliberately writes no machine scores: the point of the sample is that
+        the teacher scores it without seeing them, and a file that carried them
+        would defeat itself the moment anyone opened it.
+        """
+        path = self.root / "calibration" / f"{sample.sample_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with interprocess_lock(path.with_suffix(".lock")):
+            atomic_write_json(path, {
+                "schema": codec.DOCUMENT_VERSION,
+                "sample_id": sample.sample_id,
+                "generated_at": sample.generated_at.isoformat(),
+                "strata": sample.strata,
+                "items": [
+                    {"submission_id": item.submission_id,
+                     "stratum": item.stratum,
+                     "criteria_set_id": item.criteria_set_id,
+                     "text": item.text}
+                    for item in sample.items
+                ],
+            })
+
+    def read_calibration(self, sample_id: str):
+        from datetime import datetime as _datetime
+
+        from api.dailywriting.core.digest import CalibrationItem, CalibrationSample
+
+        path = self.root / "calibration" / f"{sample_id}.json"
+        if not path.exists():
+            return None
+        document = json.loads(path.read_text(encoding="utf-8"))
+        return CalibrationSample(
+            sample_id=document["sample_id"],
+            generated_at=_datetime.fromisoformat(document["generated_at"]),
+            strata=int(document.get("strata", 0)),
+            items=[CalibrationItem(
+                submission_id=item["submission_id"],
+                stratum=int(item["stratum"]),
+                criteria_set_id=item["criteria_set_id"],
+                text=item.get("text", "")) for item in document.get("items", [])],
+        )
 
     def read_profile(self, pseudonym_id: str) -> RollingProfile | None:
         """Read a stored profile.

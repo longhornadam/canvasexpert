@@ -208,8 +208,15 @@ def observe_submission(
 
     Deterministic and idempotent: `obs_id` is derived from the submission and
     the tag, so re-running ingest replaces rather than multiplies.
+
+    `observed_at` defaults to the submission's own timestamp, not to now. An
+    observation is dated to the work it is about, because that is what the
+    profile window and the weekly digest select on: a teacher who ingests
+    Monday's reps on Wednesday must not have Monday's noticings land in
+    Wednesday's week, and a backfill must not push a term's observations into
+    whatever week it happened to run.
     """
-    stamped = now or utc_now()
+    stamped = now or submission.submitted_at or utc_now()
     observations: list[Observation] = []
 
     def add(pattern_tag: str, claim: str, span: str,

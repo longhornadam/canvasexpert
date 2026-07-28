@@ -110,8 +110,12 @@ def ingest(
         now=stamped,
     )
 
+    # Observations are dated to the work, not to this run. `scored_at` above is
+    # legitimately the processing time; an observation's date is what the
+    # profile window and the weekly digest select on, so it has to be the
+    # submission's own timestamp or a Wednesday backfill relocates Monday.
     observations = observations_module.observe_submission(
-        submission, score, criteria_set, now=stamped, vault=vault)
+        submission, score, criteria_set, now=submitted_at, vault=vault)
 
     updated_directives, acknowledgments = directives_module.evaluate_all(
         list(open_directives), submission, tier=context.tier, now=stamped,

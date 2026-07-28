@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from api.dailywriting.core.models import (
+    AssignmentContext,
     BannedPhraseDetector,
     Directive,
     DirectiveEval,
@@ -22,6 +23,7 @@ from api.dailywriting.core.models import (
     PatternSummary,
     RequiredMoveDetector,
     RollingProfile,
+    ScaffoldBlock,
     Score,
     ScrubFinding,
     Segment,
@@ -122,6 +124,51 @@ def finding_from_dict(document: dict) -> ScrubFinding:
         span_start=int(document.get("span_start", 0)),
         span_end=int(document.get("span_end", 0)),
         detail=document.get("detail", ""),
+    )
+
+
+# --- Assignment context -----------------------------------------------------
+# Reps are stored because a submission on its own cannot be re-scored: the
+# checker needs the prompt and the scaffolds it was written against. Keeping
+# them means a scorer fix can be replayed over past work instead of only
+# applying going forward.
+
+
+def rep_to_dict(context: AssignmentContext) -> dict:
+    return {
+        "schema": DOCUMENT_VERSION,
+        "rep_id": context.rep_id,
+        "date": context.date.isoformat(),
+        "tier": context.tier,
+        "prompt_text": context.prompt_text,
+        "criteria_set_id": context.criteria_set_id,
+        "scaffold_blocks": [
+            {"block_id": b.block_id, "template": b.template, "kind": b.kind}
+            for b in context.scaffold_blocks
+        ],
+        "source_texts": list(context.source_texts),
+        "word_cap": context.word_cap,
+        "section_id": context.section_id,
+    }
+
+
+def rep_from_dict(document: dict) -> AssignmentContext:
+    _require(document, "rep", "rep_id", "date", "tier", "prompt_text",
+             "criteria_set_id")
+    return AssignmentContext(
+        rep_id=document["rep_id"],
+        date=_parse_date(document["date"]),
+        tier=int(document["tier"]),
+        prompt_text=document["prompt_text"],
+        criteria_set_id=document["criteria_set_id"],
+        scaffold_blocks=[
+            ScaffoldBlock(block_id=b["block_id"], template=b["template"],
+                          kind=b.get("kind", "stem"))
+            for b in document.get("scaffold_blocks", [])
+        ],
+        source_texts=list(document.get("source_texts", [])),
+        word_cap=document.get("word_cap"),
+        section_id=document.get("section_id"),
     )
 
 
