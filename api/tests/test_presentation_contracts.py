@@ -12,26 +12,27 @@ from api.webui.routes import pages, powergrader
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES = ROOT / "api" / "webui" / "templates"
 
-# Route -> (page template, layout, variant, real rail count, migrated).
+# Route -> (page template, layout, variant, real rail count).
+#
+# There used to be a fifth "migrated" flag here, plus a MIGRATED_ROUTES subset
+# derived from it. Every route carried True once the template-family rollout
+# finished, which made the subset identical to this dict and the assertion that
+# compared them unfailable. The rollout is done, so the column is gone.
 EXPECTED_PRESENTATION = {
-    "/": ("dashboard.html", "workspace", "full", 0, True),
-    "/course-expert": ("course_expert.html", "workspace", "three", 2, True),
-    "/powergrader": ("powergrader_setup.html", "workspace", "left-main", 1, True),
-    "/powergrader/session/{session_id}": ("powergrader_queue.html", "workspace", "full", 0, True),
-    "/gradebook": ("gradebook.html", "workspace", "left-main", 1, True),
-    "/roster": ("roster.html", "workspace", "left-main", 1, True),
-    "/settings": ("settings.html", "workspace", "left-main", 1, True),
+    "/": ("dashboard.html", "workspace", "full", 0),
+    "/course-expert": ("course_expert.html", "workspace", "three", 2),
+    "/powergrader": ("powergrader_setup.html", "workspace", "left-main", 1),
+    "/powergrader/session/{session_id}": ("powergrader_queue.html", "workspace", "full", 0),
+    "/gradebook": ("gradebook.html", "workspace", "left-main", 1),
+    "/roster": ("roster.html", "workspace", "left-main", 1),
+    "/settings": ("settings.html", "workspace", "left-main", 1),
     # Automations sits on the workspace layout so its title shares a left edge
     # with the other primary-nav pages instead of jumping inward.
-    "/routines": ("routines.html", "workspace", "full", 0, True),
-    "/course": ("course.html", "document", "wide", 0, True),
-    "/about": ("about.html", "document", "wide", 0, True),
-    "/ai-expert": ("ai_expert.html", "document", "standard", 0, True),
-    "/welcome": ("welcome.html", "wizard", "", 0, True),
-}
-
-MIGRATED_ROUTES = {
-    route: row for route, row in EXPECTED_PRESENTATION.items() if row[4]
+    "/routines": ("routines.html", "workspace", "full", 0),
+    "/course": ("course.html", "document", "wide", 0),
+    "/about": ("about.html", "document", "wide", 0),
+    "/ai-expert": ("ai_expert.html", "document", "standard", 0),
+    "/welcome": ("welcome.html", "wizard", "", 0),
 }
 FEATURE_CSS = (
     "api/webui/static/pages/dashboard.css",
@@ -121,12 +122,10 @@ def _configure_fictional(monkeypatch):
 
 def test_registry_is_the_full_program_route_map():
     assert len(EXPECTED_PRESENTATION) == 12
-    assert set(MIGRATED_ROUTES) == set(EXPECTED_PRESENTATION)
 
 
 def test_all_live_templates_use_layouts_and_no_inline_styles():
-    for _, (template, layout, _, _, migrated) in EXPECTED_PRESENTATION.items():
-        assert migrated
+    for _, (template, layout, _, _) in EXPECTED_PRESENTATION.items():
         text = (TEMPLATES / template).read_text(encoding="utf-8")
         assert f'{{% extends "layouts/{layout}.html" %}}' in text
         assert "stylesheet_bundle" not in text
@@ -194,7 +193,7 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/static/ui/components.css", "/static/ui/layouts.css",
     )
     for key, url in routes.items():
-        _, layout, variant, rails, _ = EXPECTED_PRESENTATION[key]
+        _, layout, variant, rails = EXPECTED_PRESENTATION[key]
         response = client.get(url)
         assert response.status_code == 200, url
         text = response.text

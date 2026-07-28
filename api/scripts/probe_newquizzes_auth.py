@@ -1,12 +1,14 @@
 """Live probe: can the saved PAT reach the New Quizzes API?
 
-This is a *gated* test — it does nothing in CI. It runs only when you point it at
-a real course you can reach (e.g. your collab teacher course, even empty/archived):
+A hand-run diagnostic, not part of the suite. It lived in api/tests/ and was the
+one permanent skip there, since it needs a real course id and a saved token that
+no automated run has. Moved here so a skip in `pytest api/tests` means something.
+Run it explicitly when you want to re-measure the New Quizzes auth question:
 
     # PowerShell
     $env:CE_LIVE_COURSE = "12345"          # course id to probe
     $env:CE_LIVE_NQ_ASSIGNMENT = "67890"   # optional: a New Quiz assignment_id
-    py -m pytest api/tests/test_newquizzes_auth.py -s
+    py -m pytest api/scripts/probe_newquizzes_auth.py -s
 
 It needs a token saved in the app (keyring) — the same one the Web UI uses. The
 test asserts only that we get a *conclusive* auth signal (not a network error),

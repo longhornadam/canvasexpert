@@ -5,19 +5,13 @@ Keeping service functions here breaks circular-import risk and makes them
 unit-testable without HTTP.
 """
 import json
-import hashlib
-import os
 from pathlib import Path
 
 from . import config
-from .deps import WEBUI_DIR
 from .schooldays import _parse_iso_local, _add_school_days
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
-from api.storage_support import utc_compact_stamp
 
-CURVE_EVENTS_PATH = os.path.join(WEBUI_DIR, "curve_events.json")
-LEGACY_CURVE_EVENTS_PATH = CURVE_EVENTS_PATH
 CURVE_EVENT_STORAGE_ERROR = "curve_event_storage_unavailable"
 _CURVE_EVENT_VERSION = 1
 _CURVE_EVENT_REQUIRED = ("id", "course_id", "assignment_id", "applied_at", "reverted", "students")
@@ -67,67 +61,11 @@ def _read_versioned_curve_events(path):
     return events
 
 
-def _read_legacy_curve_events(path):
-    raw = Path(path).read_bytes()
-    document = _decode_curve_document(raw)
-    if not isinstance(document, dict):
-        raise ValueError("legacy curve event root is invalid")
-    events = document.get("events")
-    _validate_curve_events(events)
-    return raw, events
-
-
-def _checksum_prefix(payload):
-    return hashlib.sha256(payload).hexdigest()[:16]
-
-
-def _remove_new_curve_file(path):
-    try:
-        os.unlink(str(path))
-    except FileNotFoundError:
-        pass
-
-
-def _migrate_legacy_curve_events(legacy_path, live_path):
-    """Migrate one validated legacy file, rolling back the new file on failure."""
-    live_created = False
-    raw, events = _read_legacy_curve_events(legacy_path)
-    try:
-        backup_dir = ledger_paths.curve_migration_backups_dir()
-        backup_path = backup_dir / f"curve_events.{utc_compact_stamp()}.json"
-        source_checksum = _checksum_prefix(raw)
-        ledger_storage.atomic_write_bytes(backup_path, raw)
-        if _checksum_prefix(backup_path.read_bytes()) != source_checksum:
-            raise ValueError("curve event backup checksum mismatch")
-
-        ledger_storage.atomic_write_json(
-            live_path, {"version": _CURVE_EVENT_VERSION, "events": events})
-        live_created = True
-        reread_events = _read_versioned_curve_events(live_path)
-        if reread_events != events:
-            raise ValueError("curve event migration comparison failed")
-
-        try:
-            os.unlink(str(legacy_path))
-        except Exception:
-            _remove_new_curve_file(live_path)
-            raise
-        return events
-    except Exception:
-        if live_created or Path(live_path).exists():
-            _remove_new_curve_file(live_path)
-        raise
-
-
 def _load_curve_events_unlocked():
     live_path = ledger_paths.curve_events_file()
-    if live_path.exists():
-        return _read_versioned_curve_events(live_path)
-
-    legacy_path = Path(CURVE_EVENTS_PATH)
-    if not legacy_path.exists():
+    if not live_path.exists():
         return []
-    return _migrate_legacy_curve_events(legacy_path, live_path)
+    return _read_versioned_curve_events(live_path)
 
 
 def _load_curve_events():
