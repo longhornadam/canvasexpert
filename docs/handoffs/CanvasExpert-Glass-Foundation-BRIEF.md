@@ -190,10 +190,11 @@ Register in the page map (`api/webui/README.md:43`) following the existing surfa
 - **Day strip:** all blocks of the day, current one lit.
 - **Rotating banner:** cycles plan-supplied items on a fixed interval.
 
-The reference mockup is **directional, not binding**. It is a useful starting point for type
-scale, hierarchy, and colour, and it predates both the Bobcat Hour pane and the widget tray.
-Where it conflicts with this brief, the brief wins. Matching it pixel for pixel is not a goal
-and is not worth stopping over.
+The reference mockup is at v2 and covers the three-pane rail, the widget tray, the reach
+line, the per-section switch, and the Bobcat Hour today-to-tomorrow flip. It is
+**directional, not binding**: useful for type scale, hierarchy, and colour. Where it
+conflicts with this brief, the brief wins. Matching it pixel for pixel is not a goal and is
+not worth stopping over.
 
 In this batch the banner renders **text supplied by the hand-written plan**. It is not yet
 wired to the mirror or the vault. The slot exists so the layout is proven at real size.
@@ -224,13 +225,19 @@ widget. Get that right and every later widget is cheap.
 The one widget in this batch is the **work timer**, because it is asked for and it is the one
 that runs constantly:
 
-- Duration presets as large tap targets, plus a plus-one-minute control.
-- Pause, resume, reset.
+- At rest the tray **is** the timer: duration presets as large tap targets, plus a custom
+  option. With one widget in existence a launcher would be pointless indirection, so tapping
+  a preset starts a timer directly. Reintroduce a launcher row when a second widget arrives.
+- While running the tray becomes pause, resume, plus-one-minute, and reset.
+- **The tray transforms; it never grows.** Its height is identical in both states, so
+  starting or stopping a timer never reflows the content above it. A tray that changed height
+  would shove the learning goal around mid-class.
+- Reset is separated from the other controls by a clear gap and treated distinctly. Physical
+  separation is the first defence against a stray hand; the confirm is the second.
 - Claims the focus slot while running; the learning goal collapses to its one-line form.
 - Under two minutes the digits and bars go red.
-- Reset takes a confirm, because a stray hand must not wipe a running timer.
 
-No second widget is built this batch, and the tray shows exactly one launcher.
+No second widget is built this batch.
 
 ## 6. Non-goals
 
@@ -291,12 +298,14 @@ Do not reopen it.
 8. The timer widget supports presets, plus-one-minute, pause, resume, and a reset that takes
    a confirm. It claims the focus slot while running, collapses the goal to one line, and
    turns red under two minutes.
-9. A running widget survives a period change without crashing or wedging, and the rail and
-   day strip update underneath it.
-10. `git grep` finds no Berry Miller bell times, calendar dates, club or tutorial names,
+9. **The tray's rendered height is identical at rest and while running**, verified by
+   measurement, so no element above it moves when a timer starts or stops.
+10. A running widget survives a period change without crashing or wedging, and the rail and
+    day strip update underneath it.
+11. `git grep` finds no Berry Miller bell times, calendar dates, club or tutorial names,
     section names, or student data anywhere in the repo. Only the template and the fictional
     sample.
-11. `docs/reference/glass-module-map.md` exists and carries the subsystem's durable state:
+12. `docs/reference/glass-module-map.md` exists and carries the subsystem's durable state:
     invariants, this batch, the widget contract, open decisions, and verification discipline.
 
 **Manual, teacher-run, not automatable:** one full Bobcat Hour day on the real projector in
