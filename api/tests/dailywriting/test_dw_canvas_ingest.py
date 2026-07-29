@@ -27,7 +27,6 @@ from api import course_catalog, feedback_safety
 from api.dailywriting import canvas_attachments, canvas_ingest, canvas_source
 from api.dailywriting.cli import _common
 from api.dailywriting.cli import ingest_canvas as cli_ingest_canvas
-from api.dailywriting.cli import score as cli_score
 from api.dailywriting.core import ingest as core_ingest_module
 from api.dailywriting.core import scrub
 from api.dailywriting.fixtures import loader
@@ -36,7 +35,6 @@ from api.dailywriting.store.repo import Repository
 from api.feedback_vault import Vault
 from api.mcp_server import tools
 from api.mirror import store as mirror_store
-from api.powergrader import context as pg_context
 from api.webui import workspace
 
 COURSE_ID = "111"
@@ -225,7 +223,7 @@ def _history(pseudonym, **kwargs):
 
 # --- AC1/AC2/AC3: happy path, idempotent re-run, no leak ---------------------
 
-def test_ingest_then_get_writing_history_has_no_score_and_ascending_order(monkeypatch, tmp_path):
+def test_ingest_then_get_writing_history_projects_evidence_in_ascending_order(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     root = str(tmp_path)
     _write_catalog(root)
@@ -250,10 +248,8 @@ def test_ingest_then_get_writing_history_has_no_score_and_ascending_order(monkey
         history = _history(pseudonym)
         assert len(history["submissions"]) == 1
         row = history["submissions"][0]
-        assert row["total"] is None
-        assert row["possible"] is None
-        assert row["status"] is None
-        assert "per_item" not in row
+        assert "raw_text" not in row
+        assert {"student_word_count", "segments", "flags"} <= set(row)
 
     submitted_ats = sorted(
         s.submitted_at for pseudonym in (pseudonym_one, pseudonym_two)
@@ -414,49 +410,6 @@ def test_unknown_author_is_skipped_and_reported_not_fatal(monkeypatch, tmp_path)
         VaultResolver(vault).to_pseudonym("900099")
 
 
-# --- AC6: a Canvas-sourced rep refuses to be checklist-scored ---------------
-
-def test_score_cli_refuses_a_canvas_sourced_rep(monkeypatch, tmp_path, capsys):
-    _mount(monkeypatch, tmp_path)
-    root = str(tmp_path)
-    _write_catalog(root)
-    _write_mirror(root, bodies_by_user={
-        900001: ("<p>An extended piece, not a daily rep.</p>", "2026-09-14T20:00:00Z"),
-    })
-    repository, vault = _repository(tmp_path)
-    list(canvas_ingest.ingest_canvas_assignment(COURSE_ID, ASSIGNMENT_ID, repository=repository))
-    pseudonym = VaultResolver(vault).to_pseudonym("900001")
-
-    # cli.score's non-identity-map path builds its Repository via
-    # `Repository.default()`, which reads the vault through
-    # `api.powergrader.context.vault()` -- bind that seam to our vault.
-    monkeypatch.setattr(pg_context, "vault", lambda: vault)
-
-    exit_code = cli_score.main([
-        "--from", "2026-09-01", "--to", "2026-09-30",
-        "--students", pseudonym,
-        "--store-root", str(repository.root),
-    ])
-    assert exit_code == 0
-    out = capsys.readouterr().out
-    assert "skipped" in out
-    assert "not a real tier" in out
-    submission_ids = [s.submission_id for s in
-                      repository.submissions_in_window(pseudonym, *_ANY_YEAR)]
-    assert repository.scores_for(submission_ids) == {}
-
-
-def test_is_unscorable_true_for_canvas_sourced_context_false_for_a_real_tier():
-    row = course_catalog.normalize_assignment({
-        "id": "1", "name": "x", "description": "", "due_at": "2026-09-14T23:59:00Z",
-    })
-    unscored = canvas_source.assignment_context(row, rep_id="canvas:1:1")
-    assert canvas_source.is_unscorable(unscored) is True
-
-    scored = loader.rep(loader.rep_ids()[0])
-    assert canvas_source.is_unscorable(scored) is False
-
-
 # --- AC7: an assignment with an empty description still ingests ------------
 
 def test_empty_description_ingests_with_visibly_empty_prompt(monkeypatch, tmp_path):
@@ -533,8 +486,20 @@ def test_no_mcp_module_reaches_the_ingest_path():
     A live Canvas path under the assistant is what `docs/mirror.md` design law
     6 forbids, so the assistant-facing package must not import this driver or
     its acquisition seam -- directly or by re-export.
+
+    `api.webui.canvas_client` is held to the same rule. It is the raw Canvas
+    HTTP transport, and the MCP tools have no business holding it: they serve
+    from the local mirror, catalog, and writing store, and the one tool that
+    does move Canvas data (`refresh_mirror`) goes through Canvas Expert's own
+    sync engine instead. That indirection is the whole guarantee, and it is
+    only cheap to verify while the transport is absent -- an unused import of
+    it still costs a reader the work of proving nothing calls it.
     """
-    forbidden = {"api.dailywriting.canvas_ingest", "api.dailywriting.canvas_attachments"}
+    forbidden = {
+        "api.dailywriting.canvas_ingest",
+        "api.dailywriting.canvas_attachments",
+        "api.webui.canvas_client",
+    }
     mcp_dir = os.path.join(_API_DIR, "mcp_server")
     checked = 0
     for name in sorted(os.listdir(mcp_dir)):
@@ -560,7 +525,7 @@ def test_no_mcp_module_reaches_the_ingest_path():
 # --- uploaded Word documents -------------------------------------------------
 
 def test_uploaded_docx_ingests_like_a_typed_submission(monkeypatch, tmp_path):
-    """AC1: a DOCX-only assignment reaches get_writing_history, unscored,
+    """AC1: a DOCX-only assignment reaches get_writing_history as evidence,
     for the right pseudonyms, in date order."""
     _mount(monkeypatch, tmp_path)
     root = str(tmp_path)
@@ -598,8 +563,7 @@ def test_uploaded_docx_ingests_like_a_typed_submission(monkeypatch, tmp_path):
         assert len(history["submissions"]) == 1
         row = history["submissions"][0]
         assert expected in row["raw_text"]
-        assert row["total"] is None
-        assert row["status"] is None
+        assert {"student_word_count", "segments", "flags", "raw_text"} <= set(row)
 
     submitted = sorted(s.submitted_at for canvas_id in ("900001", "900002")
                        for s in repository.submissions_in_window(

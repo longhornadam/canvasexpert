@@ -151,8 +151,8 @@ def ingest_canvas_assignment(
     repository.put_rep(context)
     prompt_note = ("empty" if not context.prompt_text
                    else f"{len(context.prompt_text)} chars")
-    yield (f"rep {rep_id} stored: date={context.date.isoformat()}, "
-           f"prompt={prompt_note}, unscored (tier={context.tier})")
+    yield (f"record {rep_id} stored: date={context.date.isoformat()}, "
+           f"prompt={prompt_note}")
 
     processed = no_text = no_timestamp = no_identity = 0
     acquisition_skips: dict[str, int] = {}
@@ -196,7 +196,7 @@ def ingest_canvas_assignment(
 
         submission_id = canvas_source.submission_id_for(
             course_id, assignment_id, canvas_user_id)
-        result = ingest_module.ingest_unscored(
+        submission = ingest_module.ingest(
             submission_id=submission_id,
             rep_id=rep_id,
             pseudonym_id=pseudonym_id,
@@ -205,11 +205,10 @@ def ingest_canvas_assignment(
             context=context,
             vault=vault,
         )
-        repository.append_submission(result.submission)
-        repository.append_observations(result.observations)
+        repository.append_submission(submission)
         processed += 1
         yield (f"{pseudonym_id}: ingested from {source}, "
-               f"{result.submission.student_word_count} student word(s)")
+               f"{submission.student_word_count} student word(s)")
 
     summary = f"{processed} submission(s) ingested for {rep_id}."
     skips = []

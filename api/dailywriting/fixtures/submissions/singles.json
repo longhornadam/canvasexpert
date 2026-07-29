@@ -3,94 +3,81 @@
   "submissions": [
     {
       "fixture": 1,
-      "name": "clean_tier1_thesis",
       "submission_id": "sub-f01",
       "rep_id": "rep_t1_phones",
       "canvas_id": "990001",
       "submitted_at": "2026-09-14T09:12:00-05:00",
-      "expect": "all four tier-1 criteria met",
       "text": "Students should leave their phones in their backpacks during class because the temptation to check them is stronger than most seventh graders can fight."
     },
     {
       "fixture": 2,
-      "name": "restates_prompt",
       "submission_id": "sub-f02",
       "rep_id": "rep_t1_phones",
       "canvas_id": "990002",
       "submitted_at": "2026-09-14T09:14:00-05:00",
-      "expect": "fails arguable: it gives the prompt back as a statement",
       "text": "Students should be allowed to keep their phones with them during class."
     },
     {
       "fixture": 3,
-      "name": "prompt_copied_plus_eight",
       "submission_id": "sub-f03",
       "rep_id": "rep_t1_phones",
       "canvas_id": "990003",
       "submitted_at": "2026-09-14T09:20:00-05:00",
-      "expect": "student_word_count == 8",
       "text": "Should students be allowed to keep their phones with them during class? Take a position in one sentence. Phones belong in lockers during every single class."
     },
     {
       "fixture": 4,
-      "name": "stem_completed",
       "submission_id": "sub-f04",
       "rep_id": "rep_t4_lockdown",
       "canvas_id": "990001",
       "submitted_at": "2026-10-26T09:30:00-05:00",
-      "expect": "stem literal is scaffold, the interior is student",
       "text": "This shows that the school cared more about keeping the schedule than about keeping students safe."
     },
     {
       "fixture": 5,
-      "name": "stem_blank_empty",
       "submission_id": "sub-f05",
       "rep_id": "rep_t4_lockdown",
       "canvas_id": "990002",
       "submitted_at": "2026-10-26T09:31:00-05:00",
-      "expect": "zero student words, flagged empty_stem_blank and no_student_text",
       "text": "This shows that."
     },
     {
       "fixture": 6,
-      "name": "tier3_quotes_correctly",
       "submission_id": "sub-f06",
       "rep_id": "rep_t3_forest",
       "canvas_id": "990003",
       "submitted_at": "2026-10-05T09:22:00-05:00",
-      "expect": "quotation tagged quoted_source and excluded from student_word_count",
       "text": "The mill owner keeps cutting because money matters more to him than the pines do. The narrator makes that clear when he writes that the owner \"kept the saws running until the last stand of pines came down,\" which means he only looked up after there were no pines left."
     },
     {
       "fixture": 7,
-      "name": "tier3_dropped_quote",
       "submission_id": "sub-f07",
       "rep_id": "rep_t3_forest",
       "canvas_id": "990004",
       "submitted_at": "2026-10-05T09:25:00-05:00",
-      "expect": "evidence present but not integrated",
       "text": "The mill owner cares only about money and not about the pines. \"kept the saws running until the last stand of pines came down.\" That proves he is greedy."
     },
     {
       "fixture": 8,
-      "name": "names_classmate_and_sibling",
       "submission_id": "sub-f08",
       "rep_id": "rep_t1_phones",
       "canvas_id": "990004",
       "submitted_at": "2026-09-14T09:28:00-05:00",
-      "expect": "roster name replaced by its pseudonym; the non-roster sibling name is left alone, because the scrubber removes what the vault knows and guesses at nothing",
-      "names_that_must_not_survive": ["Marcus", "Marc"],
-      "names_that_survive_by_decision": ["Diego"],
+      "names_that_must_not_survive": [
+        "Marcus",
+        "Marc"
+      ],
+      "names_that_survive_by_decision": [
+        "Diego"
+      ],
       "text": "My brother Diego says Marcus texts him all through science class, which proves phones ruin focus for everybody."
     },
     {
       "fixture": 12,
-      "name": "formulaic_commentary",
       "submission_id": "sub-f12",
       "rep_id": "rep_t4_lockdown",
       "canvas_id": "990003",
       "submitted_at": "2026-10-26T09:40:00-05:00",
-      "expect": "the Goodhart case: commentary_beyond_restatement passes, and commentary_formulaic is observed anyway so the digest shows it",
       "text": "The school should have told families about the lockdown much sooner than it did.\n\nThe article says that administrators confirmed the front office \"waited two hours before sending any message home.\" This shows that waiting was a bad choice. It shows how the school was not really thinking about what families needed. This is important because it shows why telling families matters, and it shows that the school should have thought about families more."
     }
   ]

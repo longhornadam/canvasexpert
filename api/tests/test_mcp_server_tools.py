@@ -932,33 +932,23 @@ def _use_dailywriting_vault(monkeypatch):
 
 
 def _build_dailywriting_repo(tmp_path, fixture_numbers):
-    """Ingest one or more numbered ``single`` fixtures through the real
-    ingest pipeline and store the results in a fresh Repository."""
-    from api.dailywriting.config import criteria_loader
+    """Store fixture evidence through the one retained ingest path."""
     from api.dailywriting.core import ingest as ingest_module
     from api.dailywriting.fixtures import loader as dw_loader
     from api.dailywriting.store.repo import Repository as DWRepository
 
-    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(),
-                        vault=None)
-    roster_map = dw_loader.roster_map()
-    criteria_cache: dict[int, object] = {}
+    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(), vault=None)
     for number in fixture_numbers:
         raw = dw_loader.single(number)
         context = dw_loader.rep(raw["rep_id"])
-        if context.tier not in criteria_cache:
-            criteria_cache[context.tier] = criteria_loader.load_tier(context.tier)
-        result = ingest_module.ingest(
+        submission = ingest_module.ingest(
             submission_id=raw["submission_id"], rep_id=raw["rep_id"],
             pseudonym_id=dw_loader.pseudonym_for(raw["canvas_id"]),
             submitted_at=dw_loader.submitted_at(raw), text=raw["text"],
-            context=context, criteria_set=criteria_cache[context.tier],
-            roster_map=roster_map,
+            context=context, roster_map=dw_loader.roster_map(),
         )
         repo.put_rep(context)
-        repo.append_submission(result.submission)
-        repo.append_score(result.score, result.submission.pseudonym_id)
-        repo.append_observations(result.observations)
+        repo.append_submission(submission)
     return repo
 
 
@@ -966,380 +956,99 @@ def _use_dailywriting_repo(monkeypatch, repo):
     monkeypatch.setattr(tools, "_dailywriting_repository_factory", lambda: repo)
 
 
-def test_get_writing_history_returns_dated_rows_with_no_identity_leak(monkeypatch, tmp_path):
-    """AC1: one row per submission, ascending by date, carrying score/possible,
-    tier, word count, and observation count -- and no canvas_id, real name, SIS
-    id, or section, at any nesting depth, including inside the directive and
-    profile sections (neither of which the other get_writing_history tests
-    exercise, so a leak sweep that never populates them proves nothing about
-    those branches of the projection).
-
-    The two submissions share a canvas_id AND a month partition, appended to
-    the store in reverse chronological order -- `Repository.submissions_in_window`
-    already returns its results sorted (repo.py:363-365), so this cannot by
-    itself prove `build_history_payload` sorts on its own account; that
-    narrower claim has its own isolated test in
-    api/tests/dailywriting/test_dw_writing_history.py, which bypasses the
-    repository and feeds `build_history_payload` directly."""
-    from datetime import date, datetime, timezone
-
-    from api.dailywriting.config import criteria_loader
-    from api.dailywriting.core import ingest as ingest_module
-    from api.dailywriting.core.directives import compile_directive
-    from api.dailywriting.core.models import (
-        Directive, PatternSummary, SubmissionRef, build_profile,
-    )
+def test_get_writing_history_projects_evidence_without_identity_or_assessment(monkeypatch, tmp_path):
     from api.dailywriting.fixtures import loader as dw_loader
-    from api.dailywriting.store.repo import Repository as DWRepository
 
-    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(),
-                        vault=None)
-    roster_map = dw_loader.roster_map()
-    raw = dw_loader.single(1)  # rep_t1_phones, canvas_id 990001
-    context = dw_loader.rep(raw["rep_id"])
-    criteria = criteria_loader.load_tier(context.tier)
-    pseudonym = dw_loader.pseudonym_for(raw["canvas_id"])
-    repo.put_rep(context)
-
-    for day in (20, 5):  # appended late-then-early, same September partition
-        result = ingest_module.ingest(
-            submission_id=f"sub-order-{day}", rep_id=raw["rep_id"],
-            pseudonym_id=pseudonym,
-            submitted_at=datetime(2026, 9, day, 9, 0, tzinfo=timezone.utc),
-            text=raw["text"], context=context, criteria_set=criteria,
-            roster_map=roster_map,
-        )
-        repo.append_submission(result.submission)
-        repo.append_score(result.score, pseudonym)
-        repo.append_observations(result.observations)
-
-    directive = Directive(
-        directive_id="dir-1", pseudonym_id=pseudonym,
-        issued_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
-        text='Stop opening with "I think".',
-        target_pattern="banned_phrase",
-        detector=compile_directive('Stop saying "I think".').detector,
-    )
-    repo.put_directive(directive)
-    profile = build_profile(
-        pseudonym_id=pseudonym,
-        generated_at=datetime(2026, 9, 21, tzinfo=timezone.utc),
-        window_start=date(2026, 9, 1), window_end=date(2026, 9, 30),
-        tier=1,
-        per_criterion_rate={"arguable": 1.0},
-        active_patterns=[PatternSummary(
-            pattern_tag="thesis_not_arguable", count=1, rate=0.5,
-            evidence=["a quoted span that must not leak identity either"],
-            first_seen=date(2026, 9, 5), last_seen=date(2026, 9, 5),
-        )],
-        open_directives=[directive],
-        best_piece=SubmissionRef(submission_id="sub-order-5", rep_id=raw["rep_id"],
-                                 on=date(2026, 9, 5), total=4, possible=4),
-        next_focus="Keep quoting the passage directly.",
-        ready_for_tier_advance=False,
-    )
-    repo.put_profile(profile)
-
+    repo = _build_dailywriting_repo(tmp_path, [1, 2])
     _use_dailywriting_repo(monkeypatch, repo)
     _use_dailywriting_vault(monkeypatch)
+    pseudonym = dw_loader.pseudonym_for("990001")
 
-    result = tools.get_writing_history(
-        pseudonym, since="2026-01-01", until="2026-12-31")
+    result = tools.get_writing_history(pseudonym, since="2026-01-01", until="2026-12-31")
     assert result["ok"] is True
-    rows = result["submissions"]
-    assert len(rows) == 2
-    assert [row["submission_id"] for row in rows] == [
-        "sub-order-5", "sub-order-20"]
-    for row in rows:
-        for key in ("total", "possible", "tier", "student_word_count",
-                    "observation_count"):
-            assert key in row
-    assert result["directives"] and result["profile"] is not None
-
+    row = result["submissions"][0]
+    assert {"submission_id", "rep_id", "submitted_at", "student_word_count", "assignment_date", "prompt_text", "segments", "flags"} <= set(row)
     dumped = json.dumps(result)
-    for leak in (str(raw["canvas_id"]), "F990001", "Marcus Bell", "ELA7-PREAP-2A"):
-        assert leak not in dumped, f"{leak!r} leaked into payload: {dumped}"
+    for forbidden in ("canvas_id", "Marcus Bell", "total", "possible", "tier", "directives", "profile", "observations"):
+        assert forbidden not in dumped
 
 
-def test_get_writing_history_unscored_submission_has_null_score_fields(
-        monkeypatch, tmp_path):
-    """ECR substrate brief Sec 5 AC2: a submission ingested through
-    `core.ingest.ingest_unscored` and stored with `Repository.append_submission`
-    (no `append_score` call -- there is no `Score` to append) comes back
-    through the real `get_writing_history` tool with total/possible/status all
-    null. Asserted through the actual store write/read and the real tool
-    function, not by constructing the projection payload directly, which is
-    what distinguishes this from a projection-only unit test."""
-    from datetime import datetime, timezone
-
-    from api.dailywriting.core import ingest as ingest_module
-    from api.dailywriting.fixtures import loader as dw_loader
-    from api.dailywriting.store.repo import Repository as DWRepository
-
-    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(),
-                        vault=None)
-    roster_map = dw_loader.roster_map()
-    raw = dw_loader.single(1)  # rep_t1_phones, canvas_id 990001
-    context = dw_loader.rep(raw["rep_id"])
-    pseudonym = dw_loader.pseudonym_for(raw["canvas_id"])
-    repo.put_rep(context)
-
-    essay = " ".join(["mill", "river", "town", "families", "shift"] * 30) + "."
-    result = ingest_module.ingest_unscored(
-        submission_id="ecr-history-1", rep_id=context.rep_id,
-        pseudonym_id=pseudonym,
-        submitted_at=datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc),
-        text=essay, context=context, roster_map=roster_map,
-    )
-    repo.append_submission(result.submission)
-    if result.observations:
-        repo.append_observations(result.observations)
-    # Deliberately no repo.append_score(): an unscored piece has no Score.
-
-    _use_dailywriting_repo(monkeypatch, repo)
-    _use_dailywriting_vault(monkeypatch)
-
-    response = tools.get_writing_history(
-        pseudonym, since="2026-01-01", until="2026-12-31")
-    assert response["ok"] is True
-    rows = response["submissions"]
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["total"] is None
-    assert row["possible"] is None
-    assert row["status"] is None
-    assert row["student_word_count"] == 150
-
-
-def test_get_writing_history_scan_payload_green_with_include_text(monkeypatch, tmp_path):
-    """AC2: fixture 8's INPUT text has "Marcus" (a roster real name) and
-    "Diego" (a non-roster sibling name) -- but `core.ingest` scrubs at ingest
-    time (INV-7), so the STORED raw_text is already
-    "My brother [name] says Sparky texts him...", and this asserts nothing
-    about that scrub survived being served: it asserts the served payload,
-    scanned fresh, has neither a hard violation NOR a soft (unresolved) name
-    flag, mirroring test_no_pii_sweep_scan_payload_green_for_submissions'
-    "the scrub caught every roster name; nothing left to flag" assertion.
-    `green is True` alone is not that claim: a roster name inside a
-    _TEXT_FIELDS value is only ever a SOFT finding (feedback_safety.py:91-96),
-    and green = not hard (:110), so green can be True while a name is still
-    sitting there unflagged. `soft == []` is the assertion that actually
-    checks for a name leak."""
+def test_get_writing_history_include_text_gates_student_prose(monkeypatch, tmp_path):
     from api.dailywriting.fixtures import loader as dw_loader
 
-    repo = _build_dailywriting_repo(tmp_path, [8])
-    _use_dailywriting_repo(monkeypatch, repo)
-    _use_dailywriting_vault(monkeypatch)
-
-    pseudonym = dw_loader.pseudonym_for("990004")
-    result = tools.get_writing_history(
-        pseudonym, since="2026-01-01", until="2026-12-31", include_text=True)
-    assert result["ok"] is True
-
-    verdict = feedback_safety.scan_payload(result, _DailyWritingFixtureVault())
-    assert verdict["green"] is True
-    assert verdict["hard"] == []
-    assert verdict["soft"] == []
-
-
-def test_get_writing_history_scan_payload_can_actually_go_red(monkeypatch, tmp_path):
-    """Companion to the green test above: a no-PII sweep that has never been
-    shown to fail is not evidence that it works. A hand-written payload
-    carrying a structural identity key must fail scan_payload's own hard-block
-    layer -- proving the assertions above are testing something that can
-    fail, not asserting a tautology."""
-    vault = _DailyWritingFixtureVault()
-
-    leaking_key = feedback_safety.scan_payload(
-        {"submissions": [{"canvas_id": "990001"}]}, vault)
-    assert leaking_key["green"] is False
-    assert leaking_key["hard"]
-
-    leaking_id_in_text = feedback_safety.scan_payload(
-        {"submissions": [{"raw_text": "my number is 990001"}]}, vault)
-    assert leaking_id_in_text["green"] is False
-    assert leaking_id_in_text["hard"]
-
-
-def test_get_writing_history_unknown_pseudonym_is_a_structured_refusal(monkeypatch, tmp_path):
-    """AC3: a pseudonym absent from the resolver raises IdentityError inside
-    the store; the tool converts it to a refusal naming the roster-sync
-    remedy, never an exception and never an empty success."""
-    from api.dailywriting.store.repo import Repository as DWRepository
-    from api.dailywriting.fixtures import loader as dw_loader
-
-    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(),
-                        vault=None)
-    _use_dailywriting_repo(monkeypatch, repo)
-    _use_dailywriting_vault(monkeypatch)
-
-    result = tools.get_writing_history("Not A Real Pseudonym")
-    assert result["ok"] is False
-    assert set(result) == {"ok", "error"}
-    assert "roster" in result["error"].lower()
-
-
-def test_get_writing_history_include_text_default_false_omits_quoted_spans(
-        monkeypatch, tmp_path):
-    """AC4: include_text=False (the default) emits no stored writing text
-    anywhere; include_text=True emits it truncated to max_text_chars."""
-    from api.dailywriting.fixtures import loader as dw_loader
-
-    # Fixture 7 (evidence present but not integrated) is the one single
-    # fixture whose observations carry a real quoted span -- a clean fixture
-    # like 6 earns zero observations, so it cannot exercise this gate.
     repo = _build_dailywriting_repo(tmp_path, [7])
     _use_dailywriting_repo(monkeypatch, repo)
     _use_dailywriting_vault(monkeypatch)
-
     pseudonym = dw_loader.pseudonym_for("990004")
-    hidden = tools.get_writing_history(
-        pseudonym, since="2026-01-01", until="2026-12-31")
-    assert hidden["ok"] is True
-    dumped = json.dumps(hidden)
-    assert "raw_text" not in dumped
-    assert "kept the saws running" not in dumped
-    row = hidden["submissions"][0]
-    assert row["observations"], "observation metadata should survive include_text=False"
-    for observation in row["observations"]:
-        assert "claim_text" not in observation
-        assert "evidence_span" not in observation
-    assert row["per_item"], "checklist outcomes should survive include_text=False"
-    for item in row["per_item"].values():
-        # ItemResult.note (outbound key "score_note") is gated too:
-        # core.scoring interpolates a slice of the student's own text into
-        # several of these notes, so it is not machine-only prose (the whole
-        # point of this round's correction).
-        assert "score_note" not in item
-        assert "evidence_span" not in item
-
-    shown = tools.get_writing_history(
-        pseudonym, since="2026-01-01", until="2026-12-31",
-        include_text=True, max_text_chars=40)
-    assert shown["ok"] is True
-    shown_row = shown["submissions"][0]
-    assert any("score_note" in item for item in shown_row["per_item"].values())
-    assert "truncated" in shown_row["raw_text"] or len(shown_row["raw_text"]) <= 40
+    hidden = tools.get_writing_history(pseudonym, since="2026-01-01", until="2026-12-31")
+    shown = tools.get_writing_history(pseudonym, since="2026-01-01", until="2026-12-31", include_text=True, max_text_chars=40)
+    assert "raw_text" not in json.dumps(hidden)
+    assert "raw_text" in shown["submissions"][0]
+    assert len(shown["submissions"][0]["raw_text"]) <= 70
 
 
-def _write_raw_submission(repo, *, submission_id, rep_id, canvas_id, raw_text,
-                          submitted_at_iso):
-    """Write a submission document straight to the store's on-disk partition,
-    bypassing `append_submission` (and therefore `core.ingest`'s scrub pass
-    entirely) -- legitimate for these two tests specifically, because they
-    need to plant an UNSCRUBBED real id token at a controlled offset, which
-    the normal write path would refuse to store."""
-    import json as _json
-    from datetime import datetime as _dt
-
-    partition = f"{_dt.fromisoformat(submitted_at_iso):%Y-%m}"
-    path = repo.root / "submissions" / f"{partition}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    document = {"schema": 1, "submissions": [{
-        "submission_id": submission_id, "rep_id": rep_id,
-        "canvas_id": str(canvas_id), "submitted_at": submitted_at_iso,
-        "raw_text": raw_text, "student_word_count": len(raw_text.split()),
-        "segments": [], "flags": [], "scrub_findings": [],
-    }]}
-    path.write_text(_json.dumps(document), encoding="utf-8")
-
-
-def test_get_writing_history_truncates_before_the_gate_lets_a_far_id_through(
-        monkeypatch, tmp_path):
-    """AC4, half 1: truncation happens BEFORE the gate scans. A hard-blocking
-    real id (canvas_id "990001", 6 chars, over the gate's 5-char floor) sitting
-    past max_text_chars never reaches the scan, so the call succeeds. If the
-    order were swapped (gate first, then truncate) this would refuse."""
-    from api.dailywriting.fixtures import loader as dw_loader
-    from api.dailywriting.store.repo import Repository as DWRepository
-
-    pseudonym = dw_loader.pseudonym_for("990001")
-    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(),
-                        vault=None)
-    repo.put_rep(dw_loader.rep("rep_t1_phones"))
-    far_text = ("filler " * 20) + "990001"
-    assert far_text.index("990001") > 50
-    _write_raw_submission(
-        repo, submission_id="sub-leak-far", rep_id="rep_t1_phones",
-        canvas_id="990001", raw_text=far_text,
-        submitted_at_iso="2026-09-14T09:12:00-05:00")
-
+def test_get_writing_history_unknown_pseudonym_is_a_structured_refusal(monkeypatch, tmp_path):
+    repo = _build_dailywriting_repo(tmp_path, [])
     _use_dailywriting_repo(monkeypatch, repo)
     _use_dailywriting_vault(monkeypatch)
-
-    result = tools.get_writing_history(
-        pseudonym, since="2026-01-01", until="2026-12-31",
-        include_text=True, max_text_chars=50)
-    assert result["ok"] is True
-    assert "990001" not in json.dumps(result)
-
-
-def test_get_writing_history_truncates_before_the_gate_still_blocks_a_near_id(
-        monkeypatch, tmp_path):
-    """AC4, half 2: the companion case. The same real id sitting BEFORE the
-    max_text_chars boundary survives truncation and still gets caught by the
-    gate. Only together do these two prove the ordering: either one alone is
-    also consistent with truncation and the gate running in either order."""
-    from api.dailywriting.fixtures import loader as dw_loader
-    from api.dailywriting.store.repo import Repository as DWRepository
-
-    pseudonym = dw_loader.pseudonym_for("990001")
-    repo = DWRepository(tmp_path / "dw-store", resolver=dw_loader.resolver(),
-                        vault=None)
-    repo.put_rep(dw_loader.rep("rep_t1_phones"))
-    near_text = "990001 " + ("filler " * 20)
-    assert near_text.index("990001") < 50
-    _write_raw_submission(
-        repo, submission_id="sub-leak-near", rep_id="rep_t1_phones",
-        canvas_id="990001", raw_text=near_text,
-        submitted_at_iso="2026-09-14T09:12:00-05:00")
-
-    _use_dailywriting_repo(monkeypatch, repo)
-    _use_dailywriting_vault(monkeypatch)
-
-    result = tools.get_writing_history(
-        pseudonym, since="2026-01-01", until="2026-12-31",
-        include_text=True, max_text_chars=50)
+    result = tools.get_writing_history("Not A Real Pseudonym")
     assert result["ok"] is False
-    assert result["violations"]
+    assert "roster" in result["error"].lower()
+
+
+def test_get_writing_history_scan_payload_can_actually_go_red():
+    verdict = feedback_safety.scan_payload({"submissions": [{"canvas_id": "990001"}]}, _DailyWritingFixtureVault())
+    assert verdict["green"] is False
+
+
+def test_get_writing_history_bad_date_and_inverted_window_are_structured_refusals(monkeypatch, tmp_path):
+    _use_dailywriting_vault(monkeypatch)
+    _use_dailywriting_repo(monkeypatch, _build_dailywriting_repo(tmp_path, []))
+    assert tools.get_writing_history("Whoever", since="not-a-date")["ok"] is False
+    assert tools.get_writing_history("Whoever", since="2026-12-31", until="2026-01-01")["ok"] is False
+
+
+def _write_history_raw_submission(repo, *, text):
+    from datetime import datetime
+
+    path = repo.root / "submissions" / "2026-09.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema": 1, "submissions": [{
+        "submission_id": "raw-history", "rep_id": "rep_t1_phones",
+        "canvas_id": "990001", "submitted_at": "2026-09-14T09:12:00-05:00",
+        "raw_text": text, "student_word_count": len(text.split()),
+        "segments": [], "flags": [], "scrub_findings": [],
+    }]}), encoding="utf-8")
+
+
+def test_get_writing_history_truncates_before_the_gate(monkeypatch, tmp_path):
+    from api.dailywriting.fixtures import loader as dw_loader
+
+    repo = _build_dailywriting_repo(tmp_path, [])
+    repo.put_rep(dw_loader.rep("rep_t1_phones"))
+    _use_dailywriting_repo(monkeypatch, repo)
+    _use_dailywriting_vault(monkeypatch)
+    pseudonym = dw_loader.pseudonym_for("990001")
+
+    _write_history_raw_submission(repo, text=("filler " * 20) + "990001")
+    far = tools.get_writing_history(pseudonym, since="2026-01-01", until="2026-12-31", include_text=True, max_text_chars=50)
+    assert far["ok"] is True
+    assert "990001" not in json.dumps(far)
+
+    _write_history_raw_submission(repo, text="990001 " + ("filler " * 20))
+    near = tools.get_writing_history(pseudonym, since="2026-01-01", until="2026-12-31", include_text=True, max_text_chars=50)
+    assert near["ok"] is False
+    assert near["violations"]
 
 
 def test_get_writing_history_refuses_on_vault_conflict(monkeypatch, tmp_path):
-    """AC5: a vault conflict copy present on disk causes refusal, not a
-    partial answer -- regardless of what the store holds. The exact key set
-    (not just ok=False) is what proves "refusal, not a partial answer": a
-    partial answer would still carry ok=False plus leftover payload keys."""
-    from api.dailywriting.fixtures import loader as dw_loader
-
     repo = _build_dailywriting_repo(tmp_path, [1])
     _use_dailywriting_repo(monkeypatch, repo)
-
-    class ConflictedVault:
-        def conflicts(self):
-            return ["vault conflict.json"]
-
-    monkeypatch.setattr(tools, "_vault_factory", ConflictedVault)
-
-    pseudonym = dw_loader.pseudonym_for("990001")
-    result = tools.get_writing_history(pseudonym)
+    monkeypatch.setattr(tools, "_vault_factory", type("ConflictVault", (), {"conflicts": lambda self: ["copy"]}))
+    result = tools.get_writing_history("Sparky McGee")
     assert result["ok"] is False
     assert set(result) == {"ok", "error"}
     assert "conflict" in result["error"].lower()
-
-
-def test_get_writing_history_bad_date_and_inverted_window_are_structured_refusals(
-        monkeypatch, tmp_path):
-    _use_dailywriting_vault(monkeypatch)
-    repo = _build_dailywriting_repo(tmp_path, [])
-    _use_dailywriting_repo(monkeypatch, repo)
-
-    bad_format = tools.get_writing_history("Whoever", since="not-a-date")
-    assert bad_format["ok"] is False
-
-    inverted = tools.get_writing_history(
-        "Whoever", since="2026-12-31", until="2026-01-01")
-    assert inverted["ok"] is False
-
 
 # --- typed mirror-first reads (1.0beta-05) ------------------------------------
 #

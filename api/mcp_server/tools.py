@@ -35,7 +35,6 @@ from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
 from api.webui import config, mirror_service, workspace
-from api.webui.canvas_client import _canvas_get_all
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_vault
@@ -843,23 +842,23 @@ _DEFAULT_HISTORY_LOOKBACK_DAYS = 730
 def get_writing_history(pseudonym: str, since: str = "", until: str = "",
                         include_text: bool = False,
                         max_text_chars: int = _DEFAULT_MAX_TEXT_CHARS) -> dict:
-    """One student's daily-writing record across time, pseudonym-first: dated
-    submissions in ascending order (score/possible, tier, student word count,
-    observation signal, and the checklist prompt), directive uptake, and the
-    rolling coaching profile. Read from the private per-student store
+    """One student's Writing Record evidence across time, pseudonym-first:
+    dated submissions, assignment context, word counts, segment attribution,
+    and structural flags. Writing Record does not score, coach, or judge work.
+    Read from the private per-student store
     (``api/dailywriting``), never from a course or the CanvasMirror -- there
     is no ``course_id`` here because the store has no course concept and
     nothing to refresh, but the identity vault and the outbound safety gate
     still apply: this is the first tool to carry student data with no
     ``course_id`` gate.
 
-    No trend, streak, or aggregate judgment is computed here -- only what the
-    store already recorded; reasoning about the arc is left to the model.
+    No judgment is computed here; the assistant and teacher may evaluate the
+    evidence later if they choose.
     ``since``/``until`` are ``YYYY-MM-DD`` dates (both default to a two-year
     lookback from today). ``include_text=False`` (the default) omits every
     span quoted from student writing; ``include_text=True`` includes them
     trimmed to ``max_text_chars`` (0 = full), trimmed BEFORE the gate scans
-    them. The checklist prompt is teacher-authored, not student data, and is
+    them. The assignment prompt is teacher-authored, not student data, and is
     always included."""
     vault, vault_err = _open_vault()
     if vault_err:
@@ -883,13 +882,6 @@ def get_writing_history(pseudonym: str, since: str = "", until: str = "",
     try:
         submissions = repository.submissions_in_window(
             pseudonym, since_date, until_date)
-        scores = repository.scores_for(
-            [s.submission_id for s in submissions])
-        observations = repository.observations_in_window(
-            pseudonym, since_date, until_date)
-        directives = repository.directives_for(pseudonym)
-        profile = repository.read_profile(pseudonym)
-        current_tier = repository.current_tier(pseudonym)
         reps = {}
         for submission in submissions:
             if submission.rep_id not in reps:
@@ -904,15 +896,10 @@ def get_writing_history(pseudonym: str, since: str = "", until: str = "",
 
     payload = dailywriting_projection.build_history_payload(
         pseudonym_id=pseudonym,
-        current_tier=current_tier,
         since=since_date,
         until=until_date,
         submissions=submissions,
-        scores=scores,
-        observations=observations,
         reps=reps,
-        directives=directives,
-        profile=profile,
         include_text=include_text,
         max_text_chars=max_text_chars,
     )

@@ -1,143 +1,49 @@
-Writing Record - one student's writing history over time
+Writing Record - private longitudinal writing evidence
 
-Reference for an AI assistant helping a teacher coach a writer, not just grade
-one assignment, in CanvasExpert. Accurate as of this file's version. Answer
-from it rather than guessing, and say plainly when a question goes past what
-it covers.
+Use get_writing_history(pseudonym) when a teacher asks to inspect one
+student's dated writing evidence. It is separate from PowerGrader and from
+Writing Timeline. It does not score, coach, assign a tier, infer a trend,
+recommend feedback, or decide whether an assignment meets a rubric.
 
+What is stored
 
-What the Writing Record is
+For every teacher-authorized acquisition, CanvasExpert retains the reliable
+assignment context (date, prompt, and supplied scaffolds/source text when
+available) and each acquired student's scrubbed text. It also retains stable
+assignment/rep and submission IDs, timestamp, student word count, segment
+origins/spans/method/confidence, scrub findings, and structural flags. Segment
+attribution distinguishes assignment, scaffold, student, and quoted-source
+text so later readers can accurately see what counts as student writing.
 
-Separate from a Canvas course entirely. Some teachers run a daily or weekly
-short-writing practice (a "rep") that CanvasExpert scores automatically
-against a published checklist and keeps a private, per-student record of over
-time: every piece, its score, dated noticings about patterns in the writing,
-and specific instructions the teacher gave that student and whether they
-followed them. get_writing_history(pseudonym) reads that record. It is
-pseudonym-first, not course-first or assignment-first, because the question it
-answers is "how is this writer developing," and no other tool can answer that.
+How work enters
 
-This has nothing to do with Writing Timeline. Writing Timeline reads a
-submitted Word document's own revision history for one assignment. The
-Writing Record is a running history across many short pieces, built by
-CanvasExpert's own scoring, not by anything in the document.
+A teacher selects one Canvas assignment in CanvasExpert's web UI or equivalent
+local CLI. That action scopes one teacher-triggered acquisition; it is not a
+persistent tracking or eligibility flag. Every acquired response is eligible:
+there is no assignment-type, length, genre, or opt-in classifier. Typed text
+comes from the local mirror. A DOCX upload may be read through the focused
+teacher-triggered Canvas path; PDF, OCR, and other new attachment types are
+not part of this tool. Re-ingesting a stable assignment/submission replaces
+the current record read without creating a second current piece.
 
+What the assistant receives
 
-What it returns
-
-Dated submissions in ascending order, oldest first. Each one carries its
-score and the total possible, the tier it was checked against, how many words
-the student actually wrote, and how many dated observations exist for it. Also
-the checklist prompt the student was writing to, and the per-criterion
-checklist outcome for that piece. Alongside the submissions: any standing
-instructions the teacher has given this student and whether the student has
-been following them, and the rolling coaching profile CanvasExpert already
-keeps for the student: per-criterion rates, active patterns, what to focus on
-next, and whether the student looks ready to move up a tier.
-
-There is no trend, streak, or overall judgment baked into the tool's answer.
-It hands you dated records; reasoning about the arc, and saying so to the
-teacher, is your job as the assistant reading it, the same way a teacher would
-read a folder of a student's work over a semester.
-
-include_text defaults to false, which leaves out every span quoted from the
-student's own writing: the piece's own text, the exact sentence behind an
-observation, the quote behind a checklist outcome. Call with include_text=true
-only when you actually need to read the words, and prefer max_text_chars to
-trim what comes back rather than pulling everything by default: a long arc of
-full text is a large payload, billed to the teacher's own AI key. The
-checklist prompt itself is not student data and always comes through, because
-without it a piece's purpose is impossible to read: a narrative piece scored
-lower than an argument piece the week before is not decline, it is a
-different assignment, and the prompt is the only thing here that says so.
-
-
-What it does not have yet
-
-Only two of the three things a teacher would want are here. The prompt and
-scaffolding the student was given: yes. The student's actual submission,
-attributed sentence by sentence to where it came from (the assignment, a
-scaffold, the student, a quoted source) so a student who copies the prompt
-and adds four words is credited with four words, not a whole essay: yes.
-The feedback the student actually received, in the teacher's or the model's
-own words as the student read it: not yet. What you can see instead is the
-structured half only, the checklist outcome and directive follow-through, not
-the delivered sentences.
-
-There is no rubric here either, on purpose. A rubric answers "why this score,"
-which is PowerGrader's question and belongs there. This tool answers "how is
-this writer developing," and per-criterion checklist outcomes already carry
-that signal without several hundred words of grading-descriptor prose eating
-the context window before you have read a word the student wrote.
-
-Extended constructed responses -- the kind PowerGrader scores against a full
-rubric with a Writing Timeline attached -- can be held here too, as an
-ordinary dated piece alongside the short daily reps, but unscored: a
-checklist written for a one-sentence rep cannot honestly grade a 400-1500
-word essay, so a long piece's total, possible, and per-criterion outcomes all
-come back null rather than a number that would misrepresent what was
-checked. student_word_count and the flag-derived observations
-(no_student_text, exceeds_word_cap) still apply, because those come from
-segmentation, not from a checklist.
-
-A long piece is truncated the same as any other quoted text when you ask for
-it: with include_text=true, its raw_text is cut at max_text_chars and the
-rest is dropped from what comes back, not just hidden. student_word_count is
-never truncated, so it is what tells you how much of the piece you did not
-just see -- a piece reporting 900 student words against a raw_text you only
-received the first 2000 characters of is missing most of itself. Raise
-max_text_chars deliberately when you actually need to read an extended
-piece rather than a rep; the default is sized for short daily writing, not
-an essay.
-
-A piece's purpose, narrative versus argument versus explanation and so on, is
-not a separate stored field yet. Infer it from the checklist prompt text if
-you need it, and say when you are inferring rather than reading a fact.
-
-
-How work enters the record
-
-There is no automatic feed and no per-assignment flag to turn on. A teacher
-points CanvasExpert at one Canvas assignment (from the CanvasExpert web UI,
-or the equivalent CLI command) and every student response on that assignment
-enters the record, pseudonymously, unscored, the same day. That one action is
-the opt-in -- there is nothing else to configure, and nothing happens to an
-assignment nobody has pointed CanvasExpert at.
-
-Two kinds of submission reach the record. A typed response (online text
-entry) is read from CanvasExpert's own local mirror. An uploaded Word
-document (.docx) is read too: the mirror keeps filenames but not file
-contents, so CanvasExpert reads that one file from Canvas at ingest time and
-extracts its text. Both then follow the identical path -- same pseudonyms,
-same name scrubbing before anything is stored, unscored either way.
-
-What is skipped, and always reported by filename rather than dropped
-silently: any upload that is not a .docx (a PDF, a photo of handwriting --
-there is no OCR here, and handwriting is not read at all), a Word document
-over the size cap, one that cannot be opened as a Word document, and any
-student whose file could not be fetched from Canvas at that moment. A
-submission carrying both typed text and an upload keeps the typed text. If a
-student uploaded more than one Word document, the most recently uploaded one
-is the one that enters the record and the earlier ones are named as skipped.
-A skipped student is skipped alone -- everyone else on the assignment still
-ingests, and re-running picks up whoever was missed.
-
-Re-running the same assignment is safe: it replaces that assignment's rep and
-each student's submission rather than duplicating them, so pointing
-CanvasExpert at an assignment again after a due-date change or a new late
-submission does not create a second copy of anyone's work. A re-run does
-re-read each uploaded file from Canvas, because Canvas's file links expire
-and cannot be reused.
-
-Ingest is a teacher action on the teacher's own surfaces, the web UI and the
-CLI. It is deliberately not something you as the assistant can trigger.
-
+get_writing_history returns dated submissions in ascending order with
+assignment context, IDs, timestamp, student word count, segment attribution
+metadata, and flag codes. include_text=false is the default and omits student
+prose plus flag detail that can quote it. include_text=true returns scrubbed
+raw_text and text-bearing flag material, trimmed by max_text_chars. Prompt
+text is teacher-authored context and remains available under the same trim.
 
 Privacy
 
-Pseudonym-first the same way every other student-data tool here is: real
-names, Canvas IDs, and SIS IDs never leave the machine. The record is private
-to the teacher's own workspace and does not exist in Canvas, in the AI
-Authoring folder, or anywhere outbound except through this one gated read.
-Quoted spans, when you ask for them with include_text=true, pass through the
-same outbound safety scan every other tool here does before they reach you.
+The private store is keyed by Canvas ID at rest, but only pseudonyms leave the
+machine. Names, Canvas IDs, SIS IDs, private paths, and unscrubbed text are
+never projected. The outbound safety scan runs over every exposed text field.
+The evidence is pseudonymized and scrubbed, not anonymous; the teacher reviews
+it before sending it to any external AI service.
+
+Open boundaries
+
+Rubric capture, delivered-feedback history, and automatic acquisition are not yet
+implemented. PowerGrader remains the grading and feedback-review surface.

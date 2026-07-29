@@ -1,7 +1,7 @@
 """Shared plumbing for the daily writing command line.
 
 Every command here is local and read-or-write-to-disk only. None of them touch
-Canvas, create a gradebook column, or advance a student's tier.
+Canvas or create gradebook state.
 
 Output is pseudonymised because the store is: a command prints "Sparky McGee"
 because that is the only name it has. Nothing here resolves back to a real
@@ -14,8 +14,7 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 
-from api.dailywriting.config import criteria_loader, naming
-from api.dailywriting.core.models import CriteriaSet
+from api.dailywriting.config import naming
 from api.dailywriting.store.identity import MappingResolver
 from api.dailywriting.store.repo import Repository, workspace_store_root
 
@@ -54,14 +53,6 @@ def build_repository(args) -> Repository:
     return repository
 
 
-def criteria_for(context_tier: int,
-                 cache: dict[int, CriteriaSet] | None = None) -> CriteriaSet:
-    cache = cache if cache is not None else {}
-    if context_tier not in cache:
-        cache[context_tier] = criteria_loader.load_tier(context_tier)
-    return cache[context_tier]
-
-
 def parse_date(value: str) -> date:
     try:
         return date.fromisoformat(value)
@@ -85,34 +76,6 @@ def read_json(path: Path) -> dict:
         raise CommandError(f"no file at {path}") from exc
     except json.JSONDecodeError as exc:
         raise CommandError(f"{path} is not valid JSON: {exc}") from exc
-
-
-def students_from(args, repository: Repository) -> tuple[list[str], list[str]]:
-    """Resolve which students a command covers.
-
-    Returns (pseudonyms, warnings). Falling back to the store's known students
-    is honest but incomplete, so it warns: a student who has never turned
-    anything in has no record to be found by, and "who is missing work" cannot
-    be answered from the store alone.
-    """
-    warnings: list[str] = []
-    if getattr(args, "students", None):
-        return list(args.students), warnings
-    if getattr(args, "students_file", None):
-        document = read_json(args.students_file)
-        listed = document if isinstance(document, list) else document.get(
-            "pseudonyms", [])
-        if not listed:
-            raise CommandError(
-                f"{args.students_file} has no pseudonyms; expected a JSON list "
-                'or {"pseudonyms": [...]}')
-        return list(listed), warnings
-    known = repository.known_pseudonyms()
-    warnings.append(
-        "No roster supplied, so this covers only the "
-        f"{len(known)} student(s) who already have records. Students with no "
-        "work at all cannot appear; pass --students-file for the full roster.")
-    return known, warnings
 
 
 def run(main_fn, argv=None) -> int:

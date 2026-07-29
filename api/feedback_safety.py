@@ -37,17 +37,12 @@ _FORBIDDEN_KEYS = {"name", "real_name", "canvas_id", "sis_id", "sisid",
 # below are the daily writing substrate's stored text and quoted evidence
 # spans: names appear inside student writing, so a span quoted out of a
 # submission is exactly as identity-bearing as a response body.
-# "score_note" (api/dailywriting projection.py's ItemResult.note) is
-# deliberately not called "note": a bare "note" key is already used elsewhere
-# in this codebase to carry a structural exact-value id (see
-# test_feedback_safety.py's hard-block regression tests), so listing it here
-# would have reclassified that existing usage as free text and silently
-# weakened its hard-block coverage for ids under _MIN_ID_HARD_BLOCK_LEN.
 _TEXT_FIELDS = {"prompt", "response", "feedback", "text", "assignment_description",
                 # daily writing substrate (api/dailywriting)
                 "raw_text", "evidence_span", "claim_text", "next_focus",
                 "student_facing_text", "prompt_text", "strong_text",
-                "near_miss_text", "one_thing", "acknowledgment", "score_note"}
+                "near_miss_text", "one_thing", "acknowledgment",
+                "flag_detail"}
 
 # A real id found as a `\b`-bounded token inside free text is only a HARD
 # block at this length or longer. Below it, a coincidental short number (a

@@ -21,8 +21,7 @@ the [name] [name]." The assignment's own text was exempt, which only helped
 when the prompt happened to name the same proper nouns; a student writing past
 the prompt, which is the writing most worth coaching, was hit hardest. And
 because scrubbing happens before storage, that was the stored record, the
-quoted evidence behind every observation, and the input to every checklist
-check.
+quoted structural evidence derived from the writing.
 
 Over-redaction was defended as the safe direction. It is not safe, it is
 destructive: this product exists to help a teacher read how a student's
@@ -50,7 +49,7 @@ from typing import Iterable
 from api.dailywriting.core.models import ScrubFinding
 
 # Used only by `model_ready_text`, to strip the vault's safe pseudonyms out of
-# a payload leaving the tenant. Readable in a teacher's digest, unlike an
+# a payload leaving the tenant. Readable in a teacher's record, unlike an
 # opaque token.
 NAME_PLACEHOLDER = "[name]"
 

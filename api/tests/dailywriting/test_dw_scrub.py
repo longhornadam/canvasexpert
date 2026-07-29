@@ -11,7 +11,6 @@ from __future__ import annotations
 import pytest
 
 from api.dailywriting.core import scrub
-from api.dailywriting.core.observations import assert_span_storable
 from api.dailywriting.fixtures import loader
 
 
@@ -20,15 +19,8 @@ def test_t6_no_roster_name_or_alias_survives_anywhere(ingest_fixture):
     raw = loader.single(8)
     result = ingest_fixture(8)
 
-    stored_surfaces = [result.submission.raw_text]
-    stored_surfaces += [segment.text for segment in result.submission.segments]
-    stored_surfaces += [observation.evidence_span
-                        for observation in result.observations]
-    stored_surfaces += [item.evidence_span.text
-                        for item in result.score.per_item.values()
-                        if item.evidence_span]
-    stored_surfaces += [observation.claim_text
-                        for observation in result.observations]
+    stored_surfaces = [result.raw_text]
+    stored_surfaces += [segment.text for segment in result.segments]
 
     for name in raw["names_that_must_not_survive"]:
         for surface in stored_surfaces:
@@ -45,8 +37,8 @@ def test_t6_outbound_representation_requires_scrubbed_text(ingest_fixture):
 
     result = ingest_fixture(8)
     outbound = scrub.model_ready_text(scrub.ScrubResult(
-        text=result.submission.raw_text,
-        findings=result.submission.scrub_findings,
+        text=result.raw_text,
+        findings=result.scrub_findings,
     ), pseudonyms=pseudonyms)
     for name in raw["names_that_must_not_survive"]:
         assert name.lower() not in outbound.text.lower()
@@ -55,8 +47,8 @@ def test_t6_outbound_representation_requires_scrubbed_text(ingest_fixture):
 
 def test_a_roster_name_becomes_its_pseudonym(ingest_fixture):
     result = ingest_fixture(8)
-    assert "Sparky" in result.submission.raw_text
-    kinds = {finding.kind for finding in result.submission.scrub_findings}
+    assert "Sparky" in result.raw_text
+    kinds = {finding.kind for finding in result.scrub_findings}
     assert kinds <= {"roster_name", "roster_id"}
 
 
@@ -73,14 +65,14 @@ def test_a_non_roster_name_is_left_alone_deliberately(ingest_fixture):
     result = ingest_fixture(8)
     raw = loader.single(8)
     for name in raw["names_that_survive_by_decision"]:
-        assert name in result.submission.raw_text
+        assert name in result.raw_text
 
 
 def test_findings_never_record_the_value_they_removed(ingest_fixture):
     """A finding is stored beside the text, so it must not undo the redaction."""
     raw = loader.single(8)
     result = ingest_fixture(8)
-    for finding in result.submission.scrub_findings:
+    for finding in result.scrub_findings:
         for name in raw["names_that_must_not_survive"]:
             assert name.lower() not in finding.detail.lower()
             assert name.lower() not in finding.replacement.lower()
@@ -133,8 +125,8 @@ def test_no_redaction_placeholder_reaches_stored_text(ingest_fixture):
     placeholder is `model_ready_text`, on the way out of the tenant."""
     for number in loader.single_numbers():
         result = ingest_fixture(number)
-        assert scrub.NAME_PLACEHOLDER not in result.submission.raw_text
-        for segment in result.submission.segments:
+        assert scrub.NAME_PLACEHOLDER not in result.raw_text
+        for segment in result.segments:
             assert scrub.NAME_PLACEHOLDER not in segment.text
 
 
@@ -191,9 +183,4 @@ def test_the_student_is_credited_for_every_word_they_wrote(ingest_fixture):
     which is one of the few numbers the record uses to describe a writer.
     """
     result = ingest_fixture(8)
-    assert result.submission.student_word_count == 18
-
-
-def test_an_observation_without_a_span_is_refused():
-    with pytest.raises(Exception):
-        assert_span_storable("   ")
+    assert result.student_word_count == 18

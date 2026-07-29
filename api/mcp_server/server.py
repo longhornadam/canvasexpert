@@ -124,9 +124,9 @@ def get_submissions(course_id: str, assignment_id: str,
 def get_writing_history(pseudonym: str, since: str = "", until: str = "",
                         include_text: bool = False,
                         max_text_chars: int = 2000) -> str:
-    """One student's daily-writing record across time, pseudonym-first: dated
-    submissions (score/possible, tier, word count, observation signal, the
-    checklist prompt) plus directive uptake and the rolling coaching profile.
+    """One student's Writing Record evidence across time, pseudonym-first:
+    dated submissions, assignment context, word counts, segment attribution,
+    and structural flags. Writing Record does not score, coach, or judge work.
     No course_id -- this reads a private per-student store, not a course.
     since/until are YYYY-MM-DD (both default to a two-year lookback).
     include_text=false (default) omits every span quoted from student

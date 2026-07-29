@@ -70,9 +70,7 @@ def rep(rep_id: str) -> AssignmentContext:
     return AssignmentContext(
         rep_id=raw["rep_id"],
         date=datetime.fromisoformat(raw["date"]).date(),
-        tier=raw["tier"],
         prompt_text=raw["prompt_text"],
-        criteria_set_id=raw["criteria_set_id"],
         scaffold_blocks=[
             ScaffoldBlock(block_id=b["block_id"], template=b["template"],
                           kind=b["kind"])

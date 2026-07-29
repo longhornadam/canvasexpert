@@ -2,7 +2,7 @@
 
 Records on disk are keyed by Canvas user id, because that key is durable: the
 vault lets a teacher regenerate or hand-set a pseudonym, and a store keyed on
-the pseudonym string would orphan every observation, directive, and score for
+the pseudonym string would orphan every stored writing record for
 that student the moment they did. Everything above the store speaks pseudonyms
 only, and the translation happens here.
 

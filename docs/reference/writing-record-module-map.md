@@ -1,252 +1,67 @@
 # Writing Record Route Card
 
-Routing scope: open this card only when the active handoff touches the longitudinal writing
-record (`api/dailywriting/`), then read the relevant section. It is not global executor
-context and does not replace a handoff's exact file/symbol list.
-
-This card is the **durable** home for the subsystem's state. Briefs are retired when their
-batch lands; what a new senior needs after that lives here.
-
 ## What this subsystem is
 
-A per-student longitudinal record of writing, kept privately on the teacher's machine, so a
-connected assistant can coach a writer across time rather than mark one assignment. It is
-not a grading surface.
-
-The boundary that keeps it and PowerGrader both lean: **the writing record answers "how is
-this writer developing." PowerGrader answers "why this score."** A rubric question is a
-grading question and belongs to the surface that owns grading. This has nothing to do with
-Writing Timeline, which reads one submitted DOCX's own revision history.
+Writing Record privately preserves scrubbed writing evidence for later
+teacher/AI evaluation. It is not a grading authority and does not score,
+coach, infer trends, recommend tiers, or assemble feedback. PowerGrader owns
+grading and review-first Canvas posting; Writing Timeline reads revision facts
+for one DOCX and is separate.
 
 ## Entry points
 
-- Substrate (models, scoring, segmentation, scrub, observations, profile): `api/dailywriting/core/`
-- Private store: `api/dailywriting/store/` — see `store/SCHEMA.md`
-- Outbound projection: `api/dailywriting/projection.py`
-- Canvas mapping and ingest driver: `api/dailywriting/canvas_source.py`, `canvas_ingest.py`
-- Uploaded-file acquisition (the only live Canvas path): `api/dailywriting/canvas_attachments.py`
-- CLI: `api/dailywriting/cli/`
-- Web trigger: `api/webui/routes/dailywriting.py`
+- Evidence types and scrub/segmentation: `api/dailywriting/core/`
+- Private store: `api/dailywriting/store/` (see `store/SCHEMA.md`)
+- Explicit outbound projection: `api/dailywriting/projection.py`
+- Assignment mapping and teacher-triggered Canvas ingest:
+  `canvas_source.py`, `canvas_ingest.py`, `canvas_attachments.py`
+- Local CLI: `api/dailywriting/cli/ingest.py` and `ingest_canvas.py`
+- Teacher web trigger: `api/webui/routes/dailywriting.py`
 - Assistant read: `get_writing_history` in `api/mcp_server/tools.py`
-- Served guide: `api/default_docs/AI Authoring/Writing Record (longitudinal writing history).txt`
-
-The seven load-bearing invariants are in `api/dailywriting/__init__.py`. Short, read in full.
 
 ## Ownership routes
 
-| Concern | Owners |
-|---|---|
-| Record shape and invariants | `core/models.py` |
-| Origin attribution of every span | `core/segmentation.py` |
-| History-blind checklist scoring | `core/scoring.py` |
-| Name removal before storage (INV-7) | `core/scrub.py` |
-| Storage, keyed by `canvas_id` | `store/repo.py`, `store/codec.py` |
-| Pseudonym ↔ canvas id | `store/identity.py`, backed by the shared vault |
-| Anything that becomes outbound | `projection.py` — the single place |
-| Canvas assignment → `AssignmentContext` | `canvas_source.py` |
+`core/models.py` owns evidence shape; `core/scrub.py` removes vault-known
+names before storage; `core/segmentation.py` attributes spans; `store/` keeps
+Canvas ID private and resolves pseudonyms; `projection.py` is the only
+assistant-facing allowlist. `canvas_source.py` maps only reliable catalog
+facts into assignment context.
 
 ## Where the record lives
 
-`<workspace>/_System/WritingReps/`, the PRIVATE machine-state tier, beside the identity
-vault and PowerGrader's sessions. The folder name derives from `config.naming.SYSTEM_NAME`
-rather than being written twice. Nothing here belongs in the repo, in `For AI/`, or in an
-outbound payload.
-
-Records are keyed by `canvas_id` on disk; everything above `store/` speaks pseudonyms.
-`canvas_id` is in `feedback_safety._FORBIDDEN_KEYS`, so a stored record handed to a payload
-builder wholesale is hard-blocked on the key name alone.
+`<workspace>/_System/WritingReps/` is private machine state. Its only
+artifacts are `submissions/YYYY-MM.json` and `reps.json`. Canvas IDs stay on
+disk; pseudonyms are resolved before projection. Storage rechecks scrubbed
+text, and the outbound safety gate scans every exposed text field.
 
 ## Two rules that are easy to break
 
-**The outbound gate is field-name-keyed.** `feedback_safety.scan_payload` scans free text
-only under names in `_TEXT_FIELDS`. A payload carrying student writing under an unlisted
-name is not scanned at all and comes back green whatever is inside it. Any new outbound text
-field must reuse a listed name or be added to the list *and* to `DAILYWRITING_TEXT_FIELDS`
-in `api/tests/dailywriting/test_dw_outbound_gate.py`.
+Scrub before segmentation and storage: spans must never be derived from
+unscrubbed text. Build outbound payloads field by field: the safety scanner is
+keyed by exposed text-field names, and stored records must never be serialized
+wholesale.
 
-Corollary, learned the hard way: adding a key to `_TEXT_FIELDS` can *weaken* protection.
-A value in a non-text field that exactly equals a real id is a hard block at any length;
-inside a text field only ids at or above the length threshold hard-block. That is why
-`ItemResult.note` is emitted as `score_note` rather than `note` — a bare `note` key already
-carries structural-id semantics elsewhere.
+## The one live Canvas path
 
-**Scrub happens at ingest, before any span is stored.** A scrub applied later has already
-been outrun by the spans quoted out of the text. This is the whole of INV-7's defence and it
-constrains every future acquisition route.
-
-**The scrubber removes what the vault knows and guesses at nothing.** Real names, the nicknames
-the teacher entered, Canvas and SIS ids. A heuristic second pass that treated any capitalised
-token with no lexicon entry as a name was removed at `0a9e713`; do not reintroduce it, and read
-`core/scrub.py`'s header before proposing anything like it. On ordinary seventh-grade responses
-containing no roster name at all, it redacted 30 of 37 capitalised tokens — `Gettysburg`,
-`Photosynthesis`, `Canada`, `Dogs` — and because scrub precedes storage, that was the stored
-record. On the one fixture in the corpus with a non-roster name it also cost the student a word
-off `student_word_count` and split their single sentence into three segments, one of them
-attributed to `assignment` origin, so part of a kid's own writing was credited to the prompt.
-The accepted residual risk is a non-roster first name reaching the teacher's own AI tenant inside
-a quoted sentence — the same trade `api/feedback_pipeline.py` has always made on the PowerGrader
-path. Coverage is extended by entering the name or nickname in the names screen, which is a thing
-a teacher can see and correct.
-
-## The one live Canvas path (`8960bda`)
-
-Typed submissions are served entirely from the mirror and make zero HTTP calls — asserted, not
-assumed. An uploaded file cannot be: the mirror keeps `attachment_names` but never bytes, and
-Canvas leaves `body` empty for an `online_upload`. So `canvas_attachments` makes one focused
-submission fetch plus one bounded download, and only for a mirror row that is an upload with no
-body.
-
-Three things about it are load-bearing:
-
-- **It must never become an MCP tool.** `docs/mirror.md` design law 6 scopes the mirror-only law
-  to the AI-facing tools; putting a live path under the assistant is what it forbids. An AST
-  guard in `test_dw_canvas_ingest.py` holds the line, and the CLI and web route are the only
-  triggers.
-- **`canvas_client` is the only Canvas caller.** Not `api/submission_transport.py`, which has
-  neither 429 retry nor the coordinator's yield and cancellation — fine for one teacher-watched
-  report, not for thirty unattended sequential fetches. `canvas_stream_get` is the streamed seam;
-  `_physical_get`'s `stream` keyword is passed to `requests.get` only when set, so non-streaming
-  callers see the arguments they always did.
-- **`_docx_segments`' annotations are not student text.** `[Inline image N]`, `[Table]`,
-  `[Heading N] ` are the extractor talking to a reader. `canvas_attachments.submission_text`
-  strips exactly those and rewrites nothing else, or they would inflate `student_word_count`,
-  be attributed to the student by segmentation, and be quoted back as evidence. A plain essay
-  carries none of them — measured, and pinned by a test.
-
-The acquisition decisions, so they need not be re-derived: a typed body wins over an attachment
-(the mirror already holds it, and reading the attachment instead would cost a live call on every
-typed row); when a student uploaded several `.docx`, the latest by `created_at` wins and the
-earlier ones are named in the log — the teacher's call, made 2026-07-28; only `.docx`, with no
-OCR and no PDF; 10 MB cap, enforced on Canvas's declared size before a request is spent and again
-while streaming; nothing written to disk; a per-student failure is named and counted and never
-ends the run; and a re-run re-downloads, because Canvas's signed URLs expire.
-
-**Carried for review:** the annotation-stripping rule above was flagged YELLOW when the batch
-landed, because the brief named "`_docx_segments` output needs post-processing" as a stop
-condition. The reasoning and the alternatives considered are in that brief's Section 12
-(`git show 5b44efa:docs/handoffs/CanvasExpert-WritingRecord-DocxIngest-BRIEF.md`). Nothing
-downstream depends on the choice; reversing it is a one-function change.
-
-## Delivered batches
-
-Read the commit, not a summary, when the detail matters.
-
-| Batch | Commit | What landed |
-|---|---|---|
-| Naming | `e772f3f` | `SYSTEM_NAME` = WritingReps; store folder derives from it |
-| Assistant read path | `b2b89a0` | `get_writing_history`, `projection.py`, MCP schema v10 |
-| Extended-writing substrate | `ef40e01` | `ingest_unscored`, mid-prompt fragment detection, dead `Origin` value removed |
-| Canvas typed ingest | `401c7c0` | `canvas_source.py`, `canvas_ingest.py`, CLI + web trigger |
-| DOCX ingest | `8960bda` | `canvas_attachments.py`, the subsystem's first live Canvas calls, `canvas_stream_get` |
-| Scrub narrowed to the vault | `0a9e713` | Heuristic capitalised-token pass removed; roster names, nicknames and ids remain |
-| Evidence spans | `634484d` | Raw-text span geometry, literal unknown-quotation evidence, and digest-visible unlocatable-span flags |
-
-Retired briefs are recoverable, and these are the commits where each one still exists — pinned,
-because a path alone stops resolving the moment the brief is retired:
-
-| Brief | Read it at |
-|---|---|
-| Canvas typed ingest | `git show 401c7c0:docs/handoffs/CanvasExpert-WritingRecord-CanvasIngest-BRIEF.md` |
-| DOCX ingest (with its Section 12 execution result) | `git show 5b44efa:docs/handoffs/CanvasExpert-WritingRecord-DocxIngest-BRIEF.md` |
-| Evidence spans (with its Section 12 execution result) | `git show 1f35770:docs/handoffs/CanvasExpert-WritingRecord-EvidenceSpans-BRIEF.md` |
+Typed submissions come only from the current local mirror and make zero live
+Canvas calls. A DOCX upload has no mirrored bytes, so teacher-triggered ingest
+may perform one focused fetch/download through `canvas_attachments.py`. It is
+never an MCP tool. Typed body wins over an attachment; latest DOCX wins among
+uploads; only DOCX is supported; per-student failures are reported and do not
+stop other acquired work.
 
 ## Open decisions
 
-**Which assignments feed the record.** Unresolved. The teacher's first answer — reuse the
-Writing Timeline tracked choice — rests on a false premise: `is_tracked_assignment`
-(`api/powergrader/writing_timeline.py:56`) is not a stored flag but a classifier for
-`submission_types == {"online_upload"} and allowed_extensions == {"docx"}`. A typed
-text-entry submission can never satisfy it. Three options, recommendation first:
-
-1. **The ingest action is the opt-in** — no persistent flag; pointing at an assignment is
-   the decision. Current implementation assumes this, and it requires no mechanism, so 2 and
-   3 stay reachable without rework.
-2. A Canvas assignment group, read via `assignment_group_id` (already in the catalog).
-3. A CanvasExpert-owned per-assignment flag — the new store, UI, and staleness handling the
-   others avoid.
-
-**Whether delivered feedback becomes a stored record.** AI feedback is assembled but never
-persisted, and teacher feedback has no representation at all. A regenerated message is not
-the message the student read, and coaching's first question is "what have I already told
-this writer." If stored: written on delivery not generation; exemplar pairs held by
-`submission_id` reference, never embedded text, or the per-student record silently becomes
-multi-student data.
-
-**`AssignmentContext` purpose field.** A short closed set (narrative / argument /
-explanation / analysis / reflection) plus optional audience. The original argument was that it
-becomes load-bearing once the record spans genres, because a narrative following an argument
-reads as regression to a reader who cannot see the task changed.
-
-**Recommend closing this as not earned** (2026-07-28). `prompt_text` is teacher-authored, is
-never gated by `include_text`, and is always emitted, so the reader *can* see the task changed.
-The only real gap is an assignment whose Canvas description is empty, and nothing yet says how
-often that happens — revisit with a measurement from the live run rather than building the field
-first. There is also nothing to derive it from: a Canvas assignment carries no genre, and the
-rubric files carry `flavor`, `family` and `applies_to` but no mode (checked).
-
-**Recommend closing "which assignments feed the record" as decided** (2026-07-28). Option 1 has
-now shipped twice, in `401c7c0` and `8960bda`, and needed no mechanism either time. Leaving it
-listed as open invites someone to build the flag it was decided against.
-
-## Known defects and dead ends
-
-**Resolved 2026-07-28: evidence-backed noticings no longer disappear because the scorer rebuilt
-their text.** The scorer maps its selected-segment text back to offsets in the scrubbed
-`Submission.raw_text`, then stores that literal raw slice. This preserves paragraph breaks and any
-provided scaffold between selected fragments instead of persisting a reconstructed string. An
-unknown quotation now supplies the existing evidence-family verdicts with its literal quote span;
-it does not become a source match, so no verdict changes.
-
-If an unmet, pattern-bearing criterion still has no locatable span, INV-3 still refuses to store
-the observation and adds `unlocatable_evidence_span` to the submission. The weekly digest renders
-that flag under *Needs human eyes*, including the item ids, so this is a defect signal rather than
-a silent loss. The focused reproduction moved from two dropped observations out of three unmet
-items to zero in both one- and two-paragraph forms; the pinned fixture corpus retained every
-verdict, word count, origin set, and observation count.
-
-**Scoring inverts on extended writing, which is why ECRs ingest unscored.** Tier 2-4
-checklists say "my thesis is one sentence, and my argument comes after it", so
-`CheckInput.thesis` returning `sentences[0]` is faithful to what students were taught. No
-checklist mentions a hook, because a 90-word rep has no room for one. Real extended writing
-does — and then the hook is scored as the thesis and `arguable`, `specific`, and
-`answers_prompt` fail together. Measured on 446/803/1356-word essays: `thesis_arguable`
-failed on all three with the stance in sentence two; `commentary_connects` drifted
-33% → 67% → 80% on the same argument as length grew.
-
-**Dead end, do not re-attempt: `SequenceMatcher` reuse in segmentation.** Segmentation
-dominates ingest cost (~13 ms/word on a tier-3 rep with a source passage; 96/288/576 words
-measured at 789/3100/7475 ms). Reusing one `SequenceMatcher` via `set_seq2` was implemented
-and measured at 0.83x / 0.91x / 1.05x — no win, slower at small sizes, segments identical.
-The cost is in `ratio()` computing matching blocks, not the constructor. Any future attempt
-must be algorithmic and must show a measured improvement with identical output.
+Selecting an assignment scopes a teacher-triggered acquisition; it creates no
+persistent tracking or eligibility flag, and every acquired response is kept.
+No genre, purpose, stem, or missing prompt text is inferred. Rubric capture,
+delivered-feedback history, and automatic acquisition remain unimplemented.
 
 ## Verification discipline
 
-The named gate for this subsystem:
-
-```bash
-python -m pytest api/tests/dailywriting api/tests/test_mcp_server_tools.py -q
-```
-
-**A green suite is evidence about the tests, not about the behaviour.** Three batches in
-this subsystem shipped with verification gaps that a green suite did not catch: a no-PII
-test that passed because the name had already been scrubbed out of the fixture, a test that
-exercised the codec instead of the layer under test, an ordering assertion fed pre-sorted
-data, and a shared-code-path change that silently altered two fixtures.
-
-So, when touching anything shared: **diff `student_word_count` and segment origins across
-the whole `singles.json` fixture corpus, before and after.** A pinned-fixture test in
-`test_dw_segmentation.py` now guards this permanently. Prove every negative test can go red
-— `test_dw_canvas_ingest.py`'s scrub-bypass positive control is the pattern.
-
-**Environmental test failures are machine-specific — re-baseline on a new machine.** On the
-original development machine, two tests fail from the Windows 260-character path limit
-(`test_feedback_pipeline.py::test_write_safe_and_private_auto_detects_compact_on_deep_path`
-and `test_powergrader_packet.py::test_packet_workflow_budget_exception_stops_before_writes`),
-and `test_beta075_storage.py::test_spawned_vault_writers_preserve_both_students` is
-load-sensitive under full-suite contention. Do not assume this list transfers. Establish the
-baseline on a clean checkout first: `git stash`, run, record, restore.
-
-Evidence that it does not transfer: on 2026-07-28, the DOCX-ingest batch baselined all three of
-those as **passing** — 1572 passed, 0 failed on a clean checkout. So on that machine any failure
-during a batch is the batch's, and the list above is history rather than an allowance to spend.
+For evidence changes, preserve pinned fixture submission IDs, rep IDs,
+timestamps, scrubbed-text digest, word count, ordered segment origins/spans,
+flags, and scrub findings. Verify typed ingestion makes zero live calls,
+re-ingest reads as one current assignment/submission, and the assistant
+projection withholds text unless requested. Run the named Writing Record and
+MCP gates; only add browser verification when executable UI code changes.

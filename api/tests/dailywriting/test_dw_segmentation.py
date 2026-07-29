@@ -1,8 +1,4 @@
-"""Segmentation as alignment. Acceptance tests T-3, T-4, T-5.
-
-The mid-prompt-fragment and dead-Origin-value tests below belong to the ECR
-substrate brief (docs/handoffs/CanvasExpert-WritingRecord-ECRSubstrate-BRIEF.md
-Sec 5, AC4 and AC6)."""
+"""Segmentation as alignment for retained Writing Record evidence."""
 from __future__ import annotations
 
 import typing
@@ -81,7 +77,7 @@ def test_t5_quoted_source_is_its_own_origin_and_not_counted():
     assert result.student_word_count < whole
     assert quoted_words > 0
     # The quoted words are excluded from the student count but still present
-    # for the evidence criteria to read.
+    # for a later reader to inspect.
     assert result.text_for("quoted_source").strip()
     assert result.text_for("student").strip()
 
@@ -214,7 +210,7 @@ def test_short_rep_prompt_echo_is_left_as_the_students():
 
 
 def test_short_rep_correct_answer_echoing_the_prompts_topic_is_not_penalised():
-    """Senior review regression: fixture 6 is a strong, correct tier-3 answer
+    """Senior review regression: fixture 6 is a strong, strong source-based answer
     that opens with the prompt's own topic words ('The mill owner keeps
     cutting'). The stage's first cut clipped 5 of those words to
     `assignment`, dropping student_word_count from 38 to 33. A model answer

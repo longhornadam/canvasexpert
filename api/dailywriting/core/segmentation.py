@@ -18,12 +18,8 @@ Stages run in order and first match wins:
      otherwise-original writing, which stage 1/2's whole-prompt-length
      matching cannot see (below). Gated because the same shape -- a handful
      of prompt words verbatim, near the start of the response -- is also
-     what a short rep's opening thesis naturally looks like, whether it is
-     genuinely restating the prompt (`observations.py`'s `restates_prompt`
-     tag exists to catch exactly that, one layer up, and must see those
-     words as the student's) or just answering a question using the
-     question's own topic words. Below the length gate, this stage does not
-     run at all, so it cannot compete with that mechanism.
+     ordinary student use of a question's topic words. Below the length gate,
+     this stage does not run at all.
   6. residual, which is the student
 
 Stem alignment is allowed to re-read tokens stage 1 already called `scaffold`,
@@ -33,12 +29,10 @@ token as the blank's fill, so first-match-wins still holds for student prose.
 
 Downstream rules this module exists to make true:
 
-  - Score against `student` + `quoted_source`. Provided text goes to the
-    scorer as labeled context so the checker can tell whether a thesis
-    actually answers the prompt.
+  - Preserve `student` and `quoted_source` as distinct origins so a later
+    reader can distinguish supplied text from student prose.
   - `student_word_count` counts `student` segments only.
-  - Zero student words is not a zero score, it is a flag. Silent 0/4s on what
-    was really a copy-paste error waste the teacher's tutorial time.
+  - Zero student words is a structural flag, not an evaluation.
 """
 from __future__ import annotations
 
@@ -396,9 +390,8 @@ def segment_submission(
     for block in blank_blocks:
         _align_stem(tokens, block, owner, methods, confidences, flags, text)
 
-    # Stage 4: quoted source. A different origin from scaffold: from tier 3 on,
-    # quoting the passage is the assignment, and those words must stay visible
-    # to the evidence criteria while staying out of the student word count.
+    # Stage 4: quoted source. It stays distinct from scaffold and out of the
+    # student word count while remaining visible to a later reader.
     for source in context.source_texts:
         needle = _norms(tokenize(source))
         if not needle:
@@ -449,8 +442,8 @@ def segment_submission(
         flags.append(SegmentationFlag(
             code="no_student_text",
             detail=("every word in this submission matches provided text; "
-                    "not scored, because a silent zero here is usually a "
-                    "copy-paste error rather than a refusal"),
+                    "not evaluated; this is usually a copy-paste error "
+                    "rather than a refusal"),
         ))
     if context.word_cap is not None and student_words > context.word_cap:
         flags.append(SegmentationFlag(
@@ -481,7 +474,7 @@ def _claim_embedded_quote(text: str, tokens: list[Token], hay: list[str],
                           origin: Origin = "quoted_source") -> None:
     """Claim the run of submission tokens lifted verbatim from `needle`.
 
-    The ordinary tier-3 case: a student quotes one line out of a source
+    A common case: a student quotes one line out of a source
     paragraph (`origin="quoted_source"`, the default). Stage 5 below reuses
     this same alignment for a short run lifted out of the middle of the
     *prompt* instead (`origin="assignment"`): stage 1/2 already handle a
@@ -530,8 +523,8 @@ def flag_cross_submission_repetition(
 
     Cross-submission repetition is a strong signal of provided text the
     authoring record missed. It never changes an origin: it produces a flag
-    for the teacher digest, because a low-confidence classification must not
-    silently drive a score.
+    so a low-confidence classification is visible without becoming an
+    evaluation.
 
     `submissions` maps submission_id to that submission's residual student
     text. Returns flags per submission_id.

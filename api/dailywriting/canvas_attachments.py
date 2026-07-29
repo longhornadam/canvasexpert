@@ -54,7 +54,7 @@ _MEGABYTE = 1024 * 1024
 # heading-styled paragraph's text. Those are the extractor's words, not the
 # student's, and they must not reach the record: they would be counted by
 # `student_word_count`, attributed to the student by segmentation, and quoted
-# back as evidence in an observation. A plain essay -- measured -- carries none
+# back as evidence. A plain essay -- measured -- carries none
 # of them, so this strips annotations only and never rewrites student text.
 _IMAGE_MARKER = re.compile(r"^\[Inline image \d+\]$")
 _BLOCK_ANNOTATION = re.compile(r"^\[(?:Heading[^\]]*|Table)\]\s*")
