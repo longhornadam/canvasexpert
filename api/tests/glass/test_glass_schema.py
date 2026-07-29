@@ -13,7 +13,7 @@ import pytest
 from api.glass import schema
 from api.webui import workspace
 
-SHIPPED_DIR = os.path.join(workspace.DEFAULT_DOCS_DIR, "Glass")
+SHIPPED_DIR = os.path.join(workspace.DEFAULT_DOCS_DIR, "Glass", "day-plans")
 SAMPLE_FILE = os.path.join(SHIPPED_DIR, "day-plan-sample.json")
 TEMPLATE_FILE = os.path.join(SHIPPED_DIR, "day-plan-template.json")
 

@@ -41,10 +41,9 @@ each so it does not have to be rebuilt from scratch or argued again.
    cache invalidation, no period-boundary recomputation. A plan composed at 7:15 is correct
    enough at 3:00. This is a product decision from the teacher, not an oversight, and the whole
    client architecture depends on it.
-5. **The repo ships no district data.** Bell schedules, the day-type calendar, Bobcat Hour
-   offerings, section names, and student data are workspace files. The repo carries a blank
-   template plus one fictional sample, following the `Library/Calendars` precedent. Berry
-   Miller's real bell times, calendar, club lists, and section mapping must never be committed.
+5. **The real files live in the workspace, not the repo.** Bell schedules, day plans, Bobcat
+   Hour offerings, and section names are workspace files the teacher authors. The repo carries
+   a blank template plus one fictional sample, following the `Library/Calendars` precedent.
 6. **Glass reads; it never writes to Canvas and never touches the operation ledger.** It will
    consume the mirror in a later batch and writes only its own display state, which is to say
    nothing on disk at all today. A Canvas mutation here is a stop and an architecture
@@ -75,9 +74,8 @@ to say a page under `api/webui`, state in the workspace, engine modules in `api/
 argument for separation rested on Glass having a runtime profile that had to be independently
 bulletproof. That evaporated once Glass became a player of a prebuilt file: it has no runtime
 Canvas dependency at all, which makes it less demanding than the surfaces already shipping,
-not more. CE already models a district academic calendar, already loads it from a workspace
-folder, and already ships no district data; the bell schedule is the same kind of object with
-the same privacy posture.
+not more. CE already models a district academic calendar and already loads it from a workspace
+folder, and the bell schedule is the same kind of object.
 
 ## This batch
 
@@ -91,10 +89,10 @@ model, reads the mirror, touches the vault, or exposes an MCP tool.
 | `api/schedule/models.py` | Vocabulary: `Block`, `SubBlocks`, `DayType`, `BellSchedule`, `Resolved`, `NextOccurrence`. No I/O, no clock. |
 | `api/schedule/validate.py` | Structural checks over a parsed `BellSchedule`. Reports problems, never raises. |
 | `api/schedule/resolver.py` | `resolve(schedule, at, no_school_dates=, override=)` and `next_occurrence(schedule, at, kind, ...)`. Pure. |
-| `api/schedule/loader.py` | JSON to models, workspace discovery, the sample rule, and `SectionMap` parsing. |
+| `api/schedule/loader.py` | JSON to models, discovery in `Library/Glass`, the sample rule, and `SectionMap` parsing. |
 | `api/schedule/calendar.py` | Thin no-school wrapper over `api.webui.config`. The only impure file in the engine. |
 | `api/glass/schema.py` | Character budgets, day-plan dataclasses, `parse_day_plan`, `validate_day_plan`, `clamp`. |
-| `api/glass/store.py` | Day-plan discovery and load from the private workspace side. |
+| `api/glass/store.py` | Day-plan discovery and load from `Library/Glass/day-plans`. |
 | `api/glass/view.py` | Builds the render blob from schedule, plan, and instant. No Jinja, no FastAPI, no disk, no clock. |
 | `api/webui/routes/glass.py` | The `/glass` route. Picks the instant, gathers the pieces, hands one structure to the template. |
 | `api/webui/templates/layouts/display.html` | The fourth template family: header-less, full bleed, no width clamp, no page scroll. |
@@ -140,7 +138,12 @@ refresh, deliberately: no endpoint accepts it, and the JS touches no storage API
 
 ### File formats and where they live
 
-**Bell schedule.** `Library/Bell Schedules/*.json`, format `canvasexpert.bell_schedule/1`.
+Everything Glass reads sits in one folder, `Library/Glass`, and the contracts for all of it are
+written out in `api/default_docs/Glass/README (Glass contracts).txt`, which seeds into that
+folder. That file is the canonical field-by-field statement for a teacher or an assistant
+authoring these files; what follows here is the map, not the spec.
+
+**Bell schedule.** `Library/Glass/*.json`, format `canvasexpert.bell_schedule/1`.
 JSON rather than CSV because container blocks nest and nesting is not tabular. A day type is
 an ordered list of blocks; a block may carry `sub_blocks` with a mode:
 
@@ -156,8 +159,9 @@ the map is not a school day. `date_overrides` is the calendar-authored exception
 over the weekday default. Keys beginning with an underscore are inline documentation and are
 skipped by the parser, which is why the shipped files can explain themselves.
 
-The Library folder ships `bell-schedule-template.json`, `section-map-template.json`, and
-`Mockingbird-Junior-High-Sample.json`. The sample defines all four day types
+The folder ships the contracts README, `bell-schedule-template.json`,
+`section-map-template.json`, and `Mockingbird-Junior-High-Sample.json`. The sample defines all
+four day types
 (`bobcat_hour`, `friday`, `homeroom_first`, `pep_rally`), only `bobcat_hour` carries a
 `bobcat_hour` block, and its `date_overrides` use 2099 dates so nothing reads as a real
 calendar.
@@ -170,7 +174,7 @@ carries a quiet "Sample schedule" tag in the rail plus a sentence in the notes. 
 files is a reported error rather than a silent pick. Section-map files sitting in the same
 folder are recognised by their format string and skipped.
 
-**Day plan.** `_System/Glass/day-plans/YYYY-MM-DD.json`, format `canvasexpert.day_plan/1`. The
+**Day plan.** `Library/Glass/day-plans/YYYY-MM-DD.json`, format `canvasexpert.day_plan/1`. The
 file name is the authority on the date; a plan whose internal `date` disagrees renders with a
 note. Three scopes because the content has three authors: `school_wide` (events, Bobcat Hour
 offerings), `teacher` (`bobcat_hour_here`, what is happening in this room during that block),
@@ -183,18 +187,20 @@ schedule file changing. It lives on the plan because the plan is the thing being
 with no entry renders an empty focus slot, which is the honest answer for a conference or duty
 period, not an error.
 
-**Why `Library` for one and `_System` for the other.** The bell schedule is teacher-authored
-reference data with no student content, so it sits in the Library beside Calendars where a
-teacher can find and edit it. Day plans sit on the private side because they will eventually
-carry pseudonymized missing-work text, and the privacy wall is drawn by folder rather than by
-inspecting content.
+**Why one folder in the Library.** All of it is teacher-visible content the teacher or the
+assistant authors, so it is in the Library beside Calendars where a teacher can find and edit
+it. There is no second Glass folder anywhere.
 
-Workspace seeding: `LIBRARY_SUBFOLDERS` includes `"Bell Schedules"`, which self-seeds from
-`api/default_docs/Bell Schedules/`. `SYSTEM_SUBFOLDERS` includes `"Glass"`, but `_System`
-folders do not self-seed by name, so `ensure_workspace()` seeds `api/default_docs/Glass/`
-explicitly and creates the empty `day-plans/` subfolder. The seeded `day-plan-template.json`
-and `day-plan-sample.json` land at the `_System/Glass/` root rather than inside `day-plans/`,
-so a shipped sample can never be picked up as a real plan.
+Workspace seeding: `LIBRARY_SUBFOLDERS` includes `"Glass"`, which self-seeds from
+`api/default_docs/Glass/`; `_seed_folder_if_missing` walks the source tree, so `day-plans/` and
+its contents come along. `ensure_workspace()` also creates `Library/Glass/day-plans`
+explicitly, so an empty one exists where git could not have shipped it. The shipped
+`day-plan-template.json` and `day-plan-sample.json` sit inside `day-plans/`, which is safe
+because `available_plan_dates()` counts only well-formed `YYYY-MM-DD.json` names.
+
+**A naming tension, stated honestly.** The schedule engine is CE-general by locked decision 7,
+while its data now sits in a folder named for its first consumer. That is accepted: a second
+consumer would read the same file in the same folder rather than getting a folder of its own.
 
 ### Character budgets
 
@@ -309,9 +315,9 @@ annotation are all out, however small they look now that the tray exists. A test
 This section is the one that saves the next person time. Read it before planning anything.
 
 **The real schedule is not authored yet.** Only the blank template and the fictional
-Mockingbird Junior High sample are shipped. The real Berry Miller bell schedule and day-type
-calendar have not been written. They are workspace-only files and must never be committed. The
-page runs on sample data until they exist and says so quietly in the rail.
+Mockingbird Junior High sample are shipped. The teacher's own bell schedule and day-type
+calendar have not been written yet; they are workspace files. The page runs on sample data
+until they exist and says so quietly in the rail.
 
 **The teacher-run projector day has not happened.** One full Bobcat Hour day on the real
 projector in the real room is the brief's manual criterion: correct period and countdown all
@@ -438,9 +444,8 @@ is touched.
 - Read-only render harness: `py -m uvicorn webui.server:app --host 127.0.0.1 --port 8765
   --lifespan off`, run from `api/`. Then `http://127.0.0.1:8765/glass?at=2099-09-14T11:30:00`
   for any state of any day.
-- District data check: `git grep` for real bell times, calendar dates, club or tutorial names,
-  section names, and student names. Only the template and the fictional sample should ever
-  appear.
+- Shipped-data check: the only schedule content in the repo should be the template and the
+  fictional Mockingbird sample.
 
 **How the layers are tested.** The pure engine is unit-tested with no I/O at all: the instant
 is a parameter and no-school dates are a frozenset, so every state is reachable without waiting

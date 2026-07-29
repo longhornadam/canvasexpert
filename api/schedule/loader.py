@@ -28,7 +28,7 @@ from api.schedule.models import (
     SubBlocks,
 )
 
-BELL_SCHEDULE_FOLDER = "Bell Schedules"
+BELL_SCHEDULE_FOLDER = "Glass"
 SECTION_MAP_FORMAT = "canvasexpert.section_map/1"
 SECTION_MAP_FILENAME = "section-map.json"
 
@@ -346,6 +346,9 @@ def load_section_map_file(path: str) -> SectionMap:
 def bell_schedule_folder() -> str | None:
     """The Library folder holding bell schedule files, or None with no workspace.
 
+    One folder, `Library/Glass`, holds every file the display reads: the bell
+    schedule, the section map, and the day plans in a subfolder.
+
     The import is lazy because `api.webui.config._io` pulls in `keyring`, and
     a pure schedule import should not drag a keyring backend along with it.
     """
@@ -392,7 +395,7 @@ def discover_bell_schedule() -> tuple[BellSchedule | None, list[str]]:
         ]
     if not os.path.isdir(folder):
         return None, [
-            f"No bell schedule yet. Add one to the Bell Schedules folder ({folder})."
+            f"No bell schedule yet. Add one to the Glass folder ({folder})."
         ]
 
     real: list[str] = []
@@ -431,8 +434,8 @@ def discover_bell_schedule() -> tuple[BellSchedule | None, list[str]]:
     chosen = real[0] if real else (samples[0] if samples else None)
     if chosen is None:
         notes.append(
-            f"No bell schedule yet. Copy the template in the Bell Schedules "
-            f"folder ({folder}) and fill in your own bells."
+            f"No bell schedule yet. Copy the template in the Glass folder "
+            f"({folder}) and fill in your own bells."
         )
         return None, notes
 

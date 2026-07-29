@@ -1,8 +1,8 @@
-"""Read day plans off the private side of the workspace.
+"""Read day plans out of the workspace.
 
-Day plans live under `_System/Glass/day-plans/` rather than in the Library
-because they will eventually carry pseudonymized missing-work text, and the
-privacy wall is drawn by folder.
+Day plans live under `Library/Glass/day-plans/`, in the same folder as the bell
+schedule they key against. It is teacher-visible content, so it sits where a
+teacher can find and edit it.
 
 A missing or unreadable plan is a note, never an exception. Glass has to keep
 showing the clock and the day strip on a morning when nobody had time to write
@@ -16,19 +16,19 @@ from datetime import date as date_type
 
 from api.glass.schema import DayPlan, DayPlanError, parse_day_plan
 
-GLASS_SYSTEM_FOLDER = "Glass"
+GLASS_LIBRARY_FOLDER = "Glass"
 DAY_PLANS_FOLDER = "day-plans"
 
 
 def glass_folder() -> str | None:
-    """The private Glass folder, or None when no workspace is configured.
+    """The Library Glass folder, or None when no workspace is configured.
 
     The import is lazy because `api.webui.config._io` pulls in `keyring`, and
     reading a JSON file should not drag a keyring backend along with it.
     """
     from api.webui import workspace
 
-    return workspace.system_folder(GLASS_SYSTEM_FOLDER)
+    return workspace.library_folder(GLASS_LIBRARY_FOLDER)
 
 
 def day_plans_folder() -> str | None:

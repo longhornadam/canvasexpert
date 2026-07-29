@@ -1,4 +1,4 @@
-"""Day plan reads off the private side of the workspace.
+"""Day plan reads out of the workspace.
 
 Every test runs against tmp_path with a monkeypatched workspace root, so no
 real synced workspace is read or written. A missing plan is the common case on
@@ -12,6 +12,7 @@ from datetime import date
 import pytest
 
 from api.glass import schema, store
+from api.schedule import loader
 from api.webui import workspace
 
 ON = date(2099, 9, 14)
@@ -35,7 +36,7 @@ def _plan_data(**overrides):
 @pytest.fixture
 def plans_folder(tmp_path, monkeypatch):
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
-    folder = tmp_path / "_System" / "Glass" / "day-plans"
+    folder = tmp_path / "Library" / "Glass" / "day-plans"
     folder.mkdir(parents=True)
     return folder
 
@@ -132,8 +133,11 @@ def test_available_plan_dates_is_empty_without_a_workspace(monkeypatch):
     assert store.available_plan_dates() == []
 
 
-def test_glass_folder_sits_on_the_private_side(plans_folder):
+def test_glass_folder_is_the_one_library_folder(plans_folder):
     folder = store.glass_folder()
 
     assert folder.endswith("Glass")
-    assert workspace.SYSTEM_NAME in folder
+    assert workspace.LIBRARY_NAME in folder
+    assert workspace.SYSTEM_NAME not in folder
+    # The bell schedule and the day plans share it.
+    assert loader.bell_schedule_folder() == folder

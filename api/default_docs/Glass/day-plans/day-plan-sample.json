@@ -1,5 +1,5 @@
 {
-  "_comment": "A made-up day plan for a school that does not exist, shipped so you can see what a filled-in plan looks like. Every goal, assignment, club, and room number here is invented. It sits outside the day-plans folder on purpose, so Glass never mistakes it for a real day. To try it, copy it into day-plans and rename the copy to the date you want.",
+  "_comment": "A made-up day plan for a school that does not exist, shipped so you can see what a filled-in plan looks like. Every goal, assignment, club, and room number here is invented. Its name is not a date, so Glass never mistakes it for a real day. To try it, copy it and rename the copy to the date you want, like 2099-09-14.json.",
   "format": "canvasexpert.day_plan/1",
   "sample": true,
   "date": "2099-09-14",

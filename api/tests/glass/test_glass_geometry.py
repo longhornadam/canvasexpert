@@ -436,8 +436,8 @@ def _write_workspace(root: Path) -> tuple[Path, Path]:
     local_app_data = root / "LocalAppData"
     workspace = root / "workspace" / "CanvasExpert"
 
-    schedules = workspace / "Library" / "Bell Schedules"
-    day_plans = workspace / "_System" / "Glass" / "day-plans"
+    schedules = workspace / "Library" / "Glass"
+    day_plans = schedules / "day-plans"
     schedules.mkdir(parents=True, exist_ok=True)
     day_plans.mkdir(parents=True, exist_ok=True)
 

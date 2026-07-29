@@ -1,5 +1,5 @@
 {
-  "_comment": "Blank day plan. Copy this file into the day-plans folder next to it and name the copy after the date it is for, like day-plans/2099-09-14.json. As shipped every field is empty, so Glass shows the clock and the day and leaves the focus area blank.",
+  "_comment": "Blank day plan. Copy this file and name the copy after the date it is for, like 2099-09-14.json. Only files named that way count as plans, so this template can sit here safely. As shipped every field is empty, so Glass shows the clock and the day and leaves the focus area blank. The field by field contract is in the README one folder up.",
   "format": "canvasexpert.day_plan/1",
   "sample": true,
 

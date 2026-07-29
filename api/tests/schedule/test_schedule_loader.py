@@ -16,7 +16,7 @@ from api.schedule import loader
 from api.schedule.models import SCHEDULE_FORMAT
 from api.webui import workspace
 
-SHIPPED_DIR = os.path.join(workspace.DEFAULT_DOCS_DIR, "Bell Schedules")
+SHIPPED_DIR = os.path.join(workspace.DEFAULT_DOCS_DIR, "Glass")
 SAMPLE_FILE = os.path.join(SHIPPED_DIR, "Mockingbird-Junior-High-Sample.json")
 TEMPLATE_FILE = os.path.join(SHIPPED_DIR, "bell-schedule-template.json")
 SECTION_MAP_TEMPLATE = os.path.join(SHIPPED_DIR, "section-map-template.json")
@@ -54,9 +54,9 @@ def _schedule_data(**overrides):
 
 @pytest.fixture
 def bell_folder(tmp_path, monkeypatch):
-    """An empty Bell Schedules folder in a throwaway workspace."""
+    """An empty Library/Glass folder in a throwaway workspace."""
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
-    folder = tmp_path / "Library" / "Bell Schedules"
+    folder = tmp_path / "Library" / "Glass"
     folder.mkdir(parents=True)
     return folder
 
@@ -344,7 +344,8 @@ def test_no_files_is_a_note_not_a_crash(bell_folder):
 
     assert schedule is None
     assert len(notes) == 1
-    assert "Bell Schedules" in notes[0]
+    assert "Glass" in notes[0]
+    assert str(bell_folder) in notes[0]
 
 
 def test_missing_folder_is_a_note(tmp_path, monkeypatch):
@@ -353,7 +354,7 @@ def test_missing_folder_is_a_note(tmp_path, monkeypatch):
     schedule, notes = loader.discover_bell_schedule()
 
     assert schedule is None
-    assert notes and "Bell Schedules" in notes[0]
+    assert notes and "Glass" in notes[0]
 
 
 def test_no_workspace_is_a_note(monkeypatch):
