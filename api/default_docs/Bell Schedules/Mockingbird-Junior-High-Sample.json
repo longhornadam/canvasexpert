@@ -1,0 +1,116 @@
+{
+  "_comment": "A complete but made-up schedule for a school that does not exist, shipped so Glass has something to show before you author your own. Every time, id, and label here is invented. Because it is marked as a sample, Glass will use your own file instead as soon as you add one.",
+  "format": "canvasexpert.bell_schedule/1",
+  "sample": true,
+  "school": "Mockingbird Junior High",
+  "timezone": "America/Chicago",
+  "day_types": {
+    "bobcat_hour": {
+      "label": "Bobcat Hour Day",
+      "blocks": [
+        { "id": "p1", "kind": "class", "label": "1st Period", "start": "08:30", "end": "09:19" },
+        { "id": "p2", "kind": "class", "label": "2nd Period", "start": "09:25", "end": "10:14" },
+        { "id": "p3", "kind": "class", "label": "3rd Period", "start": "10:20", "end": "11:09" },
+        {
+          "_comment": "Bobcat Hour is the lunch hour, so it has no A and B split. Its concurrent list stays empty: the tutorials and clubs on offer are day plan content.",
+          "id": "bobcat",
+          "kind": "bobcat_hour",
+          "label": "Bobcat Hour",
+          "start": "11:15",
+          "end": "12:15",
+          "sub_blocks": { "mode": "concurrent", "blocks": [] }
+        },
+        { "id": "p4", "kind": "class", "label": "4th Period", "start": "12:21", "end": "13:10" },
+        { "id": "p5", "kind": "class", "label": "5th Period", "start": "13:16", "end": "14:05" },
+        { "id": "p6", "kind": "class", "label": "6th Period", "start": "14:11", "end": "15:00" }
+      ]
+    },
+    "friday": {
+      "label": "Friday",
+      "blocks": [
+        { "id": "p1", "kind": "class", "label": "1st Period", "start": "08:30", "end": "09:24" },
+        { "id": "p2", "kind": "class", "label": "2nd Period", "start": "09:30", "end": "10:24" },
+        { "id": "p3", "kind": "class", "label": "3rd Period", "start": "10:30", "end": "11:24" },
+        {
+          "_comment": "No Bobcat Hour on a Friday, so lunch happens inside 4th Period in two halves.",
+          "id": "p4",
+          "kind": "class",
+          "label": "4th Period",
+          "start": "11:30",
+          "end": "13:00",
+          "sub_blocks": {
+            "mode": "sequential",
+            "blocks": [
+              { "id": "p4a", "kind": "lunch", "label": "4th Period / A Lunch", "start": "11:30", "end": "12:15" },
+              { "id": "p4b", "kind": "lunch", "label": "4th Period / B Lunch", "start": "12:15", "end": "13:00" }
+            ]
+          }
+        },
+        { "id": "p5", "kind": "class", "label": "5th Period", "start": "13:06", "end": "14:00" },
+        { "id": "p6", "kind": "class", "label": "6th Period", "start": "14:06", "end": "15:00" }
+      ]
+    },
+    "homeroom_first": {
+      "label": "Homeroom First",
+      "blocks": [
+        { "id": "hr", "kind": "homeroom", "label": "Homeroom", "start": "08:30", "end": "08:54" },
+        { "id": "p1", "kind": "class", "label": "1st Period", "start": "09:00", "end": "09:48" },
+        { "id": "p2", "kind": "class", "label": "2nd Period", "start": "09:54", "end": "10:42" },
+        { "id": "p3", "kind": "class", "label": "3rd Period", "start": "10:48", "end": "11:36" },
+        {
+          "id": "p4",
+          "kind": "class",
+          "label": "4th Period",
+          "start": "11:42",
+          "end": "13:12",
+          "sub_blocks": {
+            "mode": "sequential",
+            "blocks": [
+              { "id": "p4a", "kind": "lunch", "label": "4th Period / A Lunch", "start": "11:42", "end": "12:27" },
+              { "id": "p4b", "kind": "lunch", "label": "4th Period / B Lunch", "start": "12:27", "end": "13:12" }
+            ]
+          }
+        },
+        { "id": "p5", "kind": "class", "label": "5th Period", "start": "13:18", "end": "14:06" },
+        { "id": "p6", "kind": "class", "label": "6th Period", "start": "14:12", "end": "15:00" }
+      ]
+    },
+    "pep_rally": {
+      "label": "Pep Rally",
+      "blocks": [
+        { "id": "p1", "kind": "class", "label": "1st Period", "start": "08:30", "end": "09:18" },
+        { "id": "p2", "kind": "class", "label": "2nd Period", "start": "09:24", "end": "10:12" },
+        { "id": "p3", "kind": "class", "label": "3rd Period", "start": "10:18", "end": "11:06" },
+        {
+          "id": "p4",
+          "kind": "class",
+          "label": "4th Period",
+          "start": "11:12",
+          "end": "12:36",
+          "sub_blocks": {
+            "mode": "sequential",
+            "blocks": [
+              { "id": "p4a", "kind": "lunch", "label": "4th Period / A Lunch", "start": "11:12", "end": "11:54" },
+              { "id": "p4b", "kind": "lunch", "label": "4th Period / B Lunch", "start": "11:54", "end": "12:36" }
+            ]
+          }
+        },
+        { "id": "p5", "kind": "class", "label": "5th Period", "start": "12:42", "end": "13:30" },
+        { "id": "p6", "kind": "class", "label": "6th Period", "start": "13:36", "end": "14:24" },
+        { "id": "rally", "kind": "assembly", "label": "Pep Rally", "start": "14:30", "end": "15:00" }
+      ]
+    }
+  },
+  "weekday_default": {
+    "0": "bobcat_hour",
+    "1": "bobcat_hour",
+    "2": "bobcat_hour",
+    "3": "bobcat_hour",
+    "4": "friday"
+  },
+  "_comment_date_overrides": "Two made-up dates, far enough in the future that they cannot be mistaken for a real school calendar.",
+  "date_overrides": {
+    "2099-09-08": "homeroom_first",
+    "2099-10-16": "pep_rally"
+  }
+}

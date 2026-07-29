@@ -24,6 +24,12 @@
 .ce-document { width: min(100%, var(--ce-width-doc)); margin: 0 auto; padding: clamp(var(--ce-space-4), 2.5vw, 40px); }
 .ce-document--wide { width: min(100%, var(--ce-width-doc-wide)); }
 .ce-wizard { width: min(100%, 680px); margin: 0 auto; padding: clamp(var(--ce-space-4), 6vw, 56px) var(--ce-space-4); }
+/* Display family: the projected image is the frame. Full bleed, no gutter, no
+   width clamp, and no page scroll, so a page on this family can trust that the
+   viewport is exactly the room it has to fill. */
+.ce-display-page { height: 100vh; overflow: hidden; }
+.ce-display-main { width: 100vw; height: 100vh; max-width: none; min-width: 0; margin: 0; padding: 0; overflow: hidden; }
+.ce-display { width: 100vw; height: 100vh; margin: 0; padding: 0; overflow: hidden; }
 @media (max-width: 1180px) {
   .ce-app-header { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ce-app-header .ce-status-strip { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; padding-top: var(--ce-space-2); border-top: 1px solid var(--ce-rule); }

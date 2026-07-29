@@ -33,6 +33,9 @@ EXPECTED_PRESENTATION = {
     "/about": ("about.html", "document", "wide", 0),
     "/ai-expert": ("ai_expert.html", "document", "standard", 0),
     "/welcome": ("welcome.html", "wizard", "", 0),
+    # Glass is a projected surface, so it sits on the display family: no app
+    # header, no width clamp, no outer gutter, and no page scroll.
+    "/glass": ("glass.html", "display", "", 0),
 }
 FEATURE_CSS = (
     "api/webui/static/pages/dashboard.css",
@@ -48,6 +51,7 @@ FEATURE_CSS = (
     "api/webui/static/pages/about.css",
     "api/webui/static/pages/ai_expert.css",
     "api/webui/static/pages/welcome.css",
+    "api/webui/static/pages/glass.css",
 )
 VISUAL_LITERAL_RE = re.compile(r"font-family:|#[0-9a-fA-F]{3,8}|rgb\(|hsl\(|border-radius:|box-shadow:")
 FORBIDDEN_JS_SELECTORS = (
@@ -89,7 +93,10 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages.workspace, "canvas_uploads_root", lambda: "")
     monkeypatch.setattr(pages.workspace, "student_work_root", lambda: "")
     monkeypatch.setattr(pages.workspace, "for_ai_root", lambda: "")
-    monkeypatch.setattr(pages.workspace, "system_root", lambda: "")
+    # The real signature is system_root(root=None), and Glass reaches it through
+    # workspace.system_folder(name). The stub previously took no arguments, which
+    # no route had exercised.
+    monkeypatch.setattr(pages.workspace, "system_root", lambda root=None: "")
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
     monkeypatch.setattr(pages.work_routes, "_presentations", lambda jobs, finding_names=None: {})
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
@@ -121,7 +128,7 @@ def _configure_fictional(monkeypatch):
 
 
 def test_registry_is_the_full_program_route_map():
-    assert len(EXPECTED_PRESENTATION) == 12
+    assert len(EXPECTED_PRESENTATION) == 13
 
 
 def test_all_live_templates_use_layouts_and_no_inline_styles():
@@ -133,7 +140,7 @@ def test_all_live_templates_use_layouts_and_no_inline_styles():
         if template == "gradebook.html" or template == "routines.html":
             assert 'style="' not in (TEMPLATES / "_routines_panel.html").read_text(encoding="utf-8")
 
-    for layout in ("workspace.html", "document.html", "wizard.html"):
+    for layout in ("workspace.html", "document.html", "wizard.html", "display.html"):
         assert '{% extends "base.html" %}' in (TEMPLATES / "layouts" / layout).read_text(encoding="utf-8")
 
     for template in TEMPLATES.rglob("*.html"):
@@ -186,6 +193,7 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/about": "/about",
         "/ai-expert": "/ai-expert",
         "/welcome": "/welcome",
+        "/glass": "/glass",
     }
     client = _client()
     bundle = (
@@ -202,7 +210,9 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
             assert f'ce-{layout}--{variant}' in text
         else:
             assert f'ce-{layout}' in text
-        assert text.count("<header") == (0 if layout == "wizard" else 1)
+        # The wizard and display families are both header-less on purpose: first-run
+        # setup stays focused, and a projected screen has no chrome to navigate.
+        assert text.count("<header") == (0 if layout in ("wizard", "display") else 1)
         assert text.count("<main") == 1
         assert len(re.findall(r'class="[^"]*\bce-rail\b', text)) == rails
         assert "/static/style.css" not in text

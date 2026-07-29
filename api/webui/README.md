@@ -55,6 +55,7 @@ Source tests never substitute for rendered verification.
 | `/settings` | Settings | `settings.js` |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
+| `/glass` | **Glass** - full-screen classroom display showing the current period, learning goal, work, Bobcat Hour, and a touch work timer | `glass/widgets.js`, `glass/runtime.js`, `glass/timer.js` |
 | `/about` | What-is-Canvas-Expert explainer | — |
 
 Home's Canvas sync action queues local read-only coordinator work and polls its opaque
@@ -131,6 +132,19 @@ Roster has backend helper splits and browser feature files.
 - Helper modules: `api/webui/routes/roster_canvas.py`, `api/webui/routes/roster_helpers.py`, `api/webui/routes/roster_groups.py`
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
+
+### Glass module routing
+
+Glass is split so the widget contract stays readable on its own.
+
+- Route owner: `api/webui/routes/glass.py` (thin; `?at=<ISO8601>` pins the instant)
+- Render blob: `api/glass/view.py`, built from `api/schedule/` and `api/glass/store.py`
+- Template family: `templates/layouts/display.html` (header-less, full-bleed, no page scroll)
+- Widget contract: `static/glass/widgets.js` (registration seam, tray ownership, focus-slot
+  arbitration, period-change notification)
+- Clock and painting: `static/glass/runtime.js` (ticks the local clock against the static
+  day; no polling and no server round trips)
+- The one widget: `static/glass/timer.js`
 
 ### Feedback tools module routing — PowerGrader advanced import
 

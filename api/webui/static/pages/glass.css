@@ -1,0 +1,545 @@
+/* Glass: one screen, read from the back of a room, touched at the front.
+   The display layout owns the outer shell (full bleed, no gutter, no page
+   scroll); everything here is internal layout only.
+
+   Two numbers carry the design and are declared once:
+     --glass-tray-height  the tray's fixed height. Fixed rather than intrinsic
+                          so a timer starting cannot move the learning goal.
+     --glass-touch-min    the smallest a tap target is ever allowed to be,
+                          kept above the 9%-of-screen-width floor.
+   Type sizes are viewport-relative so the same page reads at a laptop and at a
+   projector without a second stylesheet. */
+.glass-page {
+  --glass-tray-height: 26vh;
+  --glass-touch-min: 10.5vw;
+  --glass-gutter: clamp(var(--ce-space-4), 1.8vw, 34px);
+}
+
+.glass {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto var(--glass-tray-height);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ce-surface);
+}
+
+.glass [hidden] { display: none; }
+
+.glass-eyebrow {
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: clamp(10px, 0.9vw, 15px);
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------- top rail */
+
+.glass-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: var(--glass-gutter);
+  min-width: 0;
+  padding: clamp(var(--ce-space-2), 1.2vh, 20px) var(--glass-gutter);
+  border-bottom: 1px solid var(--ce-rule);
+  background: var(--ce-surface-raised);
+}
+
+.glass-rail__identity { min-width: 0; }
+
+/* The page's one title. It names the surface rather than shouting it, so it is
+   sized as a label instead of at the shared title rank. */
+.glass-rail__mark {
+  margin: 0;
+  color: var(--ce-accent-canvas);
+  font-size: clamp(11px, 0.95vw, 16px);
+  font-weight: 750;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.glass-rail__school {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--ce-ink);
+  font-size: clamp(14px, 1.3vw, 24px);
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-rail__note {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(10px, 0.85vw, 14px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-rail__moment {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(var(--ce-space-2), 1.2vw, 24px);
+  min-width: 0;
+}
+
+.glass-rail__pill {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--ce-accent-canvas);
+  color: var(--ce-accent-canvas);
+  font-size: clamp(10px, 0.85vw, 14px);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.glass-rail__now {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ce-ink);
+  font-size: clamp(18px, 2vw, 40px);
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-rail__remaining {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: clamp(13px, 1.15vw, 22px);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.glass-rail__clock {
+  margin: 0;
+  color: var(--ce-ink);
+  font-size: clamp(22px, 2.6vw, 54px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  /* Not 1: a clock this large clips its own descenders at a tighter measure. */
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------- progress line */
+
+.glass-progress {
+  width: 100%;
+  height: clamp(6px, 0.9vh, 14px);
+  overflow: hidden;
+  background: var(--ce-surface-soft);
+}
+
+.glass-progress__fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--ce-accent-canvas);
+}
+
+/* --------------------------------------------------------- focus and panes */
+
+.glass-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(240px, 24vw, 460px);
+  gap: var(--glass-gutter);
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(var(--ce-space-3), 1.6vh, 28px) var(--glass-gutter);
+  overflow: hidden;
+}
+
+.glass-focus {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.glass-focus__pane {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(var(--ce-space-2), 1.2vh, 20px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.glass-focus__goal {
+  margin: 0;
+  color: var(--ce-ink);
+  font-size: clamp(26px, 3.2vw, 66px);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+}
+
+.glass-focus__criteria {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+
+.glass-focus__criteria li {
+  margin-top: clamp(4px, 0.7vh, 12px);
+  padding-left: 1.1em;
+  position: relative;
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(15px, 1.5vw, 30px);
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-focus__criteria li::before {
+  content: "";
+  position: absolute;
+  top: .55em;
+  left: 0;
+  width: .5em;
+  height: 2px;
+  background: var(--ce-accent-canvas);
+}
+
+.glass-focus__quiet {
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: clamp(20px, 2.4vw, 46px);
+  font-weight: 600;
+}
+
+.glass-focus__countdown {
+  margin: 0;
+  color: var(--ce-ink);
+  font-size: clamp(60px, 9vw, 190px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.glass-focus__next {
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: clamp(16px, 1.7vw, 34px);
+  font-weight: 600;
+}
+
+/* While a widget owns the slot the goal keeps its place as a single line, so
+   the room can still see what the work is for. */
+.glass-focus__goal-line {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(14px, 1.4vw, 28px);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-focus__widget-host {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Panes stack in reading order: work, Bobcat Hour, then events.
+   Bobcat Hour is the pane that takes the rail's flexible share, and work and
+   events are sized to their content. That is what makes the brief's priority
+   real rather than incidental: a shed events item shrinks a content-sized row,
+   and the space it frees goes straight to Bobcat Hour. Putting the flexible row
+   under events instead handed freed space to a track with nothing in it, so the
+   pane that was supposed to hold its ground clipped while events sat idle. */
+.glass-panes {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(var(--ce-space-3), 1.4vh, 24px);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.glass-pane {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.6vh, 10px);
+  min-width: 0;
+  min-height: 0;
+  padding-left: clamp(var(--ce-space-2), 0.8vw, 16px);
+  border-left: 2px solid var(--ce-rule);
+  overflow: hidden;
+}
+
+.glass-pane--bobcat { border-left-color: var(--ce-accent-canvas); }
+
+.glass-pane__when {
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: clamp(11px, 1vw, 18px);
+  font-weight: 600;
+}
+
+/* Takes the pane's leftover height rather than its own content height, so the
+   Bobcat Hour list keeps one box while it rotates through pages and a short
+   final page cannot make the pane jump. */
+.glass-pane__list {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  list-style: none;
+  overflow: hidden;
+}
+
+.glass-pane__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ce-space-2);
+  min-width: 0;
+  margin-top: clamp(2px, 0.5vh, 8px);
+  overflow: hidden;
+}
+
+.glass-pane__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ce-ink);
+  font-size: clamp(13px, 1.2vw, 24px);
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-pane__detail {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(11px, 1vw, 19px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-pane__item--here .glass-pane__name { color: var(--ce-accent-canvas); }
+
+.glass-pane__quiet {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(11px, 1vw, 18px);
+}
+
+/* Says quietly that the list carries more than the pane is showing. Sized as a
+   label rather than as content, because it is a footnote to the list and not a
+   row of it. */
+.glass-pane__page {
+  flex: 0 0 auto;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(10px, 0.85vw, 15px);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- day strip */
+
+.glass-strip {
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  padding: 0 var(--glass-gutter);
+  list-style: none;
+  overflow: hidden;
+}
+
+.glass-strip__item {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: clamp(4px, 0.7vh, 12px) clamp(4px, 0.5vw, 12px);
+  border-top: 3px solid var(--ce-rule);
+  overflow: hidden;
+}
+
+.glass-strip__item--now {
+  border-top-color: var(--ce-accent-canvas);
+  background: var(--ce-accent-canvas-soft);
+}
+
+.glass-strip__label {
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(10px, 0.95vw, 17px);
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.glass-strip__item--now .glass-strip__label { color: var(--ce-ink); }
+
+.glass-strip__time {
+  color: var(--ce-ink-muted);
+  font-size: clamp(9px, 0.8vw, 14px);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- banner */
+
+.glass-banner {
+  min-width: 0;
+  margin: 0;
+  padding: clamp(var(--ce-space-2), 1vh, 18px) var(--glass-gutter);
+  overflow: hidden;
+  color: var(--ce-ink-muted);
+  font-size: clamp(13px, 1.25vw, 26px);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------------------ tray */
+
+/* Everything touchable lives here and nowhere else, because a teacher at a
+   projected image reaches its lower portion and not its top. The height is a
+   fixed value rather than intrinsic, and the two states are siblings of which
+   exactly one is shown, so no state change can move the content above. */
+.glass-tray {
+  display: grid;
+  align-content: center;
+  gap: clamp(var(--ce-space-2), 1vh, 16px);
+  height: var(--glass-tray-height);
+  min-height: 0;
+  padding: 0 var(--glass-gutter);
+  border-top: 1px solid var(--ce-rule);
+  background: var(--ce-surface-raised);
+  overflow: hidden;
+}
+
+.glass-tray__state {
+  display: grid;
+  align-content: center;
+  gap: clamp(var(--ce-space-2), 1vh, 16px);
+  grid-row: 1;
+  grid-column: 1;
+  min-height: 0;
+}
+
+.glass-tray__row {
+  display: flex;
+  align-items: stretch;
+  gap: clamp(var(--ce-space-2), 1.4vw, 28px);
+  min-width: 0;
+}
+
+/* The gap that separates reset from the controls a teacher taps all lesson.
+   Physical separation is the first defence against a stray hand. */
+.glass-tray__spacer { flex: 1 1 clamp(var(--ce-space-6), 6vw, 120px); }
+
+.glass-touch {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: auto;
+  min-width: var(--glass-touch-min);
+  min-height: clamp(56px, 11vh, 150px);
+  margin: 0;
+  padding: clamp(var(--ce-space-2), 1vh, 18px) clamp(var(--ce-space-3), 1.2vw, 24px);
+  border: 2px solid var(--ce-rule-strong);
+  background: var(--ce-surface);
+  color: var(--ce-ink);
+  font-size: clamp(15px, 1.5vw, 30px);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+}
+
+.glass-touch:focus-visible { outline: 3px solid var(--ce-accent-canvas); outline-offset: 2px; }
+.glass-touch:active { background: var(--ce-accent-canvas-soft); }
+.glass-touch[disabled] { border-color: var(--ce-rule); color: var(--ce-ink-muted); cursor: default; }
+
+.glass-touch__word { display: block; }
+
+.glass-touch__hint {
+  display: block;
+  color: var(--ce-ink-muted);
+  font-size: clamp(9px, 0.75vw, 14px);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.glass-touch--apart { border-color: var(--ce-danger); color: var(--ce-danger); }
+.glass-touch--apart[data-glass-armed="yes"] { background: var(--ce-danger-soft); }
+
+/* ----------------------------------------------------------- work timer */
+
+.glass-timer {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(var(--ce-space-2), 1.4vh, 24px);
+  min-height: 0;
+}
+
+.glass-timer__digits {
+  margin: 0;
+  color: var(--ce-ink);
+  font-size: clamp(64px, 10vw, 210px);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.glass-timer__bars {
+  display: flex;
+  gap: clamp(2px, 0.3vw, 6px);
+  height: clamp(10px, 1.6vh, 26px);
+}
+
+.glass-timer__bar {
+  flex: 1 1 0;
+  background: var(--ce-surface-soft);
+}
+
+.glass-timer__bar--filled { background: var(--ce-accent-canvas); }
+
+.glass-timer__state {
+  margin: 0;
+  color: var(--ce-ink-muted);
+  font-size: clamp(13px, 1.2vw, 24px);
+  font-weight: 650;
+}
+
+/* The last two minutes. The one place on this page that changes colour to say
+   something, so it only ever means "time is nearly up". */
+.glass-timer--urgent .glass-timer__digits { color: var(--ce-danger); }
+.glass-timer--urgent .glass-timer__bar--filled { background: var(--ce-danger); }
+
+/* A tall narrow window is not a projector, but the page still has to be usable
+   on the laptop a teacher checks it from. Panes drop below the focus slot and
+   the tray keeps its fixed height. */
+@media (max-width: 900px) {
+  .glass-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .glass-touch { min-width: 16vw; font-size: clamp(13px, 2.4vw, 22px); }
+  .glass-strip__time { display: none; }
+}

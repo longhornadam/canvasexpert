@@ -1,0 +1,64 @@
+{
+  "_comment": "Blank bell schedule. Copy this file, give the copy a name like bell-schedule.json, delete the \"sample\": true line, and fill in your own day types. As shipped it declares no school days at all, so nothing is displayed until you fill it in.",
+  "format": "canvasexpert.bell_schedule/1",
+  "sample": true,
+
+  "_comment_school": "Your school name. It is only used to tell one schedule file from another.",
+  "school": "",
+
+  "_comment_timezone": "Your local timezone name, for example America/Chicago.",
+  "timezone": "",
+
+  "_comment_day_types": "One entry per kind of school day. The key is a short id you choose (for example bobcat_hour, friday, homeroom_first, pep_rally) and the value has a label plus an ordered list of blocks. Copy an entry from _example_day_types below to get started.",
+  "day_types": {},
+
+  "_comment_weekday_default": "Which day type each weekday normally gets. Keys are numbers as text: \"0\" is Monday through \"6\" is Sunday. A weekday you leave out is not a school day.",
+  "weekday_default": {},
+
+  "_comment_date_overrides": "Single dates that use a different day type, in YYYY-MM-DD form. These win over weekday_default.",
+  "date_overrides": {},
+
+  "_example_day_types": {
+    "_comment": "Reference only. Nothing in here is read. Copy an entry into day_types above and change the ids, labels, and times to your own.",
+    "your_day_type_id": {
+      "label": "What to call this kind of day",
+      "blocks": [
+        {
+          "_comment": "id is the short name you will key the day plan by. kind is one of class, homeroom, bobcat_hour, lunch, advisory, assembly, other. start and end are HH:MM on a 24-hour clock, so 1:05pm is 13:05.",
+          "id": "p1",
+          "kind": "class",
+          "label": "1st Period",
+          "start": "08:30",
+          "end": "09:20"
+        },
+        {
+          "_comment": "A period with A and B lunch inside it. Sequential sub-blocks have to fill the parent exactly: the first starts when the parent starts, the last ends when the parent ends, with no gaps and no overlap.",
+          "id": "p4",
+          "kind": "class",
+          "label": "4th Period",
+          "start": "11:30",
+          "end": "13:00",
+          "sub_blocks": {
+            "mode": "sequential",
+            "blocks": [
+              { "id": "p4a", "kind": "lunch", "label": "4th Period / A Lunch", "start": "11:30", "end": "12:15" },
+              { "id": "p4b", "kind": "lunch", "label": "4th Period / B Lunch", "start": "12:15", "end": "13:00" }
+            ]
+          }
+        },
+        {
+          "_comment": "A block that holds several things happening at once, such as a lunch-and-tutorials hour. Leave blocks empty: what is on offer changes week to week, so it is day plan content, not schedule content.",
+          "id": "bobcat",
+          "kind": "bobcat_hour",
+          "label": "Bobcat Hour",
+          "start": "11:15",
+          "end": "12:15",
+          "sub_blocks": {
+            "mode": "concurrent",
+            "blocks": []
+          }
+        }
+      ]
+    }
+  }
+}

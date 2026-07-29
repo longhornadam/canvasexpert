@@ -339,4 +339,38 @@ Stop and return YELLOW or RED rather than guessing when:
 
 ## 11. Execution result
 
-_Not started._
+**Code complete 2026-07-29. GREEN on the automatable gate. The manual criterion is outstanding.**
+
+Gate: `py -m pytest api/tests` gives **1747 passed, 0 failed, 0 skipped** (baseline before this
+batch was 1722). The subsystem's own tests are 224: 114 in `api/tests/schedule/` and 110 in
+`api/tests/glass/`.
+
+Acceptance criteria 1 through 12 all pass. Criteria 6, 7, and 9 are proven by measured geometry
+through Playwright at 1280x800 and 1920x1200 in `api/tests/glass/test_glass_geometry.py`, the
+repo's first browser-driving test; those twelve skip rather than fail when Chromium is absent, so
+confirm they ran. Tray height is identical across all five timer states (208.00px and 312.00px),
+the narrowest touch target is 10.50% of viewport width against the 9% floor, and the highest
+interactive element sits at 0.829 of viewport height against the 0.667 bottom-third line.
+
+**Still outstanding: the manual, teacher-run projector day** (section 8). It has not happened,
+and it remains the only criterion that can fail after the code is green. The real Berry Miller
+bell schedule and day-type calendar are also not yet authored; the page runs on the shipped
+fictional sample until they are, and says so quietly in the rail.
+
+Three decisions were taken during execution and are recorded in
+`docs/reference/glass-module-map.md`, which is the route card from here on:
+
+1. **Long lists move.** The Bobcat Hour pane rotates through its offerings rather than being
+   capped, clipped, or scrolled. This replaced a proposed schema cap and is a teacher decision
+   about what a projector screen is, so it should govern the next such call too.
+2. **Events and banner items stay unbudgeted**, deliberately rather than by omission. Revisit
+   when the banner is wired to the mirror and the vault.
+3. **A fourth template family, `display`**, was added: header-less and full bleed, because
+   `workspace/full` is width-clamped and would letterbox a projector.
+
+Two corrections to this brief, for the record. Section 3 cites SpeedGrader as a precedent
+surface; there is no SpeedGrader page in this repo, and Seating was the precedent actually
+followed. Section 5.5's shed rule was implemented twice: the first fix was insufficient because
+the rail's flexible grid track sat under events rather than under the pane that was supposed to
+hold its ground, so events yielded all six items and bought Bobcat nothing. Both the track order
+and the shed logic had to change.

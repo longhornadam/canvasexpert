@@ -42,7 +42,7 @@ LIBRARY_NAME = "Library"
 AI_AUTHORING_SUBFOLDER = "AI Authoring"
 LIBRARY_SUBFOLDERS = [
     AI_AUTHORING_SUBFOLDER, "Rubrics", "Quizzes", "Assignments", "Pages",
-    "Calendars", "Source Materials",
+    "Calendars", "Bell Schedules", "Source Materials",
 ]
 
 # Assistant-staged drafts waiting for the teacher to push to Canvas.
@@ -65,7 +65,7 @@ FOR_AI_NAME = "For AI"
 
 SYSTEM_NAME = "_System"
 SYSTEM_SUBFOLDERS = ("Identity Vault", "PowerGrader", "Audits", "Archive",
-                     "Canvas Catalog", "Canvas Mirror")
+                     "Canvas Catalog", "Canvas Mirror", "Glass")
 CANVAS_CATALOG_NAME = "Canvas Catalog"
 CANVAS_MIRROR_NAME = "Canvas Mirror"
 
@@ -751,6 +751,12 @@ def ensure_workspace():
         os.makedirs(os.path.join(root, SYSTEM_NAME, sub), exist_ok=True)
     os.makedirs(os.path.join(root, SYSTEM_NAME, "PowerGrader", "Sessions"), exist_ok=True)
     os.makedirs(os.path.join(root, SYSTEM_NAME, "PowerGrader", "Jobs"), exist_ok=True)
+    # Day plans live on the private side because they will eventually carry
+    # pseudonymized missing-work text.  Library folders seed themselves from
+    # default_docs by name; _System ones do not, so Glass says it explicitly.
+    glass_dir = os.path.join(root, SYSTEM_NAME, "Glass")
+    os.makedirs(os.path.join(glass_dir, "day-plans"), exist_ok=True)
+    _seed_folder_if_missing(os.path.join(DEFAULT_DOCS_DIR, "Glass"), glass_dir)
 
     rubric_dir = os.path.join(root, LIBRARY_NAME, "Rubrics")
     for source in _default_rubric_files():

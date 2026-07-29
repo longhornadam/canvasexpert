@@ -1,0 +1,182 @@
+{% extends "layouts/display.html" %}
+{# Glass is read from the back of a room, so everything large lives high and
+   everything touchable lives in the tray along the foot of the screen. There is
+   deliberately no exit or navigation control anywhere on this page: a link
+   would be an interactive element outside the bottom third, and the teacher has
+   a browser. The whole resolved day is serialised once into #glass-data and the
+   browser ticks its own clock against it. #}
+{% block title %}Glass - Canvas Expert{% endblock %}
+{% block display_body_class %}glass-page{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/pages/glass.css?v={{ asset_v }}">
+{% endblock %}
+
+{% block primary %}
+<div class="glass" id="glass-root">
+
+  <div class="glass-rail">
+    <div class="glass-rail__identity">
+      <h1 class="glass-rail__mark">Glass</h1>
+      <p class="glass-rail__school">{{ glass.school or "This room" }}</p>
+      {% if glass.rail_notes %}
+      <p class="glass-rail__note">{{ glass.rail_notes | join(" / ") }}</p>
+      {% endif %}
+    </div>
+    <div class="glass-rail__moment">
+      <p class="glass-rail__pill" id="glass-day-type">{{ glass.day_type.label }}</p>
+      <p class="glass-rail__now" id="glass-now-label">{{ glass.current.label }}</p>
+      <p class="glass-rail__remaining" id="glass-remaining">{{ glass.current.remaining_text }}</p>
+    </div>
+    <p class="glass-rail__clock" id="glass-clock">{{ glass.clock }}</p>
+  </div>
+
+  <div class="glass-progress" id="glass-progress" data-percent="{{ glass.current.percent }}"
+       role="img" aria-label="Time elapsed in this period">
+    <span class="glass-progress__fill" id="glass-progress-fill"></span>
+  </div>
+
+  <div class="glass-body">
+
+    <div class="glass-focus" id="glass-focus">
+      <div class="glass-focus__pane" id="glass-focus-rest">
+        <p class="glass-eyebrow">Learning goal</p>
+        <p class="glass-focus__goal" id="glass-goal">{{ glass.current.plan.learning_goal }}</p>
+        <ul class="glass-focus__criteria" id="glass-criteria">
+          {% for criterion in glass.current.plan.success_criteria %}
+          <li>{{ criterion }}</li>
+          {% endfor %}
+        </ul>
+        {% if not glass.current.plan.learning_goal %}
+        <p class="glass-focus__quiet">{{ glass.current.label }}</p>
+        {% endif %}
+      </div>
+
+      <div class="glass-focus__pane" id="glass-focus-passing" hidden>
+        <p class="glass-eyebrow">Passing period</p>
+        <p class="glass-focus__countdown" id="glass-passing-countdown">{{ glass.current.countdown }}</p>
+        <p class="glass-focus__next" id="glass-passing-next">until {{ glass.current.next_label }}</p>
+      </div>
+
+      <div class="glass-focus__pane" id="glass-focus-widget" hidden>
+        <p class="glass-focus__goal-line" id="glass-goal-line"></p>
+        <div class="glass-focus__widget-host" id="glass-widget-host"></div>
+      </div>
+    </div>
+
+    <div class="glass-panes">
+      <section class="glass-pane glass-pane--work">
+        <p class="glass-eyebrow">Today's work</p>
+        <ul class="glass-pane__list" id="glass-work">
+          {% for item in glass.current.plan.work %}
+          <li class="glass-pane__item">
+            <span class="glass-pane__name">{{ item.name }}</span>
+            {% if item.detail %}<span class="glass-pane__detail">{{ item.detail }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+
+      <section class="glass-pane glass-pane--bobcat">
+        {# The pane's own elements are always present, hidden when they have
+           nothing to say, because the browser swaps this pane from today to
+           tomorrow on the clock and cannot fill in an element that was never
+           rendered. #}
+        <p class="glass-eyebrow" id="glass-bobcat-heading">{{ glass.bobcat_hour.heading }}</p>
+        <p class="glass-pane__when" id="glass-bobcat-when"
+           {% if not glass.bobcat_hour.available %}hidden{% endif %}>{{ glass.bobcat_hour.start_text }} to {{ glass.bobcat_hour.end_text }}</p>
+        <ul class="glass-pane__list" id="glass-bobcat-list">
+          {% if glass.bobcat_hour.here %}
+          <li class="glass-pane__item glass-pane__item--here">
+            <span class="glass-pane__name">{{ glass.bobcat_hour.here.label }}</span>
+            <span class="glass-pane__detail">in this room{% if glass.bobcat_hour.here.location %}, {{ glass.bobcat_hour.here.location }}{% endif %}</span>
+          </li>
+          {% endif %}
+          {% for offering in glass.bobcat_hour.offerings %}
+          <li class="glass-pane__item">
+            <span class="glass-pane__name">{{ offering.label }}</span>
+            {% if offering.location %}<span class="glass-pane__detail">{{ offering.location }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {# Which page of a long offering list is showing. Ships hidden and stays
+           hidden unless the list outruns the pane, because the page a room is
+           looking at is live state the browser owns, not something the server
+           decides. Text only: nothing interactive may appear this high up. #}
+        <p class="glass-pane__page" id="glass-bobcat-more" hidden></p>
+        <p class="glass-pane__quiet" id="glass-bobcat-note"
+           {% if not glass.bobcat_hour.note %}hidden{% endif %}>{{ glass.bobcat_hour.note }}</p>
+      </section>
+
+      {# Events are the pane that gives way when the rail runs short of room,
+         so the whole section collapses once its last item has been shed rather
+         than leaving a heading with nothing under it. #}
+      <section class="glass-pane glass-pane--events" id="glass-events-pane">
+        <p class="glass-eyebrow">Coming up</p>
+        <ul class="glass-pane__list" id="glass-events">
+          {% for event in glass.events %}
+          <li class="glass-pane__item">
+            <span class="glass-pane__name">{{ event.label }}</span>
+            {% if event.when %}<span class="glass-pane__detail">{{ event.when }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+    </div>
+
+  </div>
+
+  <ol class="glass-strip" id="glass-strip">
+    {% for block in glass.blocks %}
+    <li class="glass-strip__item{% if block.id == glass.current.block_id %} glass-strip__item--now{% endif %}"
+        data-glass-block="{{ block.id }}">
+      <span class="glass-strip__label">{{ block.label }}</span>
+      <span class="glass-strip__time">{{ block.start_text }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+
+  <p class="glass-banner" id="glass-banner">
+    <span id="glass-banner-text">{{ glass.banner[0] if glass.banner else "" }}</span>
+  </p>
+
+  {# The tray's height is fixed in CSS, and its two states are siblings of which
+     exactly one is shown, so starting or stopping a timer cannot move anything
+     above it. Reset sits past a spacer and asks a second time before it acts. #}
+  <div class="glass-tray" id="glass-tray">
+    <div class="glass-tray__state" id="glass-tray-rest">
+      <p class="glass-eyebrow">Work timer</p>
+      <div class="glass-tray__row">
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-preset="5">5 min</button>
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-preset="10">10 min</button>
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-preset="15">15 min</button>
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-preset="20">20 min</button>
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-preset="1">
+          <span class="glass-touch__word">Custom</span>
+          <span class="glass-touch__hint">starts at 1, add with plus one</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="glass-tray__state" id="glass-tray-running" hidden>
+      <p class="glass-eyebrow" id="glass-tray-running-label">Work timer</p>
+      <div class="glass-tray__row">
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-timer="pause">Pause</button>
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-timer="resume">Resume</button>
+        <button type="button" class="glass-touch" data-ce-hook="glass-touch" data-glass-timer="add">Plus 1 min</button>
+        <span class="glass-tray__spacer" aria-hidden="true"></span>
+        <button type="button" class="glass-touch glass-touch--apart" data-ce-hook="glass-touch"
+                data-glass-timer="reset" id="glass-timer-reset">Reset</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script id="glass-data" type="application/json">{{ glass | tojson }}</script>
+{% endblock %}
+
+{% block display_scripts %}
+<script src="/static/glass/widgets.js?v={{ asset_v }}"></script>
+<script src="/static/glass/runtime.js?v={{ asset_v }}"></script>
+<script src="/static/glass/timer.js?v={{ asset_v }}"></script>
+{% endblock %}
