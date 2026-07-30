@@ -52,15 +52,25 @@ scoring). The `docs/handoffs/feedbackexpert-*.md` files are historical build spe
    in-tenant and FERPA-safe — never the repo. When in doubt, treat anything course- or
    roster-derived as PII.
 
-3. **No district-specific config in the repo.** District URLs, calendars, rubric names,
-   and the like belong in the **UI** and the **user-chosen synced workspace** (default
+3. **No district-specific config in the repo.** District URLs, rubric names, rosters, and
+   the like belong in the **UI** and the **user-chosen synced workspace** (default
    `OneDrive\CanvasExpert\`, overridable; last-writer-wins `settings.json`) — not in source.
-   The repo is district-agnostic: `CANVAS_BASE_DEFAULT` is empty (an empty base is the
-   signal that first-run onboarding isn't complete); calendars are **data-driven** — the
-   app lists whatever CSVs live in the workspace `Calendars` folder. The only calendar
-   content shipped in-repo is a blank `calendar_template.csv` and a **fictional**
-   `Summer_Session_Sample.csv` for testing. Do not reintroduce a real district's URL,
-   calendar, or school/teacher name anywhere in source.
+   The repo is district-agnostic in **code**: `CANVAS_BASE_DEFAULT` is empty (an empty base
+   is the signal that first-run onboarding isn't complete), and calendars are
+   **data-driven** — the app lists whatever CSVs live in the workspace `Calendars` folder
+   and never branches on a district name. Do not reintroduce a real district's URL, roster,
+   or teacher-identifying config anywhere in source.
+
+   **Carve-out — public schedule data (added 2026-07-30, for SmartDeck).** Academic
+   calendars and school bell schedules are **public, non-PII information**, and real ones
+   **may ship in-repo** as seed data files under `api/default_docs/` (e.g.
+   `api/default_docs/Calendars/*.csv`), alongside the blank `calendar_template.csv` and the
+   fictional `Summer_Session_Sample.csv`. A future agent should **not** "fix" a real
+   district's calendar or bell schedule found there — it is intentional. Conditions: the
+   data must be a **seed file** consumed by the existing data-driven loader (no district
+   values hardcoded in `.py`, no code path that special-cases a district), and it must
+   contain **no student data and no per-teacher contact info**. This carve-out covers
+   calendars and bell schedules only; everything else in this guardrail stands.
 
 4. **Local-only, never exposed.** The Web UI binds `127.0.0.1`. Do not change the bind
    address, add public routes, or otherwise make this app reachable off the machine.
@@ -105,9 +115,9 @@ py -m pip install -r api/requirements.txt
 ## Onboarding wizard — implemented
 
 The first-run experience (workspace-folder picker → Canvas URL → token → optional
-calendar activation) is now implemented. See spec at
-**`docs/handoffs/onboarding-wizard.md`** for details. An unconfigured app redirects
-to `/welcome` automatically; a "Re-run setup wizard" link is available on Settings.
+calendar activation) is now implemented. An unconfigured app redirects to `/welcome`
+automatically; a "Re-run setup wizard" link is available on Settings. Code lives in
+`api/webui/routes/onboarding.py`.
 
 ## Cleanup backlog
 
