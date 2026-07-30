@@ -1,0 +1,47 @@
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail, page_header, panel, notice, empty_state %}
+{% block title %}SmartDeck — Canvas Expert{% endblock %}
+{% block workspace_variant %}left-main{% endblock %}
+{% block workspace_body_class %}smartdeck-page{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/smartdeck/smartdeck.css?v={{ asset_v }}">
+{% endblock %}
+{% block left_rail %}
+{% call rail('left', 'SmartDeck') %}
+  <p class="ce-hint">A local, student-free projector surface. Your assistant authors Slides; you choose when to display them.</p>
+{% endcall %}
+{% endblock %}
+{% block workspace_header %}{{ page_header('SmartDeck', 'Decks of classroom-display Slides for your projector.') }}{% endblock %}
+{% block primary %}
+<div id="smartdeck-unconfigured" hidden>
+  {% call notice('attention') %}
+  <strong>SmartDeck isn't fully set up yet.</strong>
+  <p id="smartdeck-unconfigured-detail" class="ce-hint"></p>
+  {% endcall %}
+</div>
+
+{% call panel('Active') %}
+  <div id="smartdeck-active-list">{{ empty_state('Loading...') }}</div>
+{% endcall %}
+
+{% call panel('Templates') %}
+  <h3>Deck Templates</h3>
+  <div id="smartdeck-deck-templates-list">{{ empty_state('Loading...') }}</div>
+  <h3>Slide Templates</h3>
+  <div id="smartdeck-slide-templates-list">{{ empty_state('Loading...') }}</div>
+{% endcall %}
+
+{% call panel('Archived') %}
+  <div id="smartdeck-archived-list">{{ empty_state('Loading...') }}</div>
+{% endcall %}
+
+{% call panel('Widgets') %}
+  <p class="ce-hint">Widgets are added inside a deck's own Slides while authoring, not managed separately here.</p>
+  <ul class="smartdeck-widget-kinds">
+    <li><strong>Timer</strong> -- a countdown, scoped to one Slide or the whole Deck. The only widget kind in v1.</li>
+  </ul>
+{% endcall %}
+{% endblock %}
+{% block workspace_scripts %}
+<script src="/static/smartdeck/smartdeck.js?v={{ asset_v }}"></script>
+{% endblock %}

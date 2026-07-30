@@ -1,0 +1,68 @@
+/* SmartDeck layout and styling — consumes existing ce-* tokens */
+
+.smartdeck-widget-kinds {
+  list-style: none;
+  padding: 0;
+  margin: var(--ce-space-3) 0;
+}
+
+.smartdeck-widget-kinds li {
+  margin: var(--ce-space-2) 0;
+  line-height: 1.5;
+}
+
+.smartdeck-deck-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ce-space-3);
+  margin: var(--ce-space-2) 0;
+  border: 1px solid var(--ce-rule);
+  border-radius: 4px;
+  gap: var(--ce-space-3);
+}
+
+.smartdeck-deck-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--ce-space-2);
+  min-width: 0;
+}
+
+.smartdeck-deck-date,
+.smartdeck-deck-revision {
+  font-size: 0.875em;
+  color: var(--ce-text-secondary);
+  white-space: nowrap;
+}
+
+.smartdeck-deck-title {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smartdeck-deck-actions {
+  display: flex;
+  gap: var(--ce-space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.smartdeck-template-row {
+  padding: var(--ce-space-2) var(--ce-space-3);
+  border-bottom: 1px solid var(--ce-rule);
+}
+
+.smartdeck-template-row:last-child {
+  border-bottom: none;
+}
+
+.smartdeck-page h3 {
+  margin: var(--ce-space-3) 0 var(--ce-space-2) 0;
+  font-size: 1em;
+  font-weight: 600;
+}

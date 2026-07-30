@@ -342,3 +342,43 @@ def delete_deck(deck_id: str) -> tuple[bool, list[str]]:
         return True, []
     except (OSError, shutil.Error) as e:
         return False, [f"failed to delete deck: {e}"]
+
+
+def list_templates(kind: str) -> list[dict]:
+    """List templates by kind: 'deck' or 'slide'.
+
+    Scans *.json files in Library/SmartDecks/'Deck Templates' or
+    Library/SmartDecks/'Slide Templates' respectively. Returns [{name, path}]
+    sorted by name, or [] if the workspace/folder is missing or kind is invalid.
+    Never raises -- unreadable/malformed files are just skipped.
+    """
+    if kind == "deck":
+        folder_name = "Deck Templates"
+    elif kind == "slide":
+        folder_name = "Slide Templates"
+    else:
+        return []
+
+    smartdecks_base = _smartdecks_base()
+    if not smartdecks_base:
+        return []
+
+    template_dir = os.path.join(smartdecks_base, folder_name)
+    if not os.path.isdir(template_dir):
+        return []
+
+    templates = []
+    for filepath in glob.glob(os.path.join(template_dir, "*.json")):
+        try:
+            filename = os.path.basename(filepath)
+            # Store just the name without the .json extension
+            name = filename[:-5] if filename.endswith(".json") else filename
+            templates.append({
+                "name": name,
+                "path": filepath,
+            })
+        except Exception:
+            # Skip unreadable or malformed files
+            continue
+
+    return sorted(templates, key=lambda x: x["name"])
