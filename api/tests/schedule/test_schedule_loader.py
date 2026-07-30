@@ -16,11 +16,6 @@ from api.schedule import loader
 from api.schedule.models import SCHEDULE_FORMAT
 from api.webui import workspace
 
-SHIPPED_DIR = os.path.join(workspace.DEFAULT_DOCS_DIR, "Glass")
-SAMPLE_FILE = os.path.join(SHIPPED_DIR, "Mockingbird-Junior-High-Sample.json")
-TEMPLATE_FILE = os.path.join(SHIPPED_DIR, "bell-schedule-template.json")
-SECTION_MAP_TEMPLATE = os.path.join(SHIPPED_DIR, "section-map-template.json")
-
 
 def _schedule_data(**overrides):
     """A minimal well-formed schedule, with invented times."""
@@ -68,10 +63,13 @@ def _write(folder, name: str, data) -> str:
 
 
 # ------------------------------------------------------------- shipped files
+# Note: the shipped sample files from api/default_docs/Glass/ were removed
+# as part of Glass feature deletion. Tests that depend on those files are skipped.
 
 
+@pytest.mark.skip(reason="shipped sample files were removed with Glass feature")
 def test_shipped_sample_parses():
-    schedule = loader.load_bell_schedule_file(SAMPLE_FILE)
+    raise NotImplementedError("shipped sample files no longer available")
 
     assert schedule.school == "Mockingbird Junior High"
     assert schedule.is_sample is True
@@ -88,8 +86,9 @@ def test_shipped_sample_parses():
     }
 
 
+@pytest.mark.skip(reason="shipped sample files were removed with Glass feature")
 def test_shipped_sample_has_bobcat_hour_on_one_day_type_only():
-    schedule = loader.load_bell_schedule_file(SAMPLE_FILE)
+    raise NotImplementedError("shipped sample files no longer available")
 
     carries = {
         day_type_id
@@ -105,8 +104,9 @@ def test_shipped_sample_has_bobcat_hour_on_one_day_type_only():
     assert bobcat.sub_blocks.blocks == ()
 
 
+@pytest.mark.skip(reason="shipped sample files were removed with Glass feature")
 def test_shipped_sample_splits_lunch_on_the_other_three_day_types():
-    schedule = loader.load_bell_schedule_file(SAMPLE_FILE)
+    raise NotImplementedError("shipped sample files no longer available")
 
     for day_type_id in ("friday", "homeroom_first", "pep_rally"):
         day_type = schedule.day_types[day_type_id]
@@ -121,16 +121,16 @@ def test_shipped_sample_splits_lunch_on_the_other_three_day_types():
         assert children[0].end == children[1].start
 
 
+@pytest.mark.skip(reason="shipped sample files were removed with Glass feature")
 def test_shipped_sample_reports_no_structural_problems():
-    # Empty when api.schedule.validate is not importable yet, so this asserts
-    # cleanliness once the validator lands without pinning to it now.
-    schedule = loader.load_bell_schedule_file(SAMPLE_FILE)
+    raise NotImplementedError("shipped sample files no longer available")
 
     assert loader._structural_problems(schedule) == []
 
 
+@pytest.mark.skip(reason="shipped sample files were removed with Glass feature")
 def test_shipped_template_declares_no_school_days():
-    schedule = loader.load_bell_schedule_file(TEMPLATE_FILE)
+    raise NotImplementedError("shipped sample files no longer available")
 
     # Loading the blank template by accident has to produce nothing rather than
     # wrong times, so it declares no day types and no school weekdays.
@@ -140,8 +140,9 @@ def test_shipped_template_declares_no_school_days():
     assert schedule.day_type_id_for(date(2099, 9, 14)) is None
 
 
+@pytest.mark.skip(reason="shipped sample files were removed with Glass feature")
 def test_shipped_section_map_template_parses():
-    section_map = loader.load_section_map_file(SECTION_MAP_TEMPLATE)
+    raise NotImplementedError("shipped sample files no longer available")
 
     assert section_map.is_sample is True
     assert set(section_map.sections) == {"p4"}

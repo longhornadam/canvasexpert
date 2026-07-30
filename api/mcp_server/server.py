@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Seventeen thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Thirteen thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -30,9 +30,7 @@ _FERPA_NOTICE = (
     "and get_gradebook_snapshot serve only from the local mirror and refuse "
     "when it is stale; call refresh_mirror for that course, then retry once. "
     "Results are compact JSON, with list data as {columns, rows} tables. "
-    "Prefer narrow calls: include_text=false or specific pseudonyms first. To "
-    "For Glass, call get_authoring_contract for glass_pane or glass_scene, then "
-    "get_glass_context before saving a pending Glass draft; the teacher alone approves it. "
+    "Prefer narrow calls: include_text=false or specific pseudonyms first. "
     "To help the teacher create other content, call get_authoring_contract for the kind "
     "and follow the staging steps in its response. Before answering what "
     "CanvasExpert itself can do, or planning writing work, call "
@@ -151,37 +149,8 @@ def get_gradebook_snapshot(course_id: str) -> str:
 
 @mcp.tool()
 def get_authoring_contract(kind: str) -> str:
-    """Canonical Forge or Glass authoring contract. Glass kinds are
-    glass_pane and glass_scene; their teacher-review flow has no Forge staging
-    appendix. No student data."""
+    """Canonical Forge authoring contract. No student data."""
     return _compact(tools.get_authoring_contract(kind))
-
-
-@mcp.tool()
-def get_glass_context(date: str, lookahead_days: int = 14, include_pane_schemas: bool = False) -> str:
-    """Public bell-schedule/calendar context plus approved pane and scene status.
-    Pass include_pane_schemas to also get each approved pane's data_schema, which
-    a scene's per-instance data must satisfy.
-    It never reads Canvas, course work, or student data."""
-    return _compact(tools.get_glass_context(date, lookahead_days, include_pane_schemas))
-
-
-@mcp.tool()
-def save_glass_pane_draft(manifest: dict, pane_html: str, pane_css: str = "", pane_js: str = "", assets: list = None, draft_id: str = "") -> str:
-    """Validate and stage one pending pane in To Review/Glass. Never publishes."""
-    return _compact(tools.save_glass_pane_draft(manifest, pane_html, pane_css, pane_js, assets, draft_id))
-
-
-@mcp.tool()
-def save_glass_scene_draft(scene: dict, draft_id: str = "") -> str:
-    """Validate and stage one dated scene in To Review/Glass. Never publishes."""
-    return _compact(tools.save_glass_scene_draft(scene, draft_id))
-
-
-@mcp.tool()
-def list_glass_drafts() -> str:
-    """Compact pending Glass draft metadata; never returns source, assets, or paths."""
-    return _compact(tools.list_glass_drafts())
 
 
 @mcp.tool()

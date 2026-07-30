@@ -33,9 +33,6 @@ EXPECTED_PRESENTATION = {
     "/about": ("about.html", "document", "wide", 0),
     "/ai-expert": ("ai_expert.html", "document", "standard", 0),
     "/welcome": ("welcome.html", "wizard", "", 0),
-    # Glass management is an app-shell teacher surface; projector display is
-    # its dedicated headerless /glass/display route.
-    "/glass": ("glass.html", "workspace", "full", 0),
 }
 FEATURE_CSS = (
     "api/webui/static/pages/dashboard.css",
@@ -51,7 +48,6 @@ FEATURE_CSS = (
     "api/webui/static/pages/about.css",
     "api/webui/static/pages/ai_expert.css",
     "api/webui/static/pages/welcome.css",
-    "api/webui/static/pages/glass.css",
 )
 VISUAL_LITERAL_RE = re.compile(r"font-family:|#[0-9a-fA-F]{3,8}|rgb\(|hsl\(|border-radius:|box-shadow:")
 FORBIDDEN_JS_SELECTORS = (
@@ -93,9 +89,6 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages.workspace, "canvas_uploads_root", lambda: "")
     monkeypatch.setattr(pages.workspace, "student_work_root", lambda: "")
     monkeypatch.setattr(pages.workspace, "for_ai_root", lambda: "")
-    # The real signature is system_root(root=None), and Glass reaches it through
-    # workspace.system_folder(name). The stub previously took no arguments, which
-    # no route had exercised.
     monkeypatch.setattr(pages.workspace, "system_root", lambda root=None: "")
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
     monkeypatch.setattr(pages.work_routes, "_presentations", lambda jobs, finding_names=None: {})
@@ -128,7 +121,7 @@ def _configure_fictional(monkeypatch):
 
 
 def test_registry_is_the_full_program_route_map():
-    assert len(EXPECTED_PRESENTATION) == 13
+    assert len(EXPECTED_PRESENTATION) == 12
 
 
 def test_all_live_templates_use_layouts_and_no_inline_styles():
@@ -193,7 +186,6 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/about": "/about",
         "/ai-expert": "/ai-expert",
         "/welcome": "/welcome",
-        "/glass": "/glass",
     }
     client = _client()
     bundle = (

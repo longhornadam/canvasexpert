@@ -47,7 +47,6 @@ from .routes.courses import router as _courses_router
 from .routes.course_catalog import router as _course_catalog_router
 from .routes.dailywriting import router as _dailywriting_router
 from .routes.feedback import router as _feedback_router
-from .routes.glass import router as _glass_router
 from .routes.names import names_router as _names_router
 from .routes.gradebook import router as _gradebook_router
 from .routes.library import router as _library_router
@@ -72,7 +71,7 @@ from .mirror_service import _mirror_heartbeat
 
 
 class _StaticFiles(StaticFiles):
-    """Serve bundled fonts to opaque-origin Glass frames without diagnostics."""
+    """Serve bundled fonts to sandboxed iframes without diagnostics."""
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
         if path.replace("\\", "/").startswith("fonts/"):
@@ -170,7 +169,6 @@ app.include_router(_courses_router)
 app.include_router(_course_catalog_router)
 app.include_router(_dailywriting_router)
 app.include_router(_feedback_router)
-app.include_router(_glass_router)
 app.include_router(_names_router)
 app.include_router(_gradebook_router)
 app.include_router(_library_router)
