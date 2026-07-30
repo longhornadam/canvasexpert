@@ -493,7 +493,7 @@ def test_get_authoring_contract_unknown_kind_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown kind 'essay'; expected one of: "
-                  "quiz, assignment, page, rubric"),
+                  "quiz, assignment, page, rubric, deck"),
     }
 
 
@@ -507,7 +507,7 @@ def test_get_authoring_contract_missing_file_returns_structured_error(monkeypatc
 def test_get_authoring_contract_matches_the_one_canonical_repo_file():
     """Each kind has exactly one repository file under api/default_docs/AI
     Authoring/; the MCP tool must return that file's bytes exactly (plus the
-    staging appendix), never a regenerated or forked copy."""
+    staging appendix for non-deck kinds), never a regenerated or forked copy."""
     for kind, filename in tools._CONTRACT_FILES.items():
         canonical_path = os.path.join(
             tools.REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
@@ -515,7 +515,11 @@ def test_get_authoring_contract_matches_the_one_canonical_repo_file():
             canonical_text = f.read()
         result = tools.get_authoring_contract(kind)
         assert result["ok"] is True
-        assert result["contract"].startswith(canonical_text)
+        # Deck has no staging appendix; others do
+        if kind == "deck":
+            assert result["contract"] == canonical_text
+        else:
+            assert result["contract"].startswith(canonical_text)
 
 
 
@@ -684,6 +688,7 @@ def test_list_staged_content_omitting_kind_aggregates_across_kinds(monkeypatch):
         {"kind": "assignment", "label": "assignment-draft.txt"},
         {"kind": "page", "label": "page-draft.txt"},
         {"kind": "rubric", "label": "rubric-draft.txt"},
+        {"kind": "deck", "label": "deck-draft.txt"},
     ]
 
 
@@ -692,7 +697,7 @@ def test_list_staged_content_unknown_kind_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown kind 'essay'; expected one of: "
-                  "quiz, assignment, page, rubric (or omit for all)"),
+                  "quiz, assignment, page, rubric, deck (or omit for all)"),
     }
 
 
@@ -1567,6 +1572,7 @@ def test_server_registers_the_expected_tool_set():
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "list_staged_content",
         "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
+        "save_deck", "list_active_decks", "archive_deck",
     }
 
 

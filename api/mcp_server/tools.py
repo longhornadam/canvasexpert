@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 16 MCP tools.
+"""Plain, testable implementations of the 19 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -9,7 +9,8 @@ monkeypatch them without touching the real Canvas API or identity vault
 Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses``,
 ``get_authoring_contract``, ``get_product_guide``, ``list_staged_content``,
-``get_bell_schedule``, ``get_day_schedule``, and ``get_teacher_schedule`` are
+``get_bell_schedule``, ``get_day_schedule``, ``get_teacher_schedule``,
+``save_deck``, ``list_active_decks``, and ``archive_deck`` are
 the only tools with no ``course_id`` and no student data, so they skip both the
 course gate and the outbound safety gate. ``get_writing_history`` breaks that
 pairing on purpose: it has no ``course_id`` either (the daily-writing store has
@@ -34,7 +35,7 @@ from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snaps
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
-from api.webui import config, mirror_service, workspace
+from api.webui import config, mirror_service, workspace, deck_store, sf
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_vault
@@ -473,6 +474,7 @@ _CONTRACT_FILES = {
     "assignment": "Author an Assignment (AssignmentForge).txt",
     "page": "Author a Page (PageForge).txt",
     "rubric": "Author a Rubric (RubricForge).txt",
+    "deck": "Author a SmartDeck (SlideForge).txt",
 }
 
 # Product knowledge the tool surface does not imply. An assistant that only
@@ -535,8 +537,9 @@ def _staging_appendix(kind: str) -> str:
 def get_authoring_contract(kind: str) -> dict:
     """Return one canonical Forge authoring contract.
 
-    Contracts come from ``api/default_docs/AI Authoring/`` and receive
-    the Forge-only staging appendix. No course_id, student data, vault,
+    Contracts come from ``api/default_docs/AI Authoring/``. Most receive
+    the Forge-only staging appendix; deck is an exception (direct write via
+    save_deck, no review queue). No course_id, student data, vault,
     or safety gate applies.
     """
     filename = _CONTRACT_FILES.get(kind)
@@ -550,6 +553,11 @@ def get_authoring_contract(kind: str) -> dict:
     contract_text, error = _read_authoring_doc(filename, f"{kind} authoring contract")
     if error:
         return {"ok": False, "error": error}
+
+    # Deck has no staging/review queue -- it writes directly via save_deck.
+    # Skip the staging appendix for this one kind only.
+    if kind == "deck":
+        return {"ok": True, "kind": kind, "contract": contract_text}
 
     return {"ok": True, "kind": kind,
             "contract": contract_text + _staging_appendix(kind)}
@@ -1058,3 +1066,57 @@ def get_teacher_schedule() -> dict:
         "schedule": teacher_schedule,
         "problems": problems,
     }
+
+
+def save_deck(date: str, title: str, slides: list, widgets: list = None) -> dict:
+    """Build and validate a SmartDeck, then write it live to the workspace.
+
+    Constructs the deck dict from the parameters, validates via sf.validate(),
+    and calls deck_store.save_deck() to write it atomically. Returns
+    {"ok": True, "deck_id": ..., "path": ..., "revision": ...} on success,
+    or {"ok": False, "problems": [...]} on any validation or storage error.
+
+    No course_id, no student data — no course gate, no safety gate.
+    Never raises.
+    """
+    data = {
+        "version": "1.0-json",
+        "type": "DECK",
+        "date": date,
+        "title": title,
+        "widgets": widgets or [],
+        "slides": slides,
+    }
+
+    result, problems = deck_store.save_deck(data)
+    if result:
+        return {"ok": True, **result}
+    return {"ok": False, "problems": problems}
+
+
+def list_active_decks() -> dict:
+    """List all active SmartDecks in the workspace.
+
+    Returns {"ok": True, "decks": [...]}, where each deck has
+    {deck_id, date, title, revision, path}.
+
+    No course_id, no student data — no course gate, no safety gate.
+    Never raises.
+    """
+    decks = deck_store.list_decks("active")
+    return {"ok": True, "decks": decks}
+
+
+def archive_deck(deck_id: str) -> dict:
+    """Move a SmartDeck from active to archived status.
+
+    Returns {"ok": True} on success, or {"ok": False, "problems": [...]}
+    if the deck is not found or the move fails.
+
+    No course_id, no student data — no course gate, no safety gate.
+    Never raises.
+    """
+    success, problems = deck_store.archive_deck(deck_id)
+    if success:
+        return {"ok": True}
+    return {"ok": False, "problems": problems}

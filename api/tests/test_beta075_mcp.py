@@ -18,7 +18,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 13
+    assert contract.TOOL_SCHEMA_VERSION == 14
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -26,8 +26,9 @@ def test_live_mcp_schema_matches_versioned_contract():
     # pinned before refresh_mirror (v3), seating context (v4), modules (v5),
     # the authoring contract tool (v6), list_staged_content (v7),
     # list_sections (v8), get_product_guide (v9), get_writing_history (v10),
-    # local-only Glass draft tools (v11), v12 removes those Glass tools, and
-    # v13 adds schedule-read tools get_bell_schedule, get_day_schedule, get_teacher_schedule.
+    # local-only Glass draft tools (v11), v12 removes those Glass tools,
+    # v13 adds schedule-read tools get_bell_schedule, get_day_schedule, get_teacher_schedule,
+    # and v14 adds save_deck, list_active_decks, archive_deck.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -55,7 +56,7 @@ def test_live_mcp_schema_matches_versioned_contract():
     assert len(v9["tools"]) == 12
     v11 = contract.load_contract(11)
     assert v11["schema_version"] == 11
-    assert len(live["tools"]) == 16
+    assert len(live["tools"]) == 19
     assert all("canvas" not in tool["name"].lower() for tool in live["tools"])
 
 

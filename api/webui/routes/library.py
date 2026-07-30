@@ -140,6 +140,7 @@ _CONTRACT_FILE_MAP = {
     "PageForge_Base": "Author a Page (PageForge).txt",
     "QuizForge_Base": "Author a Quiz (QuizForge).txt",
     "RubricForge_Base": "Author a Rubric (RubricForge).txt",
+    "SlideForge_Base": "Author a SmartDeck (SlideForge).txt",
     # Not Forge contracts, but the same "hand this text to an AI" delivery and
     # the same canonical source, so they reuse this route rather than adding
     # one. Both are also served by the MCP get_product_guide tool, so a pasted
