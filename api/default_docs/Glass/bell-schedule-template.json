@@ -24,7 +24,7 @@
       "label": "What to call this kind of day",
       "blocks": [
         {
-          "_comment": "id is the short name you will key the day plan by. kind is one of class, homeroom, bobcat_hour, lunch, advisory, assembly, other. start and end are HH:MM on a 24-hour clock, so 1:05pm is 13:05.",
+          "_comment": "id is the stable block id scene variants may use. kind is one of class, homeroom, bobcat_hour, lunch, advisory, assembly, other. start and end are HH:MM on a 24-hour clock, so 1:05pm is 13:05.",
           "id": "p1",
           "kind": "class",
           "label": "1st Period",
@@ -47,7 +47,7 @@
           }
         },
         {
-          "_comment": "A block that holds several things happening at once, such as a lunch-and-tutorials hour. Leave blocks empty: what is on offer changes week to week, so it is day plan content, not schedule content.",
+          "_comment": "A block that holds several things happening at once, such as a lunch-and-tutorials hour. Scene panes carry display content; the schedule only supplies timing and block ids.",
           "id": "bobcat",
           "kind": "bobcat_hour",
           "label": "Bobcat Hour",

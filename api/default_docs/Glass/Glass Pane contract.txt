@@ -1,0 +1,21 @@
+Glass pane contract
+===================
+
+Use `save_glass_pane_draft` with `manifest`, `pane_html`, optional `pane_css`
+and `pane_js`, and `assets`: `{name, media_type, data_base64}`. The manifest
+has exactly `format`, `id`, `title`, `description`, `data_schema`, and
+`example_data`; `format` is `canvasexpert.glass_pane/1` and `id` is stable
+kebab-case. `example_data` must validate against the JSON Schema.
+
+Assets are local data only: at most 20, at most 5 MiB each and 20 MiB total.
+Allowed media types are image/png, image/jpeg, image/webp, image/gif,
+image/svg+xml, font/woff, and font/woff2. Refer to an asset as `asset:name`.
+
+Build a responsive pane for one sandboxed display cell. It receives only the
+one-way `glass:context/1` fields `instance_id`, `scene_date`, `data`,
+`local_time`, and `current_block`. Use ephemeral in-frame state only: no
+network, storage, navigation, popups, parent access, external capability, or
+student/private data. Runtime CSP and the sandbox are the enforcement boundary.
+
+Saving creates only a pending draft. Teacher approval creates an immutable
+digest revision; later edits create a new revision.

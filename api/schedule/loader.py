@@ -343,17 +343,19 @@ def load_section_map_file(path: str) -> SectionMap:
     return parse_section_map(data)
 
 
-def bell_schedule_folder() -> str | None:
+def bell_schedule_folder(root: str | None = None) -> str | None:
     """The Library folder holding bell schedule files, or None with no workspace.
 
-    One folder, `Library/Glass`, holds every file the display reads: the bell
-    schedule, the section map, and the day plans in a subfolder.
+    `Library/Glass` holds bell schedules and the section map. Approved Glass
+    pane revisions and dated scenes live in their own `panes` and `scenes`
+    subfolders and are owned by the Glass package, not this loader.
 
     The import is lazy because `api.webui.config._io` pulls in `keyring`, and
     a pure schedule import should not drag a keyring backend along with it.
     """
+    if root:
+        return os.path.join(root, "Library", BELL_SCHEDULE_FOLDER)
     from api.webui import workspace
-
     return workspace.library_folder(BELL_SCHEDULE_FOLDER)
 
 
@@ -380,7 +382,7 @@ def _structural_problems(schedule: BellSchedule) -> list[str]:
     return [str(problem) for problem in (validate(schedule) or [])]
 
 
-def discover_bell_schedule() -> tuple[BellSchedule | None, list[str]]:
+def discover_bell_schedule(root: str | None = None) -> tuple[BellSchedule | None, list[str]]:
     """The bell schedule to run today, plus anything worth telling the teacher.
 
     Prefers a real file over a shipped sample. Returns None when there is
@@ -388,7 +390,7 @@ def discover_bell_schedule() -> tuple[BellSchedule | None, list[str]]:
     can say something calm instead of showing an empty clock.
     """
     notes: list[str] = []
-    folder = bell_schedule_folder()
+    folder = bell_schedule_folder(root)
     if not folder:
         return None, [
             "No workspace folder is set up yet, so there is no bell schedule to read."

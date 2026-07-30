@@ -474,6 +474,10 @@ _CONTRACT_FILES = {
     "page": "Author a Page (PageForge).txt",
     "rubric": "Author a Rubric (RubricForge).txt",
 }
+_GLASS_CONTRACT_FILES = {
+    "glass_pane": "Glass Pane contract.txt",
+    "glass_scene": "Glass Scene contract.txt",
+}
 
 # Product knowledge the tool surface does not imply. An assistant that only
 # sees the tool list cannot tell that Writing Timeline exists, or that every
@@ -533,17 +537,27 @@ def _staging_appendix(kind: str) -> str:
 
 
 def get_authoring_contract(kind: str) -> dict:
-    """The Forge authoring contract (envelope format) for one content kind,
-    served verbatim from ``api/default_docs/AI Authoring/`` — the same
-    on-disk source ``/api/download-contract`` reads. No course_id, no
-    student data — no course gate, no vault, no safety gate. The contract is
-    a single plain-text document, returned as a string, not tabulated."""
+    """Return one canonical Forge or Glass authoring contract.
+
+    Forge contracts come from ``api/default_docs/AI Authoring/`` and receive
+    the Forge-only staging appendix. ``glass_pane`` and ``glass_scene`` come
+    directly from ``api/default_docs/Glass/`` with no staging appendix because
+    their only authoring path is a pending local Glass draft. No course_id,
+    student data, vault, or safety gate applies.
+    """
+    if kind in _GLASS_CONTRACT_FILES:
+        path = os.path.join(REPO_ROOT, "api", "default_docs", "Glass", _GLASS_CONTRACT_FILES[kind])
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return {"ok": True, "kind": kind, "contract": handle.read()}
+        except OSError as error:
+            return {"ok": False, "error": f"Could not read the {kind} authoring contract: {error}"}
     filename = _CONTRACT_FILES.get(kind)
     if filename is None:
         return {
             "ok": False,
             "error": (f"unknown kind '{kind}'; expected one of: "
-                      f"{', '.join(_CONTRACT_FILES)}"),
+                      f"{', '.join((*_CONTRACT_FILES, *_GLASS_CONTRACT_FILES))}"),
         }
 
     contract_text, error = _read_authoring_doc(filename, f"{kind} authoring contract")
@@ -552,6 +566,62 @@ def get_authoring_contract(kind: str) -> dict:
 
     return {"ok": True, "kind": kind,
             "contract": contract_text + _staging_appendix(kind)}
+
+
+def get_glass_context(date: str, lookahead_days: int = 14) -> dict:
+    """Public schedule/calendar context only; no Canvas or student reads."""
+    from datetime import date as date_type, datetime, time, timedelta
+    from api.glass import panes
+    from api.schedule import loader, resolver
+    try:
+        day = date_type.fromisoformat(date)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "date must be YYYY-MM-DD"}
+    if isinstance(lookahead_days, bool) or not isinstance(lookahead_days, int) or not 0 <= lookahead_days <= 31:
+        return {"ok": False, "error": "lookahead_days must be an integer from 0 to 31"}
+    schedule, _ = loader.discover_bell_schedule()
+    from api.webui import config
+    calendar = config.get_combined_calendar_for_range(day.isoformat(), (day + timedelta(days=lookahead_days)).isoformat())
+    raw_no_count = calendar.get("no_count_dates", []) if isinstance(calendar, dict) else []
+    no_count = set()
+    if isinstance(raw_no_count, (list, tuple, set, frozenset)):
+        for item in raw_no_count:
+            if isinstance(item, str):
+                try: no_count.add(date_type.fromisoformat(item))
+                except ValueError: pass
+    resolved = resolver.resolve(schedule, datetime.combine(day, time.min), no_school_dates=frozenset(no_count)) if schedule else None
+    blocks = [] if not resolved or not resolved.day_type else [{"block_id": block.block_id, "label": block.label, "start": block.start.isoformat(timespec="minutes"), "end": block.end.isoformat(timespec="minutes")} for block in resolved.day_type.blocks]
+    approved = []
+    _, library = panes._roots()
+    if library and (library / "panes").is_dir():
+        for pane_dir in sorted((library / "panes").iterdir()):
+            if pane_dir.is_dir():
+                for child in sorted(pane_dir.iterdir()):
+                    if child.is_dir() and panes._approved(pane_dir.name, child.name):
+                        approved.append({"pane_id": pane_dir.name, "revision": child.name})
+    scene = panes.approved_scene(day)
+    pending = next((item for item in panes.list_drafts() if item["kind"] == "scene" and item["subject"] == date), None)
+    return {"ok": True, "date": date, "day_type": resolved.day_type.day_type_id if resolved and resolved.day_type else None,
+            "blocks": blocks, "events": calendar.get("events", []), "grading_periods": calendar.get("grading_periods", []),
+            "approved_panes": approved,
+            "approved_scene": {"approved": bool(scene), "digest": scene["digest"] if scene else None},
+            "pending_scene": {"pending": bool(pending), "draft_id": pending["draft_id"] if pending else None,
+                              "digest": pending["digest"] if pending else None}}
+
+
+def save_glass_pane_draft(manifest: dict, pane_html: str, pane_css: str = "", pane_js: str = "", assets: list | None = None, draft_id: str = "") -> dict:
+    from api.glass import panes
+    return panes.save_pane_draft({"manifest": manifest, "pane_html": pane_html, "pane_css": pane_css, "pane_js": pane_js, "assets": assets or []}, draft_id)
+
+
+def save_glass_scene_draft(scene: dict, draft_id: str = "") -> dict:
+    from api.glass import panes
+    return panes.save_scene_draft(scene, draft_id)
+
+
+def list_glass_drafts() -> dict:
+    from api.glass import panes
+    return {"ok": True, "drafts": panes.list_drafts()}
 
 
 def get_product_guide(topic: str = "") -> dict:

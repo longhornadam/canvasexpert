@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 9.
+Tool schema version 11.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -37,7 +37,7 @@ Tool schema version 9.
 | `list_sections(course_id)` | Section names from the local mirror roster; how to find the exact `section_name` `get_seating_context` requires | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
-| `get_authoring_contract(kind)` | The Forge authoring contract (envelope format) for one content kind (`quiz`, `assignment`, `page`, `rubric`), served verbatim from `api/default_docs/AI Authoring/` | No |
+| `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/`, or Glass (`glass_pane`, `glass_scene`) from `api/default_docs/Glass/` | No |
 | `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
@@ -45,6 +45,9 @@ Tool schema version 9.
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
 | `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
+| `get_glass_context(date, lookahead_days=14)` | Public schedule/calendar context, approved panes, and Glass draft status | No |
+| `save_glass_pane_draft(...)` / `save_glass_scene_draft(...)` | Validate and stage a pending Glass draft for teacher review | No |
+| `list_glass_drafts()` | Compact pending Glass draft metadata | No |
 
 `get_course_assignments` and `get_modules` only read the local course catalog written by
 the CanvasExpert web UI — neither ever falls back to a live Canvas call. If the catalog
@@ -54,10 +57,13 @@ the catalog holds, labeled with `source`, `synced_at`, and `state`, since module
 is far lower-risk than student data.
 
 `get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
-needs no course gate, no identity vault, and no safety scan. It reads the same
-`api/default_docs/AI Authoring/` file the web UI's own `/api/download-contract` route
-serves, so the Forge envelope format lives in exactly one place. Pull it before authoring
-a quiz, assignment, page, or rubric so the resulting file validates.
+needs no course gate, no identity vault, and no safety scan. Forge kinds read the same
+`api/default_docs/AI Authoring/` file the web UI's `/api/download-contract` route serves,
+then receive the Forge-only staging appendix. `glass_pane` and `glass_scene` instead read
+their canonical contracts directly from `api/default_docs/Glass/`; they have no staging
+appendix. Use `save_glass_pane_draft` or `save_glass_scene_draft` to place those local-only
+pending drafts in `To Review/Glass`, where the teacher previews and approves them. Glass
+never publishes or pushes to Canvas.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
 the app actually does — an assistant that sees only the read tools cannot tell that

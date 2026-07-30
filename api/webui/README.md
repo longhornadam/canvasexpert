@@ -55,7 +55,8 @@ Source tests never substitute for rendered verification.
 | `/settings` | Settings | `settings.js` |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
-| `/glass` | **Glass** - full-screen classroom display showing the current period, learning goal, work, Bobcat Hour, and a touch work timer | `glass/widgets.js`, `glass/runtime.js`, `glass/timer.js` |
+| `/glass` | **Glass** - teacher review for pending agent-authored panes and scenes | `glass/review.js` |
+| `/glass/display` | **Glass display** - headerless approved-scene projector view | `glass/display.js` |
 | `/about` | What-is-Canvas-Expert explainer | — |
 
 Home's Canvas sync action queues local read-only coordinator work and polls its opaque
@@ -135,16 +136,12 @@ For the full ownership map and current hotspot snapshot, see `docs/reference/ros
 
 ### Glass module routing
 
-Glass is split so the widget contract stays readable on its own.
-
-- Route owner: `api/webui/routes/glass.py` (thin; `?at=<ISO8601>` pins the instant)
-- Render blob: `api/glass/view.py`, built from `api/schedule/` and `api/glass/store.py`
-- Template family: `templates/layouts/display.html` (header-less, full-bleed, no page scroll)
-- Widget contract: `static/glass/widgets.js` (registration seam, tray ownership, focus-slot
-  arbitration, period-change notification)
-- Clock and painting: `static/glass/runtime.js` (ticks the local clock against the static
-  day; no polling and no server round trips)
-- The one widget: `static/glass/timer.js`
+Glass separates review from display. `api/glass/panes.py` validates local drafts, stores
+immutable content-addressed pane revisions, and validates dated 12x8 scenes. `/glass` is the
+app-shell review page; `/glass/display?at=<ISO8601>` is headerless and runs every pane in an
+opaque-origin `sandbox="allow-scripts"` iframe with an inline no-network CSP. Preview is useful
+but cannot prove away CPU-exhaustion from approved JavaScript. `api/schedule/` remains pure and
+owns current-block resolution; display updates locally with no polling or data subscription.
 
 ### Feedback tools module routing — PowerGrader advanced import
 

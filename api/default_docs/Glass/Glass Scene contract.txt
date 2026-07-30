@@ -1,0 +1,17 @@
+Glass scene contract
+====================
+
+Use `save_glass_scene_draft` with a scene object containing `format`, `date`,
+`title`, `default`, and `blocks`. `format` is `canvasexpert.glass_scene/1` and
+`date` is YYYY-MM-DD. `default` is a complete layout. Each `blocks` entry is a
+current valid bell-schedule block id and a complete replacement layout; blocks
+never merge with `default`.
+
+Approve the pane revision first. Every instance has exactly `instance_id`,
+`pane_id`, `pane_revision`, `data`, `column`, `row`, `width`, and `height`.
+The revision must be approved and `data` must validate against that pane's JSON
+Schema. Use integer, one-based placements in the 12x8 grid; placements cannot
+overlap.
+
+Saving creates only a pending draft. Teacher approval only publishes one
+authoritative scene per date, atomically replacing that date's prior scene.

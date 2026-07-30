@@ -33,9 +33,9 @@ EXPECTED_PRESENTATION = {
     "/about": ("about.html", "document", "wide", 0),
     "/ai-expert": ("ai_expert.html", "document", "standard", 0),
     "/welcome": ("welcome.html", "wizard", "", 0),
-    # Glass is a projected surface, so it sits on the display family: no app
-    # header, no width clamp, no outer gutter, and no page scroll.
-    "/glass": ("glass.html", "display", "", 0),
+    # Glass management is an app-shell teacher surface; projector display is
+    # its dedicated headerless /glass/display route.
+    "/glass": ("glass.html", "workspace", "full", 0),
 }
 FEATURE_CSS = (
     "api/webui/static/pages/dashboard.css",

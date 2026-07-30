@@ -71,6 +71,15 @@ from .routes.updates import router as _updates_router
 from .mirror_service import _mirror_heartbeat
 
 
+class _StaticFiles(StaticFiles):
+    """Serve bundled fonts to opaque-origin Glass frames without diagnostics."""
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if path.replace("\\", "/").startswith("fonts/"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
+
+
 @asynccontextmanager
 async def _lifespan(app):
     """Startup work — kept out of module import so the app is cheap to import
@@ -104,7 +113,7 @@ async def _lifespan(app):
 
 
 app = FastAPI(title="Canvas Expert", lifespan=_lifespan)
-app.mount("/static", StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), name="static")
+app.mount("/static", _StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), name="static")
 
 # ── Onboarding gate ──────────────────────────────────────────────────────
 # If Canvas URL or token is not yet configured, redirect HTML page requests

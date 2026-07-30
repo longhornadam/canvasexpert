@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 # api/mcp_server/pseudonym.py reaches api.webui.routes.names, which (like the
 # rest of the webui package) imports sibling top-level api/ modules with bare
@@ -492,7 +493,7 @@ def test_get_authoring_contract_unknown_kind_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown kind 'essay'; expected one of: "
-                  "quiz, assignment, page, rubric"),
+                  "quiz, assignment, page, rubric, glass_pane, glass_scene"),
     }
 
 
@@ -515,6 +516,91 @@ def test_get_authoring_contract_matches_the_one_canonical_repo_file():
         result = tools.get_authoring_contract(kind)
         assert result["ok"] is True
         assert result["contract"].startswith(canonical_text)
+
+
+def test_glass_authoring_contracts_are_canonical_without_forge_staging_appendix():
+    base = Path(__file__).resolve().parents[2] / "api" / "default_docs" / "Glass"
+    for kind, filename in tools._GLASS_CONTRACT_FILES.items():
+        result = tools.get_authoring_contract(kind)
+        assert result == {"ok": True, "kind": kind,
+                          "contract": (base / filename).read_text(encoding="utf-8")}
+        assert "Staging this for the teacher" not in result["contract"]
+
+
+def _glass_pane_payload(pane_id="context-pane"):
+    return {"manifest": {"format": "canvasexpert.glass_pane/1", "id": pane_id,
+            "title": "Fictional pane", "description": "Fictional", "data_schema": {"type": "object"},
+            "example_data": {}}, "pane_html": "<p>Fictional</p>", "pane_css": "", "pane_js": "", "assets": []}
+
+
+def test_glass_context_projects_public_state_and_skips_corrupt_revisions(tmp_path, monkeypatch):
+    from api.glass import panes
+    from api.schedule import loader
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(loader, "discover_bell_schedule", lambda *_args: (None, [str(tmp_path / "Library" / "Glass")]))
+    monkeypatch.setattr(tools.config, "get_combined_calendar_for_range", lambda *_args: {
+        "no_count_dates": ["not-a-date", None], "events": [{"kind": "no_school", "label": "Fictional break",
+        "start": "2099-09-14", "end": "2099-09-14", "source_subtype": "holiday"}],
+        "grading_periods": [{"name": "Term 1", "code": "T1", "start": "2099-08-01", "end": "2099-10-01"}],
+    })
+    pane = panes.save_pane_draft(_glass_pane_payload(), root=str(tmp_path))
+    approved = panes.approve_pane(pane["draft_id"], pane["digest"], str(tmp_path))
+    scene = {"format": panes.SCENE_FORMAT, "date": "2099-09-14", "title": "Fictional scene",
+             "default": [{"instance_id": "one", "pane_id": approved["pane_id"],
+             "pane_revision": approved["pane_revision"], "data": {}, "column": 1, "row": 1,
+             "width": 12, "height": 8}], "blocks": {}}
+    scene_draft = panes.save_scene_draft(scene, root=str(tmp_path))
+    scene_approved = panes.approve_scene(scene_draft["draft_id"], scene_draft["digest"], str(tmp_path))
+    pending_scene = panes.save_scene_draft({**scene, "title": "Pending fictional scene"}, root=str(tmp_path))
+    corrupt = tmp_path / "Library" / "Glass" / "panes" / "corrupt-pane" / ("0" * 64)
+    corrupt.mkdir(parents=True)
+    (corrupt / "package.json").write_text("{}", encoding="utf-8")
+
+    result = tools.get_glass_context("2099-09-14")
+
+    assert result["ok"] is True
+    assert result["events"] == [{"kind": "no_school", "label": "Fictional break", "start": "2099-09-14", "end": "2099-09-14", "source_subtype": "holiday"}]
+    assert result["grading_periods"] == [{"name": "Term 1", "code": "T1", "start": "2099-08-01", "end": "2099-10-01"}]
+    assert result["approved_panes"] == [{"pane_id": "context-pane", "revision": approved["pane_revision"]}]
+    assert result["approved_scene"] == {"approved": True, "digest": scene_approved["digest"]}
+    assert result["pending_scene"] == {"pending": True, "draft_id": pending_scene["draft_id"], "digest": pending_scene["digest"]}
+    assert "source_path" not in json.dumps(result) and str(tmp_path) not in json.dumps(result) and "notes" not in result
+    assert tools.get_glass_context(None) == {"ok": False, "error": "date must be YYYY-MM-DD"}
+    assert tools.get_glass_context("not-a-date") == {"ok": False, "error": "date must be YYYY-MM-DD"}
+    assert tools.get_glass_context("2099-09-14", True) == {"ok": False, "error": "lookahead_days must be an integer from 0 to 31"}
+
+
+def test_glass_mcp_save_and_list_stay_in_review_and_never_offer_approval(tmp_path, monkeypatch):
+    from api.glass import panes
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    saved = tools.save_glass_pane_draft(**_glass_pane_payload("mcp-pane"))
+    assert saved["ok"] is True
+    pane_path = tmp_path / "To Review" / "Glass" / "panes" / "mcp-pane.json"
+    assert pane_path.is_file()
+    assert not (tmp_path / "Library" / "Glass" / "panes").exists()
+    changed = _glass_pane_payload("mcp-pane"); changed["manifest"] = {**changed["manifest"], "title": "Updated fictional pane"}
+    updated = tools.save_glass_pane_draft(**changed, draft_id=saved["draft_id"])
+    assert updated["ok"] is True and updated["draft_id"] == saved["draft_id"] and updated["digest"] != saved["digest"]
+    listed = tools.list_glass_drafts()
+    assert listed == {"ok": True, "drafts": [{"draft_id": updated["draft_id"], "kind": "pane",
+                                                  "subject": "mcp-pane", "digest": updated["digest"]}]}
+    assert all(key not in json.dumps(listed) for key in ("pane_html", "pane_js", "assets", str(tmp_path)))
+    approved = panes.approve_pane(updated["draft_id"], updated["digest"], str(tmp_path))
+    assert approved["ok"] is True and not pane_path.exists()
+    scene = {"format": panes.SCENE_FORMAT, "date": "2099-09-14", "title": "MCP fictional scene", "default": [
+        {"instance_id": "mcp", "pane_id": approved["pane_id"], "pane_revision": approved["pane_revision"],
+         "data": {}, "column": 1, "row": 1, "width": 12, "height": 8}], "blocks": {}}
+    pending_scene = tools.save_glass_scene_draft(scene)
+    scene_path = tmp_path / "To Review" / "Glass" / "scenes" / "2099-09-14.json"
+    assert pending_scene["ok"] is True and scene_path.is_file()
+    revised_scene = tools.save_glass_scene_draft({**scene, "title": "Updated MCP fictional scene"}, draft_id=pending_scene["draft_id"])
+    assert revised_scene["ok"] is True and revised_scene["draft_id"] == pending_scene["draft_id"] and revised_scene["digest"] != pending_scene["digest"]
+    assert tools.list_glass_drafts() == {"ok": True, "drafts": [{"draft_id": revised_scene["draft_id"], "kind": "scene",
+                                                                      "subject": "2099-09-14", "digest": revised_scene["digest"]}]}
+    assert scene_path.is_file() and not (tmp_path / "Library" / "Glass" / "scenes").exists()
+    from api.mcp_server import contract
+    assert not {row["name"] for row in contract.load_contract(11)["tools"]
+                if "approve" in row["name"] or "publish" in row["name"]}
 
 
 def test_download_contract_route_returns_the_same_bytes_as_the_mcp_tool():
@@ -1555,7 +1641,7 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
 
 # --- server wiring -------------------------------------------------------------
 
-def test_server_registers_exactly_the_thirteen_read_only_tools():
+def test_server_registers_glass_authoring_tools():
     from api.mcp_server.server import mcp
 
     tool_names = set(mcp._tool_manager._tools.keys())
@@ -1564,6 +1650,8 @@ def test_server_registers_exactly_the_thirteen_read_only_tools():
         "get_roster", "get_seating_context", "get_submissions",
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "list_staged_content",
+        "get_glass_context", "save_glass_pane_draft", "save_glass_scene_draft",
+        "list_glass_drafts",
     }
 
 

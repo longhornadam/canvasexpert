@@ -47,7 +47,7 @@ LIBRARY_SUBFOLDERS = [
 
 # Assistant-staged drafts waiting for the teacher to push to Canvas.
 TO_REVIEW_NAME = "To Review"
-TO_REVIEW_SUBFOLDERS = ["Quizzes", "Assignments", "Pages", "Rubrics"]
+TO_REVIEW_SUBFOLDERS = ["Quizzes", "Assignments", "Pages", "Rubrics", "Glass"]
 
 # Outputs to print/photocopy vs. Canvas import packages -- the old flat
 # "Exports" split by teacher verb.
@@ -714,8 +714,9 @@ def _seed_workspace_readme(root):
             "Review every file before sharing; pseudonyms do not guarantee anonymity and\n"
             "visible content may still identify a student.\n\n"
             "Library/ holds the reusable material you author or keep (quizzes, rubrics,\n"
-            "assignments, pages, calendars, source materials, AI Authoring instructions).\n\n"
-            "To Review/ holds assistant-staged drafts waiting for you to push to Canvas.\n\n"
+            "assignments, pages, calendars, Glass panes/scenes, source materials, AI Authoring instructions).\n\n"
+            "To Review/ holds pending assistant drafts. Forge drafts wait for Canvas review and push;\n"
+            "Glass drafts wait for local teacher preview and approval, never a Canvas push.\n\n"
             "Printables/ is for PDF/DOCX output to print or photocopy.\n"
             "Canvas Uploads/ holds QTI/.imscc import packages.\n\n"
             "_System/ contains the identity vault, PowerGrader state, and audit files; it is PRIVATE.\n"
@@ -735,9 +736,10 @@ def ensure_workspace():
         target_dir = os.path.join(root, LIBRARY_NAME, subfolder)
         os.makedirs(target_dir, exist_ok=True)
         _seed_folder_if_missing(os.path.join(DEFAULT_DOCS_DIR, subfolder), target_dir)
-    # Glass keeps its day plans in a subfolder, created here as well as seeded
-    # so an empty one still exists where git could not have shipped it.
-    os.makedirs(os.path.join(root, LIBRARY_NAME, "Glass", "day-plans"), exist_ok=True)
+    # Glass has an immutable approved library and a separate assistant inbox.
+    for subfolder in ("panes", "scenes"):
+        os.makedirs(os.path.join(root, LIBRARY_NAME, "Glass", subfolder), exist_ok=True)
+    os.makedirs(os.path.join(root, TO_REVIEW_NAME, "Glass"), exist_ok=True)
 
     os.makedirs(os.path.join(root, TO_REVIEW_NAME), exist_ok=True)
     for subfolder in TO_REVIEW_SUBFOLDERS:

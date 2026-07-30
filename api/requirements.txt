@@ -1,6 +1,7 @@
 # QuizForge-API backend deps. Kept separate from the repo-root requirements.txt
 # so the Netlify build (which installs root requirements) does NOT pull these.
 requests>=2.31
+jsonschema>=4.0
 python-dotenv>=1.0
 pygments>=2.17
 

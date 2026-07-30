@@ -12,7 +12,7 @@
         { "id": "p2", "kind": "class", "label": "2nd Period", "start": "09:25", "end": "10:14" },
         { "id": "p3", "kind": "class", "label": "3rd Period", "start": "10:20", "end": "11:09" },
         {
-          "_comment": "Bobcat Hour is the lunch hour, so it has no A and B split. Its concurrent list stays empty: the tutorials and clubs on offer are day plan content.",
+          "_comment": "Bobcat Hour is the lunch hour, so it has no A and B split. Its concurrent list stays empty: approved scene panes carry display content.",
           "id": "bobcat",
           "kind": "bobcat_hour",
           "label": "Bobcat Hour",
