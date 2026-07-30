@@ -95,7 +95,7 @@ def test_scene_view_respects_selected_calendar_no_school_date(monkeypatch):
     schedule = loader.parse_bell_schedule({"format": "canvasexpert.bell_schedule/1", "day_types": {"d": {"blocks": [
         {"id": "p1", "start": "08:30", "end": "09:30"}
     ]}}, "weekday_default": {"0": "d"}})
-    monkeypatch.setattr(glass_routes.loader, "discover_bell_schedule", lambda *_args: (schedule, []))
+    monkeypatch.setattr(loader, "discover_bell_schedule", lambda *_args: (schedule, []))
     monkeypatch.setattr(glass_routes.config, "get_combined_calendar_for_range", lambda *_args: {
         "no_count_dates": ["2099-09-14", "not-a-date", None]})
     record = {"scene": {"date": "2099-09-14", "default": [], "blocks": {"p1": []}}}

@@ -570,27 +570,17 @@ def get_authoring_contract(kind: str) -> dict:
 
 def get_glass_context(date: str, lookahead_days: int = 14) -> dict:
     """Public schedule/calendar context only; no Canvas or student reads."""
-    from datetime import date as date_type, datetime, time, timedelta
+    from datetime import date as date_type
     from api.glass import panes
-    from api.schedule import loader, resolver
+    from api.glass.day_context import day_context
     try:
         day = date_type.fromisoformat(date)
     except (TypeError, ValueError):
         return {"ok": False, "error": "date must be YYYY-MM-DD"}
     if isinstance(lookahead_days, bool) or not isinstance(lookahead_days, int) or not 0 <= lookahead_days <= 31:
         return {"ok": False, "error": "lookahead_days must be an integer from 0 to 31"}
-    schedule, _ = loader.discover_bell_schedule()
-    from api.webui import config
-    calendar = config.get_combined_calendar_for_range(day.isoformat(), (day + timedelta(days=lookahead_days)).isoformat())
-    raw_no_count = calendar.get("no_count_dates", []) if isinstance(calendar, dict) else []
-    no_count = set()
-    if isinstance(raw_no_count, (list, tuple, set, frozenset)):
-        for item in raw_no_count:
-            if isinstance(item, str):
-                try: no_count.add(date_type.fromisoformat(item))
-                except ValueError: pass
-    resolved = resolver.resolve(schedule, datetime.combine(day, time.min), no_school_dates=frozenset(no_count)) if schedule else None
-    blocks = [] if not resolved or not resolved.day_type else [{"block_id": block.block_id, "label": block.label, "start": block.start.isoformat(timespec="minutes"), "end": block.end.isoformat(timespec="minutes")} for block in resolved.day_type.blocks]
+    context = day_context(day, lookahead_days=lookahead_days)
+    blocks = context["blocks"]
     approved = []
     _, library = panes._roots()
     if library and (library / "panes").is_dir():
@@ -601,8 +591,8 @@ def get_glass_context(date: str, lookahead_days: int = 14) -> dict:
                         approved.append({"pane_id": pane_dir.name, "revision": child.name})
     scene = panes.approved_scene(day)
     pending = next((item for item in panes.list_drafts() if item["kind"] == "scene" and item["subject"] == date), None)
-    return {"ok": True, "date": date, "day_type": resolved.day_type.day_type_id if resolved and resolved.day_type else None,
-            "blocks": blocks, "events": calendar.get("events", []), "grading_periods": calendar.get("grading_periods", []),
+    return {"ok": True, "date": date, "day_type": context["day_type"],
+            "blocks": blocks, "events": context["events"], "grading_periods": context["grading_periods"],
             "approved_panes": approved,
             "approved_scene": {"approved": bool(scene), "digest": scene["digest"] if scene else None},
             "pending_scene": {"pending": bool(pending), "draft_id": pending["draft_id"] if pending else None,

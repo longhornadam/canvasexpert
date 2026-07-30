@@ -157,7 +157,7 @@ def test_glass_authoring_contracts_are_actionable_without_staging_appendix():
     root = Path(__file__).resolve().parents[3] / "api" / "default_docs" / "Glass"
     pane = (root / "Glass Pane contract.txt").read_text(encoding="utf-8")
     scene = (root / "Glass Scene contract.txt").read_text(encoding="utf-8")
-    for term in ("save_glass_pane_draft", "manifest", "pane_html", "pane_css", "pane_js", "data_base64", "data_schema", "example_data", "20", "5 MiB", "20 MiB", "asset:name", "glass:context/1", "sandbox", "network", "storage", "navigation", "student", "immutable", "digest"):
+    for term in ("save_glass_pane_draft", "manifest", "pane_html", "pane_css", "pane_js", "data_base64", "data_schema", "example_data", "20", "5 MiB", "20 MiB", "asset:name", "glass:context/2", "sandbox", "network", "storage", "navigation", "student", "immutable", "digest"):
         assert term in pane
     for term in ("save_glass_scene_draft", "default", "blocks", "instance_id", "pane_id", "pane_revision", "column", "row", "width", "height", "JSON", "12x8", "overlap", "atomic", "Teacher approval"):
         assert term in scene

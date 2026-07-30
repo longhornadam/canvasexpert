@@ -3,18 +3,22 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import date, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from api.glass import panes
-from api.schedule import loader, resolver
+from api.glass.day_context import day_context
 from .. import config
 from ..deps import templates
 from ..local_request_guard import csrf_token, require_local_mutation
 
 router = APIRouter(tags=["glass"])
+
+# The one-way context a pane receives. Version 2 added `events`; a pane reads
+# only the fields the Glass pane contract enumerates.
+GLASS_CONTEXT_TYPE = "glass:context/2"
 
 
 def _instant(raw: str):
@@ -30,34 +34,27 @@ def _script_json(value) -> str:
     }))
 
 
-def _pane_document(package, instance, scene_date, local_time, current_block):
+def _pane_document(package, instance, scene_date, local_time, current_block, events=None):
     pane = package["pane"]
     assets = {item["name"]: f"data:{item['media_type']};base64,{item['data_base64']}" for item in pane["assets"]}
     def inline(value):
         for name, uri in sorted(assets.items(), key=lambda item: len(item[0]), reverse=True):
             value = value.replace(f"asset:{name}", uri)
         return value
-    context = {"type": "glass:context/1", "instance_id": instance["instance_id"], "scene_date": scene_date, "data": instance["data"], "local_time": local_time, "current_block": current_block}
+    context = {"type": GLASS_CONTEXT_TYPE, "instance_id": instance["instance_id"], "scene_date": scene_date, "data": instance["data"], "local_time": local_time, "current_block": current_block, "events": events or []}
     csp = "default-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'; img-src data: blob:; media-src data: blob:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
-    bootstrap = f"window.glassContext={_script_json(context)};window._glassFailed=false;window._glassFail=function(){{if(window._glassFailed)return;window._glassFailed=true;clearInterval(window._glassHeartbeat);parent.postMessage({{type:'glass:error/1',instance_id:window.glassContext.instance_id}},'*')}};window.addEventListener('error',window._glassFail);window.addEventListener('unhandledrejection',window._glassFail);window.addEventListener('message',function(e){{if(e.data&&e.data.type==='glass:context/1')window.glassContext=e.data}});parent.postMessage({{type:'glass:ready/1',instance_id:window.glassContext.instance_id}},'*');window._glassHeartbeat=setInterval(function(){{parent.postMessage({{type:'glass:heartbeat/1',instance_id:window.glassContext.instance_id}},'*')}},1000);"
+    bootstrap = f"window.glassContext={_script_json(context)};window._glassFailed=false;window._glassFail=function(){{if(window._glassFailed)return;window._glassFailed=true;clearInterval(window._glassHeartbeat);parent.postMessage({{type:'glass:error/1',instance_id:window.glassContext.instance_id}},'*')}};window.addEventListener('error',window._glassFail);window.addEventListener('unhandledrejection',window._glassFail);window.addEventListener('message',function(e){{if(e.data&&e.data.type==='{GLASS_CONTEXT_TYPE}')window.glassContext=e.data}});parent.postMessage({{type:'glass:ready/1',instance_id:window.glassContext.instance_id}},'*');window._glassHeartbeat=setInterval(function(){{parent.postMessage({{type:'glass:heartbeat/1',instance_id:window.glassContext.instance_id}},'*')}},1000);"
     return f"<!doctype html><meta http-equiv=\"Content-Security-Policy\" content=\"{csp}\"><style>{inline(pane['pane_css'])}</style>{inline(pane['pane_html'])}<script>{bootstrap}</script><script>{inline(pane['pane_js'])}</script>"
 
 
 def _scene_view(record, instant):
-    schedule, _ = loader.discover_bell_schedule(); current = None; blocks = []
-    if schedule:
-        calendar = config.get_combined_calendar_for_range(instant.date().isoformat(), instant.date().isoformat())
-        raw_no_count = calendar.get("no_count_dates", []) if isinstance(calendar, dict) else []
-        no_count = set()
-        if isinstance(raw_no_count, (list, tuple, set, frozenset)):
-            for item in raw_no_count:
-                if isinstance(item, str):
-                    try: no_count.add(date.fromisoformat(item))
-                    except ValueError: pass
-        resolved = resolver.resolve(schedule, instant, no_school_dates=frozenset(no_count))
-        current = resolved.block.block_id if resolved.block else None
-        if resolved.day_type:
-            blocks = [{"id": item.block_id, "start": item.start.isoformat(timespec="minutes"), "end": item.end.isoformat(timespec="minutes"), "label": item.label} for item in resolved.day_type.blocks]
+    # One merged read for schedule and calendar alike. The calendar used to be
+    # read only when a bell schedule existed, so a teacher who had loaded a
+    # calendar but not yet filled in a schedule saw no events at all.
+    context = day_context(instant)
+    blocks = context["blocks"]
+    current = context["current_block"]["id"] if context["current_block"] else None
+    events = context["events"]
     scene = record["scene"] if record else None
     layouts = {} if not scene else {"default": scene["default"], **scene.get("blocks", {})}
     active = current if current in layouts else "default"
@@ -65,10 +62,10 @@ def _scene_view(record, instant):
     for layout, instances in layouts.items():
         for instance in instances:
             package = panes._approved(instance["pane_id"], instance["pane_revision"])
-            if package: frames.append({"layout": layout, "instance": instance, "srcdoc": _pane_document(package, instance, scene["date"], instant.isoformat(), next((item for item in blocks if item["id"] == current), None))})
+            if package: frames.append({"layout": layout, "instance": instance, "srcdoc": _pane_document(package, instance, scene["date"], instant.isoformat(), context["current_block"], events)})
             else: frames.append({"layout": layout, "instance": instance, "failed": True})
     status = "No approved scene for today." if not scene else ("Some content is unavailable." if any(frame.get("failed") for frame in frames) else "Ready.")
-    return {"scene": scene, "frames": frames, "layouts": list(layouts), "blocks": blocks, "current": current, "active": active, "at": instant.isoformat(), "status": status}
+    return {"scene": scene, "frames": frames, "layouts": list(layouts), "blocks": blocks, "current": current, "active": active, "at": instant.isoformat(), "status": status, "events": events}
 
 
 def _review_cards():

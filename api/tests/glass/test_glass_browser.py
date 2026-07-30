@@ -154,7 +154,7 @@ def test_real_edge_sandbox_watchdog_context_and_viewports(tmp_path):
                 markers = hostile.locator("body").evaluate("body=>Object.assign({},body.dataset)")
                 assert all(markers.get(name) == "1" for name in ("parent", "storage", "fetch", "xhr", "socket", "eventsource", "form", "popup", "topnav"))
                 lesson = _frame(page, "lesson-focus")
-                assert lesson.locator("body").evaluate("body=>window.glassContext") == {"type": "glass:context/1", "instance_id": "lesson-focus", "scene_date": "2099-09-14", "data": {"lesson": "Fraction Lab", "objective": "Compare equivalent fractions.</script><script>document.body.dataset.contextInjection='ran'</script>"}, "local_time": HOSTILE_FROZEN, "current_block": {"id": "p1", "start": "08:30", "end": "09:00", "label": "One"}}
+                assert lesson.locator("body").evaluate("body=>window.glassContext") == {"type": "glass:context/2", "instance_id": "lesson-focus", "scene_date": "2099-09-14", "data": {"lesson": "Fraction Lab", "objective": "Compare equivalent fractions.</script><script>document.body.dataset.contextInjection='ran'</script>"}, "local_time": HOSTILE_FROZEN, "current_block": {"id": "p1", "start": "08:30", "end": "09:00", "label": "One"}, "events": []}
                 assert lesson.locator("body").evaluate("body=>body.dataset.contextInjection") is None
                 page.wait_for_timeout(4200)
                 assert page.evaluate("document.documentElement.scrollWidth===innerWidth&&document.documentElement.scrollHeight===innerHeight")
@@ -187,9 +187,9 @@ def test_unfrozen_local_block_transition_and_frozen_clock(tmp_path):
             assert page.locator(".glass-cell[data-layout='p2']:not([hidden])").count() == 1 and page.locator(".glass-cell[data-layout='default']:not([hidden])").count() == 0 and page.locator("#glass-block").inner_text() == "Two" and not requests
             p2 = _frame(page, "p2-upcoming-work"); p2.locator("body").wait_for()
             p2_context = p2.locator("body").evaluate("body=>window.glassContext")
-            assert p2_context == {"type": "glass:context/1", "instance_id": "p2-upcoming-work", "scene_date": date.today().isoformat(),
+            assert p2_context == {"type": "glass:context/2", "instance_id": "p2-upcoming-work", "scene_date": date.today().isoformat(),
                                   "data": {"items": [{"title": "Notebook check", "due": "Friday"}]}, "local_time": "2099-09-15T09:05:00",
-                                  "current_block": {"id": "p2", "start": "09:00", "end": "09:30", "label": "Two"}}
+                                  "current_block": {"id": "p2", "start": "09:00", "end": "09:30", "label": "Two"}, "events": []}
             frozen = browser.new_page(); frozen.add_init_script(shim); frozen.goto(url + "/glass/display?at=" + SAFE_FROZEN); frozen.wait_for_selector("iframe[data-instance='lesson-focus']")
             before = frozen.locator("#glass-clock").inner_text(); frozen.evaluate("__glassAdvance('2099-09-15T09:05:00')"); frozen.wait_for_timeout(1200)
             assert frozen.locator(".glass-cell[data-layout='default']:not([hidden])").count() == 3 and frozen.locator("#glass-clock").inner_text() == before

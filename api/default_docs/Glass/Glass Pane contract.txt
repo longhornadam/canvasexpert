@@ -12,10 +12,19 @@ Allowed media types are image/png, image/jpeg, image/webp, image/gif,
 image/svg+xml, font/woff, and font/woff2. Refer to an asset as `asset:name`.
 
 Build a responsive pane for one sandboxed display cell. It receives only the
-one-way `glass:context/1` fields `instance_id`, `scene_date`, `data`,
-`local_time`, and `current_block`. Use ephemeral in-frame state only: no
-network, storage, navigation, popups, parent access, external capability, or
+one-way `glass:context/2` fields `instance_id`, `scene_date`, `data`,
+`local_time`, `current_block`, and `events`. Use ephemeral in-frame state only:
+no network, storage, navigation, popups, parent access, external capability, or
 student/private data. Runtime CSP and the sandbox are the enforcement boundary.
+
+`events` is the host's own classroom-facing projection for the next two weeks,
+so a pane never hard-codes a date-specific announcement in `data`. Each entry
+has `kind`, `label`, and `detail`, plus one shape: `shape` `"date"` or `"span"`
+with `start` and `end`, or `shape` `"weekly"` with `weekdays` (0 is Monday) and
+optional `effective_start` / `effective_end`. Optional `from` and `to` are HH:MM.
+District calendar entries carry no `shape` and use `start`/`end` or
+`report_issue_date`. Read defensively: the list may be empty and fields may be
+absent.
 
 Saving creates only a pending draft. Teacher approval creates an immutable
 digest revision; later edits create a new revision.
