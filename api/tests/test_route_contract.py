@@ -161,6 +161,8 @@ EXPECTED = [
     ('/smartdeck/api/decks/{deck_id}/archive', ('POST',)),
     ('/smartdeck/api/decks/{deck_id}/delete', ('POST',)),
     ('/smartdeck/api/readiness', ('GET',)),
+    ('/smartdeck/display/{deck_id}', ('GET',)),
+    ('/smartdeck/display/{deck_id}/data', ('GET',)),
     ('/powergrader', ('GET',)),
     ('/powergrader/session/{session_id}', ('GET',)),
     ('/api/powergrader/session/{session_id}', ('GET',)),

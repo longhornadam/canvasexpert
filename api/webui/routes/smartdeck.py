@@ -6,8 +6,11 @@ Routes:
   POST /smartdeck/api/decks/{id}/archive   -> archive a deck
   POST /smartdeck/api/decks/{id}/delete    -> delete a deck
   GET  /smartdeck/api/readiness            -> check schedule readiness for SmartDeck
+  GET  /smartdeck/display/{deck_id}        -> renders display page (classroom projector)
+  GET  /smartdeck/display/{deck_id}/data   -> returns display payload (JSON)
 """
 
+from datetime import datetime
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -92,4 +95,65 @@ def smartdeck_readiness():
         "ok": True,
         "ready": ready,
         "missing": missing,
+    })
+
+
+@router.get("/smartdeck/display/{deck_id}", response_class=HTMLResponse)
+def smartdeck_display_page(request: Request, deck_id: str):
+    """Classroom projector display page for a SmartDeck.
+
+    Renders the display template; the JavaScript fetches the deck data
+    from /smartdeck/display/{deck_id}/data once on load.
+    """
+    return deps.templates.TemplateResponse(request, "smartdeck_display.html", {
+        "deck_id": deck_id,
+    })
+
+
+@router.get("/smartdeck/display/{deck_id}/data")
+def smartdeck_display_data(deck_id: str):
+    """Full display payload for a SmartDeck (resolved schedule, resolved widgets).
+
+    This is the single data fetch the display page performs; no further
+    network requests after initial page load.
+
+    Returns {ok: bool, deck_id, date, title, server_time, slides, problems}
+    where each slide contains full resolved widget objects {id, scope, kind, params}.
+    """
+    deck, problems = deck_store.load_deck(deck_id)
+    if deck is None:
+        return JSONResponse({"ok": False, "problems": problems}, status_code=404)
+
+    blocks, schedule_problems = deps.resolve_schedule_for(deck.get("date", ""))
+    blocks_by_name = {b["name"]: b for b in blocks}
+
+    widgets_by_id = {w["id"]: w for w in (deck.get("widgets") or [])}
+
+    resolved_slides = []
+    slide_problems = list(schedule_problems)
+    for slide in deck.get("slides") or []:
+        block = blocks_by_name.get(slide.get("block"))
+        resolved_widgets = [widgets_by_id[wid] for wid in (slide.get("widgets") or []) if wid in widgets_by_id]
+        entry = {
+            "id": slide["id"],
+            "block": slide.get("block"),
+            "layout": slide.get("layout"),
+            "title": slide.get("title", ""),
+            "body": slide.get("body", ""),
+            "widgets": resolved_widgets,
+            "start": block["start"] if block else None,
+            "end": block["end"] if block else None,
+        }
+        if block is None:
+            slide_problems.append(f"slide {slide['id']!r}: block {slide.get('block')!r} not in today's resolved schedule")
+        resolved_slides.append(entry)
+
+    return JSONResponse({
+        "ok": True,
+        "deck_id": deck_id,
+        "date": deck.get("date"),
+        "title": deck.get("title"),
+        "server_time": datetime.now().isoformat(timespec="seconds"),
+        "slides": resolved_slides,
+        "problems": slide_problems,
     })

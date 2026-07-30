@@ -1,0 +1,284 @@
+/* SmartDeck classroom projector display page.
+
+   Extends layouts/display.html which provides:
+   - .ce-display-page { height: 100vh; overflow: hidden; }
+   - .ce-display-main { width: 100vw; height: 100vh; ... overflow: hidden; }
+   - .ce-display { width: 100vw; height: 100vh; ... overflow: hidden; }
+
+   This page consumes the full viewport with no page scroll.
+*/
+
+#sd-display-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Banners: clock skew and date */
+.sd-banner {
+  padding: var(--ce-space-3) var(--ce-space-4);
+  background: var(--ce-attention-soft);
+  border-bottom: 1px solid var(--ce-attention);
+  color: var(--ce-ink);
+  font-size: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sd-banner {
+    background: var(--ce-attention-soft);
+  }
+}
+
+/* Slide stage: the main display area */
+#sd-slide-stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--ce-surface);
+  color: var(--ce-ink);
+  padding: var(--ce-space-6);
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  #sd-slide-stage {
+    background: var(--ce-surface);
+    color: var(--ce-ink);
+  }
+}
+
+/* Slide content wrapper (rebuilt on each showSlide call) */
+.sd-slide {
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-width: 0;
+}
+
+.sd-slide h1,
+.sd-slide h2,
+.sd-slide h3,
+.sd-slide h4,
+.sd-slide h5,
+.sd-slide h6 {
+  margin: 0 0 var(--ce-space-4) 0;
+  font-family: var(--ce-font-display);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--ce-ink);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.sd-slide p {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.6;
+  color: var(--ce-ink);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.sd-slide ul {
+  margin: 0;
+  padding: 0 0 0 var(--ce-space-5);
+  font-size: 20px;
+  line-height: 1.6;
+  color: var(--ce-ink);
+}
+
+.sd-slide li {
+  margin: var(--ce-space-2) 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Slide widgets container (cleared on each showSlide call) */
+#sd-slide-widgets {
+  margin-top: var(--ce-space-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ce-space-3);
+  justify-content: center;
+  max-width: 100%;
+}
+
+/* Deck-scope widgets container (persists across slides) */
+#sd-deck-widgets {
+  position: absolute;
+  top: 60px;
+  right: var(--ce-space-4);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ce-space-3);
+}
+
+/* Not scheduled message (shown when no slide matches current time) */
+#sd-not-scheduled {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--ce-ink-muted);
+  text-align: center;
+  padding: var(--ce-space-6);
+}
+
+/* Corner chrome: fixed buttons for controls */
+.sd-corner-chrome {
+  position: fixed;
+  bottom: var(--ce-space-4);
+  right: var(--ce-space-4);
+  z-index: 200;
+  display: flex;
+  gap: var(--ce-space-2);
+}
+
+.sd-chrome-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--ce-space-2) var(--ce-space-3);
+  background: var(--ce-chrome);
+  color: #fff;
+  border: none;
+  border-radius: var(--ce-radius);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 200ms ease, opacity 200ms ease;
+  flex-shrink: 0;
+}
+
+.sd-chrome-btn:hover:not(:disabled) {
+  background: var(--ce-chrome-soft);
+}
+
+.sd-chrome-btn:active:not(:disabled) {
+  opacity: 0.8;
+}
+
+.sd-chrome-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sd-chrome-btn {
+    background: var(--ce-chrome);
+    color: #fff;
+  }
+
+  .sd-chrome-btn:hover:not(:disabled) {
+    background: var(--ce-chrome-soft);
+  }
+}
+
+/* Timer widget styles */
+.sd-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ce-space-2);
+  padding: var(--ce-space-4);
+  background: var(--ce-surface-raised);
+  border: 1px solid var(--ce-rule-strong);
+  border-radius: var(--ce-radius);
+  min-width: 120px;
+}
+
+.sd-timer-display {
+  font-family: var(--ce-font-mono);
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--ce-ink);
+  text-align: center;
+  min-width: 100%;
+  margin: 0;
+}
+
+.sd-timer-display.sd-timer-done {
+  color: var(--ce-attention);
+}
+
+.sd-timer-label {
+  font-size: 12px;
+  color: var(--ce-ink-muted);
+  text-align: center;
+  margin: 0;
+}
+
+.sd-timer-controls {
+  display: flex;
+  gap: var(--ce-space-2);
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.sd-timer-btn {
+  flex: 1;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--ce-space-2);
+  background: var(--ce-accent-canvas);
+  color: var(--ce-on-accent);
+  border: none;
+  border-radius: var(--ce-radius);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 200ms ease, opacity 200ms ease;
+}
+
+.sd-timer-btn:hover {
+  opacity: 0.9;
+}
+
+.sd-timer-btn:active {
+  opacity: 0.8;
+}
+
+.sd-timer-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sd-timer {
+    background: var(--ce-surface-raised);
+    border-color: var(--ce-rule-strong);
+  }
+
+  .sd-timer-display {
+    color: var(--ce-ink);
+  }
+
+  .sd-timer-label {
+    color: var(--ce-ink-muted);
+  }
+
+  .sd-timer-btn {
+    background: var(--ce-accent-canvas);
+    color: var(--ce-on-accent);
+  }
+}
