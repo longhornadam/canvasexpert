@@ -1566,6 +1566,7 @@ def test_server_registers_the_expected_tool_set():
         "get_roster", "get_seating_context", "get_submissions",
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "list_staged_content",
+        "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
     }
 
 

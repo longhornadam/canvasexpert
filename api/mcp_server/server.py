@@ -179,3 +179,26 @@ def refresh_mirror(course_id: str) -> str:
     sync of this course, then reports status (synced, syncing, or failed),
     never data. On "synced", re-call the read that refused."""
     return _compact(tools.refresh_mirror(course_id))
+
+
+@mcp.tool()
+def get_bell_schedule(schedule_id: str = "") -> str:
+    """Bell schedule(s) from the workspace as {period_id, start, end} periods.
+    schedule_id="" returns all variants; else returns one variant or error.
+    No student data."""
+    return _compact(tools.get_bell_schedule(schedule_id))
+
+
+@mcp.tool()
+def get_day_schedule(date: str) -> str:
+    """Teacher blocks resolved for a specific date as {name, label, start, end,
+    raw_periods, schedule_id}, sorted by start time. date is YYYY-MM-DD.
+    No student data."""
+    return _compact(tools.get_day_schedule(date))
+
+
+@mcp.tool()
+def get_teacher_schedule() -> str:
+    """Teacher schedule from workspace as version and blocks list with their
+    periods and class labels. No student data."""
+    return _compact(tools.get_teacher_schedule())

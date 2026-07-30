@@ -60,6 +60,166 @@ def list_calendar_files():
     return found
 
 
+def _smartdecks_dir():
+    """Resolve SmartDecks folder in the workspace Library."""
+    from . import workspace as _ws
+    return _ws.library_folder("SmartDecks")
+
+
+def list_bell_schedule_files():
+    """[{name, label, schedule_id, path}] for every 'Bell Schedule*'-prefixed
+    CSV in the workspace Calendars folder. schedule_id derived via the same
+    slug function as api/webui/routes/calendar.py's _file_key()."""
+    from .routes.calendar import _file_key
+
+    cal_dir = _calendars_dir()
+    if not cal_dir or not os.path.isdir(cal_dir):
+        return []
+
+    found = []
+    for path in sorted(_glob.glob(os.path.join(cal_dir, "*.csv"))):
+        name = os.path.basename(path)
+        if not name.lower().startswith("bell schedule"):
+            continue
+        found.append({
+            "name": name,
+            "label": _calendar_label(name),
+            "schedule_id": _file_key(name),
+            "path": os.path.abspath(path),
+        })
+    return found
+
+
+def load_bell_schedules() -> tuple:
+    """Load all bell schedules from workspace Calendars folder.
+
+    Returns ({schedule_id: periods_list}, problems_list):
+    - First element is dict mapping schedule_id to period list from parse_bell_schedule
+    - Second element is list of problem strings (prefixed with filename/schedule_id)
+    """
+    from . import deck_schedule
+
+    schedules = {}
+    all_problems = []
+
+    for file_info in list_bell_schedule_files():
+        path = file_info["path"]
+        schedule_id = file_info["schedule_id"]
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+        except OSError as e:
+            all_problems.append(f"{schedule_id}: could not read file: {e}")
+            continue
+
+        periods, problems = deck_schedule.parse_bell_schedule(content)
+        schedules[schedule_id] = periods
+
+        for problem in problems:
+            all_problems.append(f"{schedule_id}: {problem}")
+
+    return schedules, all_problems
+
+
+def load_day_calendar() -> tuple:
+    """Load day calendar from workspace Calendars folder.
+
+    Discovers CSVs whose header is 'date,schedule_id' (case-insensitive).
+    Returns ({date_isoformat: schedule_id}, problems_list).
+    """
+    from . import deck_schedule
+
+    cal_dir = _calendars_dir()
+    if not cal_dir or not os.path.isdir(cal_dir):
+        return {}, ["no workspace Calendars folder found"]
+
+    # Find day-calendar CSVs (header line is 'date,schedule_id')
+    day_calendar_mapping = {}
+    all_problems = []
+
+    for path in sorted(_glob.glob(os.path.join(cal_dir, "*.csv"))):
+        name = os.path.basename(path)
+
+        # Skip bell schedules
+        if name.lower().startswith("bell schedule"):
+            continue
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+        except OSError:
+            continue
+
+        # Check if this looks like a day calendar (header contains 'date' and 'schedule_id')
+        lines = content.strip().split("\n")
+        if not lines:
+            continue
+
+        header = lines[0].lower()
+        # Check for both columns in the header
+        if "date" in header and "schedule_id" in header:
+            mapping, problems = deck_schedule.parse_day_calendar(content)
+            day_calendar_mapping.update(mapping)
+
+            for problem in problems:
+                all_problems.append(f"{name}: {problem}")
+
+    if not day_calendar_mapping and all_problems == []:
+        all_problems.append("no day calendar found")
+
+    return day_calendar_mapping, all_problems
+
+
+def load_teacher_schedule() -> tuple:
+    """Load teacher schedule from SmartDecks folder.
+
+    Reads 'Teacher Schedule.json' (exact filename) from the SmartDecks folder.
+    Returns (data_dict, problems_list).
+    Missing file -> ({}, ["no teacher schedule found"]).
+    """
+    from . import deck_schedule
+
+    smartdecks = _smartdecks_dir()
+    if not smartdecks or not os.path.isdir(smartdecks):
+        return {}, ["no workspace SmartDecks folder found"]
+
+    path = os.path.join(smartdecks, "Teacher Schedule.json")
+    if not os.path.exists(path):
+        return {}, ["no teacher schedule found"]
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+    except OSError as e:
+        return {}, [f"could not read teacher schedule: {e}"]
+
+    return deck_schedule.parse_teacher_schedule(content)
+
+
+def resolve_schedule_for(date: str) -> tuple:
+    """Resolve blocks for a specific date.
+
+    Calls load_day_calendar(), load_bell_schedules(), load_teacher_schedule(),
+    then deck_schedule.resolve_day(). Merges problems from all stages.
+
+    date: "YYYY-MM-DD" string
+    Returns (blocks_list, problems_list).
+    """
+    from . import deck_schedule
+
+    day_calendar, day_cal_problems = load_day_calendar()
+    bell_schedules, bell_problems = load_bell_schedules()
+    teacher_schedule, teacher_problems = load_teacher_schedule()
+
+    blocks, resolve_problems = deck_schedule.resolve_day(
+        date, day_calendar, bell_schedules, teacher_schedule
+    )
+
+    all_problems = day_cal_problems + bell_problems + teacher_problems + resolve_problems
+    return blocks, all_problems
+
+
 def _key_to_year(key: str) -> str:
     """'something_2025_26' → '25-26', 'custom' → ''"""
     import re as _re

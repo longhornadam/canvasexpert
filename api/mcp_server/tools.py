@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 13 MCP tools.
+"""Plain, testable implementations of the 16 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -8,13 +8,13 @@ monkeypatch them without touching the real Canvas API or identity vault
 
 Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses``,
-``get_authoring_contract``, ``get_product_guide``, and
-``list_staged_content`` are the only tools with no ``course_id`` and no
-student data, so they skip both the course gate and the outbound safety gate.
-``get_writing_history`` breaks that pairing on purpose: it has no
-``course_id`` either (the daily-writing store has no course concept), but it
-is student data, so it still runs the identity vault and the outbound safety
-gate.
+``get_authoring_contract``, ``get_product_guide``, ``list_staged_content``,
+``get_bell_schedule``, ``get_day_schedule``, and ``get_teacher_schedule`` are
+the only tools with no ``course_id`` and no student data, so they skip both the
+course gate and the outbound safety gate. ``get_writing_history`` breaks that
+pairing on purpose: it has no ``course_id`` either (the daily-writing store has
+no course concept), but it is student data, so it still runs the identity vault
+and the outbound safety gate.
 
 Strict mirror-only law: get_roster, get_submissions, and
 get_gradebook_snapshot serve ONLY from the local CanvasMirror and refuse
@@ -998,3 +998,63 @@ def refresh_mirror(course_id: str) -> dict:
                 "message": "Still syncing — wait a few seconds, then try again."}
     return {"ok": False, "status": "failed",
             "error": "Sync failed. Try again, or use Sync now in the CanvasExpert web UI."}
+
+
+def get_bell_schedule(schedule_id: str = "") -> dict:
+    """Read bell schedule(s) from workspace Calendars folder.
+
+    No course gate, no student data — no safety gate.
+    schedule_id: empty string ("") returns all variants as {schedule_id: periods},
+                 non-empty returns just that one or error if not found.
+    """
+    bell_schedules, problems = deps.load_bell_schedules()
+
+    if schedule_id == "":
+        return {
+            "ok": True,
+            "schedules": bell_schedules,
+            "problems": problems,
+        }
+
+    if schedule_id not in bell_schedules:
+        return {
+            "ok": False,
+            "error": f"schedule '{schedule_id}' not found",
+            "problems": problems,
+        }
+
+    return {
+        "ok": True,
+        "schedule_id": schedule_id,
+        "periods": bell_schedules[schedule_id],
+        "problems": problems,
+    }
+
+
+def get_day_schedule(date: str) -> dict:
+    """Resolve teacher blocks for a specific date.
+
+    No course gate, no student data — no safety gate.
+    date: "YYYY-MM-DD" string
+    Returns [{name, label, start, end, raw_periods, schedule_id}, ...] sorted by start time.
+    """
+    blocks, problems = deps.resolve_schedule_for(date)
+    return {
+        "ok": True,
+        "date": date,
+        "blocks": blocks,
+        "problems": problems,
+    }
+
+
+def get_teacher_schedule() -> dict:
+    """Read teacher schedule from workspace SmartDecks folder.
+
+    No course gate, no student data — no safety gate.
+    """
+    teacher_schedule, problems = deps.load_teacher_schedule()
+    return {
+        "ok": True,
+        "schedule": teacher_schedule,
+        "problems": problems,
+    }
