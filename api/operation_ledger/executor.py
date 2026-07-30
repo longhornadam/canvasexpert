@@ -1,0 +1,350 @@
+"""Crash-safe apply/retry execution for the operation ledger."""
+
+import copy
+
+from . import claims, models, operations, registry, storage
+from .catalog_reconcile import reconcile_catalog_after_apply
+from .receipts import create_receipt, new_receipt
+
+
+class LostClaimError(RuntimeError):
+    """Raised when a recovered worker attempts to write after fencing."""
+
+
+class ExecutionContext:
+    """Fenced, durable step checkpointing owned by one target execution."""
+
+    def __init__(self, *, operation_id: str, target_key: str, claim: dict):
+        self.operation_id = operation_id
+        self.target_key = target_key
+        self.claim = copy.deepcopy(claim)
+        self._outbound_started = False
+
+    def _verify_and_mutate(self, mutator):
+        def transaction(_operations_doc, _claims_doc):
+            if not claims.is_current_claim(
+                self.claim["claim_id"], self.target_key, self.operation_id
+            ):
+                raise LostClaimError("execution claim is no longer current")
+            operation = next(
+                (item for item in _operations_doc["operations"]
+                 if item.get("operation_id") == self.operation_id), None)
+            if operation is None:
+                raise LostClaimError("operation no longer exists")
+            target = next(
+                (item for item in operation.get("targets", [])
+                 if item.get("target_key") == self.target_key), None)
+            if target is None:
+                raise LostClaimError("target no longer exists")
+            return mutator(target)
+
+        return storage.modify_ledger(transaction)
+
+    def before_send(self, step_key: str, payload_digest: str) -> dict:
+        """Write the outbound marker before an individual Canvas mutation."""
+        outbound_started_at = models.now_iso()
+
+        def mutate(target):
+            existing = next(
+                (step for step in target.get("steps", [])
+                 if step.get("step_key") == step_key), None)
+            step = copy.deepcopy(existing) if existing else models.new_step(step_key)
+            step["step_key"] = step_key
+            step["state"] = "claimed"
+            step["attempt_id"] = self.claim["attempt_id"]
+            step["payload_digest"] = payload_digest
+            step["outbound_started_at"] = outbound_started_at
+            step["error_code"] = None
+            step["private_diagnostic"] = None
+            step["updated_at"] = outbound_started_at
+            _replace_step(target, step)
+            target["state"] = "claimed"
+            target["updated_at"] = outbound_started_at
+            return copy.deepcopy(step)
+
+        self._outbound_started = True
+        return self._verify_and_mutate(mutate)
+
+    def checkpoint_step(
+        self,
+        step: dict,
+        *,
+        returned_object_id: str | None = None,
+        returned_object_url: str | None = None,
+    ) -> dict:
+        """Persist the response for a step before another Canvas request."""
+        candidate = copy.deepcopy(step)
+        step_key = candidate["step_key"]
+
+        def mutate(target):
+            previous = next(
+                (item for item in target.get("steps", [])
+                 if item.get("step_key") == step_key), None)
+            if not candidate.get("outbound_started_at") and previous:
+                candidate["outbound_started_at"] = previous.get("outbound_started_at")
+            candidate["attempt_id"] = self.claim["attempt_id"]
+            if returned_object_id is not None:
+                candidate["returned_object_id"] = returned_object_id
+            if returned_object_url is not None:
+                candidate["returned_object_url"] = returned_object_url
+            candidate["updated_at"] = models.now_iso()
+            _replace_step(target, candidate)
+
+            if step_key == "create_page" and returned_object_id is not None:
+                target["returned_object_id"] = returned_object_id
+                if returned_object_url is not None:
+                    target["returned_object_url"] = returned_object_url
+            if candidate.get("state") in ("sent_unknown", "failed", "blocked"):
+                target["state"] = candidate["state"]
+            target["updated_at"] = candidate["updated_at"]
+            return copy.deepcopy(candidate)
+
+        result = self._verify_and_mutate(mutate)
+        self._outbound_started = self._outbound_started or bool(
+            result.get("outbound_started_at"))
+        return result
+
+    def has_outbound_started(self) -> bool:
+        return self._outbound_started
+
+
+def _replace_step(target: dict, step: dict) -> None:
+    steps = target.setdefault("steps", [])
+    for index, existing in enumerate(steps):
+        if existing.get("step_key") == step.get("step_key"):
+            steps[index] = step
+            return
+    steps.append(step)
+
+
+def apply_operation(operation_id: str, batch_id: str, review_digest: str) -> dict:
+    op = operations.get_operation(operation_id)
+    if op is None:
+        raise ValueError(f"operation {operation_id} not found")
+    from . import batches
+    if not batches.validate_apply(op, batch_id, review_digest):
+        raise ValueError("review batch or digest does not match stored review")
+    adapter = registry.get_adapter(op["kind"])
+    old_status = op.get("status", "reviewed")
+    if not models.validate_operation_status_transition(old_status, "applying"):
+        raise ValueError(f"operation is in status '{old_status}', cannot apply")
+    operations.set_operation_status(operation_id, "applying")
+
+    target_results = []
+    for target in op.get("targets", []):
+        target_results.append(_execute_target(adapter, op, op["normalized_payload"], target))
+    return _finish_operation(operation_id, target_results)
+
+
+def retry_operation(operation_id: str) -> dict:
+    op = operations.get_operation(operation_id)
+    if op is None:
+        raise ValueError(f"operation {operation_id} not found")
+    adapter = registry.get_adapter(op["kind"])
+    old_status = op.get("status", "attention")
+    if not models.validate_operation_status_transition(old_status, "applying"):
+        raise ValueError(f"operation is in status '{old_status}', cannot retry")
+    operations.set_operation_status(operation_id, "applying")
+
+    unresolved_keys = {t["target_key"] for t in adapter.retry_selector(op)}
+    target_results = []
+    for target in op.get("targets", []):
+        if target["target_key"] not in unresolved_keys:
+            target_results.append({
+                "target_key": target["target_key"],
+                "state": target.get("state"),
+                "returned_object_id": target.get("returned_object_id"),
+                "returned_object_url": target.get("returned_object_url"),
+                "error_code": target.get("error_code"),
+                "skipped_retry": True,
+            })
+        else:
+            target_results.append(_execute_target(
+                adapter, op, op["normalized_payload"], target))
+    return _finish_operation(operation_id, target_results)
+
+
+def _finish_operation(operation_id: str, target_results: list[dict]) -> dict:
+    op = operations.get_operation(operation_id)
+    final_status = models.compute_operation_status(op.get("targets", []))
+    operations.set_operation_status(operation_id, final_status)
+    receipt = new_receipt(
+        subject_type="operation",
+        subject_id=operation_id,
+        kind=op["kind"],
+        status=_receipt_status(final_status),
+        targets=_receipt_targets(op.get("targets", [])),
+    )
+    create_receipt(receipt)
+    return {
+        "ok": final_status == "applied",
+        "operation_id": operation_id,
+        "status": final_status,
+        "target_results": _project_target_results(target_results),
+    }
+
+
+def _execute_target(adapter, operation: dict, payload: dict, target: dict) -> dict:
+    target_key = target["target_key"]
+    stored_baseline = target.get("baseline", {})
+    try:
+        fresh_baseline = adapter.capture_baseline(payload, target)
+        if adapter.check_drift(payload, target, stored_baseline):
+            _update_target_state(operation["operation_id"], target_key, "blocked",
+                                 error_code="drift_detected")
+            return {"target_key": target_key, "state": "blocked",
+                    "error_code": "drift_detected"}
+    except Exception as exc:
+        _update_target_state(operation["operation_id"], target_key, "failed",
+                             error_code="adapter_exception",
+                             private_diagnostic=type(exc).__name__)
+        return {"target_key": target_key, "state": "failed",
+                "error_code": "adapter_exception"}
+
+    payload_digest = models.sha256_dict(payload)
+    try:
+        claim = claims.acquire_claim(
+            target_key=target_key,
+            operation_id=operation["operation_id"],
+            payload_digest=payload_digest,
+        )
+    except claims.ClaimConflictError:
+        return {"target_key": target_key, "state": "blocked",
+                "error_code": "claim_conflict"}
+
+    context = ExecutionContext(
+        operation_id=operation["operation_id"], target_key=target_key, claim=claim)
+    try:
+        _update_target_claimed(operation["operation_id"], target_key, claim, fresh_baseline)
+        try:
+            result = adapter.execute(payload, target, fresh_baseline, claim, context)
+        except LostClaimError:
+            return {"target_key": target_key, "state": "sent_unknown",
+                    "error_code": "lost_claim"}
+        except Exception as exc:
+            after_send = context.has_outbound_started()
+            result = {
+                "state": "sent_unknown" if after_send else "failed",
+                "error_code": (
+                    "adapter_exception_after_send" if after_send
+                    else "adapter_exception"),
+                "private_diagnostic": type(exc).__name__,
+            }
+        try:
+            _update_target_result(operation["operation_id"], target_key, result, claim)
+        except LostClaimError:
+            return {"target_key": target_key, "state": "sent_unknown",
+                    "error_code": "lost_claim"}
+        if result.get("state") == "applied":
+            reconcile_catalog_after_apply(
+                operation["kind"], target["course_id"], payload=payload,
+            )
+        return {
+            "target_key": target_key,
+            "state": result.get("state", "failed"),
+            "returned_object_id": result.get("returned_object_id"),
+            "returned_object_url": result.get("returned_object_url"),
+            "error_code": result.get("error_code"),
+            "private_diagnostic": result.get("private_diagnostic"),
+        }
+    finally:
+        claims.release_claim(claim["claim_id"])
+
+
+def _update_target_state(operation_id: str, target_key: str, state: str,
+                         error_code: str | None = None,
+                         private_diagnostic: str | None = None) -> None:
+    def mutate(target):
+        target["state"] = state
+        if error_code:
+            target["error_code"] = error_code
+        if private_diagnostic:
+            target["private_diagnostic"] = private_diagnostic
+        target["updated_at"] = models.now_iso()
+        return target
+    operations.update_target(operation_id, target_key, mutate)
+
+
+def _update_target_claimed(operation_id: str, target_key: str, claim: dict,
+                            apply_baseline: dict) -> None:
+    def transaction(_operations_doc, _claims_doc):
+        if not claims.is_current_claim(claim["claim_id"], target_key, operation_id):
+            raise LostClaimError("execution claim is no longer current")
+        operation = next(o for o in _operations_doc["operations"]
+                          if o.get("operation_id") == operation_id)
+        target = next(t for t in operation["targets"]
+                      if t.get("target_key") == target_key)
+        target.update({
+            "state": "claimed",
+            "attempt_id": claim["attempt_id"],
+            "payload_digest": claim["payload_digest"],
+            "claim_owner": claim["owner_pid"],
+            "claim_acquired_at": claim["acquired_at"],
+            "claim_lease_expires_at": claim["lease_expires_at"],
+            "apply_baseline": copy.deepcopy(apply_baseline),
+            "updated_at": models.now_iso(),
+        })
+        return target
+    storage.modify_ledger(transaction)
+
+
+def _update_target_result(operation_id: str, target_key: str, result: dict,
+                          claim: dict) -> None:
+    def transaction(_operations_doc, _claims_doc):
+        if not claims.is_current_claim(claim["claim_id"], target_key, operation_id):
+            raise LostClaimError("execution claim is no longer current")
+        operation = next(o for o in _operations_doc["operations"]
+                          if o.get("operation_id") == operation_id)
+        target = next(t for t in operation["targets"]
+                      if t.get("target_key") == target_key)
+        target["state"] = result.get("state", "failed")
+        if result.get("returned_object_id"):
+            target["returned_object_id"] = result["returned_object_id"]
+        if result.get("returned_object_url"):
+            target["returned_object_url"] = result["returned_object_url"]
+        target["error_code"] = result.get("error_code")
+        target["private_diagnostic"] = result.get("private_diagnostic")
+        if result.get("steps"):
+            target["steps"] = copy.deepcopy(result["steps"])
+        target["updated_at"] = models.now_iso()
+        return target
+    storage.modify_ledger(transaction)
+
+
+def _receipt_targets(targets: list[dict]) -> list[dict]:
+    return [{
+        "target_key": t.get("target_key"),
+        "state": t.get("state"),
+        "returned_object_id": t.get("returned_object_id"),
+        "returned_object_url": t.get("returned_object_url"),
+        "error_code": t.get("error_code"),
+        "steps": _safe_steps(t.get("steps", [])),
+    } for t in targets]
+
+
+def _receipt_status(operation_status: str) -> str:
+    return {
+        "applied": "applied",
+        "partial": "partial",
+        "failed": "failed",
+        "attention": "blocked",
+    }.get(operation_status, "failed")
+
+
+def _project_target_results(results: list[dict]) -> list[dict]:
+    return [{
+        "target_key": r.get("target_key"),
+        "state": r.get("state"),
+        "returned_object_id": r.get("returned_object_id"),
+        "returned_object_url": r.get("returned_object_url"),
+        "error_code": r.get("error_code"),
+        "steps": _safe_steps(r.get("steps", [])),
+    } for r in results]
+
+
+def _safe_steps(steps: list[dict]) -> list[dict]:
+    allowed = (
+        "step_key", "state", "returned_object_id",
+        "returned_object_url", "error_code",
+    )
+    return [{key: step.get(key) for key in allowed} for step in steps]

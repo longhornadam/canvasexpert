@@ -1,4 +1,4 @@
-"""Scrub engine for FeedbackExpert — roster-aware real-name removal from student
+"""Scrub engine for feedback tools — roster-aware real-name removal from student
 writing content before it leaves the machine.
 
 Built around a token map from `vault.all_real_identifiers()`, collision-checked

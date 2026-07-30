@@ -1,0 +1,226 @@
+# AGENTS.md - Canvas Expert
+
+Canonical guidance for agents working in this repository. Keep this file short: it
+defines safety, execution, and routing; detailed product knowledge belongs in the linked
+contract or reference document. Do not create parallel vendor-specific root guidance.
+
+## Required context
+
+Every agent reads this file. An implementation executor then reads:
+
+1. the single direct brief in `docs/handoffs/`;
+2. only the files and exact document sections named by that brief.
+
+Do not preload archived handoffs, every module map, `TOOLS.md`, or a whole architecture
+vision. A handoff that cites a long document must name the required numbered sections.
+Historical handoffs are never implementation authority.
+
+## Repository boundary
+
+- `api/` is the live, local-only FastAPI app and CLI surface. It holds the Canvas token,
+  handles private student data, and may perform Canvas writes.
+- `engine/` is the offline parse/validate/render/package library. It has no token, network,
+  or student data.
+- `LLM_Modules/*_Base.md` are the canonical authoring contracts. Do not change their
+  meaning in backend code. Read `api/README.md` before changing Canvas push behavior.
+
+## Branch policy
+
+The only durable branches are `main` (stable) and `dev` (integration and default agent
+branch). Work on `dev` unless the user says otherwise. Do not create or preserve other
+long-lived branches. Before claiming the repository is current, fetch and compare against
+both `origin/dev` and `origin/main`. A temporary PR branch must target `dev` and be deleted
+after closure. Never merge histories or delete branches without checking unmerged commits
+and confirming the target.
+
+## Lazy routing index
+
+Use only the row relevant to the active handoff.
+
+| Area | Start here | Boundary to preserve |
+|---|---|---|
+| Create / Course Expert | `docs/reference/course-expert-module-map.md` | Forge contracts are canonical; live content writes use the reviewed operation path. |
+| Settings | `docs/reference/settings-module-map.md` | Secrets stay in the credential store; district configuration stays outside the repo. |
+| Connections / diagnostics | `api/README.md`, then the exact owners named by the handoff | Read-only diagnostics; never edit client config, install software, change `PATH`, elevate, or start tunnels. |
+| Gradebook | `docs/reference/gradebook-module-map.md` | Grade/status operations and roster context are private; write work is high risk. |
+| Roster | `docs/reference/roster-module-map.md` | Names, IDs, groups, accommodations, and monitored notes are student data. |
+| FeedbackExpert compatibility | `docs/reference/feedbackexpert-module-map.md`, `docs/contracts/feedback-scoring-contract.md` | AI results are drafts; review and Canvas writes belong to PowerGrader. |
+| PowerGrader | `docs/reference/powergrader-module-map.md` | Sessions are private; Canvas posting is review-first except for the two narrow default-off opt-ins documented there. |
+| Routines | `api/custom_routines/AUTHORING.md` | Local jobs only; scheduled Canvas posting requires a specific teacher opt-in and the PowerGrader write safeguards. |
+| CanvasMirror | `docs/mirror.md` for current behavior; exact sections of `docs/reference/canvasmirror-1.0beta-information-spine.md` for target design | The vision is section-routed only and never read wholesale for execution; cached state never authorizes a write. |
+| Course Catalog | `docs/contracts/course-catalog-contract.md` | Student-free navigation/search projection only; no PII, raw HTML, URLs, credentials, private paths, evidence, or write preflight. |
+| Operation Ledger | `docs/reference/operation-ledger-module-map.md` | High-risk Canvas write boundary; preserve checkpoints, idempotency, verification, and receipts. |
+| New Quizzes grading | `docs/reference/new-quizzes-grading-transport.md` | PowerGrader's live-course item-finalization lane uses Canvas's short-lived signed grader transport for teacher-reviewed item scores and per-item feedback. Active/current instructor enrollment is required; closed, concluded, past-enrollment, or otherwise restricted courses may return `403`. |
+| Web UI / teacher surfaces | `api/webui/README.md` | Preserve route-specific load order and verify affected rendered routes. |
+| Physical output | relevant Forge contract and rendering owner named by the handoff | PDF uses installed Microsoft Edge through Playwright; do not add managed browser downloads. DOCX uses `pypandoc-binary`. |
+
+## Non-negotiable guardrails
+
+1. **No secrets in the repo.** Web UI credentials live only in the OS credential store;
+   CLI credentials may live in gitignored `api/.env`. Never put tokens in tracked files,
+   logs, fixtures, output, or commit messages. The pre-commit hook is only a backstop.
+2. **No student data in the repo.** Names, IDs, submissions, grades, comments, private
+   notes, roster data, and course-derived exports never enter commits, fixtures, or
+   printable logs. Private output belongs in the user-selected workspace or gitignored
+   output directories. When uncertain, treat data as FERPA-protected.
+3. **No district-specific source configuration.** URLs, calendars, labels, rubric names,
+   school names, and teacher names belong in the UI/workspace. `CANVAS_BASE_DEFAULT`
+   remains empty. Shipped calendar data is limited to the blank template and fictional
+   sample.
+4. **Local only.** The token-holding app binds `127.0.0.1`. Do not add public routes,
+   external exposure, or public-infrastructure assumptions.
+5. **Describe AI privacy honestly.** SAFE artifacts are pseudonymized and scrubbed, not
+   guaranteed anonymous or “FERPA safe.” Teachers review them before external upload.
+
+## Execution model: senior design, one executor
+
+The senior/orchestrator owns architecture, scope, and acceptance. One implementation
+executor performs the bounded handoff. Do not add a planner or automatic reviewer, and do
+not implement in parallel with the executor. At most one implementation subagent may be
+active unless the user explicitly authorizes more.
+
+When model tiers are available: Sol is the senior; Luna is the default executor; Terra is
+the alternative for cross-cutting, architecture-heavy, or guardrail-adjacent work. The
+user may choose an external executor.
+
+### Senior responsibilities
+
+- Understand the relevant teacher path and make the hard product/technical decisions.
+- Discuss choices that materially change the user's direction.
+- Write one durable brief before delegation.
+- Prefer one meaningful vertical improvement (normally half a day to two days), not a
+  chain of numbered micro-slices.
+- Author independently checkable acceptance criteria and explicit non-goals before execution,
+  then lock exact boundaries, insertion points, references, risk, the named test gate, and
+  stop conditions. The executor should not need architecture discovery or define success.
+- Accept from the report and inspect only risk seams or missing evidence; do not
+  automatically reread the repository or rerun successful checks.
+
+### Executor responsibilities
+
+- Read this file, the active brief, and only its routed references.
+- Preserve unrelated worktree changes and stay within authorized scope.
+- Run the brief's preflight before writing; stop when an assumption is false.
+- Implement the entire brief and self-review against its locked decisions.
+- Run the brief's named acceptance gate and only the required proportional verification;
+  report evidence, not a self-defined definition of success.
+- Reuse the same context for corrections; do not replace the executor for routine repair.
+- Put the compact return report in both chat and the brief's `Execution result`: traffic
+  light, commit hash if any, changed files, commands/counts, deviations, and unresolved
+  decisions.
+
+### Traffic lights
+
+- **GREEN:** every pre-authored acceptance criterion holds, the named gate passes, and there
+  is no undeclared deviation. The senior accepts against the brief, not the executor's view
+  of completeness.
+- **YELLOW:** bounded incomplete work, unavailable required check, or one senior decision
+  needed. Return to the same executor after direction.
+- **RED:** repository truth contradicts the brief, a guardrail is underspecified, or a
+  public contract/architecture expansion is required. Stop implementation.
+
+### Durable context and escalation
+
+No important decision may live only in chat or agent memory. The active brief contains
+the current objective, acceptance criteria, explicit non-goals, locked decisions, scope,
+references, named verification gate, stop conditions, and latest result. Durable product decisions belong in `docs/contracts/` or
+`docs/reference/`; the brief links to them instead of copying them.
+
+After compaction or executor replacement, resume from the active brief, current diff/commit,
+and narrow follow-up direction. Do not repeat broad discovery.
+
+Stop rather than guess when a named seam does not exist, current behavior contradicts the
+brief, materially different implementations remain possible, another subsystem/public
+contract would need to change, a side effect or guardrail is underspecified, or an
+out-of-scope regression appears.
+
+## Lean engineering defaults
+
+- Start from the teacher-visible outcome and deliver one vertical batch.
+- Add no registry, adapter, persistence format, or durable contract without an immediate
+  consumer in the same agreed work.
+- Do not abstract after one implementation or build sibling features for symmetry.
+- Prefer reversible local behavior and the smallest complete change.
+- Let real use, defects, or measured friction pull future integration.
+- Batch related work when context and verification carry over; process-only acceptance,
+  repair, or archive slices are not product work.
+
+## Risk and verification
+
+| Risk | Typical boundary | Default evidence |
+|---|---|---|
+| Low | copy/layout, local UI state, offline parsing, narrow internal refactor | Focused tests if useful; render affected browser routes. |
+| Medium | reversible Canvas content operations, settings, shared browser utilities | Focused tests, affected subsystem tests, affected rendered routes. |
+| High | grades/comments, credentials, FERPA boundaries, external AI, scheduled writes | Happy/failure/idempotency checks, relevant broader suite, and user diff review. |
+
+During implementation, run the named focused gate that exercises the changed behavior. Its
+passing result is the slice gate; a slice confined to its declared surface does not owe a
+broad deselected matrix. Baseline unrelated existing failures once at a known commit in the
+vision or current brief, with the exact reproduction command and observed result. Later
+slices cite that record rather than rerunning, re-explaining, or silently absorbing it.
+
+Run the full API or engine suite only at an explicitly declared integration/release
+checkpoint, after genuinely cross-cutting changes, or when focused failures show unexpected
+coupling. Do not rerun a successful executor matrix unless evidence is missing, the
+environment changed, or the relevant diff changed.
+
+Tests must derive paths from the repository and contain no developer-specific absolute
+paths or private data. Source-text tests do not prove browser behavior. Shared scripts,
+templates, navigation, initialization, or safety controls require loading every affected
+route in the local app, checking required globals/state, and confirming zero new browser
+console errors.
+
+## Handoff and document hygiene
+
+- `docs/handoffs/` contains at most one current direct brief.
+  Do not store a future queue there; create a brief only when it is ready for execution.
+- Close GREEN work by accepting it and retiring its brief in the same batch (Git history is
+  its record). A RED/YELLOW brief remains current only while the senior is actively deciding
+  or correcting it. Superseded or abandoned briefs are retired with an explicit status.
+- Closing a GREEN brief that finishes or advances a vision-doc batch (spine §17.1) must
+  leave a single current pointer to the next batch — never a log — naming
+  the next batch-table row, the exact vision-doc sections it requires, and any outstanding
+  senior decisions carried over from other batches. A new senior reads only that pointer and
+  the sections it names, never the whole vision document, to find the next unit of work.
+- Never route an executor to a retired or superseded brief; Git history is history, not
+  current authority.
+- Keep the brief concise and slice-specific. Link contracts and exact reference sections;
+  do not paste product history or whole architecture narratives into it.
+- `docs/contracts/` holds durable data/behavior contracts; `docs/guides/` durable usage;
+  `docs/reference/` current architecture, safety facts, and module route cards.
+
+## Tool routing
+
+Tool discovery is conditional, not mandatory reading. Consult `TOOLS.md` and only the
+relevant manifest before brute-force inspection of a large/repetitive document, log, diff,
+HTML/API response, or unfamiliar repository area. Skip it when the active brief already
+names a small set of files and symbols. A `planned` tool is unavailable and must not block
+execution.
+
+Prefer tools for retrieval, parsing, validation, and compact summaries. Use reasoning for
+architecture decisions, tradeoffs, review, and specifications. Never use repository-wide
+indexing to evade a handoff's bounded reference list.
+
+## Build, test, and run
+
+Windows and PowerShell; current local tests use Python 3.14 through `py`. Select commands
+proportionally rather than running every suite by default.
+
+```powershell
+# Web UI (http://127.0.0.1:8765)
+cd api; py qf_ui.py
+
+# Suites
+py -m pytest api/tests
+py -m pytest engine/tests
+
+# Focused PowerGrader regressions
+py -m pytest api/tests/test_powergrader_packet.py api/tests/test_powergrader_copilot_packet.py api/tests/test_powergrader_import_results.py api/tests/test_route_contract.py
+
+# Dependencies
+py -m pip install -r api/requirements.txt
+```
+
+The launcher installs Python dependencies only. Printable PDF generation requires an
+installed, policy-allowed Microsoft Edge; `CANVAS_EXPERT_EDGE_PATH` may point to a
+nonstandard `msedge.exe`.

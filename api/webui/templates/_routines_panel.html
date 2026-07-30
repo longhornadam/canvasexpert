@@ -1,12 +1,12 @@
 <div class="rt-page">
-  <header class="rt-head">
+  <div class="rt-head">
     <h1>Routines</h1>
     <p class="rt-sub">
       Automations that run on this machine while Canvas Expert is open — across your
       {{ active_count }} active course{{ '' if active_count == 1 else 's' }}.
       Nothing runs in the cloud, and your Canvas token never leaves this computer.
     </p>
-  </header>
+  </div>
 
   <section class="rt-how">
     <div class="rt-how-item">
@@ -33,7 +33,7 @@
       </div>
     </div>
     <div id="rt-list" class="rt-list">
-      <p class="hint" style="padding:8px 2px">Loading…</p>
+      <p class="ce-hint ce-routines-loading">Loading…</p>
     </div>
     <div class="rt-actions">
       <button id="btn-routines-due" class="primary">Run due routines</button>

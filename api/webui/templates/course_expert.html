@@ -1,33 +1,62 @@
-{% extends "base.html" %}
-{% block title %}Course Expert — Canvas Expert{% endblock %}
-{% block body_class %}ce-screen{% endblock %}
-{% block main_class %}ce-page{% endblock %}
-{% block content %}
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail %}
+{% block title %}Work Tools — Canvas Expert{% endblock %}
+{% block workspace_variant %}three{% endblock %}
+{% block workspace_body_class %}ce-screen{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/course_expert.css?v={{ asset_v }}">{% endblock %}
 
+{% block left_rail %}
+{% if token_is_set %}
+{% call rail('left', 'Work') %}
+    <div class="ce-work-rail" data-ce-hook="course-rail">
+      <div class="ce-work-rail-head"><h2>Work</h2></div>
+      <div class="ce-work-rail-section ce-work-rail-section--start">
+        <p class="ce-work-rail-section-title">Start</p>
+        <div class="ce-work-rail-start-grid">
+          <button type="button" class="ce-work-rail-item" data-rail-tab="quiz">Quiz<span class="ce-work-rail-item-desc">Create and deliver a QuizForge assessment</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="assignment">Assignment<span class="ce-work-rail-item-desc">Create and push an AssignmentForge file</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="page">Page<span class="ce-work-rail-item-desc">Create and place a Canvas page</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="rubric">Rubric<span class="ce-work-rail-item-desc">Create or update a course rubric</span></button>
+          <button type="button" class="ce-work-rail-item" data-rail-tab="quick">Quick column<span class="ce-work-rail-item-desc">Add a fast gradebook column</span></button>
+        </div>
+      </div>
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">Continue</p>
+        <div id="ce-rail-continue"><p class="ce-work-rail-empty">None.</p></div>
+      </div>
+      <div class="ce-work-rail-section">
+        <p class="ce-work-rail-section-title">Attention</p>
+        <div id="ce-rail-attention"><p class="ce-work-rail-empty">None.</p></div>
+      </div>
+    </div>
+{% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block primary %}
 {% if not token_is_set %}
-<div class="callout warn" style="max-width:680px; margin:32px auto">
-  No Canvas token saved — <a href="/settings">go to Settings</a> to add one.
-</div>
+<div class="ce-notice ce-course-expert-notice">No Canvas token saved — <a href="/settings">go to Settings</a> to add one.</div>
 {% else %}
-
-<div class="expert-shell expert-shell--course">
-  <!-- ── Sidebar navigation ───────────────────────────────────────────── -->
-  <aside class="expert-sidebar expert-sidebar--course" aria-label="Course Expert sections">
-    <div class="expert-sidebar-kicker">Course Expert</div>
+    <div class="ce-course-expert-center ce-drafting-grid" data-ce-hook="course-shell">
+      <aside class="expert-sidebar expert-sidebar--course" aria-label="Work tool sections">
     <div class="ce-tabs expert-side-tabs" role="tablist" aria-orientation="vertical">
-      <button type="button" class="ce-tab active" data-tab="quiz">Quiz</button>
-      <button type="button" class="ce-tab" data-tab="assignment">Assignment</button>
-      <button type="button" class="ce-tab" data-tab="page">Page</button>
-      <button type="button" class="ce-tab" data-tab="rubric">Rubric</button>
-      <button type="button" class="ce-tab" data-tab="download">Download Work</button>
-      <button type="button" class="ce-tab" data-tab="students">Student Reports</button>
-      <button type="button" class="ce-tab ce-tab--alt" data-tab="quick"><em>Quick Assignment</em></button>
+      <button type="button" id="ce-tab-button-quiz" class="ce-tab active" data-ce-hook="course-tab" data-tab="quiz" role="tab" aria-selected="true" aria-controls="ce-tab-quiz" tabindex="0">Quiz</button>
+      <button type="button" id="ce-tab-button-assignment" class="ce-tab" data-ce-hook="course-tab" data-tab="assignment" role="tab" aria-selected="false" aria-controls="ce-tab-assignment" tabindex="-1">Assignment</button>
+      <button type="button" id="ce-tab-button-page" class="ce-tab" data-ce-hook="course-tab" data-tab="page" role="tab" aria-selected="false" aria-controls="ce-tab-page" tabindex="-1">Page</button>
+      <button type="button" id="ce-tab-button-rubric" class="ce-tab" data-ce-hook="course-tab" data-tab="rubric" role="tab" aria-selected="false" aria-controls="ce-tab-rubric" tabindex="-1">Rubric</button>
+      <button type="button" id="ce-tab-button-quick" class="ce-tab ce-tab--alt" data-ce-hook="course-tab" data-tab="quick" role="tab" aria-selected="false" aria-controls="ce-tab-quick" tabindex="-1"><em>Quick Assignment</em></button>
     </div>
   </aside>
 
+  <div class="ce-workspace-header">
+    <p>Workspace</p>
+    <h1 id="ce-workspace-title">Quiz</h1>
+  </div>
+
   <!-- ── Tab content ───────────────────────────────────────────────────── -->
+  <div class="ce-workspace-stage">
   <div class="ce-content ce-panels-wrap expert-main">
-  <section class="card tool-course-card ce-course-work-card">
+  <section class="ce-panel tool-course-card ce-course-work-card">
     <div class="tool-course-card-head">
       <div>
         <h2>Target courses</h2>
@@ -47,13 +76,13 @@
               {% for c in saved_courses %}
               <div class="cc-row" data-id="{{ c.id }}" data-name="{{ c.name }}">
                 <input type="checkbox" class="cc-cb" value="{{ c.id }}" data-name="{{ c.name }}">
-                <span class="cc-star" title="Bookmarked">★</span>
+                <span class="cc-star" title="Current course">★</span>
                 <button type="button" class="cc-focus" title="Focus this course">{{ c.nickname }}</button>
               </div>
               {% endfor %}
               {% if not saved_courses %}
-              <p class="hint" style="font-size:13px; margin:0">
-                No bookmarked courses yet. <a href="/settings">Add some in Settings</a>.
+              <p class="hint ce-u-m0">
+                No Current courses yet. <a href="/settings">Add courses in Settings</a>.
               </p>
               {% endif %}
             </div>
@@ -69,18 +98,18 @@
   </section>
 
   <!-- ── Quiz tab ──────────────────────────────────────────────────────── -->
-  <div id="ce-tab-quiz" class="ce-panel active">
+  <div id="ce-tab-quiz" class="ce-panel active" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-quiz">
 
     <!-- Whole-class picker (top) -->
-    <div class="card ce-quiz-card" id="quiz-whole">
-      <h2 style="margin-bottom:14px">Push quiz</h2>
-      <div class="mode-toggle" role="group" aria-label="Push mode" style="margin-bottom:14px">
+    <div class="ce-panel ce-quiz-card" id="quiz-whole">
+      <h2 class="ce-u-mb-3">Push quiz</h2>
+      <div class="mode-toggle ce-u-mb-3" role="group" aria-label="Push mode">
         <button type="button" class="mode-seg active" data-mode="whole">Whole class</button>
         <button type="button" class="mode-seg" data-mode="diff">Differentiated</button>
       </div>
       <label>Quiz file</label>
       <div class="file-source">
-        <select id="quizfile" style="display:none">
+        <select id="quizfile" class="ce-initially-hidden">
           <option value="">— select —</option>
           {% for f in quiz_files %}
           <option value="{{ f.path }}">{{ f.label }}</option>
@@ -90,10 +119,10 @@
           <button type="button" class="file-src-btn" data-src="select">Library</button>
           <button type="button" class="file-src-btn active" data-src="paste">Paste JSON</button>
           <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-          <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+          <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
         </div>
         <textarea class="file-src-paste" placeholder="Paste your &lt;QUIZFORGE_JSON&gt;…"></textarea>
-        <p class="file-src-hint" style="display:none"></p>
+        <p class="file-src-hint ce-initially-hidden"></p>
       </div>
       <details class="forge-howto">
         <summary>Don't have a quiz yet? Forge one with your LLM →</summary>
@@ -104,11 +133,10 @@
           </li>
           <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
         </ol>
-        <p class="hint" style="margin:0">Need a QTI-ZIP for manual import instead?
-          <a href="/forge/quizforge/" target="_blank" rel="noopener">Open the QuizForge app ↗</a>
-          · More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
-      <div class="actions">
+      <div class="course-scope-summary" data-course-scope="quiz-whole" aria-live="polite"></div>
+      <div class="ce-actions">
         <button id="btn-validate">Validate</button>
         <button id="btn-preview">Dry-run preview</button>
         <button id="btn-push" class="primary">Push live quiz…</button>
@@ -118,17 +146,18 @@
     </div>
 
     <!-- Differentiated picker -->
-    <div class="card" id="quiz-diff" hidden>
+    <div class="ce-panel" id="quiz-diff" hidden>
       <p id="groups-status" class="status hint"></p>
       <div id="variant-rows"></div>
-      <div class="actions">
+      <div class="ce-actions">
         <button id="btn-add-variant">+ Add row</button>
       </div>
-      <p class="hint" style="margin:14px 0 0; font-size:13px">
+      <p class="hint ce-course-note">
         Tiers push to <strong>every checked course</strong> in the Targets list.
         Groups are matched by name across courses.
       </p>
-      <div class="actions" style="margin-top:10px">
+      <div class="course-scope-summary" data-course-scope="quiz-diff" aria-live="polite"></div>
+      <div class="ce-actions ce-u-mt-3">
         <button id="btn-push-variants" class="primary">Push tiers to checked course(s)…</button>
       </div>
       <pre id="variants-result" class="log" hidden></pre>
@@ -136,8 +165,8 @@
     </div>
 
     <!-- Delivery options (below the picker) -->
-    <div class="card ce-delivery-card">
-      <h2 style="margin-bottom:14px">Delivery options</h2>
+    <div class="ce-panel ce-delivery-card">
+      <h2 class="ce-u-mb-3">Delivery options</h2>
       <div class="settings-grid">
         <label>Due date <small class="lbl-hint">(optional)</small>
           <input type="datetime-local" id="due-at">
@@ -149,7 +178,7 @@
           <input type="datetime-local" id="lock-at">
         </label>
       </div>
-      <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+      <div class="settings-grid ce-grid-two ce-u-mt-3">
         <label>Grading category <small class="lbl-hint js-ag-hint" id="ag-hint">(select a course)</small>
           <select id="assignment-group-select" class="js-aggroups" disabled>
             <option value="">— none / default —</option>
@@ -160,8 +189,7 @@
             <option value="">— don't add to a module —</option>
             <option value="__new__">＋ Create new module…</option>
           </select>
-          <input type="text" id="new-module-name" class="js-new-module" placeholder="New module name…"
-                 style="display:none; margin-top:6px">
+          <input type="text" id="new-module-name" class="js-new-module ce-initially-hidden ce-u-mt-2" placeholder="New module name…">
         </label>
       </div>
       <div class="opt-checks">
@@ -178,7 +206,7 @@
         </div>
         <label class="opt-check"><input type="checkbox" id="allow-attempts"> Allow multiple attempts</label>
         <div id="attempts-wrap" class="opt-subpanel" hidden>
-          <div class="settings-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+          <div class="settings-grid ce-grid-four">
             <label>Attempts allowed
               <select id="allowed-attempts">
                 <option value="-1">Unlimited</option>
@@ -200,7 +228,7 @@
             <label>Cooldown between attempts <small class="lbl-hint">(min, 0 = none)</small>
               <input type="number" id="attempt-cooldown" value="0" min="0" max="1440">
             </label>
-            <label class="opt-check" style="align-self:end; padding-bottom:6px">
+            <label class="opt-check ce-u-align-end ce-u-pad-bottom">
               <input type="checkbox" id="build-on-last"> Build on last attempt
             </label>
           </div>
@@ -208,7 +236,7 @@
         <label class="opt-check"><input type="checkbox" id="has-time-limit"> Time limit</label>
         <div id="time-limit-wrap" class="opt-subpanel" hidden>
           <label>Minutes
-            <input type="number" id="time-limit-minutes" value="30" min="1" max="600" style="width:80px">
+            <input type="number" id="time-limit-minutes" value="30" min="1" max="600" class="ce-u-compact-input">
           </label>
         </div>
         <label class="opt-check"><input type="checkbox" id="one-at-a-time"> One question at a time</label>
@@ -218,13 +246,13 @@
           </label>
         </div>
         <label>Calculator <small class="lbl-hint">(shown during quiz)</small>
-          <select id="calculator-type" style="width:auto; margin-top:4px">
+          <select id="calculator-type" class="ce-u-auto-input ce-u-mt-1">
             <option value="none" selected>None</option>
             <option value="basic">Basic</option>
             <option value="scientific">Scientific</option>
           </select>
         </label>
-        <label class="opt-check" style="margin-top:6px">
+        <label class="opt-check ce-u-mt-2">
           <input type="checkbox" id="physical-version">
           Also save a printable version
           <small class="lbl-hint">(QuizForge PDF + DOCX -> Exports folder)</small>
@@ -235,15 +263,16 @@
   </div><!-- /#ce-tab-quiz -->
 
   <!-- ── Assignment tab ──────────────────────────────────────────────────── -->
-  <div id="ce-tab-assignment" class="ce-panel">
+  <div id="ce-tab-assignment" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-assignment" hidden>
 
     <div id="assignment">
       <h2 class="section-heading">Push Assignment</h2>
-      <div class="card">
-        <h2 style="margin-bottom:6px">From AssignmentForge file</h2>
-        <p class="hint" style="margin:0 0 14px">
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">From AssignmentForge file</h2>
+        <p class="hint ce-u-mb-3">
           Push an LLM-authored <code>&lt;ASSIGNMENTFORGE_JSON&gt;</code> file to every checked
           course — HTML description, submission settings, and differentiation tiers come from the file.
+          Tiered files use the group set selected in Roster and create one gradebook column per tier.
         </p>
       <details class="forge-howto">
         <summary>Don't have an assignment yet? Forge one with your LLM →</summary>
@@ -254,7 +283,7 @@
           </li>
           <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
         </ol>
-        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
         <label>AssignmentForge file</label>
         <div class="file-source">
@@ -268,34 +297,34 @@
             <button type="button" class="file-src-btn active" data-src="select">Library</button>
             <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-            <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
           </div>
-          <textarea class="file-src-paste" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…" style="display:none"></textarea>
-          <p class="file-src-hint" style="display:none"></p>
+          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…"></textarea>
+          <p class="file-src-hint ce-initially-hidden"></p>
         </div>
-        <label style="margin-top:12px; display:block">RubricForge file
+        <label class="ce-u-mt-3">RubricForge file
           <select id="af-rubric">
             <option value="">No rubric</option>
           </select>
         </label>
         <div id="af-rubric-controls" hidden>
-          <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+          <div class="settings-grid ce-grid-two ce-u-mt-3">
             <label>Rubric mode
               <select id="af-rubric-mode">
                 <option value="grading">Grade with rubric (points match rubric)</option>
                 <option value="feedback">Feedback only (keep assignment points)</option>
               </select>
             </label>
-            <label class="opt-check" style="margin-top:26px">
+            <label class="opt-check ce-u-mt-5">
               <input type="checkbox" id="af-rubric-link" checked> Link the student explainer page in the description
             </label>
           </div>
-          <div class="actions" style="margin-top:10px">
+          <div class="ce-actions ce-u-mt-3">
             <button type="button" id="btn-af-copy-prompt" class="small">Copy scoring prompt</button>
-            <span id="af-rubric-status" class="hint" style="align-self:center"></span>
+            <span id="af-rubric-status" class="hint ce-u-align-center"></span>
           </div>
         </div>
-        <div class="settings-grid" style="margin-top:14px">
+        <div class="settings-grid ce-u-mt-3">
           <label>Due date <small class="lbl-hint">(optional)</small>
             <input type="datetime-local" id="af-due">
           </label>
@@ -306,7 +335,7 @@
             <input type="datetime-local" id="af-lock">
           </label>
         </div>
-        <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+        <div class="settings-grid ce-grid-two ce-u-mt-3">
           <label>Grading category <small class="lbl-hint js-ag-hint">(select a course)</small>
             <select id="af-aggroup" class="js-aggroups" disabled>
               <option value="">— none / default —</option>
@@ -316,18 +345,47 @@
             <select id="af-module" class="js-modules" data-default="none" disabled>
               <option value="">— don't add to a module —</option>
             </select>
-            <input type="text" id="af-new-module" class="js-new-module" placeholder="New module name…"
-                   style="display:none; margin-top:6px">
+          <input type="text" id="af-new-module" class="js-new-module ce-initially-hidden ce-u-mt-2" placeholder="New module name…">
           </label>
         </div>
         <div class="opt-checks">
           <label class="opt-check"><input type="checkbox" id="af-sis"> Sync to SIS</label>
           <label class="opt-check"><input type="checkbox" id="af-publish"> Publish immediately</label>
         </div>
-        <div class="actions">
+        <section class="scheduled-grading-block is-disabled" id="af-scheduled-grading" aria-labelledby="af-scheduled-grading-title">
+          <div class="scheduled-grading-head">
+            <div>
+              <h3 id="af-scheduled-grading-title">Scheduled grading</h3>
+              <p id="af-autoscore-hint">Requires a due date. Add one above to enable these per-assignment opt-ins.</p>
+            </div>
+            <span class="scheduled-grading-badge">Opt-in only</span>
+          </div>
+          <div class="scheduled-grading-options">
+            <label class="scheduled-grading-option">
+              <input type="checkbox" id="af-autoscore" disabled>
+              <span>
+                <strong>Schedule Auto-Score after due date</strong>
+                <small>After the due date, create draft AI suggestions and a teacher review queue.</small>
+              </span>
+            </label>
+            <label class="scheduled-grading-option scheduled-grading-option--nested">
+              <input type="checkbox" id="af-autoscore-push" disabled>
+              <span>
+                <strong>Automatically post eligible AI scores/feedback to Canvas</strong>
+                <small>Writes only eligible scores/comments that pass policy checks; review-needed cases stay out of auto-post.</small>
+              </span>
+            </label>
+          </div>
+          <p class="scheduled-grading-policy">
+            Teacher-controlled per-assignment opt-in only. Never global or default. Auto-post requires eligibility checks,
+            idempotency protection, and audit receipts.
+          </p>
+        </section>
+        <div class="ce-actions">
           <button id="btn-af-validate">Validate</button>
           <button id="btn-af-push" class="primary">Push assignment…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="assignment" aria-live="polite"></div>
         <pre id="af-log" class="log" hidden></pre>
         <div id="af-banner" class="push-banner" hidden></div>
       </div>
@@ -336,13 +394,13 @@
     </div><!-- /#ce-tab-assignment -->
 
   <!-- ── Page tab ──────────────────────────────────────────────────────── -->
-  <div id="ce-tab-page" class="ce-panel">
+  <div id="ce-tab-page" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-page" hidden>
 
     <div id="page">
       <h2 class="section-heading">Push Page</h2>
-      <div class="card">
-        <h2 style="margin-bottom:6px">From PageForge file</h2>
-        <p class="hint" style="margin:0 0 14px">
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">From PageForge file</h2>
+        <p class="hint ce-u-mb-3">
           Push an LLM-authored <code>&lt;PAGEFORGE_JSON&gt;</code> file to every checked
           course — title and HTML body come from the file;
           <code>{{ '{{file:…}}' }}</code> and <code>{{ '{{page:…}}' }}</code> placeholders resolve per course.
@@ -356,7 +414,7 @@
           </li>
           <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
         </ol>
-        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
         <label>PageForge file</label>
         <div class="file-source">
@@ -370,27 +428,28 @@
             <button type="button" class="file-src-btn active" data-src="select">Library</button>
             <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-            <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
           </div>
-          <textarea class="file-src-paste" placeholder="Paste your &lt;PAGEFORGE_JSON&gt;…" style="display:none"></textarea>
-          <p class="file-src-hint" style="display:none"></p>
+          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;PAGEFORGE_JSON&gt;…"></textarea>
+          <p class="file-src-hint ce-initially-hidden"></p>
         </div>
-        <div class="settings-grid" style="margin-top:12px; grid-template-columns:1fr 1fr; align-items:start">
+        <div class="settings-grid ce-grid-two ce-u-mt-3">
           <label>Add to module <small class="lbl-hint js-mod-hint">(select a course)</small>
             <select id="pf-module" class="js-modules" data-default="none" disabled>
               <option value="">— don't add to a module —</option>
             </select>
-            <input type="text" id="pf-new-module" class="js-new-module" placeholder="New module name…"
-                   style="display:none; margin-top:6px">
+          <input type="text" id="pf-new-module" class="js-new-module ce-initially-hidden ce-u-mt-2" placeholder="New module name…">
           </label>
-          <div class="opt-checks" style="margin-top:26px">
+          <div class="opt-checks ce-u-mt-5">
             <label class="opt-check"><input type="checkbox" id="pf-publish"> Publish immediately</label>
           </div>
         </div>
-        <div class="actions">
+        <div class="ce-actions">
           <button id="btn-pf-validate">Validate</button>
+          <button id="btn-pf-prepare" class="secondary">Prepare publication</button>
           <button id="btn-pf-push" class="primary">Push page…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="page" aria-live="polite"></div>
         <pre id="pf-log" class="log" hidden></pre>
         <div id="pf-banner" class="push-banner" hidden></div>
       </div>
@@ -399,13 +458,13 @@
   </div><!-- /#ce-tab-page -->
 
   <!-- ── Rubric tab ─────────────────────────────────────────────────────── -->
-  <div id="ce-tab-rubric" class="ce-panel">
+  <div id="ce-tab-rubric" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-rubric" hidden>
 
     <div id="rubric">
       <h2 class="section-heading">Push Rubric</h2>
-      <div class="card">
-        <h2 style="margin-bottom:6px">From RubricForge file</h2>
-        <p class="hint" style="margin:0 0 14px">
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">From RubricForge file</h2>
+        <p class="hint ce-u-mb-3">
           Push a <code>&lt;RUBRICFORGE_JSON&gt;</code> file to every checked course.
           Canvas Expert creates (or reuses) the course rubric and updates the student explainer page.
         </p>
@@ -418,7 +477,7 @@
           </li>
           <li>Paste or upload the AI's JSON above (Paste JSON / Upload…).</li>
         </ol>
-        <p class="hint" style="margin:0">More skills in the <a href="/ai-expert">AI Expert ↗</a></p>
+        <p class="hint ce-u-m0">More skills in the <a href="/ai-expert">AI helper files ↗</a></p>
       </details>
         <label>RubricForge file</label>
         <div class="file-source">
@@ -429,15 +488,16 @@
             <button type="button" class="file-src-btn active" data-src="select">Library</button>
             <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-            <input type="file" class="file-src-input" accept=".json,.txt" style="display:none">
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
           </div>
-          <textarea class="file-src-paste" placeholder="Paste your &lt;RUBRICFORGE_JSON&gt;…" style="display:none"></textarea>
-          <p class="file-src-hint" style="display:none"></p>
+          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;RUBRICFORGE_JSON&gt;…"></textarea>
+          <p class="file-src-hint ce-initially-hidden"></p>
         </div>
-        <div class="actions">
+        <div class="ce-actions">
           <button id="btn-rf-validate">Validate</button>
           <button id="btn-rf-push" class="primary">Push rubric…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="rubric" aria-live="polite"></div>
         <pre id="rf-log" class="log" hidden></pre>
         <div id="rf-banner" class="push-banner" hidden></div>
       </div>
@@ -445,278 +505,20 @@
 
   </div><!-- /#ce-tab-rubric -->
 
-  <!-- ── Download Work tab ─────────────────────────────────────────────── -->
-  <div id="ce-tab-download" class="ce-panel">
-
-    <div id="download">
-      <h2 class="section-heading">Download student work</h2>
-      <div class="card">
-        <p class="hint" style="margin:0 0 14px">
-          Downloads student work to your local folder from the <strong>focused course</strong>
-          (click a course name in Targets above to focus it).
-          Text entries → .html, file uploads → original file.
-          All students get an entry in _index.csv even with no submission.
-        </p>
-        <div class="dl-toolbar">
-          <button id="btn-load-assignments" class="small">Load assignments…</button>
-          <span id="dl-filter-wrap" hidden>
-            <select id="dl-type-filter" class="small-select">
-              <option value="">All types</option>
-              <option value="online_text_entry">Text</option>
-              <option value="online_upload">Upload</option>
-              <option value="discussion_topic">Discussion</option>
-              <option value="online_url">URL</option>
-            </select>
-            <button id="btn-dl-select-all" class="small">Select all</button>
-            <button id="btn-dl-clear" class="small">Clear</button>
-          </span>
-        </div>
-        <div id="dl-date-bar" class="dl-date-bar" hidden>
-          <span class="hint" style="white-space:nowrap">Due between</span>
-          <input type="date" id="dl-date-from" class="small-input">
-          <span class="hint">–</span>
-          <input type="date" id="dl-date-to" class="small-input">
-          <span class="dl-presets">
-            <button class="chip" data-preset="all">All</button>
-            <button class="chip" data-preset="fall">Fall</button>
-            <button class="chip" data-preset="spring">Spring</button>
-            <button class="chip" data-preset="30d">30 days</button>
-            <button class="chip" data-preset="90d">90 days</button>
-          </span>
-          <span id="dl-visible-count" class="hint"></span>
-        </div>
-        <div class="actions" id="dl-action-row" style="display:none">
-          <button id="btn-download-selected" class="primary">⬇ Download selected</button>
-          <span id="dl-selected-count" class="hint"></span>
-        </div>
-        <div id="dl-assignment-table" hidden>
-          <table class="dl-table">
-            <thead>
-              <tr>
-                <th style="width:32px"><input type="checkbox" id="dl-check-all" title="Toggle all downloadable"></th>
-                <th>Assignment</th>
-                <th>Type</th>
-                <th>Due</th>
-                <th>Pts</th>
-              </tr>
-            </thead>
-            <tbody id="dl-tbody"></tbody>
-          </table>
-        </div>
-        <pre id="dl-log" class="log" hidden></pre>
-        <div id="dl-banner" class="push-banner" hidden></div>
-        <div id="folder-row" class="folder-row" hidden>
-          <span class="hint" style="font-size:12px; white-space:nowrap">Saves to:</span>
-          <code id="folder-path" class="folder-path" title=""></code>
-          <div class="folder-actions">
-            <button type="button" class="small" id="btn-open-folder">📁 Open ↗</button>
-            <button type="button" class="small" id="btn-change-folder">Change…</button>
-            <span id="folder-note" class="hint" style="font-size:11px"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-  </div><!-- /#ce-tab-download -->
-
-  <!-- ── Student Reports tab ───────────────────────────────────────────── -->
-  <div id="ce-tab-students" class="ce-panel">
-    <div class="card">
-      <h2 style="margin-bottom:12px">Student Reports</h2>
-      <p class="hint" style="margin-top:0">
-        Pick a student and compile copies of their work plus summaries across every
-        active course they're in. Saved to your Student Reports folder (synced via OneDrive).
-      </p>
-
-      <div class="sr-pick">
-        <label>Course
-          <select id="sr-course">
-            <option value="">— pick a course —</option>
-            {% for c in saved_courses %}<option value="{{ c.id }}">{{ c.nickname }}</option>{% endfor %}
-          </select>
-        </label>
-        <label>Student
-          <select id="sr-student"><option value="">— pick a course first —</option></select>
-        </label>
-        <button type="button" id="sr-monitor" class="small" hidden>☆ Monitor</button>
-      </div>
-
-      <fieldset class="sr-sections">
-        <legend>Include</legend>
-        <label><input type="checkbox" class="sr-sec" value="standing" checked> Standing &amp; grades</label>
-        <label><input type="checkbox" class="sr-sec" value="late" checked> Late &amp; extended due dates</label>
-        <label><input type="checkbox" class="sr-sec" value="adjustments" checked> Adjustments (curves)</label>
-        <label><input type="checkbox" class="sr-sec" value="comments"> Comments</label>
-        <label><input type="checkbox" class="sr-sec" value="work" checked> Work samples</label>
-      </fieldset>
-
-      <div class="actions">
-        <button type="button" id="sr-generate" class="primary" disabled>Generate packet</button>
-        <a id="sr-open" class="small open-link" hidden>Open folder</a>
-        <span id="sr-status" class="hint"></span>
-      </div>
-      <pre id="sr-log" class="log" hidden></pre>
-    </div>
-
-    <div class="card" id="nq-portfolio-card">
-      <h2 style="margin-bottom:12px">New Quizzes Writing Portfolio</h2>
-      <p class="hint" style="margin-top:0">
-        New Quizzes responses can't be pulled from the API, so in Canvas open the quiz →
-        <strong>Reports → Student Analysis</strong> and download the CSV, then drop it
-        here. Canvas Expert builds one writing-portfolio document per student (prompts +
-        their responses, with a performance summary) into your Student Reports folder.
-      </p>
-      <div class="sr-pick">
-        <label>Student Analysis CSV
-          <input type="file" id="nqp-file" accept=".csv">
-        </label>
-        <label>Quiz title <small class="lbl-hint">(optional)</small>
-          <input type="text" id="nqp-title" placeholder="e.g. THG Ch 1–9 Test" autocomplete="off">
-        </label>
-      </div>
-      <div class="actions">
-        <button type="button" id="nqp-generate" class="primary" disabled>Generate portfolios</button>
-        <a id="nqp-open" class="small open-link" hidden>Open folder</a>
-        <span id="nqp-status" class="hint"></span>
-      </div>
-    </div>
-    <script>
-    (function () {
-      var fileInp = document.getElementById("nqp-file"),
-          titleInp = document.getElementById("nqp-title"),
-          genBtn = document.getElementById("nqp-generate"),
-          openLink = document.getElementById("nqp-open"),
-          status = document.getElementById("nqp-status");
-      if (!fileInp) return;
-      fileInp.addEventListener("change", function () {
-        genBtn.disabled = !fileInp.files.length;
-      });
-      genBtn.addEventListener("click", function () {
-        if (!fileInp.files.length) return;
-        genBtn.disabled = true; openLink.hidden = true;
-        status.textContent = "Generating…";
-        var fd = new FormData();
-        fd.append("file", fileInp.files[0]);
-        fd.append("quiz_title", titleInp.value.trim());
-        fetch("/api/portfolio/from-nq-csv", { method: "POST", body: fd })
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (d.ok) {
-              status.textContent = "✓ " + d.count + " portfolio(s) created in " + d.folder;
-              openLink.hidden = false;
-              openLink.onclick = function () {
-                fetch("/api/open-folder", { method: "POST",
-                  body: new URLSearchParams({ path: d.folder }) });
-              };
-            } else {
-              status.textContent = "Error: " + (d.error || "failed");
-            }
-          })
-          .catch(function (e) { status.textContent = "Error: " + e; })
-          .finally(function () { genBtn.disabled = false; });
-      });
-    })();
-    </script>
-
-    <div class="card" id="merged-portfolio-card">
-      <h2 style="margin-bottom:12px">Combined Writing Portfolio</h2>
-      <p class="hint" style="margin-top:0">
-        One chronological document per student across sources: <strong>Assignment text
-        entries + uploaded files/photos</strong>, plus <strong>New Quizzes</strong>
-        responses if you add the CSV. Pulls live from the chosen course — scope to your
-        <strong>Monitored</strong> students for speed. Saved to your Student Reports folder.
-      </p>
-      <div class="sr-pick">
-        <label>Course
-          <select id="mp-course">
-            <option value="">— pick a course —</option>
-            {% for c in saved_courses %}<option value="{{ c.id }}">{{ c.nickname }}</option>{% endfor %}
-          </select>
-        </label>
-        <label>Students
-          <select id="mp-cohort">
-            <option value="monitored">Monitored students only</option>
-            <option value="all">All students in course</option>
-          </select>
-        </label>
-      </div>
-      <div class="sr-pick">
-        <label>New Quizzes CSV <small class="lbl-hint">(optional)</small>
-          <input type="file" id="mp-file" accept=".csv">
-        </label>
-        <label>From <small class="lbl-hint">(optional)</small><input type="date" id="mp-from"></label>
-        <label>To <small class="lbl-hint">(optional)</small><input type="date" id="mp-to"></label>
-      </div>
-      <div class="actions">
-        <button type="button" id="mp-generate" class="primary" disabled>Generate portfolios</button>
-        <a id="mp-open" class="small open-link" hidden>Open folder</a>
-        <span id="mp-status" class="hint"></span>
-      </div>
-      <pre id="mp-log" class="log" hidden></pre>
-    </div>
-    <script>
-    (function () {
-      var courseSel = document.getElementById("mp-course"),
-          cohortSel = document.getElementById("mp-cohort"),
-          fileInp = document.getElementById("mp-file"),
-          fromInp = document.getElementById("mp-from"),
-          toInp = document.getElementById("mp-to"),
-          genBtn = document.getElementById("mp-generate"),
-          openLink = document.getElementById("mp-open"),
-          status = document.getElementById("mp-status"),
-          logEl = document.getElementById("mp-log");
-      if (!courseSel) return;
-      courseSel.addEventListener("change", function () {
-        genBtn.disabled = !courseSel.value;
-      });
-      genBtn.addEventListener("click", function () {
-        if (!courseSel.value) return;
-        genBtn.disabled = true; openLink.hidden = true; logEl.hidden = true;
-        status.textContent = "Generating… this can take a minute for a full class.";
-        var fd = new FormData();
-        fd.append("course_id", courseSel.value);
-        fd.append("cohort", cohortSel.value);
-        fd.append("date_from", fromInp.value);
-        fd.append("date_to", toInp.value);
-        if (fileInp.files.length) fd.append("file", fileInp.files[0]);
-        fetch("/api/portfolio/merged", { method: "POST", body: fd })
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (d.log && d.log.length) {
-              logEl.textContent = d.log.join("\n"); logEl.hidden = false;
-            }
-            if (d.ok) {
-              status.textContent = "✓ " + d.count + " portfolio(s) created in " + d.folder;
-              openLink.hidden = false;
-              openLink.onclick = function () {
-                fetch("/api/open-folder", { method: "POST",
-                  body: new URLSearchParams({ path: d.folder }) });
-              };
-            } else {
-              status.textContent = "Error: " + (d.error || "failed");
-            }
-          })
-          .catch(function (e) { status.textContent = "Error: " + e; })
-          .finally(function () { genBtn.disabled = false; });
-      });
-    })();
-    </script>
-  </div><!-- /#ce-tab-students -->
-
   <!-- ── Quick tab ─────────────────────────────────────────────────────── -->
-  <div id="ce-tab-quick" class="ce-panel">
+  <div id="ce-tab-quick" class="ce-panel" data-ce-hook="course-tab-panel" role="tabpanel" aria-labelledby="ce-tab-button-quick" hidden>
     <div id="quick">
       <h2 class="section-heading">Quick assignment</h2>
-      <div class="card">
-        <h2 style="margin-bottom:6px">Fast gradebook column</h2>
-        <p class="hint" style="margin:0 0 14px">
+      <div class="ce-panel">
+        <h2 class="ce-u-mb-2">Fast gradebook column</h2>
+        <p class="hint ce-u-mb-3">
           For a fast gradebook column across your courses.
           Authoring real instructions? Use AssignmentForge above.
         </p>
         <label>Assignment name
           <input type="text" id="qa-name" placeholder="e.g. Exit Ticket Week 5">
         </label>
-        <div class="settings-grid" style="grid-template-columns:130px 1fr 1fr; align-items:start">
+        <div class="settings-grid ce-grid-quick">
           <label>Points
             <input type="number" id="qa-points" value="100" min="0" step="0.5">
           </label>
@@ -733,17 +535,18 @@
             </select>
           </label>
         </div>
-        <div class="settings-grid" style="margin-top:8px; grid-template-columns:1fr auto">
+        <div class="settings-grid ce-grid-date-publish ce-u-mt-2">
           <label>Due date <small class="lbl-hint">(optional)</small>
             <input type="datetime-local" id="qa-due">
           </label>
-          <div class="opt-checks" style="margin-top:28px">
+          <div class="opt-checks ce-u-mt-5">
             <label class="opt-check"><input type="checkbox" id="qa-publish"> Publish immediately</label>
           </div>
         </div>
-        <div class="actions">
+        <div class="ce-actions">
           <button id="btn-qa-push" class="primary">Create assignment…</button>
         </div>
+        <div class="course-scope-summary" data-course-scope="quick" aria-live="polite"></div>
         <pre id="qa-log" class="log" hidden></pre>
         <div id="qa-banner" class="push-banner" hidden></div>
       </div>
@@ -751,8 +554,27 @@
   </div><!-- /#ce-tab-quick -->
 
   </div><!-- /.ce-panels-wrap -->
-</div><!-- /.expert-shell -->
+  </div><!-- /.ce-workspace-stage -->
+  </div><!-- /.ce-course-expert-center -->
+{% endif %}
+{% endblock %}
 
+{% block right_rail %}
+{% if token_is_set %}
+{% call rail('right', 'Operation ledger') %}
+  <aside class="ce-summary-panel" data-ce-hook="course-summary" aria-label="Operation ledger">
+    <h3>Operation ledger</h3>
+    <p class="ce-operation-flow">Work → Review → Canvas</p>
+    <div id="ce-operations-list" class="ce-operations-list">
+      <p class="ce-operations-empty">Canvas unchanged.</p>
+    </div>
+  </aside>
+{% endcall %}
+{% endif %}
+{% endblock %}
+
+{% block workspace_scripts %}
+{% if token_is_set %}
 <script>
   window.QF_FILES            = {{ quiz_files | tojson }};
   window.QF_QUIZ_FILES       = {{ quiz_files | tojson }};
@@ -762,272 +584,14 @@
   window.QF_HISTORY          = [];
   window.QF_SAVED            = {{ saved_courses | tojson }};
 </script>
-<script src="/static/push.js?v={{ asset_v }}"></script>
-<script>
-(function () {
-  "use strict";
-
-  // ── Tab switching ─────────────────────────────────────────────────────
-  function activateTab(tabName) {
-    document.querySelectorAll(".ce-tab").forEach(function (t) {
-      t.classList.toggle("active", t.dataset.tab === tabName);
-    });
-    document.querySelectorAll(".ce-panel").forEach(function (p) {
-      p.classList.toggle("active", p.id === "ce-tab-" + tabName);
-    });
-  }
-
-  document.querySelectorAll(".ce-tab").forEach(function (tab) {
-    tab.addEventListener("click", function () { activateTab(tab.dataset.tab); });
-  });
-
-  // Open tab from ?tab= query param or hash
-  (function () {
-    var params = new URLSearchParams(location.search);
-    var tab = params.get("tab") || location.hash.replace("#", "");
-    if (tab && document.querySelector(".ce-tab[data-tab='" + tab + "']")) activateTab(tab);
-  })();
-
-  // ── Delivery-option toggles ───────────────────────────────────────────
-  document.getElementById("access-code-enable")?.addEventListener("change", function () {
-    document.getElementById("access-code-wrap").hidden = !this.checked;
-    if (this.checked) document.getElementById("access-code").focus();
-  });
-  document.getElementById("allow-attempts")?.addEventListener("change", function () {
-    document.getElementById("attempts-wrap").hidden = !this.checked;
-  });
-  document.getElementById("has-time-limit")?.addEventListener("change", function () {
-    document.getElementById("time-limit-wrap").hidden = !this.checked;
-    if (this.checked) document.getElementById("time-limit-minutes").focus();
-  });
-  document.getElementById("one-at-a-time")?.addEventListener("change", function () {
-    document.getElementById("one-at-a-time-wrap").hidden = !this.checked;
-  });
-
-  // ── Whole / differentiated mode toggle ───────────────────────────────
-  var segs  = document.querySelectorAll(".mode-seg");
-  var whole = document.getElementById("quiz-whole");
-  var diff  = document.getElementById("quiz-diff");
-  segs.forEach(function (seg) {
-    seg.addEventListener("click", function () {
-      segs.forEach(function (s) { s.classList.toggle("active", s === seg); });
-      var m = seg.dataset.mode;
-      // mode-seg lives inside quiz-whole; show/hide the two distinct picker cards
-      if (m === "diff") {
-        if (diff) diff.hidden = false;
-        // hide the file-source and push buttons within quiz-whole, show diff card
-        document.getElementById("quiz-whole")?.querySelector(".file-source")?.closest("label")?.parentElement;
-      } else {
-        if (diff) diff.hidden = true;
-      }
-      if (m === "diff" && window.QF_loadGroups) window.QF_loadGroups();
-    });
-  });
-
-  // ── Quick assignment push ─────────────────────────────────────────────
-  document.getElementById("btn-qa-push")?.addEventListener("click", function () {
-    var name = document.getElementById("qa-name")?.value.trim();
-    if (!name) return alert("Give the assignment a name.");
-    var payload = {
-      name:            name,
-      points:          parseFloat(document.getElementById("qa-points")?.value) || 100,
-      submission_type: document.getElementById("qa-subtype")?.value || "none",
-      published:       document.getElementById("qa-publish")?.checked || false,
-    };
-    var due = typeof localToISO === "function"
-              ? localToISO(document.getElementById("qa-due")?.value || "") : "";
-    if (due) payload.due_at = due;
-    var agSel = document.getElementById("qa-aggroup");
-    if (agSel?.value) payload.assignment_group_name = agSel.selectedOptions[0].text;
-    pushContent("quick", payload,
-      document.getElementById("qa-log"),
-      document.getElementById("qa-banner"),
-      this,
-      'Create quick assignment "' + name + '"');
-  });
-
-  // ── File source: paste / upload handling ─────────────────────────────
-  function initFileSource(wrapper) {
-    if (!wrapper) return;
-    var sel      = wrapper.querySelector("select");
-    var pasteEl  = wrapper.querySelector(".file-src-paste");
-    var fileInp  = wrapper.querySelector(".file-src-input");
-    var hintEl   = wrapper.querySelector(".file-src-hint");
-    var srcBtns  = Array.from(wrapper.querySelectorAll(".file-src-btn"));
-
-    function setMode(mode) {
-      srcBtns.forEach(function (b) { b.classList.toggle("active", b.dataset.src === mode); });
-      if (sel)     sel.style.display     = mode === "select" ? "" : "none";
-      if (pasteEl) pasteEl.style.display = mode === "paste"  ? "" : "none";
-      if (mode !== "paste") {
-        if (hintEl) { hintEl.style.display = "none"; hintEl.textContent = ""; hintEl.className = "file-src-hint"; }
-      }
-    }
-
-    function setTempOption(path, label) {
-      if (!sel) return;
-      var opt = sel.querySelector("option[data-temp]");
-      if (!opt) { opt = document.createElement("option"); opt.dataset.temp = "1"; sel.appendChild(opt); }
-      opt.value = path;
-      opt.textContent = label;
-      sel.value = path;
-    }
-
-    async function uploadContent(content) {
-      try {
-        var r = await fetch("/api/temp-upload", { method: "POST", body: new URLSearchParams({ content: content }) });
-        var d = await r.json();
-        return d.ok ? d.path : null;
-      } catch (e) { return null; }
-    }
-
-    async function uploadFile(file) {
-      try {
-        var fd = new FormData(); fd.append("file", file);
-        var r = await fetch("/api/temp-upload", { method: "POST", body: fd });
-        var d = await r.json();
-        return d.ok ? d.path : null;
-      } catch (e) { return null; }
-    }
-
-    srcBtns.forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        if (btn.dataset.src === "upload") { if (fileInp) fileInp.click(); }
-        else setMode(btn.dataset.src);
-      });
-    });
-
-    if (fileInp) {
-      fileInp.addEventListener("change", async function () {
-        var file = this.files[0]; if (!file) return;
-        if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint"; hintEl.textContent = "Uploading…"; }
-        var path = await uploadFile(file);
-        if (path) {
-          setTempOption(path, "📎 " + file.name);
-          setMode("select");
-          if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint ok"; hintEl.textContent = "Ready: " + file.name; }
-        } else {
-          if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint err"; hintEl.textContent = "Upload failed."; }
-          setMode("select");
-        }
-        this.value = "";
-      });
-    }
-
-    var _timer;
-    if (pasteEl) {
-      pasteEl.addEventListener("input", function () {
-        clearTimeout(_timer);
-        var val = pasteEl.value.trim();
-        if (!val) { if (hintEl) hintEl.style.display = "none"; return; }
-        _timer = setTimeout(async function () {
-          if (hintEl) { hintEl.style.display = ""; hintEl.className = "file-src-hint"; hintEl.textContent = "Saving…"; }
-          var path = await uploadContent(val);
-          if (path) {
-            setTempOption(path, "📋 Pasted JSON");
-            if (hintEl) { hintEl.className = "file-src-hint ok"; hintEl.textContent = "Ready — click Validate or Push"; }
-          } else {
-            if (hintEl) { hintEl.className = "file-src-hint err"; hintEl.textContent = "Error saving content."; }
-          }
-        }, 600);
-      });
-    }
-  }
-
-  // ── Forge: copy authoring skill to clipboard ──────────────────────────
-  async function copySkill(name, btn) {
-    if (!name) return;
-    var orig = btn.textContent;
-    btn.textContent = "Copying…"; btn.disabled = true;
-    try {
-      var r = await fetch("/api/ai-ta/file?name=" + encodeURIComponent(name));
-      if (!r.ok) throw 0;
-      await navigator.clipboard.writeText(await r.text());
-      btn.textContent = "Copied!";
-    } catch (e) { btn.textContent = "Failed"; }
-    setTimeout(function () { btn.textContent = orig; btn.disabled = false; }, 1800);
-  }
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest(".btn-copy-skill");
-    if (b) copySkill(b.dataset.name, b);
-  });
-
-  // ── Course picker: close on outside click ─────────────────────────────
-  var _picker = document.getElementById("ce-course-picker");
-  if (_picker) document.addEventListener("click", function (e) {
-    if (_picker.open && !e.target.closest("#ce-course-picker")) _picker.open = false;
-  });
-
-  document.querySelectorAll(".file-source").forEach(function (w) { initFileSource(w); });
-
-  // ── Student Reports tab ──────────────────────────────────────────────
-  (function () {
-    var courseSel = document.getElementById("sr-course");
-    if (!courseSel) return;
-    var stuSel = document.getElementById("sr-student"),
-        monBtn = document.getElementById("sr-monitor"),
-        genBtn = document.getElementById("sr-generate"),
-        openA  = document.getElementById("sr-open"),
-        status = document.getElementById("sr-status"),
-        logEl  = document.getElementById("sr-log");
-
-    function selName(){ var o = stuSel.options[stuSel.selectedIndex]; return o ? o.textContent : ""; }
-    function refreshMonBtn(mon){ monBtn.hidden = !stuSel.value; monBtn.textContent = mon ? "★ Monitored" : "☆ Monitor"; monBtn.dataset.mon = mon ? "1" : "0"; }
-
-    courseSel.addEventListener("change", function () {
-      stuSel.innerHTML = '<option value="">Loading…</option>';
-      genBtn.disabled = true; monBtn.hidden = true;
-      if (!courseSel.value) { stuSel.innerHTML = '<option value="">— pick a course first —</option>'; return; }
-      fetch("/api/students?course_id=" + encodeURIComponent(courseSel.value))
-        .then(function(r){return r.json();}).then(function(d){
-          stuSel.innerHTML = '<option value="">— pick a student —</option>';
-          (d.students||[]).forEach(function(s){
-            var o = document.createElement("option");
-            o.value = s.id; o.textContent = s.name; o.dataset.mon = s.monitored ? "1" : "0";
-            stuSel.appendChild(o);
-          });
-        });
-    });
-
-    stuSel.addEventListener("change", function () {
-      genBtn.disabled = !stuSel.value;
-      var o = stuSel.options[stuSel.selectedIndex];
-      refreshMonBtn(o && o.dataset.mon === "1");
-    });
-
-    monBtn.addEventListener("click", function () {
-      var on = monBtn.dataset.mon !== "1";
-      fetch("/api/students/monitor", {method:"POST", body:new URLSearchParams({
-        user_id: stuSel.value, name: selName(), monitored: on ? "true" : "false"})})
-        .then(function(){ stuSel.options[stuSel.selectedIndex].dataset.mon = on ? "1" : "0"; refreshMonBtn(on); });
-    });
-
-    genBtn.addEventListener("click", function () {
-      var secs = Array.prototype.map.call(document.querySelectorAll(".sr-sec:checked"), function(c){return c.value;});
-      genBtn.disabled = true; openA.hidden = true;
-      logEl.hidden = false; logEl.textContent = "";
-      status.textContent = "Generating…";
-      var qs = new URLSearchParams({user_id: stuSel.value, student_name: selName(), sections: secs.join(",")});
-      var es = new EventSource("/api/student-packet/stream?" + qs.toString());
-      var done = false;
-      es.onmessage = function (e) {
-        var line = JSON.parse(e.data);   // server sends JSON-encoded lines (see _sse)
-        if (line === "[exit 0]" || line === "[exit 1]") {
-          done = true; es.close(); genBtn.disabled = false;
-          status.textContent = line === "[exit 0]" ? "Done." : "Finished with errors.";
-          return;
-        }
-        if (line.indexOf("FOLDER: ") === 0) {
-          openA.setAttribute("data-open-path", line.slice(8)); openA.hidden = false; return;
-        }
-        logEl.textContent += line + "\n"; logEl.scrollTop = logEl.scrollHeight;
-      };
-      es.onerror = function(){ if (done) return; es.close(); genBtn.disabled = false; status.textContent = "Connection lost."; };
-    });
-  })();
-
-})();
-</script>
-
+{% include "_push_common_scripts.html" %}
+<script src="/static/push/quiz.js?v={{ asset_v }}"></script>
+<script src="/static/push/page.js?v={{ asset_v }}"></script>
+<script src="/static/push/rubric.js?v={{ asset_v }}"></script>
+<script src="/static/push/assignment.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/tabs.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/quick_assignment.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/instrument.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/work_rail.js?v={{ asset_v }}"></script>
 {% endif %}
 {% endblock %}

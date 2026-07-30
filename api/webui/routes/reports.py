@@ -9,18 +9,14 @@ import sys
 from datetime import datetime
 
 from fastapi import APIRouter, File, Form, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
 import requests
 
-import downloader
-import nq_report
-import portfolio
-import portfolio_service
-import student_packet
-from .. import config
+from api import nq_report, portfolio, portfolio_service, student_packet
+from api.mirror import read_service, store as mirror_store
+from .. import config, workspace
 from ..canvas_client import _canvas_get_all, _canvas_headers
-from ..deps import _sse
 from ..gradebook_service import _load_curve_events
 
 router = APIRouter(prefix="/api", tags=["reports"])
@@ -37,9 +33,38 @@ def get_download_root():
 
 @router.get("/assignments-full")
 def list_assignments_full(course_id: str):
-    """All assignments for a course — used by the download picker.
-    Returns id, name, submission_types, due_at, points_possible.
+    """All assignments for a course — used by Gradebook's Extra Time dropdown
+    (`gradebook/extensions.js`); the standalone download picker this was
+    originally built for has since been retired.
+    Returns id, name, submission_types, due_at, points_possible, is_quiz, quiz_kind.
+    Served from Course Catalog when current; falls back to a live fetch otherwise.
     """
+    assignment_scope = read_service.catalog_assignments(course_id, max_age_hours=None)
+    group_scope = read_service.catalog_assignment_groups(course_id, max_age_hours=None)
+    if assignment_scope["state"] == "current" and group_scope["state"] == "current":
+        group_names = {g["id"]: g["name"] for g in group_scope["records"]}
+        assignments = [
+            {
+                "id":                   record["id"],
+                "name":                 record["name"],
+                "submission_types":     record["submission_types"],
+                "due_at":               record["due_at"][:10],
+                "points_possible":      record["points_possible"],
+                "quiz_id":              record["quiz_id"],
+                "assignment_group_id":  record["assignment_group_id"],
+                "assignment_group_name": group_names.get(record["assignment_group_id"], ""),
+                "is_quiz":              record["is_quiz"],
+                "quiz_kind":            record["quiz_kind"],
+                "is_quiz_lti_assignment": record["is_quiz_lti_assignment"],
+            }
+            for record in assignment_scope["records"]
+        ]
+        assignments.sort(
+            key=lambda a: a["due_at"] if a["due_at"] else "0000-00-00",
+            reverse=True,
+        )
+        return JSONResponse({"ok": True, "assignments": assignments})
+
     hdrs, base = _canvas_headers()
     if not hdrs:
         return JSONResponse({"ok": False, "error": "No token saved."})
@@ -59,63 +84,84 @@ def list_assignments_full(course_id: str):
             if 'rel="next"' in part:
                 url = part.split(";")[0].strip().strip("<>")
                 break
+    # Pre-build a lookup for assignment group names from the full Canvas
+    # response. The list endpoint often includes inline group name data.
+    group_names: dict[str, str] = {}
+    for a in results:
+        gid = a.get("assignment_group_id")
+        if gid is not None:
+            gid_str = str(gid)
+            # Canvas sometimes embeds a mini assignment_group object
+            inline = a.get("assignment_group") or {}
+            if isinstance(inline, dict) and inline.get("name"):
+                group_names[gid_str] = inline["name"]
+            elif gid_str not in group_names:
+                group_names[gid_str] = ""  # will be resolved later
+
+    def _is_quiz(a: dict) -> bool:
+        st = a.get("submission_types") or []
+        return bool(
+            "online_quiz" in st
+            or a.get("quiz_id") is not None
+            or a.get("quiz_type") is not None
+            or a.get("is_quiz_lti_assignment") is True  # New Quizzes
+        )
+
+    def _quiz_kind(a: dict) -> str:
+        st = a.get("submission_types") or []
+        qt = a.get("quiz_type") or ""
+        if a.get("is_quiz_lti_assignment") is True:
+            return "new_quiz"
+        if "online_quiz" in st:
+            if "new_quiz" in qt.lower() or qt.lower() == "quizzes.next":
+                return "new_quiz"
+            # external_tool with a quiz-like URL can hint new quiz
+            ext = a.get("external_tool_tag_attributes") or {}
+            if isinstance(ext, dict):
+                url = (ext.get("url") or "").lower()
+                content_type = (ext.get("content_type") or "").lower()
+                if "quiz" in url or "quiz" in content_type or "new_quiz" in content_type:
+                    return "new_quiz"
+            return "classic_quiz"
+        if a.get("quiz_id") is not None or a.get("quiz_type") is not None:
+            return "quiz"
+        return ""
+
     assignments = [
         {
-            "id":               str(a["id"]),
-            "name":             a.get("name", ""),
-            "submission_types": a.get("submission_types") or [],
-            "due_at":           (a.get("due_at") or "")[:10],
-            "points_possible":  a.get("points_possible"),
+            "id":                   str(a["id"]),
+            "name":                 a.get("name", ""),
+            "submission_types":     a.get("submission_types") or [],
+            "due_at":               (a.get("due_at") or "")[:10],
+            "points_possible":      a.get("points_possible"),
+            "quiz_id":              str(a.get("quiz_id") or ""),
+            "assignment_group_id":  str(a.get("assignment_group_id") or ""),
+            "assignment_group_name":
+                group_names.get(str(a["assignment_group_id"]), "")
+                if a.get("assignment_group_id") is not None else "",
+            "is_quiz":              _is_quiz(a),
+            "quiz_kind":            _quiz_kind(a),
+            "is_quiz_lti_assignment": a.get("is_quiz_lti_assignment") is True,
         }
         for a in results
     ]
-    DL = downloader.DOWNLOADABLE_TYPES
     assignments.sort(
         key=lambda a: a["due_at"] if a["due_at"] else "0000-00-00",
         reverse=True,
-    )
-    assignments.sort(
-        key=lambda a: 0 if set(a["submission_types"]) & DL else 1,
     )
     return JSONResponse({"ok": True, "assignments": assignments})
 
 
 @router.get("/course-folder")
-def course_folder(course_name: str):
+def course_folder(course_name: str, course_id: str = ""):
     """Return the local download folder path for a course and whether it exists."""
-    root = config.get_download_root()
-    path = os.path.join(root, downloader.safe_name(course_name))
+    if not course_id:
+        for course in config.active_courses():
+            if course.get("name") == course_name or course.get("nickname") == course_name:
+                course_id = str(course.get("id") or "")
+                break
+    path = workspace.course_folder(course_name, course_id or "unknown")
     return JSONResponse({"path": path, "exists": os.path.isdir(path)})
-
-
-@router.get("/submissions/download/stream")
-def submissions_download_stream(course_id: str, course_name: str,
-                                 assignment_ids: str):
-    """SSE stream — downloads submissions, yields progress lines.
-    assignment_ids: comma-separated list of assignment IDs.
-    Final SSE line: COURSE_FOLDER: <path>
-    """
-    token = config.get_token()
-    if not token:
-        return StreamingResponse(
-            _sse(["!! No Canvas token saved.", "[exit 1]"]),
-            media_type="text/event-stream",
-        )
-    ids  = [i.strip() for i in assignment_ids.split(",") if i.strip()]
-    base = config.get_canvas_base()
-    root = config.get_download_root()
-
-    def lines():
-        try:
-            yield from downloader.run_download(
-                course_id, course_name, ids, base, token, root
-            )
-            yield "[exit 0]"
-        except Exception as e:
-            yield f"!! Fatal: {e}"
-            yield "[exit 1]"
-
-    return StreamingResponse(_sse(lines()), media_type="text/event-stream")
 
 
 # --------------------------------------------------------------------------
@@ -124,11 +170,22 @@ def submissions_download_stream(course_id: str, course_name: str,
 
 @router.get("/students")
 def api_students(course_id: str):
-    """Roster for one course, annotated with the machine-local monitored flag."""
-    users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
-                                 {"enrollment_type[]": "student", "per_page": 100})
-    if err:
-        return JSONResponse({"ok": False, "error": err})
+    """Roster for one course, annotated with the machine-local monitored flag.
+    Served from the local roster mirror when current; falls back to live."""
+    roster_scope = read_service.private_roster(course_id)
+    if roster_scope["state"] == "current" and isinstance(roster_scope.get("records"), list):
+        users = roster_scope["records"]
+        has_ids = all(isinstance(u, dict) and u.get("id") is not None for u in users)
+    else:
+        has_ids = False
+
+    if has_ids:
+        pass  # records already in hand
+    else:
+        users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
+                                     {"enrollment_type[]": "student", "per_page": 100})
+        if err:
+            return JSONResponse({"ok": False, "error": err})
     mon = config.get_monitored_students()
     out = [{"id": str(u["id"]),
             "name": u.get("sortable_name") or u.get("name", ""),
@@ -195,7 +252,7 @@ async def portfolio_from_nq_csv(file: UploadFile = File(...),
     portfolio DOCX per student into the synced Student Reports folder.
 
     The CSV is parsed in memory and never written to disk; only the per-student
-    DOCX outputs land in the (FERPA-safe, gitignored/synced) reports root.
+    DOCX outputs land in the (FERPA-conscious, gitignored/synced) reports root.
     """
     title = (quiz_title or "").strip() or os.path.splitext(file.filename or "")[0] or "New Quiz"
     try:
@@ -212,7 +269,7 @@ async def portfolio_from_nq_csv(file: UploadFile = File(...),
                                       "Student Analysis CSV?"})
 
     out_dir = os.path.join(config.get_student_reports_root(),
-                           downloader.safe_name(title) + " - Portfolios")
+                           workspace.safe_component(title) + " - Portfolios")
     try:
         written = portfolio.render_portfolio(data, out_dir, quiz_title=title)
     except Exception as e:
@@ -245,10 +302,14 @@ async def portfolio_merged(course_id: str = Form(...),
         students = [{"id": uid, "name": v["name"]}
                     for uid, v in config.get_monitored_students().items()]
     else:
-        users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
-                                     {"enrollment_type[]": "student", "per_page": 100})
-        if err:
-            return JSONResponse({"ok": False, "error": err})
+        roster_scope = read_service.private_roster(course_id)
+        if roster_scope["state"] == "current" and isinstance(roster_scope.get("records"), list):
+            users = roster_scope["records"]
+        else:
+            users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
+                                         {"enrollment_type[]": "student", "per_page": 100})
+            if err:
+                return JSONResponse({"ok": False, "error": err})
         students = [{"id": str(u["id"]),
                      "name": u.get("sortable_name") or u.get("name", "")}
                     for u in (users or [])]
@@ -301,7 +362,7 @@ def open_folder(path: str = Form(...)):
 @router.post("/open-file")
 def open_file(path: str = Form(...)):
     """Open a local file with its default app (local server only) — used by the
-    FeedbackExpert manual lane to open a pseudonymized bundle for MagicSchool/Copilot."""
+    Feedback tools manual lane to open a pseudonymized bundle for MagicSchool/Copilot."""
     path = os.path.normpath(path)
     if not os.path.isfile(path):
         return JSONResponse({"ok": False, "error": "File not found."})

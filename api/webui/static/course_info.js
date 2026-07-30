@@ -77,13 +77,12 @@
     const tbody = document.getElementById("ci-roster");
     tbody.innerHTML = "";
     if (!students.length) {
-      tbody.innerHTML = '<tr><td colspan="2" class="muted">No students found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="1" class="muted">No students found.</td></tr>';
       return;
     }
     students.forEach(s => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${esc(s.sortable_name || s.name)}</td>` +
-                     `<td class="muted">${esc(s.email || "—")}</td>`;
+      tr.innerHTML = `<td>${esc(s.sortable_name || s.name)}</td>`;
       tbody.appendChild(tr);
     });
   }

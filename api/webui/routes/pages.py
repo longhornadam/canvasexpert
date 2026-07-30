@@ -3,7 +3,7 @@
 One APIRouter; all 9 GET page routes + the /api/open-path utility POST.
 Imported by server.py via app.include_router(router).
 
-Routes: GET /, /about, /ai-expert, /assessment, /course, /course-expert,
+Routes: GET /, /about, /ai-expert, /course, /course-expert,
         /gradebook, /routines, /settings
         POST /api/open-path
 """
@@ -17,10 +17,15 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import config, workspace
+from api import runtime_paths
+from ..local_request_guard import csrf_token
+from api.operation_ledger import operations as operation_store
+from api.operation_ledger import receipts as receipt_store
+from . import work as work_routes
 from ..deps import (
-    AI_TA_DIR, API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
+    API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
     list_ai_ta_files, list_assignment_files, list_calendar_files,
-    list_note_files, list_page_files, list_quiz_files,
+    list_page_files, list_quiz_files,
 )
 
 router = APIRouter(tags=["pages"])
@@ -53,6 +58,15 @@ def _routines_template_context() -> dict:
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     courses = config.active_courses()
+    initial_jobs, initial_presentations = work_routes.visible_work("all") or ([], {})
+    initial_operations = [
+        {
+            "kind": operation.get("kind"),
+            "status": operation.get("status"),
+            "target_count": operation.get("target_count"),
+        }
+        for operation in operation_store.list_operations_pii_minimized()
+    ]
     workspace_root = workspace.workspace_root()
     workspace_status = "local folders"
     if workspace_root:
@@ -60,23 +74,46 @@ def dashboard(request: Request):
         folder = parts[-1] if parts else workspace_root
         workspace_status = f"OneDrive/{folder}" if any("OneDrive" in p for p in parts) else folder
     return templates.TemplateResponse(request, "dashboard.html", {
-        "nav_section":    "dashboard",
+        "nav_section":    "",
         "token_is_set":   config.token_is_set(),
         "canvas_base":    config.get_canvas_base(),
         "saved_courses":  courses,
         "active_count":   len(courses),
         "workspace_status": workspace_status,
+        "csrf_token": csrf_token(),
+        "initial_jobs": initial_jobs,
+        "initial_presentations": initial_presentations,
+        "initial_operations": initial_operations,
+        "initial_receipts": receipt_store.list_receipts(),
     })
-
-
-@router.get("/assessment", response_class=HTMLResponse)
-def assessment_page(request: Request):
-    return RedirectResponse(url="/", status_code=302)
 
 
 @router.get("/course-expert", response_class=HTMLResponse)
 def course_expert_page(request: Request):
-    return RedirectResponse(url="/", status_code=302)
+    if request.query_params.get("tab") == "students":
+        return RedirectResponse("/students/reports", status_code=307)
+    skills = list_ai_ta_files()
+    return templates.TemplateResponse(request, "course_expert.html", {
+        **_push_base_ctx(request),
+        "quiz_files":       list_quiz_files(),
+        "assignment_files": list_assignment_files(),
+        "page_files":       list_page_files(),
+        "authoring_skills": {
+            "quiz":       _authoring_skill(skills, "Author a Quiz"),
+            "assignment": _authoring_skill(skills, "Author an Assignment"),
+            "page":       _authoring_skill(skills, "Author a Page"),
+            "rubric":     _authoring_skill(skills, "Author a Rubric"),
+        },
+    })
+
+
+@router.get("/students/reports", response_class=HTMLResponse)
+def student_reports_page(request: Request):
+    """Dedicated Student Reports presentation; report APIs remain in reports.py."""
+    return templates.TemplateResponse(request, "student_reports.html", {
+        **_push_base_ctx(request),
+        "nav_section": "manage",
+    })
 
 
 def _authoring_skill(skills: list, prefix: str) -> str:
@@ -88,84 +125,19 @@ def _authoring_skill(skills: list, prefix: str) -> str:
 
 def _push_base_ctx(request: Request) -> dict:
     return {
-        "nav_section":   "assignments",
+        "nav_section":   "create",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
         "saved_courses": config.active_courses(),
+        "csrf_token":    csrf_token(),
     }
-
-
-@router.get("/push/quiz", response_class=HTMLResponse)
-def push_quiz_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author a Quiz")
-    return templates.TemplateResponse(request, "push_quiz.html", {
-        **_push_base_ctx(request),
-        "quiz_files":    list_quiz_files(),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/assignment", response_class=HTMLResponse)
-def push_assignment_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author an Assignment")
-    return templates.TemplateResponse(request, "push_assignment.html", {
-        **_push_base_ctx(request),
-        "assignment_files": list_assignment_files(),
-        "authoring_skill":  skill,
-    })
-
-
-@router.get("/push/page", response_class=HTMLResponse)
-def push_page_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author a Page")
-    return templates.TemplateResponse(request, "push_page.html", {
-        **_push_base_ctx(request),
-        "page_files":      list_page_files(),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/note", response_class=HTMLResponse)
-def push_note_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author Notes")
-    return templates.TemplateResponse(request, "push_note.html", {
-        **_push_base_ctx(request),
-        "note_files":      list_note_files(),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/rubric", response_class=HTMLResponse)
-def push_rubric_page(request: Request):
-    skill = _authoring_skill(list_ai_ta_files(), "Author a Rubric")
-    return templates.TemplateResponse(request, "push_rubric.html", {
-        **_push_base_ctx(request),
-        "authoring_skill": skill,
-    })
-
-
-@router.get("/push/quick", response_class=HTMLResponse)
-def push_quick_page(request: Request):
-    return templates.TemplateResponse(request, "push_quick.html", _push_base_ctx(request))
-
-
-@router.get("/download-work", response_class=HTMLResponse)
-def download_work_page(request: Request):
-    return templates.TemplateResponse(request, "download_work.html", _push_base_ctx(request))
-
-
-@router.get("/student-reports", response_class=HTMLResponse)
-def student_reports_page(request: Request):
-    return templates.TemplateResponse(
-        request, "student_reports.html",
-        {**_push_base_ctx(request), "nav_section": "feedback"},
-    )
 
 
 @router.get("/ai-expert", response_class=HTMLResponse)
 def ai_expert_page(request: Request):
     ai_ta_files = list_ai_ta_files()
-    toolkit_dir = os.path.join(AI_TA_DIR, "MagicSchool Toolkit")
+    ai_ta_dir = runtime_paths.ai_ta_dir()
+    toolkit_dir = os.path.join(ai_ta_dir, "MagicSchool Toolkit")
     toolkit_files = []
     if os.path.isdir(toolkit_dir):
         toolkit_files = sorted(
@@ -173,38 +145,26 @@ def ai_expert_page(request: Request):
             for p in glob.glob(os.path.join(toolkit_dir, "*.txt"))
         )
     return templates.TemplateResponse(request, "ai_expert.html", {
-        "nav_section":    "ai",
+        "nav_section":    "help",
         "token_is_set":   config.token_is_set(),
         "ai_ta_files":    ai_ta_files,
-        "ai_ta_dir":      AI_TA_DIR,
+        "ai_ta_dir":      str(ai_ta_dir),
         "toolkit_files":  toolkit_files,
         "workspace_root": workspace.workspace_root(),
     })
 
 
-@router.get("/feedback-expert", response_class=HTMLResponse)
-def feedback_expert_page(request: Request):
-    fb = workspace.feedback_root()
-    folders = {}
-    if fb:
-        folders = {k: workspace.feedback_folder(v) for k, v in {
-            "inbox": "1_Inbox", "forllm": "2_ForLLM",
-            "fromllm": "3_FromLLM", "toenter": "4_ToEnter",
-            "safe": "SAFE", "private": "PRIVATE", "system": "_system"}.items()}
-    return templates.TemplateResponse(request, "feedback_expert.html", {
-        "nav_section":   "feedback",
-        "persona":       config.get_ai_ta_persona(),
-        "feedback_root": fb,
-        "folders":       folders,
-        "saved_courses": config.active_courses(),
-    })
+@router.get("/feedback-expert", response_class=RedirectResponse)
+def feedback_expert_page():
+    """Keep old bookmarks on the session-bound PowerGrader migration lane."""
+    return RedirectResponse("/powergrader?advanced=import", status_code=307)
 
 
 @router.get("/roster", response_class=HTMLResponse)
 def roster_page(request: Request):
     """Roster Console — unified student settings surface."""
     return templates.TemplateResponse(request, "roster.html", {
-        "nav_section":   "roster",
+        "nav_section":   "manage",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
         "saved_courses": config.active_courses(),
@@ -219,14 +179,14 @@ def name_manager_page(request: Request):
 
 @router.get("/about", response_class=HTMLResponse)
 def about(request: Request):
-    return templates.TemplateResponse(request, "about.html", {"nav_section": "about"})
+    return templates.TemplateResponse(request, "about.html", {"nav_section": "help"})
 
 
 @router.get("/course", response_class=HTMLResponse)
 def course_page(request: Request, course_id: str = ""):
     """Detailed Course Info page — roster, groups, modules, assignments."""
     return templates.TemplateResponse(request, "course.html", {
-        "nav_section":    "course",
+        "nav_section":    "manage",
         "token_is_set":   config.token_is_set(),
         "canvas_base":    config.get_canvas_base(),
         "saved_courses":  config.active_courses(),
@@ -247,7 +207,8 @@ def gradebook_page(request: Request):
             all_gp.append({**gp, "year": year})
     all_gp.sort(key=lambda g: g["start"])
     return templates.TemplateResponse(request, "gradebook.html", {
-        "nav_section":          "gradebook",
+        "nav_section":          "grade",
+        "csrf_token":           csrf_token(),
         "token_is_set":         config.token_is_set(),
         "canvas_base":          config.get_canvas_base(),
         "saved_courses":        config.active_courses(),
@@ -266,23 +227,81 @@ def routines_page(request: Request):
     Scans the custom_routines folder so the page can show the real path and the
     files it found (active vs. _-prefixed templates)."""
     return templates.TemplateResponse(request, "routines.html", {
-        "nav_section":      "gradebook",
+        "nav_section":      "automate",
         "token_is_set":     config.token_is_set(),
         **_routines_template_context(),
     })
 
 
+def _mirror_relative(age_hours) -> str:
+    """Human 'synced N ago' from an age in hours (None → never synced)."""
+    if age_hours is None:
+        return "not yet"
+    minutes = int(age_hours * 60)
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return f"{minutes} min ago"
+    hours = int(age_hours)
+    if hours < 24:
+        return f"{hours} h ago"
+    return f"{int(age_hours // 24)} d ago"
+
+
+def _mirror_settings_context() -> dict:
+    """Read-only CanvasMirror freshness for the Settings panel. Never raises."""
+    default = {
+        "mirror_enabled": False, "mirror_configured": False,
+        "mirror_courses": [], "mirror_serve_max_age_hours": 6,
+    }
+    try:
+        from .. import mirror_service
+        from api.mirror import store as mirror_store
+        status = mirror_service.status()
+        now = mirror_store.now_iso()
+    except Exception:
+        return default
+    courses = []
+    for course in status.get("courses", []) if isinstance(status, dict) else []:
+        passes = course.get("passes", {}) if isinstance(course, dict) else {}
+        full = (passes.get("full") or {}).get("last_success_at", "")
+        delta = (passes.get("delta") or {}).get("last_success_at", "")
+        newest = max(full, delta)  # ISO-Z strings compare lexically
+        age = mirror_store.age_hours(newest, now) if newest else None
+        courses.append({
+            "name": course.get("course_name") or course.get("course_id") or "Course",
+            "synced_relative": _mirror_relative(age),
+        })
+    serve = status.get("serve_max_age_hours", 6)
+    if isinstance(serve, float) and serve.is_integer():
+        serve = int(serve)
+    return {
+        "mirror_enabled": bool(status.get("enabled")),
+        "mirror_configured": bool(status.get("workspace_configured")),
+        "mirror_courses": courses,
+        "mirror_serve_max_age_hours": serve,
+    }
+
+
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(request: Request):
     root = workspace.workspace_root()
+    saved_courses = config.saved_courses()
     return templates.TemplateResponse(request, "settings.html", {
-        "nav_section":   "",
+        **_mirror_settings_context(),
+        "nav_section":   "settings",
         "canvas_base":   config.get_canvas_base(),
         "token_is_set":  config.token_is_set(),
-        "saved_courses": config.saved_courses(),
+        "openrouter_is_set": config.has_openrouter_key(),
+        "openrouter_model": config.get_openrouter_model(),
+        "default_openrouter_model": config.DEFAULT_OPENROUTER_MODEL,
+        "openrouter_model_presets": config.openrouter_model_presets(),
+        "saved_courses": saved_courses,
+        "current_courses": [course for course in saved_courses if course.get("active", True)],
+        "previous_courses": [course for course in saved_courses if not course.get("active", True)],
         "base_default":  config.CANVAS_BASE_DEFAULT,
         "download_root": config.get_download_root(),
-        "ai_ta_dir":     AI_TA_DIR,
+        "ai_ta_dir":     str(runtime_paths.ai_ta_dir()),
         "calendars":     config.get_calendars(),
         "calendar_files": list_calendar_files(),
         "workspace_root": root,
@@ -293,6 +312,10 @@ def settings_page(request: Request):
             {"name": "Assignments", "path": workspace.folder("Assignments")},
             {"name": "Pages", "path": workspace.folder("Pages")},
             {"name": "Exports", "path": workspace.folder("Exports")},
+            {"name": "Source Materials", "path": workspace.folder("Source Materials")},
+            {"name": "Courses (PRIVATE)", "path": workspace.courses_root()},
+            {"name": "AI Packets (review before sharing)", "path": workspace.ai_packets_root()},
+            {"name": "_System (PRIVATE)", "path": workspace.system_root()},
         ],
         "computer_name": os.environ.get("COMPUTERNAME", "this PC"),
         "tier_tags": config.get_tier_tags(),

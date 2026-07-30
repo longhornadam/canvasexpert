@@ -1,0 +1,109 @@
+# Workbench Canonical Flow Map
+
+> Generated 2026-07-12 from source inventory. No runtime changes.
+> This is the first-stop routing map for debugging sessions.
+> For detailed file ownership, see the per-feature module maps in `docs/reference/`.
+
+## Teacher outcome → canonical flow
+
+| # | Outcome | Entry point | Template | Browser owner | Backend owner | Contract / map | Safety boundary |
+|---|---|---|---|---|---|---|---|
+| 1 | **Home** – choose or continue work | `/` | `dashboard.html` (`layouts/workspace.html`, `full`) | `desk.js` | `routes/pages.py::dashboard`, `routes/work.py`, `routes/receipts.py`; explicit scan reductions in `work_registry/discovery.py` and `providers/home_attention.py` | `work-registry-contract.md`, `operation-ledger-release-status.md` | Exact generic jobs plus a transient local presentation sidecar; no Canvas calls from Home itself. Explicit scans reduce private submission/comment metadata to assignment-scoped counts only. |
+| 2 | **Course content creation & delivery** | `/course-expert` | `course_expert.html` (`layouts/workspace.html`, `three`) | `push.js` + `push/*.js` + `course_expert/*.js` | `routes/push.py`, `routes/push_validation.py`, `routes/operations.py`, `operation_ledger/adapters/` | `course-expert-module-map.md`, `operation-ledger-module-map.md` | Typed operation-ledger prepare/review/apply; no generic push fallback; teacher review gate before Canvas writes |
+| 3 | **Gradebook actions** | `/gradebook` | `gradebook.html` (`layouts/workspace.html`, `left-main`) | `gradebook.js` + `gradebook/*.js` | `routes/gradebook.py` (facade) + `routes/gradebook_*.py`, `gradebook_service.py` | `gradebook-module-map.md` | Single-course scope; late-policy/sweep/curve writes are reversible; extra-time reads from Roster config |
+| 4 | **Roster & student-group actions** | `/roster` | `roster.html` (`layouts/workspace.html`, `left-main`) | `roster.js` + `roster/*.js` | `routes/roster.py` + `routes/roster_*.py`, `routes/names.py` | `roster-module-map.md` | V3: Canvas groups are source of truth; V2 tier/planned_group writes rejected; vault is PRIVATE |
+| 5 | **Student reports** | `/students/reports` | `student_reports.html` (`layouts/document.html`, `wide`) | `course_expert/student_reports.js`, `course_expert/portfolio.js` | `routes/pages.py::student_reports_page`, `routes/reports.py` | `roster-module-map.md` | Private report roots, monitored-student data, CSV handling, and portfolio behavior remain owned by the existing report routes; no data migration or new Canvas write path. |
+| 6 | **PowerGrader** – setup, review, push | `/powergrader` → `/powergrader/session/{id}` | `powergrader_setup.html` / `powergrader_queue.html` (`layouts/workspace.html`, `full`) | `powergrader_setup.js` + `powergrader/setup_*.js` / `powergrader_queue.js` + `powergrader/queue_*.js` | `routes/powergrader.py`, `api/powergrader/` | `powergrader-module-map.md` | SAFE pseudonymized packet; review is the default. Scheduled auto-push is one job/assignment opt-in and interactive automatic posting is one new session opt-in; both are default-off, fresh-state/policy/idempotency/receipt guarded, and hold uncertain rows for review. Fast and quiz modes are excluded. |
+| 7 | **FeedbackExpert compatibility entry** | `/feedback-expert` → `/powergrader?advanced=import` | PowerGrader setup/queue | `powergrader/setup_advanced.js`, `powergrader/queue_import.js` | `routes/pages.py`, `routes/powergrader.py`, `routes/feedback_library.py`, `api/feedback_*.py` | `feedbackexpert-module-map.md`, `feedback-scoring-contract.md` | SAFE artifacts remain pseudonymized, not anonymous; imported results are session-bound and teacher-reviewed before a PowerGrader write |
+| 8 | **Settings & first-run** | `/settings` (first-run: `/welcome`) | `settings.html` (`layouts/workspace.html`, `left-main`) / `welcome.html` (`layouts/wizard.html`) | `settings.js` + `settings/*.js` / `welcome.js` | `routes/settings.py`, `routes/calendar.py`, `routes/onboarding.py`, `config/` | `settings-module-map.md` | Token in OS credential store only; no district defaults in source; local-only bind |
+| 9 | **Routines** | `/routines` | `routines.html` (`layouts/document.html`, `wide`) | inline / route-driven | `routes/routines.py` + `routes/routines_builtin.py` + `routes/routines_custom.py` + `routes/routines_powergrader.py` | `operation-ledger-release-status.md` (routines integration) | Local automations only; no cloud scheduler; writes gated by routine definitions |
+
+## Deliberately retained alternate paths
+
+| Alternate path | Canonical replacement | Reason retained |
+|---|---|---|
+| Gradebook extra-time tab (`/gradebook?tab=extra-time`) | Roster extra-time lens (`/roster?focus=extra-time`) | Convenience view within gradebook context; reads same config; no independent write path |
+| `/name-manager` → 302 redirect to `/roster` | `/roster` safety lens | Clean redirect; no duplicate surface |
+| `/feedback-expert` → 307 redirect to `/powergrader?advanced=import` | PowerGrader advanced import | Legacy bookmarks retain a session-bound import/review entry; no direct FeedbackExpert push route remains |
+| `/course` (Course Info detail page) | N/A – distinct outcome | Read-only course inspection; not a duplicate of any other surface |
+| `/ai-expert` (AI helper files) | N/A – distinct outcome | Paste-ready LLM skill files; not a duplicate |
+| `/about` | N/A – distinct outcome | Explainer page |
+| `push/core.js` legacy globals (`localToISO`, `targetCourses`, `initFileSource`, `copySkill`) | `window.CE_PUSH` namespace | Still consumed by `push/*.js` feature scripts and `course_expert/*.js`; guarded by `course-expert-module-map.md` |
+| `push_validation.py` `/api/push/preview` (dry-run) | N/A – distinct validation step | QuizForge dry-run preview; not a write path; still called by `push/quiz.js` |
+| `gradebook_service.py` legacy curve events migration | Current curve events path | Data migration for existing teacher curve history; not a surface |
+| `app_context.js` legacy course-picker localStorage migration | Current course picker state | One-time localStorage migration; not a surface |
+
+## Completed retirements
+
+### July 2026: Tier-scheme HTTP endpoints removed
+
+| Removed | Replacement | Changes |
+|---|---|---|
+| `GET /api/roster/tier-scheme` | Roster V3 Canvas group scheme | Routes removed from `roster.py`; 5 endpoint tests removed from `test_roster_routes.py`; 2 entries removed from `test_route_contract.py::EXPECTED` |
+| `POST /api/roster/tier-scheme` | Roster V3 Canvas group scheme | Routes removed from `roster.py`; 5 endpoint tests removed from `test_roster_routes.py`; 2 entries removed from `test_route_contract.py::EXPECTED` |
+
+**Live config retained:** `config.get_roster_tier_scheme()`, `config.roster_tier_by_id()`, and the `roster_tier_schemes` synced key remain for PowerGrader's tier-map resolution. Only the unused HTTP endpoint wrappers were removed.
+
+### July 2026: QuizForge streaming HTTP wrappers removed
+
+| Removed | Replacement | Changes |
+|---|---|---|
+| `GET /api/push/stream` | Typed operation-ledger prepare/apply | Routes and handlers deleted; `push_streaming.py` deleted; `register_streaming_routes` import removed from `push.py` |
+| `GET /api/push-multi-whole/stream` | Typed operation-ledger prepare/apply | Same |
+| `GET /api/push-variants/stream` | Typed operation-ledger prepare/apply | Same |
+| `GET /api/push-multi/stream` | Typed operation-ledger prepare/apply | Same |
+
+**Retained:** `POST /api/push/preview` dry-run — moved to `push_validation.py`. Direct CLI (`qf_pusher.py`, `push_tiers.py`) remains a supported manual teacher path.
+
+**Changes:** 4 route entries removed from `test_route_contract.py::EXPECTED`; 4 literal-string assertions removed from `test_webui_template_contracts.py`. All reference docs updated to identify typed operations as the sole browser live-write path.
+
+---
+
+## Retirement candidates
+
+*(None currently identified after the tier-scheme and QuizForge streaming retirements.)*
+
+---
+
+## Non-candidates (investigated and retained)
+
+| Surface | Why not a candidate |
+|---|---|
+| `GET/POST /api/tier-tags` | Active Settings consumer: `settings.html` lines 155-177 render a tier-tags form; inline JS at line 392-402 calls `fetch("/api/tier-tags", { method: "POST", ... })` on save. `pages.py` line 254 supplies `tier_tags` template data via `config.get_tier_tags()`. This is a live Settings feature, not legacy overlap. |
+| Gradebook extra-time tab | Active convenience view within gradebook; has live JS callers (`gradebook/extra_time.js`); reads same config as Roster |
+| PowerGrader legacy JSON import box | Still actively used by `queue_import.js` for non-Copilot import path |
+| `push/core.js` legacy globals | Still consumed by `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `course_expert/quick_assignment.js` |
+| `/api/push/preview` (dry-run POST) | Still called by `push/quiz.js` for QuizForge dry-run preview |
+| `/name-manager` → 302 redirect | Already a clean redirect; no duplicate surface to retire |
+| `gradebook_service.py` curve migration | Data migration, not a surface; no teacher-visible behavior |
+| `app_context.js` localStorage migration | One-time data migration, not a surface |
+| FeedbackExpert SAFE/PRIVATE workspace artifacts | Compatibility-read safety boundary; PowerGrader owns active review/write flow |
+| Operation-ledger recovery seams | Required safety boundary; not migration overlap |
+
+## Template inheritance summary
+
+| Template | Extends | Used by |
+|---|---|---|
+| `base.html` | – | Private root; extended only by the three layouts |
+| `layouts/workspace.html` | `base.html` | Home, Create, Gradebook, Roster, Settings, PowerGrader setup + queue |
+| `layouts/document.html` | `base.html` | Routines, Student Reports, Course Info, About, AI Expert |
+| `layouts/wizard.html` | `base.html` | Welcome |
+
+`layouts/_app_header.html` is the single app header for workspace and document
+layouts; those layouts also load `readiness.js`. The wizard intentionally omits both.
+All layouts load the shared `ui/` stylesheet bundle, while `write_review.js` and
+`app_context.js` remain shared base scripts.
+
+Home's `presentations` mapping is computed by `routes/work.py` for visible jobs only and
+is supplied identically to the initial dashboard JSON and `GET /api/work` refreshes. It
+contains course/title/aggregate-summary/action strings for display, remains separate from
+the exact Work Registry job contract, and is never persisted.
+
+## Test portfolio notes
+
+Source-contract tests (`test_webui_template_contracts.py`) protect safety and workflow
+wiring — typed operation gateways, no direct SSE/student IDs, cancellation prevents apply,
+ordinal-only polling, shared CSRF, shared write review, Feedback/OpenRouter acknowledgement,
+PowerGrader review-before-push. Visual composition, CSS, layout, DOM IDs, copy, and
+script ordering are verified through rendered-route checks rather than frozen source
+snapshots (per AGENTS.md testing policy).

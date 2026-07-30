@@ -3,6 +3,12 @@
  * Workspace → Canvas URL → API token → Calendars → Done.
  */
 
+var WIZARD_HIDDEN_CLASS = "ce-wizard-initially-hidden";
+
+function setWizardVisible(el, visible) {
+  if (el) el.classList.toggle(WIZARD_HIDDEN_CLASS, !visible);
+}
+
 var WIZARD = {
   currentStep: 0,
   totalSteps:  4,
@@ -13,7 +19,7 @@ var WIZARD = {
     var panels = document.querySelectorAll('.wizard-panel');
     var indicators = document.querySelectorAll('.wiz-step');
     for (var i = 0; i < panels.length; i++) {
-      panels[i].style.display = i === step ? '' : 'none';
+      setWizardVisible(panels[i], i === step);
       if (indicators[i]) {
         indicators[i].classList.toggle('active', i === step);
         indicators[i].classList.toggle('done', i < step);
@@ -38,7 +44,7 @@ var WIZARD = {
     // Show the success panel by id (it's not a numbered step, so goTo() can't reach it).
     var panels = document.querySelectorAll('.wizard-panel');
     for (var i = 0; i < panels.length; i++) {
-      panels[i].style.display = panels[i].id === 'step-done' ? '' : 'none';
+      setWizardVisible(panels[i], panels[i].id === 'step-done');
     }
     this.currentStep = 99;
   },
@@ -64,28 +70,28 @@ var WIZARD = {
       var result = document.getElementById('workspace-result');
       var done = document.getElementById('workspace-done');
       if (d.ok) {
-        result.className = 'callout ok';
+        result.className = 'ce-notice ce-notice--ok';
         result.innerHTML = '✓ Workspace created at <strong>' + d.root + '</strong>' +
           '<div class="subfolder-list">' +
           d.subfolders.map(function (s) { return '<span>' + s + '</span>'; }).join('') +
           '</div>';
-        result.style.display = '';
-        document.getElementById('workspace-form').style.display = 'none';
-        done.style.display = '';
+        setWizardVisible(result, true);
+        setWizardVisible(document.getElementById('workspace-form'), false);
+        setWizardVisible(done, true);
         WIZARD.markStepDone(0);
       } else {
-        result.className = 'callout warn';
+        result.className = 'ce-notice';
         result.textContent = d.error || 'Something went wrong.';
-        result.style.display = '';
+        setWizardVisible(result, true);
         btn.disabled = false;
         btn.textContent = 'Confirm folder';
       }
     })
     .catch(function () {
       var result = document.getElementById('workspace-result');
-      result.className = 'callout warn';
+      result.className = 'ce-notice';
       result.textContent = 'Network error. Please try again.';
-      result.style.display = '';
+      setWizardVisible(result, true);
       btn.disabled = false;
       btn.textContent = 'Confirm folder';
     });
@@ -128,19 +134,19 @@ var WIZARD = {
       if (d.ok) {
         // Write the normalized origin back so the token step reads the clean base.
         document.getElementById('canvas-url').value = url;
-        result.className = 'callout ok';
+        result.className = 'ce-notice ce-notice--ok';
         result.textContent = '✓ Saved: ' + url;
-        result.style.display = '';
-        form.style.display = 'none';
-        done.style.display = '';
+        setWizardVisible(result, true);
+        setWizardVisible(form, false);
+        setWizardVisible(done, true);
         // Update the token step's Canvas link
         var link = document.getElementById('token-canvas-link');
         if (link) link.href = url + '/profile/settings';
         WIZARD.markStepDone(1);
       } else {
-        result.className = 'callout warn';
+        result.className = 'ce-notice';
         result.textContent = d.error || 'Failed to save.';
-        result.style.display = '';
+        setWizardVisible(result, true);
         btn.disabled = false;
         btn.textContent = 'Save & continue';
       }
@@ -191,18 +197,18 @@ var WIZARD = {
         .then(function (d2) {
           if (d2.ok) {
             document.getElementById('connected-name').textContent = d.display_name;
-            result.style.display = 'none';
-            form.style.display = 'none';
-            done.style.display = '';
+            setWizardVisible(result, false);
+            setWizardVisible(form, false);
+            setWizardVisible(done, true);
             WIZARD.markStepDone(2);
           } else {
             throw new Error(d2.error || 'Save failed');
           }
         });
       } else {
-        result.className = 'callout warn';
+        result.className = 'ce-notice';
         result.textContent = d.error || 'Connection test failed.';
-        result.style.display = '';
+        setWizardVisible(result, true);
         btn.disabled = false;
         btn.textContent = 'Test & save';
       }
@@ -228,7 +234,7 @@ var WIZARD = {
         return;
       }
       container.innerHTML = '';
-      form.style.display = '';
+      setWizardVisible(form, true);
       checkboxes.innerHTML = '';
       d.available.forEach(function (cal) {
         var label = document.createElement('label');
@@ -243,7 +249,7 @@ var WIZARD = {
       });
     })
     .catch(function () {
-      document.getElementById('calendar-list').innerHTML = '<p class="callout warn">Could not load calendars.</p>';
+      document.getElementById('calendar-list').innerHTML = '<p class="ce-notice">Could not load calendars.</p>';
     });
   },
 
@@ -279,16 +285,16 @@ var WIZARD = {
       var result = document.getElementById('calendar-result');
       if (ok.length > 0) {
         msg.textContent = '✓ ' + ok.length + ' calendar(s) activated.';
-        result.style.display = 'none';
-        form.style.display = 'none';
+        setWizardVisible(result, false);
+        setWizardVisible(form, false);
         var skipRow = document.getElementById('calendar-skip-row');
-        if (skipRow) skipRow.style.display = 'none';
-        done.style.display = '';
+        setWizardVisible(skipRow, false);
+        setWizardVisible(done, true);
         WIZARD.markStepDone(3);
       } else {
-        result.className = 'callout warn';
+        result.className = 'ce-notice';
         result.textContent = 'Could not activate calendars.';
-        result.style.display = '';
+        setWizardVisible(result, true);
         btn.disabled = false;
         btn.textContent = 'Activate selected';
       }
@@ -313,9 +319,9 @@ var WIZARD = {
   showResult: function (id, msg, isWarn) {
     var el = document.getElementById(id);
     if (!el) return;
-    el.className = 'callout ' + (isWarn ? 'warn' : 'ok');
+    el.className = 'ce-notice' + (isWarn ? '' : ' ce-notice--ok');
     el.textContent = msg;
-    el.style.display = '';
+    setWizardVisible(el, true);
   }
 };
 
@@ -352,13 +358,13 @@ var wizardFinish = WIZARD.finish.bind(WIZARD);
     // Auto-load calendars when we get to step 3 (lazy)
     var mutationObserver = new MutationObserver(function () {
       var panel = document.getElementById('step-3');
-      if (panel && panel.style.display !== 'none') {
+      if (panel && !panel.classList.contains(WIZARD_HIDDEN_CLASS)) {
         WIZARD.loadCalendars();
         mutationObserver.disconnect();
       }
     });
     mutationObserver.observe(document.getElementById('step-3'), {
-      attributes: true, attributeFilter: ['style']
+      attributes: true, attributeFilter: ['class']
     });
   }
 

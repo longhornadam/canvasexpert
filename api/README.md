@@ -4,13 +4,24 @@ The **live half of the Canvas Expert platform.** Holds a Canvas API token and
 pushes content to live courses via the REST and New Quizzes APIs:
 
 - **Push Quizzes** (QuizForge JSON → live New Quizzes)
-- **Push Assignments** (AssignmentForge JSON → live assignments, with tier overrides)
+- **Push Assignments** (AssignmentForge JSON → live whole-class assignments)
 - **Push Pages** (PageForge JSON → live pages)
-- **Push Rubrics** (RubricForge JSON → live rubrics + student explainer pages)
-- **Gradebook Expert** — late policy sweep, student extensions, curves
+- **Push Rubrics** (RubricForge JSON → live course rubrics with an optional student explainer page)
+- **Printable outputs** (QuizForge JSON → local DOCX + PDF files)
+- **Gradebook tools** — late policy sweep, student extensions, curves
+- **PowerGrader** — keyboard grading queue, Safe AI Packet export, Copilot batch
+  import, optional API scoring
 - **Download** — submission bundles by assignment or by student
 
-Local-only, never served. See `CLAUDE.md` Guardrails.
+Local-only, never served. See `AGENTS.md` Guardrails.
+
+The 0.75 beta version is `0.75.0-beta.0`. The supported launcher is
+`py qf_ui.py` from `api/` or `py api/qf_ui.py` from the repository root; it binds
+only to `127.0.0.1` and preserves the `--port` and `--no-browser` options.
+The `/connections` page reports the current interpreter and app-root paths and
+offers copy-only client snippets or a support bundle. It never edits client
+configuration, installs software, changes `PATH`, starts a tunnel, or requests
+administrator access.
 
 ## Contracts consumed
 
@@ -19,7 +30,7 @@ Local-only, never served. See `CLAUDE.md` Guardrails.
 | **QuizForge** | `../LLM_Modules/QuizForge_Base.md` (v3.0-json) | Quiz authoring: 12 question types, rationales, tiers |
 | **AssignmentForge** | `../LLM_Modules/AssignmentForge_Base.md` (v1.0-json) | Assignment authoring: submissions, scaffolding tiers |
 | **PageForge** | `../LLM_Modules/PageForge_Base.md` (v1.0-json) | Page authoring: unit hubs, placeholders |
-| **RubricForge** | `../LLM_Modules/RubricForge_Base.md` (v1.0-json) | Rubric authoring: analytics criteria, explainer page, scoring prompt |
+| **RubricForge** | `../LLM_Modules/RubricForge_Base.md` (v1.0-json) | Rubric authoring: criteria, explainer page, scoring prompt |
 
 Each contract is canonical in `../LLM_Modules/` — this backend consumes, never forks.
 Token security: the repo is **private**; a `pre-commit` hook blocks the token pattern;
@@ -38,15 +49,20 @@ automation/headless use.
    push box has an inline "Forge one with your LLM" helper, or use the embedded
    QuizForge web editor.
 3. **Validate** the file in the Web UI (summarizes what will push, spots errors)
-4. **Select target courses** (multi-select dropdown in the Course Expert header)
+4. **Select target courses** (multi-select dropdown in the Work tools header)
 5. **Configure delivery** (due dates, grading category, module, publish state)
 6. **Push** — one button, multi-course in one shot. Log shows per-course notes.
+
+Printable QuizForge outputs are generated locally from the same Forge contract.
+PDFs use the installed Microsoft Edge through Playwright; editable DOCX files use
+bundled Pandoc through `pypandoc-binary`.
 
 ### CLI (for automation)
 
 - **Quiz**: `py qf_pusher.py "<quiz.txt>"` → live New Quiz (unpublished)
 - **Tiers** (diff variants): `py push_tiers.py --manifest <manifest.json>`
 - **Validate**: `py validate_qf.py <file.txt>`
+- **New Quizzes diagnostic**: `py diagnose_newquizzes.py --course <id> [--assignment <nq_id>]`
 
 ## Web UI (recommended for day-to-day use)
 
@@ -66,8 +82,13 @@ lives in `api/webui/config.json` (gitignored).
 
 When OneDrive is available, teacher-authored content lives in
 `OneDrive\CanvasExpert\` with `AI-TA\`, `Rubrics\`, `Quizzes\`, `Assignments\`,
-`Pages\`, `Exports\`, and synced `settings.json`. Default rubric files are seeded
-into `Rubrics\` only when the filename is missing, so user edits win forever.
+`Pages\`, `Exports\`, and synced `settings.json`. Human-facing student work is
+canonical under `Courses\<Course>\Assignments\<Assignment>\Student Work\`;
+pseudonymized artifacts live under `AI Packets (Pseudonymized)\`, derived output
+under `Student Reports\`, and vault/session/audit state under `_System\`.
+Default rubric files are seeded into `Rubrics\` only when the filename is missing,
+so user edits win forever. `Courses\` and `_System\` are PRIVATE; review every
+pseudonymized packet before sharing because it is not guaranteed anonymous.
 
 Machine-local state stays machine-local: `canvas_base`, `download_root`, and the
 Canvas token in Credential Manager. Synced state is last-writer-wins through
@@ -75,7 +96,7 @@ OneDrive; conflict copies like `settings-<PC>.json` are ignored by the app. If
 OneDrive is absent, the app falls back to the local folders exactly as before.
 
 **Full feature reference** (Settings, Dashboard, Push Quiz/Assignment/Page/Module,
-Gradebook Expert, Download Assignments, Course Info): **`api/webui/README.md`**.
+Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 
 ## What each push does automatically
 
@@ -105,7 +126,8 @@ Gradebook Expert, Download Assignments, Course Info): **`api/webui/README.md`**.
 - Resolves course-resource placeholders (`{{file:NAME}}`, `{{page:Title}}` per course).
 - Creates assignment(s) with configurable submission types, points, dates, grading category.
 - **Tier overrides**: one file with tiers → multiple assignments, each visible only to
-  its group via an assignment override. Each tier can have its own scaffolding text.
+  its group via an assignment override. Each tier can have its own scaffolding text;
+  the operation review shows safe group counts and one gradebook column per tier.
 
 ### Pages (PageForge)
 - Extracts JSON from the `<PAGEFORGE_JSON>` envelope.
@@ -129,10 +151,12 @@ Gradebook Expert, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `teks.py` | TEKS coverage report + visible labels |
 | `qf_pusher.py` | Driver: envelope → live quiz (points, settings, stimulus, TEKS) |
 | `push_tiers.py` | Differentiation: variants → student groups via assignment overrides (`--manifest`) |
-| `downloader.py` | Submission downloader → `by_assignment/` + `by_student/` tree, `_index.csv` / `_portfolio.csv` |
+| `downloader.py` | Submission downloader → canonical `Courses/<course>/Assignments/<assignment>/Student Work/<student>/Attempt <n>/` tree; no duplicate raw by-student mirror |
 | `validate_qf.py` | QuizForge compliance checker |
 | `qf_ui.py` | Launches the local web UI (see "Web UI" above) |
-| `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, subprocess/SSE runner |
+| `../engine/rendering/physical/` | Local printable DOCX/PDF render stack (Edge via Playwright for PDF, Pandoc for DOCX) |
+| `powergrader/` | PowerGrader backend helpers: Canvas fetch, privacy artifacts, Safe AI Packet ZIP, Copilot batch folders, import validation, session mutations, start-workflow assembly, autoscore claim/queue helpers, auto-push policy helpers |
+| `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, split feature scripts, subprocess/SSE runner |
 | `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `../LLM_Modules/QuizForge_Base.md`) |
 
 ## Setup
@@ -187,6 +211,15 @@ ANTHROPIC_KEY=
   PAT limitation. Use `py diagnose_newquizzes.py --course <id> [--assignment <nq_id>]`
   (see `api/diagnose_newquizzes.py`) to check any course; it reads 401 (missing scope —
   admin can grant), 403 (concluded enrollment, or missing scope), and transient 5xx apart.
+- **Per-item manual grading is also available, but not as an ordinary PAT REST call.**
+  Canvas's first-party grader uses `/login/session_token`, the signed LTI submission launch,
+  and short-lived participant/result credentials to read and write the authoritative New
+  Quiz item-result collection. A live dummy-data probe verified independent item score and
+  grader-feedback writes. Each accepted update creates a new authoritative result ID, so
+  post-write verification must re-fetch the quiz session before reading item results. This
+  transport is not documented as a stable public grading API; isolate it, fail closed on
+  drift, and fall back to SpeedGrader. See
+  `docs/reference/new-quizzes-grading-transport.md`.
 - **The Reports API (student/item analysis) is the response-content path, but the gateway
   is flaky.** `POST /api/quiz/v1/courses/:course_id/quizzes/:assignment_id/reports`
   (`report_type=student_analysis|item_analysis`, `format=csv|json`) enqueues a report and
@@ -199,13 +232,19 @@ ANTHROPIC_KEY=
   Regardless of the API, the **Student Analysis CSV downloads fine from the New Quizzes UI**
   (full responses included) — the always-available manual fallback, and the only option for
   courses where your enrollment has concluded.
+- **PowerGrader New Quiz sessions support manual grading and two write lanes.** They use the
+  Student Analysis JSON report for written responses. New Quiz sessions can post assignment-level
+  teacher feedback through a reviewed comment-only lane, and item scores + per-item grader
+  feedback through a gated item-finalization lane (two-phase review→finalize route pair with
+  preflight freeze, drift detection, idempotency, and post-write verification). Concluded
+  enrollment may return `403`. New Quiz late catch-up and scheduled scoring remain unimplemented.
 - **Common Cartridge import is the zero-auth power path** (Settings → Import Course
   Content). Vanilla CC 1.x carries only the portable common subset, but a **Canvas-flavored
   export package** (CC + Canvas extensions: `canvas_export.txt`, `course_settings/*.xml`)
   presets nearly everything the UI can — module structure/prerequisites, assignment-group
   weights, due/unlock/lock dates, submission types, rubrics+associations, publish state.
   The import-time **"Convert content to New Quizzes"** checkbox upgrades Classic-QTI quizzes
-  to New Quizzes on import (creation only — unrelated to the response-pull block above).
+  to New Quizzes on import (creation only — unrelated to response acquisition or grading).
   Only roster-relational things (per-student/section overrides) genuinely need the live API.
 - Rubric `DELETE` returns a spurious 500 but still deletes.
 - **One assignment override per student per assignment** — granting a second

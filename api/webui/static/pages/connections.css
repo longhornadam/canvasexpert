@@ -1,0 +1,19 @@
+.ce-connections-stack { display: grid; gap: var(--ce-space-4); }
+.ce-connections-intro { margin: 0; }
+.ce-connections-intro h1 { margin-bottom: var(--ce-space-2); }
+.ce-connections-banner { margin: 0 0 var(--ce-space-4); padding: var(--ce-space-3); border-left: 3px solid var(--ce-accent-canvas); background: var(--ce-accent-canvas-soft); color: var(--ce-ink); font-weight: 700; }
+.ce-connections-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ce-space-2); }
+.ce-connections-actions form { margin: 0; }
+.ce-connections-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ce-space-4); align-items: start; }
+.ce-connection-card { min-width: 0; margin: 0; }
+.ce-connection-card h2 { margin-top: 0; }
+.ce-connection-card code, .ce-connection-card pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+.ce-connection-card pre { max-height: 280px; overflow: auto; padding: var(--ce-space-3); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); font-size: 12px; }
+.ce-health-list { display: flex; flex-wrap: wrap; gap: var(--ce-space-2); margin: var(--ce-space-3) 0; color: var(--ce-ink-muted); font-size: 13px; }
+.ce-health-list strong { color: var(--ce-ink); }
+.ce-connection-card ol { padding-left: 20px; }
+.ce-connection-card li { margin-bottom: var(--ce-space-2); }
+.ce-connection-card details { margin-top: var(--ce-space-3); }
+.ce-connection-card summary { cursor: pointer; font-weight: 700; }
+.ce-copy-button { margin-bottom: var(--ce-space-2); }
+@media (max-width: 1050px) { .ce-connections-grid { grid-template-columns: minmax(0, 1fr); } }

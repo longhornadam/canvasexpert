@@ -90,6 +90,12 @@ essays ~15 pts; `PointsPossible` 100. So the block count and per-item points are
   (HTML → text) for rubric-based scoring (MagicSchool / Copilot / LLM scorer),
   matching the existing RubricForge / Essay-Scorer flow.
 
+## PowerGrader note
+
+PowerGrader's New Quiz written-response path uses the Student Analysis **JSON**
+report API for its local snapshots. This CSV document remains the manual fallback
+and parser reference; it is not used by the PowerGrader fetch path.
+
 ## Next step
 
 Build a synthetic `Student_Analysis_Sample.csv` (fake authors, fake ids, fake

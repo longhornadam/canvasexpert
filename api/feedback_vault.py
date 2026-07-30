@@ -1,8 +1,8 @@
-"""Pseudonym vault v2 — the real<->pseudonym map for FeedbackExpert.
+"""Pseudonym vault v2 — the real<->pseudonym map for feedback tools.
 
 The single most sensitive artifact in the app: it is the only thing that can
 re-identify pseudonymized work. It lives in the synced workspace
-(FeedbackExpert/_system/vault/), NEVER in the repo, and is NEVER transmitted
+(`_System/Identity Vault/`), NEVER in the repo, and is NEVER transmitted
 anywhere.
 
 Keyed on the Canvas user id (stable, present in the Student Analysis CSV `ID`
@@ -12,9 +12,16 @@ sources, and years.
 v2 pseudonyms are realistic fake names like "Sparky McGee" drawn from a pool
 disjoint from real rosters. Pure stdlib; offline-testable.
 """
+import fnmatch
 import json
 import os
 import random
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+
+from api.powergrader.autoscore_claims import machine_id
+from api.storage_support import atomic_write_json, interprocess_lock
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -37,40 +44,98 @@ class Vault:
         self._by_id = {}          # canvas_id(str) -> {pseudonym, pseudo_first, pseudo_last,
                                   #                   real_name, sis_id, nicknames, first_seen}
         self._by_pseudo = {}      # pseudonym -> canvas_id(str)
+        self.conflict_files: list[str] = []
         self._load()
 
     def _load(self):
+        data = {}
         if os.path.exists(self.path):
             with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
-            self._by_id = data.get("by_canvas_id", {})
-            self._by_pseudo = {v["pseudonym"]: cid for cid, v in self._by_id.items()}
-            # Upgrade legacy entries: fill missing v2 fields
-            for cid, entry in self._by_id.items():
-                changed = False
-                if "pseudo_first" not in entry:
-                    entry["pseudo_first"] = ""
-                    changed = True
-                if "pseudo_last" not in entry:
-                    entry["pseudo_last"] = ""
-                    changed = True
-                if "nicknames" not in entry:
-                    entry["nicknames"] = []
-                    changed = True
-                # Upgrade S001-style pseudonyms to fake names
-                if entry.get("pseudonym", "").startswith("S0") and not entry.get("pseudo_first"):
-                    old_pseudo = entry["pseudonym"]
-                    self._assign_fake_name(entry, set(), set())
-                    self._by_pseudo.pop(old_pseudo, None)
-                    self._by_pseudo[entry["pseudonym"]] = cid
-                    changed = True
-                if changed:
-                    self._by_id[cid] = entry
+        self._apply_document(data)
+        self.conflict_files = self._scan_conflicts()
+
+    def _scan_conflicts(self) -> list[str]:
+        """OneDrive can fork this file across machines, naming copies like
+        ``vault-DESKTOP123.json`` or ``vault (1).json``. Find any such
+        artifact beside the canonical file (never the file itself or its
+        ``.lock`` companion) without touching or merging them."""
+        directory = os.path.dirname(self.path) or "."
+        if not os.path.isdir(directory):
+            return []
+        canonical = os.path.basename(self.path)
+        lock_name = canonical + ".lock"
+        found = []
+        for entry in sorted(os.listdir(directory)):
+            if entry in (canonical, lock_name):
+                continue
+            if fnmatch.fnmatch(entry, "vault*.json"):
+                found.append(entry)
+        return found
+
+    def conflicts(self) -> list[str]:
+        """Basenames of OneDrive conflict-copy artifacts found beside this
+        vault at last load. Empty means no fork detected."""
+        return list(self.conflict_files)
+
+    def _apply_document(self, data: dict):
+        """Replace in-memory maps with one freshly loaded document."""
+        raw_entries = data.get("by_canvas_id", {}) if isinstance(data, dict) else {}
+        self._by_id = raw_entries if isinstance(raw_entries, dict) else {}
+        self._by_pseudo = {
+            v["pseudonym"]: cid
+            for cid, v in self._by_id.items()
+            if isinstance(v, dict) and v.get("pseudonym")
+        }
+        # Upgrade legacy entries: fill missing v2 fields
+        for cid, entry in self._by_id.items():
+            changed = False
+            if "pseudo_first" not in entry:
+                entry["pseudo_first"] = ""
+                changed = True
+            if "pseudo_last" not in entry:
+                entry["pseudo_last"] = ""
+                changed = True
+            if "nicknames" not in entry:
+                entry["nicknames"] = []
+                changed = True
+            # Upgrade S001-style pseudonyms to fake names
+            if entry.get("pseudonym", "").startswith("S0") and not entry.get("pseudo_first"):
+                old_pseudo = entry["pseudonym"]
+                self._assign_fake_name(entry, set(), set())
+                self._by_pseudo.pop(old_pseudo, None)
+                self._by_pseudo[entry["pseudonym"]] = cid
+                changed = True
+            if changed:
+                self._by_id[cid] = entry
+
+    def _lock_path(self) -> Path:
+        path = Path(self.path)
+        return path.with_name(path.name + ".lock")
+
+    def _save_unlocked(self):
+        atomic_write_json(Path(self.path), {
+            "by_canvas_id": self._by_id,
+            "written_by": machine_id(),
+            "written_at": datetime.now().isoformat(timespec="seconds"),
+            "entry_count": len(self._by_id),
+        })
+
+    @contextmanager
+    def transaction(self):
+        """Reload, mutate, and atomically save this vault under one lock."""
+        with interprocess_lock(self._lock_path()):
+            self._load()
+            try:
+                yield self
+            except Exception:
+                raise
+            else:
+                self._save_unlocked()
 
     def save(self):
-        os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump({"by_canvas_id": self._by_id}, f, indent=2)
+        with interprocess_lock(self._lock_path()):
+            self._save_unlocked()
 
     def _existing_tokens(self, roster_names: set | None = None) -> tuple[set, set]:
         """Return (used_fake_firsts, used_fake_lasts) from the vault + roster."""

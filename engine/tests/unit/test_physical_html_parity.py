@@ -227,7 +227,7 @@ def test_generate_physical_outputs_logs_missing_engine_warnings(monkeypatch, tmp
         raise RuntimeError("Pandoc unavailable")
 
     def missing_pdf(html: str, css_path: str, out_path: str) -> str:
-        raise RuntimeError("Chromium unavailable")
+        raise RuntimeError("Microsoft Edge unavailable")
 
     monkeypatch.setattr(emit_docx, "html_to_docx", missing_docx)
     monkeypatch.setattr(emit_pdf, "html_to_pdf", missing_pdf)
@@ -242,7 +242,7 @@ def test_generate_physical_outputs_logs_missing_engine_warnings(monkeypatch, tmp
 
     log_text = Path(results["log_path"]).read_text(encoding="utf-8")
     assert "PHYSICAL RENDER WARNING [quiz docx]: Pandoc unavailable" in log_text
-    assert "PHYSICAL RENDER WARNING [quiz pdf]: Chromium unavailable" in log_text
+    assert "PHYSICAL RENDER WARNING [quiz pdf]: Microsoft Edge unavailable" in log_text
     assert "PHYSICAL QUIZ VALIDATION STATISTICS" in log_text
 
 
@@ -253,17 +253,15 @@ def test_generate_physical_outputs_native_smoke_when_provisioned(tmp_path):
         pytest.skip("playwright is not installed")
 
     import pypandoc
-    from playwright.sync_api import sync_playwright
+    from engine.rendering.physical.emit_pdf import edge_executable_path
 
     try:
         pypandoc.get_pandoc_path()
     except OSError:
         pytest.skip("Pandoc binary is not available")
 
-    with sync_playwright() as playwright:
-        chromium_path = Path(playwright.chromium.executable_path)
-        if not chromium_path.exists():
-            pytest.skip("Playwright Chromium is not installed")
+    if edge_executable_path() is None:
+        pytest.skip("Microsoft Edge is not installed")
 
     results = generate_physical_outputs(_coverage_quiz(), str(tmp_path))
 

@@ -1,4 +1,4 @@
-"""Offline tests for FeedbackExpert vault v2: fake-name pseudonyms, nicknames,
+"""Offline tests for feedback tools vault v2: fake-name pseudonyms, nicknames,
 collision avoidance, entries() shape, regenerate.
 """
 import json

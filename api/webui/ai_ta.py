@@ -7,22 +7,21 @@ import os
 
 from . import rf
 
+from api import runtime_paths
+
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 API_DIR = os.path.dirname(MODULE_DIR)
 REPO_ROOT = os.path.dirname(API_DIR)
 DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 DEFAULT_AI_TA_DIR = os.path.join(DEFAULT_DOCS_DIR, "AI-TA")
-RUBRIC_FOLDERS = [
-    os.path.join(API_DIR, "rubrics"),
-    os.path.join(REPO_ROOT, "Rubrics"),
-]
 QUIZFORGE_EXPLAINER_PATH = os.path.join(REPO_ROOT, "LLM_Modules", "QuizForge_Explainer.txt")
 CONTRACT_FILES = {
     "Author a Quiz (QuizForge).txt": ("quiz", "QUIZFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "QuizForge_Base.md")),
     "Author an Assignment (AssignmentForge).txt": ("assignment", "ASSIGNMENTFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "AssignmentForge_Base.md")),
     "Author a Page (PageForge).txt": ("page", "PAGEFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "PageForge_Base.md")),
     "Author a Rubric (RubricForge).txt": ("rubric", "RUBRICFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "RubricForge_Base.md")),
+    "Author a TA (TAForge).txt": ("TA persona", "TAFORGE_JSON", os.path.join(REPO_ROOT, "LLM_Modules", "TAForge_Base.md")),
 }
 
 
@@ -112,7 +111,7 @@ def _about_text():
         "conversation inside that one file's instructions.\n\n"
         "File categories:\n"
         "- START HERE: Canvas Expert overview and how the system fits together.\n"
-        "- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, and RubricForge.\n"
+        "- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, RubricForge, and TAForge.\n"
         "- Scoring skills: one file per valid rubric in the default rubric library.\n\n"
         "Canvas Expert seeds missing files in this folder, then leaves existing files\n"
         "alone so you can refine them by hand in VS Code.\n"
@@ -283,11 +282,9 @@ def _build_toolkit(toolkit_dir, target_dir, rubric_folders):
 
 
 def build_library(target_dir, rubric_folders=None):
-    """Build the AI-TA library. rubric_folders overrides the module default
-    so the workspace-aware RUBRIC_FOLDERS from server.py are used instead of
-    the hard-coded paths (fixing the bug where OneDrive rubrics were skipped)."""
+    """Build the AI-TA library using the current rubric folders by default."""
     if rubric_folders is None:
-        rubric_folders = RUBRIC_FOLDERS
+        rubric_folders = runtime_paths.rubric_folders()
     os.makedirs(target_dir, exist_ok=True)
     written = _copy_tree_if_missing(DEFAULT_AI_TA_DIR, target_dir)
 

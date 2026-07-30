@@ -1,4 +1,4 @@
-"""Offline tests for FeedbackExpert Phase A: pseudonym vault + pipeline.
+"""Offline tests for feedback tools Phase A: pseudonym vault + pipeline.
 
 No live Canvas, no LLM key, no PII (synthetic NQ fixture + temp dirs). Validates
 stable pseudonyms, lossless real->pseudo->real round-trips, that no identity leaks
@@ -59,39 +59,6 @@ def test_round_trip_reidentify(tmp_path):
     assert rows[0]["real_name"] == "Ada Lovelace" and rows[0]["canvas_id"] == "9001"
     assert rows[0]["resolved"] is True
     assert rows[1]["resolved"] is False                # unknown pseudonym flagged, not dropped
-
-
-def test_process_inbox_and_reidentify_dir(tmp_path):
-    inbox = tmp_path / "PRIVATE"; inbox.mkdir()
-    forllm = tmp_path / "SAFE"
-    archive = tmp_path / "_system" / "archive"
-    fromllm = tmp_path / "SAFE"
-    toenter = tmp_path / "PRIVATE"
-    vpath = str(tmp_path / "_system" / "vault" / "vault.json")
-    shutil.copy(FIXTURE, str(inbox / "THG Test.csv"))
-
-    v = Vault(vpath)
-    log = list(fp.process_inbox(str(inbox), str(forllm), str(archive), v, "Sage"))
-    assert any(line.startswith("✓") for line in log)
-    assert (forllm / "THG Test__bundle.json").exists()
-    assert (forllm / "THG Test__HOW-TO-SCORE.txt").exists()
-    assert os.path.exists(vpath)                        # vault saved
-    assert not list(inbox.glob("*.csv"))               # original archived
-    assert (archive / "THG Test.csv").exists()
-
-    # Simulate an LLM results drop — use the actual pseudonym from the vault
-    entries = v.entries()
-    first_pseudo = entries[0]["pseudonym"] if entries else "S001"
-
-    (fromllm / "THG Test__results.json").write_text(json.dumps([
-        {"pseudonym": first_pseudo, "item_id": "1003", "score": 9,
-         "feedback": "Nice. Drafted by Sage (AI), reviewed by your teacher.",
-         "disclosure": "Drafted by Sage (AI)."}]), encoding="utf-8")
-    v2 = Vault(vpath)
-    log2 = list(fp.reidentify_dir(str(fromllm), str(toenter), v2))
-    assert any(line.startswith("✓") for line in log2)
-    out = (toenter / "THG Test__results__to-enter.csv").read_text(encoding="utf-8")
-    assert "Ada Lovelace" in out and "Sage" in out
 
 
 # --------------------------------------------------------------------------
@@ -176,8 +143,8 @@ def test_submissions_round_trip_reidentify(tmp_path):
 
 def _score_like_an_llm(bundle):
     """Stand in for the scoring LLM: emit one contract-conforming result per
-    response in the bundle (Glows/Grows/Next, signed, with disclosure). This is
-    the self-test — proving the contract is concrete enough to author against."""
+    response in the bundle (Glows/Grows/Next, no required disclosure). This is
+    the self-test proving the contract is concrete enough to author against."""
     out = []
     for s in bundle["students"]:
         for r in s["responses"]:
@@ -187,9 +154,7 @@ def _score_like_an_llm(bundle):
                 "score": (r["possible"] or 10) - 1,
                 "feedback": ("Glows: clear thesis; concrete example.\n"
                              "Grows: connect the middle back to the prompt.\n"
-                             "Next step: add one cited quote.\n"
-                             "— Sage (AI teaching assistant)"),
-                "disclosure": "Drafted by Sage (AI), reviewed by your teacher.",
+                             "Next step: add one cited quote."),
             })
     return {"contract_version": "1.0", "results": out}
 
@@ -206,7 +171,59 @@ def test_self_authored_results_conform_to_contract(tmp_path):
 
     rows = fp.reidentify(payload["results"], v)        # push-ready, re-identified
     assert rows and all(r["resolved"] for r in rows)
-    assert all(r["feedback"].endswith("(AI teaching assistant)") for r in rows)
+    assert all("Drafted by" not in r["feedback"] for r in rows)
+
+
+def test_merge_rows_by_uid_combines_multi_item_drafts():
+    """Two items for one student merge into one draft (regression: a plain
+    {canvas_id: row} dict kept only the last item, so a New Quiz essay draft
+    was silently overwritten by the photo-upload draft)."""
+    disclosure = "Drafted by Coach Vale (AI), reviewed by your teacher."
+    rows = [
+        {"resolved": True, "canvas_id": "42", "item_id": "essay-1", "score": 4,
+         "feedback": f"Strong ideas.\n\n{disclosure}", "disclosure": disclosure},
+        {"resolved": True, "canvas_id": "42", "item_id": "photo-2", "score": 0,
+         "feedback": f"Teacher will review the image.\n\n{disclosure}", "disclosure": disclosure},
+        {"resolved": True, "canvas_id": "7", "item_id": "essay-1", "score": 9,
+         "feedback": "Nice.", "disclosure": ""},
+        {"resolved": False, "canvas_id": "", "item_id": "essay-1", "score": 1,
+         "feedback": "?", "disclosure": ""},
+    ]
+    merged = fp.merge_rows_by_uid(rows)
+    assert set(merged) == {"42", "7"}
+    combined = merged["42"]
+    assert combined["score"] == 4
+    assert "Item 1 of 2 (AI score 4):" in combined["feedback"]
+    assert "Strong ideas." in combined["feedback"]
+    assert "Item 2 of 2 (AI score 0):" in combined["feedback"]
+    assert combined["feedback"].count("Coach Vale") == 1
+    assert combined["item_id"] == "essay-1,photo-2"
+    assert merged["7"]["feedback"] == "Nice."      # single-item passthrough
+
+
+def test_merge_rows_by_uid_leaves_total_blank_when_an_item_is_unscored():
+    rows = [
+        {"resolved": True, "canvas_id": "42", "item_id": "a", "score": 4,
+         "feedback": "Good.", "disclosure": ""},
+        {"resolved": True, "canvas_id": "42", "item_id": "b", "score": None,
+         "feedback": "Teacher reviews the image.", "disclosure": ""},
+    ]
+    merged = fp.merge_rows_by_uid(rows)
+    assert merged["42"]["score"] is None
+    assert "not AI-scored" in merged["42"]["feedback"]
+
+
+def test_normalize_ai_feedback_removes_duplicate_signature_and_formats():
+    out = fp.normalize_ai_feedback(
+        "Score: 8/10 Glows: clear thesis. Grows: connect evidence back. "
+        "Coach Vale (AI teaching assistant) "
+        "Drafted by Coach Vale (AI), reviewed by your teacher.",
+        "Drafted by Coach Vale (AI), reviewed by your teacher.",
+    )
+    assert out.count("Coach Vale") == 1
+    assert "AI teaching assistant" not in out
+    assert "connect evidence back" in out
+    assert "\n\nGlows:" in out and "\n\nGrows:" in out
 
 
 # --------------------------------------------------------------------------
@@ -275,9 +292,22 @@ def test_build_contract_text_inlines_rubric():
     with_rubric = fp.build_contract_text("Sage", rubric_text="3 pts: uses a loop")
     assert "3 pts: uses a loop" in with_rubric
     assert "RUBRIC" in with_rubric
+    assert "disclosure sentence exactly once" not in with_rubric
     without = fp.build_contract_text("Sage")
     assert "attached as Knowledge" in without
     assert "3 pts: uses a loop" not in without
+
+
+def test_build_contract_text_uses_persona_signoff_when_configured():
+    contract = fp.build_contract_text(
+        persona={
+            "name": "Sage",
+            "signoff_policy": "ai_disclosure",
+            "signoff_text": "Drafted by {name} (AI), reviewed by your teacher.",
+        }
+    )
+    assert "Drafted by Sage (AI), reviewed by your teacher." in contract
+    assert "End each `feedback` value with it exactly once" in contract
 
 
 def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
@@ -289,6 +319,28 @@ def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
                               rubric_text="Criterion: image has alt text")
     how_to = (safe_dir / f"{fp._safe('Essay 1')}__HOW-TO-SCORE.txt").read_text(encoding="utf-8")
     assert "image has alt text" in how_to
+
+
+def test_write_safe_and_private_writes_scrubbed_shared_context(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
+    bundle["shared_context"] = {
+        "assignment_description": "Use the class passage.",
+        "materials": [{
+            "title": "Passage",
+            "source": "pasted",
+            "text": "Ada Lovelace is named inside the source passage.",
+        }],
+    }
+    safe_dir = tmp_path / "SAFE"
+    result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(tmp_path / "PRIVATE"))
+
+    assert result["shared_context"]
+    shared_text = (safe_dir / f"{fp._safe('Essay 1')}__SHARED-CONTEXT.txt").read_text(encoding="utf-8")
+    safe_blob = (safe_dir / f"{fp._safe('Essay 1')}__bundle.json").read_text(encoding="utf-8")
+    assert "Source material: Passage" in shared_text
+    assert "Ada" not in shared_text and "Lovelace" not in shared_text
+    assert "Ada" not in safe_blob and "Lovelace" not in safe_blob
 
 
 def _code_submission():
@@ -320,19 +372,6 @@ def test_code_file_upload_is_scored_html_preserved_and_name_scrubbed(tmp_path):
     safe_blob = (safe_dir / f"{fp._safe('Webpage 1')}__bundle.json").read_text(encoding="utf-8")
     assert "<h1>" in safe_blob                  # HTML tags survived the scrub
     assert "Ada" not in safe_blob and "Lovelace" not in safe_blob   # name scrubbed from code
-
-
-def test_push_payload_shapes():
-    """Phase C: grade + comment, comment-only (null score), grade-only, and nothing."""
-    from api.webui.routes.feedback import _push_payload
-    both = _push_payload({"score": 8, "feedback": "Nice work. — Sage (AI)"})
-    assert both["submission"]["posted_grade"] == "8"
-    assert both["comment"]["text_comment"].startswith("Nice work")
-    comment_only = _push_payload({"score": None, "feedback": "See note. — Sage (AI)"})
-    assert "submission" not in comment_only and "comment" in comment_only
-    grade_only = _push_payload({"score": 5, "feedback": "   "})
-    assert grade_only == {"submission": {"posted_grade": "5"}}
-    assert _push_payload({"score": None, "feedback": ""}) == {}
 
 
 def test_validate_results_catches_violations(tmp_path):
@@ -368,8 +407,27 @@ def test_build_request_injects_feedback_pattern():
     pattern = {"id": "basic", "name": "Glows & Grows (Basic)",
                "glows": {"min": 2, "max": 3}, "grows": {"min": 1, "max": 2},
                "strategy_sentences": {"min": 2, "max": 3}, "sign_with_persona": True}
-    body = orc.build_request(bundle, "", {"name": "Sage"}, "x/y", feedback_pattern=pattern)
+    body = orc.build_request(
+        bundle, "",
+        {"name": "Sage", "signoff_policy": "ai_disclosure",
+         "signoff_text": "Drafted by {name} (AI), reviewed by your teacher."},
+        "x/y",
+        feedback_pattern=pattern,
+    )
     system = body["messages"][0]["content"]
     assert "Glows & Grows (Basic)" in system
     assert "2–3 Glows" in system and "1–2 Grows" in system
     assert "Sage" in system
+    assert "persona signoff" in system
+    assert "Do not add a separate signature" in system
+    assert "Sign each feedback entry" not in system
+
+
+def test_build_request_does_not_require_signoff_for_plain_persona():
+    body = orc.build_request(
+        {"students": []}, "", {"name": "Plain", "signoff_policy": "none"}, "x/y",
+        feedback_pattern={"id": "basic", "name": "Basic", "sign_with_persona": True},
+    )
+    system = body["messages"][0]["content"]
+    assert "Drafted by" not in system
+    assert "persona signoff" not in system

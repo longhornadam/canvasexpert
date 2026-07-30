@@ -3,72 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% if csrf_token %}<meta name="canvasexpert-csrf-token" content="{{ csrf_token }}">{% endif %}
   <title>{% block title %}Canvas Expert{% endblock %}</title>
   <!-- Prevent flash of wrong theme -->
   <script>try{var t=localStorage.getItem('ce-theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
   <!-- Local fonts (vendored from Google Fonts) -->
   <link rel="stylesheet" href="/static/fonts/fonts.css">
-  <link rel="stylesheet" href="/static/style.css?v={{ asset_v }}">
+  {% block stylesheet_bundle %}
+  <link rel="stylesheet" href="/static/ui/tokens.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/ui/foundation.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/ui/components.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/ui/layouts.css?v={{ asset_v }}">
+  {% endblock %}
+  <script src="/static/write_review.js?v={{ asset_v }}"></script>
+  <script src="/static/app_context.js?v={{ asset_v }}"></script>
+  {% block head_extra %}{% endblock %}
 </head>
 <body class="{% if nav_section %}nav-section-{{ nav_section }} {% endif %}{% block body_class %}{% endblock %}">
-  <header class="topbar">
-    <a class="brand" href="/">{% include "_ce_logo.svg" %} CanvasExpert</a>
-    <nav>
-      <a class="nav-link nav-roster{% if nav_section == 'roster' %} nav-active{% endif %}" href="/roster">Roster</a>
-
-      <details class="nav-dd{% if nav_section == 'assignments' %} nav-dd--active{% endif %}">
-        <summary>Assignments ▾</summary>
-        <div class="dd-menu">
-          <a href="/push/quiz">Push quiz</a>
-          <a href="/push/assignment">Push assignment</a>
-          <a href="/push/note">Push notes</a>
-          <a href="/push/page">Push page</a>
-          <a href="/push/rubric">Push rubric</a>
-          <a href="/push/quick">Quick assignment</a>
-          <div class="dd-sep"></div>
-          <a href="/download-work">Download student work</a>
-        </div>
-      </details>
-
-      <details class="nav-dd{% if nav_section == 'gradebook' %} nav-dd--active{% endif %}">
-        <summary>Gradebook ▾</summary>
-        <div class="dd-menu">
-          <a href="/gradebook?tab=policy">Policy &amp; sweep</a>
-          <a href="/gradebook?tab=extra-time">Extra-time</a>
-          <a href="/gradebook?tab=extensions">Extensions</a>
-          <a href="/gradebook?tab=curves">Curves</a>
-          <a href="/gradebook?tab=snapshot">Snapshot</a>
-          <a href="/gradebook?tab=routines">Routines</a>
-        </div>
-      </details>
-
-      <details class="nav-dd{% if nav_section in ['feedback', 'ai'] %} nav-dd--active{% endif %}">
-        <summary>Feedback ▾</summary>
-        <div class="dd-menu">
-          <a href="/feedback-expert">Score with AI</a>
-          <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
-          <a href="/student-reports">Student reports</a>
-          <div class="dd-sep"></div>
-          <a href="/ai-expert">AI tools &amp; skills</a>
-        </div>
-      </details>
-    </nav>
-    <div class="topbar-right">
-      <a href="/settings" class="topbar-settings-link">Settings</a>
-      <a href="/about" class="topbar-settings-link{% if nav_section == 'about' %} topbar-right-active{% endif %}">About</a>
-      <button class="theme-toggle" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle theme">
-        <span class="toggle-track">
-          <span class="toggle-thumb"></span>
-          <span class="toggle-icon toggle-icon--sun">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          </span>
-          <span class="toggle-icon toggle-icon--moon">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          </span>
-        </span>
-      </button>
-    </div>
-  </header>
+  {% block app_header %}{% endblock %}
+  {% block status_strip %}{% endblock %}
   <main class="{% block main_class %}page{% endblock %}">
     {% block content %}{% endblock %}
   </main>
@@ -86,22 +39,8 @@
       setTimeout(function(){ html.classList.remove('ce-transitioning'); }, 320);
     });
   })();
-  // Nav dropdown: close all when another opens or user clicks outside
+  // Keep direct hash links focused after a page renders.
   (function(){
-    var dds = Array.from(document.querySelectorAll('.nav-dd'));
-    dds.forEach(function(dd) {
-      dd.addEventListener('toggle', function() {
-        if (dd.open) {
-          dds.forEach(function(other) { if (other !== dd) other.open = false; });
-        }
-      });
-    });
-    document.addEventListener('click', function(e) {
-      if (!e.target.closest('.nav-dd')) {
-        dds.forEach(function(dd) { dd.open = false; });
-      }
-    });
-    // Activate nav section anchor on page load
     var hash = location.hash;
     if (hash) {
       var el = document.querySelector(hash);
@@ -132,5 +71,6 @@
     });
   })();
   </script>
+  {% block scripts_extra %}{% endblock %}
 </body>
 </html>

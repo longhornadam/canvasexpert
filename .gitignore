@@ -17,6 +17,7 @@ env/
 .env.*
 api/.env
 api/webui/config.json
+api/webui/config.json.lock
 
 # Runtime / user data
 out/

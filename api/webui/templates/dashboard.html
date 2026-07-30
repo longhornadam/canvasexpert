@@ -1,291 +1,112 @@
-{% extends "base.html" %}
-{% block title %}Canvas Expert{% endblock %}
-{% block body_class %}dash-screen{% endblock %}
-{% block main_class %}dash-shell{% endblock %}
-{% block content %}
+{% extends "layouts/workspace.html" %}
+{% block title %}Home · Canvas Expert{% endblock %}
+{% block workspace_body_class %}ce-desk-page{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/dashboard.css?v={{ asset_v }}">{% endblock %}
+{% block primary %}
+<div id="desk-root" class="ce-desk-shell" aria-label="Home">
+  <script id="desk-initial-data" type="application/json">{{ {"jobs": initial_jobs, "presentations": initial_presentations, "operations": initial_operations, "receipts": initial_receipts} | tojson }}</script>
 
-{% if not token_is_set %}
-<div style="max-width:720px; margin:0 auto; padding:32px 24px">
-  <section class="callout warn" style="margin-bottom:20px">
-    No Canvas token on this machine yet &mdash; <a href="/settings">30-second setup in Settings</a>.
-  </section>
-  <section class="card">
-    <h2>Welcome to Canvas Expert</h2>
-    <div class="welcome-grid">
-      <div class="welcome-tile">
-        <h3>Forges &mdash; ready right now</h3>
-        <p>Author a quiz with your AI, compile it here, then import into Canvas. No token needed.</p>
-        <a class="forge forge-qf" href="/forge/quizforge/" target="_blank" rel="noopener">{% include "_anvil.svg" %} Open QuizForge</a>
-        <span class="forge forge-uf">{% include "_anvil.svg" %} UnitForge <span class="forge-soon">soon</span></span>
+  <div class="ce-desk-toolbar" aria-label="Home controls">
+    <p class="ce-desk-active-courses">
+      <strong>Active courses:</strong>
+      <span>{% for course in saved_courses %}{{ course.nickname or course.name }}{% if not loop.last %}, {% endif %}{% else %}None selected{% endfor %}</span>
+      <a href="/settings#current-courses-card">Change in Settings</a>
+    </p>
+    <p class="ce-desk-sync" id="desk-mirror" data-state="unknown" aria-live="polite">
+      <span class="ce-status-dot" data-mirror-dot></span>
+      <span id="desk-mirror-label">Checking Canvas sync…</span>
+    </p>
+    <button type="button" id="desk-sync" class="ce-desk-button ce-desk-button--primary">Sync now</button>
+  </div>
+
+  <div class="ce-desk-grid">
+    <section class="ce-panel ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
+      <div class="ce-desk-panel-head">
+        <h2 id="desk-start-title">Start</h2>
       </div>
-      <div class="welcome-tile">
-        <h3>Live Canvas tools &mdash; need a token</h3>
-        <p>Push quizzes, assignments, pages and rubrics to your courses. Canvas &rarr; Account &rarr; Settings &rarr; New Access Token.</p>
-        <form id="welcome-token-form">
-          <label style="font-weight:600;font-size:13px">Canvas base URL<input type="url" name="base_url" value="{{ canvas_base }}" required style="font-size:13px"></label>
-          <label style="font-weight:600;font-size:13px">Canvas API token<input type="password" name="token" autocomplete="off" required placeholder="Paste your token here" style="font-size:13px"></label>
-          <div class="actions" style="margin-bottom:0">
-            <button type="button" id="welcome-btn-test" class="small">Test connection</button>
-            <button type="submit" class="primary small">Save &amp; get started</button>
+      <div class="ce-desk-launch-groups">
+        <section class="ce-desk-launch-group" aria-labelledby="desk-create-title">
+          <h3 id="desk-create-title" class="ce-create-mark">Create</h3>
+          <div class="ce-desk-launch-list">
+            <a href="/course-expert?tab=assignment">Assignment <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=quiz">Quiz <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=quick">Quick column <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=page">Page <span aria-hidden="true">→</span></a>
+            <a href="/course-expert?tab=rubric">Rubric <span aria-hidden="true">→</span></a>
           </div>
-          <p id="welcome-status" class="status" style="font-size:13px"></p>
-        </form>
+        </section>
+        <section class="ce-desk-launch-group" aria-labelledby="desk-grade-title">
+          <h3 id="desk-grade-title" class="ce-grade-mark">Grade</h3>
+          <div class="ce-desk-launch-list">
+            <a href="/powergrader">Grade an assignment <span aria-hidden="true">→</span></a>
+            <a href="/gradebook">Gradebook <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
+        <section class="ce-desk-launch-group" aria-labelledby="desk-manage-title">
+          <h3 id="desk-manage-title" class="ce-attention-mark">Students</h3>
+          <div class="ce-desk-launch-list">
+            <a href="/roster">Students <span aria-hidden="true">→</span></a>
+            <a href="/students/reports">Student reports <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
+        <section class="ce-desk-launch-group" aria-labelledby="desk-automate-title">
+          <h3 id="desk-automate-title" class="ce-prepared-mark">Automations</h3>
+          <div class="ce-desk-launch-list">
+            <a href="/routines">Routines <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <section class="ce-panel ce-desk-panel ce-desk-panel--continue" aria-labelledby="desk-continue-title">
+      <div class="ce-desk-panel-head"><h2 id="desk-continue-title">Continue</h2></div>
+      <div id="desk-continue-list" class="ce-desk-list" aria-live="polite">
+        {% for job in initial_jobs if job.status in ['draft', 'ready', 'in_progress'] %}
+        {% set presentation = initial_presentations.get(job.job_id, {}) %}
+        <article class="ce-desk-job" data-job-id="{{ job.job_id }}" data-material-version="{{ job.material_version }}" data-origin="{{ job.origin }}">
+          <div class="ce-desk-job-detail">{% if presentation.course_label %}<span class="ce-desk-course-label">{{ presentation.course_label }}</span>{% endif %}<strong>{{ presentation.title or job.title or 'Work item' }}</strong><span class="ce-desk-job-summary">{{ presentation.summary or 'Work in progress' }}</span></div>
+          <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">{{ presentation.action_label or 'Continue' }}</a>
+          <div class="ce-desk-job-actions"><button type="button" data-job-action="ignore" data-job-id="{{ job.job_id }}">Ignore</button><button type="button" data-job-action="snooze" data-job-id="{{ job.job_id }}">Snooze</button>{% if job.origin == 'intentional' %}<button type="button" data-job-action="complete" data-job-id="{{ job.job_id }}">Complete</button>{% endif %}</div>
+        </article>
+        {% else %}<p class="ce-desk-empty">No open work.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="ce-panel ce-desk-panel ce-desk-panel--attention" aria-labelledby="desk-attention-title">
+      <div class="ce-desk-panel-head"><h2 id="desk-attention-title">Attention</h2></div>
+      <div id="desk-attention-list" class="ce-desk-list" aria-live="polite">
+        {% for job in initial_jobs if job.status == 'attention' %}
+        {% set presentation = initial_presentations.get(job.job_id, {}) %}
+        <article class="ce-desk-job" data-job-id="{{ job.job_id }}" data-material-version="{{ job.material_version }}" data-origin="{{ job.origin }}">
+          <div class="ce-desk-job-detail">{% if presentation.course_label %}<span class="ce-desk-course-label">{{ presentation.course_label }}</span>{% endif %}<strong>{{ presentation.title or job.title or 'Work item' }}</strong><span class="ce-desk-job-summary">{{ presentation.summary or job.attention_reason or 'Work needs attention' }}</span></div>
+          <a class="ce-desk-inline-link" href="{{ job.resumable_url }}">{{ presentation.action_label or 'Review' }}</a>
+          <div class="ce-desk-job-actions"><button type="button" data-job-action="ignore" data-job-id="{{ job.job_id }}">Ignore</button><button type="button" data-job-action="snooze" data-job-id="{{ job.job_id }}">Snooze</button>{% if job.origin == 'intentional' %}<button type="button" data-job-action="complete" data-job-id="{{ job.job_id }}">Complete</button>{% endif %}</div>
+        </article>
+        {% else %}<p class="ce-desk-empty">No items need review.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="ce-panel ce-desk-panel ce-desk-panel--rail" aria-label="Prepared operations and receipts">
+      <section class="ce-desk-rail-section" aria-labelledby="desk-prepared-title">
+        <div class="ce-desk-panel-head"><h2 id="desk-prepared-title">Prepared</h2><span class="ce-desk-panel-note">Canvas unchanged</span></div>
+        <div id="desk-prepared-list" class="ce-desk-list" aria-live="polite">
+          {% for operation in initial_operations if operation.status in ['prepared', 'reviewed'] %}
+          <article class="ce-desk-prepared"><div><strong>{{ operation.kind }}</strong><span>{{ operation.status }} · {{ operation.target_count }} target{{ '' if operation.target_count == 1 else 's' }}</span></div></article>
+          {% else %}<p id="desk-prepared-empty" class="ce-desk-empty">No prepared operations.</p>{% endfor %}
+        </div>
+      </section>
+      <section class="ce-desk-rail-section" aria-labelledby="desk-receipts-title">
+        <div class="ce-desk-panel-head"><h2 id="desk-receipts-title">Receipts</h2></div>
+        <div id="desk-receipts-list" class="ce-desk-list" aria-live="polite">
+          {% for receipt in initial_receipts %}
+          <article class="ce-desk-receipt"><div><strong>{{ receipt.kind }}</strong><span>{{ receipt.status }} · {{ receipt.target_count }} target{{ '' if receipt.target_count == 1 else 's' }}</span></div><a class="ce-desk-inline-link" href="{{ receipt.detail_url }}">Receipt</a></article>
+          {% else %}<p class="ce-desk-empty">No receipts.</p>{% endfor %}
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <p class="ce-desk-version">CanvasExpert v{{ app_version }}</p>
 </div>
-<script>
-(function(){
-  var form=document.getElementById("welcome-token-form");
-  var status=document.getElementById("welcome-status");
-  function setStatus(msg,ok){status.textContent=msg;status.className="status "+(ok?"ok":"error");}
-  document.getElementById("welcome-btn-test").addEventListener("click",async function(){
-    setStatus("Testing...",true);
-    try{var r=await fetch("/settings/test-connection",{method:"POST",body:new FormData(form)});var d=await r.json();d.ok?setStatus("Connected as "+(d.display_name||"you")+" OK",true):setStatus(d.error||"Connection failed",false);}
-    catch(e){setStatus(String(e),false);}
-  });
-  form.addEventListener("submit",async function(ev){
-    ev.preventDefault();setStatus("Saving...",true);
-    try{var r=await fetch("/settings/canvas",{method:"POST",body:new FormData(form)});var d=await r.json();if(d.ok){setStatus("Saved OK",true);location.reload();}else setStatus(d.error||"Save failed",false);}
-    catch(e){setStatus(String(e),false);}
-  });
-})();
-</script>
-
-{% else %}
-<div class="dash-page">
-  <section class="dash-status-card" aria-label="CanvasExpert status">
-    <a class="dash-status-item dash-status-item--canvas" href="/settings">
-      <span class="dash-status-dot" aria-hidden="true"></span>
-      <span class="dash-status-label">Canvas</span>
-      <strong>Connected</strong>
-    </a>
-    <a class="dash-status-item" href="/settings">
-      <span class="dash-status-label">Courses</span>
-      <strong>{{ active_count }} active</strong>
-    </a>
-    <a class="dash-status-item" href="/settings">
-      <span class="dash-status-label">Workspace</span>
-      <strong>{{ workspace_status }}</strong>
-    </a>
-    <button type="button" class="dash-status-check" id="dash-check-connection"
-            data-base="{{ canvas_base }}">Check connection</button>
-    <span class="dash-check-result" id="dash-check-result" aria-live="polite"></span>
-  </section>
-
-  <section class="dash-hero">
-    <div>
-      <p class="dash-kicker">CanvasExpert home</p>
-      <h1>Choose the job.</h1>
-      <p>Common teacher workflows stay up front. Everything else is still one scroll away.</p>
-    </div>
-  </section>
-
-  <section class="dash-section dash-section--primary">
-    <div class="dash-section-head">
-      <h2>Most common jobs</h2>
-      <p>Fast entry points for work you are likely to do during a planning period.</p>
-    </div>
-    <div class="dash-job-grid">
-      <a class="dash-job dash-job--primary" href="/push/quick">
-        <span class="dash-job-verb">Create</span>
-        <strong>Quick assignment</strong>
-        <span>Make a gradebook column across checked courses.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/push/assignment">
-        <span class="dash-job-verb">Create</span>
-        <strong>Push assignment</strong>
-        <span>Publish instructions, submission settings, rubrics, and tiers.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/push/note">
-        <span class="dash-job-verb">Create</span>
-        <strong>Push notes</strong>
-        <span>Generate printable NoteForge notes for class.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/push/quiz">
-        <span class="dash-job-verb">Create</span>
-        <strong>Push quiz</strong>
-        <span>Validate and push a QuizForge assessment.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/download-work">
-        <span class="dash-job-verb">Manage</span>
-        <strong>Download student work</strong>
-        <span>Collect submissions by assignment and by student.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/gradebook">
-        <span class="dash-job-verb">Manage</span>
-        <strong>Gradebook sweep</strong>
-        <span>Preview and correct school-day lateness.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/gradebook#extensions">
-        <span class="dash-job-verb">Manage</span>
-        <strong>Grant extension</strong>
-        <span>Move due dates for selected students.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/feedback-expert">
-        <span class="dash-job-verb">Assess</span>
-        <strong>Score writing with AI</strong>
-        <span>Pseudonymize submissions, draft feedback, and review before posting.</span>
-      </a>
-
-      <a class="dash-job dash-job--primary" href="/roster">
-        <span class="dash-job-verb">Manage</span>
-        <strong>Manage roster</strong>
-        <span>Set nicknames, pseudonyms, and roster-safe names before AI or group work.</span>
-      </a>
-    </div>
-  </section>
-
-  <section class="dash-tools">
-    <div class="dash-section-head">
-      <h2>More tools by job</h2>
-      <p>Less frequent work stays available without competing with the daily tasks.</p>
-    </div>
-    <div class="dash-lane-grid">
-      <div class="dash-lane">
-        <h3>Roster</h3>
-        <a href="/roster">Roster names</a>
-        <a href="/roster?focus=extra-time">Extra-time roster</a>
-        <a href="/roster?focus=groups">Course roster &amp; groups</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Assignments</h3>
-        <a href="/push/quiz">Push quiz</a>
-        <a href="/push/assignment">Push assignment</a>
-        <a href="/push/note">Push notes</a>
-        <a href="/push/page">Push page</a>
-        <a href="/push/rubric">Push rubric</a>
-        <a href="/push/quick">Quick assignment</a>
-        <a href="/download-work">Download student work</a>
-        <a href="/forge/quizforge/" target="_blank" rel="noopener">Open QuizForge compiler</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Gradebook</h3>
-        <a href="/gradebook?tab=policy">Late policy &amp; sweep</a>
-        <a href="/gradebook?tab=extensions">Extensions</a>
-        <a href="/gradebook?tab=curves">Curves</a>
-        <a href="/gradebook?tab=snapshot">Gradebook snapshot</a>
-        <a href="/gradebook?tab=routines">Routines</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Feedback</h3>
-        <a href="/feedback-expert">Score with AI</a>
-        <a href="/feedback-expert#push-section">Push feedback to Canvas</a>
-        <a href="/student-reports">Student reports</a>
-        <a href="/ai-expert">AI tools &amp; skills</a>
-      </div>
-
-      <div class="dash-lane">
-        <h3>Download forges</h3>
-        <a href="/api/download-contract?name=QuizForge_Base" download>QuizForge</a>
-        <a href="/api/download-contract?name=AssignmentForge_Base" download>AssignmentForge</a>
-        <a href="/api/download-contract?name=PageForge_Base" download>PageForge</a>
-        <a href="/api/download-contract?name=RubricForge_Base" download>RubricForge</a>
-        <a href="/api/download-contract?name=NoteForge_Base" download>NoteForge</a>
-      </div>
-    </div>
-  </section>
-
-  <section class="dash-section dash-section--activity">
-    <div class="dash-section-head">
-      <h2>Recent activity</h2>
-    </div>
-    <div class="dash-activity-list" id="dash-activity-list">
-      <div class="dash-activity-row">
-        <span class="dash-activity-check" aria-hidden="true">&#10003;</span>
-        <span class="dash-activity-title">No recent activity loaded yet</span>
-        <span class="dash-activity-time"></span>
-      </div>
-    </div>
-  </section>
-</div>
-
-<script>
-(function(){
-"use strict";
-var checkBtn=document.getElementById("dash-check-connection");
-var checkResult=document.getElementById("dash-check-result");
-if(checkBtn&&checkResult){
-  checkBtn.addEventListener("click",function(){
-    var original=checkBtn.textContent;
-    checkBtn.disabled=true;
-    checkBtn.textContent="Checking...";
-    checkResult.textContent="";
-    var body=new URLSearchParams({base_url:checkBtn.dataset.base||"",token:""});
-    fetch("/settings/test-connection",{method:"POST",body:body})
-      .then(function(r){return r.json();})
-      .then(function(d){
-        checkResult.textContent=d.ok?("Connected as "+(d.display_name||"you")):(d.error||"Connection failed");
-        checkResult.className="dash-check-result "+(d.ok?"ok":"err");
-      })
-      .catch(function(){checkResult.textContent="Connection check failed";checkResult.className="dash-check-result err";})
-      .finally(function(){checkBtn.disabled=false;checkBtn.textContent=original;});
-  });
-}
-
-var list=document.getElementById("dash-activity-list");
-if(!list)return;
-var labels={
-  quiz_push:"Quiz pushed",
-  quiz_push_tiered:"Differentiated quiz pushed",
-  af_push:"Assignment pushed",
-  pf_push:"Page created and published",
-  rf_push:"Rubric pushed",
-  quick_assignment:"Quick assignment created",
-  download:"Student work downloaded",
-  sweep_apply:"Gradebook sweep completed",
-  curve_apply:"Curve applied",
-  curve_revert:"Curve reverted",
-  extension:"Extension applied",
-  ai_ta_rebuild:"AI Teaching Assistant rebuilt",
-  routine:"Automation completed"
-};
-function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]});}
-function rel(ts){
-  if(!ts)return"";
-  var d=new Date(ts);
-  if(Number.isNaN(d.getTime()))return"";
-  var diff=Math.max(0,Date.now()-d.getTime());
-  var mins=Math.floor(diff/60000);
-  if(mins<1)return"Just now";
-  if(mins<60)return mins+" minute"+(mins===1?"":"s")+" ago";
-  var hours=Math.floor(mins/60);
-  if(hours<24)return hours+" hour"+(hours===1?"":"s")+" ago";
-  var days=Math.floor(hours/24);
-  if(days===1)return"Yesterday";
-  if(days<7)return days+" days ago";
-  try{return d.toLocaleDateString(undefined,{month:"short",day:"numeric"});}catch(e){return"";}
-}
-function titleFor(e){
-  var title=e.title||labels[e.action]||"Canvas activity";
-  if((e.action==="quiz_push"||e.action==="quiz_push_tiered")&&e.courses&&e.courses.length){
-    title="Quiz pushed to "+e.courses.length+" course"+(e.courses.length===1?"":"s");
-  }
-  if(e.action==="sweep_apply"&&e.detail)title=e.detail;
-  return title;
-}
-function row(e){
-  return '<div class="dash-activity-row">'+
-    '<span class="dash-activity-check" aria-hidden="true">&#10003;</span>'+
-    '<span class="dash-activity-title">'+esc(titleFor(e))+'</span>'+
-    '<span class="dash-activity-time">'+esc(rel(e.ts))+'</span>'+
-  '</div>';
-}
-fetch("/api/activity?limit=3").then(function(r){return r.json();}).then(function(data){
-  var events=data.events||[];
-  if(events.length)list.innerHTML=events.map(row).join("");
-}).catch(function(){});
-})();
-</script>
-{% endif %}
 {% endblock %}
+{% block workspace_scripts %}<script src="/static/desk.js?v={{ asset_v }}"></script>{% endblock %}

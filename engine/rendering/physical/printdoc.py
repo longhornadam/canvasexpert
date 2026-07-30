@@ -1,7 +1,7 @@
 """Intermediate content model for printable documents.
 
-Slice 1 keeps this intentionally quiz-shaped while separating layout from the
-legacy DOCX packager. Later slices can add more block/payload types.
+QuizForge adapters convert trusted content into this shared model before
+rendering through the physical HTML/PDF/DOCX pipeline.
 """
 
 from __future__ import annotations

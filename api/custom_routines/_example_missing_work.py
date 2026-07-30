@@ -1,6 +1,6 @@
 # Example custom routine — a read-only "missing work" nudge check.
 # Copy this file to a name WITHOUT the leading underscore to activate it.
-# No imports needed: routine, active_courses, canvas_get_all, datetime are injected.
+# No imports needed: routine, active_courses, canvas_read, datetime are injected.
 
 @routine("missing_work",
          label="Missing-work nudge",
@@ -12,17 +12,16 @@ def run(params):
     lines, ok, total = [], True, 0
     for c in active_courses():
         cid = str(c["id"])
-        asgns, err = canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
-        if err:
-            lines.append(f"\u2717 {c['nickname']}: {err}"); ok = False; continue
-        due_ids = {str(a["id"]) for a in (asgns or [])
+        asgns = canvas_read("assignments", cid)
+        if not asgns["ok"]:
+            lines.append(f"\u2717 {c['nickname']}: {asgns['error']}"); ok = False; continue
+        due_ids = {str(a["id"]) for a in asgns["records"]
                    if (a.get("due_at") or "")[:10] and (a.get("due_at") or "")[:10] <= today}
-        subs, err = canvas_get_all(f"/api/v1/courses/{cid}/students/submissions",
-                                   {"student_ids[]": "all", "per_page": 100})
-        if err:
-            lines.append(f"\u2717 {c['nickname']}: {err}"); ok = False; continue
+        subs = canvas_read("submissions", cid)
+        if not subs["ok"]:
+            lines.append(f"\u2717 {c['nickname']}: {subs['error']}"); ok = False; continue
         missing = {}
-        for s_ in (subs or []):
+        for s_ in subs["records"]:
             if (str(s_.get("assignment_id")) in due_ids
                     and s_.get("workflow_state") == "unsubmitted"):
                 missing[s_["user_id"]] = missing.get(s_["user_id"], 0) + 1

@@ -1,7 +1,6 @@
 """Slice-1 target test for the paper render layer — `to_printdoc(Quiz)`.
 
-This is the green checkmark the Toyota implementer builds toward (see
-`docs/handoffs/paper-render-layer-slice1.md`). It exercises ONLY the pure-Python
+This is the green checkmark the Toyota implementer builds toward. It exercises ONLY the pure-Python
 adapter: it imports `engine.rendering.physical.printdoc` and
 `engine.rendering.physical.quiz_adapter` and nothing else — no WeasyPrint, no
 Pandoc — so the suite never depends on native libs.

@@ -10,10 +10,39 @@ from datetime import datetime
 import requests
 from docx import Document
 
-from downloader import (
-    _download_binary, _get_all_pages, _reserve_filename, _student_file_tag,
-    _work_filename, safe_name,
+from api import report_local_reads
+from api.submission_transport import (
+    download_binary as _download_binary,
+    fetch_submission as _fetch_submission,
+    get_all_pages as _get_all_pages,
 )
+from api.webui.workspace import safe_component
+
+
+def safe_name(value, max_len=80):
+    return safe_component(value, max_len=max_len)
+
+
+def _student_file_tag(user, fallback_user_id=None):
+    user = user or {}
+    raw = user.get("sortable_name") or user.get("name") or f"user_{fallback_user_id}"
+    return safe_name(raw, 40)
+
+
+def _work_filename(assignment_name, student_tag, ext="", detail=""):
+    stem = safe_name(assignment_name, 110) + " - " + safe_name(student_tag, 40)
+    return stem + (" - " + safe_name(detail, 40) if detail else "") + (ext or "")
+
+
+def _reserve_filename(filename, used):
+    stem, ext = os.path.splitext(filename)
+    directory = used.get("__directory__", "") if isinstance(used, dict) else ""
+    names = used.setdefault("__names__", set()) if isinstance(used, dict) else used
+    candidate, number = filename, 2
+    while candidate in names or (directory and os.path.exists(os.path.join(directory, candidate))):
+        candidate = f"{stem} ({number}){ext}"; number += 1
+    names.add(candidate)
+    return candidate
 
 # Section keys the UI offers (order preserved in the document):
 SECTIONS = ["standing", "late", "adjustments", "comments", "work"]
@@ -85,7 +114,13 @@ def _info_blocks(subs, curve_rows, sections):
         for c in (s.get("submission_comments") or []):
             who = (c.get("author_name") or "").strip()
             when = (c.get("created_at") or "")[:10]
-            comments.append(f'{when} — {who}: {c.get("comment", "")}')
+            # A blank label (author not attributable — see report_local_reads
+            # ::comment_author_label) renders without a dangling "— :" prefix,
+            # never a guessed name; the comment's content is still shown.
+            if who:
+                comments.append(f'{when} — {who}: {c.get("comment", "")}')
+            else:
+                comments.append(f'{when}: {c.get("comment", "")}')
     for cr in curve_rows:
         adj.append(cr)   # pre-formatted neutral strings, built in build_packet
     blocks = []
@@ -103,7 +138,7 @@ def _info_blocks(subs, curve_rows, sections):
 
 
 def _signature(subs, curve_rows):
-    """Cheap change-detector for dedupe: latest activity + counts."""
+    """Cheap change-detector for dedupe: latest submission marker + counts."""
     last = max([(s.get("submitted_at") or "") for s in subs] + [""])
     graded = sum(1 for s in subs if s.get("workflow_state") == "graded")
     return f"{last}|{graded}|{len(curve_rows)}"
@@ -116,8 +151,17 @@ def build_packet(user_id, student_name, sections, courses, base, token,
                  reports_root, curve_events, skip_unchanged=False):
     """Generator of progress strings. `courses` = [{id, name}] to consider.
     Final line: 'FOLDER: <student root>'. Set skip_unchanged for the routine path."""
-    session = requests.Session()
-    session.headers["Authorization"] = f"Bearer {token}"
+    session_box: dict = {}
+
+    def _session():
+        # Constructed only the first time a live fallback or a focused attachment
+        # fetch actually needs it — a fully-local run never touches `requests`.
+        if "session" not in session_box:
+            live = requests.Session()
+            live.headers["Authorization"] = f"Bearer {token}"
+            session_box["session"] = live
+        return session_box["session"]
+
     stu_root = os.path.join(reports_root, safe_name(student_name))
     file_tag = _student_file_tag({"name": student_name}, user_id)
     os.makedirs(stu_root, exist_ok=True)
@@ -130,25 +174,47 @@ def build_packet(user_id, student_name, sections, courses, base, token,
 
     yield f"Student: {student_name}"
     any_course = False
+    manifest_entries: dict = {}
     for c in courses:
         cid, cname = str(c["id"]), c["name"]
-        try:
-            subs = _get_all_pages(
-                session, f"{base}/api/v1/courses/{cid}/students/submissions",
-                {"student_ids[]": str(user_id),
-                 "include[]": ["assignment", "submission_comments"],
-                 "per_page": 100})
-        except requests.HTTPError as e:
-            code = e.response.status_code if e.response is not None else "?"
-            yield f"· {cname}: no access (HTTP {code}) — skipped"
-            continue                         # e.g. 403 where the teacher can't read submissions
-        except Exception as e:
-            yield f"· {cname}: skipped ({e})"
-            continue
-        subs = [s for s in (subs or []) if (s.get("assignment") or {}).get("id")]
+        local_subs = report_local_reads.local_course_submissions(cid, user_id)
+        used_local = local_subs is not None
+        freshness = report_local_reads.local_course_freshness(cid)
+        if used_local:
+            subs = local_subs
+        else:
+            try:
+                subs = _get_all_pages(
+                    _session(), f"{base}/api/v1/courses/{cid}/students/submissions",
+                    {"student_ids[]": str(user_id),
+                     "include[]": ["assignment", "submission_comments"],
+                     "per_page": 100})
+            except requests.HTTPError as e:
+                code = e.response.status_code if e.response is not None else "?"
+                yield f"· {cname}: no access (HTTP {code}) — skipped"
+                continue                     # e.g. 403 where the teacher can't read submissions
+            except Exception as e:
+                yield f"· {cname}: skipped ({e})"
+                continue
+            subs = [s for s in (subs or []) if (s.get("assignment") or {}).get("id")]
         if not subs:
             continue                         # student not in this course
         any_course = True
+        # Private, non-rendered source/freshness disclosure — a separate
+        # concern from `_manifest.json`'s dedupe cache below; recorded for
+        # every processed course regardless of the skip_unchanged outcome.
+        manifest_entries[cid] = {
+            "course_name": cname,
+            "source": freshness["source"],
+            "synced_at": freshness["synced_at"],
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        if used_local:
+            # Local-mirror comments never stored a real author name to begin
+            # with — this recovers a usable label. Live-fallback subs come
+            # straight from Canvas and already carry real author_name values,
+            # exactly as _info_blocks reads them today; leave them untouched.
+            report_local_reads.apply_comment_display(subs, user_id, student_name)
         # curve adjustments for this student+course (local records, neutral phrasing)
         curve_rows = []
         for ev in curve_events:
@@ -175,6 +241,17 @@ def build_packet(user_id, student_name, sections, courses, base, token,
         if "work" in sections:
             asg_dir = os.path.join(course_dir, "Assignments")
             os.makedirs(asg_dir, exist_ok=True)
+            if used_local:
+                # The local path never stores attachments (signed URLs are never
+                # cached) — a focused, single-submission live call is the only
+                # way to learn whether an online_upload submission has files,
+                # and only for that one submission, never the whole course.
+                for s in subs:
+                    if s.get("submission_type") == "online_upload":
+                        fetched = _fetch_submission(
+                            _session(), base, cid, s.get("assignment_id"), user_id)
+                        if fetched:
+                            s["attachments"] = fetched.get("attachments") or []
             used_filenames = set()
             n = 0
             for s in subs:
@@ -207,7 +284,7 @@ def build_packet(user_id, student_name, sections, courses, base, token,
                     )
                     dest = os.path.join(asg_dir, fname)
                     try:
-                        _download_binary(session, att["url"], dest)
+                        _download_binary(_session(), att["url"], dest)
                         n += 1
                     except Exception as e:
                         yield f"  !! {cname}/{safe_name(assignment_name)}: {e}"
@@ -226,4 +303,5 @@ def build_packet(user_id, student_name, sections, courses, base, token,
         yield "· student not found in any selected course"
     with open(man_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
+    report_local_reads.write_source_manifest(stu_root, manifest_entries)
     yield f"FOLDER: {stu_root}"

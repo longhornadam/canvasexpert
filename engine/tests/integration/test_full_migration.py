@@ -8,7 +8,14 @@ import io
 from engine.parsing.text_parser import TextOutlineParser
 from engine.validation.validator import QuizValidator, ValidationStatus
 from engine.rendering.canvas.canvas_packager import CanvasPackager
-from engine.orchestrator import QuizForgeOrchestrator
+from engine.importers import import_quiz_from_llm
+from engine.validation.point_calculator import calculate_points
+from engine.validation.answer_balancer import balance_answers
+from engine.rendering.physical.styles.default_styles import DEFAULT_QUIZ_POINTS
+from engine.packagers.packager import package_quiz
+from engine.packaging.folder_creator import create_quiz_folder
+from engine.feedback.log_generator import generate_log
+from engine.feedback.fail_prompt_generator import generate_fail_prompt
 
 
 def test_parse_all_question_types():
@@ -164,16 +171,14 @@ Tolerance: 0.01
     print("✓ Numerical bounds calculated")
 
 
-def test_full_orchestrator_pipeline():
-    """Test complete orchestrator workflow."""
+def test_full_pipeline_parse_validate_package_and_log():
+    """Parse -> points/balance -> validate -> package -> log, calling the same
+    engine building blocks the (retired) orchestrator used to wrap directly."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        dropzone = tmpdir / "DropZone"
-        output = tmpdir / "Finished_Exports"
-        dropzone.mkdir()
+        output = Path(tmpdir) / "Finished_Exports"
         output.mkdir()
 
-        # Create valid quiz (JSON 3.0 format)
+        # Valid quiz (JSON 3.0 format) should pass, package, and log.
         valid_quiz = """<QUIZFORGE_JSON>
 {
   "version": "3.0-json",
@@ -191,9 +196,22 @@ def test_full_orchestrator_pipeline():
 }
 </QUIZFORGE_JSON>
 """
-        (dropzone / "valid.txt").write_text(valid_quiz)
+        quiz = import_quiz_from_llm(valid_quiz).quiz
+        quiz.questions = calculate_points(quiz.questions, total_points=DEFAULT_QUIZ_POINTS)
+        quiz.questions = balance_answers(quiz.questions)
+        result = QuizValidator().validate(quiz)
+        assert result.status != ValidationStatus.FAIL
 
-        # Create invalid quiz (JSON 3.0 format - missing choices)
+        folder = create_quiz_folder(output, result.quiz.title)
+        package_quiz(result.quiz, str(folder))
+        assert any(p.name.endswith("_QTI.zip") for p in folder.glob("*.zip"))
+
+        log_content = generate_log(
+            fix_log=result.fix_log, warnings=result.warnings, quiz_title=result.quiz.title,
+            total_points=result.quiz.total_points(), question_count=result.quiz.question_count())
+        assert log_content
+
+        # Invalid quiz (missing choices) should fail validation and still produce a fail prompt.
         invalid_quiz = """<QUIZFORGE_JSON>
 {
   "version": "3.0-json",
@@ -207,29 +225,14 @@ def test_full_orchestrator_pipeline():
 }
 </QUIZFORGE_JSON>
 """
-        (dropzone / "invalid.txt").write_text(invalid_quiz)
+        bad_quiz = import_quiz_from_llm(invalid_quiz).quiz
+        bad_result = QuizValidator().validate(bad_quiz)
+        assert bad_result.status == ValidationStatus.FAIL
+        prompt = generate_fail_prompt(original_text=invalid_quiz, errors=bad_result.errors,
+                                       quiz_title="Invalid Quiz")
+        assert prompt
 
-        # Run orchestrator
-        orchestrator = QuizForgeOrchestrator(str(dropzone), str(output))
-        orchestrator.process_all()
-
-        # Check valid quiz output
-        quiz_folders = [f for f in output.iterdir() if f.is_dir()]
-        assert len(quiz_folders) >= 1
-
-        valid_folder = [f for f in quiz_folders if "Valid" in f.name][0]
-        assert any(p.name.endswith("_QTI.zip") for p in valid_folder.glob("*.zip"))
-        assert any((valid_folder / f"log_{s}_FIXED.txt").exists() for s in ["PASS", "WEAK_PASS"])
-
-        # Check invalid quiz output
-        fail_files = list(output.glob("*_FAIL_REVISE_WITH_AI.txt"))
-        assert len(fail_files) >= 1
-
-        # Check archival
-        assert (dropzone / "old_quizzes" / "valid.txt").exists()
-        assert (dropzone / "old_quizzes" / "invalid.txt").exists() or len(fail_files) > 0
-
-        print("✓ Full orchestrator pipeline works")
+        print("✓ Full parse -> validate -> package -> log pipeline works")
 
 
 def test_point_normalization():
@@ -275,7 +278,7 @@ def run_all_tests():
     test_validator_catches_errors()
     test_canvas_package_structure()
     test_numerical_bounds_calculation()
-    test_full_orchestrator_pipeline()
+    test_full_pipeline_parse_validate_package_and_log()
     test_point_normalization()
 
     print()

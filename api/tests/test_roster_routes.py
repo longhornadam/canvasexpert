@@ -1,9 +1,13 @@
 """Route-level tests for Roster Console API (V3: Canvas groups are source of truth)."""
+import json
 from fastapi.testclient import TestClient
+from contextlib import contextmanager
 import pytest
 
 from api.webui.server import app
 import api.webui.routes.roster as roster_routes
+from api.mirror import store as mirror_store
+from api.webui import workspace
 
 client = TestClient(app)
 
@@ -23,6 +27,10 @@ class FakeVault:
             }
         }
         self.saved = False
+
+    @contextmanager
+    def transaction(self):
+        yield self
 
     def entries(self):
         return list(self.rows.values())
@@ -98,12 +106,6 @@ def isolated_roster(monkeypatch):
         scheme = fake_get_roster_group_scheme(course_id)
         return scheme.get("group_labels", {}).get(str(group_id))
 
-    def fake_set_group_label(course_id, group_id, teacher_label, meaning=""):
-        scheme = fake_get_roster_group_scheme(course_id)
-        labels = scheme.setdefault("group_labels", {})
-        labels[str(group_id)] = {"teacher_label": teacher_label, "meaning": meaning}
-        fake_set_roster_group_scheme(course_id, scheme)
-
     monkeypatch.setattr(roster_routes, "_vault", lambda: stores["vault"])
     monkeypatch.setattr(roster_routes, "_upsert_roster", lambda vault, users: None)
     monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: ([], "No token saved."))
@@ -122,7 +124,6 @@ def isolated_roster(monkeypatch):
     monkeypatch.setattr(roster_routes.config, "get_selected_group_category_id", fake_get_selected_group_category_id)
     monkeypatch.setattr(roster_routes.config, "set_selected_group_category_id", fake_set_selected_group_category_id)
     monkeypatch.setattr(roster_routes.config, "get_group_label", fake_get_group_label)
-    monkeypatch.setattr(roster_routes.config, "set_group_label", fake_set_group_label)
     monkeypatch.setattr(roster_routes.config, "compute_group_display",
                         lambda label, name: f"{label} / {name}" if label and label != name else name)
     return stores
@@ -186,6 +187,216 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     assert "Groups" not in str(data.get("groups", ""))
 
 
+def test_roster_get_uses_current_mirror_before_live_students_and_sections(
+    monkeypatch, isolated_roster,
+):
+    roster_document = {
+        "state": "current",
+        "students": {
+            "101": {
+                "id": "101",
+                "name": "Ada Lovelace",
+                "sortable_name": "Lovelace, Ada",
+                "short_name": "Ada",
+                "sis_user_id": "SIS-SECRET",
+                "enrollments": [{"course_section_id": "44"}],
+            }
+        },
+        "sections": {"44": "Period 1"},
+    }
+    group_calls = []
+
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: roster_document)
+    monkeypatch.setattr(roster_routes, "_fetch_students",
+                        lambda course_id: pytest.fail("students must use the mirror"))
+    monkeypatch.setattr(roster_routes, "_fetch_sections",
+                        lambda course_id: pytest.fail("sections must use the mirror"))
+    monkeypatch.setattr(
+        roster_routes,
+        "load_group_categories",
+        lambda course_id: (group_calls.append(course_id) or [], None, ""),
+    )
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["students"][0]["id"] == "101"
+    assert data["students"][0]["sections"] == [{"id": "44", "name": "Period 1"}]
+    assert "sis_id" not in data["students"][0]
+    assert group_calls == ["1"]
+
+
+def _current_roster_document():
+    return {
+        "state": "current",
+        "students": {
+            "101": {
+                "id": "101", "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada",
+                "short_name": "Ada", "sis_user_id": "", "enrollments": [],
+            }
+        },
+        "sections": {},
+    }
+
+
+def _groups_snapshot(state="current"):
+    return {
+        "state": state,
+        "last_success_at": mirror_store.now_iso(),
+        "categories": [{
+            "category_id": "7", "category_name": "Reading groups",
+            "groups": [{"id": "8", "name": "Blue", "memberships": [{"id": "9", "user_id": "101"}]}],
+        }],
+    }
+
+
+def test_roster_get_uses_fresh_private_groups_without_live_loader(monkeypatch, isolated_roster):
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: _current_roster_document())
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups",
+                        lambda course_id: _groups_snapshot())
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: pytest.fail("fresh group snapshot must avoid the live loader"))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["groups"][0]["groups"][0]["student_ids"] == ["101"]
+    assert data["students"][0]["canvas_groups"][0]["group_name"] == "Blue"
+
+
+@pytest.mark.parametrize("snapshot", [None, _groups_snapshot("stale")])
+def test_roster_get_falls_back_live_for_missing_or_stale_groups(monkeypatch, isolated_roster, snapshot):
+    live_categories = [{
+        "category_id": "7", "category_name": "Live groups",
+        "groups": [{"id": "8", "name": "Blue", "memberships": [{"id": "9", "user_id": "101"}]}],
+    }]
+    writes = []
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: _current_roster_document())
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: snapshot)
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: (live_categories, None, ""))
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups",
+                        lambda course_id, categories: writes.append((course_id, categories)))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["groups"][0]["category_name"] == "Live groups"
+    assert writes == [("1", live_categories)]
+
+
+def test_roster_live_group_failure_does_not_replace_snapshot(monkeypatch, isolated_roster):
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: _current_roster_document())
+    monkeypatch.setattr(roster_routes.mirror_store, "read_groups",
+                        lambda course_id: _groups_snapshot("stale"))
+    monkeypatch.setattr(roster_routes, "load_group_categories",
+                        lambda course_id: ([], "forbidden", ""))
+    monkeypatch.setattr(roster_routes.mirror_store, "write_groups",
+                        lambda *args: pytest.fail("failed live read must preserve last-good snapshot"))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True
+    assert data["groups"] == []
+
+
+def test_private_group_snapshot_round_trip_has_only_allowlisted_fields(tmp_path):
+    mirror_store.write_groups("1", [{
+        "category_id": 7, "category_name": "Reading groups", "ignored": "not persisted",
+        "groups": [{
+            "id": 8, "name": "Blue", "other": "not persisted",
+            "memberships": [{"id": 9, "user_id": 101, "user_name": "not persisted"}],
+        }],
+    }], root=tmp_path, attempted_at="2026-07-18T00:00:00Z")
+
+    with open(mirror_store.groups_path("1", root=tmp_path), encoding="utf-8") as handle:
+        document = json.load(handle)
+
+    assert set(document) == {
+        "schema_version", "course_id", "state", "last_success_at", "last_attempt_at", "error_code", "categories",
+    }
+    assert document["categories"] == [{
+        "category_id": "7", "category_name": "Reading groups",
+        "groups": [{"id": "8", "name": "Blue", "memberships": [{"id": "9", "user_id": "101"}]}],
+    }]
+    stale = mirror_store.invalidate_groups("1", root=tmp_path, attempted_at="2026-07-18T01:00:00Z")
+    assert stale["state"] == "stale"
+    assert stale["categories"] == document["categories"]
+    assert mirror_store.groups_are_current(stale, max_age_hours=24) is False
+
+
+def test_private_group_snapshot_rejects_ambiguous_duplicate_ids(tmp_path):
+    duplicate_category = [
+        {"category_id": "7", "category_name": "One", "groups": []},
+        {"category_id": "7", "category_name": "Two", "groups": []},
+    ]
+    duplicate_group = [{
+        "category_id": "7", "category_name": "One",
+        "groups": [
+            {"id": "8", "name": "Blue", "memberships": []},
+            {"id": "8", "name": "Green", "memberships": []},
+        ],
+    }]
+    duplicate_membership_id = [{
+        "category_id": "7", "category_name": "One",
+        "groups": [{
+            "id": "8", "name": "Blue",
+            "memberships": [{"id": "9", "user_id": "101"}, {"id": "9", "user_id": "102"}],
+        }],
+    }]
+    duplicate_user_id = [{
+        "category_id": "7", "category_name": "One",
+        "groups": [{
+            "id": "8", "name": "Blue",
+            "memberships": [{"id": "9", "user_id": "101"}, {"id": "10", "user_id": "101"}],
+        }],
+    }]
+
+    for categories in (duplicate_category, duplicate_group, duplicate_membership_id, duplicate_user_id):
+        with pytest.raises(ValueError):
+            mirror_store.write_groups("1", categories, root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("case", "roster_document"),
+    [
+        ("missing", None),
+        # read_roster returns None for a corrupt or invalid on-disk document.
+        ("corrupt", None),
+        ("stale", {"state": "stale", "students": {}, "sections": {}}),
+    ],
+)
+def test_roster_get_falls_back_live_when_mirror_is_not_current(
+    monkeypatch, isolated_roster, case, roster_document,
+):
+    users = [{
+        "id": 101,
+        "name": "Live Ada",
+        "sortable_name": "Ada, Live",
+        "short_name": "Ada",
+        "enrollments": [{"course_section_id": 44}],
+    }]
+    calls = []
+
+    monkeypatch.setattr(roster_routes.mirror_store, "read_roster",
+                        lambda course_id: roster_document)
+    monkeypatch.setattr(roster_routes, "_fetch_students",
+                        lambda course_id: (calls.append("students") or (users, None)))
+    monkeypatch.setattr(roster_routes, "_fetch_sections",
+                        lambda course_id: (calls.append("sections") or {"44": "Live section"}))
+    monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: ([], None, ""))
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["ok"] is True, case
+    assert data["students"][0]["display_name"] == "Live Ada"
+    assert calls == ["students", "sections"]
+
+
 def test_roster_get_handles_student_without_canvas_group(monkeypatch, isolated_roster):
     isolated_roster["group_schemes"] = {
         "1": {"selected_group_category_id": "7", "group_labels": {}}
@@ -218,6 +429,7 @@ def test_roster_get_handles_student_without_canvas_group(monkeypatch, isolated_r
 
 def test_create_group_set_with_groups(monkeypatch, isolated_roster):
     calls = []
+    invalidations = []
 
     def fake_canvas_send(method, path, payload):
         calls.append((method, path, payload))
@@ -227,7 +439,16 @@ def test_create_group_set_with_groups(monkeypatch, isolated_roster):
             return {"id": len(calls), "name": payload["name"]}, None
         return None, "unexpected call"
 
+    def fake_reconcile(course_id, category_id, category_name=None):
+        invalidations.append((course_id, category_id, category_name))
+        # Also land a marker in the shared ``calls`` sequence so the ordering
+        # assertion below proves reconciliation fires only after every seed
+        # group already exists in Canvas — not right after category
+        # creation (see 1.0beta-05a's create_group_set fix).
+        calls.append(("reconcile", category_id, category_name))
+
     monkeypatch.setattr(roster_routes, "_canvas_send", fake_canvas_send)
+    monkeypatch.setattr(roster_routes, "_reconcile_group_category", fake_reconcile)
 
     resp = client.post("/api/roster/group-set", data={
         "course_id": "1",
@@ -244,7 +465,163 @@ def test_create_group_set_with_groups(monkeypatch, isolated_roster):
         ("POST", "/api/v1/courses/1/group_categories", {"name": "Reading groups"}),
         ("POST", "/api/v1/group_categories/7/groups", {"name": "Blue"}),
         ("POST", "/api/v1/group_categories/7/groups", {"name": "Green"}),
+        ("reconcile", "7", "Reading groups"),
     ]
+    assert invalidations == [("1", "7", "Reading groups")]
+
+
+def test_create_group_set_reconciliation_shows_seeded_groups_not_zero(
+    monkeypatch, tmp_path, isolated_roster,
+):
+    """1.0beta-05a fix: reconciling right after category creation (before the
+    seed-groups loop) would merge in a category with zero groups that never
+    self-corrects. Reconciliation must fire only after every seed group
+    already exists in Canvas, so the merged snapshot shows them immediately."""
+    _mount_groups_workspace(monkeypatch, tmp_path)
+    # A previous groups document must already exist for the merge to run at
+    # all (targeted reconciliation only ever merges into a previously
+    # written document); seed one unrelated category to also prove it stays
+    # untouched.
+    mirror_store.write_groups("1", [{
+        "category_id": "99", "category_name": "Other set",
+        "groups": [{"id": "100", "name": "Other", "memberships": []}],
+    }])
+
+    sequence = []
+
+    def fake_canvas_send(method, path, payload):
+        sequence.append(("canvas_send", path))
+        if path == "/api/v1/courses/1/group_categories":
+            return {"id": 7, "name": payload["name"]}, None
+        if path == "/api/v1/group_categories/7/groups":
+            return {"id": 10 + len(sequence), "name": payload["name"]}, None
+        return None, "unexpected call"
+
+    def fake_fetch(course_id, category_id):
+        sequence.append(("fetch", category_id))
+        # By the time reconciliation fetches this category, Canvas must
+        # already have both seed groups — proving the call fired after the
+        # seed loop, not right after category creation.
+        return [
+            {"id": "12", "name": "Blue", "student_ids": [], "memberships": []},
+            {"id": "13", "name": "Green", "student_ids": [], "memberships": []},
+        ], None
+
+    monkeypatch.setattr(roster_routes, "_canvas_send", fake_canvas_send)
+    monkeypatch.setattr(roster_routes, "fetch_group_category_groups", fake_fetch)
+
+    resp = client.post("/api/roster/group-set", data={
+        "course_id": "1",
+        "name": "Reading groups",
+        "group_names": '["Blue", "Green"]',
+    })
+    data = resp.json()
+
+    assert data["ok"] is True
+    assert sequence == [
+        ("canvas_send", "/api/v1/courses/1/group_categories"),
+        ("canvas_send", "/api/v1/group_categories/7/groups"),
+        ("canvas_send", "/api/v1/group_categories/7/groups"),
+        ("fetch", "7"),
+    ]
+
+    document = mirror_store.read_groups("1")
+    assert document["state"] == "current"
+    new_category = next(c for c in document["categories"] if c["category_id"] == "7")
+    assert new_category["category_name"] == "Reading groups"
+    assert [g["name"] for g in new_category["groups"]] == ["Blue", "Green"]
+    other = next(c for c in document["categories"] if c["category_id"] == "99")
+    assert [g["name"] for g in other["groups"]] == ["Other"]
+
+
+def test_create_group_set_partial_failure_reconciles_created_groups(
+    monkeypatch, tmp_path, isolated_roster,
+):
+    """A seed group failing partway through must still reconcile whatever
+    groups were actually created before the failure, not lose them."""
+    _mount_groups_workspace(monkeypatch, tmp_path)
+    mirror_store.write_groups("1", [{
+        "category_id": "99", "category_name": "Other set",
+        "groups": [{"id": "100", "name": "Other", "memberships": []}],
+    }])
+
+    def fake_canvas_send(method, path, payload):
+        if path == "/api/v1/courses/1/group_categories":
+            return {"id": 7, "name": payload["name"]}, None
+        if path == "/api/v1/group_categories/7/groups":
+            if payload["name"] == "Green":
+                return None, "Canvas rejected 'Green'"
+            return {"id": 12, "name": payload["name"]}, None
+        return None, "unexpected call"
+
+    def fake_fetch(course_id, category_id):
+        assert category_id == "7"
+        return [{"id": "12", "name": "Blue", "student_ids": [], "memberships": []}], None
+
+    monkeypatch.setattr(roster_routes, "_canvas_send", fake_canvas_send)
+    monkeypatch.setattr(roster_routes, "fetch_group_category_groups", fake_fetch)
+
+    resp = client.post("/api/roster/group-set", data={
+        "course_id": "1",
+        "name": "Reading groups",
+        "group_names": '["Blue", "Green"]',
+    })
+    data = resp.json()
+
+    assert data["ok"] is False
+    assert "Green" in data["error"]
+
+    document = mirror_store.read_groups("1")
+    new_category = next(c for c in document["categories"] if c["category_id"] == "7")
+    assert [g["name"] for g in new_category["groups"]] == ["Blue"]
+
+
+def test_create_group_set_first_seed_failure_still_reconciles_new_empty_category(
+    monkeypatch, tmp_path, isolated_roster,
+):
+    """Unlike ``create_groups`` (an already-existing category, where nothing
+    changed if the first new group fails), ``create_group_set``'s category
+    POST already succeeded unconditionally before the seed loop starts. Even
+    if the very first seed group name fails — so ``created_groups`` is still
+    empty — that brand-new category is real Canvas state and must still be
+    reconciled into the mirror (present, zero groups), not left absent."""
+    _mount_groups_workspace(monkeypatch, tmp_path)
+    mirror_store.write_groups("1", [{
+        "category_id": "99", "category_name": "Other set",
+        "groups": [{"id": "100", "name": "Other", "memberships": []}],
+    }])
+
+    def fake_canvas_send(method, path, payload):
+        if path == "/api/v1/courses/1/group_categories":
+            return {"id": 7, "name": payload["name"]}, None
+        if path == "/api/v1/group_categories/7/groups":
+            return None, "Canvas rejected 'Blue'"
+        return None, "unexpected call"
+
+    def fake_fetch(course_id, category_id):
+        assert category_id == "7"
+        return [], None
+
+    monkeypatch.setattr(roster_routes, "_canvas_send", fake_canvas_send)
+    monkeypatch.setattr(roster_routes, "fetch_group_category_groups", fake_fetch)
+
+    resp = client.post("/api/roster/group-set", data={
+        "course_id": "1",
+        "name": "Reading groups",
+        "group_names": '["Blue", "Green"]',
+    })
+    data = resp.json()
+
+    assert data["ok"] is False
+    assert data["created_groups"] == []
+
+    document = mirror_store.read_groups("1")
+    new_category = next((c for c in document["categories"] if c["category_id"] == "7"), None)
+    assert new_category is not None, "the new category must not be silently absent"
+    assert new_category["category_name"] == "Reading groups"
+    assert new_category["groups"] == []
+    other = next(c for c in document["categories"] if c["category_id"] == "99")
+    assert [g["name"] for g in other["groups"]] == ["Other"]
 
 
 def test_create_groups_rejects_existing_name(monkeypatch):
@@ -372,6 +749,36 @@ def test_roster_student_accepts_canvas_group(monkeypatch, isolated_roster):
     assert calls[0][:4] == ("1", "101", "7", "8")
 
 
+def test_roster_group_membership_write_invalidates_only_after_success(monkeypatch, isolated_roster):
+    invalidations = []
+    monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: ([{
+        "category_id": "7", "category_name": "Differentiation",
+        "groups": [{"id": "8", "name": "Blue", "student_ids": [], "memberships": []}],
+    }], None, ""))
+    monkeypatch.setattr(roster_routes, "_reconcile_group_category",
+                        lambda course_id, category_id, category_name=None:
+                            invalidations.append((course_id, category_id)))
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
+                        lambda *args: (False, "Canvas denied"))
+
+    failed = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": '{"canvas_group": {"category_id": "7", "group_id": "8"}}',
+    }).json()
+
+    assert failed["ok"] is False
+    assert invalidations == []
+
+    monkeypatch.setattr(roster_routes, "_update_student_canvas_group", lambda *args: (True, None))
+    succeeded = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": '{"canvas_group": {"category_id": "7", "group_id": "8"}}',
+    }).json()
+
+    assert succeeded["ok"] is True
+    assert invalidations == [("1", "7")]
+
+
 def test_roster_student_rejects_canvas_group_outside_category(monkeypatch, isolated_roster):
     monkeypatch.setattr(roster_routes, "load_group_categories",
                         lambda course_id: ([{
@@ -468,6 +875,7 @@ def test_roster_bulk_rejects_obsolete_set_tier(isolated_roster):
 def test_roster_bulk_set_canvas_group(monkeypatch, isolated_roster):
     """V3: set_canvas_group writes Canvas membership for every selected user."""
     calls = []
+    invalidations = []
     monkeypatch.setattr(roster_routes, "load_group_categories",
                         lambda course_id: ([{
                             "category_id": "7",
@@ -476,6 +884,9 @@ def test_roster_bulk_set_canvas_group(monkeypatch, isolated_roster):
                         }], None, ""))
     monkeypatch.setattr(roster_routes, "_update_student_canvas_group",
                         lambda *args: calls.append(args) or (True, None))
+    monkeypatch.setattr(roster_routes, "_reconcile_group_category",
+                        lambda course_id, category_id, category_name=None:
+                            invalidations.append((course_id, category_id)))
     resp = client.post("/api/roster/bulk", data={
         "course_id": "1", "user_ids": '["101", "102"]',
         "action": "set_canvas_group", "value": '{"category_id": "7", "group_id": "8"}'
@@ -488,6 +899,7 @@ def test_roster_bulk_set_canvas_group(monkeypatch, isolated_roster):
         ("1", "101", "7", "8"),
         ("1", "102", "7", "8"),
     ]
+    assert invalidations == [("1", "7")]
 
 
 def test_roster_bulk_rejects_canvas_group_outside_category(monkeypatch, isolated_roster):
@@ -602,54 +1014,118 @@ def test_roster_bulk_clear_monitor_ok(isolated_roster):
     assert "101" not in isolated_roster["monitored"]
 
 
-# ── Tier-scheme endpoint tests ──────────────────────────────────────────
+# --------------------------------------------------------------------------
+# _reconcile_group_category — targeted post-write group reconciliation
+# --------------------------------------------------------------------------
+
+def _mount_groups_workspace(monkeypatch, tmp_path):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
 
 
-def test_tier_scheme_get_requires_course_id():
-    resp = client.get("/api/roster/tier-scheme")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is False
-    assert "course_id" in data.get("error", "").lower()
+def test_reconcile_group_category_merges_only_affected_category(
+    monkeypatch, tmp_path, isolated_roster,
+):
+    _mount_groups_workspace(monkeypatch, tmp_path)
+    mirror_store.write_groups("1", [
+        {"category_id": "7", "category_name": "Reading groups",
+         "groups": [{"id": "8", "name": "Blue",
+                     "memberships": [{"id": "9", "user_id": "101"}]}]},
+        {"category_id": "20", "category_name": "Math groups",
+         "groups": [{"id": "21", "name": "Advanced",
+                     "memberships": [{"id": "22", "user_id": "102"}]}]},
+    ])
+    other_before = mirror_store.read_groups("1")["categories"][1]
+
+    requested_category_ids = []
+
+    def fake_fetch(course_id, category_id):
+        requested_category_ids.append(category_id)
+        return [{
+            "id": "8", "name": "Blue", "student_ids": ["101", "103"],
+            "memberships": [{"id": "9", "user_id": "101"}, {"id": "31", "user_id": "103"}],
+        }], None
+
+    monkeypatch.setattr(roster_routes, "fetch_group_category_groups", fake_fetch)
+
+    roster_routes._reconcile_group_category("1", "7", "Reading groups")
+
+    # Zero Canvas calls naming any other existing category's id.
+    assert requested_category_ids == ["7"]
+
+    document = mirror_store.read_groups("1")
+    assert document["state"] == "current"
+    other_after = next(c for c in document["categories"] if c["category_id"] == "20")
+    assert other_after == other_before
+    changed = next(c for c in document["categories"] if c["category_id"] == "7")
+    assert changed["groups"][0]["memberships"] == [
+        {"id": "9", "user_id": "101"}, {"id": "31", "user_id": "103"},
+    ]
 
 
-def test_tier_scheme_get_returns_default(monkeypatch):
-    monkeypatch.setattr(roster_routes.config, "get_roster_tier_scheme",
-                        lambda cid: [{"id": "support", "teacher_label": "Support", "alias": "Blue", "order": 10, "active": True}])
-    resp = client.get("/api/roster/tier-scheme?course_id=1")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is True
-    assert len(data["tier_scheme"]) == 1
-    assert data["tier_scheme"][0]["id"] == "support"
+def test_reconcile_group_category_falls_back_when_fetch_fails(
+    monkeypatch, tmp_path, isolated_roster,
+):
+    _mount_groups_workspace(monkeypatch, tmp_path)
+    mirror_store.write_groups("1", [{
+        "category_id": "7", "category_name": "Reading groups",
+        "groups": [{"id": "8", "name": "Blue", "memberships": []}],
+    }])
+    monkeypatch.setattr(roster_routes, "fetch_group_category_groups",
+                        lambda course_id, category_id: (None, "Canvas returned 403"))
+    merge_calls = []
+    monkeypatch.setattr(roster_routes.mirror_store, "merge_group_category",
+                        lambda *a, **k: merge_calls.append((a, k)))
+
+    roster_routes._reconcile_group_category("1", "7", "Reading groups")
+
+    assert merge_calls == []
+    document = mirror_store.read_groups("1")
+    assert document["state"] == "stale"
+    assert document["error_code"] == "invalidated"
 
 
-def test_tier_scheme_post_validates():
-    resp = client.post("/api/roster/tier-scheme", data={
-        "course_id": "1",
-        "scheme": '[{"id": "a", "teacher_label": "A", "alias": "A1"}]'
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is True
+def test_reconcile_group_category_falls_back_when_merge_write_fails(
+    monkeypatch, tmp_path, isolated_roster,
+):
+    _mount_groups_workspace(monkeypatch, tmp_path)
+    mirror_store.write_groups("1", [{
+        "category_id": "7", "category_name": "Reading groups",
+        "groups": [{"id": "8", "name": "Blue", "memberships": []}],
+    }])
+    monkeypatch.setattr(
+        roster_routes, "fetch_group_category_groups",
+        lambda course_id, category_id: ([{"id": "8", "name": "Blue", "memberships": []}], None),
+    )
+
+    def raising_merge(*args, **kwargs):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(roster_routes.mirror_store, "merge_group_category", raising_merge)
+
+    roster_routes._reconcile_group_category("1", "7", "Reading groups")
+
+    document = mirror_store.read_groups("1")
+    assert document["state"] == "stale"
+    assert document["error_code"] == "invalidated"
 
 
-def test_tier_scheme_post_rejects_invalid_json():
-    resp = client.post("/api/roster/tier-scheme", data={
-        "course_id": "1", "scheme": "bad-json"
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is False
-    assert "json" in data.get("error", "").lower()
+def test_reconcile_group_category_skips_merge_without_previous_document(
+    monkeypatch, tmp_path, isolated_roster,
+):
+    _mount_groups_workspace(monkeypatch, tmp_path)
+    # No previous groups document exists for this course.
+    fetch_calls = []
+    monkeypatch.setattr(
+        roster_routes, "fetch_group_category_groups",
+        lambda course_id, category_id: (
+            fetch_calls.append(category_id)
+            or ([{"id": "8", "name": "Blue", "memberships": []}], None)
+        ),
+    )
 
+    roster_routes._reconcile_group_category("1", "7", "Reading groups")
 
-def test_tier_scheme_post_rejects_duplicate_ids():
-    resp = client.post("/api/roster/tier-scheme", data={
-        "course_id": "1",
-        "scheme": '[{"id": "a", "teacher_label": "A", "alias": "One"}, {"id": "a", "teacher_label": "B", "alias": "Two"}]'
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("ok") is False
-    assert "duplicate" in data.get("error", "").lower()
+    assert fetch_calls == ["7"]
+    # merge_group_category no-ops (no previous document); falling back to
+    # invalidate_groups is itself a no-op here too — unchanged from today.
+    assert mirror_store.read_groups("1") is None

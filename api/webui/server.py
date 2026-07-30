@@ -13,7 +13,6 @@ subprocesses (api/qf_pusher.py, push_tiers.py) with credentials injected via
 environment variables. See runner.py. Push logic is never touched by this UI.
 """
 import os
-import sys
 import threading
 from contextlib import asynccontextmanager
 
@@ -22,12 +21,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import downloader    # noqa: E402
-import student_packet  # noqa: E402
+from api import student_packet
+from api.mirror import coordinator as _mirror_coordinator
+from api.operation_ledger import recovery as _operation_ledger_recovery
 
-from . import af, ai_ta, activity, config, pf, rf, runner
+from . import af, ai_ta, config, pf, rf, runner
 from . import workspace
+from api import runtime_paths
 from .canvas_client import _canvas_headers, _canvas_get, _canvas_get_all, _canvas_send
 from .schooldays import (
     _parse_iso_local, _is_school_day, _school_days_late,
@@ -36,14 +36,14 @@ from .schooldays import (
 
 from .deps import (
     WEBUI_DIR, API_DIR, REPO_ROOT,
-    _key_to_year, QUIZ_FOLDERS, WORKSPACE_ROOT, _workspace_folder, _exports_dir,
-    RUBRIC_FOLDERS, ASSIGNMENT_FOLDERS, PAGE_FOLDERS, AI_TA_DIR, TEMP_DIR, templates,
+    _key_to_year, templates,
     _CUSTOM_DIR, list_quiz_files, list_assignment_files, list_page_files,
     list_rubric_files, list_ai_ta_files,
 )
 
 from .routes.calendar import router as _calendar_router
 from .routes.courses import router as _courses_router
+from .routes.course_catalog import router as _course_catalog_router
 from .routes.feedback import router as _feedback_router
 from .routes.names import names_router as _names_router
 from .routes.gradebook import router as _gradebook_router
@@ -55,6 +55,15 @@ from .routes.reports import router as _reports_router
 from .routes.routines import router as _routines_router, _load_custom_routines, _routines_heartbeat
 from .routes.roster import router as _roster_router
 from .routes.settings import router as _settings_router
+from .routes.powergrader import router as _powergrader_router
+from .routes.readiness import router as _readiness_router
+from .routes.receipts import router as _receipts_router
+from .routes.connections import router as _connections_router
+from .routes.support import router as _support_router
+from .routes.work import router as _work_router
+from .routes.operations import router as _operations_router
+from .routes.mirror import router as _mirror_router
+from .mirror_service import _mirror_heartbeat
 
 
 @asynccontextmanager
@@ -66,11 +75,19 @@ async def _lifespan(app):
     except Exception as e:
         print(f"Workspace setup note: {e}")
     try:
-        ai_ta.build_library(AI_TA_DIR, rubric_folders=RUBRIC_FOLDERS)
+        ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
     except Exception as e:
         print(f"AI-TA library build failed: {e}")
+    try:
+        # Reconcile any operation-ledger targets left claimed/sent_unknown by a
+        # crash mid-write, before the routines heartbeat can claim the same
+        # targets for new work. Usually a no-op (empty scan).
+        _operation_ledger_recovery.recover_pending_operations()
+    except Exception as e:
+        print(f"Operation-ledger recovery note: {e}")
     _load_custom_routines()
     threading.Thread(target=_routines_heartbeat, daemon=True).start()
+    threading.Thread(target=_mirror_heartbeat, daemon=True).start()
     yield
 
 
@@ -81,24 +98,29 @@ app.mount("/static", StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), n
 # If Canvas URL or token is not yet configured, redirect HTML page requests
 # to the /welcome wizard. Never gate API/static endpoints or the wizard itself.
 
-_ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/static", "/api", "/openapi.json", "/docs", "/redoc")
+_ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/connections", "/static", "/api", "/openapi.json", "/docs", "/redoc")
 
 
 @app.middleware("http")
 async def _onboarding_gate(request: Request, call_next):
-    if not config.token_is_set() or not config.get_canvas_base():
-        path = request.url.path
-        wants_html = "text/html" in request.headers.get("accept", "")
-        allowlisted = any(path.startswith(p) for p in _ALLOWLIST_PREFIXES)
-        if wants_html and not allowlisted:
-            from fastapi.responses import RedirectResponse
-            return RedirectResponse(url="/welcome", status_code=303)
-    return await call_next(request)
+    # The interval covers routing, response construction, and every local API
+    # request.  Background Canvas GET workers inspect this shared gate before
+    # each physical request and cooperatively yield to the teacher.
+    with _mirror_coordinator.foreground_interval():
+        if not config.token_is_set() or not config.get_canvas_base():
+            path = request.url.path
+            wants_html = "text/html" in request.headers.get("accept", "")
+            allowlisted = any(path.startswith(p) for p in _ALLOWLIST_PREFIXES)
+            if wants_html and not allowlisted:
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(url="/welcome", status_code=303)
+        return await call_next(request)
 
 
 app.include_router(_onboarding_router)
 app.include_router(_calendar_router)
 app.include_router(_courses_router)
+app.include_router(_course_catalog_router)
 app.include_router(_feedback_router)
 app.include_router(_names_router)
 app.include_router(_gradebook_router)
@@ -109,6 +131,11 @@ app.include_router(_reports_router)
 app.include_router(_routines_router)
 app.include_router(_roster_router)
 app.include_router(_settings_router)
-
-
-
+app.include_router(_powergrader_router)
+app.include_router(_readiness_router)
+app.include_router(_receipts_router)
+app.include_router(_connections_router)
+app.include_router(_support_router)
+app.include_router(_work_router)
+app.include_router(_operations_router)
+app.include_router(_mirror_router)

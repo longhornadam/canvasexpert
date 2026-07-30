@@ -26,7 +26,7 @@ language, so nothing gets lost in translation.
 1. **The Forges (authoring + pushing content).** Each Forge is a specialized
    tool for one kind of Canvas content. You author with an AI, save the AI's
    output as a .txt file, then load it into Canvas Expert and push.
-2. **Gradebook Expert (managing grades).** Tools that act on your live
+2. **Gradebook tools (managing grades).** Tools that act on your live
    gradebook: course-wide late policies, late-work sweeps, grade curves, and
    per-student extensions (including extra-time students). Changes are
    previewed before anything is applied.
@@ -38,7 +38,7 @@ language, so nothing gets lost in translation.
   matching, ordering, categorization, stimulus passages, and more). Every
   choice gets a rationale — students learn *why* each answer is right or
   wrong. Quizzes can be pushed live to Canvas, or compiled offline into a
-  Canvas-importable ZIP plus printable Word documents (student copy, answer
+  Canvas-importable ZIP plus printable DOCX/PDF documents (student copy, answer
   key, rationale sheet).
 - **AssignmentForge** — Canvas assignments with submission settings, point
   values, and optional differentiation tiers. A tier is a scaffolded variant
@@ -75,7 +75,7 @@ files you paste whole into MagicSchool, Copilot, or any AI chat:
 1. **Author.** Paste an authoring skill (e.g. "Author a Quiz") into your AI
    chat and describe what you want — topic, grade level, rigor, standards.
 2. **Save.** Copy the AI's final output and save it as a .txt file.
-3. **Load & validate.** In Canvas Expert, open Course Expert, pick the
+3. **Load & validate.** In Canvas Expert, open Work tools, pick the
    matching tab (Quiz / Assignment / Page / Rubric), and load the file. It is
    validated and summarized before anything touches Canvas.
 4. **Select courses.** Check every course/section that should receive it.
@@ -89,11 +89,11 @@ files you paste whole into MagicSchool, Copilot, or any AI chat:
   computer in one go (handy for AI-assisted scoring or offline grading).
 - **Quick assignment**: create a fast gradebook column without authoring a
   full file.
-- **Gradebook Expert**: set a Canvas-native late policy, sweep late/missing
+- **Gradebook tools**: set a Canvas-native late policy, sweep late/missing
   work, apply curves with transparent math, and grant extensions — including
   managing your extra-time student list.
 - **QuizForge offline**: quizzes also work with zero Canvas connection via
-  the QuizForge web app — compile to an import ZIP and printable documents,
+  the QuizForge web app — compile to an import ZIP and printable DOCX/PDF documents,
   then import into Canvas by hand.
 
 ## FAQ

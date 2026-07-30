@@ -18,8 +18,8 @@ _CSS_PATH = _ROOT / "styles" / "print.css"
 def render_html(printdoc: PrintDoc, *, variant: str, tier: str | None = None) -> str:
     """Render a student quiz or answer key HTML document."""
 
-    if variant not in {"quiz", "key", "note"}:
-        raise ValueError("variant must be 'quiz', 'key', or 'note'")
+    if variant not in {"quiz", "key"}:
+        raise ValueError("variant must be 'quiz' or 'key'")
 
     env = Environment(
         loader=FileSystemLoader(str(_TEMPLATE_DIR)),
@@ -34,7 +34,6 @@ def render_html(printdoc: PrintDoc, *, variant: str, tier: str | None = None) ->
     template_name = {
         "quiz": "quiz.html.j2",
         "key": "answer_key.html.j2",
-        "note": "note.html.j2",
     }[variant]
     template = env.get_template(template_name)
     return template.render(

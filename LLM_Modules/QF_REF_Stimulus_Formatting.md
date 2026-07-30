@@ -345,4 +345,4 @@ def factorial(n):
 
 **Maintainer:** QuizForge Core Team  
 **Related Modules:** `engine/rendering/canvas/html_formatter.py`, `engine/core/questions.py`  
-**For Questions:** See `dev/ARCHITECTURE.md` or `DEVELOPMENT.md`
+**For Questions:** See `engine/docs/ARCHITECTURE.md` and `engine/docs/AGENT_MAP.md`

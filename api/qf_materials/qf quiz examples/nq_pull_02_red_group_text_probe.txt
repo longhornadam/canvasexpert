@@ -1,0 +1,73 @@
+<QUIZFORGE_JSON>
+{
+  "version": "3.0-json",
+  "title": "NQ Pull Test 02 - Red Group Text Probe",
+  "instructions": "<p>This Red group sandbox quiz checks group-only visibility and typed New Quizzes responses. Use only synthetic marker text.</p>",
+  "metadata": {
+    "subject": "CanvasExpert sandbox",
+    "grade": 8,
+    "standard": "Synthetic Red group response-pull fixture",
+    "variant_group": "nq_pull_group_text_probe",
+    "variant_label": "Red",
+    "privacy": "Synthetic fixture; no student data in authored file."
+  },
+  "items": [
+    {
+      "id": "red_q01_group_mc",
+      "type": "MC",
+      "prompt": "<p>Which group marker appears in this quiz title?</p>",
+      "choices": [
+        { "id": "A", "text": "Red", "correct": true },
+        { "id": "B", "text": "Blue", "correct": false },
+        { "id": "C", "text": "Green", "correct": false },
+        { "id": "D", "text": "Orange", "correct": false }
+      ]
+    },
+    {
+      "id": "red_q02_group_dropdown",
+      "type": "FITB",
+      "prompt": "<p>Choose the group color for this quiz: [blank]</p>",
+      "accept": ["Red"],
+      "answer_mode": "dropdown",
+      "options": ["Red", "Blue", "Green", "Orange"],
+      "case_sensitive": false
+    },
+    {
+      "id": "red_q03_two_line_marker",
+      "type": "ESSAY",
+      "prompt": "<p>Type two lines in the response box.</p><ol><li>Line 1: <code>RED-GROUP-LINE-1</code></li><li>Line 2: <code>RED-GROUP-LINE-2</code></li></ol>",
+      "length_guidance": "Two short lines",
+      "rubric_hint": "The response should preserve both Red group line markers."
+    },
+    {
+      "id": "red_q04_visibility_sentence",
+      "type": "ESSAY",
+      "prompt": "<p>Write one sentence starting with <code>RED-SENTENCE:</code>. Mention whether this was the only group-specific quiz you could see.</p>",
+      "length_guidance": "One sentence",
+      "rubric_hint": "The response should begin with RED-SENTENCE and give a visibility note."
+    },
+    {
+      "id": "red_q05_special_marker",
+      "type": "ESSAY",
+      "prompt": "<p>Type one sentence that includes this exact marker text:</p><p><code>RED \"quote\" &lt;group&gt; &amp; marker</code></p>",
+      "length_guidance": "One sentence",
+      "rubric_hint": "The response should include the Red special-character marker."
+    }
+  ],
+  "rationales": [
+    {
+      "item_id": "red_q01_group_mc",
+      "choices": [
+        { "id": "A", "correct": true, "rationale": "The title and directions identify this as the Red group version." },
+        { "id": "B", "correct": false, "rationale": "Blue names the companion variant, not this Red group quiz." },
+        { "id": "C", "correct": false, "rationale": "Green is a distractor and is not used for this sandbox split." },
+        { "id": "D", "correct": false, "rationale": "Orange is a distractor and is not used for this sandbox split." }
+      ]
+    },
+    {
+      "item_id": "red_q02_group_dropdown",
+      "rationale": "The Red version should use Red as its group marker."
+    }
+  ]
+}
+</QUIZFORGE_JSON>
