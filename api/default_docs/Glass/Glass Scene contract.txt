@@ -13,5 +13,11 @@ The revision must be approved and `data` must validate against that pane's JSON
 Schema. Use integer, one-based placements in the 12x8 grid; placements cannot
 overlap.
 
+Do not guess a pane's data shape. Call `get_glass_context` with
+`include_pane_schemas` true: `approved_panes` then carries each approved
+revision's `pane_id`, `revision`, `title`, and `data_schema`. Write `data`
+against the schema of the exact revision you pin, including for a pane you
+authored earlier in the same conversation.
+
 Saving creates only a pending draft. Teacher approval only publishes one
 authoritative scene per date, atomically replacing that date's prior scene.

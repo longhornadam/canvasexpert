@@ -68,6 +68,15 @@ def _scene_view(record, instant):
     return {"scene": scene, "frames": frames, "layouts": list(layouts), "blocks": blocks, "current": current, "active": active, "at": instant.isoformat(), "status": status, "events": events}
 
 
+def _pane_only_display(package, instant, digest):
+    """A single pane filling the grid, shown with its own example data."""
+    instance = {"instance_id": "preview", "pane_id": package["pane"]["manifest"]["id"], "pane_revision": digest,
+                "data": package["pane"]["manifest"]["example_data"], "column": 1, "row": 1, "width": 12, "height": 8}
+    return {"scene": {"date": "preview", "default": [instance]},
+            "frames": [{"layout": "default", "instance": instance, "srcdoc": _pane_document(package, instance, "preview", instant.isoformat(), None)}],
+            "layouts": ["default"], "blocks": [], "current": None, "active": "default", "at": instant.isoformat(), "status": "Ready."}
+
+
 def _review_cards():
     cards = []
     for summary in panes.list_drafts():
@@ -85,7 +94,7 @@ def _review_cards():
 
 @router.get("/glass", response_class=HTMLResponse)
 def glass_page(request: Request):
-    return templates.TemplateResponse(request, "glass.html", {"nav_section": "glass", "token_is_set": config.token_is_set(), "csrf_token": csrf_token(), "drafts": _review_cards()})
+    return templates.TemplateResponse(request, "glass.html", {"nav_section": "glass", "token_is_set": config.token_is_set(), "csrf_token": csrf_token(), "drafts": _review_cards(), "library": panes.list_approved()})
 
 
 @router.get("/glass/display", response_class=HTMLResponse)
@@ -99,14 +108,20 @@ def glass_preview(request: Request, draft_id: str, layout: str = Query("")):
     if not record: return HTMLResponse("Draft not found", status_code=404)
     instant = datetime.now()
     if record["kind"] == "pane":
-        fake_scene = {"scene": {"date": "preview", "default": [{"instance_id": "preview", "data": record["pane"]["manifest"]["example_data"], "pane_id": record["pane"]["manifest"]["id"], "pane_revision": record["digest"], "column": 1, "row": 1, "width": 12, "height": 8}]}}
-        display = {"scene": fake_scene["scene"], "frames": [{"layout": "default", "instance": fake_scene["scene"]["default"][0], "srcdoc": _pane_document({"pane": record["pane"]}, fake_scene["scene"]["default"][0], "preview", instant.isoformat(), None)}], "layouts": ["default"], "blocks": [], "current": None, "active": "default", "at": instant.isoformat(), "status": "Ready."}
+        display = _pane_only_display({"pane": record["pane"]}, instant, record["digest"])
     else:
         display = _scene_view(record, instant)
         if layout in display["layouts"]:
             display["active"] = layout
             display["forced_layout"] = layout
     return templates.TemplateResponse(request, "glass_display.html", {"display": display, "frozen": True, "preview_digest": record["digest"]})
+
+
+@router.get("/glass/library/panes/{pane_id}/{revision}", response_class=HTMLResponse)
+def glass_library_pane(request: Request, pane_id: str, revision: str):
+    package = panes._approved(pane_id, revision)
+    if not package: return HTMLResponse("Approved pane not found", status_code=404)
+    return templates.TemplateResponse(request, "glass_display.html", {"display": _pane_only_display(package, datetime.now(), revision), "frozen": True, "preview_digest": revision})
 
 
 @router.get("/api/glass/drafts")

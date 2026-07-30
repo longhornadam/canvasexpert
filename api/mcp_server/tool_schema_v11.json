@@ -3,7 +3,7 @@
   "tools": [
     {"name":"get_authoring_contract","required":["kind"],"properties":{"kind":"string"}},
     {"name":"get_course_assignments","required":["course_id"],"properties":{"course_id":"string","full_descriptions":"boolean"}},
-    {"name":"get_glass_context","required":["date"],"properties":{"date":"string","lookahead_days":"integer"}},
+    {"name":"get_glass_context","required":["date"],"properties":{"date":"string","lookahead_days":"integer","include_pane_schemas":"boolean"}},
     {"name":"get_gradebook_snapshot","required":["course_id"],"properties":{"course_id":"string"}},
     {"name":"get_modules","required":["course_id"],"properties":{"course_id":"string","include_items":"boolean"}},
     {"name":"get_product_guide","required":[],"properties":{"topic":"string"}},

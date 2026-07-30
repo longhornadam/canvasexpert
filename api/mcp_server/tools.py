@@ -568,7 +568,7 @@ def get_authoring_contract(kind: str) -> dict:
             "contract": contract_text + _staging_appendix(kind)}
 
 
-def get_glass_context(date: str, lookahead_days: int = 14) -> dict:
+def get_glass_context(date: str, lookahead_days: int = 14, include_pane_schemas: bool = False) -> dict:
     """Public schedule/calendar context only; no Canvas or student reads."""
     from datetime import date as date_type
     from api.glass import panes
@@ -582,13 +582,10 @@ def get_glass_context(date: str, lookahead_days: int = 14) -> dict:
     context = day_context(day, lookahead_days=lookahead_days)
     blocks = context["blocks"]
     approved = []
-    _, library = panes._roots()
-    if library and (library / "panes").is_dir():
-        for pane_dir in sorted((library / "panes").iterdir()):
-            if pane_dir.is_dir():
-                for child in sorted(pane_dir.iterdir()):
-                    if child.is_dir() and panes._approved(pane_dir.name, child.name):
-                        approved.append({"pane_id": pane_dir.name, "revision": child.name})
+    for item in panes.list_approved()["panes"]:
+        entry = {"pane_id": item["pane_id"], "revision": item["revision"], "title": item["title"]}
+        if include_pane_schemas: entry["data_schema"] = item["data_schema"]
+        approved.append(entry)
     scene = panes.approved_scene(day)
     pending = next((item for item in panes.list_drafts() if item["kind"] == "scene" and item["subject"] == date), None)
     return {"ok": True, "date": date, "day_type": context["day_type"],

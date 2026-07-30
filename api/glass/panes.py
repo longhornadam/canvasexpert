@@ -345,6 +345,24 @@ def approve_scene(draft_id, digest, root=None):
     discard(draft_id, root); return {"ok": True, "date": scene["date"], "digest": digest}
 
 
+def list_approved(root=None):
+    """Approved pane revisions and scenes that still read back intact."""
+    _, library = _roots(root); result = {"panes": [], "scenes": []}
+    if not library: return result
+    for pane_folder in sorted((library / "panes").iterdir()) if (library / "panes").is_dir() else ():
+        for revision_folder in sorted(pane_folder.iterdir()) if pane_folder.is_dir() else ():
+            package = _approved(pane_folder.name, revision_folder.name, root) if revision_folder.is_dir() else None
+            if package:
+                manifest = package["pane"]["manifest"]
+                result["panes"].append({"pane_id": manifest["id"], "revision": package["digest"], "title": manifest["title"], "description": manifest["description"], "data_schema": manifest["data_schema"]})
+    for path in sorted((library / "scenes").glob("*.json")) if (library / "scenes").is_dir() else ():
+        try: day = date.fromisoformat(path.stem)
+        except ValueError: continue
+        record = approved_scene(day, root)
+        if record: result["scenes"].append({"date": path.stem, "digest": record["digest"], "title": record["scene"].get("title")})
+    return result
+
+
 def approved_scene(day, root=None):
     _, library = _roots(root)
     if not library or not isinstance(day, date): return None

@@ -158,10 +158,12 @@ def get_authoring_contract(kind: str) -> str:
 
 
 @mcp.tool()
-def get_glass_context(date: str, lookahead_days: int = 14) -> str:
+def get_glass_context(date: str, lookahead_days: int = 14, include_pane_schemas: bool = False) -> str:
     """Public bell-schedule/calendar context plus approved pane and scene status.
+    Pass include_pane_schemas to also get each approved pane's data_schema, which
+    a scene's per-instance data must satisfy.
     It never reads Canvas, course work, or student data."""
-    return _compact(tools.get_glass_context(date, lookahead_days))
+    return _compact(tools.get_glass_context(date, lookahead_days, include_pane_schemas))
 
 
 @mcp.tool()

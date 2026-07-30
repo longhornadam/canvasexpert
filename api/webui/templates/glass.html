@@ -37,6 +37,27 @@
     </article>
     {% else %}<p>No pending scene drafts.</p>{% endfor %}
   </section>
+  <section aria-labelledby="glass-approved-panes">
+    <h2 id="glass-approved-panes">Approved panes</h2>
+    {% for pane in library.panes %}
+    <article data-glass-approved-pane="{{ pane.pane_id }}">
+      <h3>{{ pane.title }}</h3><p>{{ pane.description }}</p>
+      <p>{{ pane.pane_id }} · revision {{ pane.revision }}</p>
+      <p><a href="/glass/library/panes/{{ pane.pane_id }}/{{ pane.revision }}">Open this pane on its own</a></p>
+    </article>
+    {% else %}<p>No approved panes yet.</p>{% endfor %}
+  </section>
+  <section aria-labelledby="glass-approved-scenes">
+    <h2 id="glass-approved-scenes">Approved scenes</h2>
+    {% for scene in library.scenes %}
+    <article data-glass-approved-scene="{{ scene.date }}">
+      <h3>{{ scene.title }}</h3>
+      <p>Date: {{ scene.date }} · Digest: {{ scene.digest }}</p>
+      <p><a href="/glass/display?at={{ scene.date }}T08:00:00">Open this day on the projector</a></p>
+    </article>
+    {% else %}<p>No approved scenes yet. An approved pane reaches the projector once a scene places it on a date.</p>{% endfor %}
+  </section>
+  <p><a href="/glass/display">Open the projector view for today</a></p>
 </section>
 {% endblock %}
 {% block workspace_scripts %}<script src="/static/glass/review.js?v={{ asset_v }}"></script>{% endblock %}

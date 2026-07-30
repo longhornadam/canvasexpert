@@ -561,7 +561,12 @@ def test_glass_context_projects_public_state_and_skips_corrupt_revisions(tmp_pat
     assert result["ok"] is True
     assert result["events"] == [{"kind": "no_school", "label": "Fictional break", "start": "2099-09-14", "end": "2099-09-14", "source_subtype": "holiday"}]
     assert result["grading_periods"] == [{"name": "Term 1", "code": "T1", "start": "2099-08-01", "end": "2099-10-01"}]
-    assert result["approved_panes"] == [{"pane_id": "context-pane", "revision": approved["pane_revision"]}]
+    listed = panes.list_approved(str(tmp_path))["panes"][0]
+    assert result["approved_panes"] == [{"pane_id": "context-pane", "revision": approved["pane_revision"], "title": listed["title"]}]
+    with_schemas = tools.get_glass_context("2099-09-14", 14, True)["approved_panes"]
+    assert with_schemas == [{"pane_id": "context-pane", "revision": approved["pane_revision"],
+                             "title": listed["title"], "data_schema": listed["data_schema"]}]
+    assert "data_schema" not in json.dumps(result)
     assert result["approved_scene"] == {"approved": True, "digest": scene_approved["digest"]}
     assert result["pending_scene"] == {"pending": True, "draft_id": pending_scene["draft_id"], "digest": pending_scene["digest"]}
     assert "source_path" not in json.dumps(result) and str(tmp_path) not in json.dumps(result) and "notes" not in result

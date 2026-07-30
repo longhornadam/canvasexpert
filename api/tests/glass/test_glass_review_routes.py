@@ -44,6 +44,42 @@ def test_review_mutations_with_csrf_keep_exact_drafts(tmp_path, monkeypatch):
     assert discarded.json() == {"ok": True} and panes.draft(second["draft_id"], str(tmp_path)) is None
 
 
+def test_approved_pane_leaves_the_pending_list_and_joins_the_library(tmp_path, monkeypatch):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    saved = panes.save_pane_draft(_pane(), root=str(tmp_path))
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    assert "No approved panes yet." in client.get("/glass").text
+    approved = panes.approve_pane(saved["draft_id"], saved["digest"], str(tmp_path))
+
+    page = client.get("/glass")
+    assert "No pending pane drafts." in page.text and "No approved panes yet." not in page.text
+    assert f'data-glass-approved-pane="{approved["pane_id"]}"' in page.text and approved["pane_revision"] in page.text
+    assert "No approved scenes yet." in page.text
+
+    preview = client.get(f"/glass/library/panes/{approved['pane_id']}/{approved['pane_revision']}")
+    assert preview.status_code == 200 and 'sandbox="allow-scripts"' in preview.text and "Review pane" not in preview.text
+    assert client.get(f"/glass/library/panes/{approved['pane_id']}/{'0' * 64}").status_code == 404
+    assert client.get("/glass/library/panes/not!an!id/abc").status_code == 404
+
+
+def test_approved_scene_is_listed_with_a_projector_link(tmp_path, monkeypatch):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    saved = panes.save_pane_draft(_pane(), root=str(tmp_path))
+    approved = panes.approve_pane(saved["draft_id"], saved["digest"], str(tmp_path))
+    scene = {"format": panes.SCENE_FORMAT, "date": "2099-09-21", "title": "Fictional listed day", "blocks": {},
+             "default": [{"instance_id": "one", "pane_id": approved["pane_id"], "pane_revision": approved["pane_revision"],
+                          "data": {"message": "hello"}, "column": 1, "row": 1, "width": 12, "height": 8}]}
+    draft = panes.save_scene_draft(scene, root=str(tmp_path))
+    assert panes.approve_scene(draft["draft_id"], draft["digest"], str(tmp_path))["ok"]
+    (tmp_path / "Library" / "Glass" / "scenes" / "not-a-date.json").write_text("{}", encoding="utf-8")
+
+    listed = panes.list_approved(str(tmp_path))
+    assert [item["date"] for item in listed["scenes"]] == ["2099-09-21"]
+    page = TestClient(app, base_url="http://127.0.0.1:8765").get("/glass")
+    assert 'data-glass-approved-scene="2099-09-21"' in page.text and "Fictional listed day" in page.text
+    assert "/glass/display?at=2099-09-21T08:00:00" in page.text
+
+
 def test_only_bundled_fonts_allow_opaque_frame_cors():
     client = TestClient(app, base_url="http://127.0.0.1:8765")
     font = client.get("/static/fonts/public-sans-400.woff2")

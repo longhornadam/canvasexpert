@@ -109,6 +109,7 @@ EXPECTED = [
     ('/docs/oauth2-redirect', ('GET',)),
     ('/glass', ('GET',)),
     ('/glass/display', ('GET',)),
+    ('/glass/library/panes/{pane_id}/{revision}', ('GET',)),
     ('/glass/preview/{draft_id}', ('GET',)),
     ('/gradebook', ('GET',)),
     ('/openapi.json', ('GET',)),
