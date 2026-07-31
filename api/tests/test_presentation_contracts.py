@@ -250,3 +250,11 @@ def test_settings_has_a_class_schedule_panel_and_rail_link(monkeypatch):
     text = _client().get("/settings").text
     assert 'id="class-schedule-card"' in text
     assert 'href="#class-schedule-card"' in text
+
+
+def test_class_schedule_editor_uses_course_periods_and_days_fields():
+    text = _source("api/webui/static/settings/class_schedule.js")
+    assert 'data-field="course"' in text
+    assert 'data-field="periods"' in text
+    assert 'data-field="label"' not in text
+    assert 'data-field="name"' not in text

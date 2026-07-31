@@ -63,7 +63,7 @@
 .ce-schedule-blocks { display: grid; gap: var(--ce-space-2); margin-top: var(--ce-space-5); padding-top: var(--ce-space-4); border-top: 1px solid var(--ce-rule); }
 .ce-schedule-blocks h3 { margin: 0; }
 .ce-schedule-block-list { display: grid; gap: var(--ce-space-2); }
-.ce-schedule-block-row { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(110px, .7fr) minmax(130px, 1fr) minmax(230px, 1.6fr) auto; align-items: end; gap: var(--ce-space-2); padding: var(--ce-space-3); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
+.ce-schedule-block-row { display: grid; grid-template-columns: minmax(180px, 1.1fr) minmax(110px, .7fr) minmax(230px, 1.6fr) auto; align-items: end; gap: var(--ce-space-2); padding: var(--ce-space-3); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
 .ce-schedule-block-row label { min-width: 0; }
 .ce-schedule-weekdays { display: grid; gap: var(--ce-space-1); }
 .ce-schedule-field-label { color: var(--ce-ink); font-size: 13px; font-weight: 600; }

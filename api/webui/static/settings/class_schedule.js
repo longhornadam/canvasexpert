@@ -90,11 +90,11 @@
       row.setAttribute("data-ce-hook", "block-row");
       row._sourceBlock = block;
       var periods = Array.isArray(block.raw_periods) ? block.raw_periods.join(", ") : "";
+      var course = block.label || block.name || "";
       var days = blockDays(block);
       row.innerHTML =
-        '<label>Name<input type="text" data-field="name" value="' + esc(block.name || "") + '"></label>' +
+        '<label>Course<input type="text" data-field="course" value="' + esc(course) + '"></label>' +
         '<label>Periods<input type="text" data-field="periods" value="' + esc(periods) + '" placeholder="1, 2"></label>' +
-        '<label>Label<input type="text" data-field="label" value="' + esc(block.label || "") + '"></label>' +
         '<div class="ce-schedule-weekdays"><span class="ce-schedule-field-label">Days</span><div class="ce-schedule-day-list">' +
         weekdays.map(function (day, index) {
           return '<label><input type="checkbox" data-weekday="' + index + '"' +
@@ -117,9 +117,10 @@
   function readBlocks() {
     return Array.prototype.map.call(blockList.querySelectorAll('[data-ce-hook="block-row"]'), function (row) {
       var block = Object.assign({}, row._sourceBlock || {});
-      block.name = inputValue(row, "name").trim();
+      var course = inputValue(row, "course").trim();
+      block.name = course;
       block.raw_periods = parsePeriods(inputValue(row, "periods"));
-      block.label = inputValue(row, "label").trim();
+      block.label = course;
       var selected = Array.prototype.map.call(
         row.querySelectorAll('[data-weekday]:checked'),
         function (input) { return Number(input.getAttribute("data-weekday")); }
