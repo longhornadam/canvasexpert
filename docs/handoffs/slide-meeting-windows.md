@@ -194,7 +194,7 @@ No test names this file, but `test_default_resolved_runs_never_invert` globs the
 
 **Traffic light:** GREEN
 
-**Commit:** `81f0bb2` (`Support repeated SmartDeck meeting windows`). No push, merge, or
+**Commit:** `6123e61` (`Support repeated SmartDeck meeting windows`). No push, merge, or
 branch was created.
 
 **Changed files:**
