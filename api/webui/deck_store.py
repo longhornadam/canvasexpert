@@ -35,10 +35,40 @@ def _archived_dir():
     return os.path.join(base, "Archived")
 
 
+def _deleted_dir():
+    """Return <workspace>/_System/Archive/SmartDecks, where delete_deck moves files."""
+    archive_root = workspace.system_folder("Archive")
+    if archive_root is None:
+        return None
+    return os.path.join(archive_root, "SmartDecks")
+
+
 def _smartdecks_base():
     """Return <workspace>/Library/SmartDecks for path jailing checks."""
     base = workspace.library_folder("SmartDecks")
     return os.path.realpath(base) if base else None
+
+
+def _move_preserving(source: str, destination: str, what: str) -> list[str]:
+    """Move a file, refusing to overwrite an existing destination.
+
+    shutil.move falls back to copy-then-delete when os.rename fails, which on
+    Windows means an occupied destination is silently overwritten. Every move in
+    this module is an archive or a soft delete, so clobbering the destination is
+    the one outcome this storage layer promises cannot happen. Revision numbers
+    are unique per date (see next_revision), so a collision here means a file
+    predating that guarantee -- refuse and say so rather than destroy it.
+
+    Returns [] on success, or a single problem string prefixed with `what`.
+    """
+    if os.path.exists(destination):
+        return [f"{what}: a different deck is already stored at "
+                f"{os.path.basename(destination)}; nothing was moved"]
+    try:
+        shutil.move(source, destination)
+    except (OSError, shutil.Error) as e:
+        return [f"{what}: {e}"]
+    return []
 
 
 def _is_path_jailed(path: str) -> bool:
@@ -60,31 +90,31 @@ def _is_path_jailed(path: str) -> bool:
 
 
 def next_revision(date: str) -> int:
-    """Scan for existing revisions of a given date and return the next revision number.
+    """Return the next free revision number for a date.
 
-    Scans <date>.r*.json files in _decks_dir() (ignoring Archived).
-    Returns 1 if none exist, else max existing revision + 1.
+    Scans <date>.r*.json in every location a deck can live: active, Decks/Archived,
+    and _System/Archive/SmartDecks. Revision numbers have to be unique per date
+    across all three, not just within the active folder. Scanning only the active
+    folder restarts at r1 once a date's decks have all been archived or deleted,
+    and the next archive/delete then moves a fresh r1 onto the stored one.
+
+    Returns 1 if no revision of this date exists anywhere.
     """
-    decks_dir = _decks_dir()
-    if decks_dir is None or not os.path.isdir(decks_dir):
-        return 1
-
-    pattern = os.path.join(decks_dir, f"{date}.r*.json")
-    existing = glob.glob(pattern)
-
-    revisions = []
-    for path in existing:
-        filename = os.path.basename(path)
-        # Extract revision number from filename like "2026-08-14.r2.json"
-        try:
-            rev_str = filename.split(".")[-2][1:]  # "r2" -> "2"
-            rev_num = int(rev_str)
-            revisions.append(rev_num)
-        except (ValueError, IndexError):
-            # Stray non-matching file, ignore it
+    highest = 0
+    for directory in (_decks_dir(), _archived_dir(), _deleted_dir()):
+        if directory is None or not os.path.isdir(directory):
             continue
+        for path in glob.glob(os.path.join(directory, f"{date}.r*.json")):
+            filename = os.path.basename(path)
+            # Extract revision number from filename like "2026-08-14.r2.json"
+            try:
+                rev_num = int(filename.split(".")[-2][1:])  # "r2" -> 2
+            except (ValueError, IndexError):
+                # Stray non-matching file, ignore it
+                continue
+            highest = max(highest, rev_num)
 
-    return (max(revisions) + 1) if revisions else 1
+    return highest + 1
 
 
 def save_deck(data: dict) -> tuple[dict | None, list[str]]:
@@ -123,11 +153,14 @@ def save_deck(data: dict) -> tuple[dict | None, list[str]]:
         for old_file in glob.glob(pattern):
             try:
                 os.makedirs(archived_dir, exist_ok=True)
-                old_name = os.path.basename(old_file)
-                archive_dest = os.path.join(archived_dir, old_name)
-                shutil.move(old_file, archive_dest)
-            except (OSError, shutil.Error) as e:
+            except OSError as e:
                 return None, [f"failed to archive prior revision: {e}"]
+            old_name = os.path.basename(old_file)
+            archive_dest = os.path.join(archived_dir, old_name)
+            move_problems = _move_preserving(
+                old_file, archive_dest, "failed to archive prior revision")
+            if move_problems:
+                return None, move_problems
 
         # Verify the path is jailed
         if not _is_path_jailed(final_path):
@@ -283,8 +316,8 @@ def archive_deck(deck_id: str) -> tuple[bool, list[str]]:
         if not _is_path_jailed(archive_path):
             return False, ["path traversal detected"]
 
-        shutil.move(active_path, archive_path)
-        return True, []
+        problems = _move_preserving(active_path, archive_path, "failed to archive deck")
+        return (not problems), problems
     except (OSError, shutil.Error) as e:
         return False, [f"failed to archive deck: {e}"]
 
@@ -325,11 +358,10 @@ def delete_deck(deck_id: str) -> tuple[bool, list[str]]:
 
     try:
         # Get the system Archive folder
-        archive_root = workspace.system_folder("Archive")
-        if archive_root is None:
+        delete_dir = _deleted_dir()
+        if delete_dir is None:
             return False, ["no workspace available"]
 
-        delete_dir = os.path.join(archive_root, "SmartDecks")
         os.makedirs(delete_dir, exist_ok=True)
 
         # Verify destination is jailed (relative to Archive, which is itself
@@ -338,8 +370,8 @@ def delete_deck(deck_id: str) -> tuple[bool, list[str]]:
         if not workspace.path_within_workspace(dest_path):
             return False, ["destination path is outside workspace"]
 
-        shutil.move(source_path, dest_path)
-        return True, []
+        problems = _move_preserving(source_path, dest_path, "failed to delete deck")
+        return (not problems), problems
     except (OSError, shutil.Error) as e:
         return False, [f"failed to delete deck: {e}"]
 

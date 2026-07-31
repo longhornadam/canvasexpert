@@ -388,3 +388,83 @@ class TestDeleteDeck:
         success, problems = deck_store.delete_deck("2026-08-14.r999")
         assert success is False
         assert "not found" in problems[0]
+
+
+class TestRevisionUniqueness:
+    """Revision numbers must be unique per date across every folder a deck lives in.
+
+    Scanning only the active folder restarted numbering at r1 once a date's decks
+    had been archived or deleted, so the next archive moved a fresh r1 on top of
+    the stored one and destroyed it.
+    """
+
+    def _deck(self, title, date="2026-08-14"):
+        return {
+            "version": "1.0-json",
+            "type": "DECK",
+            "date": date,
+            "title": title,
+            "slides": [{"id": "s1", "block": "1st", "layout": "title_only", "title": "A"}],
+        }
+
+    def test_revision_does_not_restart_after_archive(self, mock_workspace):
+        """A save after archiving must not reuse the archived revision number."""
+        first, problems = deck_store.save_deck(self._deck("ORIGINAL"))
+        assert problems == []
+        assert first["deck_id"] == "2026-08-14.r1"
+
+        success, problems = deck_store.archive_deck("2026-08-14.r1")
+        assert success, problems
+
+        second, problems = deck_store.save_deck(self._deck("REPLACEMENT"))
+        assert problems == []
+        assert second["deck_id"] == "2026-08-14.r2"
+
+    def test_revision_does_not_restart_after_delete(self, mock_workspace):
+        """Soft-deleted revisions also reserve their number."""
+        first, problems = deck_store.save_deck(self._deck("ORIGINAL"))
+        assert problems == []
+
+        success, problems = deck_store.delete_deck(first["deck_id"])
+        assert success, problems
+
+        second, problems = deck_store.save_deck(self._deck("REPLACEMENT"))
+        assert problems == []
+        assert second["deck_id"] == "2026-08-14.r2"
+
+    def test_archiving_twice_preserves_the_first_deck(self, mock_workspace):
+        """The end-to-end case: archive, re-author, archive again. Both survive."""
+        first, _ = deck_store.save_deck(self._deck("ORIGINAL"))
+        deck_store.archive_deck(first["deck_id"])
+        second, _ = deck_store.save_deck(self._deck("REPLACEMENT"))
+        success, problems = deck_store.archive_deck(second["deck_id"])
+        assert success, problems
+
+        archived = {d["deck_id"]: d["title"] for d in deck_store.list_decks("archived")}
+        assert archived == {"2026-08-14.r1": "ORIGINAL", "2026-08-14.r2": "REPLACEMENT"}
+
+    def test_revision_numbering_is_per_date(self, mock_workspace):
+        """A different date starts its own numbering at r1."""
+        deck_store.save_deck(self._deck("A", date="2026-08-14"))
+        deck_store.archive_deck("2026-08-14.r1")
+        other, problems = deck_store.save_deck(self._deck("B", date="2026-08-15"))
+        assert problems == []
+        assert other["deck_id"] == "2026-08-15.r1"
+
+    def test_archive_refuses_to_overwrite_an_occupied_destination(self, mock_workspace):
+        """Legacy on-disk collisions must fail loudly, not clobber the stored deck."""
+        first, _ = deck_store.save_deck(self._deck("ORIGINAL"))
+        deck_store.archive_deck(first["deck_id"])
+
+        # Simulate a colliding file written by the pre-fix numbering.
+        decks_dir = mock_workspace / "Library" / "SmartDecks" / "Decks"
+        (decks_dir / "2026-08-14.r1.json").write_text(
+            json.dumps(self._deck("LEGACY COLLIDER")), encoding="utf-8")
+
+        success, problems = deck_store.archive_deck("2026-08-14.r1")
+        assert success is False
+        assert "already stored" in problems[0]
+
+        archived = decks_dir / "Archived" / "2026-08-14.r1.json"
+        assert json.loads(archived.read_text(encoding="utf-8"))["title"] == "ORIGINAL"
+        assert (decks_dir / "2026-08-14.r1.json").exists()

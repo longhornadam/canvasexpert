@@ -7,6 +7,8 @@
  * - Two independent slide-selection mechanisms:
  *   A) Wall-clock auto-advance (runs every 5s, matches slides by time)
  *   B) Manual Shuffle (toggle, runs every 29s, cycles through all slides)
+ * - Home returns control to A and shows what is current, falling back to Slide 1
+ *   for as long as the clock has no answer
  * - Widget lifecycle: deck-scoped widgets persist, slide-scoped widgets reset each slide
  * - Timer widget: 1s interval (never rAF), wall-clock based
  */
@@ -19,8 +21,32 @@ let shuffleOn = false;
 let wallClockInterval = null;
 let shuffleInterval = null;
 
+// Set by Home, consumed by the wall-clock check. Home asks for whatever is current;
+// when nothing is, this holds the deck on Slide 1 instead of blanking the stage, until
+// the schedule has an answer. Without a flag the 5s tick would undo it immediately.
+let homeFallbackActive = false;
+
 // Widget lifecycle state
 const mountedDeckWidgetIds = new Set();
+// Teardown callbacks for the slide-scoped widgets currently on the stage. Clearing
+// the stage removes their DOM but not their timers, so every slide change has to run
+// these first: this page runs unattended all day, and Shuffle remounts on a 29s cycle.
+let mountedSlideWidgetTeardowns = [];
+
+/**
+ * Unmount the slide-scoped widgets currently on the stage. Deck-scoped widgets are
+ * deliberately left alone -- they persist for the life of the page.
+ */
+function teardownSlideWidgets() {
+  for (const teardown of mountedSlideWidgetTeardowns) {
+    try {
+      teardown();
+    } catch (err) {
+      console.error("Widget teardown failed:", err);
+    }
+  }
+  mountedSlideWidgetTeardowns = [];
+}
 
 /**
  * Initialize on page load: fetch payload, check clocks, set up initial display.
@@ -129,7 +155,14 @@ function performWallClockCheck() {
   }
 
   if (matchedSlide) {
+    // The clock has an answer, so any pending Home fallback is spent and normal
+    // between-blocks behavior resumes from here.
+    homeFallbackActive = false;
     showSlide(matchedSlide);
+  } else if (homeFallbackActive && payload.slides.length) {
+    // Home was pressed and nothing is current: hold on Slide 1 until the schedule
+    // has something to say, rather than showing the teacher an empty stage.
+    showSlide(payload.slides[0]);
   } else {
     // No slide matches; show next upcoming slide or "nothing scheduled"
     showNotScheduled();
@@ -163,6 +196,7 @@ function showNotScheduled() {
     notScheduled.textContent = "Nothing else scheduled today";
   }
 
+  teardownSlideWidgets();
   stage.innerHTML = "";
   notScheduled.hidden = false;
   currentSlideId = null;
@@ -194,14 +228,14 @@ function setupControls() {
   });
 
   homeBtn.addEventListener("click", () => {
-    // If shuffle is on, turn it off
+    // Home hands control back to the clock and shows whatever is current right now.
+    // performWallClockCheck falls back to Slide 1 when nothing is.
+    homeFallbackActive = true;
     if (shuffleOn) {
-      turnOffShuffle();
+      turnOffShuffle();  // already re-arms the wall-clock check
+    } else {
+      startWallClockAutoAdvance();
     }
-    // Show first slide
-    showSlide(payload.slides[0]);
-    // Restart wall-clock check
-    startWallClockAutoAdvance();
   });
 
   maximizeBtn.addEventListener("click", () => {
@@ -242,6 +276,7 @@ function turnOnShuffle() {
   if (wallClockInterval) clearInterval(wallClockInterval);
 
   shuffleOn = true;
+  homeFallbackActive = false;  // a new manual choice supersedes an earlier Home
   // Set index to current slide or 0
   if (currentSlideId !== null) {
     shuffleIndex = payload.slides.findIndex(s => s.id === currentSlideId);
@@ -302,6 +337,7 @@ function showSlide(slide) {
   notScheduled.hidden = true;
 
   // Clear and rebuild the slide content
+  teardownSlideWidgets();
   stage.innerHTML = "";
 
   // Build slide DOM based on layout
@@ -346,10 +382,13 @@ function showSlide(slide) {
   // Widget lifecycle
   for (const widget of slide.widgets) {
     if (widget.scope === "slide") {
-      // Create fresh instance
+      // Create fresh instance, and remember how to stop it when this slide goes away
       const widgetEl = createWidget(widget);
       if (widgetEl) {
         slideWidgetsDiv.appendChild(widgetEl);
+        if (widgetEl.teardown) {
+          mountedSlideWidgetTeardowns.push(widgetEl.teardown);
+        }
       }
     } else if (widget.scope === "deck") {
       // Deck-scoped: only create if not already mounted
@@ -461,6 +500,7 @@ function createTimerWidget(widget) {
     if (remaining <= 0) {
       display.classList.add("sd-timer-done");
       if (interval) clearInterval(interval);
+      interval = null;
       startBtn.disabled = false;
       pauseBtn.disabled = true;
     }
@@ -509,6 +549,13 @@ function createTimerWidget(widget) {
     pauseBtn.disabled = true;
     display.textContent = formatRemaining(remainingWhenPaused);
   });
+
+  // Stop the countdown when this widget is unmounted. Without this the interval
+  // outlives the removed DOM and keeps ticking against a detached node forever.
+  container.teardown = () => {
+    if (interval) clearInterval(interval);
+    interval = null;
+  };
 
   // If autostart, begin immediately
   if (params.autostart) {

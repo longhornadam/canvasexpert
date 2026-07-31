@@ -28,8 +28,11 @@ historical, not current -- this route card is authoritative).
    start/end time) ships in one payload from `/smartdeck/display/{deck_id}/data` -- zero
    further network requests for the rest of the page's life. The display page picks which
    Slide to show via wall-clock matching (automatic, ties broken by authored order) or a
-   manual Shuffle override (whole-deck, 29s interval, suspends wall-clock while active; Home
-   resets to Slide 1 and hands control back to the clock).
+   manual Shuffle override (whole-deck, 29s interval, suspends wall-clock while active).
+   Home hands control back to the clock and shows whatever block is current; when no block
+   is current it holds Slide 1 instead of the between-blocks panel, and keeps holding it
+   until the clock has an answer. Pressing Shuffle, or the clock resolving to a real Slide,
+   spends that fallback, so ordinary between-blocks gaps show the panel again.
 
 ## Current ownership
 
@@ -57,6 +60,14 @@ historical, not current -- this route card is authoritative).
 <workspace>/Library/SmartDecks/Teacher Schedule.json    the teacher's real block-name mapping
 <workspace>/_System/Archive/SmartDecks/                 where delete_deck moves a file (soft delete)
 ```
+
+Revision numbers are unique per date across all three deck folders, not just within the
+active one: `next_revision()` takes the highest `r<N>` it can see in any of them. That is
+what makes "moves, never deletes" true. Numbering off the active folder alone restarts at
+r1 once a date has been archived or deleted, and the next move then lands a fresh r1 on top
+of the stored one. As a backstop for files written before that rule, every move in
+`deck_store.py` goes through `_move_preserving()`, which refuses an occupied destination
+instead of overwriting it.
 
 ## Deck/Slide schema (SlideForge v1)
 
