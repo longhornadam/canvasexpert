@@ -115,9 +115,9 @@ def parse_teacher_schedule(text: str) -> tuple:
 
     Shape:
     {"version": "1.0-json",
-     "blocks": [{"name": "4th/5th", "raw_periods": [4, 5], "label": "ELA 7"}, ...]}
+     "blocks": [{"name": "4th/5th", "raw_periods": [4, 5], "label": "ELA 7", "weekdays": [0, 2]}, ...]}
 
-    raw_periods is ordered and may span multiple bell periods. label is optional.
+    raw_periods is ordered and may span multiple bell periods. label and weekdays are optional.
     Top-level "_comment" key (or any unknown top-level key) is silently ignored.
 
     Returns (data_dict, problems_list):
@@ -138,6 +138,105 @@ def parse_teacher_schedule(text: str) -> tuple:
         return {}, problems
 
     return data, problems
+
+
+def _weekday_set(block, name) -> tuple[set | None, list]:
+    """Return a block's weekday restriction and any malformed-field problem."""
+    if "weekdays" not in block:
+        return None, []
+
+    weekdays = block.get("weekdays")
+    if (
+        not isinstance(weekdays, list)
+        or any(
+            isinstance(day, bool)
+            or not isinstance(day, int)
+            or day < 0
+            or day > 6
+            for day in weekdays
+        )
+    ):
+        return None, [
+            f"block '{name}': weekdays must be a list of numbers, "
+            "0 for Monday through 6 for Sunday"
+        ]
+
+    return set(weekdays), []
+
+
+def _block_meets(block, name, weekday) -> tuple[bool, list]:
+    """Return whether a block applies today, failing open on bad input."""
+    weekdays, problems = _weekday_set(block, name)
+    if weekday is None or weekdays is None:
+        return True, problems
+    return weekday in weekdays, problems
+
+
+def effective_weekdays(block) -> set:
+    """Return the weekdays a block applies to, with absent or bad values unrestricted."""
+    if not isinstance(block, dict):
+        return set(range(7))
+    weekdays, _ = _weekday_set(block, block.get("name") or "")
+    return set(range(7)) if weekdays is None else weekdays
+
+
+def validate_teacher_schedule(data: dict) -> list:
+    """Validate the teacher schedule shape for a write operation."""
+    if not isinstance(data, dict):
+        return ["teacher schedule must be a dict"]
+
+    blocks = data.get("blocks")
+    if not isinstance(blocks, list):
+        return ["blocks must be a list"]
+
+    problems = []
+    named_blocks = []
+    for index, block in enumerate(blocks):
+        if not isinstance(block, dict):
+            problems.append(f"block at index {index} must be a dict")
+            continue
+
+        name = block.get("name")
+        valid_name = isinstance(name, str) and bool(name.strip())
+        display_name = name if isinstance(name, str) else f"at index {index}"
+        if not valid_name:
+            problems.append(f"block at index {index} needs a non-empty string name")
+
+        raw_periods = block.get("raw_periods")
+        valid_raw_periods = (
+            isinstance(raw_periods, list)
+            and bool(raw_periods)
+            and all(
+                (isinstance(period, int) and not isinstance(period, bool))
+                or (isinstance(period, str) and bool(period.strip()))
+                for period in raw_periods
+            )
+        )
+        if not valid_raw_periods:
+            problems.append(
+                f"block '{display_name}' must have a non-empty list of ints "
+                "or non-empty strings for raw_periods"
+            )
+
+        weekdays, weekday_problems = _weekday_set(block, display_name)
+        problems.extend(weekday_problems)
+
+        if "label" in block and not isinstance(block.get("label"), str):
+            problems.append(f"block '{display_name}': label must be a string")
+
+        if valid_name:
+            named_blocks.append((name, set(range(7)) if weekdays is None else weekdays))
+
+    for index, (name, weekdays) in enumerate(named_blocks):
+        for other_name, other_weekdays in named_blocks[:index]:
+            if name == other_name and weekdays.intersection(other_weekdays):
+                problems.append(
+                    f"block '{name}' is listed more than once for the same weekday; "
+                    "give one a different name or narrow its weekdays"
+                )
+                break
+
+    return problems
 
 
 def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
@@ -170,6 +269,9 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
     periods_list = bell_schedules[schedule_id]
     period_map = {p["period_id"]: p for p in periods_list}
 
+    parsed = _parse_date(date)
+    weekday = parsed.weekday() if parsed else None
+
     # Parse teacher schedule blocks
     blocks_data = teacher_schedule.get("blocks") or []
     if not isinstance(blocks_data, list):
@@ -189,6 +291,11 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
 
         if not isinstance(raw_periods, list) or len(raw_periods) == 0:
             problems.append(f"block '{name}' has no raw_periods")
+            continue
+
+        meets, weekday_problems = _block_meets(block, name, weekday)
+        problems.extend(weekday_problems)
+        if not meets:
             continue
 
         # Convert raw_periods to strings for lookup
@@ -216,6 +323,18 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
 
     # Sort by start time
     blocks.sort(key=lambda b: b["start"])
+
+    seen_names = set()
+    reported_names = set()
+    for block in blocks:
+        name = block["name"]
+        if name in seen_names and name not in reported_names:
+            problems.append(
+                f"block '{name}' resolved twice for {date}; "
+                "a deck will only use the later one in the day"
+            )
+            reported_names.add(name)
+        seen_names.add(name)
 
     return blocks, problems
 

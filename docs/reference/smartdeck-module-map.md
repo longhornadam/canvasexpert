@@ -62,6 +62,11 @@ historical, not current -- this route card is authoritative).
 <workspace>/_System/Archive/SmartDecks/                 where delete_deck moves a file (soft delete)
 ```
 
+Teacher Schedule.json uses the additive schema `{version: "1.0-json", blocks: [{name,
+raw_periods, label?, weekdays?}]}`. `weekdays` is optional and contains numbers from 0 for
+Monday through 6 for Sunday. When absent, the block meets every day. A block name may appear
+more than once when its weekday sets do not overlap.
+
 Revision numbers are unique per date across all three deck folders, not just within the
 active one: `next_revision()` takes the highest `r<N>` it can see in any of them. That is
 what makes "moves, never deletes" true. Numbering off the active folder alone restarts at
