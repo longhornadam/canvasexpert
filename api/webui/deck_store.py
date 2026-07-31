@@ -195,6 +195,29 @@ def save_deck(data: dict) -> tuple[dict | None, list[str]]:
         return None, [f"unexpected error saving deck: {e}"]
 
 
+def _read_deck_file(path: str) -> tuple[dict | None, list[str]]:
+    """Read one deck file, insisting it holds a JSON object.
+
+    json.load returns whatever the file contains, so a valid-JSON file holding a list,
+    a string, a number, or null used to come back as a "deck" and blow up on the first
+    .get() with an AttributeError that no caller catches. Hand-edited files do reach
+    here: recovering an archived deck by hand is a documented workflow. One bad file
+    took down the whole management page rather than just its own row.
+
+    Returns (deck, []) or (None, [reason]). Never raises.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        return None, [f"cannot read deck file: {e}"]
+
+    if not isinstance(data, dict):
+        return None, [f"deck file does not hold a deck object "
+                      f"(found {type(data).__name__})"]
+    return data, []
+
+
 def list_decks(status: str = "active") -> list[dict]:
     """List all SmartDecks, either active or archived.
 
@@ -215,34 +238,33 @@ def list_decks(status: str = "active") -> list[dict]:
 
     decks = []
     for filepath in glob.glob(os.path.join(search_dir, "*.json")):
-        try:
-            with open(filepath, encoding="utf-8") as f:
-                data = json.load(f)
-            filename = os.path.basename(filepath)
-            # Remove .json extension to get deck_id
-            deck_id = filename[:-5] if filename.endswith(".json") else filename
-            # Parse revision from filename like "2026-08-14.r2"
-            parts = deck_id.rsplit(".r", 1)
-            if len(parts) == 2:
-                date = parts[0]
-                try:
-                    revision = int(parts[1])
-                except ValueError:
-                    revision = 0
-            else:
-                date = deck_id
-                revision = 0
-
-            decks.append({
-                "deck_id": deck_id,
-                "date": date,
-                "title": data.get("title", ""),
-                "revision": revision,
-                "path": filepath,
-            })
-        except (OSError, json.JSONDecodeError):
-            # Skip unreadable or malformed files
+        data, problems = _read_deck_file(filepath)
+        if data is None:
+            # Skip unreadable or malformed files; one of them must not hide the rest
             continue
+
+        filename = os.path.basename(filepath)
+        # Remove .json extension to get deck_id
+        deck_id = filename[:-5] if filename.endswith(".json") else filename
+        # Parse revision from filename like "2026-08-14.r2"
+        parts = deck_id.rsplit(".r", 1)
+        if len(parts) == 2:
+            date = parts[0]
+            try:
+                revision = int(parts[1])
+            except ValueError:
+                revision = 0
+        else:
+            date = deck_id
+            revision = 0
+
+        decks.append({
+            "deck_id": deck_id,
+            "date": date,
+            "title": str(data.get("title", "")),
+            "revision": revision,
+            "path": filepath,
+        })
 
     return decks
 
@@ -266,12 +288,11 @@ def load_deck(deck_id: str) -> tuple[dict | None, list[str]]:
         return None, ["path traversal detected"]
 
     # Try active first
-    try:
-        if os.path.isfile(active_path):
-            with open(active_path, encoding="utf-8") as f:
-                return json.load(f), []
-    except (OSError, json.JSONDecodeError) as e:
-        return None, [f"error reading active deck: {e}"]
+    if os.path.isfile(active_path):
+        data, problems = _read_deck_file(active_path)
+        if data is None:
+            return None, [f"error reading active deck: {problems[0]}"]
+        return data, []
 
     # Try archived
     archived_dir = _archived_dir()
@@ -279,12 +300,11 @@ def load_deck(deck_id: str) -> tuple[dict | None, list[str]]:
         archived_path = os.path.join(archived_dir, f"{deck_id}.json")
         if not _is_path_jailed(archived_path):
             return None, ["path traversal detected"]
-        try:
-            if os.path.isfile(archived_path):
-                with open(archived_path, encoding="utf-8") as f:
-                    return json.load(f), []
-        except (OSError, json.JSONDecodeError) as e:
-            return None, [f"error reading archived deck: {e}"]
+        if os.path.isfile(archived_path):
+            data, problems = _read_deck_file(archived_path)
+            if data is None:
+                return None, [f"error reading archived deck: {problems[0]}"]
+            return data, []
 
     return None, [f"deck not found: {deck_id!r}"]
 

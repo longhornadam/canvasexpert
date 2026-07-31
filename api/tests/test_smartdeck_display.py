@@ -495,3 +495,40 @@ def test_deck_list_reports_no_problems_for_a_clean_deck(isolated_workspace, sche
     listing = client.get("/smartdeck/api/decks").json()
     entry = next(d for d in listing["active"] if d["deck_id"] == saved["deck_id"])
     assert entry["problems"] == []
+
+
+@pytest.mark.parametrize("body", ['[1, 2, 3]', '"a string"', '42', 'null'],
+                         ids=["array", "string", "number", "null"])
+def test_display_data_on_a_non_object_deck_is_404_not_500(isolated_workspace, schedule_fixture, body):
+    """A deck file holding valid JSON that is not an object must not crash the route."""
+    decks_dir = Path(schedule_fixture) / "Decks"
+    decks_dir.mkdir(parents=True, exist_ok=True)
+    (decks_dir / "2026-08-19.r1.json").write_text(body, encoding="utf-8")
+
+    response = client.get("/smartdeck/display/2026-08-19.r1/data")
+    assert response.status_code == 404
+    assert response.json()["ok"] is False
+
+
+def test_deck_list_survives_a_garbage_file_beside_a_good_deck(isolated_workspace, schedule_fixture):
+    """One unreadable file must not take down the whole management page.
+
+    Before this guard, a single bad file 500'd the list route, so the teacher could not
+    see or delete any of their other decks.
+    """
+    saved, problems = deck_store.save_deck({
+        "version": "1.0-json", "type": "DECK", "date": "2026-08-19", "title": "Good Deck",
+        "slides": [{"id": "s1", "block": "1st Period", "layout": "title_only", "title": "A"}],
+    })
+    assert problems == []
+
+    decks_dir = Path(schedule_fixture) / "Decks"
+    (decks_dir / "2026-01-05.r1.json").write_text("[1, 2, 3]", encoding="utf-8")
+    (decks_dir / "2026-01-06.r1.json").write_text("not json", encoding="utf-8")
+
+    response = client.get("/smartdeck/api/decks")
+    assert response.status_code == 200
+    listing = response.json()
+    assert listing["ok"] is True
+    assert [d["deck_id"] for d in listing["active"]] == [saved["deck_id"]]
+    assert listing["active"][0]["title"] == "Good Deck"

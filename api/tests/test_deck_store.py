@@ -468,3 +468,64 @@ class TestRevisionUniqueness:
         archived = decks_dir / "Archived" / "2026-08-14.r1.json"
         assert json.loads(archived.read_text(encoding="utf-8"))["title"] == "ORIGINAL"
         assert (decks_dir / "2026-08-14.r1.json").exists()
+
+
+class TestMalformedDeckFiles:
+    """A deck file can be valid JSON without being a deck.
+
+    json.load returns whatever the file holds, so an array/string/number/null used to
+    be handed back as a "deck" and blow up on the first .get() with an AttributeError
+    no caller catches. Hand-edited files reach here: recovering an archived deck by
+    hand is a documented workflow.
+    """
+
+    NON_OBJECTS = ["[1, 2, 3]", '"just a string"', "42", "null", "true"]
+
+    def _decks_dir(self, mock_workspace):
+        return mock_workspace / "Library" / "SmartDecks" / "Decks"
+
+    @pytest.mark.parametrize("body", NON_OBJECTS)
+    def test_load_deck_rejects_a_non_object_file(self, mock_workspace, body):
+        (self._decks_dir(mock_workspace) / "2026-08-14.r1.json").write_text(
+            body, encoding="utf-8")
+
+        deck, problems = deck_store.load_deck("2026-08-14.r1")
+        assert deck is None
+        assert any("does not hold a deck object" in p for p in problems)
+
+    @pytest.mark.parametrize("body", NON_OBJECTS)
+    def test_list_decks_skips_a_non_object_file(self, mock_workspace, body):
+        (self._decks_dir(mock_workspace) / "2026-08-14.r1.json").write_text(
+            body, encoding="utf-8")
+
+        assert deck_store.list_decks("active") == []
+
+    def test_one_bad_file_does_not_hide_the_others(self, mock_workspace):
+        """The management page lists every readable deck, not zero of them."""
+        saved, problems = deck_store.save_deck({
+            "version": "1.0-json", "type": "DECK", "date": "2026-08-15", "title": "Good",
+            "slides": [{"id": "s1", "block": "1st", "layout": "title_only", "title": "A"}],
+        })
+        assert problems == []
+        (self._decks_dir(mock_workspace) / "2026-08-14.r1.json").write_text(
+            "[1, 2, 3]", encoding="utf-8")
+
+        listed = deck_store.list_decks("active")
+        assert [d["deck_id"] for d in listed] == [saved["deck_id"]]
+
+    def test_load_deck_rejects_a_file_that_is_not_json(self, mock_workspace):
+        (self._decks_dir(mock_workspace) / "2026-08-14.r1.json").write_text(
+            "this is not json at all", encoding="utf-8")
+
+        deck, problems = deck_store.load_deck("2026-08-14.r1")
+        assert deck is None
+        assert any("cannot read deck file" in p for p in problems)
+
+    def test_a_non_object_archived_file_is_rejected_too(self, mock_workspace):
+        archived = self._decks_dir(mock_workspace) / "Archived"
+        archived.mkdir(parents=True, exist_ok=True)
+        (archived / "2026-08-14.r1.json").write_text("[]", encoding="utf-8")
+
+        deck, problems = deck_store.load_deck("2026-08-14.r1")
+        assert deck is None
+        assert any("archived" in p for p in problems)
