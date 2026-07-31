@@ -176,6 +176,18 @@ here.
 - The step 1 guard has been observed failing on a deliberately restored file, then passing again.
 - `git status` is clean and no file from the table above exists in the tree.
 
+## Execution result
+
+- **Traffic light:** GREEN.
+- **Commit:** pending until this result is recorded and the brief is retired.
+- **Changed:** `api/tests/test_retired_paths.py`, the optional `.githooks/pre-commit` mirror,
+  and the three `var(--line)` call sites. Teacher-facing em-dashes in the edited calendar
+  strings were also replaced; the wider em-dash sweep remains deferred.
+- **Evidence:** focused guard `1 passed`; deliberate `api/webui/config.py` restoration made
+  the guard fail with path and retirement reason; the hook mirror also exited 1 on that staged
+  restoration; presentation gate `11 passed`; full suite `1925 passed, 1 skipped`.
+- **Deviations:** none. No unresolved decisions.
+
 ## Retiring this brief
 
 Per `AGENTS.md`, close GREEN work by accepting it and retiring this brief in the same batch. Git

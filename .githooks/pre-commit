@@ -9,6 +9,38 @@
 # false-positives as PII. A real address still matches once the marker is gone.
 added=$(git diff --cached -U0 | grep -E '^\+' | grep -vE '^\+\+\+' | sed 's/^+//')
 
+# Mirror the suite guard when Python is available, using its list as the single
+# source of truth. The suite remains authoritative if this optional backstop is
+# unavailable in a minimal Git-only environment.
+if command -v python >/dev/null 2>&1; then
+  retired=$(python - <<'PY'
+import subprocess
+
+from api.tests.test_retired_paths import RETIRED_PATHS
+
+added_paths = set(
+    subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=A"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+)
+for relative, _, _ in RETIRED_PATHS:
+    if relative in added_paths:
+        print(relative)
+PY
+)
+  if [ -n "$retired" ]; then
+    echo "" >&2
+    echo "COMMIT BLOCKED: a retired path is being added:" >&2
+    printf '%s\n' "$retired" >&2
+    echo "See api/tests/test_retired_paths.py for the retirement reason." >&2
+    echo "" >&2
+    exit 1
+  fi
+fi
+
 # 1) Canvas access token (pattern: NNNN~<40+ alnum>). Belongs only in api/.env.
 token=$(printf '%s\n' "$added" | grep -E '[0-9]{3,6}~[A-Za-z0-9]{40,}')
 if [ -n "$token" ]; then

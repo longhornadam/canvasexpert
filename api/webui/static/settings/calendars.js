@@ -20,7 +20,7 @@
     if (!list) return;
     var entries = Object.entries(calendars || {});
     if (!entries.length) {
-      list.innerHTML = '<div class="callout warn" id="cal-none-callout">No academic calendar configured — only weekends are skipped by default.</div>';
+      list.innerHTML = '<div class="callout warn" id="cal-none-callout">No academic calendar configured - only weekends are skipped by default.</div>';
       return;
     }
     list.innerHTML = entries.map(function (_ref) {
@@ -66,7 +66,7 @@
       var d = await fetch("/api/calendar/load-builtin", { method: "POST", body: fd }).then(function (r) { return r.json(); });
       if (d.ok) {
         var note = (d.grading_periods || []).length ? " · " + d.grading_periods.length + " grading period(s)" : "";
-        setCalStatus(calOpStatus, "✓ Loaded " + d.count + " day(s) off" + note + " — " + d.label, "ok");
+        setCalStatus(calOpStatus, "✓ Loaded " + d.count + " day(s) off" + note + " - " + d.label, "ok");
         var cd = await fetch("/api/calendar").then(function (r) { return r.json(); });
         if (cd.ok) renderCalendars(cd.calendars);
       } else {
@@ -179,15 +179,15 @@
     parsedCalSource = "Custom CSV";
 
     var dayHtml = dayOffRows.map(function (r) {
-      return '<div style="padding:3px 0; border-bottom:1px solid var(--line)">' +
-        '<strong>' + CE.esc(r.name) + '</strong> — ' + CE.esc(r.start) + ' to ' + CE.esc(r.end) + ' ' +
+      return '<div style="padding:3px 0; border-bottom:1px solid var(--ce-rule)">' +
+        '<strong>' + CE.esc(r.name) + '</strong> - ' + CE.esc(r.start) + ' to ' + CE.esc(r.end) + ' ' +
         '<span class="muted">(' + r.count + ' day' + (r.count === 1 ? "" : "s") + ')</span></div>';
     }).join("");
     var perHtml = periodRows.length
       ? '<div style="margin-top:10px"><strong>' + periodRows.length + ' grading period(s):</strong>' +
         periodRows.map(function (r) {
-          return '<div style="padding:3px 0; border-bottom:1px solid var(--line)">' +
-            '<strong>' + CE.esc(r.name) + '</strong> — ' + CE.esc(r.start) + ' to ' + CE.esc(r.end) + '</div>';
+          return '<div style="padding:3px 0; border-bottom:1px solid var(--ce-rule)">' +
+            '<strong>' + CE.esc(r.name) + '</strong> - ' + CE.esc(r.start) + ' to ' + CE.esc(r.end) + '</div>';
         }).join("") + "</div>"
       : "";
     if (preview) {

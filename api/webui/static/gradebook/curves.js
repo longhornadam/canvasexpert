@@ -261,7 +261,7 @@
       es.textContent = "";
       events.forEach(function (ev) {
         var row = document.createElement("div");
-        row.style.cssText = "display:flex; align-items:baseline; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13.5px";
+        row.style.cssText = "display:flex; align-items:baseline; gap:12px; padding:8px 0; border-bottom:1px solid var(--ce-rule); font-size:13.5px";
         var applied    = ev.applied_at ? ev.applied_at.replace("T", " ") : "";
         var modelLabel = ev.curve_type ? ev.curve_type.replace(/_/g, " ") : "";
         row.innerHTML =
