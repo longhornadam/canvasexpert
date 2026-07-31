@@ -256,7 +256,7 @@ New test in `api/tests/test_schedule_fixture.py`:
 ## Execution result
 
 - **Traffic light:** GREEN.
-- **Commit:** pending until this result is recorded and the brief is retired.
+- **Commit:** `0bcc9ec` (`Model school days as ordered meetings`).
 - **Changed:** ordered Bell Schedule meetings with duplicate IDs and labels; consecutive-run
   resolution with additive meeting fields; weekday-axis retirement and save-time period checks;
   SmartDeck/feed/MCP consumers; Settings UI; defaults, fixtures, and focused regressions.
