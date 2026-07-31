@@ -1,33 +1,22 @@
 (function () {
   "use strict";
 
-  var links = Array.prototype.slice.call(document.querySelectorAll('.ce-settings-index__links a[data-rail-link]'));
+  var links = Array.prototype.slice.call(document.querySelectorAll('[data-rail-link]'));
   if (!links.length || !window.IntersectionObserver) return;
 
   var linkTargets = links
     .map(function (link) { return document.querySelector(link.getAttribute('href')); })
     .filter(Boolean);
 
-  // "Previous courses" and "Add courses from Canvas" are part of the Courses
-  // group but don't get their own rail link (three near-identical "Courses"
-  // links would just add noise). Observe them too, so scrolling through them
-  // keeps "Courses" highlighted instead of leaving whatever link came before
-  // it stuck on screen by accident.
-  var extraCoverage = {
-    'previous-courses-card': 'current-courses-card',
-    'add-courses-card': 'current-courses-card'
-  };
-
   var highlightFor = new Map();
   linkTargets.forEach(function (el) { highlightFor.set(el, el.id); });
 
   var extraTargets = [];
-  Object.keys(extraCoverage).forEach(function (id) {
-    var el = document.getElementById(id);
-    if (el) {
-      highlightFor.set(el, extraCoverage[id]);
-      extraTargets.push(el);
-    }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rail-covered-by]'), function (el) {
+    var coveringId = el.getAttribute('data-rail-covered-by');
+    if (!coveringId || !document.getElementById(coveringId)) return;
+    highlightFor.set(el, coveringId);
+    extraTargets.push(el);
   });
 
   var targets = linkTargets.concat(extraTargets);

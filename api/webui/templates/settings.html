@@ -7,43 +7,43 @@
 
 {% block left_rail %}
 {% call rail('left', 'Settings sections') %}
-  <nav class="ce-settings-index" aria-label="Settings sections">
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">Canvas connection</p>
-      <div class="ce-settings-index__links">
+  <nav class="ce-rail-nav" aria-label="Settings sections">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Canvas connection</p>
+      <div class="ce-rail-nav__links">
         <a href="#workspace-card" data-rail-link>Canvas account</a>
         <a href="#mirror-card" data-rail-link>Canvas data</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">Courses</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Courses</p>
+      <div class="ce-rail-nav__links">
         <a href="#current-courses-card" data-rail-link>Courses</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">AI &amp; authoring</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">AI &amp; authoring</p>
+      <div class="ce-rail-nav__links">
         <a href="#openrouter-card" data-rail-link>AI assistance</a>
         <a href="#tier-tags-card" data-rail-link>Differentiation tags</a>
         <a href="#ai-ta-card" data-rail-link>AI Authoring</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">Files &amp; calendars</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Files &amp; calendars</p>
+      <div class="ce-rail-nav__links">
         <a href="#workspace-settings-card" data-rail-link>Workspace</a>
         <a href="#download-root-card" data-rail-link>Downloads</a>
         <a href="#cal" data-rail-link>Academic calendars</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">About this app</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">About this app</p>
+      <div class="ce-rail-nav__links">
         <a href="#update-card" data-rail-link>Updates</a>
       </div>
     </div>
@@ -182,7 +182,7 @@
   {% endif %}
 </section>
 
-<section class="ce-panel ce-settings-panel" id="previous-courses-card">
+<section class="ce-panel ce-settings-panel" id="previous-courses-card" data-rail-covered-by="current-courses-card">
   <h2>Previous courses</h2>
   <p class="ce-hint">
     Previous courses stay saved with their local sessions, receipts, downloads, and
@@ -215,7 +215,7 @@
   {% endif %}
 </section>
 
-<section class="ce-panel ce-settings-panel" id="add-courses-card">
+<section class="ce-panel ce-settings-panel" id="add-courses-card" data-rail-covered-by="current-courses-card">
   <h2>Add courses from Canvas</h2>
   <p class="ce-hint">
     Browse every course available to your Canvas account. Adding a course makes it
@@ -546,7 +546,7 @@
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
 <script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
 <script src="/static/settings/updates.js?v={{ asset_v }}"></script>
-<script src="/static/settings/rail_nav.js?v={{ asset_v }}"></script>
+<script src="/static/ui/rail_nav.js?v={{ asset_v }}"></script>
 
 <script>
 (function () {

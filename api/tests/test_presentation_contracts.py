@@ -206,7 +206,7 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         # setup stays focused, and a projected screen has no chrome to navigate.
         assert text.count("<header") == (0 if layout in ("wizard", "display") else 1)
         assert text.count("<main") == 1
-        assert len(re.findall(r'class="[^"]*\bce-rail\b', text)) == rails
+        assert len(re.findall(r'class="[^"]*\bce-rail(?=\s|")', text)) == rails
         assert "/static/style.css" not in text
         assert "/static/workbench.css" not in text
         for href in bundle:
