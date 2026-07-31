@@ -1,6 +1,6 @@
 # Brief: let the assistant store the class schedule
 
-Status: **READY FOR EXECUTION**. Authored 2026-07-31.
+Status: **GREEN. EXECUTED 2026-07-31.**
 
 > Supersedes nothing. The preceding class-schedule brief landed GREEN and was retired in the
 > same batch that authored this one; its examples feature was removed in that batch (see
@@ -391,4 +391,25 @@ Named so a later agent does not mistake them for oversights.
 
 # Execution result
 
-_Not yet executed._
+Traffic light: **GREEN** after user direction to continue with the unrelated baseline
+failures recorded below.
+
+- Commits: `9b3c1a4`, `c576131`, `b3fbcbb`, `df1a2e0`.
+- Unit 1 gate: 95 passed in `api/tests/test_mcp_server_tools.py`.
+- Unit 2 gate: 109 passed across the MCP and day-calendar write tests.
+- Unit 3 gate: 129 passed across the schema, MCP, connections, and instruction tests.
+- Unit 4 affected checks: 2 schedule-specific presentation checks passed and 12 schedule
+  route tests passed. The named presentation gate still includes two baseline failures in
+  `test_presentation_contracts.py`.
+- Integration: `py -m pytest api/tests -q` produced 1,751 passed and the same 7 baseline
+  failures recorded before implementation.
+- End-to-end evidence: an isolated workspace write produced 9 weekday rows, omitted the
+  holiday, resolved ordinary and Friday override times as 08:00 and 09:00 with empty
+  problem lists, reported readiness true, rendered `/settings` with status 200, and showed
+  the AI Connections line.
+- Protected surfaces: `api/webui/deck_schedule.py` and `api/smartdeck_feeds.py` were not
+  changed. No seeded Calendars files or live workspace files were written.
+- Deviations: the repository baseline remains non-green for 7 unrelated failures in import,
+  Canvas ownership, NoteForge, presentation, and transport-contract tests. No new failure
+  appeared in the schedule surface.
+- Unresolved decisions: none.
