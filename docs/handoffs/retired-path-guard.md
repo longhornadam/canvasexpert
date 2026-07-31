@@ -1,6 +1,6 @@
 # Brief — Guard the retired paths so a resurrection cannot pass green
 
-**Status:** current, awaiting execution · **Author:** Claude Code (session of 2026-07-31)
+**Status:** GREEN; complete; retiring · **Author:** Claude Code (session of 2026-07-31)
 · **Executor:** external · **Lane:** one vertical improvement · **Branch:** `dev`
 
 ## Why this exists
@@ -179,7 +179,7 @@ here.
 ## Execution result
 
 - **Traffic light:** GREEN.
-- **Commit:** pending until this result is recorded and the brief is retired.
+- **Commit:** `fa79074` (`Guard retired paths and restore design tokens`).
 - **Changed:** `api/tests/test_retired_paths.py`, the optional `.githooks/pre-commit` mirror,
   and the three `var(--line)` call sites. Teacher-facing em-dashes in the edited calendar
   strings were also replaced; the wider em-dash sweep remains deferred.
