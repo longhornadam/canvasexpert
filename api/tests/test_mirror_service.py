@@ -47,10 +47,15 @@ class FakeCanvas:
 
 
 def _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course"},)):
+    courses = list(courses)
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
     monkeypatch.setattr(mirror_service.config, "token_is_set", lambda: True)
     monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: True)
-    monkeypatch.setattr(mirror_service.config, "active_courses", lambda: list(courses))
+    monkeypatch.setattr(mirror_service.config, "saved_courses", lambda: courses)
+    monkeypatch.setattr(
+        mirror_service.config, "active_courses",
+        lambda: [course for course in courses if course.get("active", True)],
+    )
     monkeypatch.setattr(mirror_service, "load_group_categories", lambda _course_id: ([], None, ""))
 
 
@@ -445,19 +450,48 @@ def test_sync_now_forwards_course_name_to_catalog(monkeypatch, tmp_path):
 
 # --- sync_now -------------------------------------------------------------------
 
-def test_sync_now_scopes_to_current_courses(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_sync_now_scopes_to_saved_courses(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path, courses=(
+        {"id": "111", "name": "Current", "active": True},
+        {"id": "222", "name": "Previous", "active": False},
+    ))
     ignored = FakeCanvas()
     results = mirror_service.sync_now(
         "999", canvas_get=ignored, canvas_get_all=ignored,
         canvas_get_all_complete=ignored.complete, now=NOW)
-    assert results == [{"ok": False, "error": "Not a Current course."}]
+    assert results == [{"ok": False, "error": "Not a saved course."}]
     canvas = FakeCanvas()
     results = mirror_service.sync_now(
         "111", canvas_get=canvas, canvas_get_all=canvas,
         canvas_get_all_complete=canvas.complete, now=NOW)
     assert results[0]["ok"] is True
     assert results[0]["course_id"] == "111"
+
+
+def test_enqueue_sync_accepts_previous_but_heartbeat_stays_current_only(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path, courses=(
+        {"id": "111", "name": "Current", "active": True},
+        {"id": "222", "name": "Previous", "active": False},
+    ))
+    submitted = []
+
+    class FakeCoordinator:
+        def submit(self, course_ids, scopes, *, priority):
+            submitted.append((tuple(course_ids), tuple(scopes or ("course.refresh",)), priority))
+            return "plan"
+
+    monkeypatch.setattr(mirror_service, "coordinator_instance", lambda: FakeCoordinator())
+    monkeypatch.setattr(
+        mirror_service.store, "read_course_context",
+        lambda course_id: {"lifecycle": "current", "state": "current"},
+    )
+
+    assert mirror_service.enqueue_sync("222") == "plan"
+    assert submitted == [(('222',), ("course.refresh",), "manual")]
+    submitted.clear()
+
+    assert mirror_service.enqueue_heartbeat_refreshes() == ["plan"]
+    assert submitted == [(('111',), ("course.refresh",), "background")]
 
 
 def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does(monkeypatch, tmp_path):

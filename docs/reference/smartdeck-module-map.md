@@ -89,7 +89,7 @@ instead of overwriting it.
   they reference it) or `"slide"` (fresh mount/unmount with every Slide's own showing, no
   preserved state).
 
-## MCP tools (schema v14, 19 tools total; SmartDeck's own 9)
+## MCP tools (schema v15, 21 tools total; SmartDeck's own 9)
 
 | Tool | Reads/writes |
 |---|---|

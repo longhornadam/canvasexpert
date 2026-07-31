@@ -98,6 +98,14 @@ def _set_active_courses(monkeypatch, course_ids):
     )
 
 
+def _set_previous_course(monkeypatch, course_id="111"):
+    _set_active_courses(monkeypatch, ["222"])
+    monkeypatch.setattr(
+        tools.config, "saved_courses",
+        lambda: [{"id": course_id, "name": f"Course {course_id}", "active": False}],
+    )
+
+
 # --- list_courses (no course_id, no student data -> no gates) --------------
 
 def test_list_courses_happy(monkeypatch):
@@ -259,11 +267,16 @@ def test_get_course_assignments_catalog_missing(monkeypatch):
     assert "refresh" in result["error"].lower()
 
 
-def test_get_course_assignments_rejects_non_current_course(monkeypatch):
-    _set_active_courses(monkeypatch, ["222"])
+def test_get_course_assignments_accepts_previous_course(monkeypatch):
+    _set_previous_course(monkeypatch)
+    document = _catalog_document(
+        {"700010": {"id": 700010, "name": "Quiz 1", "description_text": "desc"}},
+        [],
+    )
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
     result = tools.get_course_assignments("111")
-    assert result["ok"] is False
-    assert "not a Current course" in result["error"]
+    assert result["ok"] is True
 
 
 # --- get_modules (disk-only catalog, no student data, no vault/gate) --------
@@ -345,11 +358,14 @@ def test_get_modules_include_items_false_omits_items_column(monkeypatch):
     assert all("items" not in row for row in _rows(result["modules"]))
 
 
-def test_get_modules_rejects_non_current_course(monkeypatch):
-    _set_active_courses(monkeypatch, ["222"])
+def test_get_modules_accepts_previous_course(monkeypatch):
+    _set_previous_course(monkeypatch)
+    document = _module_catalog_document([])
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+    monkeypatch.setattr(tools.mirror_queries, "_serve_max_age_hours", lambda: 10**9)
     result = tools.get_modules("111")
-    assert result["ok"] is False
-    assert "not a Current course" in result["error"]
+    assert result["ok"] is True
 
 
 def test_get_modules_catalog_missing(monkeypatch):
@@ -470,11 +486,14 @@ def test_list_sections_roster_missing(monkeypatch):
     assert "mirror" in result["error"].lower()
 
 
-def test_list_sections_rejects_non_current_course(monkeypatch):
-    _set_active_courses(monkeypatch, ["222"])
+def test_list_sections_accepts_previous_course(monkeypatch):
+    _set_previous_course(monkeypatch)
+    monkeypatch.setattr(
+        tools.mirror_store, "read_roster",
+        lambda cid: {"sections": {"800001": "Period 1"}},
+    )
     result = tools.list_sections("111")
-    assert result["ok"] is False
-    assert "not a Current course" in result["error"]
+    assert result["ok"] is True
 
 
 # --- get_authoring_contract (no course_id, no student data -> no gates) -----
@@ -1501,11 +1520,17 @@ def test_gate_hard_blocks_unscrubbed_id_in_text_field_and_sanitizes_violation(tm
 
 # --- refresh_mirror -------------------------------------------------------------
 
-def test_refresh_mirror_rejects_non_current_course(monkeypatch):
-    _set_active_courses(monkeypatch, ["222"])
+def test_refresh_mirror_accepts_previous_course(monkeypatch):
+    _set_previous_course(monkeypatch)
+    monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
+    monkeypatch.setattr(tools, "_wait_for_plan",
+                        lambda plan_id, **kwargs: {"state": "succeeded"})
     result = tools.refresh_mirror("111")
-    assert result["ok"] is False
-    assert "not a Current course" in result["error"]
+    assert result == {
+        "ok": True,
+        "status": "synced",
+        "message": "Mirror refreshed. Re-read the data now.",
+    }
 
 
 def test_refresh_mirror_reports_synced_on_success(monkeypatch):
@@ -1651,6 +1676,34 @@ def test_save_teacher_schedule_preserves_unknown_keys_and_block_order(monkeypatc
     assert saved["version"] == original["version"]
     assert saved["unknown"] == original["unknown"]
     assert saved["blocks"] == blocks
+
+
+def test_save_teacher_schedule_preserves_course_id(monkeypatch, tmp_path):
+    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    blocks = [{
+        "name": "Algebra",
+        "raw_periods": [1],
+        "label": "Math 7",
+        "course_id": "9000001",
+        "custom": {"keep": True},
+    }]
+
+    result = tools.save_teacher_schedule(blocks)
+
+    assert result["ok"] is True
+    assert json.loads(path.read_text(encoding="utf-8"))["blocks"] == blocks
+
+
+def test_save_teacher_schedule_rejects_non_string_course_id(monkeypatch, tmp_path):
+    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    result = tools.save_teacher_schedule([
+        {"name": "Algebra", "raw_periods": [1], "course_id": 9000001},
+    ])
+    assert result == {
+        "ok": False,
+        "problems": ["block 'Algebra' course_id must be a string"],
+    }
+    assert not path.exists()
 
 
 def test_save_teacher_schedule_rejects_invalid_blocks_without_writing(monkeypatch, tmp_path):

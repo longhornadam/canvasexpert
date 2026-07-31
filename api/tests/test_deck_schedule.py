@@ -460,10 +460,17 @@ class TestValidateTeacherSchedule:
         assert deck_schedule.validate_teacher_schedule({
             "version": "1.0-json",
             "blocks": [
-                {"name": "Algebra", "raw_periods": [1], "weekdays": [0, 2]},
+                {"name": "Algebra", "raw_periods": [1], "weekdays": [0, 2],
+                 "course_id": "9000001"},
                 {"name": "Algebra", "raw_periods": [2], "weekdays": [4], "label": "Math"},
             ],
         }) == []
+
+    def test_course_id_must_be_a_string(self):
+        problems = deck_schedule.validate_teacher_schedule({
+            "blocks": [{"name": "Algebra", "raw_periods": [1], "course_id": 9000001}],
+        })
+        assert problems == ["block 'Algebra' course_id must be a string"]
 
     def test_blocks_must_be_a_list(self):
         problems = deck_schedule.validate_teacher_schedule({"blocks": {}})

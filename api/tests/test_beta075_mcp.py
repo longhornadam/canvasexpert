@@ -162,8 +162,6 @@ def test_http_and_mcp_share_use_cases_and_student_outputs_stay_green(tmp_path, m
         for leak in ("Learner One", "Learner", "900001", "SIS-900001", "private-name.pdf"):
             assert leak not in dumped
 
-    assert tools.get_course_assignments("previous")["error"] == course_scope.current_course_error(
-        "previous", tools.config.active_courses()
-    )
+    assert "No local course catalog found" in tools.get_course_assignments("previous")["error"]
     assert powergrader_routes._powergrader_assignment_context("previous", "700010")[1] == \
         course_scope.current_course_error("previous", tools.config.active_courses())

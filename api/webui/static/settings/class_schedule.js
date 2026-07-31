@@ -7,7 +7,7 @@
   var CE = window.CE_SETTINGS || {};
   var blockList = document.getElementById("class-schedule-block-list");
   var blockStatus = document.getElementById("class-schedule-status");
-  var state = { blocks: [], folders: {} };
+  var state = { blocks: [], folders: {}, courses: [] };
   var weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
   function esc(value) {
@@ -76,6 +76,12 @@
         "folder: " + unknown.join(", ") + ". Dates using it will not resolve.");
     }
 
+    var unknownCourses = teacher.unknown_course_ids || [];
+    if (unknownCourses.length) {
+      detail("Your blocks are linked to courses that are not saved in Settings: " +
+        unknownCourses.join(", ") + ". The binding is kept until you choose another course.");
+    }
+
     var problems = []
       .concat(teacher.problems || [], bell.problems || [], day.problems || []);
     if (problems.length) detail(problems.join(" "));
@@ -88,6 +94,34 @@
 
   function blockDays(block) {
     return Array.isArray(block.weekdays) ? block.weekdays : [];
+  }
+
+  function courseSelect(block) {
+    var courses = Array.isArray(state.courses) ? state.courses : [];
+    var selected = block.course_id == null ? "" : String(block.course_id);
+    var html = '<option value="">&mdash; none &mdash;</option>';
+    [true, false].forEach(function (active) {
+      var matching = courses.filter(function (course) {
+        return Boolean(course && course.active !== false) === active;
+      });
+      if (!matching.length) return;
+      html += active ? '<optgroup label="Current">' : '<optgroup label="Previous">';
+      matching.forEach(function (course) {
+        var id = String(course.id == null ? "" : course.id);
+        if (!id) return;
+        html += '<option value="' + esc(id) + '"' +
+          (id === selected ? " selected" : "") + ">" +
+          esc(course.name || id) + "</option>";
+      });
+      html += "</optgroup>";
+    });
+    if (selected && !courses.some(function (course) {
+      return String(course && course.id) === selected;
+    })) {
+      html += '<option value="' + esc(selected) + '" selected>' +
+        esc(selected + " (not a saved course)") + "</option>";
+    }
+    return html;
   }
 
   function renderBlocks(blocks) {
@@ -112,6 +146,11 @@
         esc(periods) + '" placeholder="1, 2"></label>' +
         '<label>Course<input type="text" data-field="label" value="' +
         esc(block.label || "") + '" placeholder="Intensive Reading"></label>' +
+        '<label>Canvas course<select data-field="course_id"' +
+        (state.courses.length ? "" : " disabled") + '>' + courseSelect(block) +
+        '</select>' + (state.courses.length ? "" :
+          '<span class="ce-field-hint">Bookmark a course under Settings &rarr; Current courses.</span>') +
+        '</label>' +
         '<div class="ce-schedule-weekdays"><span class="ce-schedule-field-label">Days</span><div class="ce-schedule-day-list">' +
         weekdays.map(function (day, index) {
           return '<label><input type="checkbox" data-weekday="' + index + '"' +
@@ -142,6 +181,12 @@
       } else {
         delete block.label;
       }
+      var courseId = inputValue(row, "course_id").trim();
+      if (courseId) {
+        block.course_id = courseId;
+      } else {
+        delete block.course_id;
+      }
       var selected = Array.prototype.map.call(
         row.querySelectorAll('[data-weekday]:checked'),
         function (input) { return Number(input.getAttribute("data-weekday")); }
@@ -170,6 +215,7 @@
     var response = await fetch("/api/schedule");
     var data = await response.json();
     state.folders = data.folders || {};
+    state.courses = Array.isArray(data.courses) ? data.courses : [];
     renderReadiness(data);
     renderBlocks(data.blocks || []);
     setFolderButton("class-schedule-open-calendars", state.folders.calendars);

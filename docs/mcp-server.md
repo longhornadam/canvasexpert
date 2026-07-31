@@ -68,9 +68,11 @@ then receive the Forge-only staging appendix. SmartDeck (`deck`) reads its canon
 from the same source but has no staging/review appendix — unlike other Forge kinds, SmartDeck
 writes live to the workspace immediately with no teacher review queue.
 
-`save_deck`, `save_teacher_schedule`, `save_day_calendar`, `list_active_decks`, and
-`archive_deck` also take no `course_id` and carry no student data. They use the same
-local-only exemption: no course gate, no identity vault, and no safety scan.
+`save_deck`, `save_day_calendar`, `list_active_decks`, and `archive_deck` take no
+`course_id` and carry no student data. They use the same local-only exemption: no course
+gate, no identity vault, and no safety scan. `save_teacher_schedule` has no `course_id`
+parameter and makes no Canvas call; a teacher-set block `course_id` passes through untouched
+after string validation, so an assistant can read, edit, and write the binding safely.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
 the app actually does — an assistant that sees only the read tools cannot tell that
@@ -96,9 +98,12 @@ a live Canvas call. If the required mirror data is stale or missing, they return
 `{"ok": false, "error": "..."}` naming the problem; call `refresh_mirror(course_id)` and
 retry the same read once it reports `"synced"`.
 
-Every `course_id` tool is scoped to Current courses (`config.active_courses()`) — the same
-scope the web UI uses. `get_seating_context` requires exactly one matching mirror section
-name and withholds all student data when the name is absent or ambiguous. Pseudonymized
+Student-data tools (`get_roster`, `get_submissions`, `get_gradebook_snapshot`, and
+`get_seating_context`) are scoped to Current courses (`config.active_courses()`). The
+catalog reads (`list_sections`, `get_course_assignments`, and `get_modules`) and
+`refresh_mirror` accept any saved course, including Previous courses. `get_seating_context`
+requires exactly one matching mirror section name and withholds all student data when the
+name is absent or ambiguous. Pseudonymized
 artifacts are scrubbed, not anonymous or guaranteed FERPA-safe; teachers review them before
 any external upload.
 

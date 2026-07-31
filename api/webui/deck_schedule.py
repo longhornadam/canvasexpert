@@ -115,7 +115,7 @@ def parse_teacher_schedule(text: str) -> tuple:
 
     Shape:
     {"version": "1.0-json",
-     "blocks": [{"name": "4th/5th", "raw_periods": [4, 5], "label": "ELA 7", "weekdays": [0, 2]}, ...]}
+     "blocks": [{"name": "4th/5th", "raw_periods": [4, 5], "label": "ELA 7", "course_id": "9000001", "weekdays": [0, 2]}, ...]}
 
     raw_periods is ordered and may span multiple bell periods. label and weekdays are optional.
     Top-level "_comment" key (or any unknown top-level key) is silently ignored.
@@ -223,6 +223,9 @@ def validate_teacher_schedule(data: dict) -> list:
 
         if "label" in block and not isinstance(block.get("label"), str):
             problems.append(f"block '{display_name}': label must be a string")
+
+        if "course_id" in block and not isinstance(block.get("course_id"), str):
+            problems.append(f"block '{display_name}' course_id must be a string")
 
         if valid_name:
             named_blocks.append((name, set(range(7)) if weekdays is None else weekdays))

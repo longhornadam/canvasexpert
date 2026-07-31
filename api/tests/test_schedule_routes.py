@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from api.webui import workspace
+from api.webui import config, workspace
 from api.webui.server import app
 
 
@@ -119,6 +119,39 @@ def test_get_api_schedule_returns_blocks_verbatim_including_unknown_keys(isolate
         encoding="utf-8",
     )
     assert client.get("/api/schedule").json()["blocks"] == blocks
+
+
+def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_courses(
+    isolated_workspace, monkeypatch
+):
+    courses = [
+        {"id": "9000001", "name": "Course A", "nickname": "A", "active": True},
+        {"id": "9000002", "name": "Course B", "nickname": "", "active": False},
+    ]
+    monkeypatch.setattr(config, "saved_courses", lambda: courses)
+    monkeypatch.setattr(
+        config, "course_display_name",
+        lambda course_id: {"9000001": "A", "9000002": "Course B"}[str(course_id)],
+    )
+    blocks = [{
+        "name": "Algebra",
+        "raw_periods": [1, 2],
+        "label": "Math 7",
+        "course_id": "missing-course",
+        "weekdays": [0, 2],
+        "custom": {"keep": True},
+    }]
+
+    response = client.post("/api/schedule/teacher", data={"blocks": json.dumps(blocks)})
+    assert response.json()["ok"] is True
+
+    data = client.get("/api/schedule").json()
+    assert data["blocks"] == blocks
+    assert data["courses"] == [
+        {"id": "9000001", "name": "A", "active": True},
+        {"id": "9000002", "name": "Course B", "active": False},
+    ]
+    assert data["pieces"]["teacher_schedule"]["unknown_course_ids"] == ["missing-course"]
 
 
 def test_post_schedule_teacher_writes_blocks(isolated_workspace):

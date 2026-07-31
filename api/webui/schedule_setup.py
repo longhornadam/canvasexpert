@@ -14,7 +14,7 @@ import re
 import tempfile
 from datetime import date, datetime, timedelta
 
-from . import deck_schedule, deps, workspace
+from . import config, deck_schedule, deps, workspace
 
 
 # The loaders report a missing file or folder as a problem string. Each piece
@@ -73,6 +73,19 @@ def _compose_readiness(teacher_schedule, teacher_problems, bell_schedules,
     teacher_blocks = teacher_schedule.get("blocks") if isinstance(teacher_schedule, dict) else []
     if not isinstance(teacher_blocks, list):
         teacher_blocks = []
+    saved_course_ids = {
+        str(course.get("id"))
+        for course in config.saved_courses()
+        if isinstance(course, dict) and course.get("id") is not None
+    }
+    unknown_course_ids = sorted({
+        block.get("course_id")
+        for block in teacher_blocks
+        if isinstance(block, dict)
+        and isinstance(block.get("course_id"), str)
+        and block.get("course_id")
+        and block.get("course_id") not in saved_course_ids
+    })
 
     pieces = {
         "teacher_schedule": {
@@ -80,6 +93,7 @@ def _compose_readiness(teacher_schedule, teacher_problems, bell_schedules,
             "count": len(teacher_blocks),
             "path": teacher_schedule_path(),
             "problems": real_problems(teacher_problems),
+            "unknown_course_ids": unknown_course_ids,
         },
         "bell_schedules": {
             "present": bool(bell_schedules),

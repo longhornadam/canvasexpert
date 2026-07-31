@@ -144,10 +144,10 @@ def coordinator_instance() -> coordinator.MirrorCoordinator:
 
 def enqueue_sync(course_id: str | None = None, scopes: list[str] | None = None) -> str:
     """Queue manual read-only work; HTTP callers receive the opaque plan ID."""
-    courses = [course for course in config.active_courses()
+    courses = [course for course in config.saved_courses()
                if not course_id or str(course.get("id")) == str(course_id)]
     if not courses:
-        raise ValueError("Not a Current course.")
+        raise ValueError("Not a saved course.")
     return coordinator_instance().submit((str(course.get("id")) for course in courses), scopes,
                                          priority="manual")
 
@@ -281,10 +281,10 @@ def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=No
     canvas_get = canvas_get or _canvas_get
     canvas_get_all = canvas_get_all or _canvas_get_all
     canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
-    courses = [c for c in config.active_courses()
+    courses = [c for c in config.saved_courses()
                if not course_id or str(c.get("id")) == str(course_id)]
     if not courses:
-        return [{"ok": False, "error": "Not a Current course."}]
+        return [{"ok": False, "error": "Not a saved course."}]
     summaries = []
     for course in courses:
         cid = str(course.get("id") or "")

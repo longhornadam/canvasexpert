@@ -251,6 +251,8 @@ def test_settings_has_a_class_schedule_panel_and_rail_link(monkeypatch):
     assert 'id="class-schedule-card"' in text
     assert 'href="#class-schedule-card"' in text
     assert 'href="/connections">AI Connections</a>' in text
+    assert "teacher-facing label" in text
+    assert "optional" in text
 
 
 def test_class_schedule_editor_edits_block_periods_and_course_separately():
@@ -263,4 +265,11 @@ def test_class_schedule_editor_edits_block_periods_and_course_separately():
     assert 'data-field="name"' in text
     assert 'data-field="periods"' in text
     assert 'data-field="label"' in text
+    assert 'data-field="course_id"' in text
+    assert '<optgroup label="Current">' in text
+    assert '<optgroup label="Previous">' in text
+    assert "&mdash; none &mdash;" in text
+    assert "not a saved course" in text
+    assert "disabled" in text
+    assert "Settings &rarr; Current courses" in text
     assert 'data-field="course"' not in text

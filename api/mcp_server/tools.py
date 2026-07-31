@@ -328,13 +328,10 @@ _SECTION_COLUMNS = ("section_id", "section_name")
 
 def list_sections(course_id: str) -> dict:
     """Section names from the local CanvasMirror roster (disk-only, no live
-    Canvas fallback). No student data — no vault, no safety gate. Returns
+    Canvas fallback) for any saved course (Current or Previous). No student
+    data — no vault, no safety gate. Returns
     a {columns, rows} table of (section_id, section_name). Call this before
     get_seating_context to discover valid section_name values."""
-    err = _course_gate_check(course_id)
-    if err:
-        return {"ok": False, "error": err}
-
     document = mirror_store.read_roster(course_id)
     if document is None:
         return {
@@ -356,13 +353,10 @@ def list_sections(course_id: str) -> dict:
 
 def get_course_assignments(course_id: str, full_descriptions: bool = False) -> dict:
     """Assignment metadata from the local course catalog (disk-only, no live
-    Canvas fallback — refresh the catalog from the web UI first). No student
-    data — no safety gate. Descriptions are trimmed to a preview unless
-    ``full_descriptions`` is set; assignments go out as a {columns, rows}
-    table."""
-    err = _course_gate_check(course_id)
-    if err:
-        return {"ok": False, "error": err}
+    Canvas fallback — refresh the catalog from the web UI first) for any
+    saved course (Current or Previous). No student data — no safety gate.
+    Descriptions are trimmed to a preview unless ``full_descriptions`` is set;
+    assignments go out as a {columns, rows} table."""
 
     read_result = read_catalog(course_id)
     scope = read_service.catalog_assignments(
@@ -397,15 +391,13 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> d
 
 def get_modules(course_id: str, include_items: bool = False) -> dict:
     """Module structure from the local course catalog (disk-only, no live
-    Canvas fallback — refresh the catalog from the web UI first). No student
-    data — no vault, no safety gate. Staleness is labeled (source, synced_at,
-    state), never refused, since modules are structural, not student data.
-    Modules go out as a {columns, rows} table; include_items nests each
-    module's items as their own {columns, rows} table. ``published`` is
-    included only when the catalog record actually carries it."""
-    err = _course_gate_check(course_id)
-    if err:
-        return {"ok": False, "error": err}
+    Canvas fallback — refresh the catalog from the web UI first) for any
+    saved course (Current or Previous). No student data — no vault, no safety
+    gate. Staleness is labeled (source, synced_at, state), never refused,
+    since modules are structural, not student data. Modules go out as a
+    {columns, rows} table; include_items nests each module's items as their
+    own {columns, rows} table. ``published`` is included only when the catalog
+    record actually carries it."""
 
     read_result = read_catalog(course_id)
     # Age-gate the stored catalog against the same mirror serve-age window
@@ -988,10 +980,7 @@ def refresh_mirror(course_id: str) -> dict:
     get_roster/get_submissions/get_gradebook_snapshot refuses as stale or
     unavailable, then re-call that same tool; this tool never returns course,
     roster, or submission data itself, so it needs no identity vault and no
-    outbound safety scan."""
-    err = _course_gate_check(course_id)
-    if err:
-        return {"ok": False, "error": err}
+    outbound safety scan. It accepts any saved course (Current or Previous)."""
 
     try:
         plan_id = _enqueue_sync(course_id, _REFRESH_SCOPES)
@@ -1101,7 +1090,9 @@ def save_deck(date: str, title: str, slides: list, widgets: list = None) -> dict
 def save_teacher_schedule(blocks: list) -> dict:
     """Replace the teacher's blocks in Teacher Schedule.json.
 
-    No course_id, no student data, no course gate, no safety gate.
+    This has no ``course_id`` parameter and makes no Canvas call. A
+    teacher-set ``course_id`` field on a block passes through untouched after
+    string validation. No student data, no course gate, no safety gate.
     Never raises.
     """
     if not isinstance(blocks, list):
