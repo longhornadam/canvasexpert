@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -81,6 +82,31 @@ def test_get_api_schedule_reports_unknown_schedule_ids_in_the_day_calendar(isola
     )
     data = client.get("/api/schedule").json()
     assert data["pieces"]["day_calendar"]["unknown_schedule_ids"] == ["renamed_schedule"]
+
+
+def test_get_api_schedule_reports_whether_day_calendar_covers_today(isolated_workspace):
+    calendars, smartdecks = _folders(isolated_workspace)
+    today = date.today()
+    (smartdecks / "Teacher Schedule.json").write_text(
+        json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
+        encoding="utf-8",
+    )
+    (calendars / "Bell Schedule - Example.csv").write_text(
+        "period_id,start,end\n1,08:00,08:45\n", encoding="utf-8"
+    )
+    day_path = calendars / "Day Calendar.csv"
+    day_path.write_text(
+        f"date,schedule_id\n{(today - timedelta(days=1)).isoformat()},bell_schedule_example\n",
+        encoding="utf-8",
+    )
+    old_data = client.get("/api/schedule").json()
+    assert old_data["pieces"]["day_calendar"]["covers_today"] is False
+    day_path.write_text(
+        f"date,schedule_id\n{today.isoformat()},bell_schedule_example\n",
+        encoding="utf-8",
+    )
+    current_data = client.get("/api/schedule").json()
+    assert current_data["pieces"]["day_calendar"]["covers_today"] is True
 
 
 def test_get_api_schedule_returns_blocks_verbatim_including_unknown_keys(isolated_workspace):

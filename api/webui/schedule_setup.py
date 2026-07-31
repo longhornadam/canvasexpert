@@ -52,6 +52,7 @@ def _day_calendar_detail(day_calendar, bell_schedules):
     return {
         "present": bool(day_calendar),
         "count": len(dates),
+        "covers_today": date.today().isoformat() in day_calendar,
         "path": _calendars_dir(),
         "unknown_schedule_ids": sorted(schedule_ids - set(bell_schedules)),
         "first": dates[0] if dates else None,

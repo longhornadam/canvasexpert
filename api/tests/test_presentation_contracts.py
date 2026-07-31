@@ -250,6 +250,7 @@ def test_settings_has_a_class_schedule_panel_and_rail_link(monkeypatch):
     text = _client().get("/settings").text
     assert 'id="class-schedule-card"' in text
     assert 'href="#class-schedule-card"' in text
+    assert 'href="/connections">AI Connections</a>' in text
 
 
 def test_class_schedule_editor_edits_block_periods_and_course_separately():
