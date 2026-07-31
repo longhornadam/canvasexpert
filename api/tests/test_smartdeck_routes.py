@@ -32,6 +32,16 @@ def test_smartdeck_page_get_returns_200_and_html():
     assert "text/html" in response.headers.get("content-type", "")
 
 
+def test_smartdeck_page_has_section_rail_and_settings_link():
+    text = client.get("/smartdeck").text
+    assert "Decks of classroom-display Slides for your projector." not in text
+    for panel_id in ("smartdeck-active", "smartdeck-templates", "smartdeck-archived", "smartdeck-widgets"):
+        assert f'id="{panel_id}"' in text
+        assert f'href="#{panel_id}"' in text
+    assert 'href="/settings#class-schedule-card"' in text
+    assert "/static/ui/rail_nav.js" in text
+
+
 def test_smartdeck_api_decks_empty_workspace_returns_empty_lists():
     """GET /smartdeck/api/decks with empty workspace returns ok=True and empty lists."""
     response = client.get("/smartdeck/api/decks")

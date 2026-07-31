@@ -20,7 +20,7 @@
         if (readiness.missing && readiness.missing.length > 0) {
           detailEl.textContent = readiness.missing.join("; ");
         } else {
-          detailEl.textContent = "Please configure your schedules in Settings.";
+          detailEl.textContent = "SmartDeck is not ready to display a deck yet.";
         }
       } else {
         unconfiguredDiv.hidden = true;
