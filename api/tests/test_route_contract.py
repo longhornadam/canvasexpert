@@ -83,8 +83,6 @@ EXPECTED = [
     ('/api/routines/run', ('POST',)),
     ('/api/routines/save', ('POST',)),
     ('/api/schedule', ('GET',)),
-    ('/api/schedule/examples/load', ('POST',)),
-    ('/api/schedule/examples/remove', ('POST',)),
     ('/api/schedule/teacher', ('POST',)),
     ('/api/student-packet/stream', ('GET',)),
     ('/api/students', ('GET',)),

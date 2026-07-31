@@ -415,14 +415,12 @@
 <section class="ce-panel ce-settings-panel" id="class-schedule-card">
   <h2>Class schedule <small class="lbl-hint">(used by SmartDeck)</small></h2>
   <p class="ce-hint">
-    Your class schedule is what SmartDeck uses to turn a block name like 4th/5th into today's real start and end time. It has three parts, all kept as plain files in your workspace, so you can edit any of them by hand at any time.
+    Your blocks live here. The bell schedule and day calendar are CSV files in your Calendars folder. SmartDeck reads all three to turn a block into today's real start and end time.
   </p>
   <div id="class-schedule-readiness" class="ce-schedule-readiness" aria-live="polite"></div>
   <div id="class-schedule-blocks" class="ce-schedule-blocks">
-    <h3>Blocks</h3>
-    <p class="ce-hint">A row is one course in the day. Enter the course name you want to use on a slide, the bell periods it covers in order, and the days it meets. A course that runs two periods back to back gets both period numbers.</p>
-    <p class="ce-hint">Leave the days blank if this block meets every school day. Otherwise check the days it meets.</p>
-    <p class="ce-hint">A course can appear on more than one row when its days do not overlap. That lets one course use first period on Monday and Wednesday and fifth period on the Friday schedule, while your slides keep using the same course name.</p>
+    <h3>Your blocks</h3>
+    <p class="ce-hint">One row per class. <strong>Block</strong> is the name your slides point to, so keep it steady once slides use it. <strong>Periods</strong> are the bell periods it covers, in order. <strong>Course</strong> is what shows on the deck. Leave the days unchecked when a block meets every school day.</p>
     <div id="class-schedule-block-list" class="ce-schedule-block-list"></div>
     <div class="ce-actions">
       <button type="button" id="class-schedule-add-block" class="small">Add a block</button>
@@ -432,15 +430,7 @@
   </div>
   <div class="ce-actions">
     <button type="button" id="class-schedule-open-calendars" class="small" disabled>Open the Calendars folder</button>
-    <button type="button" id="class-schedule-open-smartdecks" class="small" disabled>Open the SmartDecks folder</button>
   </div>
-  <p class="ce-hint">Bell schedules and day calendars are CSV files you keep in your Calendars folder. Drop a new one in and it shows up here.</p>
-</section>
-
-<section class="ce-panel ce-settings-panel" id="class-schedule-examples-card" data-rail-covered-by="class-schedule-card">
-  <h2>Class schedule examples</h2>
-  <p class="ce-hint">Three complete example sets ship with the app. Loading one writes its files into your workspace so you can see how the three parts fit together, then edit them into your own. The course names, bell times, and dates are all invented.</p>
-  <div id="class-schedule-examples" class="ce-schedule-examples"></div>
 </section>
 
 <section class="ce-panel ce-settings-panel" id="cal">

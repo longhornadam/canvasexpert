@@ -1,7 +1,7 @@
 """Class schedule setup route tests."""
 
 import json
-import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -12,8 +12,7 @@ from api.webui.server import app
 
 
 client = TestClient(app)
-ROOT = Path(__file__).resolve().parents[2]
-EXAMPLES = ROOT / "api" / "default_docs" / "Examples" / "Class Schedules"
+FIXTURE = Path(__file__).parent / "fixtures" / "class_schedule"
 
 
 @pytest.fixture(autouse=True)
@@ -37,13 +36,6 @@ def _folders(root):
     calendars.mkdir(parents=True, exist_ok=True)
     smartdecks.mkdir(parents=True, exist_ok=True)
     return calendars, smartdecks
-
-
-def _example_files(slug):
-    example = EXAMPLES / slug
-    manifest = json.loads((example / "manifest.json").read_text(encoding="utf-8"))
-    files = [manifest["teacher_schedule"], *manifest["bell_schedules"], manifest["day_calendar"]]
-    return example, manifest, files
 
 
 def test_get_api_schedule_on_empty_workspace_reports_all_three_missing(isolated_workspace):
@@ -162,6 +154,28 @@ def test_post_schedule_teacher_keeps_block_order(isolated_workspace):
     assert [block["name"] for block in saved["blocks"]] == ["Later", "Earlier"]
 
 
+def test_saving_the_fixture_schedule_back_unchanged_keeps_every_block(isolated_workspace):
+    """A no-op editor round trip must leave every block exactly as it was.
+
+    A block's name is the key a slide binds to, and two blocks may legitimately
+    share a course label. An editor that derives one from the other renames blocks
+    on save and trips the duplicate-name check, so a realistic multi-block schedule
+    has to survive being read and written straight back.
+    """
+    _calendars, smartdecks = _folders(isolated_workspace)
+    shutil.copy2(FIXTURE / "Teacher Schedule.json", smartdecks / "Teacher Schedule.json")
+
+    blocks = client.get("/api/schedule").json()["blocks"]
+    assert len(blocks) > 1
+    assert len({block["name"] for block in blocks}) < len(blocks), (
+        "fixture should contain a shared block name, which is the case that used to break"
+    )
+
+    response = client.post("/api/schedule/teacher", data={"blocks": json.dumps(blocks)})
+    assert response.json()["ok"] is True, response.json().get("problems")
+    assert client.get("/api/schedule").json()["blocks"] == blocks
+
+
 def test_post_schedule_teacher_refuses_invalid_blocks_and_leaves_the_file_unchanged(isolated_workspace):
     _calendars, smartdecks = _folders(isolated_workspace)
     path = smartdecks / "Teacher Schedule.json"
@@ -173,111 +187,3 @@ def test_post_schedule_teacher_refuses_invalid_blocks_and_leaves_the_file_unchan
     )
     assert response.json()["ok"] is False
     assert path.read_text(encoding="utf-8") == original
-
-
-def test_load_example_writes_every_manifest_file(isolated_workspace):
-    _example, manifest, files = _example_files("alternating-day-split")
-    response = client.post("/api/schedule/examples/load", data={"slug": "alternating-day-split"})
-    data = response.json()
-    assert data["ok"] is True
-    assert set(data["written"]) == set(files)
-    for filename in files:
-        folder = "SmartDecks" if filename == "Teacher Schedule.json" else "Calendars"
-        assert (isolated_workspace / "Library" / folder / filename).exists()
-
-
-def test_load_example_does_not_write_the_manifest_or_readme(isolated_workspace):
-    client.post("/api/schedule/examples/load", data={"slug": "seven-single-periods"})
-    assert not list((isolated_workspace / "Library").rglob("manifest.json"))
-    assert not list((isolated_workspace / "Library").rglob("README.md"))
-
-
-def test_load_example_refuses_to_clobber_an_existing_teacher_schedule(isolated_workspace):
-    _calendars, smartdecks = _folders(isolated_workspace)
-    teacher = smartdecks / "Teacher Schedule.json"
-    teacher.write_text('{"blocks":[]}', encoding="utf-8")
-    data = client.post(
-        "/api/schedule/examples/load", data={"slug": "seven-single-periods"}
-    ).json()
-    assert data["ok"] is False
-    assert data["conflict"] == "teacher_schedule"
-    assert teacher.read_text(encoding="utf-8") == '{"blocks":[]}'
-    assert not list((isolated_workspace / "Library" / "Calendars").glob("*.csv"))
-
-
-def test_load_example_with_overwrite_moves_the_old_file_aside(isolated_workspace):
-    _calendars, smartdecks = _folders(isolated_workspace)
-    teacher = smartdecks / "Teacher Schedule.json"
-    teacher.write_text('{"blocks":[{"name":"Old","raw_periods":[1]}]}', encoding="utf-8")
-    data = client.post(
-        "/api/schedule/examples/load",
-        data={"slug": "seven-single-periods", "overwrite": "true"},
-    ).json()
-    assert data["ok"] is True
-    moved = list(smartdecks.glob("Teacher Schedule (replaced *.json"))
-    assert len(moved) == 1
-    assert json.loads(moved[0].read_text(encoding="utf-8"))["blocks"][0]["name"] == "Old"
-
-
-def test_load_example_skips_csvs_that_already_exist(isolated_workspace):
-    calendars, _smartdecks = _folders(isolated_workspace)
-    source = EXAMPLES / "seven-single-periods" / "Bell Schedule - Example Seven Period Day.csv"
-    existing = calendars / source.name
-    existing.write_text("existing", encoding="utf-8")
-    data = client.post(
-        "/api/schedule/examples/load", data={"slug": "seven-single-periods"}
-    ).json()
-    assert data["ok"] is True
-    assert source.name in data["skipped"]
-    assert existing.read_text(encoding="utf-8") == "existing"
-
-
-def test_load_example_reports_day_calendar_overlap(isolated_workspace):
-    calendars, _smartdecks = _folders(isolated_workspace)
-    (calendars / "Existing Day Calendar.csv").write_text(
-        "date,schedule_id\n2026-08-17,existing\n2026-10-01,existing\n", encoding="utf-8"
-    )
-    data = client.post(
-        "/api/schedule/examples/load", data={"slug": "seven-single-periods"}
-    ).json()
-    assert data["day_calendar_overlap"] == 1
-
-
-def test_load_example_rejects_an_unknown_slug():
-    data = client.post("/api/schedule/examples/load", data={"slug": "no-such-example"}).json()
-    assert data["ok"] is False
-    assert data["problems"]
-
-
-def test_loaded_example_makes_readiness_ready(isolated_workspace):
-    client.post("/api/schedule/examples/load", data={"slug": "alternating-day-split"})
-    data = client.get("/smartdeck/api/readiness").json()
-    assert data["ready"] is True
-    assert data["missing"] == []
-
-
-def test_remove_example_moves_unmodified_files_to_the_system_archive(isolated_workspace):
-    _example, _manifest, files = _example_files("seven-single-periods")
-    client.post("/api/schedule/examples/load", data={"slug": "seven-single-periods"})
-    data = client.post(
-        "/api/schedule/examples/remove", data={"slug": "seven-single-periods"}
-    ).json()
-    archive = isolated_workspace / "_System" / "Archive" / "Class Schedule Examples" / "seven-single-periods"
-    assert data["ok"] is True
-    assert set(data["moved"]) == set(files)
-    assert all((archive / filename).exists() for filename in files)
-
-
-def test_remove_example_keeps_a_file_the_teacher_edited(isolated_workspace):
-    _example, _manifest, _files = _example_files("seven-single-periods")
-    client.post("/api/schedule/examples/load", data={"slug": "seven-single-periods"})
-    teacher = isolated_workspace / "Library" / "SmartDecks" / "Teacher Schedule.json"
-    edited = json.loads(teacher.read_text(encoding="utf-8"))
-    edited["blocks"][0]["name"] = "Edited block"
-    teacher.write_text(json.dumps(edited, indent=2), encoding="utf-8")
-    data = client.post(
-        "/api/schedule/examples/remove", data={"slug": "seven-single-periods"}
-    ).json()
-    assert data["ok"] is True
-    assert "Teacher Schedule.json" in data["kept"]
-    assert teacher.exists()

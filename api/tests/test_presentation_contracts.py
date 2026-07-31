@@ -252,9 +252,14 @@ def test_settings_has_a_class_schedule_panel_and_rail_link(monkeypatch):
     assert 'href="#class-schedule-card"' in text
 
 
-def test_class_schedule_editor_uses_course_periods_and_days_fields():
+def test_class_schedule_editor_edits_block_periods_and_course_separately():
+    """The block name is what a slide binds to, so it gets its own field.
+
+    Collapsing name and label into one input rewrites the binding key on every
+    save, which breaks slides and trips the duplicate-name check.
+    """
     text = _source("api/webui/static/settings/class_schedule.js")
-    assert 'data-field="course"' in text
+    assert 'data-field="name"' in text
     assert 'data-field="periods"' in text
-    assert 'data-field="label"' not in text
-    assert 'data-field="name"' not in text
+    assert 'data-field="label"' in text
+    assert 'data-field="course"' not in text

@@ -11,13 +11,6 @@ from .. import schedule_setup, workspace
 router = APIRouter(tags=["schedule"])
 
 
-def _response(result, problems):
-    payload = dict(result or {})
-    payload["problems"] = list(problems)
-    payload["ok"] = bool(payload.get("ok", not problems)) and not problems
-    return JSONResponse(payload)
-
-
 @router.get("/api/schedule")
 def get_schedule():
     readiness = schedule_setup.readiness()
@@ -25,10 +18,9 @@ def get_schedule():
     if block_problems:
         readiness["missing"].extend(problem for problem in block_problems
                                      if problem not in readiness["missing"])
-        readiness["pieces"]["teacher_schedule"]["problems"].extend(
-            problem for problem in block_problems
-            if problem not in readiness["pieces"]["teacher_schedule"]["problems"]
-        )
+        piece = readiness["pieces"]["teacher_schedule"]["problems"]
+        piece.extend(problem for problem in schedule_setup.real_problems(block_problems)
+                     if problem not in piece)
     return JSONResponse({
         "ok": True,
         **readiness,
@@ -37,7 +29,6 @@ def get_schedule():
             "calendars": workspace.library_folder("Calendars"),
             "smartdecks": workspace.library_folder("SmartDecks"),
         },
-        "examples": schedule_setup.list_examples(),
     })
 
 
@@ -58,19 +49,3 @@ def post_schedule_teacher(blocks: str = Form(...)):
         "count": len(saved.get("blocks", [])),
         "path": schedule_setup.teacher_schedule_path(),
     })
-
-
-@router.post("/api/schedule/examples/load")
-def post_schedule_example_load(slug: str = Form(...), overwrite: bool = Form(False)):
-    result, problems = schedule_setup.load_example(slug, overwrite=overwrite)
-    if result is None:
-        return JSONResponse({"ok": False, "problems": problems})
-    return _response(result, problems)
-
-
-@router.post("/api/schedule/examples/remove")
-def post_schedule_example_remove(slug: str = Form(...)):
-    result, problems = schedule_setup.remove_example(slug)
-    if result is None:
-        return JSONResponse({"ok": False, "problems": problems})
-    return _response(result, problems)

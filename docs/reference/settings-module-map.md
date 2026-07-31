@@ -47,7 +47,7 @@ Current split:
 - `settings/courses.js` - Canvas course browser and Current/Previous actions
 - `settings/workspace.js` - download root, workspace, AI Authoring file actions
 - `settings/calendars.js` - calendar list/load/parse/save/copy prompt
-- `settings/class_schedule.js` - class schedule readiness, block editor, folder actions, and example load/remove UX
+- `settings/class_schedule.js` - class schedule readiness line, block editor, and Calendars folder action
 - `settings/updates.js` - update check/download/apply/cancel UX
 
 ## Backend Routing
@@ -64,10 +64,17 @@ Current split:
 
 Class schedule setup is owned by `routes/schedule.py` and `schedule_setup.py`:
 
-- `GET /api/schedule` returns readiness, raw Teacher Schedule blocks, folder paths, and example manifests.
+- `GET /api/schedule` returns readiness, the raw Teacher Schedule blocks, and folder paths.
 - `POST /api/schedule/teacher` atomically replaces only the blocks array.
-- `POST /api/schedule/examples/load` and `/api/schedule/examples/remove` copy or archive
-  shipped examples on explicit request.
+
+A block's `name` is the key a Slide binds to (`routes/smartdeck.py` `_resolve_slides` keys
+blocks by name); `label` is display text only, and two blocks may share one. The editor keeps
+them in separate fields for that reason. Deriving either from the other renames blocks on save,
+which breaks existing slides and trips the duplicate-name check.
+
+`readiness()` returns only what the panel renders. Add a field there when a surface starts
+showing it, not in advance: an unrendered field costs a directory scan on every `/settings`
+load and reads as covered when it is not.
 
 `routes/updates.py` owns the self-update surface:
 
@@ -96,7 +103,9 @@ unless there is a strong reason.
 - Do not add district URLs, real calendars, teacher names, or other district-specific
   defaults to source.
 - Keep Settings local-only and do not introduce a public callback or OAuth route.
-- Example schedule sets are copied only on explicit request and are never seeded into a workspace.
+- Nothing in Settings writes to the Calendars folder. Bell schedule and day calendar CSVs are
+  teacher-authored; the panel reads them and reports what it found. Every workspace is seeded
+  with real district calendars, so the CSV shape is already on disk before anyone asks.
 - Preserve the `config.*` facade and storage keys unless a migration is explicitly
   planned and tested.
 - `config.active_courses()` is the compatibility-named Current-course boundary for
