@@ -403,3 +403,95 @@ def test_smartdeck_display_data_server_time_is_iso_format(isolated_workspace, sc
     from datetime import datetime
     dt = datetime.fromisoformat(server_time)
     assert dt is not None
+
+
+def _write_raw_deck(smartdecks_dir, deck_id, deck):
+    """Drop a deck straight onto disk, bypassing save_deck's validation.
+
+    Models a hand-edited file, which the archive recovery path invites. save_deck would
+    reject all of these, so they can only reach the display route this way.
+    """
+    decks_dir = Path(smartdecks_dir) / "Decks"
+    decks_dir.mkdir(parents=True, exist_ok=True)
+    (decks_dir / f"{deck_id}.json").write_text(json.dumps(deck), encoding="utf-8")
+
+
+def _raw_deck(slides):
+    return {
+        "version": "1.0-json", "type": "DECK", "date": "2026-08-19",
+        "title": "Hand Edited", "widgets": [], "slides": slides,
+    }
+
+
+def test_display_data_skips_slide_with_no_id(isolated_workspace, schedule_fixture):
+    """A slide with no id is dropped with a problem, not a 500.
+
+    display.js identifies slides by id, so serving one with a null id would make two
+    such slides indistinguishable and wedge the rotation.
+    """
+    _write_raw_deck(schedule_fixture, "2026-08-19.r1", _raw_deck([
+        {"block": "1st Period", "layout": "title_only", "title": "No id"},
+        {"id": "good", "block": "2nd Period", "layout": "title_only", "title": "Fine"},
+    ]))
+
+    response = client.get("/smartdeck/display/2026-08-19.r1/data")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert [s["id"] for s in data["slides"]] == ["good"]
+    assert any("has no id" in p for p in data["problems"])
+
+
+def test_display_data_keeps_only_the_first_of_duplicate_slide_ids(isolated_workspace, schedule_fixture):
+    """Duplicate ids break the same identity check, so later copies are dropped."""
+    _write_raw_deck(schedule_fixture, "2026-08-19.r1", _raw_deck([
+        {"id": "dup", "block": "1st Period", "layout": "title_only", "title": "First"},
+        {"id": "dup", "block": "2nd Period", "layout": "title_only", "title": "Second"},
+    ]))
+
+    data = client.get("/smartdeck/display/2026-08-19.r1/data").json()
+    assert [s["title"] for s in data["slides"]] == ["First"]
+    assert any("more than once" in p for p in data["problems"])
+
+
+def test_display_data_skips_a_slide_that_is_not_an_object(isolated_workspace, schedule_fixture):
+    """A malformed entry degrades to a problem rather than an exception."""
+    _write_raw_deck(schedule_fixture, "2026-08-19.r1", _raw_deck([
+        "not a slide",
+        {"id": "good", "block": "1st Period", "layout": "title_only", "title": "Fine"},
+    ]))
+
+    data = client.get("/smartdeck/display/2026-08-19.r1/data").json()
+    assert [s["id"] for s in data["slides"]] == ["good"]
+    assert any("not a slide object" in p for p in data["problems"])
+
+
+def test_deck_list_reports_problems_for_active_decks(isolated_workspace, schedule_fixture):
+    """The management page gets the warning so the teacher sees it before projecting."""
+    deck_data = {
+        "version": "1.0-json", "type": "DECK", "date": "2026-08-19", "title": "Has a gap",
+        "slides": [
+            {"id": "s1", "block": "1st Period", "layout": "title_only", "title": "Fine"},
+            {"id": "s2", "block": "Nonexistent Block", "layout": "title_only", "title": "Ghost"},
+        ],
+    }
+    saved, problems = deck_store.save_deck(deck_data)
+    assert problems == []
+
+    listing = client.get("/smartdeck/api/decks").json()
+    entry = next(d for d in listing["active"] if d["deck_id"] == saved["deck_id"])
+    assert any("Nonexistent Block" in p for p in entry["problems"])
+    assert any("will not appear" in p for p in entry["problems"])
+
+
+def test_deck_list_reports_no_problems_for_a_clean_deck(isolated_workspace, schedule_fixture):
+    """A deck whose blocks all resolve carries an empty problems list."""
+    saved, problems = deck_store.save_deck({
+        "version": "1.0-json", "type": "DECK", "date": "2026-08-19", "title": "Clean",
+        "slides": [{"id": "s1", "block": "1st Period", "layout": "title_only", "title": "Fine"}],
+    })
+    assert problems == []
+
+    listing = client.get("/smartdeck/api/decks").json()
+    entry = next(d for d in listing["active"] if d["deck_id"] == saved["deck_id"])
+    assert entry["problems"] == []

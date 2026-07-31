@@ -137,56 +137,41 @@ function startWallClockAutoAdvance() {
   wallClockInterval = setInterval(performWallClockCheck, 5000);
 }
 
+/** The wall clock as "HH:MM", the form chooseSlide compares against. */
+function nowHHMM() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
 function performWallClockCheck() {
   if (shuffleOn) return; // Suspended while Shuffle is on
 
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const nowHHMM = `${hours}:${minutes}`;
+  const decision = chooseSlide({
+    slides: payload.slides,
+    nowHHMM: nowHHMM(),
+    shuffleOn: false,
+    shuffleIndex,
+    homeFallbackActive,
+  });
 
-  // Find first slide matching the current time window
-  let matchedSlide = null;
-  for (const slide of payload.slides) {
-    if (slide.start !== null && slide.start <= nowHHMM && nowHHMM < slide.end) {
-      matchedSlide = slide;
-      break;
-    }
-  }
-
-  if (matchedSlide) {
+  if (decision.reason === "clock") {
     // The clock has an answer, so any pending Home fallback is spent and normal
     // between-blocks behavior resumes from here.
     homeFallbackActive = false;
-    showSlide(matchedSlide);
-  } else if (homeFallbackActive && payload.slides.length) {
-    // Home was pressed and nothing is current: hold on Slide 1 until the schedule
-    // has something to say, rather than showing the teacher an empty stage.
-    showSlide(payload.slides[0]);
+  }
+
+  if (decision.slide) {
+    showSlide(decision.slide);
   } else {
-    // No slide matches; show next upcoming slide or "nothing scheduled"
-    showNotScheduled();
+    showNotScheduled(decision.nextSlide);
   }
 }
 
 /**
- * Show the "not scheduled" message with next slide hint.
+ * Show the "not scheduled" message. nextSlide comes from chooseSlide and may be null
+ * when nothing further is due today.
  */
-function showNotScheduled() {
-  const now = new Date();
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const nowHHMM = `${hours}:${minutes}`;
-
-  // Find next slide with start > nowHHMM
-  let nextSlide = null;
-  for (const slide of payload.slides) {
-    if (slide.start !== null && slide.start > nowHHMM) {
-      nextSlide = slide;
-      break;
-    }
-  }
-
+function showNotScheduled(nextSlide) {
   const notScheduled = document.getElementById("sd-not-scheduled");
   const stage = document.getElementById("sd-slide-stage");
 
@@ -297,7 +282,14 @@ function turnOnShuffle() {
   if (shuffleInterval) clearInterval(shuffleInterval);
   shuffleInterval = setInterval(() => {
     shuffleIndex = (shuffleIndex + 1) % payload.slides.length;
-    showSlide(payload.slides[shuffleIndex]);
+    const decision = chooseSlide({
+      slides: payload.slides,
+      nowHHMM: nowHHMM(),
+      shuffleOn: true,
+      shuffleIndex,
+      homeFallbackActive: false,
+    });
+    if (decision.slide) showSlide(decision.slide);
     updateShuffleHint();
   }, 29000);
 }

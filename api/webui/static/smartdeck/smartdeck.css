@@ -66,3 +66,19 @@
   font-size: 1em;
   font-weight: 600;
 }
+
+/* Deck problems, shown under the row for active decks. Quiet on purpose: this is a
+   heads-up before the teacher projects, not an error state. flex-basis pushes it onto
+   its own line inside the wrapping .smartdeck-deck-row. */
+.smartdeck-deck-note {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 0.8125em;
+  line-height: 1.45;
+  color: var(--ce-text-secondary);
+}
+
+.smartdeck-deck-note li {
+  margin: 0;
+}

@@ -96,6 +96,17 @@
         esc(deck.deck_id) +
         '">Delete</button>';
       html += "</div>";
+
+      // Anything that would keep part of this deck off the projector, surfaced here
+      // rather than on the display page so it is read before class, not during.
+      if (!isArchived && deck.problems && deck.problems.length) {
+        html += '<ul class="smartdeck-deck-note">';
+        deck.problems.forEach(function (problem) {
+          html += "<li>" + esc(problem) + "</li>";
+        });
+        html += "</ul>";
+      }
+
       html += "</div>";
 
       return html;

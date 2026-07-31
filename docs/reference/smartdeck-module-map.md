@@ -42,9 +42,10 @@ historical, not current -- this route card is authoritative).
 | `api/webui/deps.py` | IO layer over `deck_schedule.py`: discovers the workspace's Bell Schedule/Day Calendar CSVs and Teacher Schedule, and `resolve_schedule_for(date)` ties them together. |
 | `api/webui/sf.py` | SlideForge parse/validate -- the `<SLIDEFORGE_JSON>` envelope, structural twin of `pf.py`/`af.py`/`rf.py`. |
 | `api/webui/deck_store.py` | Revisioned, path-jailed (`Library/SmartDecks/`), atomic Deck storage: `save_deck`, `list_decks`, `load_deck`, `archive_deck`, `delete_deck`, `list_templates`. |
-| `api/webui/routes/smartdeck.py` | `GET /smartdeck` (management page), `GET/POST /smartdeck/api/*` (list/archive/delete/readiness), `GET /smartdeck/display/{deck_id}` (display page) and `.../data` (the one-shot display payload). |
-| `api/webui/templates/smartdeck.html` + `static/smartdeck/smartdeck.{js,css}` | Management UI: Active, Templates (Deck Templates + Slide Templates), Archived, Widgets. |
-| `api/webui/templates/smartdeck_display.html` + `static/smartdeck/display.{js,css}` | The projector display: wall-clock Slide matching, manual Shuffle/Home, wall-clock-based timer widget (never `requestAnimationFrame`), persistent Maximize/Minimize/Close chrome. Extends the generic, feature-agnostic `layouts/display.html` (no app header, fills the viewport, no page scroll). |
+| `api/webui/routes/smartdeck.py` | `GET /smartdeck` (management page), `GET/POST /smartdeck/api/*` (list/archive/delete/readiness), `GET /smartdeck/display/{deck_id}` (display page) and `.../data` (the one-shot display payload). `_resolve_slides()` is shared by the display payload and the management list, so both see the same problems. |
+| `api/webui/templates/smartdeck.html` + `static/smartdeck/smartdeck.{js,css}` | Management UI: Active, Templates (Deck Templates + Slide Templates), Archived, Widgets. Each active Deck row also lists anything that would keep part of it off the projector. |
+| `api/webui/static/smartdeck/slide_select.js` | `chooseSlide()`: the pure decision half of the display page. Given Slides, a `"HH:MM"` reading, and the Shuffle/Home flags, returns which Slide to show and why. No DOM, no timers, no state, so it is testable without a browser and is where the display's subtle rules belong. |
+| `api/webui/templates/smartdeck_display.html` + `static/smartdeck/display.{js,css}` | The projector display: the DOM and lifecycle half. Loads `slide_select.js` first and defers every which-Slide question to it, keeping widget mount/unmount, the wall-clock-based timer widget (never `requestAnimationFrame`), and the persistent Maximize/Minimize/Close chrome. Extends the generic, feature-agnostic `layouts/display.html` (no app header, fills the viewport, no page scroll). |
 | `api/smartdeck_feeds.py` | Feed resolution -- see "Feed system" below. Moved here from a now-deleted `api/glass/day_context.py`. |
 | `api/default_docs/Calendars/` | Seeded Bell Schedule/Day Calendar CSVs (real Berry Miller Junior High / Pearland ISD data, public and non-PII) and academic-calendar CSVs (an older, unrelated feature). |
 | `api/default_docs/SmartDecks/` | Seeded `Teacher Schedule.template.json` (a placeholder; the real one is created in the workspace, never the repo). |
@@ -122,10 +123,20 @@ display page ever resolves and renders one.
 
 ## Verification gate
 
-`py -m pytest api/tests -q`. Manual/browser checks (the in-app preview pane used during
-development has no compositing, so `requestAnimationFrame`/screenshots don't work there --
-verify timer and Shuffle/Home behavior in a real browser): open `/smartdeck` on a fresh
-workspace and confirm all four sections render with correct empty states; open
-`/smartdeck/display/{deck_id}` for a seeded Deck and confirm Shuffle/Home work, the timer
-counts down and survives a Slide change if deck-scoped, and the browser's network tab shows
-nothing firing after the initial load.
+`py -m pytest api/tests -q`, which now covers the display page's JavaScript too.
+`api/tests/smartdeck/test_display_js.py` shells out to node's built-in runner for
+`slide_select.test.mjs` (every `chooseSlide` rule) and `widget_lifecycle.test.mjs` (mount
+and unmount balance, and that a slide-scoped timer's interval actually stops). Node is not
+a declared dependency, so a machine without it **skips** those rather than failing: read
+the skip as untested, not as passing.
+
+`widget_lifecycle.test.mjs` carries a small stub DOM. It models only what `display.js`
+touches and is not a DOM emulator. Do not grow it to chase broader coverage; anything
+needing real DOM, CSS, or layout semantics belongs in a real browser instead.
+
+Manual checks still worth doing for anything visual (the in-app preview pane used during
+development has no compositing, so `requestAnimationFrame`/screenshots don't work there):
+open `/smartdeck` on a fresh workspace and confirm all four sections render with correct
+empty states, and that a Deck with an unresolvable block shows its warning under the row;
+open `/smartdeck/display/{deck_id}` for a seeded Deck and confirm the timer counts down and
+the browser's network tab shows nothing firing after the initial load.

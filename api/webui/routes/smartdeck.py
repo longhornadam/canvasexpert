@@ -19,6 +19,81 @@ from .. import deps, deck_store
 router = APIRouter(tags=["smartdeck"])
 
 
+def _resolve_slides(deck: dict, blocks: list) -> tuple[list, list]:
+    """Resolve a Deck's Slides against today's blocks.
+
+    Returns (resolved_slides, problems). A Slide the display page could not show is
+    dropped with a problem rather than raised on: display.js identifies Slides by id,
+    so a missing or repeated id would make two Slides indistinguishable and wedge the
+    rotation on whichever showed first. Decks are validated on save, so this only bites
+    files edited by hand, which is a workflow the archive recovery path invites.
+    """
+    blocks_by_name = {b["name"]: b for b in blocks}
+    widgets_by_id = {
+        w["id"]: w for w in (deck.get("widgets") or [])
+        if isinstance(w, dict) and w.get("id")
+    }
+    # A Deck can be for any date, so name it rather than saying "today".
+    day = f"the schedule for {deck['date']}" if deck.get("date") else "this deck's schedule"
+
+    resolved = []
+    problems = []
+    seen_ids = set()
+    for position, slide in enumerate(deck.get("slides") or [], start=1):
+        if not isinstance(slide, dict):
+            problems.append(f"slide {position} is not a slide object, so it was skipped")
+            continue
+
+        slide_id = slide.get("id")
+        if not slide_id:
+            problems.append(f"slide {position} has no id, so it was skipped")
+            continue
+        if slide_id in seen_ids:
+            problems.append(
+                f"slide {slide_id!r} appears more than once; only the first was kept")
+            continue
+        seen_ids.add(slide_id)
+
+        block = blocks_by_name.get(slide.get("block"))
+        if block is None:
+            problems.append(
+                f"slide {slide_id!r}: block {slide.get('block')!r} is not in {day}, "
+                f"so it will not appear")
+
+        resolved.append({
+            "id": slide_id,
+            "block": slide.get("block"),
+            "layout": slide.get("layout"),
+            "title": slide.get("title", ""),
+            "body": slide.get("body", ""),
+            "widgets": [widgets_by_id[wid] for wid in (slide.get("widgets") or [])
+                        if wid in widgets_by_id],
+            "start": block["start"] if block else None,
+            "end": block["end"] if block else None,
+        })
+
+    return resolved, problems
+
+
+def _deck_problems(deck_id: str, date: str, schedule_cache: dict) -> list:
+    """What would keep part of this Deck off the projector, for the management page.
+
+    Shown next to Display so the teacher finds out before projecting rather than in
+    front of a class. schedule_cache is per-request: resolve_schedule_for re-reads the
+    calendar CSVs on every call, and a teacher can have a deck per school day.
+    """
+    deck, load_problems = deck_store.load_deck(deck_id)
+    if deck is None:
+        return load_problems
+
+    if date not in schedule_cache:
+        schedule_cache[date] = deps.resolve_schedule_for(date)
+    blocks, schedule_problems = schedule_cache[date]
+
+    _resolved, slide_problems = _resolve_slides(deck, blocks)
+    return list(schedule_problems) + slide_problems
+
+
 @router.get("/smartdeck", response_class=HTMLResponse)
 def smartdeck_page(request: Request):
     """SmartDeck management page — decks, templates, and configuration."""
@@ -37,6 +112,12 @@ def smartdeck_list_decks():
     archived = deck_store.list_decks("archived")
     deck_templates = deck_store.list_templates("deck")
     slide_templates = deck_store.list_templates("slide")
+
+    # Only active decks carry a Display button, so only they need the warning.
+    schedule_cache = {}
+    for entry in active:
+        entry["problems"] = _deck_problems(
+            entry["deck_id"], entry.get("date", ""), schedule_cache)
 
     return JSONResponse({
         "ok": True,
@@ -125,28 +206,8 @@ def smartdeck_display_data(deck_id: str):
         return JSONResponse({"ok": False, "problems": problems}, status_code=404)
 
     blocks, schedule_problems = deps.resolve_schedule_for(deck.get("date", ""))
-    blocks_by_name = {b["name"]: b for b in blocks}
-
-    widgets_by_id = {w["id"]: w for w in (deck.get("widgets") or [])}
-
-    resolved_slides = []
-    slide_problems = list(schedule_problems)
-    for slide in deck.get("slides") or []:
-        block = blocks_by_name.get(slide.get("block"))
-        resolved_widgets = [widgets_by_id[wid] for wid in (slide.get("widgets") or []) if wid in widgets_by_id]
-        entry = {
-            "id": slide["id"],
-            "block": slide.get("block"),
-            "layout": slide.get("layout"),
-            "title": slide.get("title", ""),
-            "body": slide.get("body", ""),
-            "widgets": resolved_widgets,
-            "start": block["start"] if block else None,
-            "end": block["end"] if block else None,
-        }
-        if block is None:
-            slide_problems.append(f"slide {slide['id']!r}: block {slide.get('block')!r} not in today's resolved schedule")
-        resolved_slides.append(entry)
+    resolved_slides, slide_problems = _resolve_slides(deck, blocks)
+    slide_problems = list(schedule_problems) + slide_problems
 
     return JSONResponse({
         "ok": True,
