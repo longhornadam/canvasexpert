@@ -64,10 +64,10 @@
       if (!day.present) detail("No day calendar yet. It says which bell schedule each date uses.");
     }
 
-    if (day.present && !day.covers_today) {
-      detail("Your day calendar does not cover today. It runs through " +
-        (day.last || "its last date") +
-        ", so SmartDeck has no times after that. Ask your assistant to extend it, or add the dates in your Calendars folder.");
+    if (day.present && day.ends_before_today) {
+      detail("Your day calendar has run out. Its last date is " +
+        (day.last || "in the past") +
+        ", so SmartDeck has no times from here on. Ask your assistant to extend it, or add the dates in your Calendars folder.");
     }
 
     var unknown = day.unknown_schedule_ids || [];

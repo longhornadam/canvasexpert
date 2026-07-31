@@ -52,7 +52,10 @@ def _day_calendar_detail(day_calendar, bell_schedules):
     return {
         "present": bool(day_calendar),
         "count": len(dates),
-        "covers_today": date.today().isoformat() in day_calendar,
+        # A day calendar lists school days only -- weekends and holidays are
+        # absent by design -- so "today is missing" says nothing about health.
+        # Running past its last date is the condition worth reporting.
+        "ends_before_today": bool(dates) and dates[-1] < date.today().isoformat(),
         "path": _calendars_dir(),
         "unknown_schedule_ids": sorted(schedule_ids - set(bell_schedules)),
         "first": dates[0] if dates else None,
