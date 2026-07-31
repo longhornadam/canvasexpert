@@ -1572,7 +1572,8 @@ def test_server_registers_the_expected_tool_set():
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "list_staged_content",
         "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
-        "save_deck", "save_teacher_schedule", "list_active_decks", "archive_deck",
+        "save_deck", "save_teacher_schedule", "save_day_calendar",
+        "list_active_decks", "archive_deck",
     }
 
 
@@ -1693,4 +1694,18 @@ def test_server_registers_save_teacher_schedule_wrapper(monkeypatch):
     wire = server.save_teacher_schedule([{"name": "Algebra", "raw_periods": [1]}])
     assert json.loads(wire) == {
         "ok": True, "count": 1, "path": "Teacher Schedule.json",
+    }
+
+
+def test_server_registers_save_day_calendar_wrapper(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "save_day_calendar", lambda *args: {
+        "ok": True, "count": 5, "path": "Day Calendar Generated.csv",
+    })
+    wire = server.save_day_calendar(
+        "Generated", "2026-08-17", "2026-08-21", "ordinary"
+    )
+    assert json.loads(wire) == {
+        "ok": True, "count": 5, "path": "Day Calendar Generated.csv",
     }

@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Twenty thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Twenty-one thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -218,6 +218,19 @@ def save_teacher_schedule(blocks: list) -> str:
     """Save the teacher's SmartDeck blocks live to the workspace.
     No course ID or student data. No review queue."""
     return _compact(tools.save_teacher_schedule(blocks))
+
+
+@mcp.tool()
+def save_day_calendar(label: str, start_date: str, end_date: str,
+                      default_schedule_id: str, weekday_schedules: dict = None,
+                      date_schedules: dict = None, skip_dates: list = None,
+                      replace: bool = False) -> str:
+    """Generate and save a day calendar for a date range.
+    No course ID or student data. The response contains counts and paths only."""
+    return _compact(tools.save_day_calendar(
+        label, start_date, end_date, default_schedule_id,
+        weekday_schedules, date_schedules, skip_dates, replace,
+    ))
 
 
 @mcp.tool()

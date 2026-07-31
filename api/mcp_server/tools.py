@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 19 MCP tools.
+"""Plain, testable implementations of the 21 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -1098,7 +1098,7 @@ def save_deck(date: str, title: str, slides: list, widgets: list = None) -> dict
 def save_teacher_schedule(blocks: list) -> dict:
     """Replace the teacher's blocks in Teacher Schedule.json.
 
-    No course_id, no student data â€” no course gate, no safety gate.
+    No course_id, no student data, no course gate, no safety gate.
     Never raises.
     """
     if not isinstance(blocks, list):
@@ -1112,6 +1112,25 @@ def save_teacher_schedule(blocks: list) -> dict:
         "count": len(blocks),
         "path": schedule_setup.teacher_schedule_path(),
     }
+
+
+def save_day_calendar(label: str, start_date: str, end_date: str,
+                      default_schedule_id: str, weekday_schedules: dict = None,
+                      date_schedules: dict = None, skip_dates: list = None,
+                      replace: bool = False) -> dict:
+    """Generate and save a teacher's day calendar live in the workspace.
+
+    No course_id, no student data, no course gate, no safety gate.
+    The response contains summary metadata, never the expanded rows.
+    Never raises.
+    """
+    result, problems = schedule_setup.save_day_calendar(
+        label, start_date, end_date, default_schedule_id,
+        weekday_schedules, date_schedules, skip_dates, replace,
+    )
+    if result is not None:
+        return result
+    return {"ok": False, "problems": problems}
 
 
 def list_active_decks() -> dict:
