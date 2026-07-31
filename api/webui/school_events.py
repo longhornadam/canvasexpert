@@ -3,8 +3,8 @@
 The district calendar CSV knows that a date is a no-school day and when report
 cards go home. It does not know about picture day, a volleyball game, or when
 the library opens early. Those facts have had nowhere to live, so the only way
-to get one onto a projector was to author a whole dated scene with the words
-typed into a pane. This file is where they live instead.
+to get one onto a projector was to author custom content for that specific day
+by hand. This file is where they live instead.
 
 Deliberately a sibling of `calendar_csv.py` rather than an addition to it. That
 parser feeds `no_count_dates`, which nine late-work call sites depend on, so it
@@ -28,18 +28,17 @@ from datetime import date, time
 SCHOOL_EVENTS_FORMAT = "canvasexpert.school_events/1"
 SCHOOL_EVENTS_FILENAME = "school-events.json"
 
-# How far ahead a screen looks by default. Matches the MCP Glass context tool's
-# own default so the two surfaces agree about what "upcoming" means; a
-# term-length view is a different product.
+# How far ahead a screen looks by default for school events.
 DEFAULT_LOOKAHEAD_DAYS = 14
 
 # The closed set of things a teacher can record. Closed on purpose: an open
 # vocabulary would drift into a taxonomy nobody maintains, and `api/audience.py`
 # has to be able to say whether each one may reach a wall.
 #
-# These are events on a date. They are not bell-schedule blocks -- `BlockKind`
-# in `api/schedule/models.py` names stretches of a school day, and conflating
-# the two is how "assembly" starts meaning two different things.
+# These are events on a date. They are not bell-schedule blocks -- a Teacher
+# Schedule's blocks (see `api/webui/deck_schedule.py`) name stretches of a
+# school day, and conflating the two is how "assembly" starts meaning two
+# different things.
 EVENT_KINDS = frozenset({
     "game", "dance", "assembly", "performance", "spirit",
     "tutorial", "club", "library", "other",
@@ -74,7 +73,7 @@ def _parse_time(value: object) -> str:
     """An HH:MM string, or empty when absent or unparseable.
 
     Kept as text rather than a `time` because the only consumer prints it, and
-    a string survives JSON round-tripping into a pane without a codec.
+    a string survives a JSON round-trip without a codec.
     """
     text = _text(value)
     if not text:
@@ -176,9 +175,9 @@ def parse_school_events(payload: object) -> list[dict]:
 def events_file_path(root=None) -> str | None:
     """Where the events file lives, or None when there is no workspace.
 
-    Imported inside the function for the same reason `api/schedule/calendar.py`
-    does it: the workspace module reaches configuration that reaches the
-    credential store, and this file has to stay importable without one.
+    Imported inside the function because the workspace module reaches
+    configuration that reaches the credential store, and this file has to
+    stay importable without one.
     """
     try:
         from api.webui import workspace

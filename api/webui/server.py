@@ -89,6 +89,10 @@ async def _lifespan(app):
     except Exception as e:
         print(f"Workspace setup note: {e}")
     try:
+        workspace.migrate_legacy_glass_folders()
+    except Exception as e:
+        print(f"Legacy Glass folder migration note: {e}")
+    try:
         # Pin the resolved workspace path so the headless MCP server (launched by
         # Claude Desktop / ChatGPT without the OneDrive env var) resolves the same
         # workspace instead of falling back to stale machine-local state.

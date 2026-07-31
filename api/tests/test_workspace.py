@@ -413,3 +413,67 @@ def test_needs_compact_layout_joins_every_child_component(tmp_path):
     deep = workspace.needs_compact_layout(base, "a" * 100, "b" * 100, "c" * 100)
     assert shallow is False
     assert deep is True
+
+
+def test_migrate_legacy_glass_folders_both_present(tmp_path, monkeypatch):
+    """When both Library/Glass and To Review/Glass exist, both are moved to
+    _System/Archive/SmartDecks-legacy/ with the correct names."""
+    root = tmp_path / "CanvasExpert"
+    root.mkdir()
+    (root / "Library").mkdir()
+    (root / "Library" / "Glass").mkdir()
+    (root / "Library" / "Glass" / "example.txt").write_text("lib glass content")
+    (root / "To Review").mkdir()
+    (root / "To Review" / "Glass").mkdir()
+    (root / "To Review" / "Glass" / "example.txt").write_text("to review glass content")
+    (root / "_System").mkdir()
+    (root / "_System" / "Archive").mkdir()
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    workspace.migrate_legacy_glass_folders()
+
+    # Source folders should be gone
+    assert not (root / "Library" / "Glass").exists()
+    assert not (root / "To Review" / "Glass").exists()
+
+    # Destination folders should exist with correct names
+    assert (root / "_System" / "Archive" / "SmartDecks-legacy" / "Library-Glass" / "example.txt").exists()
+    assert (root / "_System" / "Archive" / "SmartDecks-legacy" / "Library-Glass" / "example.txt").read_text() == "lib glass content"
+    assert (root / "_System" / "Archive" / "SmartDecks-legacy" / "ToReview-Glass" / "example.txt").exists()
+    assert (root / "_System" / "Archive" / "SmartDecks-legacy" / "ToReview-Glass" / "example.txt").read_text() == "to review glass content"
+
+
+def test_migrate_legacy_glass_folders_absent_no_op(tmp_path, monkeypatch):
+    """When both legacy Glass folders are absent, the function is a no-op."""
+    root = tmp_path / "CanvasExpert"
+    root.mkdir()
+    (root / "Library").mkdir()
+    (root / "To Review").mkdir()
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    workspace.migrate_legacy_glass_folders()
+
+    # No archive structure created
+    assert not (root / "_System").exists()
+
+
+def test_migrate_legacy_glass_folders_already_migrated_no_clobber(tmp_path, monkeypatch):
+    """When destination already exists, the function doesn't clobber and doesn't raise."""
+    root = tmp_path / "CanvasExpert"
+    root.mkdir()
+    (root / "Library").mkdir()
+    (root / "Library" / "Glass").mkdir()
+    (root / "Library" / "Glass" / "new.txt").write_text("new content")
+    (root / "_System").mkdir()
+    (root / "_System" / "Archive").mkdir()
+    (root / "_System" / "Archive" / "SmartDecks-legacy").mkdir()
+    (root / "_System" / "Archive" / "SmartDecks-legacy" / "Library-Glass").mkdir()
+    (root / "_System" / "Archive" / "SmartDecks-legacy" / "Library-Glass" / "existing.txt").write_text("existing content")
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    workspace.migrate_legacy_glass_folders()
+
+    # Existing destination preserved
+    assert (root / "_System" / "Archive" / "SmartDecks-legacy" / "Library-Glass" / "existing.txt").read_text() == "existing content"
+    # Source still present (not moved when destination exists)
+    assert (root / "Library" / "Glass" / "new.txt").exists()

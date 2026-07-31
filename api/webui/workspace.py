@@ -764,6 +764,43 @@ def ensure_workspace():
     return root
 
 
+def migrate_legacy_glass_folders(root=None):
+    """One-time cleanup: move any pre-existing Library/Glass and To Review/Glass
+    folders (left over from before the Glass feature was removed) to
+    _System/Archive/SmartDecks-legacy/. No-ops when both are absent. Move only,
+    never unlink -- same convention as deck_store.delete_deck. Idempotent: once
+    moved, the source is gone, so this becomes a permanent no-op; the
+    destination-exists check also guards against clobbering on a re-run before
+    the source is fully gone (e.g. a partial prior move)."""
+    base = _root_or_workspace(root)
+    if not base:
+        return
+    legacy_sources = [
+        (os.path.join(base, LIBRARY_NAME, "Glass"), "Library-Glass"),
+        (os.path.join(base, TO_REVIEW_NAME, "Glass"), "ToReview-Glass"),
+    ]
+    present = [(src, name) for src, name in legacy_sources if os.path.isdir(src)]
+    if not present:
+        return
+    dest_root = system_folder("Archive", base)
+    if dest_root:
+        dest_root = os.path.join(dest_root, "SmartDecks-legacy")
+    if not dest_root:
+        return
+    try:
+        os.makedirs(dest_root, exist_ok=True)
+    except OSError:
+        return
+    for src, name in present:
+        dest = os.path.join(dest_root, name)
+        if os.path.exists(dest):
+            continue
+        try:
+            shutil.move(src, dest)
+        except OSError:
+            continue
+
+
 def path_within_workspace(path: str, root=None) -> bool:
     base = _root_or_workspace(root)
     if not base or not path:

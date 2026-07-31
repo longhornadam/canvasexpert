@@ -55,8 +55,8 @@ Source tests never substitute for rendered verification.
 | `/settings` | Settings | `settings.js` |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
-| `/glass` | **Glass** - teacher review for pending agent-authored panes and scenes | `glass/review.js` |
-| `/glass/display` | **Glass display** - headerless approved-scene projector view | `glass/display.js` |
+| `/smartdeck` | **SmartDeck** — manage Decks: Active, Templates, Archived, Widgets | `smartdeck/smartdeck.js` |
+| `/smartdeck/display/{deck_id}` | **SmartDeck display** — headerless projector view for displaying Slides | `smartdeck/display.js` |
 | `/about` | What-is-Canvas-Expert explainer | — |
 
 Home's Canvas sync action queues local read-only coordinator work and polls its opaque
@@ -134,14 +134,18 @@ Roster has backend helper splits and browser feature files.
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
 
-### Glass module routing
+### SmartDeck module routing
 
-Glass separates review from display. `api/glass/panes.py` validates local drafts, stores
-immutable content-addressed pane revisions, and validates dated 12x8 scenes. `/glass` is the
-app-shell review page; `/glass/display?at=<ISO8601>` is headerless and runs every pane in an
-opaque-origin `sandbox="allow-scripts"` iframe with an inline no-network CSP. Preview is useful
-but cannot prove away CPU-exhaustion from approved JavaScript. `api/schedule/` remains pure and
-owns current-block resolution; display updates locally with no polling or data subscription.
+SmartDeck is a teacher-authored Deck of Slides bound to Teacher Schedule block names,
+displayed full-screen on a classroom projector. Slides are structured data rendered by
+fixed templates (heading, body, bulleted list), never arbitrary code — no sandboxed
+iframe required.
+
+- Routes owner: `api/webui/routes/smartdeck.py`
+- Management page: `smartdeck.html`, `smartdeck/smartdeck.js`, `smartdeck/smartdeck.css`
+- Display page: `smartdeck_display.html`, `smartdeck/display.js`, `smartdeck/display.css`
+- Storage and validation: `api/webui/deck_store.py`, `api/webui/sf.py`
+- Schedule resolution: `api/webui/deck_schedule.py`, `api/webui/deps.py`
 
 ### Feedback tools module routing — PowerGrader advanced import
 

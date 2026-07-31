@@ -61,17 +61,33 @@ Four rules that decide the cases the lists do not name.
 
 ## The assistant receives availability, never values
 
-An MCP-connected assistant authoring a pane is told *that* a category exists and how it is
-shaped — never a value. It writes generically: "if birthdays are available, render them like
-this." The local host resolves real values at render time and injects them into the pane.
+An MCP-connected assistant authoring a SmartDeck Slide is told *that* a Feed category exists
+and how it is shaped -- never a value. It would write generically: "if birthdays are
+available, show them here." Only the local display page, at render time, would ever resolve
+a Feed name to a real value.
 
-This is what makes classroom-facing student data safe to display without making it safe to
-send. The asymmetry is structural, not procedural:
+This is what would make classroom-facing student data safe to display without making it safe
+to send -- but as of this writing, no Slide can reference a Feed at all: `api/webui/sf.py`
+rejects a `feed` key outright, on every Slide and at the top level, unconditionally. Feed
+*resolution* exists (`api/smartdeck_feeds.py`, reusing this document's enforcement rules
+as-is), but nothing in the app calls it from an authoring or display path yet. This is
+deliberate, not an oversight: wiring a Feed into what an assistant can author, and into what
+the display page renders, needs its own design, and inventing one without a spec would be
+scope creep. Until that lands, the asymmetry below describes what must hold once it does, not
+what exists today:
 
-- A pane runs in an iframe with `sandbox="allow-scripts"`, an opaque origin, `no-referrer`,
-  and an inline CSP of `default-src 'none'; connect-src 'none'; form-action 'none'` with all
-  assets inlined. A pane handed a student's first name has no route out of the machine.
-- An assistant is off the machine by definition. So it gets the contract, not the roster.
+- An assistant is off the machine by definition. So it gets the contract, not the roster --
+  regardless of surface, this can never change.
+- A Slide is structured data (a fixed layout: heading, body text, or a bulleted list) rendered
+  by a small set of built-in templates, not arbitrary HTML/CSS/JS. There is no user-authored
+  code execution surface for a Slide to have in the first place -- a stronger property than
+  sandboxing it. (An earlier, deleted feature took the opposite approach: an AI authored
+  arbitrary HTML/CSS/JS, run in an iframe with `sandbox="allow-scripts"`, an opaque origin,
+  `no-referrer`, and an inline CSP blocking every outbound route. That mechanism no longer
+  exists in this codebase and must not be resurrected as a shortcut to letting a Slide run
+  authored code again -- if a future Feed design ever needs to render something more dynamic
+  than the fixed layouts above, it should get there without arbitrary script, not by rebuilding
+  that sandbox.)
 
 ## Enforcement
 
@@ -81,9 +97,9 @@ send. The asymmetry is structural, not procedural:
 - Classroom-facing surfaces filter with `api.audience.classroom_only()` rather than trusting
   their input.
 - `SCORE_FLOOR_PERCENT = 90` lives in `api/audience.py` and is stated here. A score below it
-  can never be tagged classroom-facing, whatever a pane or scene asks for.
+  can never be tagged classroom-facing, whatever a Slide or Widget asks for.
 - Per `docs/reference/project-state.md`, a model instruction is not an enforcement boundary.
-  None of the above may be relocated into prompt text, a pane's source, or an authoring
+  None of the above may be relocated into prompt text, a Slide's source, or an authoring
   contract.
 
 ## Open teacher decisions

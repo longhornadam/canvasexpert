@@ -23,7 +23,7 @@ def _normalize_event(event) -> dict | None:
 
     Calendar settings can predate events or be hand-edited.  Never let a
     malformed stored record raise here or carry an implementation/path field
-    into a Glass projection.
+    into a SmartDeck projection.
     """
     if not isinstance(event, dict) or not isinstance(event.get("kind"), str):
         return None
