@@ -10,7 +10,8 @@ Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses``,
 ``get_authoring_contract``, ``get_product_guide``, ``list_staged_content``,
 ``get_bell_schedule``, ``get_day_schedule``, ``get_teacher_schedule``,
-``save_deck``, ``list_active_decks``, and ``archive_deck`` are
+``save_deck``, ``save_teacher_schedule``, ``save_day_calendar``,
+``list_active_decks``, and ``archive_deck`` are
 the only tools with no ``course_id`` and no student data, so they skip both the
 course gate and the outbound safety gate. ``get_writing_history`` breaks that
 pairing on purpose: it has no ``course_id`` either (the daily-writing store has
@@ -35,7 +36,7 @@ from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snaps
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
-from api.webui import config, mirror_service, workspace, deck_store, sf
+from api.webui import config, mirror_service, workspace, deck_store, sf, schedule_setup
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_vault
@@ -1092,6 +1093,25 @@ def save_deck(date: str, title: str, slides: list, widgets: list = None) -> dict
     if result:
         return {"ok": True, **result}
     return {"ok": False, "problems": problems}
+
+
+def save_teacher_schedule(blocks: list) -> dict:
+    """Replace the teacher's blocks in Teacher Schedule.json.
+
+    No course_id, no student data â€” no course gate, no safety gate.
+    Never raises.
+    """
+    if not isinstance(blocks, list):
+        return {"ok": False, "problems": ["blocks must be a list"]}
+
+    data, problems = schedule_setup.save_blocks(blocks)
+    if data is None:
+        return {"ok": False, "problems": problems}
+    return {
+        "ok": True,
+        "count": len(blocks),
+        "path": schedule_setup.teacher_schedule_path(),
+    }
 
 
 def list_active_decks() -> dict:

@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Nineteen thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Twenty thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -211,6 +211,13 @@ def save_deck(date: str, title: str, slides: list, widgets: list = None) -> str:
     Writes the deck live immediately on validation success -- there is no
     review queue. No student data."""
     return _compact(tools.save_deck(date, title, slides, widgets))
+
+
+@mcp.tool()
+def save_teacher_schedule(blocks: list) -> str:
+    """Save the teacher's SmartDeck blocks live to the workspace.
+    No course ID or student data. No review queue."""
+    return _compact(tools.save_teacher_schedule(blocks))
 
 
 @mcp.tool()

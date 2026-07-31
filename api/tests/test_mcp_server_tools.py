@@ -1572,7 +1572,7 @@ def test_server_registers_the_expected_tool_set():
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "list_staged_content",
         "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
-        "save_deck", "list_active_decks", "archive_deck",
+        "save_deck", "save_teacher_schedule", "list_active_decks", "archive_deck",
     }
 
 
@@ -1590,3 +1590,107 @@ def test_server_wrappers_return_compact_json(monkeypatch):
     assert isinstance(wire, str)
     assert "\n" not in wire and ": " not in wire and ", " not in wire
     assert json.loads(wire) == tools.list_courses()
+
+
+# --- save_teacher_schedule (no course_id, no student data -> no gates) ------
+
+def _teacher_schedule_workspace(monkeypatch, tmp_path):
+    workspace_root = tmp_path / "workspace"
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(workspace_root))
+    monkeypatch.setattr(
+        workspace, "library_folder", lambda name: str(workspace_root / "Library" / name)
+    )
+    smartdecks = workspace_root / "Library" / "SmartDecks"
+    smartdecks.mkdir(parents=True)
+    return smartdecks / "Teacher Schedule.json"
+
+
+def test_save_teacher_schedule_writes_blocks_and_returns_path(monkeypatch, tmp_path):
+    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    blocks = [{"name": "Algebra", "raw_periods": [1], "weekdays": [0]}]
+
+    result = tools.save_teacher_schedule(blocks)
+
+    assert result == {"ok": True, "count": 1, "path": str(path)}
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["blocks"] == blocks
+    assert saved["version"] == "1.0-json"
+
+
+def test_save_teacher_schedule_preserves_unknown_keys_and_block_order(monkeypatch, tmp_path):
+    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    original = {
+        "_comment": "keep this",
+        "version": "custom-version",
+        "unknown": {"source": "hand"},
+        "blocks": [],
+    }
+    path.write_text(json.dumps(original), encoding="utf-8")
+    blocks = [
+        {"name": "Later", "raw_periods": [2]},
+        {"name": "Earlier", "raw_periods": [1]},
+    ]
+
+    result = tools.save_teacher_schedule(blocks)
+
+    assert result["ok"] is True
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["_comment"] == original["_comment"]
+    assert saved["version"] == original["version"]
+    assert saved["unknown"] == original["unknown"]
+    assert saved["blocks"] == blocks
+
+
+def test_save_teacher_schedule_rejects_invalid_blocks_without_writing(monkeypatch, tmp_path):
+    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    original = '{"_comment":"keep","blocks":[{"name":"Old","raw_periods":[1]}]}'
+    path.write_text(original, encoding="utf-8")
+
+    result = tools.save_teacher_schedule([{"name": "", "raw_periods": []}])
+
+    assert result["ok"] is False
+    assert result["problems"] == [
+        "block at index 0 needs a non-empty string name",
+        "block '' must have a non-empty list of ints or non-empty strings for raw_periods",
+    ]
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_save_teacher_schedule_rejects_non_list(monkeypatch, tmp_path):
+    _teacher_schedule_workspace(monkeypatch, tmp_path)
+    result = tools.save_teacher_schedule({"name": "Algebra"})
+    assert result == {"ok": False, "problems": ["blocks must be a list"]}
+
+
+def test_save_teacher_schedule_rejects_intersecting_duplicate_names(monkeypatch, tmp_path):
+    _teacher_schedule_workspace(monkeypatch, tmp_path)
+    blocks = [
+        {"name": "Shared", "raw_periods": [1], "weekdays": [0, 1]},
+        {"name": "Shared", "raw_periods": [2], "weekdays": [1, 2]},
+    ]
+    result = tools.save_teacher_schedule(blocks)
+    assert result["ok"] is False
+    assert "listed more than once for the same weekday" in result["problems"][-1]
+
+
+def test_save_teacher_schedule_accepts_disjoint_duplicate_names(monkeypatch, tmp_path):
+    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    blocks = [
+        {"name": "Shared", "raw_periods": [1], "weekdays": [0]},
+        {"name": "Shared", "raw_periods": [2], "weekdays": [4]},
+    ]
+    result = tools.save_teacher_schedule(blocks)
+    assert result["ok"] is True
+    assert json.loads(path.read_text(encoding="utf-8"))["blocks"] == blocks
+
+
+def test_server_registers_save_teacher_schedule_wrapper(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "save_teacher_schedule", lambda blocks: {
+        "ok": True, "count": len(blocks), "path": "Teacher Schedule.json",
+    })
+    wire = server.save_teacher_schedule([{"name": "Algebra", "raw_periods": [1]}])
+    assert json.loads(wire) == {
+        "ok": True, "count": 1, "path": "Teacher Schedule.json",
+    }
