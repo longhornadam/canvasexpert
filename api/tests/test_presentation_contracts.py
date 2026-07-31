@@ -268,7 +268,7 @@ def test_class_schedule_editor_edits_block_periods_and_course_separately():
     assert 'data-field="course_id"' in text
     assert '<optgroup label="Current">' in text
     assert '<optgroup label="Previous">' in text
-    assert "&mdash; none &mdash;" in text
+    assert '<option value="">(none)</option>' in text
     assert "not a saved course" in text
     assert "disabled" in text
     assert "Settings &rarr; Current courses" in text

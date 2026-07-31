@@ -99,7 +99,7 @@
   function courseSelect(block) {
     var courses = Array.isArray(state.courses) ? state.courses : [];
     var selected = block.course_id == null ? "" : String(block.course_id);
-    var html = '<option value="">&mdash; none &mdash;</option>';
+    var html = '<option value="">(none)</option>';
     [true, false].forEach(function (active) {
       var matching = courses.filter(function (course) {
         return Boolean(course && course.active !== false) === active;
