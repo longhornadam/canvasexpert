@@ -39,6 +39,19 @@
       setTimeout(function(){ html.classList.remove('ce-transitioning'); }, 320);
     });
   })();
+  (function(){
+    var more = document.getElementById('ce-nav-more');
+    if (!more) return;
+    document.addEventListener('click', function(event){
+      if (more.open && !event.target.closest('#ce-nav-more')) more.open = false;
+    });
+    document.addEventListener('keydown', function(event){
+      if (event.key === 'Escape' && more.open) {
+        more.open = false;
+        more.querySelector('summary').focus();
+      }
+    });
+  })();
   // Keep direct hash links focused after a page renders.
   (function(){
     var hash = location.hash;
