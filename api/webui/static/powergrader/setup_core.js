@@ -54,20 +54,23 @@
     rubricFast.hidden = isAi;
     apiOnly.forEach(function(el){ el.hidden = mode !== 'assisted'; });
     if (mode === 'packet') {
-      if (aiLabel) aiLabel.textContent = 'Prepare for my AI chat — create a pseudonymized SAFE packet, then paste AI JSON back into PowerGrader.';
+      if (aiLabel) aiLabel.textContent = 'Score with AI chat: makes a name-swapped file you paste into your assistant, then paste its results back here.';
     } else if (mode === 'assisted') {
-      if (aiLabel) aiLabel.textContent = 'Draft-score with OpenRouter — ' + ((modelEl && modelEl.value) || defaultModel);
+      if (aiLabel) aiLabel.textContent = 'Auto-score with AI: ' + ((modelEl && modelEl.value) || defaultModel);
     } else {
-      if (aiLabel) aiLabel.textContent = 'Grade myself — no AI packet or API call.';
+      if (aiLabel) aiLabel.textContent = 'Score myself: nothing leaves this computer.';
     }
     // Show/hide AI acknowledgement checkbox
     var ackWrap = document.getElementById('pg-ai-check-wrap');
     var ackBox = document.getElementById('pg-ai-check');
     if (ackWrap) ackWrap.hidden = !isAi;
     if (ackBox && !isAi) ackBox.checked = false;
-    // Programmatically expand safety details for AI routes
-    var safetyPopout = document.getElementById('pg-safety-popout');
-    if (safetyPopout) safetyPopout.open = isAi;
+    // Open the chosen route's own explanation for the AI routes, close the rest.
+    routeCards.forEach(function(card){
+      var what = card.querySelector('details.pg-what');
+      var choice = card.querySelector('input[type="radio"]');
+      if (what && choice) what.open = isAi && choice.checked;
+    });
     // Show/hide auto-post checkbox for supported modes (packet/assisted, not fast)
     var autoPostWrap = document.getElementById('pg-auto-post-wrap');
     var autoPostCheck = document.getElementById('pg-auto-post');
@@ -503,7 +506,14 @@
       fd.set('watch_late', watchLate && watchLate.checked ? 'true' : 'false');
       fd.set('auto_post', autoPostEnabled ? 'true' : 'false');
       fetch('/api/powergrader/start', {method:'POST', body: fd})
-        .then(function(r){ return r.json(); })
+        .then(function(r){
+          return r.text().then(function(text){
+            try { return JSON.parse(text); }
+            catch (e) {
+              return { ok: false, error: 'PowerGrader hit a server error (HTTP ' + r.status + '). Check the Canvas Expert server console for the full traceback.' };
+            }
+          });
+        })
         .then(function(d){
           if (d.ok) {
             setStatus((d.mode_label || 'Session') + ' created (' + d.student_count + ' students)…', false);

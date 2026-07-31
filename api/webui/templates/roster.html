@@ -1,15 +1,16 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import rail %}
-{% block title %}Roster Workbench — Canvas Expert{% endblock %}
+{% from "ui/_macros.html" import rail, page_header %}
+{% block title %}Students — Canvas Expert{% endblock %}
 {% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}roster-page{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/roster_workbench.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/pages/student_reports.css?v={{ asset_v }}">
 {% endblock %}
 {% block left_rail %}
-{% call rail('left', 'Roster lenses') %}
+{% call rail('left', 'Student views') %}
   <div class="roster-workbench-rail">
-    <p class="roster-workbench-rail-kicker">Roster lenses</p>
+    <p class="roster-workbench-rail-kicker">Views</p>
     <nav class="roster-workbench-lenses">
       <button type="button" class="roster-lens-btn roster-filter-btn active" data-lens="students" data-filter="all" aria-pressed="true">Students</button>
       <button type="button" class="roster-lens-btn roster-filter-btn" data-lens="accommodations" data-filter="extra_time" aria-pressed="false">Accommodations</button>
@@ -17,23 +18,30 @@
       <button type="button" class="roster-lens-btn roster-filter-btn" data-lens="monitoring" data-filter="monitored" aria-pressed="false">Monitoring</button>
       <button type="button" class="roster-lens-btn roster-filter-btn" data-lens="issues" data-filter="warnings" aria-pressed="false">Issues</button>
       <button type="button" class="roster-lens-btn roster-privacy-btn" data-lens="privacy" aria-pressed="false">Privacy</button>
-      <a class="roster-lens-btn" href="/students/reports">Student reports</a>
+      <button type="button" class="roster-lens-btn" data-lens="reports" aria-pressed="false">Student reports</button>
     </nav>
   </div>
 {% endcall %}
 {% endblock %}
+
+{% block workspace_header %}{{ page_header('Students', 'Your class list, accommodations, groups, and private notes.') }}{% endblock %}
 
 {% block primary %}
 
 <meta name="canvas-base" content="{{ canvas_base }}">
 
 <div class="roster-workbench-shell" id="roster-workbench" data-roster-lens="students">
-  <div class="roster-workbench-main ce-drafting-grid">
-    <section class="roster-v2-intro" aria-labelledby="roster-title">
-      <h1 id="roster-title">Roster</h1>
-    </section>
-
-    <div class="roster-v2-toolbar" id="roster-toolbar">
+  <div class="roster-workbench-main">
+    <div class="ce-panel roster-v2-toolbar" id="roster-toolbar">
+      <div class="roster-v2-toolbar-row roster-summary-row">
+        <span id="roster-v2-summary" class="roster-v2-summary">
+          <span class="roster-v2-summary-item" id="roster-summary-total">0 students</span>
+          <span class="roster-v2-summary-item" id="roster-summary-extra">Extra 0</span>
+          <span class="roster-v2-summary-item" id="roster-summary-monitored">Monitored 0</span>
+          <span class="roster-v2-summary-item" id="roster-summary-group-unset">Unset 0</span>
+          <span class="roster-v2-summary-item" id="roster-summary-warnings">Issues 0</span>
+        </span>
+      </div>
       <div class="roster-v2-toolbar-row roster-course-row">
         <label class="roster-v2-course-picker">
           Course
@@ -45,17 +53,8 @@
           </select>
         </label>
         <button type="button" id="roster-refresh" class="primary small">Refresh</button>
-        <a href="#" id="roster-open-canvas" class="button small" target="_blank" rel="noopener">Canvas People</a>
+        <a href="#" id="roster-open-canvas" class="small" target="_blank" rel="noopener">Canvas People</a>
         <span id="roster-status" class="hint"></span>
-      </div>
-      <div class="roster-v2-toolbar-row roster-summary-row">
-        <span id="roster-v2-summary" class="roster-v2-summary">
-          <span class="roster-v2-summary-item" id="roster-summary-total">0 students</span>
-          <span class="roster-v2-summary-item" id="roster-summary-extra">Extra 0</span>
-          <span class="roster-v2-summary-item" id="roster-summary-monitored">Monitored 0</span>
-          <span class="roster-v2-summary-item" id="roster-summary-group-unset">Unset 0</span>
-          <span class="roster-v2-summary-item" id="roster-summary-warnings">Issues 0</span>
-        </span>
       </div>
       <div class="roster-v2-toolbar-row roster-search-row">
         <label class="roster-v2-group-set-picker">
@@ -68,7 +67,7 @@
       </div>
     </div>
 
-    <details class="roster-v2-details roster-group-builder" id="roster-group-builder">
+    <details class="ce-panel roster-v2-details roster-group-builder" id="roster-group-builder">
       <summary><strong>Create Canvas groups</strong></summary>
       <div class="roster-group-builder-body">
         <div class="roster-group-builder-row">
@@ -87,7 +86,7 @@
       </div>
     </details>
 
-    <div class="roster-bulk-bar" id="roster-bulk-bar" hidden>
+    <div class="ce-panel roster-bulk-bar" id="roster-bulk-bar" hidden>
       <span id="roster-bulk-count" class="roster-bulk-title">Bulk edit: 0 selected</span>
       <span class="roster-bulk-actions">
         <span class="roster-bulk-cluster roster-bulk-cluster--groups">
@@ -113,7 +112,7 @@
       </span>
     </div>
 
-    <div class="roster-v2-table-wrap" id="roster-table-card" hidden>
+    <div class="ce-panel roster-v2-table-wrap" id="roster-table-card" hidden>
       <table class="roster-v2-table" id="roster-table">
         <thead>
           <tr>
@@ -125,16 +124,87 @@
             <th class="roster-col-group">Canvas group</th>
             <th class="roster-col-monitor">M</th>
             <th class="roster-col-note">Note</th>
+            <th class="roster-col-front-row">Front row</th>
+            <th class="roster-col-near-teacher">Near teacher</th>
+            <th class="roster-col-private-note">Private note</th>
+            <th class="roster-col-ai-context-note">AI-context note</th>
             <th class="roster-col-status">Status</th>
           </tr>
         </thead>
         <tbody id="roster-table-body">
-          <tr><td colspan="9" class="roster-empty">Select a course and click Refresh.</td></tr>
+          <tr><td colspan="13" class="roster-empty">Select a course and click Refresh.</td></tr>
         </tbody>
       </table>
     </div>
 
-    <details class="roster-v2-details" id="roster-group-labels-editor" hidden>
+    <section class="ce-panel roster-score-matrix" id="roster-score-matrix" hidden aria-labelledby="roster-score-matrix-title">
+      <div class="roster-score-matrix-heading">
+        <div>
+          <h2 id="roster-score-matrix-title">Score matrix</h2>
+          <p class="hint">Private, current-only teacher context. Blank cells have no value.</p>
+        </div>
+        <span id="roster-score-matrix-status" class="hint" aria-live="polite"></span>
+      </div>
+      <div class="roster-score-matrix-controls">
+        <label>Section
+          <select id="roster-score-section" aria-label="Score matrix section">
+            <option value="">— select a section —</option>
+          </select>
+        </label>
+        <label>Add score column
+          <input type="text" id="roster-score-new-column" maxlength="80" placeholder="Teacher label">
+        </label>
+        <button type="button" id="roster-score-add-column" class="small">Add column</button>
+      </div>
+      <div id="roster-score-columns" class="roster-score-columns" aria-label="Score columns"></div>
+      <div class="roster-score-grid-wrap">
+        <table class="roster-score-grid" id="roster-score-grid">
+          <thead id="roster-score-grid-head"></thead>
+          <tbody id="roster-score-grid-body"></tbody>
+        </table>
+      </div>
+      <div class="ce-actions roster-score-actions">
+        <button type="button" id="roster-score-save" class="primary small">Save scores</button>
+      </div>
+    </section>
+
+    <section class="ce-panel roster-relationships" id="roster-relationships" hidden aria-labelledby="roster-relationships-title">
+      <div class="roster-score-matrix-heading">
+        <div>
+          <h2 id="roster-relationships-title">Relationships</h2>
+          <p class="hint">Private, local-only pair preferences for seating. Reasons never go to Canvas or AI.</p>
+        </div>
+        <span id="roster-relationships-status" class="hint" aria-live="polite"></span>
+      </div>
+      <div class="roster-relationships-controls">
+        <label>Section
+          <select id="roster-relationships-section" aria-label="Relationships section">
+            <option value="">— select a section —</option>
+          </select>
+        </label>
+        <label>Student A
+          <select id="roster-relationship-student-a" aria-label="First student"></select>
+        </label>
+        <label>Student B
+          <select id="roster-relationship-student-b" aria-label="Second student"></select>
+        </label>
+        <label>Preference
+          <select id="roster-relationship-type">
+            <option value="keep_apart">Keep apart</option>
+            <option value="preferred_pair">Preferred pair</option>
+          </select>
+        </label>
+      </div>
+      <label class="roster-relationship-reason">Private local reason (optional)
+        <textarea id="roster-relationship-reason" rows="2" maxlength="1000" placeholder="Visible only in this local Roster workspace"></textarea>
+      </label>
+      <div class="ce-actions roster-relationship-actions">
+        <button type="button" id="roster-relationship-save" class="primary small">Save relationship</button>
+      </div>
+      <div id="roster-relationships-list" class="roster-relationships-list"></div>
+    </section>
+
+    <details class="ce-panel roster-v2-details" id="roster-group-labels-editor" hidden>
       <summary><strong>Group labels</strong></summary>
       <div class="roster-v2-tier-editor" id="roster-group-labels-body">
         <div class="roster-v2-tier-rows" id="roster-group-labels-rows"></div>
@@ -145,7 +215,11 @@
       </div>
     </details>
 
-    <details class="roster-v2-details" id="roster-safety-card">
+    <div id="roster-reports">
+      {% include "_student_reports_panels.html" %}
+    </div>
+
+    <details class="ce-panel roster-v2-details" id="roster-safety-card">
       <summary><strong>AI safety tools</strong></summary>
       <div class="guided-pickers ce-roster-guided-pickers">
         <div class="roster-safety-row">
@@ -186,4 +260,8 @@
 <script src="/static/roster/bulk.js?v={{ asset_v }}"></script>
 <script src="/static/roster/groups.js?v={{ asset_v }}"></script>
 <script src="/static/roster/safety.js?v={{ asset_v }}"></script>
+<script src="/static/roster/scores.js?v={{ asset_v }}"></script>
+<script src="/static/roster/relationships.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/student_reports.js?v={{ asset_v }}"></script>
+<script src="/static/course_expert/portfolio.js?v={{ asset_v }}"></script>
 {% endblock %}

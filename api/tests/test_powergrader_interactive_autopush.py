@@ -9,11 +9,25 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.powergrader.interactive_autopush import (
     run_interactive_autopush,
 )
+from api.webui import workspace
+
+
+@pytest.fixture(autouse=True)
+def _isolated_workspace_root(monkeypatch, tmp_path):
+    # interactive_receipt_dir() resolves through session_store.pg_dir(), which
+    # depends on workspace.workspace_root(). Without an isolated root, a real
+    # push is silently refused (no receipt dir to record idempotency against)
+    # whenever the ambient environment has no live OneDrive workspace, and
+    # silently succeeds against the real one when it does -- neither should
+    # decide whether these tests pass.
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path / "OneDrive" / "CanvasExpert"))
 
 
 def _base_session(**extra):

@@ -15,24 +15,25 @@ pushes content to live courses via the REST and New Quizzes APIs:
 
 Local-only, never served. See `AGENTS.md` Guardrails.
 
-The 0.75 beta version is `0.75.0-beta.0`. The supported launcher is
+The current version is `1.0.0-beta.2` (see `api/__init__.py`). The supported launcher is
 `py qf_ui.py` from `api/` or `py api/qf_ui.py` from the repository root; it binds
 only to `127.0.0.1` and preserves the `--port` and `--no-browser` options.
-The `/connections` page reports the current interpreter and app-root paths and
-offers copy-only client snippets or a support bundle. It never edits client
-configuration, installs software, changes `PATH`, starts a tunnel, or requests
-administrator access.
+The `/connections` page leads with **CanvasAgent**, the single paste-into-your-AI
+instruction file (download it, or copy the full/short text). Connecting Claude
+Desktop or the ChatGPT desktop app is optional and one click; it writes only that
+app's own config file, with a backup kept. It never installs software, changes
+`PATH`, starts a tunnel, or requests administrator access.
 
 ## Contracts consumed
 
 | Contract | File | Role |
 |---|---|---|
-| **QuizForge** | `../LLM_Modules/QuizForge_Base.md` (v3.0-json) | Quiz authoring: 12 question types, rationales, tiers |
-| **AssignmentForge** | `../LLM_Modules/AssignmentForge_Base.md` (v1.0-json) | Assignment authoring: submissions, scaffolding tiers |
-| **PageForge** | `../LLM_Modules/PageForge_Base.md` (v1.0-json) | Page authoring: unit hubs, placeholders |
-| **RubricForge** | `../LLM_Modules/RubricForge_Base.md` (v1.0-json) | Rubric authoring: criteria, explainer page, scoring prompt |
+| **QuizForge** | `default_docs/AI Authoring/Author a Quiz (QuizForge).txt` (v3.0-json) | Quiz authoring: 12 question types, rationales, tiers |
+| **AssignmentForge** | `default_docs/AI Authoring/Author an Assignment (AssignmentForge).txt` (v1.0-json) | Assignment authoring: submissions, scaffolding tiers |
+| **PageForge** | `default_docs/AI Authoring/Author a Page (PageForge).txt` (v1.0-json) | Page authoring: unit hubs, placeholders |
+| **RubricForge** | `default_docs/AI Authoring/Author a Rubric (RubricForge).txt` (v1.0-json) | Rubric authoring: criteria, explainer page, scoring prompt |
 
-Each contract is canonical in `../LLM_Modules/` — this backend consumes, never forks.
+Each contract is canonical in `default_docs/AI Authoring/` — this backend consumes, never forks.
 Token security: the repo is **private**; a `pre-commit` hook blocks the token pattern;
 Netlify publishes only `web/`, so nothing here is served. Keep the token only in
 `api/.env` (CLI) or OS credential store (Web UI, via `keyring`).
@@ -81,14 +82,16 @@ lives in `api/webui/config.json` (gitignored).
 ## Workspace & multi-PC
 
 When OneDrive is available, teacher-authored content lives in
-`OneDrive\CanvasExpert\` with `AI-TA\`, `Rubrics\`, `Quizzes\`, `Assignments\`,
-`Pages\`, `Exports\`, and synced `settings.json`. Human-facing student work is
-canonical under `Courses\<Course>\Assignments\<Assignment>\Student Work\`;
-pseudonymized artifacts live under `AI Packets (Pseudonymized)\`, derived output
-under `Student Reports\`, and vault/session/audit state under `_System\`.
-Default rubric files are seeded into `Rubrics\` only when the filename is missing,
-so user edits win forever. `Courses\` and `_System\` are PRIVATE; review every
-pseudonymized packet before sharing because it is not guaranteed anonymous.
+`OneDrive\CanvasExpert\` with `Library\AI Authoring\`, `Library\Rubrics\`,
+`Library\Quizzes\`, `Library\Assignments\`, `Library\Pages\`, `Printables\`,
+`Canvas Uploads\`, and synced `settings.json`. Human-facing student work is
+canonical under `Student Work\Submissions\<Course>\Assignments\<Assignment>\`;
+pseudonymized artifacts live under `For AI\`, derived output under
+`Student Work\Reports\`, and vault/session/audit state under `_System\`.
+Default rubric files are seeded into `Library\Rubrics\` only when the filename
+is missing, so user edits win forever. `Student Work\` and `_System\` are
+PRIVATE; review every pseudonymized packet before sharing because it is not
+guaranteed anonymous.
 
 Machine-local state stays machine-local: `canvas_base`, `download_root`, and the
 Canvas token in Credential Manager. Synced state is last-writer-wins through
@@ -151,13 +154,13 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `teks.py` | TEKS coverage report + visible labels |
 | `qf_pusher.py` | Driver: envelope → live quiz (points, settings, stimulus, TEKS) |
 | `push_tiers.py` | Differentiation: variants → student groups via assignment overrides (`--manifest`) |
-| `downloader.py` | Submission downloader → canonical `Courses/<course>/Assignments/<assignment>/Student Work/<student>/Attempt <n>/` tree; no duplicate raw by-student mirror |
+| `downloader.py` | Submission downloader → canonical `Student Work/Submissions/<course>/Assignments/<assignment>/<student>/Attempt <n>/` tree; no duplicate raw by-student mirror |
 | `validate_qf.py` | QuizForge compliance checker |
 | `qf_ui.py` | Launches the local web UI (see "Web UI" above) |
 | `../engine/rendering/physical/` | Local printable DOCX/PDF render stack (Edge via Playwright for PDF, Pandoc for DOCX) |
 | `powergrader/` | PowerGrader backend helpers: Canvas fetch, privacy artifacts, Safe AI Packet ZIP, Copilot batch folders, import validation, session mutations, start-workflow assembly, autoscore claim/queue helpers, auto-push policy helpers |
 | `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, split feature scripts, subprocess/SSE runner |
-| `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `../LLM_Modules/QuizForge_Base.md`) |
+| `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `default_docs/AI Authoring/Author a Quiz (QuizForge).txt`) |
 
 ## Setup
 

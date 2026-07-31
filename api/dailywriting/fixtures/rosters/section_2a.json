@@ -1,0 +1,43 @@
+{
+  "_note": "INVENTED NAMES ONLY. No real student, teacher, campus, or district appears in this file or anywhere else under fixtures/. Shaped like an api.feedback_vault vault entry so api.feedback_scrub.build_replacement_map can consume it directly.",
+  "section_id": "ELA7-PREAP-2A",
+  "course_label": "ELA 7 PreAP GT",
+  "entries": [
+    {
+      "canvas_id": "990001",
+      "sis_id": "F990001",
+      "real_name": "Marcus Bell",
+      "pseudonym": "Sparky McGee",
+      "pseudo_first": "Sparky",
+      "pseudo_last": "McGee",
+      "nicknames": ["Marc"]
+    },
+    {
+      "canvas_id": "990002",
+      "sis_id": "F990002",
+      "real_name": "Priya Raman",
+      "pseudonym": "Waffles Pinkerton",
+      "pseudo_first": "Waffles",
+      "pseudo_last": "Pinkerton",
+      "nicknames": []
+    },
+    {
+      "canvas_id": "990003",
+      "sis_id": "F990003",
+      "real_name": "Devon Okafor",
+      "pseudonym": "Rutabaga Sandwich",
+      "pseudo_first": "Rutabaga",
+      "pseudo_last": "Sandwich",
+      "nicknames": ["Dev"]
+    },
+    {
+      "canvas_id": "990004",
+      "sis_id": "F990004",
+      "real_name": "Hannah Voss",
+      "pseudonym": "Zephyr Bumblewick",
+      "pseudo_first": "Zephyr",
+      "pseudo_last": "Bumblewick",
+      "nicknames": []
+    }
+  ]
+}

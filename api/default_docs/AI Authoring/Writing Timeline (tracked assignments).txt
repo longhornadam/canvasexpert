@@ -1,0 +1,179 @@
+Writing Timeline - tracked and not-tracked assignments
+
+Reference for an AI assistant helping a teacher plan, author, or grade writing
+in CanvasExpert. Accurate as of this file's version. Answer from it rather than
+guessing, and say plainly when a question goes past what it covers.
+
+
+What Writing Timeline is
+
+PowerGrader can read a submitted Word document's own revision metadata on the
+teacher's computer and show how the writing arrived: whether there is a
+revision trail at all, how large each insertion was and when it landed, roughly
+how long the document was open, and whether the file descended from a handout
+whose tracking was locked.
+
+The feature is called Writing Timeline. It is not an integrity checker, and it
+never produces a score, a percentage, or a likelihood. It reports observations
+with innocent explanations attached. A number would get quoted in a
+disciplinary meeting as though it meant something.
+
+
+Tracked or not tracked, the one thing to get right
+
+Every writing assignment is one or the other, and the difference is ordinary
+Canvas state, not a CanvasExpert flag:
+
+  tracked      Submission type is File Upload and nothing else, and the only
+               allowed file extension is docx. Exactly that shape.
+  not tracked  Anything else: text entry, a second submission type alongside
+               upload, or any extra allowed extension such as pdf.
+
+PowerGrader applies Writing Timeline automatically to every tracked
+assignment, including ones the teacher built by hand in Canvas without
+CanvasExpert. There is no separate switch to turn on. Add pdf to the allowed
+extensions and the same assignment stops being tracked.
+
+Ask the teacher which one they want. Do not infer it from the task. An
+extended response they want to see the process on is tracked; a daily
+quickwrite usually is not. Both are legitimate, and guessing wrong either
+strips the evidence they wanted or applies tracking to work where it makes no
+sense.
+
+
+Authoring a tracked assignment
+
+In the AssignmentForge envelope the submission shape is the intent:
+
+  "submission": { "types": ["online_upload"], "allowed_extensions": ["docx"] }
+
+Nothing else expresses it. There is no "tracked" field. For a not-tracked
+assignment use the normal Canvas choices, for example
+{ "types": ["online_text_entry"] } for a quickwrite.
+
+A tracked assignment should also tell students plainly, in the description,
+that they write in the Word document provided, submit that .docx, and that the
+document records when text is added and revised. Announced, the timeline does
+most of the deterrent work it exists for. Unannounced it reads as a trap, and
+the consequence lands on a twelve-year-old.
+
+Due dates are not in the envelope. The teacher sets them at push time.
+
+
+The handout, and why the lock matters
+
+The timeline only has something to read if the student wrote in a document
+where Track Changes was already on and locked. Preparing and handing out that
+document is the teacher's own step today. CanvasExpert does not yet generate or
+distribute it, so do not tell a teacher that it will. What to walk them
+through:
+
+  1. Put the prompt and the header into the document FIRST.
+  2. Then turn Track Changes on.
+  3. Then Lock Tracking with a password. Desktop Word only; Word for the web
+     respects an existing lock but cannot set one.
+  4. Save, and give each student their own copy to write in.
+
+Reverse steps 1 and 2 and the teacher's own prompt text becomes a tracked
+insertion in all thirty copies, which is noise in every timeline.
+
+The lock is not optional. Without it a student looking at a page of colored
+underlines clicks Accept All to make their paper look like a paper, and since
+every word they typed is a tracked insertion, Accept All erases the whole
+timeline. Locking also blocks accept and reject, which closes that path.
+Students should be taught the markup display toggle on day one: hiding the
+markup changes the view, not the record. Ninety seconds of instruction.
+
+
+What it reports
+
+  * revision trail present or absent
+  * insertion blocks with size and timestamp; the three largest are surfaced
+  * editing time and revision count from the document properties
+  * whether the tracking protection element is present, which is what says
+    this file descended from the locked handout
+  * author matching, as a category rather than a name
+
+Every timestamp is US Central, labeled CST or CDT.
+
+The grading queue shows a "Tracked DOCX" Writing Timeline badge on a tracked
+assignment. On a not-tracked assignment a submission says so explicitly rather
+than showing an empty timeline, so "not examined" is never mistaken for "no
+revision trail".
+
+
+Honest limits, to say rather than soften
+
+There is no paste detection. Word records no attribute anywhere that
+distinguishes pasted text from typed text. What exists is inference: Word
+coalesces contiguous same-author insertions and stamps them to the minute, so
+six hundred words arriving as one insertion at one timestamp is a bulk insert,
+while typing usually produces many insertions across many timestamps. Say
+"inserted as a single block at 10:47". Never say "pasted".
+
+No revision trail does not imply tampering. The most likely cause by far is a
+student who opened blank Word and never touched the handout. No-trail
+submissions are accepted and flagged, never rejected, and the flag reads like a
+question: no revision history, did you write this in the file in your folder?
+
+A clean trail proves nothing either. A student who retypes AI output instead of
+pasting produces a flawless organic-looking trail. This is evidence about
+process, not about who thought of it.
+
+Handwriting is a legitimate no-trail case. A student flagged for paper
+submission in Students is skipped by the timeline rather than flagged by it.
+
+Filename oddities are not evidence. OneDrive and mobile apps generate renames
+and conflict copies on their own.
+
+
+Privacy
+
+Raw Office author strings and document properties stay on the teacher's
+computer. What can reach an AI model is a rebuilt projection: counts, times,
+booleans, editing-time and revision integers, at most three largest
+insertions, and an author match reduced to one of three categories,
+submission_author, other_roster_author, or unrecognized_author_present. Never a
+raw author string, never another student's name or pseudonym.
+
+Writing Timeline is available in all three PowerGrader modes (Score myself,
+Score with AI chat, Auto-score with AI). An AI mode may return one optional
+teacher-only field of writing-process observations. It is shown to the teacher
+only: never copied into student feedback, never posted to Canvas, never fed
+into a score, an automatic post, or an automatic consequence. Observations
+only, so no integrity conclusion, no likelihood, no recommended penalty. That
+limit is enforced in code, not merely requested in a prompt.
+
+
+Grading and planning
+
+Canvas is authoritative for the grade and for late status. Grade the Canvas
+attachment, not the file in the student's folder, because the folder copy keeps
+moving after submission. The forgotten-submission case, finished on time but
+never clicked, is settled by teacher judgment: the folder copy still carries
+its revision trail.
+
+Tracking changes the file format, not the scoring path. A tracked assignment is
+an ordinary DOCX upload as far as scoring is concerned. Its text and inline
+images are extracted the same way, it is eligible for scheduled auto-score, and
+the timeline never gates or alters a score.
+
+Planning a multi-draft sequence. There is no timeline object spanning
+assignments and no stages field. A prewrite, draft, peer review, final
+sequence is authored as separate Canvas assignments, one envelope each, with
+the teacher setting each due date at push time. Each one is independently
+tracked or not tracked.
+
+What you cannot see through the MCP tools. get_course_assignments reports
+neither submission types nor allowed extensions, so a read cannot tell you
+whether an existing assignment is tracked. Ask the teacher, or have them check
+for the badge in PowerGrader. Do not infer it from the title.
+
+
+A first tracked assignment
+
+Expect a wave of no-trail submissions the first time a class does this, from
+students who never opened the handout. If the teacher is starting out, suggest
+a throwaway first assignment whose only job is confirming every student can
+find their document, write in it, and submit it. That moves those flags out of
+the graded set.

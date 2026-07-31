@@ -79,6 +79,49 @@ def test_private_scopes_have_exact_copied_local_envelopes(tmp_path):
     assert stored["assignments"]["assignment-1"]["name"] == "Practice"
 
 
+def test_private_assignments_freshness_tracks_sync_not_the_file_envelope(tmp_path):
+    """private_assignments must report freshness from the full/delta
+    sync-pass envelope (store.read_sync), not from the assignments file's
+    own envelope -- so a no-op sync tick that leaves the (unchanged)
+    assignments file unwritten still reports current, modeled on the
+    identical existing behavior for private_submissions."""
+    root = str(tmp_path)
+    old_file_stamp = "2026-07-01T00:00:00Z"
+    store.write_assignments(COURSE, [{
+        "id": "assignment-1", "name": "Practice", "due_at": "", "points_possible": 10,
+        "published": True, "submission_types": [],
+    }], root=root, attempted_at=old_file_stamp)  # the file's own envelope is old/unwritten-since
+
+    fresh_sync_stamp = "2026-07-18T11:00:00Z"
+    store.record_pass(COURSE, "delta", ok=True, attempted_at=fresh_sync_stamp, root=root)
+
+    result = read_service.private_assignments(
+        COURSE, root=root, max_age_hours=6, now="2026-07-18T12:00:00Z")
+
+    assert result["state"] == "current"
+    assert result["last_success_at"] == fresh_sync_stamp
+    assert result["records"]
+
+
+def test_private_assignments_freshness_ages_out_when_sync_is_old_even_if_file_looks_fresh(tmp_path):
+    root = str(tmp_path)
+    fresh_file_stamp = "2026-07-18T11:55:00Z"
+    store.write_assignments(COURSE, [{
+        "id": "assignment-1", "name": "Practice", "due_at": "", "points_possible": 10,
+        "published": True, "submission_types": [],
+    }], root=root, attempted_at=fresh_file_stamp)  # the file's own envelope looks fresh
+
+    old_sync_stamp = "2026-07-18T04:00:00Z"  # 8h before "now" below, past the 6h window
+    store.record_pass(COURSE, "full", ok=True, attempted_at=old_sync_stamp, root=root)
+
+    result = read_service.private_assignments(
+        COURSE, root=root, max_age_hours=6, now="2026-07-18T12:00:00Z")
+
+    assert result["state"] == "stale"
+    assert result["last_success_at"] == old_sync_stamp
+    assert result["records"]  # staleness is metadata only; records are still served
+
+
 def test_age_limit_labels_last_good_private_records_stale(tmp_path):
     _populate(str(tmp_path))
 

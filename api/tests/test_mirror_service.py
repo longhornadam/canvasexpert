@@ -64,7 +64,7 @@ def test_due_passes_delta_when_fresh():
     state = store.default_sync("111")
     state["passes"]["full"]["last_success_at"] = "2026-07-16T11:00:00Z"
     state["passes"]["roster"]["last_success_at"] = "2026-07-16T11:00:00Z"
-    assert mirror_service.due_passes(state, NOW) == ["delta"]
+    assert mirror_service.due_passes(state, NOW, serve_max_age_hours=6.0) == ["delta"]
 
 
 def test_due_passes_nightly_full_and_daily_roster():
@@ -73,7 +73,30 @@ def test_due_passes_nightly_full_and_daily_roster():
     assert mirror_service.due_passes(state, NOW) == ["full"]
     state["passes"]["full"]["last_success_at"] = "2026-07-16T11:00:00Z"
     state["passes"]["roster"]["last_success_at"] = "2026-07-15T11:00:00Z"  # >24h
-    assert mirror_service.due_passes(state, NOW) == ["delta", "roster"]
+    assert mirror_service.due_passes(state, NOW, serve_max_age_hours=6.0) == ["delta", "roster"]
+
+
+def test_due_passes_roster_refreshes_before_serve_window_expires():
+    """The roster must refresh once it ages past the serve window (default 6h),
+    not only at the old 24h cadence — otherwise it goes unservable for most of
+    the day while deltas keep the gradebook fresh."""
+    state = store.default_sync("111")
+    state["passes"]["full"]["last_success_at"] = "2026-07-16T11:00:00Z"  # fresh
+    # Roster 7h old: within the 24h floor but past the 6h serve window.
+    state["passes"]["roster"]["last_success_at"] = "2026-07-16T05:00:00Z"
+    assert mirror_service.due_passes(state, NOW, serve_max_age_hours=6.0) == ["delta", "roster"]
+    # 1h old: still comfortably servable, no roster pass needed.
+    state["passes"]["roster"]["last_success_at"] = "2026-07-16T11:00:00Z"
+    assert mirror_service.due_passes(state, NOW, serve_max_age_hours=6.0) == ["delta"]
+
+
+def test_due_passes_roster_cadence_capped_at_daily_floor():
+    """A serve window larger than a day must not stop the roster refreshing at
+    least daily (the ROSTER_MAX_AGE_HOURS floor via min())."""
+    state = store.default_sync("111")
+    state["passes"]["full"]["last_success_at"] = "2026-07-16T11:00:00Z"  # fresh
+    state["passes"]["roster"]["last_success_at"] = "2026-07-15T11:00:00Z"  # >24h
+    assert mirror_service.due_passes(state, NOW, serve_max_age_hours=72.0) == ["delta", "roster"]
 
 
 # --- heartbeat pass -----------------------------------------------------------

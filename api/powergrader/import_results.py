@@ -7,6 +7,7 @@ from functools import wraps
 
 from api import feedback_pipeline as fp
 from api.powergrader import session_store
+from api.webui import workspace
 
 
 def _session_locked(func):
@@ -83,7 +84,7 @@ def import_results_into_session(
     if batch:
         batch_path = batch.get("safe_bundle")
         if batch_path:
-            if not os.path.isfile(batch_path):
+            if not os.path.isfile(workspace.extended_path(batch_path)):
                 return {"ok": False, "error": "Safe AI Packet student response bundle is missing."}, 200
             safe_bundle = batch_path
         else:
@@ -94,12 +95,12 @@ def import_results_into_session(
         artifacts = session.get("privacy_artifacts") or {}
         safe_bundle = artifacts.get("safe_bundle") or ""
 
-    if not safe_bundle or not os.path.isfile(safe_bundle):
+    if not safe_bundle or not os.path.isfile(workspace.extended_path(safe_bundle)):
         return {"ok": False, "error": "Safe AI Packet student response bundle is missing."}, 200
 
     # 4. Load the bundle
     try:
-        with open(safe_bundle, encoding="utf-8") as f:
+        with open(workspace.extended_path(safe_bundle), encoding="utf-8") as f:
             bundle = json.load(f)
     except Exception as e:
         return {"ok": False, "error": f"Could not load Safe AI Packet bundle: {e}"}, 200
@@ -127,6 +128,7 @@ def import_results_into_session(
             continue
         st["ai_score"] = row.get("score")
         st["ai_feedback"] = row.get("feedback")
+        st["writing_process_observations"] = row.get("writing_process_observations", "")
         st["ai_item_results"] = item_by_uid.get(uid, [])
         updated_user_ids.add(uid)
     updated = len(updated_user_ids)

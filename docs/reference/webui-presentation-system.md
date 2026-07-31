@@ -18,14 +18,35 @@ page-owned stylesheet and is added through `head_extra`.
   readiness strip and `theme-toggle` ID.
 - `ui/_macros.html`: `page_header`, `panel`, `notice`, `empty_state`,
   `action_bar`, and `rail`. Native form controls remain native HTML.
+  `page_header` emits a `div`, not a `<header>`: the app header is the page's only
+  `<header>` and the contract test enforces that. `rail` wraps its caller content in
+  `ce-rail__inner`, which is what makes rail contents follow the stage as it scrolls.
 
 Workspace variants are `full`, `three`, and `left-main`. The layout owns outer
 columns and responsive reflow; a page owns only real rail contents. At 1180px the
 right rail flows below the stage; at 760px all workspace variants become one column.
 
+## Page conventions
+
+- **One title block per page.** Every page opens with a single `page_header` whose
+  title matches its nav label, so a teacher never clicks one word and lands on
+  another. Product names live inside the page, not instead of the nav word.
+- **One heading scale**, set once in `components.css` at zero specificity via
+  `:where()`: `--ce-text-title` (h1), `--ce-text-heading` (h2), `--ce-text-sub` (h3).
+  11px uppercase eyebrows are labels, not a heading rank. A page overrides a size
+  only with a reason.
+- **Stage blocks are `ce-panel`.** A page may retune padding; it does not re-declare
+  border, background, radius, or shadow.
+- **Rail contents stick** 16px below the top, capped at viewport height with internal
+  scroll, and go static under 760px where rails stack above the stage. The `<aside>`
+  stays full height so its divider still runs the page length.
+- **Checkbox and radio labels sit beside their words.** The global `label { display: grid }`
+  is corrected by a zero-specificity `:where(:has(...))` rule, so a page's own checkbox
+  styling still wins and no page needs its own antidote.
+
 ## CSS ownership
 
-- `tokens.css`: palette, type, radius, shadow, spacing, and widths.
+- `tokens.css`: palette, type, heading scale, radius, shadow, spacing, and widths.
 - `foundation.css`: reset and native element defaults.
 - `components.css`: shared component vocabulary (`ce-shell`, `ce-panel`, `ce-rail`,
   `ce-page-header`, `ce-btn`, `ce-field`, `ce-tabs`, `ce-notice`, `ce-actions`,
@@ -41,10 +62,13 @@ ID, existing feature class, or `data-ce-hook`.
 
 The enforcement registry is `api/tests/test_presentation_contracts.py`. It is the
 source of truth for route, template, layout, variant, rail count, and migration state.
-Home and both PowerGrader routes use `workspace/full`; Create uses
-`workspace/three`; Gradebook, Roster, and Settings use `workspace/left-main`;
-Routines, Student Reports, Course Info, and About use `document/wide`; AI Expert
-uses `document/standard`; and Welcome uses `wizard`. The document layout required
+Home and the PowerGrader queue use `workspace/full`; Create uses `workspace/three`;
+PowerGrader setup, Gradebook, Students, and Settings use `workspace/left-main`;
+Routines, Course Info, and About use `document/wide`; AI Expert uses
+`document/standard`; and Welcome uses `wizard`. Student reports is not a route
+presentation: it is a view inside the Students page (`_student_reports_panels.html`
+included by `roster.html`, selected by `?focus=reports`), and `/students/reports`
+redirects there. The document layout required
 no interface adjustment at first use. The wizard shell provides the same responsive
 outer-gutter ownership as the other layouts while intentionally omitting the app
 header.

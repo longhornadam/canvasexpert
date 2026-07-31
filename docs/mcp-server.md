@@ -1,13 +1,13 @@
-# CanvasExpert read-only MCP server
+# CanvasExpert MCP server
 
 A local, stdio-only [Model Context Protocol](https://modelcontextprotocol.io) server that
-lets any MCP-capable assistant (Claude Code, Claude Desktop, Cowork, etc.) help plan
-lessons and manage rosters conversationally, while CanvasExpert keeps sole custody of the
-Canvas PAT and every write path.
+lets any MCP-capable assistant help plan lessons and manage rosters conversationally,
+while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
-- **Read-only.** No tool writes to Canvas. No tool writes to disk beyond the existing
-  identity vault it already shares with the rest of CanvasExpert.
-- **Pseudonymized.** Every student-data tool routes its result through the identity vault
+- **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
+  local copy on their computer. It never holds the Canvas token, and writes nothing
+  beyond the identity vault it already shares with the rest of CanvasExpert.
+- **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   fake name (e.g. "Sparky McGee") — never a real name, Canvas user ID, or SIS ID.
 - **Fail-closed.** Every student-data result also passes the existing outbound safety scan
@@ -16,25 +16,85 @@ Canvas PAT and every write path.
 - **Session-local.** Nothing here logs tool arguments or results. Don't write results to a
   file, and don't attempt to re-identify a student from a pseudonym.
 - **stdio transport only.** No network port is ever bound.
+- **Mirror-bounded, never a live relay.** `get_roster`, `get_submissions`, and
+  `get_gradebook_snapshot` serve exclusively from the local CanvasMirror
+  (`docs/mirror.md`). `get_seating_context` combines current mirrored identity
+  and section membership with private local Roster context. All four refuse
+  with a clear error when the required mirror data is stale or missing, instead
+  of fetching live from Canvas. The assistant's only way past a refusal is
+  `refresh_mirror`, which triggers Canvas Expert's own sync and reports
+  freshness — never Canvas data. This keeps the AI's whole path to Canvas
+  indirect: it can ask Canvas Expert to sync, then read what Canvas Expert
+  wrote to disk, but it can never receive a live Canvas response directly.
 
 ## Tools
 
-Tool schema version 2.
+Tool schema version 14.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
+| `list_sections(course_id)` | Section names from the local mirror roster; how to find the exact `section_name` `get_seating_context` requires | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
-| `get_roster(course_id)` | Table of `(pseudonym, section_names)` | Yes — pseudonymized |
-| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed | Yes — pseudonymized |
-| `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats | Yes — pseudonymized |
+| `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
+| `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/`, or SmartDeck (`deck`) with no staging/review appendix (unlike other Forge kinds) | No |
+| `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
+| `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
+| `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
+| `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
+| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
+| `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
+| `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
+| `get_bell_schedule(schedule_id="")` | Bell schedule CSV(s) from the workspace | No |
+| `get_day_schedule(date)` | Resolved schedule blocks for one date | No |
+| `get_teacher_schedule()` | The teacher's own block-name mapping | No |
+| `save_deck(date, title, slides, widgets=None)` | Validates and writes a SmartDeck deck live (no review queue) | No |
+| `list_active_decks()` | Lists active decks | No |
+| `archive_deck(deck_id)` | Moves a deck to archived | No |
 
-`get_course_assignments` only reads the local course catalog written by the CanvasExpert
-web UI — it never falls back to a live Canvas call. If the catalog hasn't been refreshed
-yet, refresh it from the web UI first, then retry.
+`get_course_assignments` and `get_modules` only read the local course catalog written by
+the CanvasExpert web UI — neither ever falls back to a live Canvas call. If the catalog
+hasn't been refreshed yet, refresh it from the web UI first, then retry. Unlike the mirror
+tools below, `get_modules` never refuses on staleness: it returns whatever module records
+the catalog holds, labeled with `source`, `synced_at`, and `state`, since module structure
+is far lower-risk than student data.
+
+`get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
+needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`, `assignment`, `page`, `rubric`) read the same
+`api/default_docs/AI Authoring/` file the web UI's `/api/download-contract` route serves,
+then receive the Forge-only staging appendix. SmartDeck (`deck`) reads its canonical contract
+from the same source but has no staging/review appendix — unlike other Forge kinds, SmartDeck
+writes live to the workspace immediately with no teacher review queue.
+
+`get_product_guide(topic="")` closes the gap between what the tool list implies and what
+the app actually does — an assistant that sees only the read tools cannot tell that
+Writing Timeline exists, or that every writing assignment is *tracked* (File Upload alone,
+`docx` alone, so PowerGrader reads the submitted document's revision history) or *not
+tracked*. It reads the same canonical files `/api/download-contract` hands out for pasting
+into a chat-only assistant (`CanvasAgent`, `WritingTimeline`), so a connected assistant and
+a pasted one work from one text rather than two that drift. Same gate posture as
+`get_authoring_contract`: no `course_id`, no vault, no safety scan. Every response also
+lists the available topics. The always-on server instructions point here rather than
+restating any of it.
+
+`list_staged_content(kind="")` also takes no `course_id` and carries no student data, so
+it likewise needs no course gate, no identity vault, and no safety scan. It reuses
+`webui.deps.list_inbox_files` (the same marker-gated To Review listing the push tabs use) and
+returns only each draft's label, never its absolute path. Pass `kind` to narrow to one of
+`quiz`, `assignment`, `page`, or `rubric`; omit it to see everything staged across all four.
+
+`get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
+CanvasMirror. `get_seating_context` uses the current mirror for identity and section
+membership, then joins the private local Roster context for that course. None fall back to
+a live Canvas call. If the required mirror data is stale or missing, they return
+`{"ok": false, "error": "..."}` naming the problem; call `refresh_mirror(course_id)` and
+retry the same read once it reports `"synced"`.
 
 Every `course_id` tool is scoped to Current courses (`config.active_courses()`) — the same
-scope the web UI uses.
+scope the web UI uses. `get_seating_context` requires exactly one matching mirror section
+name and withholds all student data when the name is absent or ambiguous. Pseudonymized
+artifacts are scrubbed, not anonymous or guaranteed FERPA-safe; teachers review them before
+any external upload.
 
 ### Token-lean results
 
@@ -53,9 +113,6 @@ turn of the conversation, so the wire format is deliberately compact:
 - The outbound safety scan always runs on the full row payload **before** tabulation and
   truncation happens **before** the scan — the gate inspects exactly the bytes that leave
   the machine.
-
-The server also caches roster/section fetches in memory for 5 minutes (never on disk), so
-back-to-back tool calls in one session don't each re-hit Canvas.
 
 ## Running it
 
@@ -115,4 +172,6 @@ After registering, try `list_courses` first (no Canvas call, no student data —
 sanity check that the process starts and the interpreter resolves correctly), then
 `get_gradebook_snapshot` on a Current course. Every student name in the output should be a
 pseudonym you don't recognize from the real roster — that's the privacy boundary working as
-intended, not a bug.
+intended, not a bug. If the mirror hasn't synced this course yet, `get_gradebook_snapshot`
+(or `get_roster`/`get_submissions`) refuses instead — call `refresh_mirror` for that course
+and retry.

@@ -1,7 +1,7 @@
 # Default Rubric Library
 
 Bundled `<RUBRICFORGE_JSON>` rubrics the Canvas Expert offers when attaching a rubric
-to an assignment. Contract: [`LLM_Modules/RubricForge_Base.md`](../../LLM_Modules/RubricForge_Base.md) (v1.0-json).
+to an assignment. Contract: [`Author a Rubric (RubricForge).txt`](../default_docs/AI%20Authoring/Author%20a%20Rubric%20%28RubricForge%29.txt) (v1.0-json).
 
 One file = one Canvas rubric. Each file also defines its student-facing explainer
 page (`student_page`), which the pusher renders and links from assignments via

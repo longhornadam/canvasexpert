@@ -1,5 +1,5 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import rail %}
+{% from "ui/_macros.html" import rail, page_header %}
 {% block title %}Gradebook Tools — Canvas Expert{% endblock %}
 {% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}ce-gradebook-page{% endblock %}
@@ -19,12 +19,14 @@
       <button type="button" id="gb-tab-button-extensions" class="gb-tab" data-tab="extensions" role="tab" aria-selected="false" aria-controls="gb-tab-extensions" tabindex="-1">Extensions</button>
       <button type="button" id="gb-tab-button-curves" class="gb-tab" data-tab="curves" role="tab" aria-selected="false" aria-controls="gb-tab-curves" tabindex="-1">Curves</button>
       <button type="button" id="gb-tab-button-snapshot" class="gb-tab" data-tab="snapshot" role="tab" aria-selected="false" aria-controls="gb-tab-snapshot" tabindex="-1">Snapshot</button>
-      <button type="button" id="gb-tab-button-routines" class="gb-tab" data-tab="routines" role="tab" aria-selected="false" aria-controls="gb-tab-routines" tabindex="-1">Routines</button>
+      <button type="button" id="gb-tab-button-routines" class="gb-tab" data-tab="routines" role="tab" aria-selected="false" aria-controls="gb-tab-routines" tabindex="-1">Automations</button>
     </div>
   </div>
 {% endcall %}
 {% endif %}
 {% endblock %}
+
+{% block workspace_header %}{{ page_header('Gradebook', 'Late policy, extra time, extensions, and curves for one course.') }}{% endblock %}
 
 {% block primary %}
 
@@ -34,7 +36,7 @@
 </div>
 {% else %}
 
-<div class="ce-gradebook-content ce-drafting-grid">
+<div class="ce-gradebook-content">
   <section class="ce-panel ce-gradebook-panel gb-course-work-card">
     <div class="ce-gradebook-course-head">
       <div>
@@ -115,7 +117,7 @@
       <h2>Late work sweep</h2>
       <p class="ce-hint ce-gradebook-snapshot-lede">
         Finds every late submission in the selected date range, counts
-        <strong>school days</strong> (weekends, district holidays, Rosters extra-time settings), then sets
+        <strong>school days</strong> (weekends, district holidays, extra time from Students), then sets
         Canvas's lateness override to the corrected count. Canvas applies its own late policy —
         no grade math here. Re-running is safe.
       </p>
@@ -142,10 +144,10 @@
       </div>
       <div class="opt-checks ce-gradebook-options ce-gradebook-options--spaced">
         <label class="opt-check"><input type="checkbox" id="sw-weekends" checked> Skip weekends</label>
-        <label class="opt-check"><input type="checkbox" id="sw-extra" checked> Honor extra-time settings from Rosters</label>
+        <label class="opt-check"><input type="checkbox" id="sw-extra" checked> Honor extra time from Students</label>
       </div>
       <p class="gb-roster-note">
-        Uses extra-time settings from <a href="/roster?focus=extra-time">Rosters</a>.
+        Uses extra time from <a href="/roster?focus=extra-time">Students</a>.
       </p>
       <div class="ce-actions ce-gradebook-action-row">
         <button id="btn-sweep-preview">Preview sweep (no changes)</button>
@@ -178,10 +180,10 @@
       <h2>Extra-time students</h2>
       <p class="ce-hint ce-gradebook-snapshot-lede">
         This compatibility view reads the same standing extra-time settings used by
-        sweep and extensions. Rosters is the main place to manage them.
+        sweep and extensions. Students is the main place to manage them.
       </p>
       <p class="gb-roster-note">
-        Manage extra-time settings in <a href="/roster?focus=extra-time">Rosters</a>.
+        Manage extra time in <a href="/roster?focus=extra-time">Students</a>.
       </p>
       <p id="xt-status" class="status hint"></p>
       <div id="xt-list" class="xt-list"></div>
@@ -199,11 +201,11 @@
       <p class="ce-hint ce-gradebook-snapshot-lede">
         Gives selected students extra school days on one assignment via a Canvas
         <strong>assignment override</strong> — their due date actually moves, so nothing
-        shows as late. District holidays and Rosters extra-time settings are automatically
+        shows as late. District holidays and extra time from Students are automatically
         considered.
       </p>
       <p class="gb-roster-note">
-        Uses extra-time settings from <a href="/roster?focus=extra-time">Rosters</a>.
+        Uses extra time from <a href="/roster?focus=extra-time">Students</a>.
       </p>
       <p id="ext-status" class="status hint"></p>
       <div class="ce-gradebook-grid ce-gradebook-grid--extension">
@@ -387,6 +389,8 @@
 
   <!-- ── Routines ─────────────────────────────────────────────────────── -->
   <div id="gb-tab-routines" class="gb-panel" role="tabpanel" aria-labelledby="gb-tab-button-routines" hidden>
+    <h2>Automations</h2>
+    <p class="ce-hint">Checks and chores that run on this computer while Canvas Expert is open. Nothing runs in the cloud.</p>
     {% include "_routines_panel.html" %}
   </div>
 

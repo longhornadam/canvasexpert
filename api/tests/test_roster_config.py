@@ -78,6 +78,59 @@ def test_update_removes_key_when_none():
     assert result["101"]["tier"] == "Support"
 
 
+def test_seating_context_removal_keeps_other_local_settings():
+    context = {
+        "front_row": "required",
+        "near_teacher": "preferred",
+        "private_note": "Teacher-only context.",
+        "ai_context_note": "Designated AI context.",
+    }
+    config.set_roster_student_settings("100", {
+        "101": {"tier": "Support", "seating_context": context},
+    })
+
+    config.update_roster_student_settings("100", "101", {"seating_context": None})
+
+    result = config.get_roster_student_settings("100")
+    assert "seating_context" not in result["101"]
+    assert result["101"]["tier"] == "Support"
+
+
+def test_score_matrix_round_trip_is_course_scoped():
+    first = {
+        "columns": [{"id": "score-writing", "label": "Writing"}],
+        "values_by_section": {"section-a": {"student-a": {"score-writing": 12.5}}},
+    }
+    second = {
+        "columns": [{"id": "score-reading", "label": "Reading"}],
+        "values_by_section": {},
+    }
+
+    assert config.get_roster_score_matrix("missing") == config.ROSTER_SCORE_MATRIX_DEFAULT
+    config.set_roster_score_matrix("course-a", first)
+    config.set_roster_score_matrix("course-b", second)
+
+    assert config.get_roster_score_matrix("course-a") == first
+    assert config.get_roster_score_matrix("course-b") == second
+    assert "roster_score_matrices" in config.SYNCED_KEYS
+
+
+def test_relationships_round_trip_is_course_scoped():
+    first = {"by_section": {"section-a": [{
+        "student_a": "student-a", "student_b": "student-b",
+        "type": "keep_apart", "reason": "private",
+    }]}}
+    second = {"by_section": {}}
+
+    assert config.get_roster_relationships("missing") == config.ROSTER_RELATIONSHIPS_DEFAULT
+    config.set_roster_relationships("course-a", first)
+    config.set_roster_relationships("course-b", second)
+
+    assert config.get_roster_relationships("course-a") == first
+    assert config.get_roster_relationships("course-b") == second
+    assert "roster_relationships" in config.SYNCED_KEYS
+
+
 def test_courses_are_independent():
     config.set_roster_student_settings("100", {"101": {"tier": "Support"}})
     config.set_roster_student_settings("200", {"201": {"tier": "Core"}})

@@ -16,17 +16,19 @@ from pathlib import Path
 from api.storage_support import atomic_write_json, interprocess_lock
 
 from api.webui import workspace
-from api.powergrader import autoscore_claims
+from api.powergrader import autoscore_claims, student_attachments
 
 QUEUE_FILENAME = "autoscore_queue.json"
 QUEUE_VERSION = 1
 TERMINAL_STATUSES = autoscore_claims.TERMINAL_STATUSES
 ELIGIBLE_SUBMISSION_TYPES = {"online_text_entry"}
-READABLE_UPLOAD_EXTS = {
-    "txt", "md", "csv", "tsv", "json", "py", "js", "ts", "html", "htm", "css",
-    "xml", "yml", "yaml", "c", "cc", "cpp", "h", "hpp", "java", "rb", "go", "rs",
-    "sh", "bat", "ps1", "sql", "r", "ipynb",
-}
+# Derived from the attachment router, never hand-maintained.  This gate exists to
+# honor one rule: do not silently charge the teacher for an assignment whose work
+# PowerGrader cannot read.  A second, independent list broke that rule in both
+# directions for a month -- it promised auto-score for 20 code extensions that
+# `route_bytes` routes to local_only (so every student would be held and nothing
+# scored), while excluding `.docx`, which it extracts in full.
+READABLE_UPLOAD_EXTS = {ext.lstrip(".") for ext in student_attachments.AI_TEXT_EXTS}
 UNSUPPORTED_TYPES = {
     "none",
     "on_paper",
@@ -55,10 +57,6 @@ def queue_path() -> str | None:
     return os.path.join(d, QUEUE_FILENAME)
 
 
-def _legacy_queue_paths() -> list[str]:
-    return workspace.compatibility_paths(QUEUE_FILENAME, kind="job")
-
-
 def _default_queue() -> dict:
     return {"version": QUEUE_VERSION, "jobs": []}
 
@@ -73,15 +71,13 @@ def load_queue() -> dict:
 
 def _load_queue_unlocked(path: str | None = None) -> dict:
     path = path or queue_path()
-    candidates = ([path] if path and os.path.isfile(path) else []) + _legacy_queue_paths()
     data = None
-    for candidate in candidates:
+    if path and os.path.isfile(path):
         try:
-            with open(candidate, encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
-            break
         except Exception:
-            continue
+            data = None
     if data is None:
         return _default_queue()
     if not isinstance(data, dict):
@@ -223,7 +219,7 @@ def classify_assignment_for_autoscore(assignment: dict) -> tuple[str, str]:
 
     if types == {"online_upload"}:
         if _is_readable_upload(assignment):
-            return "eligible", "file upload includes readable or code-friendly extensions"
+            return "eligible", "file upload includes extensions PowerGrader can read as text"
         return "needs_attention", "file upload may need teacher review before auto-score"
 
     if types == {"online_url"}:

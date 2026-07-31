@@ -13,12 +13,21 @@
     return false;
   }
 
+  // Switching courses re-triggers this loader (see gradebook.js's
+  // _autoloadTab) without cancelling a slower earlier request, so a stale
+  // response could land last and fill the assignment/student pickers with
+  // the previous course's data while the new course sits selected. Stamp
+  // each request and let only the newest one write, the same way inbox.js
+  // does.
+  var loadGeneration = 0;
+
   // ── Extensions (auto-loaded on tab activate) ───────────────────────────
 
   window.CE_GRADEBOOK.loadExtensions = async function _loadExtensions() {
     if (!requireReady()) return;
     var id = gb.gbCourseId();
     if (!id) return;
+    var generation = ++loadGeneration;
     gb._markLoaded("extensions");
     var st = document.getElementById("ext-status");
     if (st) { st.className = "status hint"; st.textContent = "Loading assignments and students\u2026"; }
@@ -28,6 +37,7 @@
         fetch("/api/students/list?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); }),
         fetch("/api/extra-time?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); }),
       ]);
+      if (generation !== loadGeneration) return;
       var asg = responses[0], stu = responses[1], xt = responses[2];
       if (!asg.ok || !stu.ok) {
         if (st) { st.className = "status error"; st.textContent = "Error: " + (asg.error || stu.error); }
@@ -65,6 +75,7 @@
           : "Pick an assignment and the students who get extra time.";
       }
     } catch (e) {
+      if (generation !== loadGeneration) return;
       if (st) { st.className = "status error"; st.textContent = String(e); }
     }
   };

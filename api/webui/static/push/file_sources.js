@@ -100,6 +100,12 @@
       });
     }
 
+    // Exposed so other push scripts (e.g. inbox.js, Slice D) can inject a
+    // chosen Inbox draft's path into this exact select-and-validate seam
+    // without duplicating setMode/setTempOption or touching the existing
+    // paste/upload logic.
+    wrapper.ceFileSource = { setMode: setMode, setTempOption: setTempOption };
+
     var timer;
     if (pasteEl) {
       pasteEl.addEventListener("input", function () {

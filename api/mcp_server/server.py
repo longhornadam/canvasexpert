@@ -1,6 +1,6 @@
-"""FastMCP wiring for the read-only CanvasExpert MCP server.
+"""FastMCP wiring for the CanvasExpert MCP server.
 
-Five thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Nineteen thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -20,17 +20,28 @@ from mcp.server.fastmcp import FastMCP
 from . import tools
 
 _FERPA_NOTICE = (
-    "CanvasExpert read-only Canvas tools. Every result about students is "
-    "pseudonymized through a local identity vault before it reaches you: "
-    "real names, Canvas user IDs, and SIS IDs never leave that machine. "
-    "Stable fake names (e.g. \"Sparky McGee\") stand in for real students so "
-    "you can refer to them consistently without ever seeing who they are. "
-    "Results are session-local — do not write them to a file, and do not "
-    "attempt to re-identify a student from a pseudonym, writing style, or "
-    "any other clue. This server is read-only: no tool writes to Canvas. "
-    "Results are compact JSON; list data arrives as {columns, rows} tables. "
-    "Prefer narrow calls: include_text=false or specific pseudonyms first, "
-    "full text only for the students you actually need."
+    "CanvasExpert reads this teacher's own Canvas courses, assignments, "
+    "rosters, grades, submissions, and seating context from a local copy on "
+    "their computer. Call list_courses first for a course_id. Student data is "
+    "pseudonymized through a local vault before you see it: stable fake names "
+    "(e.g. \"Sparky McGee\") stand in for real students, and real names and "
+    "Canvas/SIS IDs never leave the machine. Do not re-identify anyone or save "
+    "student data to a file. get_roster, get_seating_context, get_submissions, "
+    "and get_gradebook_snapshot serve only from the local mirror and refuse "
+    "when it is stale; call refresh_mirror for that course, then retry once. "
+    "Results are compact JSON, with list data as {columns, rows} tables. "
+    "Prefer narrow calls: include_text=false or specific pseudonyms first. "
+    "To help the teacher create other content, call get_authoring_contract for the kind "
+    "and follow the staging steps in its response. Before answering what "
+    "CanvasExpert itself can do, or planning writing work, call "
+    "get_product_guide: it carries the app's surfaces and the tracked / "
+    "not-tracked Writing Timeline choice every writing assignment makes. Check "
+    "it before telling a teacher a feature does not exist. get_writing_history "
+    "reads a separate, private per-student writing record that some teachers "
+    "keep for daily or weekly short-writing practice -- pseudonym-first, no "
+    "course_id, for coaching a writer's development over time rather than "
+    "grading one assignment; call get_product_guide(topic=\"writing_record\") "
+    "before assuming it does not exist."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -48,26 +59,49 @@ def _compact(payload: dict) -> str:
 
 @mcp.tool()
 def list_courses() -> str:
-    """List every saved course (Current + Previous) as
-    {course_id, course_name, active}. No student data."""
+    """This teacher's courses as {course_id, course_name, active, lifecycle};
+    active=true marks a current course, lifecycle tells Canvas concluded status.
+    Call first to get a course_id. No student data."""
     return _compact(tools.list_courses())
 
 
 @mcp.tool()
+def list_sections(course_id: str) -> str:
+    """A course's section names from the local mirror as a {columns, rows}
+    table of (section_id, section_name). Call before get_seating_context to
+    discover valid section_name values. No student data."""
+    return _compact(tools.list_sections(course_id))
+
+
+@mcp.tool()
 def get_course_assignments(course_id: str, full_descriptions: bool = False) -> str:
-    """List a course's assignments from CanvasExpert's local catalog as a
-    {columns, rows} table (id, title, due_at, points_possible, published,
-    description_text). Descriptions are trimmed to a preview unless
-    full_descriptions=true. Errors if the catalog needs a refresh from the
-    CanvasExpert web UI. No student data."""
+    """A course's assignments from the local catalog as a {columns, rows} table
+    (id, title, due_at, points_possible, published, description_text).
+    Descriptions are previews unless full_descriptions=true. No student data."""
     return _compact(tools.get_course_assignments(course_id, full_descriptions))
 
 
 @mcp.tool()
+def get_modules(course_id: str, include_items: bool = False) -> str:
+    """A course's modules from the local catalog as a {columns, rows} table
+    (id, name, position, published, item_count). include_items=true adds each
+    module's items (id, type, title, position). No student data."""
+    return _compact(tools.get_modules(course_id, include_items))
+
+
+@mcp.tool()
 def get_roster(course_id: str) -> str:
-    """Current course roster as a {columns, rows} table of
-    (pseudonym, section_names), sorted by pseudonym."""
+    """Course roster as a {columns, rows} table of (pseudonym, section_names),
+    sorted by pseudonym."""
     return _compact(tools.get_roster(course_id))
+
+
+@mcp.tool()
+def get_seating_context(course_id: str, section_name: str) -> str:
+    """One section's pseudonymized seating context: supports, score values,
+    AI-context notes, and pair preferences. Needs an exact section_name;
+    refuses when it is absent or ambiguous. No Canvas IDs or private reasons."""
+    return _compact(tools.get_seating_context(course_id, section_name))
 
 
 @mcp.tool()
@@ -75,11 +109,10 @@ def get_submissions(course_id: str, assignment_id: str,
                     include_text: bool = True, pseudonyms: str = "",
                     max_text_chars: int = 2000) -> str:
     """One assignment's submissions as a {columns, rows} table (pseudonym,
-    workflow_state, submitted_at, late, missing, excused, score, grade,
-    text). Student text is scrubbed of real names and trimmed to
-    max_text_chars (0 = full text). Set include_text=false for status and
-    scores only, or pseudonyms=\"Name A,Name B\" for specific students.
-    Attachments are never included."""
+    workflow_state, submitted_at, late, missing, excused, score, grade, text).
+    include_text=false for status and scores only; pseudonyms=\"Name A,Name B\"
+    narrows to specific students; text trims to max_text_chars (0 = full). No
+    attachments."""
     return _compact(tools.get_submissions(
         course_id, assignment_id,
         include_text=include_text, pseudonyms=pseudonyms,
@@ -88,9 +121,107 @@ def get_submissions(course_id: str, assignment_id: str,
 
 
 @mcp.tool()
+def get_writing_history(pseudonym: str, since: str = "", until: str = "",
+                        include_text: bool = False,
+                        max_text_chars: int = 2000) -> str:
+    """One student's Writing Record evidence across time, pseudonym-first:
+    dated submissions, assignment context, word counts, segment attribution,
+    and structural flags. Writing Record does not score, coach, or judge work.
+    No course_id -- this reads a private per-student store, not a course.
+    since/until are YYYY-MM-DD (both default to a two-year lookback).
+    include_text=false (default) omits every span quoted from student
+    writing; true includes it trimmed to max_text_chars (0 = full). Call
+    get_product_guide(topic="writing_record") first if unsure this exists."""
+    return _compact(tools.get_writing_history(
+        pseudonym, since=since, until=until,
+        include_text=include_text, max_text_chars=max_text_chars,
+    ))
+
+
+@mcp.tool()
 def get_gradebook_snapshot(course_id: str) -> str:
-    """Whole-course grading snapshot: class totals plus {columns, rows}
-    tables of per-assignment stats (title, due_at, points, submitted, graded,
-    missing, late, avg_pct) and per-student stats (pseudonym, missing, late,
-    ungraded, pct)."""
+    """Whole-course grading snapshot: class totals plus {columns, rows} tables
+    of per-assignment stats (title, due_at, points, submitted, graded, missing,
+    late, avg_pct) and per-student stats (pseudonym, missing, late, ungraded,
+    pct)."""
     return _compact(tools.get_gradebook_snapshot(course_id))
+
+
+@mcp.tool()
+def get_authoring_contract(kind: str) -> str:
+    """Canonical Forge authoring contract. No student data."""
+    return _compact(tools.get_authoring_contract(kind))
+
+
+@mcp.tool()
+def get_product_guide(topic: str = "") -> str:
+    """What CanvasExpert itself can do, so you plan and answer from the product
+    rather than guessing. Omit topic for the whole briefing (surfaces, the hard
+    lines, staging, privacy); topic="writing_timeline" for tracked vs
+    not-tracked writing assignments and what the timeline can and cannot show;
+    topic="writing_record" for get_writing_history, the per-student
+    longitudinal writing record. Every response lists the available topics.
+    No student data."""
+    return _compact(tools.get_product_guide(topic))
+
+
+@mcp.tool()
+def list_staged_content(kind: str = "") -> str:
+    """Drafts currently staged in the Inbox for the teacher to review, as a
+    {columns, rows} table (kind, label). Pass kind to filter; omit for all.
+    No student data."""
+    return _compact(tools.list_staged_content(kind))
+
+
+@mcp.tool()
+def refresh_mirror(course_id: str) -> str:
+    """Call only after a read refuses as stale. Triggers Canvas Expert's own
+    sync of this course, then reports status (synced, syncing, or failed),
+    never data. On "synced", re-call the read that refused."""
+    return _compact(tools.refresh_mirror(course_id))
+
+
+@mcp.tool()
+def get_bell_schedule(schedule_id: str = "") -> str:
+    """Bell schedule(s) from the workspace as {period_id, start, end} periods.
+    schedule_id="" returns all variants; else returns one variant or error.
+    No student data."""
+    return _compact(tools.get_bell_schedule(schedule_id))
+
+
+@mcp.tool()
+def get_day_schedule(date: str) -> str:
+    """Teacher blocks resolved for a specific date as {name, label, start, end,
+    raw_periods, schedule_id}, sorted by start time. date is YYYY-MM-DD.
+    No student data."""
+    return _compact(tools.get_day_schedule(date))
+
+
+@mcp.tool()
+def get_teacher_schedule() -> str:
+    """Teacher schedule from workspace as version and blocks list with their
+    periods and class labels. No student data."""
+    return _compact(tools.get_teacher_schedule())
+
+
+@mcp.tool()
+def save_deck(date: str, title: str, slides: list, widgets: list = None) -> str:
+    """Author and save a SmartDeck for classroom display on a given date.
+    Call get_teacher_schedule first to discover valid block names.
+    Writes the deck live immediately on validation success -- there is no
+    review queue. No student data."""
+    return _compact(tools.save_deck(date, title, slides, widgets))
+
+
+@mcp.tool()
+def list_active_decks() -> str:
+    """All active SmartDecks in the workspace as a list with {deck_id, date,
+    title, revision, path}. No student data."""
+    return _compact(tools.list_active_decks())
+
+
+@mcp.tool()
+def archive_deck(deck_id: str) -> str:
+    """Move a SmartDeck from active to archived status. Does not delete it.
+    No student data."""
+    return _compact(tools.archive_deck(deck_id))

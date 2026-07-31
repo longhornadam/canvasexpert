@@ -37,8 +37,8 @@ offline: no Canvas token, no live Canvas calls, and no student data.
 ## Do Not Cross These Boundaries
 
 - Do not move Canvas API behavior into `engine/`; use `api/` for live Canvas work.
-- Do not edit `LLM_Modules/*_Base.md` to solve an engine implementation bug unless
-  the user explicitly asks to revise the authoring contract.
+- Do not edit `api/default_docs/AI Authoring/Author a *.txt` to solve an engine
+  implementation bug unless the user explicitly asks to revise the authoring contract.
 - Do not add real course, roster, submission, grade, token, or district data to
   engine tests or fixtures.
 - Do not reintroduce Playwright-managed browser downloads for PDF rendering.

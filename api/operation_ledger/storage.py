@@ -3,14 +3,17 @@
 import copy
 import json
 import os
-import shutil
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 
 from . import paths
-from api.storage_support import atomic_write_bytes, atomic_write_json, interprocess_lock
+from api.storage_support import (
+    atomic_write_bytes,
+    atomic_write_json,
+    interprocess_lock,
+    quarantine_corrupt_file,
+)
 
 
 VERSION = 1
@@ -60,16 +63,7 @@ def _validate_document(document: dict) -> None:
 
 
 def _quarantine(path: Path) -> None:
-    if not path.exists():
-        return
-    target_dir = paths.quarantine_dir()
-    target_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    target = target_dir / f"{path.name}.{stamp}.corrupt"
-    try:
-        shutil.move(str(path), str(target))
-    except OSError:
-        pass
+    quarantine_corrupt_file(path, paths.quarantine_dir())
 
 
 def _read_unlocked() -> dict:

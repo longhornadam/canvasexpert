@@ -26,20 +26,31 @@ def feedback_artifact_dirs(
     assignment_name: str = "", assignment_id: str = "",
     mode: str = "assisted", run_timestamp: str | None = None,
 ) -> tuple[str | None, str | None]:
-    """Resolve new AI/private homes; no new FeedbackExpert tree is created."""
+    """Resolve the SAFE (``For AI/``) and PRIVATE (``Student Work/Grading Keys/``)
+    homes for one PowerGrader run.
+
+    The *reserve* value accounts for the deepest PowerGrader child layout
+    (packet folder, batch folder, batch file name) so the root SAFE and PRIVATE
+    directories stay short enough for all teacher-visible children.
+    """
     workspace.ensure_workspace()
     if course_id and assignment_id:
+        # Reserve ~60 chars for the deepest child: "Packet-<hash>/Batches/Batch-99/03-work.md"
+        # where <hash> is 8 chars, batch index is 2 digits.
+        pg_child_reserve = 60
         safe = workspace.ai_run_folder(
             course_name or course_id, course_id,
             assignment_name or assignment_id, assignment_id,
             mode or "assisted", run_timestamp=run_timestamp,
+            reserve=pg_child_reserve,
         )
-        private = workspace.assignment_folder(
+        private = workspace.grading_keys_assignment_folder(
             course_name or course_id, course_id,
             assignment_name or assignment_id, assignment_id,
+            reserve=pg_child_reserve,
         )
         return safe, private
-    return workspace.ai_packets_root(), workspace.courses_root()
+    return workspace.for_ai_root(), workspace.grading_keys_root()
 
 
 def write_privacy_audit_file(
@@ -53,14 +64,14 @@ def write_privacy_audit_file(
     privacy_artifacts: dict,
 ) -> str | None:
     try:
-        os.makedirs(private_folder, exist_ok=True)
+        os.makedirs(workspace.extended_path(private_folder), exist_ok=True)
         audit_root = workspace.audits_dir() or private_folder
-        os.makedirs(audit_root, exist_ok=True)
+        os.makedirs(workspace.extended_path(audit_root), exist_ok=True)
         path = os.path.join(
             audit_root,
             f"{fp._safe(assignment_name)}__powergrader-privacy-audit-{fp._safe(session_id)}.json",
         )
-        with open(path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
             json.dump({
                 "session_id": session_id,
                 "course_id": course_id,
@@ -94,7 +105,7 @@ def write_openrouter_debug_file(
         return None
     try:
         debug_root = workspace.system_folder("PowerGrader") or private_folder
-        os.makedirs(debug_root, exist_ok=True)
+        os.makedirs(workspace.extended_path(debug_root), exist_ok=True)
         path = os.path.join(
             debug_root,
             f"{fp._safe(assignment_name)}__openrouter-debug-{fp._safe(session_id)}.json",
@@ -127,7 +138,7 @@ def write_openrouter_debug_file(
                 "Raw real-name student submissions are not written here; inspect the Safe AI Packet and Private decoder files if needed.",
             ],
         }
-        with open(path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False)
         return path
     except Exception:

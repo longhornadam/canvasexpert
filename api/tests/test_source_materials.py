@@ -37,7 +37,7 @@ def test_extract_docx_text_from_uploaded_bytes(tmp_path):
 
 def test_build_source_context_from_paste_and_folder_file(tmp_path, monkeypatch):
     root = tmp_path / "CanvasExpert"
-    source_dir = root / "Source Materials"
+    source_dir = root / "Library" / "Source Materials"
     source_dir.mkdir(parents=True)
     (source_dir / "passage.html").write_text(
         "<h1>Passage</h1><p>The river changed overnight.</p>",

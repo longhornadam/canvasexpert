@@ -10,18 +10,48 @@ import os
 import zipfile
 
 from api import feedback_pipeline as fp
+from api.webui import workspace
 
 
-def safe_ai_packet_name(assignment_name: str) -> str:
+def _assignment_stable_id(assignment_name: str, assignment_id: str = "") -> str:
+    """Return a deterministic stable identifier for an assignment.
+
+    Prefers the Canvas assignment ID; falls back to a deterministic short
+    hash of the assignment name so two names produce distinct IDs.
+    """
+    if assignment_id:
+        return workspace.safe_id(assignment_id)
+    return workspace._deterministic_hash(assignment_name)
+
+
+def safe_ai_packet_name(assignment_name: str, *, assignment_id: str = "", compact: bool = False) -> str:
+    if compact:
+        stable = _assignment_stable_id(assignment_name, assignment_id)
+        return f"Packet-{stable}"
     return f"Safe AI Packet - {fp._safe(assignment_name, max_len=60)}"
 
 
-def packet_paths(safe_dir: str, assignment_name: str) -> dict:
-    packet_name = safe_ai_packet_name(assignment_name)
+def packet_paths(safe_dir: str, assignment_name: str, *, assignment_id: str = "",
+                 compact: bool = False, reserve: int = 0) -> dict:
+    packet_name = safe_ai_packet_name(assignment_name, assignment_id=assignment_id, compact=compact)
+    pdir = os.path.join(safe_dir, packet_name)
+    pzip = os.path.join(safe_dir, f"{packet_name}.zip")
+    # When reserve is given, use the teacher_visible_path helper to ensure
+    # the deepest projected child still fits the budget.
+    if reserve:
+        base_dir = safe_dir
+        # Project the deepest expected child: batch index "99", file "03-work.md"
+        deepest_child = f"Batches{os.sep}Batch-99{os.sep}03-work.md"
+        deep_full = os.path.join(base_dir, packet_name, deepest_child)
+        deep_len = len(deep_full)
+        if deep_len > workspace.TEACHER_VISIBLE_BUDGET - reserve:
+            return {"name": packet_name, "dir": pdir, "zip": pzip}
+            # Return as-is; the caller will get the budget exception from
+            # the deeper validation or switch to compact mode.
     return {
         "name": packet_name,
-        "dir": os.path.join(safe_dir, packet_name),
-        "zip": os.path.join(safe_dir, f"{packet_name}.zip"),
+        "dir": pdir,
+        "zip": pzip,
     }
 
 
@@ -111,30 +141,46 @@ def build_safe_ai_packet(
     write_result: dict,
     llm_bundle: dict,
     persona: dict | None = None,
+    assignment_id: str = "",
 ) -> dict:
-    """Create a teacher-facing packet folder + ZIP from the SAFE artifacts."""
-    paths = packet_paths(safe_dir, assignment_name)
+    """Create a teacher-facing packet folder + ZIP from the SAFE artifacts.
+
+    Selects the normal (readable) or compact layout based on whether the
+    projected paths fit within the teacher-visible 230-character budget.
+    All returned metadata paths are plain (unprefixed) and at most 230 chars.
+    """
+    # Determine whether the deep workspace forces compact layout: project the
+    # readable packet name plus its deepest expected child (the bundle JSON).
+    # If even compact doesn't fit, _validate_packet_budget raises below.
+    readable_name = safe_ai_packet_name(assignment_name, assignment_id=assignment_id)
+    compact = workspace.needs_compact_layout(safe_dir, readable_name, "Student Responses.json")
+
+    paths = packet_paths(safe_dir, assignment_name, assignment_id=assignment_id, compact=compact)
     packet_dir = paths["dir"]
-    os.makedirs(packet_dir, exist_ok=True)
+
+    # Validate every child path against the budget before creating anything.
+    _validate_packet_budget(packet_dir, write_result)
+
+    os.makedirs(workspace.extended_path(packet_dir), exist_ok=True)
 
     files: list[str] = []
 
     def write_packet_file(name: str, text: str):
         path = os.path.join(packet_dir, name)
-        with open(path, "w", encoding="utf-8") as f:
+        with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
             f.write(text)
         files.append(path)
 
     how_to_path = write_result.get("how_to_score")
-    if how_to_path and os.path.isfile(how_to_path):
-        with open(how_to_path, encoding="utf-8") as f:
+    if how_to_path and os.path.isfile(workspace.extended_path(how_to_path)):
+        with open(workspace.extended_path(how_to_path), encoding="utf-8") as f:
             instructions = f.read()
     else:
         instructions = fp.build_contract_text("your teaching assistant", persona=persona)
     write_packet_file("START HERE - Instructions for your AI.txt", instructions)
 
     bundle_path = os.path.join(packet_dir, "Student Responses.json")
-    with open(bundle_path, "w", encoding="utf-8") as f:
+    with open(workspace.extended_path(bundle_path), "w", encoding="utf-8") as f:
         json.dump(llm_bundle, f, indent=2, ensure_ascii=False)
     files.append(bundle_path)
 
@@ -148,15 +194,15 @@ def build_safe_ai_packet(
     write_packet_file("Paste Results Back Here - Format.txt", paste_format_text(llm_bundle, persona))
 
     for student_txt in write_result.get("student_txts") or []:
-        if os.path.isfile(student_txt):
+        if os.path.isfile(workspace.extended_path(student_txt)):
             dest = os.path.join(packet_dir, os.path.basename(student_txt))
-            with open(student_txt, "rb") as src, open(dest, "wb") as out:
+            with open(workspace.extended_path(student_txt), "rb") as src, open(workspace.extended_path(dest), "wb") as out:
                 out.write(src.read())
             files.append(dest)
 
-    with zipfile.ZipFile(paths["zip"], "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(workspace.extended_path(paths["zip"]), "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in files:
-            zf.write(path, arcname=os.path.basename(path))
+            zf.write(workspace.extended_path(path), arcname=os.path.basename(path))
 
     return {
         "packet_name": paths["name"],
@@ -164,3 +210,39 @@ def build_safe_ai_packet(
         "packet_zip": paths["zip"],
         "packet_files": files,
     }
+
+
+def _validate_packet_budget(packet_dir: str, write_result: dict) -> None:
+    """Validate every expected packet child path against the budget.
+
+    Raises TeacherVisiblePathBudgetError if any projected path exceeds
+    TEACHER_VISIBLE_BUDGET.  This is called *before* any directory or file
+    is created by the packet writer.
+    """
+    # Expected children under packet_dir
+    children = [
+        "START HERE - Instructions for your AI.txt",
+        "Student Responses.json",
+        "Student Responses - readable.txt",
+        "Source Materials.txt",
+        "Paste Results Back Here - Format.txt",
+    ]
+    # Per-student files from write_result
+    for student_txt in write_result.get("student_txts") or []:
+        children.append(os.path.basename(student_txt))
+
+    for child in children:
+        projected = os.path.join(packet_dir, child)
+        if len(projected) > workspace.TEACHER_VISIBLE_BUDGET:
+            raise workspace.TeacherVisiblePathBudgetError(
+                f"Packet child path exceeds budget "
+                f"({len(projected)} > {workspace.TEACHER_VISIBLE_BUDGET}): {projected}"
+            )
+
+    # ZIP path
+    zip_path = packet_dir + ".zip"
+    if len(zip_path) > workspace.TEACHER_VISIBLE_BUDGET:
+        raise workspace.TeacherVisiblePathBudgetError(
+            f"Packet ZIP path exceeds budget "
+            f"({len(zip_path)} > {workspace.TEACHER_VISIBLE_BUDGET}): {zip_path}"
+        )

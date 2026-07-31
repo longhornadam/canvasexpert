@@ -17,7 +17,6 @@
   <!-- ── START HERE ──────────────────────────────────────────────────────── -->
   <div class="ai-section" id="start">
     <h2>Start here</h2>
-    {% set start_file = ai_ta_files | selectattr("label", "equalto", "START HERE - What is Canvas Expert.txt") | first | default(none) %}
     {% for f in ai_ta_files %}{% if "start here" in f.label|lower %}
     <div class="ai-skill-row">
       <div class="ai-skill-body">
@@ -35,7 +34,7 @@
   <!-- ── Authoring skills ────────────────────────────────────────────────── -->
   <div class="ai-section" id="authoring">
     <h2>Authoring skills</h2>
-    {% set authoring_prefixes = ["Author a Quiz", "Author an Assignment", "Author a Page", "Author a Rubric", "Author a TA"] %}
+    {% set authoring_prefixes = ["Author a Quiz", "Author an Assignment", "Author a Page", "Author a Rubric"] %}
     {% for prefix in authoring_prefixes %}
     {% for f in ai_ta_files %}{% if f.label.startswith(prefix) %}
     <div class="ai-skill-row">
@@ -116,14 +115,14 @@
     {% endif %}{% endif %}
     {% endfor %}
     {% else %}
-    <p class="hint">Toolkit files not found — rebuild the AI-TA library to generate them.</p>
+    <p class="hint">Toolkit files not found — rebuild the AI Authoring library to generate them.</p>
     {% endif %}
   </div>
 
   <!-- ── Footer controls ─────────────────────────────────────────────────── -->
   <section class="ce-panel ce-ai-footer" id="ai-ta-card" data-path="{{ ai_ta_dir }}">
     <div class="ce-actions">
-      <button type="button" id="btn-ai-ta-open" class="small">Open AI-TA folder</button>
+      <button type="button" id="btn-ai-ta-open" class="small">Open AI Authoring folder</button>
       <button type="button" id="btn-ai-ta-rebuild" class="primary small">Rebuild library</button>
       <span id="ai-ta-status" class="status ce-ai-inline-status"></span>
     </div>

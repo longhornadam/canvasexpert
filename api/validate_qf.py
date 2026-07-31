@@ -42,6 +42,11 @@ def validate(path, seen_types):
 
     problems = []
     items = data.get("items", [])
+    # An envelope with no items parses cleanly and satisfies every per-item rule
+    # by having nothing to check, so without this it reports as valid and the
+    # Create page offers to push an empty quiz to Canvas.
+    if not items:
+        problems.append(f"{name}: no questions in this draft (items is empty)")
     rationale_ids = set()
     for r in data.get("rationales", []):
         rationale_ids.add(r.get("item_id"))
@@ -74,7 +79,9 @@ def validate(path, seen_types):
     for it in items:
         type_counts[it["type"]] = type_counts.get(it["type"], 0) + 1
     summary = ", ".join(f"{k}x{v}" for k, v in sorted(type_counts.items()))
-    print(f"  OK  {name}")
+    # This header prints before the caller reports `problems`, so calling every
+    # draft OK here contradicts the rejection that follows a moment later.
+    print(f"  {'OK  ' if not problems else 'BAD '}{name}")
     print(f"       title: {title}")
     print(f"       group: {grp}  |  variant: {label}")
     print(f"       items: {summary}")

@@ -6,7 +6,7 @@
 .wiz-step.active { border-color: var(--ce-accent-canvas); background: var(--ce-accent-canvas); color: var(--ce-on-accent); }
 .wiz-step.done { border-color: var(--ce-ok); background: var(--ce-ok-soft); color: var(--ce-ok); }
 .wizard-panel { margin: 0; }
-.wizard-panel h2 { margin: 0 0 var(--ce-space-2); font-size: 18px; }
+.wizard-panel h2 { margin: 0 0 var(--ce-space-2); }
 .wizard-panel label { margin: var(--ce-space-3) 0 var(--ce-space-2); }
 .wizard-panel .ce-actions { margin-top: var(--ce-space-4); }
 .ce-wizard-initially-hidden { display: none; }
@@ -16,6 +16,9 @@
 .ce-wizard-skip-row { margin-top: var(--ce-space-2); }
 .ce-wizard-finish { padding: var(--ce-space-6); font-size: 18px; text-align: center; }
 .ce-wizard-finish-actions { justify-content: center; }
+.ce-wizard-path-row { display: flex; gap: var(--ce-space-2); align-items: stretch; }
+.ce-wizard-path-row input { flex: 1; min-width: 0; }
+.ce-wizard-browse { white-space: nowrap; }
 #workspace-result .subfolder-list { display: flex; flex-wrap: wrap; gap: var(--ce-space-2); margin-top: var(--ce-space-2); }
 #workspace-result .subfolder-list span { padding: var(--ce-space-1) var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); font-size: 12px; }
 @media (max-width: 520px) {

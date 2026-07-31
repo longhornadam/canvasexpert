@@ -10,6 +10,7 @@ from pathlib import Path
 
 import keyring
 
+from api import runtime_paths
 from api.storage_support import atomic_write_json, interprocess_lock
 from .. import workspace
 
@@ -120,10 +121,14 @@ OPENROUTER_PRESET_SCENARIO_OUTPUT_TOKENS = 10_000
 # An empty base is the signal that onboarding is not yet complete.
 CANVAS_BASE_DEFAULT   = ""
 DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas Downloads")
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config.json")
+# Pre-0.75 machine-local config lived inside the app folder, which a
+# self-update mirrors wholesale -- see runtime_paths.migrate_legacy_file().
+LEGACY_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config.json")
+CONFIG_PATH = str(runtime_paths.local_app_dir() / "config.json")
 SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags",
                "ai_ta_persona", "roster_student_settings", "roster_tier_schemes",
-               "roster_group_schemes", "monitored_students")
+               "roster_group_schemes", "roster_score_matrices", "roster_relationships",
+               "seating_course_states", "monitored_students")
 
 
 def _source_label(key: str) -> str:
@@ -132,6 +137,7 @@ def _source_label(key: str) -> str:
 
 
 def _machine_load():
+    runtime_paths.migrate_legacy_file(LEGACY_CONFIG_PATH, CONFIG_PATH)
     if not os.path.exists(CONFIG_PATH):
         return {"canvas_base": CANVAS_BASE_DEFAULT, "saved_courses": []}
     with open(CONFIG_PATH, encoding="utf-8") as f:

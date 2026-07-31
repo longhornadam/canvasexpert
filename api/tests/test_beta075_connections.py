@@ -123,10 +123,10 @@ def test_connections_page_and_mcpb_use_runtime_paths_without_client_config_write
         assert all(info.date_time == (1980, 1, 1, 0, 0, 0) for info in archive.infolist())
     assert manifest == {
         "manifest_version": "0.3",
-        "name": "canvas-expert-read-only",
-        "display_name": "Canvas Expert (Read Only)",
+        "name": "canvas-expert",
+        "display_name": "Canvas Expert",
         "version": __version__,
-        "description": "Launches the read-only Canvas Expert MCP server from this computer's unzipped CanvasExpert folder.",
+        "description": "Launches the Canvas Expert MCP server from this computer's unzipped CanvasExpert folder.",
         "author": {"name": "Canvas Expert"},
         "server": {
             "type": "python",
@@ -162,7 +162,8 @@ def test_connections_page_and_mcpb_use_runtime_paths_without_client_config_write
     monkeypatch.setattr(server.config, "get_canvas_base", lambda: "https://canvas.invalid")
     response = TestClient(server.app).get("/connections")
     assert response.status_code == 200
-    assert response.text.count("Connections") >= 1
+    # The page is titled CanvasAgent now; it used to be "AI Connections".
+    assert response.text.count("CanvasAgent") >= 1
     assert "Canvas Expert runs from this unzipped folder." in response.text
     assert TestClient(server.app).get("/api/connections/health").status_code == 200
     assert TestClient(server.app).post("/api/connections/claude-package").status_code == 200

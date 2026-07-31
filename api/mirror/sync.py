@@ -246,14 +246,26 @@ def _commit_assignment_index(course_id, assignments, *, root, attempted_at) -> t
     previous_rows = (previous_document or {}).get("assignments") or {}
     previous_ids = set(previous_rows)
 
-    document = store.write_assignments(course_id, assignments, root=root,
-                                       attempted_at=attempted_at)
-    new_rows = document["assignments"]
+    candidate = store.build_assignments_document(course_id, assignments, attempted_at=attempted_at)
+    new_rows = candidate["assignments"]
     new_ids = set(new_rows)
 
     added = sorted(new_ids - previous_ids)
     removed = sorted(previous_ids - new_ids)
     changed = sorted(a for a in (new_ids & previous_ids) if new_rows[a] != previous_rows[a])
+
+    if previous_document is not None and not added and not changed and not removed:
+        # No-op tick: the payload is byte-identical to what's already
+        # committed, so skip the write entirely rather than re-stamping
+        # envelope timestamps and re-syncing the file for nothing (the file
+        # lives in a OneDrive-synced workspace). ``private_assignments``
+        # (read_service.py) sources its freshness from the sync-pass
+        # envelope, not this file's own envelope, so skipping the write here
+        # does not affect the serve-freshness gate.
+        document = previous_document
+    else:
+        document = store.write_assignments(course_id, assignments, root=root,
+                                           attempted_at=attempted_at)
 
     large_shrink = _is_large_shrink(len(previous_ids), len(new_ids))
     existing_files = set(store.list_submission_assignment_ids(course_id, root=root))

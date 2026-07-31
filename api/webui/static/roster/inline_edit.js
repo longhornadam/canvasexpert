@@ -118,7 +118,26 @@
       }
     } else if (key === "monitored") {
       s.monitored = { enabled: !!value.enabled, note: value.note || "" };
+    } else if (key === "seating_context") {
+      s.seating_context = value;
     }
+  }
+
+  function saveSeatingContext(userId) {
+    var row = tableBody.querySelector('tr[data-id="' + userId + '"]');
+    if (!row) return;
+    var frontRow = row.querySelector(".roster-v2-seating-front-row");
+    var nearTeacher = row.querySelector(".roster-v2-seating-near-teacher");
+    var privateNote = row.querySelector(".roster-v2-seating-private-note");
+    var aiContextNote = row.querySelector(".roster-v2-seating-ai-context-note");
+    if (!frontRow || !nearTeacher || !privateNote || !aiContextNote) return;
+
+    saveField(userId, "seating_context", {
+      front_row: frontRow.value,
+      near_teacher: nearTeacher.value,
+      private_note: privateNote.value,
+      ai_context_note: aiContextNote.value
+    });
   }
 
   function attachInlineEvents() {
@@ -210,6 +229,15 @@
           name: s.display_name || s.name,
           note: note
         });
+      });
+    });
+
+    tableBody.querySelectorAll(
+      ".roster-v2-seating-front-row, .roster-v2-seating-near-teacher, " +
+      ".roster-v2-seating-private-note, .roster-v2-seating-ai-context-note"
+    ).forEach(function (el) {
+      el.addEventListener("change", function () {
+        saveSeatingContext(el.dataset.id);
       });
     });
   }

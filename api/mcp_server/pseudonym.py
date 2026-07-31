@@ -1,4 +1,4 @@
-"""Pseudonymization + outbound safety gate for the read-only MCP server.
+"""Pseudonymization + outbound safety gate for the MCP server.
 
 Every student-data tool in ``tools.py`` routes its assembled payload through
 these helpers before it can reach an MCP client: real Canvas identity (name,

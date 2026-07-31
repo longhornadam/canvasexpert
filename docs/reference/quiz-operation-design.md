@@ -97,20 +97,15 @@ from drift. Missing returned IDs or uncertain transport are `sent_unknown`; defi
 failure after a prior successful step is `partial`; retry verifies exact completed IDs and
 resumes the first unfinished step.
 
-### Durable progress and lost clients
+### Durable progress
 
-- Operation records gain a bounded safe event list with monotonic sequence, timestamp,
-  hashed target key, step key, state, and a fixed message code. No payload, title, path,
-  course/student ID, diagnostic, or free text is allowed.
-- `ExecutionContext.before_send` and `checkpoint_step` append events atomically with the
-  step mutation. Operation terminal status appends a final event.
-- A PII-minimized SSE endpoint streams stored events by operation ID and sequence, supports
-  reconnect, and closes only when the operation is terminal.
-- Long apply runs via `asyncio.to_thread` (or equivalent existing threadpool mechanism) so
-  the event loop can serve SSE and cancelling the browser request cannot kill the worker
-  thread. Duplicate apply remains fenced by operation status/claims.
-- Startup calls ledger recovery. Recovery reconciles claimed/sent-unknown quiz steps by
-  exact IDs and finalizes operation status/receipt when all targets become terminal.
+The shipped transport is a **polling progress endpoint**
+(`GET /api/operations/{id}/status`, returning PII-minimized target/step states). The
+originally sketched SSE event-log stream plus `asyncio.to_thread` worker were **not built**:
+there is no SSE endpoint, no bounded event list, and no event-loop threading. Startup ledger
+recovery reconciles claimed/sent-unknown quiz steps by exact IDs and finalizes operation
+status/receipt when all targets become terminal. Authoritative behavior lives in
+`docs/contracts/operation-ledger-contract.md` and `api/operation_ledger/adapters/quiz_*.py`.
 
 ### Browser and compatibility
 
@@ -118,7 +113,7 @@ resumes the first unfinished step.
   mode sends one path/settings; differentiated mode sends ordered `{path, group_name}`
   variants. It sends no course manifest, Canvas URL, group ID, or student ID.
 - Shared review displays server-frozen quiz/item counts, settings, group/count rows, and
-  extra-time bucket counts. Apply opens the operation SSE and renders durable step progress.
+  extra-time bucket counts. Apply polls the operation status endpoint to render step progress.
 - Both Course Expert and standalone Quiz use the same path. Existing live streaming routes
   become fail-closed compatibility responses (HTTP 410/no write) after migration. Preview
   remains a no-network planner operation.

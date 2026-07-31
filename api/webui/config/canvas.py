@@ -132,6 +132,27 @@ def set_workspace_path(path: str):
     )
 
 
+def ensure_workspace_pinned() -> str | None:
+    """Persist the resolved workspace path into machine-local config.
+
+    The workspace normally resolves from the ``OneDrive``/``OneDriveCommercial``
+    environment variable. Headless subprocesses launched by another app (the MCP
+    server started by Claude Desktop or the ChatGPT desktop app) do not inherit
+    that variable, so without a persisted path they cannot find the workspace and
+    fall back to stale machine-local state. Pinning the resolved path here makes
+    workspace resolution deterministic and environment-independent for every
+    process. No-op once a path is already pinned, or when none can be resolved.
+    """
+    existing = get_workspace_path()
+    if existing:
+        return existing
+    root = workspace.workspace_root()
+    if root:
+        set_workspace_path(root)
+        return root
+    return None
+
+
 # --------------------------------------------------------------------------
 # Runtime credential bundle
 # --------------------------------------------------------------------------

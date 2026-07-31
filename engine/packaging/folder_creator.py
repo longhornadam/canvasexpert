@@ -2,49 +2,42 @@
 
 from pathlib import Path
 from typing import Optional
-import re
+
+from engine.utils.text_utils import safe_filename_component
 
 
 def sanitize_filename(title: str) -> str:
-    r"""Convert a quiz title to a safe filename.
-    
-    Removes or replaces characters that are illegal in Windows filenames:
-    \ / : * ? " < > |
-    
+    """Convert a quiz title to a safe filename.
+
+    Delegates to the shared ``safe_filename_component`` so Printables/Canvas
+    Uploads names use the same convention (spaces preserved, illegal chars
+    replaced, reserved device names guarded) as the rest of the
+    teacher-visible workspace.
+
     Args:
         title: Raw quiz title
-        
+
     Returns:
         Sanitized string safe for use in filenames
     """
-    # Replace Windows-illegal characters with underscores
-    safe = re.sub(r'[\\/:*?"<>|]', '_', title)
-    # Replace spaces with underscores
-    safe = safe.replace(' ', '_')
-    # Collapse multiple underscores
-    safe = re.sub(r'_+', '_', safe)
-    # Strip leading/trailing underscores
-    safe = safe.strip('_')
-    return safe
+    return safe_filename_component(title, fallback="")
 
 
 def create_quiz_folder(output_dir: Path, quiz_title: str) -> Path:
     """Create folder for quiz outputs.
-    
+
     Args:
-        output_dir: Base output directory (Finished_Exports)
+        output_dir: Base output directory (Printables or Canvas Uploads)
         quiz_title: Quiz title (used for folder name)
-        
+
     Returns:
         Path to created folder
     """
-    # Sanitize title for folder name
-    safe_title = "".join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in quiz_title)
-    safe_title = safe_title.strip().replace(' ', '_')
-    
+    safe_title = sanitize_filename(quiz_title) or "Untitled_Quiz"
+
     folder = output_dir / safe_title
     folder.mkdir(parents=True, exist_ok=True)
-    
+
     return folder
 
 

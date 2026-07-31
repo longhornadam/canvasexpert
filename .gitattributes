@@ -1,0 +1,4 @@
+# Dev-only scaffolding: not runtime code. Excluded from `git archive` exports.
+# NOTE: export-ignore only affects `git archive`. If the delivery ZIP is built by
+# zipping the working tree, apply this exclusion in that packaging step instead.
+engine/dev/ export-ignore

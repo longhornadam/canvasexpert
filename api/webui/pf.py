@@ -1,7 +1,7 @@
 """PageForge — parse and validate <PAGEFORGE_JSON> payloads.
 
 Pure functions only, mirroring af.py: no HTTP here. server.py owns the Canvas
-calls. Contract: LLM_Modules/PageForge_Base.md (v1.0-json).
+calls. Contract: default_docs/AI Authoring/Author a Page (PageForge).txt (v1.0-json).
 """
 import json
 import re

@@ -113,15 +113,25 @@
     }
   }
 
+  // Focusing a different course, or re-clicking the differentiated-mode
+  // segment, re-triggers this without cancelling a slower earlier request,
+  // so a stale response could land last and fill the variant-row group
+  // picker with the previous course's Canvas groups (and student counts)
+  // while a different course is now focused. Stamp each request and let
+  // only the newest one write, the same way inbox.js does.
+  var loadGeneration = 0;
+
   async function loadGroupsForCurrentCourse() {
     if (!requireReady()) return;
     var id = push.currentCourseId();
     if (!id || !groupStatus) return;
+    var generation = ++loadGeneration;
     groupStatus.className = "status hint";
     groupStatus.textContent = "Loading groups…";
     push.setBusy(true);
     try {
       var data = await fetch("/api/groups?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); });
+      if (generation !== loadGeneration) return;
       if (!data.ok) {
         groupStatus.className = "status error";
         groupStatus.textContent = "Error: " + data.error;

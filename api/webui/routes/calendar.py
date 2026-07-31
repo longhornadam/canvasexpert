@@ -51,23 +51,24 @@ def load_builtin_calendar(name: str = Form(...)):
         return JSONResponse({"ok": False, "error": f"Calendar file not found: {safe}"})
     with open(path, encoding="utf-8") as f:
         content = f.read()
-    dates, periods = _parse_calendar_csv(content)
+    dates, periods, events = _parse_calendar_csv(content)
     key   = _file_key(safe)
     label = _calendar_label(safe)
-    config.set_calendar(key, label, dates, periods)
+    config.set_calendar(key, label, dates, periods, events)
     return JSONResponse({"ok": True, "key": key, "label": label,
-                         "count": len(dates), "grading_periods": periods})
+                         "count": len(dates), "grading_periods": periods, "events": events})
 
 
 @router.post("/api/calendar/set")
 def set_calendar_route(source: str = Form(...), dates: str = Form(...),
-                       grading_periods: str = Form(default="[]")):
+                       grading_periods: str = Form(default="[]"), events: str = Form(default="[]")):
     try:
         date_list = json.loads(dates)
         periods   = json.loads(grading_periods)
+        parsed_events = json.loads(events)
     except json.JSONDecodeError as e:
         return JSONResponse({"ok": False, "error": f"bad request: {e}"})
-    config.set_calendar("custom", source or "Custom", date_list, periods)
+    config.set_calendar("custom", source or "Custom", date_list, periods, parsed_events)
     return JSONResponse({"ok": True})
 
 

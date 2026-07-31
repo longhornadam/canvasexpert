@@ -79,7 +79,7 @@ def test_storage_empty_round_trip_atomic_replace_and_no_workspace(tmp_path, monk
     monkeypatch.setattr(storage.workspace, "workspace_root", lambda: str(tmp_path / "workspace"))
     assert storage.read_registry()["jobs"] == []
     assert storage.write_registry(_registry())["ok"] is True
-    path = tmp_path / "workspace" / "_system" / "workbench" / "registry.v1.json"
+    path = tmp_path / "workspace" / "_System" / "workbench" / "registry.v1.json"
     assert path.exists()
     assert json.loads(path.read_text(encoding="utf-8"))["version"] == 1
     assert not list(path.parent.glob("*.tmp"))
@@ -87,13 +87,13 @@ def test_storage_empty_round_trip_atomic_replace_and_no_workspace(tmp_path, monk
     monkeypatch.setattr(storage.workspace, "workspace_root", lambda: None)
     assert storage.read_registry()["jobs"] == []
     assert storage.write_registry(_registry()) == {"ok": False, "error": "workspace_not_configured"}
-    assert not (Path.cwd() / "_system").exists()
+    assert not (Path.cwd() / "_System").exists()
 
 
 def test_storage_quarantines_corrupt_document_and_concurrent_writes(tmp_path, monkeypatch):
     root = tmp_path / "workspace"
     monkeypatch.setattr(storage.workspace, "workspace_root", lambda: str(root))
-    path = root / "_system" / "workbench" / "registry.v1.json"
+    path = root / "_System" / "workbench" / "registry.v1.json"
     path.parent.mkdir(parents=True)
     path.write_text("{not-json", encoding="utf-8")
     assert storage.read_registry()["jobs"] == []

@@ -291,6 +291,17 @@
     },
     {
       "path": "api/webui/routes/roster_canvas.py",
+      "symbol": "create_canvas_group_category",
+      "detector": "name:canvas_send",
+      "call_index": 1,
+      "call_form": "canvas_send(\"POST\", <course_group_categories_path>, {\"name\": name})",
+      "classification": "canvas_mutation",
+      "scopes": ["private.groups"],
+      "reconciliation": "targeted",
+      "reason": "The Seating group-set ledger adapter uses this create-only transport after review and checkpoints the returned category ID. Its exact-category reconciliation invokes roster.py's _reconcile_group_category, which targeted-merges the private groups mirror and falls back to invalidation without changing the confirmed write result."
+    },
+    {
+      "path": "api/webui/routes/roster_canvas.py",
       "symbol": "create_canvas_group",
       "detector": "name:canvas_send",
       "call_index": 1,
@@ -302,14 +313,14 @@
     },
     {
       "path": "api/webui/routes/roster_canvas.py",
-      "symbol": "canvas_add_group_membership",
+      "symbol": "create_canvas_group_membership",
       "detector": "name:canvas_send",
       "call_index": 1,
       "call_form": "canvas_send(\"POST\", <memberships_path>, {\"user_id\": user_id})",
       "classification": "canvas_mutation",
       "scopes": ["private.groups"],
       "reconciliation": "targeted",
-      "reason": "Same _reconcile_group_category convergence path as create_canvas_group."
+      "reason": "Roster callers and the create-only Seating group-set ledger adapter use this returned-membership transport. The ledger reconciles only its checkpointed new category through _reconcile_group_category; existing categories and memberships are never changed by that adapter."
     },
     {
       "path": "api/webui/routes/roster_canvas.py",

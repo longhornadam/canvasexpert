@@ -13,17 +13,26 @@
     return false;
   }
 
+  // Switching courses re-triggers this loader (see gradebook.js's
+  // _autoloadTab) without cancelling a slower earlier request, so a stale
+  // response could land last and fill the policy form with the previous
+  // course's settings while the new course sits selected. Stamp each
+  // request and let only the newest one write, the same way inbox.js does.
+  var loadGeneration = 0;
+
   // ── Late policy (auto-loaded) ──────────────────────────────────────────
 
   window.CE_GRADEBOOK.loadPolicy = async function _loadPolicy() {
     if (!requireReady()) return;
     var id = gb.gbCourseId();
     if (!id) return;
+    var generation = ++loadGeneration;
     gb._markLoaded("policy");
     var st = document.getElementById("lp-status");
     if (st) { st.className = "status hint"; st.textContent = "Loading current policy…"; }
     try {
       var d = await fetch("/api/late-policy?course_id=" + encodeURIComponent(id)).then(function (r) { return r.json(); });
+      if (generation !== loadGeneration) return;
       if (!d.ok) {
         if (st) { st.className = "status error"; st.textContent = "Could not load policy: " + d.error; }
         return;
@@ -42,6 +51,7 @@
         p.missing_submission_deduction != null ? 100 - p.missing_submission_deduction : 0;
       if (st) { st.className = "status ok"; st.textContent = "✓ Loaded current policy for " + gb.gbCourseName(); }
     } catch (e) {
+      if (generation !== loadGeneration) return;
       if (st) { st.className = "status error"; st.textContent = String(e); }
     }
   };

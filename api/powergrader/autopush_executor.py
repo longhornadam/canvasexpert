@@ -64,6 +64,9 @@ def _feedback_present(student: dict, ai_result: dict | None) -> bool:
 
 
 def _build_canvas_payload(context: dict, assignment: dict, student: dict, decision: dict) -> dict:
+    # Single grading surface: the AI-feedback comment written below is
+    # PowerGrader's alone. Gradebook adjusts grades, never feedback.
+    # See docs/reference/powergrader-scoring-map.md (Guardrails: single grading surface).
     allow_grade_push = context.get("grade_push_allowed", True)
     allow_comment_push = context.get("comment_push_allowed", True)
 

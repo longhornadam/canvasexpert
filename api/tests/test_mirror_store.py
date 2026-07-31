@@ -102,6 +102,24 @@ def test_assignments_round_trip_slim_shape(tmp_path):
     }
 
 
+def test_build_assignments_document_does_not_write_to_disk(tmp_path):
+    document = store.build_assignments_document(
+        COURSE, ASSIGNMENTS, attempted_at="2026-07-18T12:00:00Z")
+    assert document["assignments"]["700010"]["name"] == "Essay 1"
+    assert document["last_success_at"] == "2026-07-18T12:00:00Z"
+    assert document["last_attempt_at"] == "2026-07-18T12:00:00Z"
+    assert store.read_assignments(COURSE, root=str(tmp_path)) is None  # nothing written
+
+
+def test_write_assignments_matches_build_assignments_document_plus_write(tmp_path):
+    built = store.build_assignments_document(
+        COURSE, ASSIGNMENTS, attempted_at="2026-07-18T12:00:00Z")
+    written = store.write_assignments(
+        COURSE, ASSIGNMENTS, root=str(tmp_path), attempted_at="2026-07-18T12:00:00Z")
+    assert written == built
+    assert store.read_assignments(COURSE, root=str(tmp_path)) == built
+
+
 def test_normalize_assignment_description_is_permissive_string_like_body(tmp_path):
     # Additive field (Batch 5/Student Reports): same permissive-string handling
     # as the existing `body` field on submissions — non-string defaults to "".

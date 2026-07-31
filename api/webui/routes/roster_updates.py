@@ -5,6 +5,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
+from api.roster_context import (
+    SEATING_CONTEXT_DEFAULT,
+    SEATING_CONTEXT_SUPPORTS,
+    normalize_seating_context,
+    validate_seating_context,
+)
 
 def update_student(
     course_id: str,
@@ -16,6 +22,7 @@ def update_student(
     set_extra_time: Callable[[str, list[dict]], None],
     set_monitored_student: Callable[..., None],
     remove_monitored_student: Callable[[str], None],
+    update_roster_student_settings: Callable[[str, str, dict], None],
     as_int: Callable[[object, str], tuple[int | None, str | None]],
     validate_canvas_group_target: Callable[
         [str, str, str | None], tuple[list[dict], dict | None, str | None]
@@ -51,6 +58,12 @@ def update_student(
     unknown = set(data.keys()) - allowed_keys
     if unknown:
         return {"ok": False, "error": f"Unknown patch keys: {sorted(unknown)}"}
+
+    seating_context = None
+    if "seating_context" in data:
+        seating_context, err = validate_seating_context(data["seating_context"])
+        if err:
+            return {"ok": False, "error": err}
 
     vault = vault_factory()
 
@@ -123,6 +136,11 @@ def update_student(
         if not ok:
             return {"ok": False, "error": err}
         invalidate_groups(course_id, category_id)
+
+    if "seating_context" in data:
+        update_roster_student_settings(
+            course_id, user_id, {"seating_context": seating_context}
+        )
 
     return {"ok": True}
 

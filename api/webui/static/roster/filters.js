@@ -32,7 +32,8 @@
     groups: { filter: "group_unset", focus: "groups" },
     monitoring: { filter: "monitored", focus: "monitoring" },
     issues: { filter: "warnings", focus: "issues" },
-    privacy: { filter: null, focus: "privacy" }
+    privacy: { filter: null, focus: "privacy" },
+    reports: { filter: null, focus: "reports" }
   };
   var activeLens = "students";
   var activeFilter = "all";
@@ -113,7 +114,8 @@
       groups: "groups",
       monitoring: "monitoring",
       issues: "issues",
-      privacy: "privacy"
+      privacy: "privacy",
+      reports: "reports"
     };
     return map[focus] || "students";
   }

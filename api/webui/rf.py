@@ -1,8 +1,8 @@
 """RubricForge — parse, validate, and compose <RUBRICFORGE_JSON> payloads.
 
 Pure functions only: no HTTP here. server.py owns the Canvas calls so this
-module stays testable without a token. Contract: LLM_Modules/RubricForge_Base.md
-(v1.0-json).
+module stays testable without a token. Contract: default_docs/AI Authoring/Author a
+Rubric (RubricForge).txt (v1.0-json).
 """
 import json
 import re

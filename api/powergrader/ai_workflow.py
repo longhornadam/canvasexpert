@@ -54,8 +54,8 @@ def run_ai_workflow(
 
     if mode not in {"packet", "assisted"}:
         privacy_steps.append(privacy.privacy_step(
-            "fast_mode", "Grade Myself selected", "warn",
-            "Grade Myself selected. No AI packet or API call was requested.",
+            "fast_mode", "Score myself selected", "warn",
+            "Score myself selected. No AI packet or API call was requested.",
         ))
         return ai_workflow_support.workflow_result(
             ok=True,
@@ -143,13 +143,28 @@ def run_ai_workflow(
         fb_pattern = fb_pattern or (patterns[0] if patterns else None)
         model = selected_model
 
-        safe_dir, private_dir = privacy.feedback_artifact_dirs(
-            course_name=course_name or course_id,
-            course_id=course_id,
-            assignment_name=artifact_name,
-            assignment_id=assignment_id,
-            mode=mode,
-        )
+        try:
+            safe_dir, private_dir = privacy.feedback_artifact_dirs(
+                course_name=course_name or course_id,
+                course_id=course_id,
+                assignment_name=artifact_name,
+                assignment_id=assignment_id,
+                mode=mode,
+            )
+        except workspace.TeacherVisiblePathBudgetError:
+            privacy_steps.append(privacy.privacy_step(
+                "safe_private", "Wrote Safe AI Packet and Private decoder artifacts", "failed",
+                "This workspace location is too deep for PowerGrader packet files. "
+                "Choose a shorter workspace location, then try again.",
+            ))
+            return ai_workflow_support.workflow_result(
+                ok=False,
+                error="This workspace location is too deep for PowerGrader packet files. Choose a shorter workspace location, then try again.",
+                privacy_steps=privacy_steps,
+                privacy_artifacts=privacy_artifacts,
+                ai_by_uid=ai_by_uid,
+                source_context=source_context,
+            )
         if not safe_dir or not private_dir:
             privacy_steps.append(privacy.privacy_step(
                 "safe_private", "Wrote Safe AI Packet and Private decoder artifacts", "failed",

@@ -40,7 +40,6 @@ from .gradebook_sweep import (
     sweep_preview,
 )
 from ..gradebook_service import (
-    CURVE_EVENTS_PATH,
     _apply_curve_model,
     _expand_variants_extra_time,
     _load_curve_events,
@@ -73,7 +72,6 @@ __all__ = [
     "curve_apply",
     "list_curve_events",
     "revert_curve",
-    "CURVE_EVENTS_PATH",
     "_assignment",
     "_assignment_submissions",
     "_course_assignments",

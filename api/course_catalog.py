@@ -8,10 +8,10 @@ this module may enter the configured synced workspace.
 from __future__ import annotations
 
 import copy
+import fnmatch
 import json
 import os
 import re
-import shutil
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,6 +24,7 @@ from api.assignment_collection import (
     AssignmentCollectionReceipt,
     acquire_assignment_collection,
 )
+from api.storage_support import quarantine_corrupt_file
 from api.webui import workspace
 
 
@@ -695,36 +696,35 @@ def _course_lock(course_id: str) -> threading.RLock:
 
 def _catalog_conflicts(course_id: str, root=None) -> list[Path]:
     directory_value = workspace.course_catalog_dir(course_id, root)
-    if not directory_value or not os.path.isdir(directory_value):
+    if not directory_value or not os.path.isdir(workspace.extended_path(directory_value)):
         return []
-    directory = Path(directory_value)
-    excluded = {
-        Path(workspace.course_catalog_path(course_id, root)).resolve(),
-        Path(workspace.course_catalog_previous_path(course_id, root)).resolve(),
-        Path(workspace.course_catalog_v2_path(course_id, root)).resolve(),
-        Path(workspace.course_catalog_v2_previous_path(course_id, root)).resolve(),
+    # os.listdir(extended) + basename comparison instead of Path.glob/.resolve:
+    # it enumerates a deep (>260) directory correctly and needs no realpath()
+    # (which can itself fail past MAX_PATH). All catalog files share one dir, so
+    # a basename check is sufficient and precise.
+    excluded_names = {
+        os.path.basename(workspace.course_catalog_path(course_id, root) or ""),
+        os.path.basename(workspace.course_catalog_previous_path(course_id, root) or ""),
+        os.path.basename(workspace.course_catalog_v2_path(course_id, root) or ""),
+        os.path.basename(workspace.course_catalog_v2_previous_path(course_id, root) or ""),
     }
-    return sorted(
-        candidate for candidate in directory.glob("*catalog.v*.json")
-        if candidate.resolve() not in excluded
-    )
+    conflicts = [
+        Path(os.path.join(directory_value, name))
+        for name in os.listdir(workspace.extended_path(directory_value))
+        if fnmatch.fnmatch(name, "*catalog.v*.json") and name not in excluded_names
+    ]
+    return sorted(conflicts)
 
 
 def _quarantine(path: Path) -> None:
-    if not path.is_file():
-        return
-    target_dir = path.parent / "quarantine"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    target = target_dir / f"{path.name}.{stamp}.corrupt"
-    shutil.move(str(path), str(target))
+    quarantine_corrupt_file(path, path.parent / "quarantine")
 
 
 def _read_valid(path: Path) -> dict | None:
-    if not path.is_file():
+    if not os.path.isfile(workspace.extended_path(str(path))):
         return None
     try:
-        with path.open(encoding="utf-8") as handle:
+        with open(workspace.extended_path(str(path)), encoding="utf-8") as handle:
             document = json.load(handle)
         validate_catalog(document)
         return copy.deepcopy(document)
@@ -763,16 +763,18 @@ def read_catalog(course_id: str, *, root=None) -> dict:
 
 def _atomic_write(path: Path, document: dict) -> None:
     validate_catalog(document)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # os-level via extended_path; mkstemp(dir=extended) yields an already-prefixed
+    # temporary so os.replace/os.unlink inherit long-path safety.
+    os.makedirs(workspace.extended_path(str(path.parent)), exist_ok=True)
     payload = json.dumps(document, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}-", suffix=".tmp", dir=str(path.parent))
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}-", suffix=".tmp", dir=workspace.extended_path(str(path.parent)))
     try:
         with os.fdopen(descriptor, "wb") as handle:
             descriptor = None
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        os.replace(temporary, workspace.extended_path(str(path)))
     except Exception:
         if descriptor is not None:
             try:

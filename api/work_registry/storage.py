@@ -5,13 +5,13 @@ from __future__ import annotations
 import copy
 import json
 import os
-import shutil
 import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
 from api.webui import workspace
+from api.storage_support import quarantine_corrupt_file
 
 from .models import (
     REGISTRY_VERSION,
@@ -47,7 +47,7 @@ def _root() -> Path | None:
 
 def workbench_dir() -> Path | None:
     root = _root()
-    return root / "_system" / "workbench" if root else None
+    return root / workspace.SYSTEM_NAME / "workbench" if root else None
 
 
 def quarantine_dir() -> Path | None:
@@ -61,18 +61,10 @@ def _path(filename: str) -> Path | None:
 
 
 def _quarantine(path: Path) -> None:
-    if not path.exists():
-        return
     target_dir = quarantine_dir()
     if target_dir is None:
         return
-    target_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    target = target_dir / f"{path.name}.{stamp}.corrupt"
-    try:
-        shutil.move(str(path), str(target))
-    except OSError:
-        pass
+    quarantine_corrupt_file(path, target_dir)
 
 
 def _read(path: Path | None, empty_factory, validator):

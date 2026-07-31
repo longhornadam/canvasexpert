@@ -1,0 +1,210 @@
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import page_header %}
+{% block title %}Seating — Canvas Expert{% endblock %}
+{% block workspace_body_class %}seating-page{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/seating.css?v={{ asset_v }}">
+{% endblock %}
+{% block workspace_header %}{{ page_header('Seating', 'Build room layouts and place the students loaded on the Students page.') }}{% endblock %}
+
+{% block primary %}
+<div class="seating-shell">
+  <section class="seating-course-bar" aria-label="Seating course selection">
+    <label>Course
+      <select id="seating-course">
+        <option value="">— select a course —</option>
+        {% for course in saved_courses %}
+        <option value="{{ course.id }}">{{ course.nickname or course.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" id="seating-refresh" class="small">Reload</button>
+    <span id="seating-status" class="hint" aria-live="polite"></span>
+  </section>
+
+  <div id="seating-workspace" hidden>
+    <div class="seating-workspace-layout">
+      <aside class="seating-sidebar" aria-label="Seating setup controls">
+        <section class="seating-card" aria-labelledby="seating-layouts-title">
+      <div class="seating-heading">
+        <div>
+          <h2 id="seating-layouts-title">Layouts</h2>
+          <p class="hint">Reusable physical room grids. Toggle only the positions that are seats.</p>
+        </div>
+      </div>
+      <div class="seating-controls">
+        <label>Layout
+          <select id="seating-layout-select"></select>
+        </label>
+        <label>New layout name
+          <input id="seating-new-layout-name" type="text" maxlength="80" placeholder="Room layout">
+        </label>
+        <label>Rows
+          <input id="seating-new-layout-rows" type="number" min="1" max="12" value="5">
+        </label>
+        <label>Columns
+          <input id="seating-new-layout-columns" type="number" min="1" max="12" value="6">
+        </label>
+        <button type="button" id="seating-create-layout" class="primary small">Create layout</button>
+      </div>
+      <div id="seating-layout-editor" hidden>
+        <div class="seating-controls">
+          <label>Name
+            <input id="seating-layout-name" type="text" maxlength="80">
+          </label>
+          <label>Rows
+            <input id="seating-layout-rows" type="number" min="1" max="12">
+          </label>
+          <label>Columns
+            <input id="seating-layout-columns" type="number" min="1" max="12">
+          </label>
+          <button type="button" id="seating-save-layout" class="small">Save layout</button>
+          <button type="button" id="seating-delete-layout" class="small">Delete layout</button>
+        </div>
+        <div id="seating-layout-grid" class="seating-layout-grid" aria-label="Seat position builder"></div>
+        <div class="seating-near-teacher">
+          <strong>Near-teacher seats</strong>
+          <p class="hint">Mark existing seats only. Row 1 is the front.</p>
+          <div id="seating-near-teacher-seats" class="seating-near-teacher-seats"></div>
+        </div>
+      </div>
+        </section>
+
+        <section class="seating-card" aria-labelledby="seating-modes-title">
+      <div class="seating-heading">
+        <div>
+          <h2 id="seating-modes-title">Modes</h2>
+          <p class="hint">Each mode connects one layout to one loaded Roster section and retains one current manual chart.</p>
+        </div>
+      </div>
+      <div class="seating-controls">
+        <label>Mode
+          <select id="seating-mode-select"></select>
+        </label>
+        <label>New mode name
+          <input id="seating-new-mode-name" type="text" maxlength="80" placeholder="Rows">
+        </label>
+        <label>Section
+          <select id="seating-new-mode-section"></select>
+        </label>
+        <label>Layout
+          <select id="seating-new-mode-layout"></select>
+        </label>
+        <button type="button" id="seating-create-mode" class="primary small">Create mode</button>
+      </div>
+      <div id="seating-mode-editor" hidden>
+        <div class="seating-controls">
+          <label>Name
+            <input id="seating-mode-name" type="text" maxlength="80">
+          </label>
+          <label>Section
+            <select id="seating-mode-section"></select>
+          </label>
+          <label>Layout
+            <select id="seating-mode-layout"></select>
+          </label>
+          <label>Strategy
+            <select id="seating-mode-strategy">
+              <option value="manual">Manual</option>
+              <option value="testing">Testing</option>
+              <option value="buddy_pairs">Buddy pairs</option>
+              <option value="random_trios">Random trios</option>
+              <option value="mixed_fours">Mixed fours</option>
+              <option value="uniform_fours">Uniform fours</option>
+              <option value="mentor_pairs">Mentor pairs</option>
+            </select>
+          </label>
+          <button type="button" id="seating-save-mode" class="small">Save mode</button>
+          <button type="button" id="seating-delete-mode" class="small">Delete mode</button>
+        </div>
+      </div>
+        </section>
+      </aside>
+
+      <main class="seating-chart-pane">
+        <section id="seating-chart-card" class="seating-card" hidden aria-labelledby="seating-chart-title">
+      <div class="seating-heading">
+        <div>
+          <h2 id="seating-chart-title">Current chart</h2>
+          <p id="seating-chart-subtitle" class="hint"></p>
+        </div>
+        <button type="button" id="seating-print" class="small">Print chart</button>
+      </div>
+      <div class="seating-controls seating-assignment-controls">
+        <label>Seat
+          <select id="seating-assignment-seat"></select>
+        </label>
+        <label>Student
+          <select id="seating-assignment-student"></select>
+        </label>
+        <button type="button" id="seating-assign" class="primary small">Assign</button>
+        <button type="button" id="seating-clear-seat" class="small">Clear seat</button>
+      </div>
+      <div id="seating-chart" class="seating-chart" aria-label="Manual seating chart"></div>
+        </section>
+
+        <section id="seating-proposal-card" class="seating-card" hidden aria-labelledby="seating-proposal-title">
+      <div class="seating-heading">
+        <div>
+          <h2 id="seating-proposal-title">Temporary proposal</h2>
+          <p class="hint">Review this local draft before applying it. It is not printed or saved until Apply.</p>
+        </div>
+        <span id="seating-proposal-status" class="hint" aria-live="polite"></span>
+      </div>
+      <div class="seating-controls seating-proposal-controls">
+        <button type="button" id="seating-generate" class="primary small">Generate proposal</button>
+        <button type="button" id="seating-reroll" class="small">Reroll selected seats</button>
+        <label>Swap seat A
+          <select id="seating-swap-a"></select>
+        </label>
+        <label>Swap seat B
+          <select id="seating-swap-b"></select>
+        </label>
+        <button type="button" id="seating-swap" class="small">Swap unlocked seats</button>
+        <button type="button" id="seating-apply-proposal" class="primary small" disabled>Apply proposal</button>
+        <button type="button" id="seating-undo-apply" class="small" hidden>Undo last apply</button>
+      </div>
+      <div id="seating-academic-controls" class="seating-academic-controls" hidden>
+        <label id="seating-score-column-field">Score column
+          <select id="seating-score-column"></select>
+        </label>
+        <fieldset id="seating-mentor-ready-field" hidden>
+          <legend>Mentor-ready students</legend>
+          <p class="hint">Choose only after reviewing local Roster information. This is temporary and does not infer eligibility from a score.</p>
+          <div id="seating-mentor-ready-list" class="seating-mentor-ready-list"></div>
+        </fieldset>
+      </div>
+      <div id="seating-group-import" class="seating-group-controls" hidden>
+        <label>Existing loaded Canvas group set
+          <select id="seating-import-group-set"></select>
+        </label>
+        <button type="button" id="seating-import-groups" class="small">Import as temporary proposal</button>
+        <p id="seating-group-import-summary" class="hint"></p>
+      </div>
+      <div id="seating-group-export" class="seating-group-controls" hidden>
+        <label>New Canvas group-set name
+          <input id="seating-new-group-set-name" type="text" maxlength="100" placeholder="New group set">
+        </label>
+        <button type="button" id="seating-preview-group-export" class="small">Preview finalized groups</button>
+        <button type="button" id="seating-create-group-set" class="primary small">Create a new Canvas group set</button>
+        <div id="seating-group-export-preview" class="seating-group-export-preview"></div>
+      </div>
+      <div class="seating-pasted-proposal">
+        <label for="seating-pasted-proposal">Review a pasted pseudonym proposal</label>
+        <textarea id="seating-pasted-proposal" rows="4" placeholder='{"assignments":[{"pseudonym":"Pseudonym","seat_label":"1-1"}]}'></textarea>
+        <button type="button" id="seating-review-pasted-proposal" class="small">Review pasted proposal</button>
+        <p class="hint">Paste strict pseudonym-to-seat JSON only. It is parsed and cleared in this browser, then reviewed as a temporary local chart.</p>
+      </div>
+      <div id="seating-proposal-results" class="seating-proposal-results"></div>
+      <div id="seating-proposal-chart" class="seating-chart seating-proposal-chart" aria-label="Temporary seating proposal"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <section id="seating-print-chart" class="seating-print-chart" aria-hidden="true"></section>
+</div>
+{% endblock %}
+{% block workspace_scripts %}
+<script src="/static/seating.js?v={{ asset_v }}"></script>
+{% endblock %}

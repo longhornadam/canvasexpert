@@ -21,10 +21,19 @@
   var currentCategoryGroups = [];
   var filteredStudents = [];
   var selectedNameMap = {};
+  var scoreMatrix = { columns: [], values_by_section: {} };
+  var relationships = { by_section: {} };
   var currentCourseId = "";
   var courseLoaded = false;
   var courseLoadHooks = [];
   var tableRenderHooks = [];
+
+  // Switching courses (or clicking Refresh again) starts a new request
+  // without cancelling the old one, so a slower earlier response could land
+  // last and fill the roster table with the previous course's students while
+  // the new course sits selected. Stamp each request and let only the
+  // newest one write, the same way inbox.js does.
+  var loadGeneration = 0;
 
   function setStatus(msg, isOk) {
     statusEl.textContent = msg;
@@ -86,7 +95,13 @@
   }
 
   function loadCourse() {
+    var generation = ++loadGeneration;
     var cid = courseSelect.value;
+    // The relationship editor holds private, course-scoped context. Hide it
+    // before every reload so a prior course can never remain visible while a
+    // new selection is loading (or if that load fails).
+    var relationshipsCard = document.getElementById("roster-relationships");
+    if (relationshipsCard) relationshipsCard.hidden = true;
     if (!cid) {
       tableCard.hidden = true;
       groupLabelsEditor.hidden = true;
@@ -95,6 +110,7 @@
     }
 
     currentCourseId = cid;
+    courseLoaded = false;
     setStatus("Loading...", true);
     openCanvas.href = window.CANVAS_BASE
       ? window.CANVAS_BASE + "/courses/" + cid + "/users"
@@ -103,6 +119,7 @@
     fetch("/api/roster?course_id=" + encodeURIComponent(cid))
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (generation !== loadGeneration) return;
         if (!data.ok) {
           setStatus(data.error || "Failed to load roster.", false);
           return;
@@ -112,6 +129,8 @@
         groups = data.groups || [];
         selectedGroupCategoryId = data.selected_group_category_id == null ? null : String(data.selected_group_category_id);
         groupLabelScheme = data.group_label_scheme || {};
+        scoreMatrix = data.score_matrix || { columns: [], values_by_section: {} };
+        relationships = data.relationships || { by_section: {} };
         selectedNameMap = {};
         refreshCurrentCategoryGroups();
         renderSummary(data.counts);
@@ -133,6 +152,7 @@
         }
       })
       .catch(function (e) {
+        if (generation !== loadGeneration) return;
         setStatus("Network error: " + e.message, false);
       });
   }
@@ -144,6 +164,14 @@
     hasLoadedCourse: function () { return courseLoaded; },
     reloadCourse: loadCourse,
     getStudents: function () { return students; },
+    getScoreMatrix: function () { return scoreMatrix; },
+    setScoreMatrix: function (value) {
+      scoreMatrix = value || { columns: [], values_by_section: {} };
+    },
+    getRelationships: function () { return relationships; },
+    setRelationships: function (value) {
+      relationships = value || { by_section: {} };
+    },
     getGroupState: function () {
       return {
         groups: groups,

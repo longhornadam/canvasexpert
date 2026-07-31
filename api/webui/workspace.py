@@ -1,12 +1,15 @@
-"""Canonical workspace ownership and non-destructive compatibility helpers.
+"""Canonical workspace ownership: the single source of truth for the v2
+synced-workspace tree (``Library/``, ``To Review/``, ``Printables/``,
+``Canvas Uploads/``, ``Student Work/``, ``For AI/``, ``_System/``).
 
 The synced workspace is teacher-visible data.  Keep path construction here so
 callers cannot accidentally create a second student tree or put new machine
-state under the historical ``FeedbackExpert`` folder.
+state outside ``_System/``.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import glob
 import json
 import os
@@ -16,43 +19,198 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from api import runtime_paths
+from engine.utils.text_utils import safe_filename_component
 
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 API_DIR = os.path.dirname(MODULE_DIR)
 REPO_ROOT = os.path.dirname(API_DIR)
-CONFIG_PATH = os.path.join(MODULE_DIR, "config.json")
+# Pre-0.75 machine-local config lived inside the app folder, which a
+# self-update mirrors wholesale -- see runtime_paths.migrate_legacy_file().
+# Kept in step with config/_io.py's own CONFIG_PATH/LEGACY_CONFIG_PATH pair:
+# both resolve to the same physical file, computed independently because the
+# two modules already read machine config independently (see config/_io.py).
+LEGACY_CONFIG_PATH = os.path.join(MODULE_DIR, "config.json")
+CONFIG_PATH = str(runtime_paths.local_app_dir() / "config.json")
 DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 WORKSPACE_NAME = "CanvasExpert"
 
-# Existing authoring folders remain supported.  These are not the home for
-# downloaded student work or machine-owned PowerGrader state.
-WORKSPACE_SUBFOLDERS = [
-    "AI-TA", "Rubrics", "Quizzes", "Assignments", "Pages", "Exports",
-    "Calendars", "Source Materials",
+# The Library: reusable collections the teacher authors or keeps. "Seating
+# Charts" is a locked name reserved for a future feature and is deliberately
+# absent here -- do not create it until that feature ships.
+LIBRARY_NAME = "Library"
+AI_AUTHORING_SUBFOLDER = "AI Authoring"
+LIBRARY_SUBFOLDERS = [
+    AI_AUTHORING_SUBFOLDER, "Rubrics", "Quizzes", "Assignments", "Pages",
+    "Calendars", "SmartDecks", "Source Materials",
 ]
 
-COURSES_NAME = "Courses"
-AI_PACKETS_NAME = "AI Packets (Pseudonymized)"
-STUDENT_REPORTS_NAME = "Student Reports"
+# Assistant-staged drafts waiting for the teacher to push to Canvas.
+TO_REVIEW_NAME = "To Review"
+TO_REVIEW_SUBFOLDERS = ["Quizzes", "Assignments", "Pages", "Rubrics"]
+
+# Outputs to print/photocopy vs. Canvas import packages -- the old flat
+# "Exports" split by teacher verb.
+PRINTABLES_NAME = "Printables"
+CANVAS_UPLOADS_NAME = "Canvas Uploads"
+
+# Real-name student data. PRIVATE.
+STUDENT_WORK_NAME = "Student Work"
+SUBMISSIONS_NAME = "Submissions"
+STUDENT_WORK_REPORTS_NAME = "Reports"
+GRADING_KEYS_NAME = "Grading Keys"
+
+# Pseudonymized packets safe to hand to an external AI. No real names.
+FOR_AI_NAME = "For AI"
+
 SYSTEM_NAME = "_System"
 SYSTEM_SUBFOLDERS = ("Identity Vault", "PowerGrader", "Audits", "Archive",
                      "Canvas Catalog", "Canvas Mirror")
 CANVAS_CATALOG_NAME = "Canvas Catalog"
 CANVAS_MIRROR_NAME = "Canvas Mirror"
-LEGACY_FEEDBACK_NAME = "FeedbackExpert"
-
-# Compatibility aliases retained for imports and old UI wording.  New code
-# must use the canonical helpers below.
-FEEDBACK_NAME = LEGACY_FEEDBACK_NAME
-FEEDBACK_SUBFOLDERS = ["SAFE", "PRIVATE", "_system"]
 
 MAX_COMPONENT_LENGTH = 120
 MAX_PATH_LENGTH = 240
-_BAD_COMPONENT = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+TEACHER_VISIBLE_BUDGET = 230
 _BAD_ID = re.compile(r"[^A-Za-z0-9._-]+")
+
+# Deterministic short-hash length for compact path components.
+# 8 hex chars → 2^32 namespace, negligible collision risk within one assignment.
+_COMPACT_HASH_LENGTH = 8
+
+
+class TeacherVisiblePathBudgetError(ValueError):
+    """Raised when even the compact form of a teacher-visible path exceeds
+    the 230-character budget."""
+
+
+def _deterministic_hash(text: str, length: int = _COMPACT_HASH_LENGTH) -> str:
+    """Return a deterministic lowercase hex hash of *text*.
+
+    Uses Python's built-in hash() salted with a fixed seed so results are
+    stable across interpreter runs on the same platform.  The hex digest is
+    short enough to fit within the path budget.
+    """
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:length]
+
+
+_SHA256_ABBREV = _deterministic_hash
+
+
+def teacher_visible_path(
+    base: str,
+    *components: str,
+    filename: str = "",
+    reserve: int = 0,
+) -> str:
+    """Build a teacher-visible absolute path guaranteed to be at most 230 characters.
+
+    Parameters
+    ----------
+    base:
+        Absolute base directory (e.g. workspace root).
+    *components:
+        Ordered path segments to join under *base*.  Each may be a plain
+        string or a ``(display, stable_id)`` tuple.  For tuples, the
+        component becomes ``<display> — <id>`` and the stable id portion
+        is always preserved in the compact fallback.
+    filename:
+        Optional final file name with extension.
+    reserve:
+        Extra characters to reserve for projected suffix components that
+        will be appended by the caller *after* this call (e.g. batch
+        index, extension).  When given, the returned path is *shorter* so
+        the caller's full path still fits.
+
+    Returns
+    -------
+    str
+        The projected plain (unprefixed) absolute path, at most
+        ``TEACHER_VISIBLE_BUDGET`` characters.
+
+    Raises
+    ------
+    TeacherVisiblePathBudgetError
+        When even the compact form (shortened display portions, stable-id
+        suffixes preserved) cannot fit within the budget.
+    """
+    budget = TEACHER_VISIBLE_BUDGET - reserve
+    segments: list[str] = [os.path.abspath(base)]
+
+    # First pass: assemble with full display names.
+    raw_segments: list[str] = []
+    for c in components:
+        if isinstance(c, tuple):
+            display, stable_id = c
+            raw_segments.append(f"{display} — {stable_id}")
+        else:
+            raw_segments.append(str(c))
+
+    # Try full-readable form first.
+    def _project(seg: list[str]) -> str:
+        parts = [str(s) for s in seg]
+        if filename:
+            parts.append(str(filename))
+        return os.path.join(*parts)
+
+    candidate = _project(segments + raw_segments)
+    if len(candidate) <= budget:
+        return candidate
+
+    # Compact fallback: shorten display portions, keep stable IDs.
+    compact_segments: list[str] = list(segments)
+    for c in components:
+        if isinstance(c, tuple):
+            display, stable_id = c
+            # Use a deterministic short hash of the full stable-id-bearing
+            # name so that two different assignments with the same stable ID
+            # still produce distinct paths.
+            short_hash = _deterministic_hash(f"{display}—{stable_id}")
+            compact_segments.append(f"{short_hash} — {stable_id}")
+        else:
+            # Non-identity component: shorten aggressively.
+            short = _deterministic_hash(str(c))
+            compact_segments.append(short)
+
+    candidate = _project(compact_segments)
+    if len(candidate) <= budget:
+        return candidate
+
+    # Strip display portions entirely: keep only the hash.
+    minimal_segments: list[str] = list(segments)
+    for c in components:
+        if isinstance(c, tuple):
+            _display, stable_id = c
+            minimal_segments.append(stable_id)
+        else:
+            minimal_segments.append(_deterministic_hash(str(c)))
+
+    candidate = _project(minimal_segments)
+    if len(candidate) <= budget:
+        return candidate
+
+    raise TeacherVisiblePathBudgetError(
+        f"Path too deep for teacher-visible output "
+        f"(projected {len(candidate)} > {budget} budget)"
+    )
+
+
+def needs_compact_layout(base_dir: str, *deepest_child: str, budget: int = TEACHER_VISIBLE_BUDGET) -> bool:
+    """Return True when the readable-name projected path for the deepest
+    expected child under *base_dir* would exceed the teacher-visible budget.
+
+    Every writer that falls back to a shorter compact naming scheme on deep
+    workspaces (PowerGrader's Safe AI Packet, Copilot batches, SAFE/PRIVATE
+    bundle files) should probe with this instead of hand-rolling the same
+    path-length comparison.
+    """
+    projected = os.path.join(os.path.abspath(base_dir), *deepest_child)
+    return len(projected) > budget
 
 
 def _machine_config():
+    runtime_paths.migrate_legacy_file(LEGACY_CONFIG_PATH, CONFIG_PATH)
     if not os.path.exists(CONFIG_PATH):
         return {}
     try:
@@ -88,17 +246,7 @@ def safe_component(value, max_len: int = MAX_COMPONENT_LENGTH, fallback: str = "
     The result is deliberately not an identity scrubber; Canvas IDs are kept in
     the containing folder name as the stable, private collision suffix.
     """
-    text = _BAD_COMPONENT.sub("_", str(value or ""))
-    text = re.sub(r"\s+", " ", text).strip(" .")
-    if not text:
-        text = fallback
-    text = text[:max(1, int(max_len))].rstrip(" .") or fallback
-    if text.upper().split(".", 1)[0] in {
-        "CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
-        *(f"LPT{i}" for i in range(1, 10)),
-    }:
-        text += "_"
-    return text
+    return safe_filename_component(value, max_len=max_len, fallback=fallback)
 
 
 def safe_id(value, fallback: str = "unknown") -> str:
@@ -142,6 +290,38 @@ def bounded_join(base: str, *parts: str, max_path: int = MAX_PATH_LENGTH) -> str
     return path
 
 
+def extended_path(path: str) -> str:
+    """Return a form of ``path`` safe for file I/O past Windows' 260-char limit.
+
+    ``bounded_join`` keeps our *directory* names short, but a deep workspace
+    (e.g. a long OneDrive root + long course/assignment names) can still push a
+    full *file* path over the legacy MAX_PATH ceiling — at which point
+    ``open()``/``makedirs`` raise ``FileNotFoundError [Errno 2]`` even though the
+    parent directory exists. On Windows, prefixing an absolute, backslash-only
+    path with ``\\\\?\\`` opts that single call out of MAX_PATH (raising the
+    limit to ~32,767), the supported way to reach such files without the OS-wide
+    LongPathsEnabled policy.
+
+    The prefix is applied ONLY when the absolute path approaches the limit
+    (>= ``MAX_PATH_LENGTH``). Short paths are returned unchanged so the vast
+    majority of I/O keeps its exact current behavior — the ``\\\\?\\`` form
+    disables normalization and has subtle edge cases, so it is used only where a
+    normal call would actually fail. Non-Windows paths and already-prefixed
+    paths are returned as-is (idempotent).
+    """
+    if os.name != "nt" or not path:
+        return path
+    if path.startswith("\\\\?\\") or path.startswith("\\\\.\\"):
+        return path
+    abs_path = os.path.abspath(path)
+    if len(abs_path) < MAX_PATH_LENGTH:
+        return path
+    if abs_path.startswith("\\\\"):
+        # UNC share: \\server\share -> \\?\UNC\server\share
+        return "\\\\?\\UNC\\" + abs_path[2:]
+    return "\\\\?\\" + abs_path
+
+
 def _root_or_workspace(root=None):
     return root if root is not None else workspace_root()
 
@@ -155,16 +335,53 @@ def folder(name):
     return _join_root(name)
 
 
-def courses_root(root=None):
-    return _join_root(COURSES_NAME, root)
+def library_root(root=None):
+    return _join_root(LIBRARY_NAME, root)
 
 
-def ai_packets_root(root=None):
-    return _join_root(AI_PACKETS_NAME, root)
+def library_folder(name, root=None):
+    base = library_root(root)
+    return os.path.join(base, name) if base else None
 
 
-def student_reports_root(root=None):
-    return _join_root(STUDENT_REPORTS_NAME, root)
+def to_review_root(root=None):
+    return _join_root(TO_REVIEW_NAME, root)
+
+
+def to_review_folder(name, root=None):
+    base = to_review_root(root)
+    return os.path.join(base, name) if base else None
+
+
+def printables_root(root=None):
+    return _join_root(PRINTABLES_NAME, root)
+
+
+def canvas_uploads_root(root=None):
+    return _join_root(CANVAS_UPLOADS_NAME, root)
+
+
+def student_work_root(root=None):
+    return _join_root(STUDENT_WORK_NAME, root)
+
+
+def submissions_root(root=None):
+    base = student_work_root(root)
+    return os.path.join(base, SUBMISSIONS_NAME) if base else None
+
+
+def student_work_reports_root(root=None):
+    base = student_work_root(root)
+    return os.path.join(base, STUDENT_WORK_REPORTS_NAME) if base else None
+
+
+def grading_keys_root(root=None):
+    base = student_work_root(root)
+    return os.path.join(base, GRADING_KEYS_NAME) if base else None
+
+
+def for_ai_root(root=None):
+    return _join_root(FOR_AI_NAME, root)
 
 
 def system_root(root=None):
@@ -249,13 +466,21 @@ def course_mirror_dir(course_id, root=None):
 
 def course_folder(course_name, course_id, root=None):
     base = _root_or_workspace(root)
-    return bounded_join(base, COURSES_NAME, named_id_folder(course_name, course_id)) if base else None
+    return bounded_join(base, STUDENT_WORK_NAME, SUBMISSIONS_NAME,
+                       named_id_folder(course_name, course_id)) if base else None
 
 
 def assignment_folder(course_name, course_id, assignment_name, assignment_id, root=None):
+    """Downloaded-evidence home for one assignment (course-first, matches the
+    download flow). Holds the evidence manifest and per-student attempt
+    folders. Distinct from ``grading_keys_assignment_folder``, which holds
+    PowerGrader's unscrubbed PRIVATE copy and who-is-who decoder for the same
+    assignment -- the two are separate shelves under ``Student Work/``."""
     base = _root_or_workspace(root)
-    return bounded_join(base, COURSES_NAME, named_id_folder(course_name, course_id),
-                       "Assignments", named_id_folder(assignment_name, assignment_id)) if base else None
+    if not base:
+        return None
+    return bounded_join(base, STUDENT_WORK_NAME, SUBMISSIONS_NAME, named_id_folder(course_name, course_id),
+                       "Assignments", named_id_folder(assignment_name, assignment_id))
 
 
 def student_folder(course_name, course_id, assignment_name, assignment_id,
@@ -263,22 +488,50 @@ def student_folder(course_name, course_id, assignment_name, assignment_id,
     base = _root_or_workspace(root)
     # sortable_name is already ``Last, First`` when Canvas provides it.  The
     # caller may pass either form; preserving the display text is intentional.
-    return bounded_join(base, COURSES_NAME, named_id_folder(course_name, course_id),
+    return bounded_join(base, STUDENT_WORK_NAME, SUBMISSIONS_NAME, named_id_folder(course_name, course_id),
                         "Assignments", named_id_folder(assignment_name, assignment_id),
-                        "Student Work", named_id_folder(student_name, user_id)) if base else None
+                        named_id_folder(student_name, user_id)) if base else None
 
 
 def attempt_folder(course_name, course_id, assignment_name, assignment_id,
                    student_name, user_id, attempt=1, root=None):
     base = _root_or_workspace(root)
     attempt_text = safe_id(attempt, "1")
-    return bounded_join(base, COURSES_NAME, named_id_folder(course_name, course_id),
+    return bounded_join(base, STUDENT_WORK_NAME, SUBMISSIONS_NAME, named_id_folder(course_name, course_id),
                         "Assignments", named_id_folder(assignment_name, assignment_id),
-                        "Student Work", named_id_folder(student_name, user_id),
+                        named_id_folder(student_name, user_id),
                         f"Attempt {attempt_text}") if base else None
 
 
-ASSIGNMENT_EVIDENCE_MANIFEST = "assignment_evidence_manifest.json"
+def grading_keys_assignment_folder(course_name, course_id, assignment_name, assignment_id,
+                                   root=None, *, reserve=0):
+    """PowerGrader's unscrubbed PRIVATE bundle + who-is-who decoder for one
+    assignment (course-first). Never enters ``For AI/``. Carries the hard
+    230-char teacher-visible budget because PowerGrader writes several more
+    child path segments (packet folder, batch folder, batch file) beneath it;
+    ``reserve`` accounts for that projected depth."""
+    base = _root_or_workspace(root)
+    if not base:
+        return None
+    if reserve:
+        return teacher_visible_path(
+            base,
+            (STUDENT_WORK_NAME, STUDENT_WORK_NAME),
+            (GRADING_KEYS_NAME, GRADING_KEYS_NAME),
+            (named_id_folder(course_name, course_id), course_id),
+            ("Assignments", "Assignments"),
+            (named_id_folder(assignment_name, assignment_id), assignment_id),
+            reserve=reserve,
+        )
+    return bounded_join(base, STUDENT_WORK_NAME, GRADING_KEYS_NAME, named_id_folder(course_name, course_id),
+                       "Assignments", named_id_folder(assignment_name, assignment_id))
+
+
+# Leading underscore matches the app's other internal-bookkeeping sidecar
+# files (``_manifest.json``, ``_source_manifest.json``): this file lives
+# inside a folder the teacher browses (alongside per-student attempt
+# folders) but isn't meant for them to open.
+ASSIGNMENT_EVIDENCE_MANIFEST = "_assignment_evidence_manifest.json"
 
 
 def assignment_evidence_manifest_path(course_name, course_id, assignment_name, assignment_id, root=None):
@@ -289,12 +542,20 @@ def assignment_evidence_manifest_path(course_name, course_id, assignment_name, a
 
 def managed_evidence_path(course_name, course_id, assignment_name, assignment_id,
                           student_name, user_id, attempt, evidence_id, filename, root=None):
-    """Return a deterministic managed-original path; filenames are never identity."""
+    """Return a deterministic managed-original path; filenames are never identity.
+
+    The stable evidence ID is a suffix after the readable filename --
+    ``<name> — <id><ext>`` -- matching ``named_id_folder``'s "<display> — <id>"
+    convention rather than leading with the ID. This also keeps
+    ``bounded_join``'s length-shortening pass shrinking the display name, not
+    the identity suffix, if the path ever needs to shrink.
+    """
     base = attempt_folder(course_name, course_id, assignment_name, assignment_id,
                           student_name, user_id, attempt, root)
     if not base or not evidence_id:
         return None
-    return bounded_join(base, f"{safe_id(evidence_id)} — {safe_component(filename, 150)}")
+    stem, ext = os.path.splitext(safe_component(filename, 150))
+    return bounded_join(base, f"{stem} — {safe_id(evidence_id)}{ext}")
 
 
 def assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root=None):
@@ -303,10 +564,20 @@ def assignment_evidence_conflicts(course_name, course_id, assignment_name, assig
     if not path:
         return []
     directory = os.path.dirname(path)
-    if not os.path.isdir(directory):
+    if not os.path.isdir(extended_path(directory)):
         return []
-    return [candidate for candidate in glob.glob(os.path.join(directory, "*assignment_evidence_manifest*.json"))
-            if os.path.normcase(os.path.abspath(candidate)) != os.path.normcase(os.path.abspath(path))]
+    # os.listdir(extended) + fnmatch instead of glob: it enumerates a deep
+    # (>260) directory correctly and keeps candidates as plain paths, so the
+    # canonical-path comparison below is unaffected by any \\?\ prefix.
+    canonical = os.path.normcase(os.path.abspath(path))
+    conflicts = []
+    for name in os.listdir(extended_path(directory)):
+        if not fnmatch.fnmatch(name, "*assignment_evidence_manifest*.json"):
+            continue
+        candidate = os.path.join(directory, name)
+        if os.path.normcase(os.path.abspath(candidate)) != canonical:
+            conflicts.append(candidate)
+    return conflicts
 
 
 def read_assignment_evidence_manifest(course_name, course_id, assignment_name, assignment_id, root=None):
@@ -314,7 +585,7 @@ def read_assignment_evidence_manifest(course_name, course_id, assignment_name, a
     if not path or assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root):
         return None
     try:
-        with open(path, encoding="utf-8") as handle:
+        with open(extended_path(path), encoding="utf-8") as handle:
             data = json.load(handle)
     except (OSError, ValueError, TypeError):
         return None
@@ -330,14 +601,16 @@ def write_assignment_evidence_manifest(manifest: dict, *, course_name, course_id
         return None
     if assignment_evidence_conflicts(course_name, course_id, assignment_name, assignment_id, root):
         return None
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".assignment_evidence_", suffix=".partial", dir=os.path.dirname(path), text=True)
+    # os-level via extended_path so a deep assignment folder survives Windows'
+    # 260-char limit; mkstemp(dir=extended) yields an already-prefixed temporary.
+    os.makedirs(extended_path(os.path.dirname(path)), exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".assignment_evidence_", suffix=".partial", dir=extended_path(os.path.dirname(path)), text=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(manifest, handle, indent=2, sort_keys=True)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        os.replace(temporary, extended_path(path))
         return path
     finally:
         if os.path.exists(temporary):
@@ -348,17 +621,39 @@ def ai_assignment_root(course_name, course_id, assignment_name, assignment_id, r
     base = _root_or_workspace(root)
     if not base:
         return None
-    return bounded_join(base, AI_PACKETS_NAME, named_id_folder(course_name, course_id),
+    return bounded_join(base, FOR_AI_NAME, named_id_folder(course_name, course_id),
                         named_id_folder(assignment_name, assignment_id))
 
 
+RUN_STAMP_FORMAT = "%Y%m%d-%H%M%S-%f"
+
+
+def run_stamp() -> str:
+    """Return a fresh, sortable, collision-safe local-time stamp.
+
+    The one shared format for teacher-visible run/batch names -- PowerGrader
+    "For AI/" run folders, late-catchup batch labels, vault backups -- so
+    they read consistently instead of each caller picking its own.
+    """
+    return datetime.now().strftime(RUN_STAMP_FORMAT)
+
+
 def ai_run_folder(course_name, course_id, assignment_name, assignment_id,
-                  mode="assisted", *, run_timestamp=None, root=None):
+                  mode="assisted", *, run_timestamp=None, root=None, reserve=0):
     base = _root_or_workspace(root)
     if not base:
         return None
-    stamp = run_timestamp or datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    return bounded_join(base, AI_PACKETS_NAME, named_id_folder(course_name, course_id),
+    stamp = run_timestamp or run_stamp()
+    if reserve:
+        return teacher_visible_path(
+            base,
+            (FOR_AI_NAME, FOR_AI_NAME),
+            (named_id_folder(course_name, course_id), course_id),
+            (named_id_folder(assignment_name, assignment_id), assignment_id),
+            f"{safe_component(stamp, 32)} — {safe_component(mode, 32)}",
+            reserve=reserve,
+        )
+    return bounded_join(base, FOR_AI_NAME, named_id_folder(course_name, course_id),
                         named_id_folder(assignment_name, assignment_id),
                         f"{safe_component(stamp, 32)} — {safe_component(mode, 32)}")
 
@@ -368,8 +663,8 @@ def ai_student_folder(course_name, course_id, assignment_name, assignment_id,
     base = _root_or_workspace(root)
     if not base:
         return None
-    stamp = run_timestamp or datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    return bounded_join(base, AI_PACKETS_NAME, named_id_folder(course_name, course_id),
+    stamp = run_timestamp or run_stamp()
+    return bounded_join(base, FOR_AI_NAME, named_id_folder(course_name, course_id),
                         named_id_folder(assignment_name, assignment_id),
                         f"{safe_component(stamp, 32)} — {safe_component(mode, 32)}",
                         "Students", safe_component(pseudonym, 80))
@@ -411,34 +706,56 @@ def _seed_workspace_readme(root):
         f.write(
             "Canvas Expert workspace\n"
             "=======================\n\n"
-            "Courses/ contains real-name student work and is PRIVATE.\n"
+            "Real names live only in Student Work/ -- it is PRIVATE.\n"
+            "  Submissions/  downloaded evidence, by course\n"
+            "  Reports/      derived teacher reports, by student\n"
+            "  Grading Keys/ who-is-who crosswalks + unscrubbed PowerGrader copies\n\n"
+            "For AI/ is the pseudonymized counterpart -- safe to hand to an external AI.\n"
+            "Review every file before sharing; pseudonyms do not guarantee anonymity and\n"
+            "visible content may still identify a student.\n\n"
+            "Library/ holds the reusable material you author or keep (quizzes, rubrics,\n"
+            "assignments, pages, calendars, source materials, AI Authoring instructions).\n\n"
+            "To Review/ holds pending assistant drafts. Forge drafts wait for Canvas review and push.\n\n"
+            "Printables/ is for PDF/DOCX output to print or photocopy.\n"
+            "Canvas Uploads/ holds QTI/.imscc import packages.\n\n"
             "_System/ contains the identity vault, PowerGrader state, and audit files; it is PRIVATE.\n"
-            "AI Packets (Pseudonymized)/ contains pseudonymized artifacts. Review every file before sharing;\n"
-            "pseudonyms do not guarantee anonymity and visible content may still identify a student.\n"
-            "Student Reports/ contains derived teacher reports.\n\n"
-            "Canvas Expert does not automatically rename, move, overwrite, or delete existing legacy folders.\n"
         )
     return path
 
 
 def ensure_workspace():
-    """Create canonical roots and seed defaults without touching legacy data."""
+    """Create the v2 canonical tree and seed defaults."""
     root = workspace_root()
     if not root:
         return None
     os.makedirs(root, exist_ok=True)
-    for subfolder in WORKSPACE_SUBFOLDERS:
-        target_dir = os.path.join(root, subfolder)
+
+    os.makedirs(os.path.join(root, LIBRARY_NAME), exist_ok=True)
+    for subfolder in LIBRARY_SUBFOLDERS:
+        target_dir = os.path.join(root, LIBRARY_NAME, subfolder)
         os.makedirs(target_dir, exist_ok=True)
         _seed_folder_if_missing(os.path.join(DEFAULT_DOCS_DIR, subfolder), target_dir)
-    for canonical in (COURSES_NAME, AI_PACKETS_NAME, STUDENT_REPORTS_NAME, SYSTEM_NAME):
+    # SmartDecks library structure.
+    for subfolder in ("Decks", "Decks/Archived", "Deck Templates", "Slide Templates"):
+        os.makedirs(os.path.join(root, LIBRARY_NAME, "SmartDecks", subfolder), exist_ok=True)
+
+    os.makedirs(os.path.join(root, TO_REVIEW_NAME), exist_ok=True)
+    for subfolder in TO_REVIEW_SUBFOLDERS:
+        os.makedirs(os.path.join(root, TO_REVIEW_NAME, subfolder), exist_ok=True)
+
+    for canonical in (PRINTABLES_NAME, CANVAS_UPLOADS_NAME, FOR_AI_NAME):
         os.makedirs(os.path.join(root, canonical), exist_ok=True)
+
+    os.makedirs(os.path.join(root, STUDENT_WORK_NAME), exist_ok=True)
+    for subfolder in (SUBMISSIONS_NAME, STUDENT_WORK_REPORTS_NAME, GRADING_KEYS_NAME):
+        os.makedirs(os.path.join(root, STUDENT_WORK_NAME, subfolder), exist_ok=True)
+
     for sub in SYSTEM_SUBFOLDERS:
         os.makedirs(os.path.join(root, SYSTEM_NAME, sub), exist_ok=True)
     os.makedirs(os.path.join(root, SYSTEM_NAME, "PowerGrader", "Sessions"), exist_ok=True)
     os.makedirs(os.path.join(root, SYSTEM_NAME, "PowerGrader", "Jobs"), exist_ok=True)
 
-    rubric_dir = os.path.join(root, "Rubrics")
+    rubric_dir = os.path.join(root, LIBRARY_NAME, "Rubrics")
     for source in _default_rubric_files():
         target = os.path.join(rubric_dir, os.path.basename(source))
         if not os.path.exists(target):
@@ -447,83 +764,41 @@ def ensure_workspace():
     return root
 
 
-def legacy_feedback_root():
-    root = workspace_root()
-    path = os.path.join(root, LEGACY_FEEDBACK_NAME) if root else None
-    return path if path and os.path.isdir(path) else None
-
-
-def feedback_root():
-    """Return the legacy FeedbackExpert root only when it already exists.
-
-    This function is intentionally read-only: calling it cannot create the old
-    tree again.
-    """
-    return legacy_feedback_root()
-
-
-def feedback_folder(sub):
-    """Resolve an old feedback folder for compatibility, or a canonical alias.
-
-    Existing legacy folders win.  If no legacy tree exists, semantic SAFE,
-    PRIVATE, and system aliases point at their canonical homes so old helper
-    code can be retired incrementally without creating ``FeedbackExpert``.
-    """
-    legacy = legacy_feedback_root()
-    if legacy:
-        translation = {
-            "1_Inbox": "PRIVATE", "2_ForLLM": "SAFE", "3_FromLLM": "SAFE",
-            "4_ToEnter": "PRIVATE", "_vault": os.path.join("_system", "vault"),
-            "_archive": os.path.join("_system", "archive"),
-            "_audit": os.path.join("_system", "audit"),
-        }
-        return os.path.join(legacy, translation.get(sub, sub))
-    if sub in {"SAFE", "2_ForLLM", "3_FromLLM"}:
-        return ai_packets_root()
-    if sub in {"PRIVATE", "1_Inbox", "4_ToEnter"}:
-        return courses_root()
-    if sub in {"_vault", "vault"}:
-        return identity_vault_dir()
-    if sub in {"_audit", "audit"}:
-        return audits_dir()
-    if sub in {"_archive", "archive"}:
-        return archive_dir()
-    return None
-
-
-def feedback_legacy_folder(sub):
-    legacy = legacy_feedback_root()
-    if not legacy:
-        return None
-    return feedback_folder(sub)
-
-
-def compatibility_paths(filename: str, *, kind: str = "session") -> list[str]:
-    """Return legacy machine-state candidates, newest/canonical first elsewhere."""
-    root = workspace_root()
-    if not root:
-        return []
-    if kind == "session":
-        old = [os.path.join(root, "PowerGrader", filename),
-               os.path.join(root, LEGACY_FEEDBACK_NAME, "PRIVATE", "PowerGrader", filename)]
-    elif kind == "job":
-        old = [os.path.join(root, "PowerGrader", filename),
-               os.path.join(root, LEGACY_FEEDBACK_NAME, "PRIVATE", "PowerGrader", filename)]
-    else:
-        old = [os.path.join(root, LEGACY_FEEDBACK_NAME, "_system", filename)]
-    return [p for p in old if os.path.isfile(p)]
-
-
-def verified_copy_if_absent(source: str, destination: str) -> bool:
-    """Copy machine-owned compatibility state without overwrite or deletion."""
-    if not os.path.isfile(source) or os.path.exists(destination):
-        return False
-    os.makedirs(os.path.dirname(destination), exist_ok=True)
-    shutil.copy2(source, destination)
+def migrate_legacy_glass_folders(root=None):
+    """One-time cleanup: move any pre-existing Library/Glass and To Review/Glass
+    folders (left over from before the Glass feature was removed) to
+    _System/Archive/SmartDecks-legacy/. No-ops when both are absent. Move only,
+    never unlink -- same convention as deck_store.delete_deck. Idempotent: once
+    moved, the source is gone, so this becomes a permanent no-op; the
+    destination-exists check also guards against clobbering on a re-run before
+    the source is fully gone (e.g. a partial prior move)."""
+    base = _root_or_workspace(root)
+    if not base:
+        return
+    legacy_sources = [
+        (os.path.join(base, LIBRARY_NAME, "Glass"), "Library-Glass"),
+        (os.path.join(base, TO_REVIEW_NAME, "Glass"), "ToReview-Glass"),
+    ]
+    present = [(src, name) for src, name in legacy_sources if os.path.isdir(src)]
+    if not present:
+        return
+    dest_root = system_folder("Archive", base)
+    if dest_root:
+        dest_root = os.path.join(dest_root, "SmartDecks-legacy")
+    if not dest_root:
+        return
     try:
-        return os.path.getsize(source) == os.path.getsize(destination)
+        os.makedirs(dest_root, exist_ok=True)
     except OSError:
-        return False
+        return
+    for src, name in present:
+        dest = os.path.join(dest_root, name)
+        if os.path.exists(dest):
+            continue
+        try:
+            shutil.move(src, dest)
+        except OSError:
+            continue
 
 
 def path_within_workspace(path: str, root=None) -> bool:

@@ -6,7 +6,8 @@ import os
 from api.nq_report import constructed_responses, html_to_text
 from api.feedback_vault import Vault
 from api import feedback_scrub, feedback_safety
-from api.powergrader import student_attachments
+from api.powergrader import student_attachments, writing_timeline
+from api.webui import workspace
 from api.feedback_contract import (
     CONTRACT_VERSION,
     _REVIEW_NOTE,
@@ -22,6 +23,7 @@ def _attachment_meta(attachment: dict) -> dict:
         "detected_media_type", "media_type", "download_status", "extraction_status",
         "extracted_text_path", "attempt", "item_id", "item_link", "ai_eligible",
         "local_only", "warnings", "error_code", "error_message",
+        "writing_timeline",
     }
     return {k: attachment.get(k) for k in allowed if k in attachment}
 
@@ -66,9 +68,9 @@ def _extracted_upload_text(files: list) -> str | None:
             return None
         path = file.get("extracted_text_path")
         text = ""
-        if path and os.path.isfile(path):
+        if path and os.path.isfile(workspace.extended_path(path)):
             try:
-                with open(path, encoding="utf-8") as f:
+                with open(workspace.extended_path(path), encoding="utf-8") as f:
                     text = f.read().strip()
             except OSError:
                 text = ""
@@ -245,7 +247,8 @@ def _scrub_bundle(bundle: dict, vault: Vault,
     return out
 
 
-def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str) -> tuple[dict, list[str], list[str]]:
+def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str,
+                                    compact: bool = False) -> tuple[dict, list[str], list[str]]:
     """Convert downloaded local evidence into safe text/media or hold the student."""
     import copy
 
@@ -267,15 +270,18 @@ def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str) -> tuple[dict, 
             excluded.append(pseudo)
             log.append(f"!! HELD {pseudo} — attachment evidence needs teacher review: {decision['reasons'][0]}")
             continue
-        media_dir = os.path.join(safe_dir, "Students", pseudo.replace(" ", "-"))
+        if compact:
+            media_dir = os.path.join(safe_dir, "S", pseudo.replace(" ", "-"))
+        else:
+            media_dir = os.path.join(safe_dir, "Students", pseudo.replace(" ", "-"))
         for index, attachment in enumerate(attachments, start=1):
             local_path = attachment.get("local_path")
-            if not local_path or not os.path.isfile(local_path):
+            if not local_path or not os.path.isfile(workspace.extended_path(local_path)):
                 excluded.append(pseudo)
                 log.append(f"!! HELD {pseudo} — downloaded attachment is no longer available locally")
                 break
             try:
-                with open(local_path, "rb") as source:
+                with open(workspace.extended_path(local_path), "rb") as source:
                     raw_attachment = source.read()
                 routed = student_attachments.route_bytes(
                     f"attachment-{index}{os.path.splitext(attachment.get('filename') or '')[1]}",
@@ -296,12 +302,18 @@ def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str) -> tuple[dict, 
             for response in student.get("responses") or []:
                 if attachment.get("item_id") and str(response.get("item_id")) != str(attachment.get("item_id")):
                     continue
+                timeline = writing_timeline.safe_projection(attachment.get("writing_timeline"))
+                if timeline is not None:
+                    response.setdefault("writing_timeline", {"documents": []})[
+                        "documents"
+                    ].append(timeline)
                 if routed.get("text"):
                     response["response"] = (response.get("response") or "") + "\n\n" + (
                         f"Attachment {index} text:\n{routed['text']}"
                     )
                 for output in student_attachments.write_safe_derivatives(
-                    routed, media_dir, pseudonym=pseudo, item_id=attachment.get("item_id") or index
+                    routed, media_dir, pseudonym=pseudo, item_id=attachment.get("item_id") or index,
+                    compact=compact,
                 ):
                     response.setdefault("media", []).append({
                         "item_id": str(attachment.get("item_id") or ""),
@@ -339,6 +351,7 @@ def write_safe_and_private(
     protected: set[str] | None = None,
     submissions: list | None = None,
     rubric_text: str = "",
+    compact: bool | None = None,
 ) -> dict:
     """Write a scrubbed SAFE bundle + unscrubbed PRIVATE copy + who-is-who.
 
@@ -348,6 +361,13 @@ def write_safe_and_private(
        named with pseudonym.
     4. Write PRIVATE/ raw bundle + who-is-who.csv.
     5. Track attachment-only submissions (excluded from SAFE).
+
+    *compact* selects shorter leaf names suitable for deep workspaces:
+    ``bundle.json``, ``how-to-score.txt``, ``context.txt``, ``private.json``,
+    ``who-is-who.csv``, and per-student files as ``s-<hash>.txt``. Left as
+    ``None`` (the default), it is auto-detected the same way PowerGrader's
+    Safe AI Packet and Copilot batches are: project the readable name and go
+    compact only if it would exceed the teacher-visible budget.
 
     Returns {
         "safe_bundle": path,
@@ -359,16 +379,24 @@ def write_safe_and_private(
         "log": [str, ...],
     }
     """
-    os.makedirs(safe_dir, exist_ok=True)
-    os.makedirs(private_dir, exist_ok=True)
+    os.makedirs(workspace.extended_path(safe_dir), exist_ok=True)
+    os.makedirs(workspace.extended_path(private_dir), exist_ok=True)
     log: list[str] = []
     attachment_only: list[dict] = []
     excluded: list[str] = []
     shared_context_excluded = False
     stem = _safe(bundle.get("quiz_title", "assignment"))
 
+    if compact is None:
+        # Longest fixed suffix written into each directory: if that alone
+        # would overflow the budget, everything shorter overflows too.
+        compact = (
+            workspace.needs_compact_layout(safe_dir, f"{stem}__SHARED-CONTEXT.txt")
+            or workspace.needs_compact_layout(private_dir, f"{stem}__who-is-who.csv")
+        )
+
     # Step 1: convert approved local evidence, then scrub text.
-    prepared, attachment_excluded, attachment_log = _prepare_attachment_safe_bundle(bundle, safe_dir)
+    prepared, attachment_excluded, attachment_log = _prepare_attachment_safe_bundle(bundle, safe_dir, compact=compact)
     excluded.extend(attachment_excluded)
     log.extend(attachment_log)
     safe = _scrub_bundle(prepared, vault, protected=protected)
@@ -432,13 +460,17 @@ def write_safe_and_private(
                 })
 
     # Step 4: write SAFE bundle
-    bpath = os.path.join(safe_dir, f"{stem}__bundle.json")
-    with open(bpath, "w", encoding="utf-8") as f:
+    if compact:
+        bpath = os.path.join(safe_dir, "bundle.json")
+        cpath = os.path.join(safe_dir, "how-to-score.txt")
+    else:
+        bpath = os.path.join(safe_dir, f"{stem}__bundle.json")
+        cpath = os.path.join(safe_dir, f"{stem}__HOW-TO-SCORE.txt")
+    with open(workspace.extended_path(bpath), "w", encoding="utf-8") as f:
         json.dump(safe, f, indent=2, ensure_ascii=False)
     # Write HOW-TO-SCORE.txt — rubric inlined so the file is self-contained for the
     # teacher's own LLM (prompt context lives in the bundle; rubric travels here).
-    cpath = os.path.join(safe_dir, f"{stem}__HOW-TO-SCORE.txt")
-    with open(cpath, "w", encoding="utf-8") as f:
+    with open(workspace.extended_path(cpath), "w", encoding="utf-8") as f:
         f.write(build_contract_text(ai_ta_name, rubric_text=rubric_text, persona=persona))
     log.append(f"✓ {stem}: SAFE bundle ({len(safe['students'])} student(s))")
 
@@ -447,8 +479,11 @@ def write_safe_and_private(
     if isinstance(shared, dict) and (
         shared.get("assignment_description") or shared.get("materials")
     ):
-        shared_context_path = os.path.join(safe_dir, f"{stem}__SHARED-CONTEXT.txt")
-        with open(shared_context_path, "w", encoding="utf-8") as f:
+        if compact:
+            shared_context_path = os.path.join(safe_dir, "context.txt")
+        else:
+            shared_context_path = os.path.join(safe_dir, f"{stem}__SHARED-CONTEXT.txt")
+        with open(workspace.extended_path(shared_context_path), "w", encoding="utf-8") as f:
             f.write(f"Assignment: {stem}\n")
             f.write(f"{'='*50}\n\n")
             if shared.get("assignment_description"):
@@ -467,13 +502,16 @@ def write_safe_and_private(
                 f.write("\n\n")
         log.append(f"✓ {stem}: SAFE shared context file saved")
 
-    # Step 5: per-student .txt files named with pseudonym
+    # Step 5: per-student .txt files named with pseudonym (or short hash in compact mode)
     student_txts: list[str] = []
     for s in safe.get("students", []):
         pseudo = s.get("pseudonym", "unknown")
         safe_name = pseudo.replace(" ", "-")
-        txt_path = os.path.join(safe_dir, f"{safe_name}__SAFE.txt")
-        with open(txt_path, "w", encoding="utf-8") as f:
+        if compact:
+            txt_path = os.path.join(safe_dir, f"s-{safe_name}.txt")
+        else:
+            txt_path = os.path.join(safe_dir, f"{safe_name}__SAFE.txt")
+        with open(workspace.extended_path(txt_path), "w", encoding="utf-8") as f:
             f.write(f"Pseudonym: {pseudo}\n")
             f.write(f"Assignment: {stem}\n")
             f.write(f"{'='*50}\n\n")
@@ -486,14 +524,20 @@ def write_safe_and_private(
     log.append(f"✓ {stem}: {len(student_txts)} per-student SAFE .txt file(s)")
 
     # Step 6: write PRIVATE raw bundle
-    priv_path = os.path.join(private_dir, f"{stem}__PRIVATE.json")
-    with open(priv_path, "w", encoding="utf-8") as f:
+    if compact:
+        priv_path = os.path.join(private_dir, "private.json")
+    else:
+        priv_path = os.path.join(private_dir, f"{stem}__PRIVATE.json")
+    with open(workspace.extended_path(priv_path), "w", encoding="utf-8") as f:
         json.dump(bundle, f, indent=2, ensure_ascii=False)
     log.append(f"✓ {stem}: PRIVATE raw bundle saved")
 
     # Step 7: write who-is-who.csv to PRIVATE (all vault entries for context)
-    who_path = os.path.join(private_dir, f"{stem}__who-is-who.csv")
-    with open(who_path, "w", encoding="utf-8", newline="") as f:
+    if compact:
+        who_path = os.path.join(private_dir, "who-is-who.csv")
+    else:
+        who_path = os.path.join(private_dir, f"{stem}__who-is-who.csv")
+    with open(workspace.extended_path(who_path), "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["Real Name", "Canvas ID", "SIS ID", "Pseudonym", "Nicknames"])
         for e in vault.entries():

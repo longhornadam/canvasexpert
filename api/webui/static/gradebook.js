@@ -52,8 +52,35 @@
   }
 
   async function postForm(url, fields) {
+    // Callers all branch on `d.ok` / `d.error`, so every failure has to arrive
+    // as that shape. There are four ways this can fail and only one of them
+    // used to be handled:
+    //   1. the request never lands (offline, app closed) -> outer catch
+    //   2. non-2xx carrying valid JSON: HTTPException emits {"detail": ...},
+    //      which has neither ok nor error, so callers showed "Error: undefined"
+    //   3. non-2xx carrying no readable JSON at all
+    //   4. 2xx whose body is not JSON (a proxy or error page in the way)
     return fetch(url, { method: "POST", body: new URLSearchParams(fields) })
-      .then(r => r.json());
+      .then(function (r) {
+        return r.json().then(
+          function (data) { return { r: r, data: data, readable: true }; },
+          function () { return { r: r, data: {}, readable: false }; }
+        );
+      })
+      .then(function (res) {
+        var data = res.data;
+        if (!res.r.ok && !data.error) {
+          data.ok = false;
+          data.error = data.detail || ("Canvas Expert refused that request (HTTP " + res.r.status + ").");
+        } else if (!res.readable && !data.error) {
+          data.ok = false;
+          data.error = "Canvas Expert sent back a response that could not be read.";
+        }
+        return data;
+      })
+      .catch(function () {
+        return { ok: false, error: "Could not reach Canvas Expert. Check your connection and try again." };
+      });
   }
 
   function _renderBanner(el, results, exitOk) {

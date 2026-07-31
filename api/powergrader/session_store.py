@@ -1,4 +1,4 @@
-"""PowerGrader session storage with new-first legacy compatibility reads."""
+"""PowerGrader session storage under ``_System/PowerGrader/Sessions``."""
 
 import json
 import os
@@ -78,11 +78,6 @@ def session_path(session_id: str) -> str | None:
     return os.path.join(d, f"{safe_id}_session.json")
 
 
-def _legacy_session_paths(session_id: str) -> list[str]:
-    safe_id = safe_session_id(session_id)
-    return workspace.compatibility_paths(f"{safe_id}_session.json", kind="session")
-
-
 def _read_json(path: str) -> dict | None:
     try:
         with open(path, encoding="utf-8") as f:
@@ -94,10 +89,10 @@ def _read_json(path: str) -> dict | None:
 
 def mode_label(mode: str) -> str:
     return {
-        "fast": "Grade Myself",
-        "packet": "Use My AI Chat",
-        "assisted": "Auto-Score With API",
-    }.get(mode or "", mode or "Grade Myself")
+        "fast": "Score myself",
+        "packet": "Score with AI chat",
+        "assisted": "Auto-score with AI",
+    }.get(mode or "", mode or "Score myself")
 
 
 def load_session(session_id: str) -> dict | None:
@@ -109,10 +104,6 @@ def _load_session_unlocked(session_id: str) -> dict | None:
     path = session_path(session_id)
     if path and os.path.isfile(path):
         return _read_json(path)
-    for legacy in _legacy_session_paths(session_id):
-        value = _read_json(legacy)
-        if value is not None:
-            return value
     return None
 
 
@@ -136,17 +127,6 @@ def list_session_summaries() -> list[dict]:
     if os.path.isdir(d):
         candidate_paths.extend(os.path.join(d, fname) for fname in sorted(os.listdir(d))
                                if fname.endswith("_session.json"))
-    root = workspace.workspace_root()
-    if root:
-        for legacy_dir in (
-            os.path.join(root, "PowerGrader"),
-            os.path.join(root, workspace.LEGACY_FEEDBACK_NAME, "PRIVATE", "PowerGrader"),
-        ):
-            if os.path.isdir(legacy_dir):
-                candidate_paths.extend(
-                    os.path.join(legacy_dir, fname) for fname in sorted(os.listdir(legacy_dir))
-                    if fname.endswith("_session.json")
-                )
     for path in candidate_paths:
         s = _read_json(path)
         if not s:

@@ -35,14 +35,22 @@
 
   // Ledger mutation routes require the CSRF header (see routes/operations.py).
   async function postJson(url, body) {
-    var r = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CanvasExpert-CSRF": csrfToken(),
-      },
-      body: JSON.stringify(body),
-    });
+    var r;
+    try {
+      r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CanvasExpert-CSRF": csrfToken(),
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      // Network failure: resolve to the same ok:false shape the callers
+      // already handle, instead of an unhandled rejection that leaves the
+      // in-progress log/status stuck.
+      return { ok: false, error: "Could not reach Canvas Expert. Check your connection and try again." };
+    }
     var data = await r.json().catch(function () { return {}; });
     if (!r.ok && !data.error) data.error = "HTTP " + r.status;
     return data;

@@ -1,8 +1,8 @@
 # Reference: New Quizzes "Student Analysis" CSV format
 
 What the New Quizzes **student_analysis** report looks like, learned from a real
-export (THG Ch1–9 test, MC + short-answer/essay). This is the format the future
-importer must parse. The same CSV is produced two ways:
+export (THG Ch1–9 test, MC + short-answer/essay). This is the on-disk format the
+shipped parser reads (see "Shipped parser" below). The same CSV is produced two ways:
 
 - **Manual:** New Quiz → … → Reports → Student Analysis → download (always works,
   no API auth question — see `api/README.md`).
@@ -96,8 +96,10 @@ PowerGrader's New Quiz written-response path uses the Student Analysis **JSON**
 report API for its local snapshots. This CSV document remains the manual fallback
 and parser reference; it is not used by the PowerGrader fetch path.
 
-## Next step
+## Shipped parser
 
-Build a synthetic `Student_Analysis_Sample.csv` (fake authors, fake ids, fake
-HTML essays) mirroring this exact layout, then an importer parsed and unit-tested
-against it — entirely offline, no live Canvas, no PII.
+The importer is built: `api/nq_report.py::parse_student_analysis` (and
+`parse_student_analysis_file`) does the positional 5-column-block parsing described above,
+and `api/powergrader/new_quiz_csv.py` is the PowerGrader-facing consumer. Both run offline
+against synthetic fixtures — no live Canvas, no PII. This document is the format reference
+those modules implement.

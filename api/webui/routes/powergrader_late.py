@@ -3,7 +3,8 @@
 from datetime import datetime
 
 from .. import config
-from api.powergrader import ai_workflow, canvas_fetch, late_catchup, session_builder
+from api.powergrader import (ai_workflow, canvas_fetch, late_catchup, session_builder,
+                             student_attachments, writing_timeline)
 
 from api.nq_report import html_to_text
 
@@ -13,7 +14,7 @@ def _late_watch_error(session: dict, *, require_key: bool = False, require_sourc
         return "Session not found."
     mode = session.get("mode", "")
     if mode not in ("assisted", "packet"):
-        return "Late catch-up requires Auto-Score With API or AI Chat mode."
+        return "Late catch-up requires Auto-score with AI or AI chat mode."
     late_watch = session.get("late_watch") or {}
     if not late_watch:
         return "Late catch-up is not configured for this session."
@@ -116,6 +117,17 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
             assignment_name=(adata or {}).get("name") or session.get("assignment_name") or assignment_id,
             assignment_id=assignment_id,
         )
+    # A late submitter on a tracked assignment must get the same timeline pass as
+    # an on-time one.  Without this the queue shows a timeline for some students
+    # and nothing for others, which reads as "no revision trail" rather than
+    # "not examined" — the one ambiguity this feature must not create.
+    writing_timeline_tracked = writing_timeline.is_tracked_assignment(adata)
+    session["writing_timeline_tracked"] = writing_timeline_tracked
+    if writing_timeline_tracked:
+        student_attachments.attach_writing_timelines(
+            new_subs,
+            roster_submissions=subs,
+        )
     batch_id = late_catchup.make_late_batch_id()
     selected_model = session.get("model_id") or config.get_openrouter_model()
     response_kind = session.get("response_kind") or late_watch.get("response_kind") or "scr"
@@ -175,6 +187,7 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
         for st in students:
             st["ai_score"] = None
             st["ai_feedback"] = None
+            st["writing_process_observations"] = ""
         session.setdefault("students", []).extend(students)
         late_catchup.update_late_watch_after_generate(session, appended_user_ids, now_iso)
         generated_count = _merge_late_batches(session, ai_result, batch_id, artifact_name)

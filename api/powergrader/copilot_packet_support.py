@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 
 from api import feedback_pipeline as fp
+from api.webui import workspace
 
 
 def write_text(path: str, text: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    os.makedirs(workspace.extended_path(os.path.dirname(path)), exist_ok=True)
+    with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
         f.write(text)
 
 

@@ -4,7 +4,7 @@ One APIRouter; all 9 GET page routes + the /api/open-path utility POST.
 Imported by server.py via app.include_router(router).
 
 Routes: GET /, /about, /ai-expert, /course, /course-expert,
-        /gradebook, /routines, /settings
+        /gradebook, /roster, /seating, /routines, /settings
         POST /api/open-path
 """
 import glob
@@ -91,7 +91,7 @@ def dashboard(request: Request):
 @router.get("/course-expert", response_class=HTMLResponse)
 def course_expert_page(request: Request):
     if request.query_params.get("tab") == "students":
-        return RedirectResponse("/students/reports", status_code=307)
+        return RedirectResponse("/roster?focus=reports", status_code=307)
     skills = list_ai_ta_files()
     return templates.TemplateResponse(request, "course_expert.html", {
         **_push_base_ctx(request),
@@ -107,13 +107,10 @@ def course_expert_page(request: Request):
     })
 
 
-@router.get("/students/reports", response_class=HTMLResponse)
-def student_reports_page(request: Request):
-    """Dedicated Student Reports presentation; report APIs remain in reports.py."""
-    return templates.TemplateResponse(request, "student_reports.html", {
-        **_push_base_ctx(request),
-        "nav_section": "manage",
-    })
+@router.get("/students/reports")
+def student_reports_page():
+    """Reports are a view inside the Students page; keep old links working."""
+    return RedirectResponse("/roster?focus=reports", status_code=307)
 
 
 def _authoring_skill(skills: list, prefix: str) -> str:
@@ -167,6 +164,17 @@ def roster_page(request: Request):
         "nav_section":   "manage",
         "token_is_set":  config.token_is_set(),
         "canvas_base":   config.get_canvas_base(),
+        "saved_courses": config.active_courses(),
+    })
+
+
+@router.get("/seating", response_class=HTMLResponse)
+def seating_page(request: Request):
+    """Local Seating layouts and manual assignments."""
+    return templates.TemplateResponse(request, "seating.html", {
+        "nav_section": "seating",
+        "token_is_set": config.token_is_set(),
+        "canvas_base": config.get_canvas_base(),
         "saved_courses": config.active_courses(),
     })
 
@@ -306,15 +314,17 @@ def settings_page(request: Request):
         "calendar_files": list_calendar_files(),
         "workspace_root": root,
         "workspace_files": [
-            {"name": "AI-TA", "path": workspace.folder("AI-TA")},
-            {"name": "Rubrics", "path": workspace.folder("Rubrics")},
-            {"name": "Quizzes", "path": workspace.folder("Quizzes")},
-            {"name": "Assignments", "path": workspace.folder("Assignments")},
-            {"name": "Pages", "path": workspace.folder("Pages")},
-            {"name": "Exports", "path": workspace.folder("Exports")},
-            {"name": "Source Materials", "path": workspace.folder("Source Materials")},
-            {"name": "Courses (PRIVATE)", "path": workspace.courses_root()},
-            {"name": "AI Packets (review before sharing)", "path": workspace.ai_packets_root()},
+            {"name": "Library / AI Authoring", "path": workspace.library_folder("AI Authoring")},
+            {"name": "Library / Rubrics", "path": workspace.library_folder("Rubrics")},
+            {"name": "Library / Quizzes", "path": workspace.library_folder("Quizzes")},
+            {"name": "Library / Assignments", "path": workspace.library_folder("Assignments")},
+            {"name": "Library / Pages", "path": workspace.library_folder("Pages")},
+            {"name": "Library / Source Materials", "path": workspace.library_folder("Source Materials")},
+            {"name": "To Review", "path": workspace.to_review_root()},
+            {"name": "Printables", "path": workspace.printables_root()},
+            {"name": "Canvas Uploads", "path": workspace.canvas_uploads_root()},
+            {"name": "Student Work (PRIVATE)", "path": workspace.student_work_root()},
+            {"name": "For AI (review before sharing)", "path": workspace.for_ai_root()},
             {"name": "_System (PRIVATE)", "path": workspace.system_root()},
         ],
         "computer_name": os.environ.get("COMPUTERNAME", "this PC"),
@@ -358,25 +368,38 @@ def _allowed_open_roots():
 def api_open_path(path: str = Form(...)):
     """Reveal a file/folder in the OS file manager. Local-only desktop app, but
     restricted to existing paths inside app-known roots so a stray localhost POST
-    can't launch an arbitrary executable."""
-    rp = os.path.realpath(path)
+    can't launch an arbitrary executable.
+
+    Only invokes the OS opener with plain (unprefixed) paths that fit within
+    the teacher-visible budget.  A legacy deep path is resolved through the
+    extended fallback for containment/read purposes, but the opener action
+    is refused with a fixed safe error if the plain form exceeds the limit.
+    """
+    # Resolve through extended fallback for containment checks
+    rp = os.path.realpath(workspace.extended_path(path))
+    plain_rp = os.path.abspath(path)
     if not os.path.exists(rp):
-        return JSONResponse({"ok": False, "error": "path not found"})
+        return JSONResponse({"ok": False, "error": "The file or folder was not found."})
     inside = False
     for root in _allowed_open_roots():
         try:
-            if os.path.commonpath([rp, root]) == root:
+            if os.path.commonpath([os.path.normcase(rp), os.path.normcase(root)]) == os.path.normcase(root):
                 inside = True
                 break
         except ValueError:
             continue
     if not inside:
-        return JSONResponse({"ok": False, "error": "path not allowed"})
+        return JSONResponse({"ok": False, "error": "The path is not inside the workspace."})
+    # Only open with the plain (unprefixed) path; reject if it exceeds budget
+    if len(plain_rp) > workspace.TEACHER_VISIBLE_BUDGET:
+        return JSONResponse(
+            {"ok": False, "error": "The path is too deep to open in the file manager."}
+        )
     try:
-        _open_in_os(rp)
+        _open_in_os(plain_rp)
         return JSONResponse({"ok": True})
-    except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)})
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not open the file or folder."})
 
 
 # --------------------------------------------------------------------------

@@ -18,6 +18,9 @@
     </p>
     <button type="button" id="desk-sync" class="ce-desk-button ce-desk-button--primary">Sync now</button>
   </div>
+  <p class="ce-desk-active-courses ce-desk-agent-link">
+    <a href="/api/download-contract?name=CanvasAgent" download>Download CanvasAgent instructions</a>
+  </p>
 
   <div class="ce-desk-grid">
     <section class="ce-panel ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
@@ -36,7 +39,7 @@
           </div>
         </section>
         <section class="ce-desk-launch-group" aria-labelledby="desk-grade-title">
-          <h3 id="desk-grade-title" class="ce-grade-mark">Grade</h3>
+          <h3 id="desk-grade-title" class="ce-grade-mark">PowerGrader</h3>
           <div class="ce-desk-launch-list">
             <a href="/powergrader">Grade an assignment <span aria-hidden="true">→</span></a>
             <a href="/gradebook">Gradebook <span aria-hidden="true">→</span></a>
@@ -46,13 +49,13 @@
           <h3 id="desk-manage-title" class="ce-attention-mark">Students</h3>
           <div class="ce-desk-launch-list">
             <a href="/roster">Students <span aria-hidden="true">→</span></a>
-            <a href="/students/reports">Student reports <span aria-hidden="true">→</span></a>
+            <a href="/roster?focus=reports">Student reports <span aria-hidden="true">→</span></a>
           </div>
         </section>
         <section class="ce-desk-launch-group" aria-labelledby="desk-automate-title">
           <h3 id="desk-automate-title" class="ce-prepared-mark">Automations</h3>
           <div class="ce-desk-launch-list">
-            <a href="/routines">Routines <span aria-hidden="true">→</span></a>
+            <a href="/routines">Automations <span aria-hidden="true">→</span></a>
           </div>
         </section>
       </div>

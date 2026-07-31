@@ -61,17 +61,11 @@ documents it for group assignments/differentiation-tag configurations. Sources:
 
 ### Canvas write order and safety
 
-For each authored tier in source order:
-
-1. Create the tier assignment with its tier-specific description and
-   `only_visible_to_overrides: true` in the initial POST. An assignment with no override
-   therefore remains invisible to students.
-2. Persist the returned assignment ID/URL before the next request.
-3. Create one ad-hoc assignment override using the transient accepted student IDs for the
-   matched group and the common dates, then persist the override ID.
-4. Attach the tier assignment to the requested module, if any, using tier-indexed steps.
-5. Create/upsert the tier assignment's scheduled Auto-Score job, if explicitly requested,
-   using its deterministic course/assignment job ID and a tier-indexed step.
+Each tier assignment is created with `only_visible_to_overrides: true` in the initial POST,
+so a tier with no override stays invisible to students. The exact ordered write steps per
+tier (create assignment, persist ID, create ad-hoc override, module attach, optional
+Auto-Score job) live in `api/operation_ledger/adapters/assignment_tiered.py` — treat that
+adapter as authoritative rather than duplicating the sequence here.
 
 Printable upload remains supported only when the existing adapter can reuse one confirmed
 file upload safely across all tier descriptions; otherwise preparation must fail closed

@@ -10,10 +10,13 @@ Routes:
 V3: Canvas groups are the source of truth for tier/group assignment.
 Does NOT write local tier_id.
 """
+import json
+
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
 from api import feedback_scrub
+from api import roster_context
 from api import roster_service
 from api.mirror import store as mirror_store
 from .. import config
@@ -38,7 +41,7 @@ router = APIRouter(prefix="/api/roster", tags=["roster"])
 # V3: Canvas group-backed keys only
 ALLOWED_STUDENT_PATCH_KEYS = {
     "nicknames", "pseudonym", "regenerate_pseudonym",
-    "extra_time", "monitored", "canvas_group",
+    "extra_time", "monitored", "canvas_group", "seating_context",
 }
 
 # Legacy keys that are rejected with clear errors
@@ -50,6 +53,17 @@ WARNING_CODES = (
     "nickname_collision", "protected_name_collision",
 )
 ROSTER_MAX_AGE_HOURS = 24
+# Compatibility re-exports for focused Roster tests and existing callers.  The
+# root module is the sole shared implementation used by the Web UI and MCP.
+SCORE_MATRIX_ID_RE = roster_context.SCORE_MATRIX_ID_RE
+SCORE_MATRIX_FIELDS = roster_context.SCORE_MATRIX_FIELDS
+SCORE_MATRIX_PATCH_FIELDS = roster_context.SCORE_MATRIX_PATCH_FIELDS
+_empty_score_matrix = roster_context._empty_score_matrix
+_safe_score_matrix_id = roster_context._safe_score_matrix_id
+_finite_score = roster_context._finite_score
+_validate_score_matrix_columns = roster_context._validate_score_matrix_columns
+_normalize_score_matrix = roster_context._normalize_score_matrix
+_apply_score_matrix_patch = roster_context._apply_score_matrix_patch
 
 
 def _fetch_sections(course_id: str) -> dict:
@@ -212,6 +226,13 @@ def roster_get(course_id: str = Query("")):
     # Monitored
     monitored = config.get_monitored_students()
 
+    # Private local Roster context, scoped to this course and student.
+    raw_roster_settings = config.get_roster_student_settings(course_id)
+    score_matrix = _normalize_score_matrix(config.get_roster_score_matrix(course_id))
+    relationships = roster_context.normalize_relationships(
+        config.get_roster_relationships(course_id)
+    )
+
     # Protected names for collision check
     protected_names = {p.lower() for p in config.active_protected_names()}
 
@@ -273,6 +294,10 @@ def roster_get(course_id: str = Query("")):
 
         # Nicknames from vault
         nicknames = ve.get("nicknames", [])
+        local_settings = raw_roster_settings.get(uid, {})
+        seating_context = roster_updates.normalize_seating_context(
+            local_settings.get("seating_context") if isinstance(local_settings, dict) else None
+        )
 
         row = {
             "id": uid,
@@ -287,6 +312,7 @@ def roster_get(course_id: str = Query("")):
             "pseudo_last": ve.get("pseudo_last", ""),
             "extra_time": et,
             "monitored": {"enabled": monitored_flag, "note": monitored_note},
+            "seating_context": seating_context,
             "canvas_groups": canvas_groups,
             "canvas_group": canvas_group,
             "warnings": [],
@@ -316,7 +342,6 @@ def roster_get(course_id: str = Query("")):
 
     # Check for legacy tier assignments
     legacy_tier_count = 0
-    raw_roster_settings = config.get_roster_student_settings(course_id)
     for uid, local in raw_roster_settings.items():
         if local.get("tier_id") or local.get("tier") or local.get("planned_group"):
             legacy_tier_count += 1
@@ -327,6 +352,8 @@ def roster_get(course_id: str = Query("")):
         "groups": categories,
         "selected_group_category_id": selected_category_id,
         "group_label_scheme": group_scheme.get("group_labels", {}),
+        "score_matrix": score_matrix,
+        "relationships": relationships,
         "counts": {
             "total": total,
             "extra_time": extra_time_count,
@@ -361,6 +388,7 @@ def roster_student_update(
         set_extra_time=config.set_extra_time,
         set_monitored_student=config.set_monitored_student,
         remove_monitored_student=config.remove_monitored_student,
+        update_roster_student_settings=config.update_roster_student_settings,
         as_int=_as_int,
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,
@@ -368,6 +396,50 @@ def roster_student_update(
         allowed_keys=ALLOWED_STUDENT_PATCH_KEYS,
         obsolete_keys=OBSOLETE_PATCH_KEYS,
     ))
+
+
+@router.post("/score-matrix")
+def roster_score_matrix_update(
+    course_id: str = Form(...),
+    patch: str = Form(...),
+):
+    """Apply one local, current-only score-matrix patch for a course."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    try:
+        data = json.loads(patch)
+    except json.JSONDecodeError as error:
+        return JSONResponse({"ok": False, "error": f"Invalid score-matrix patch JSON: {error}"})
+
+    matrix, error = _apply_score_matrix_patch(
+        config.get_roster_score_matrix(course_id), data
+    )
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    config.set_roster_score_matrix(course_id, matrix)
+    return JSONResponse({"ok": True, "score_matrix": matrix})
+
+
+@router.post("/relationships")
+def roster_relationships_update(
+    course_id: str = Form(...),
+    section_id: str = Form(...),
+    relationships: str = Form(...),
+):
+    """Replace one section's local-only relationship list after full validation."""
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    try:
+        data = json.loads(relationships)
+    except json.JSONDecodeError as error:
+        return JSONResponse({"ok": False, "error": f"Invalid relationships JSON: {error}"})
+    updated, error = roster_context.replace_section_relationships(
+        config.get_roster_relationships(course_id), section_id, data
+    )
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    config.set_roster_relationships(course_id, updated)
+    return JSONResponse({"ok": True, "relationships": updated})
 
 
 @router.post("/bulk")

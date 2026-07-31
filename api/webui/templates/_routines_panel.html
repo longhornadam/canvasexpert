@@ -1,13 +1,4 @@
 <div class="rt-page">
-  <div class="rt-head">
-    <h1>Routines</h1>
-    <p class="rt-sub">
-      Automations that run on this machine while Canvas Expert is open — across your
-      {{ active_count }} active course{{ '' if active_count == 1 else 's' }}.
-      Nothing runs in the cloud, and your Canvas token never leaves this computer.
-    </p>
-  </div>
-
   <section class="rt-how">
     <div class="rt-how-item">
       <span class="rt-how-ico">▶</span>
@@ -15,7 +6,7 @@
     </div>
     <div class="rt-how-item">
       <span class="rt-how-ico">⏻</span>
-      <div><strong>On launch</strong><span>Due routines catch up ~90&nbsp;seconds after the app opens.</span></div>
+      <div><strong>On launch</strong><span>Anything due catches up ~90&nbsp;seconds after the app opens.</span></div>
     </div>
     <div class="rt-how-item">
       <span class="rt-how-ico">⟳</span>
@@ -25,7 +16,7 @@
 
   <section class="rt-list-section">
     <div class="rt-list-head">
-      <h2>Your routines</h2>
+      <h2>Your automations</h2>
       <div class="rt-legend">
         <span class="rt-writes" title="Writes to Canvas">✎</span> writes to Canvas
         &nbsp;·&nbsp;
@@ -36,7 +27,7 @@
       <p class="ce-hint ce-routines-loading">Loading…</p>
     </div>
     <div class="rt-actions">
-      <button id="btn-routines-due" class="primary">Run due routines</button>
+      <button id="btn-routines-due" class="primary">Run what is due</button>
       <button id="btn-routines-all" class="small">Run all now</button>
       <span id="routines-status" class="hint"></span>
     </div>
@@ -47,7 +38,7 @@
     <h2>Build your own</h2>
     <p>
       Drop a Python file in your <code>custom_routines</code> folder and it appears here the
-      next time you start the app. Each routine is a small function — hand the authoring guide
+      next time you start the app. Each one is a small function. Hand the authoring guide
       to your AI assistant and describe what you want it to check or do. Read-only "nudge"
       checks (no writes to Canvas) are the safe default.
     </p>
@@ -76,7 +67,7 @@
     <p class="hint">
       Authoring guide:
       <a class="open-link" data-open-path="{{ authoring_path }}" title="Open the authoring guide"><code>custom_routines/AUTHORING.md</code></a>
-      — paste it into your AI assistant as the contract for writing a routine.
+      paste it into your AI assistant as the contract for writing one.
     </p>
   </section>
 </div>
@@ -112,7 +103,7 @@
 
   async function load() {
     var d = await fetch("/api/routines").then(function(r){return r.json();});
-    if (!d.ok) { list.innerHTML = '<p class="hint">Could not load routines.</p>'; return; }
+    if (!d.ok) { list.innerHTML = '<p class="hint">Could not load your automations.</p>'; return; }
     list.innerHTML = "";
     d.routines.forEach(function (r) {
       var row = document.createElement("div");

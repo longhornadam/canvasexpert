@@ -31,13 +31,15 @@ def test_jose_flores_scrub_in_sentence(tmp_path):
     assert e["pseudo_first"] in result or e["pseudonym"] in result
 
 
-def test_nickname_scrubbed(tmp_path):
-    """Nickname 'Paco' is replaced with the fake first name."""
+def test_nickname_scrubbed_to_full_pseudonym(tmp_path):
+    """A manually entered nickname resolves to the student's full pseudonym."""
     v = _vault_with_students(tmp_path)
     rmap = scrub.build_replacement_map(v.entries(), set())
     text = "My friend Paco helped me."
     result = scrub.scrub_text(text, rmap)
     assert "Paco" not in result
+    assert result == f"My friend {v.entries()[0]['pseudonym']} helped me."
+    assert scrub.verify_clean(result, v) == []
 
 
 def test_protected_literary_name_preserved_when_no_roster_collision(tmp_path):
@@ -118,6 +120,58 @@ def test_empty_protected_set_is_valid(tmp_path):
     v = _vault_with_students(tmp_path)
     rmap = scrub.build_replacement_map(v.entries(), set())
     assert len(rmap) > 0
+
+
+# --- real id scrubbing (Layer A) --------------------------------------------
+#
+# A student's real Canvas id or SIS id typed into free text (e.g. "my student
+# number is 5001") is just as much a real identifier as their name. These
+# ids get mapped to a neutral ID_PLACEHOLDER, word-bounded like every other
+# rule, with a small floor (_MIN_ID_SCRUB_LEN) so a 1-2 char stray value
+# can't produce pathological matches.
+
+def test_id_scrub_replaces_canvas_and_sis_ids(tmp_path):
+    """A real canvas_id and a short (3-4 digit) sis_id in text both become
+    the neutral placeholder; neither raw id survives."""
+    v = Vault(str(tmp_path / "vault4.json"))
+    v.get_or_assign("900123", "Jamie Rivera", "456")
+    rmap = scrub.build_replacement_map(v.entries(), set())
+    text = "My canvas id is 900123 and my student number is 456."
+    result = scrub.scrub_text(text, rmap)
+    assert "900123" not in result
+    assert "456" not in result
+    assert result.count(scrub.ID_PLACEHOLDER) == 2
+
+
+def test_id_scrub_respects_word_boundary(tmp_path):
+    """A real id embedded as a digit-substring of a longer number (no word
+    boundary) is left intact -- '12345' inside '2012345' is a different token."""
+    v = Vault(str(tmp_path / "vault5.json"))
+    v.get_or_assign("12345", "Alex Kim", "99999")
+    rmap = scrub.build_replacement_map(v.entries(), set())
+    text = "The number 2012345 showed up in the essay by mistake."
+    result = scrub.scrub_text(text, rmap)
+    assert "2012345" in result
+
+
+def test_id_scrub_applies_even_without_a_name(tmp_path):
+    """An entry with an id but no usable name/nicknames still gets its id
+    scrubbed -- the id rule is added before the name/nickname early-continue."""
+    v = Vault(str(tmp_path / "vault6.json"))
+    v.get_or_assign("900777", "", "50077")   # blank real_name, no nicknames
+    rmap = scrub.build_replacement_map(v.entries(), set())
+    result = scrub.scrub_text("call me at 900777 please", rmap)
+    assert "900777" not in result
+
+
+def test_id_below_floor_is_not_scrubbed(tmp_path):
+    """An id shorter than _MIN_ID_SCRUB_LEN never gets a rule at all."""
+    v = Vault(str(tmp_path / "vault7.json"))
+    v.get_or_assign("900888", "Sam Lee", "1")   # 1-char sis_id, below the floor
+    rmap = scrub.build_replacement_map(v.entries(), set())
+    result = scrub.scrub_text("room 1 is down the hall", rmap)
+    # The lone "1" is left alone; only the real canvas_id (>= floor) is a rule.
+    assert "room 1 is down the hall" == result
 
 
 def test_longest_pattern_wins(tmp_path):

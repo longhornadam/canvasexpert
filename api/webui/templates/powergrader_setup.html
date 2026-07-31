@@ -1,20 +1,84 @@
 {% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail, page_header %}
 {% block title %}PowerGrader — Canvas Expert{% endblock %}
+{% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}pg-setup-body{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/powergrader_setup.css?v={{ asset_v }}">
 {% endblock %}
+
+{% block left_rail %}
+{% call rail('left', 'Choose work and sessions') %}
+  <div class="pg-rail">
+    <p class="pg-rail-kicker">Choose work</p>
+
+    <div class="pg-field pg-course-field">
+      <label for="pg-course">Course</label>
+      <select id="pg-course" name="course_id" required form="pg-start-form">
+        <option value="">— select a course —</option>
+        {% for c in saved_courses %}
+        <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="pg-course-catalog-actions">
+        <button type="button" class="small" id="pg-sync-course-list" disabled>Sync course list</button>
+        <small id="pg-course-catalog-status" class="lbl-hint" aria-live="polite"></small>
+      </div>
+    </div>
+
+    <hr class="pg-rail-rule">
+
+    <div class="pg-field pg-assignment-field">
+      <label for="pg-assignment">Assignment</label>
+      <div class="pg-assignment-tools" id="pg-assignment-tools" hidden>
+        <input type="search" id="pg-assignment-search" placeholder="Search assignments..." autocomplete="off"
+               aria-label="Search all assignments and quizzes">
+        <div class="pg-assignment-group-control">
+          <label for="pg-assignment-group-by">Modules</label>
+          <select id="pg-assignment-group-by">
+            <option value="last_three">Last 3 modules</option>
+          </select>
+        </div>
+      </div>
+      <select id="pg-assignment" name="assignment_id" required disabled form="pg-start-form">
+        <option value="">— select course first —</option>
+      </select>
+      <div class="ce-actions pg-assignment-evidence-actions ce-u-mt-2">
+        <span class="lbl-hint">Assignment evidence</span>
+        <button type="button" class="small" id="pg-refresh-assignment" disabled>Refresh from Canvas</button>
+        <button type="button" class="small" id="pg-open-assignment-folder" disabled>Open local folder</button>
+      </div>
+      <small id="pg-evidence-status" class="lbl-hint" aria-live="polite"></small>
+      <small id="pg-assignment-unsupported-hint" class="lbl-hint" hidden>
+        New Quizzes are reviewed from a local snapshot: teacher-approved feedback posts to Canvas as assignment comments, and item scores are entered in the Canvas grader. Classic Quizzes remain unsupported.
+      </small>
+    </div>
+
+    <hr class="pg-rail-rule">
+
+    <div class="pg-rail-sessions">
+      <p class="pg-rail-kicker">Sessions</p>
+      <a class="pg-rail-sess-row is-attention" href="#pg-attention">
+        <span class="pg-rail-sess-label">Ready to post</span>
+        <span class="pg-rail-sess-count" id="pg-rail-attention-count">0</span>
+      </a>
+      <a class="pg-rail-sess-row" href="#pg-continue">
+        <span class="pg-rail-sess-label">In progress</span>
+        <span class="pg-rail-sess-count" id="pg-rail-continue-count">0</span>
+      </a>
+      <a class="pg-rail-view-all" href="#pg-sessions-card">View all sessions →</a>
+    </div>
+  </div>
+{% endcall %}
+{% endblock %}
+
+{% block workspace_header %}{{ page_header('PowerGrader', 'Score an assignment, then post grades and feedback to Canvas.') }}{% endblock %}
+
 {% block primary %}
 
-<div class="pg-workbench-content ce-drafting-grid">
+<div class="pg-workbench-content">
 
 <section class="ce-panel pg-setup-card">
-  <div class="pg-setup-header">
-    <h1>PowerGrader</h1>
-    <p class="hint">
-      Grade locally, prepare a pseudonymized packet for your AI chat, or draft-score with OpenRouter.
-    </p>
-  </div>
 
   {% if not has_workspace %}
   <div class="callout warn">No workspace configured — <a href="/settings">finish setup in Settings</a> so PowerGrader has a place to save sessions.</div>
@@ -22,89 +86,54 @@
 
   <form id="pg-start-form" enctype="multipart/form-data">
 
-    <!-- ═══ Section 1: Choose work ═══ -->
-    <section class="pg-step pg-step-work" aria-labelledby="pg-step-work-title">
-      <h2 id="pg-step-work-title" class="pg-step-title">1. Choose work</h2>
-      <div class="pg-work-grid">
-        <div class="pg-field pg-course-field">
-          <label for="pg-course">Course</label>
-          <select id="pg-course" name="course_id" required>
-            <option value="">— select a course —</option>
-            {% for c in saved_courses %}
-            <option value="{{ c.id }}">{{ c.nickname or c.name }}</option>
-            {% endfor %}
-          </select>
-          <div class="pg-course-catalog-actions">
-            <button type="button" class="small" id="pg-sync-course-list" disabled>Sync course list</button>
-            <small id="pg-course-catalog-status" class="lbl-hint" aria-live="polite"></small>
-          </div>
-        </div>
-        <div class="pg-field pg-assignment-field">
-          <label for="pg-assignment">Assignment</label>
-          <div class="pg-assignment-tools" id="pg-assignment-tools" hidden>
-            <input type="search" id="pg-assignment-search" placeholder="Search assignments..." autocomplete="off"
-                   aria-label="Search all assignments and quizzes">
-            <div class="pg-assignment-group-control">
-              <label for="pg-assignment-group-by">Modules</label>
-              <select id="pg-assignment-group-by">
-                <option value="last_three">Last 3 modules</option>
-              </select>
-            </div>
-          </div>
-          <select id="pg-assignment" name="assignment_id" required disabled>
-            <option value="">— select course first —</option>
-          </select>
-          <div class="ce-actions pg-assignment-evidence-actions ce-u-mt-2">
-            <span class="lbl-hint">Assignment evidence</span>
-            <button type="button" class="small" id="pg-refresh-assignment" disabled>Refresh from Canvas</button>
-            <button type="button" class="small" id="pg-open-assignment-folder" disabled>Open local folder</button>
-          </div>
-          <small id="pg-evidence-status" class="lbl-hint" aria-live="polite"></small>
-          <small id="pg-assignment-unsupported-hint" class="lbl-hint" hidden>
-            New Quizzes are reviewed from a local snapshot: teacher-approved feedback posts to Canvas as assignment comments, and item scores are entered in the Canvas grader. Classic Quizzes remain unsupported.
-          </small>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══ Section 2: Choose how to grade ═══ -->
+    <!-- ═══ Section 1: Choose how to score ═══ -->
     <section class="pg-step pg-step-route" aria-labelledby="pg-step-route-title">
-      <h2 id="pg-step-route-title" class="pg-step-title">2. Choose how to grade</h2>
+      <h2 id="pg-step-route-title" class="pg-step-title">1. Choose how to score</h2>
       <div class="pg-route-box">
         <div class="pg-route-grid">
-          <label class="pg-route-card is-selected">
-            <input type="radio" name="pg-mode-choice" value="fast" checked>
-            <span><strong>Grade myself</strong><small>Grade entirely locally — no AI packet, no external call.</small></span>
-          </label>
-          <label class="pg-route-card">
-            <input type="radio" name="pg-mode-choice" value="packet">
-            <span><strong>Prepare for my AI chat</strong><small>Creates a pseudonymized SAFE packet. Pseudonymized files may still contain details that could identify a student. You paste results back into PowerGrader.</small></span>
-          </label>
-          <label class="pg-route-card {% if not has_openrouter %}is-disabled{% endif %}">
-            <input type="radio" name="pg-mode-choice" value="assisted" {% if not has_openrouter %}disabled{% endif %}>
-            <span><strong>Draft-score with OpenRouter</strong><small>{% if has_openrouter %}Sends the pseudonymized SAFE packet through OpenRouter after a token and cost estimate. Pseudonymized files may still contain details that could identify a student. Teacher review is still required before posting.{% else %}Add an OpenRouter key in Settings first.{% endif %}</small></span>
-          </label>
-        </div>
-        <details class="pg-safety-popout" id="pg-safety-popout">
-          <summary>Privacy and review details</summary>
-          <div class="pg-safety-body">
-            <p><strong>Grade myself</strong> — All grading stays local. No AI packet is created.</p>
-            <p><strong>Prepare for my AI chat</strong> — A pseudonymized SAFE packet is created. Real names stay in a private decoder on this computer. After the session starts, review the SAFE files before uploading them to any external chat. Pseudonymization reduces exposure but does not guarantee anonymity.</p>
-            <p><strong>Draft-score with OpenRouter</strong> — The same pseudonymized SAFE packet is sent through OpenRouter after you confirm a cost estimate. Drafts still require teacher review before any grades or comments are posted to Canvas. Pseudonymization reduces exposure but does not guarantee anonymity.</p>
+          <div class="pg-route-card is-selected">
+            <label class="pg-route-choice">
+              <input type="radio" name="pg-mode-choice" value="fast" checked>
+              <span><strong>Score myself</strong><small>Everything stays on this computer.</small></span>
+            </label>
+            <details class="pg-what">
+              <summary>What is this?</summary>
+              <p>You score in PowerGrader's own queue and post grades and comments to Canvas when you are ready. No packet is made and nothing is sent anywhere else.</p>
+            </details>
           </div>
-        </details>
+          <div class="pg-route-card">
+            <label class="pg-route-choice">
+              <input type="radio" name="pg-mode-choice" value="packet">
+              <span><strong>Score with AI chat</strong><small>Makes a file you can paste into Claude or ChatGPT yourself.</small></span>
+            </label>
+            <details class="pg-what">
+              <summary>What is this?</summary>
+              <p>Student names are swapped for stand-ins and the decoder stays on this computer. Look the files over before you upload them anywhere, since student writing can still name people or places. You paste the results back here, and nothing reaches Canvas until you approve it.</p>
+            </details>
+          </div>
+          <div class="pg-route-card {% if not has_openrouter %}is-disabled{% endif %}">
+            <label class="pg-route-choice">
+              <input type="radio" name="pg-mode-choice" value="assisted" {% if not has_openrouter %}disabled{% endif %}>
+              <span><strong>Auto-score with AI</strong><small>{% if has_openrouter %}Sends that same file for you and brings back draft scores.{% else %}Add an AI key in Settings first.{% endif %}</small></span>
+            </label>
+            <details class="pg-what">
+              <summary>What is this?</summary>
+              <p>The same name-swapped file, sent to the AI service you set up in Settings, after it shows you what the run will cost. Drafts land in your review queue, so you approve or change every score before anything posts to Canvas. Student writing can still name people or places.</p>
+            </details>
+          </div>
+        </div>
       </div>
       <input type="hidden" name="mode" id="pg-mode" value="fast">
     </section>
 
-    <!-- ═══ Section 3A: Grade-myself configuration ═══ -->
+    <!-- ═══ Section 2A: Score-myself configuration ═══ -->
     <section id="pg-rubric-fast" class="pg-step pg-configuration pg-configuration-fast"
              aria-labelledby="pg-fast-title">
-      <h2 id="pg-fast-title" class="pg-step-title">3. Grading setup</h2>
+      <h2 id="pg-fast-title" class="pg-step-title">2. Scoring setup</h2>
       <div class="pg-fast-row">
         <div class="pg-fast-field">
           <div class="pg-control-head">
-            <label for="pg-rubric-fast-sel">Rubric <small class="lbl-hint">(optional reference while grading yourself)</small></label>
+            <label for="pg-rubric-fast-sel">Rubric <small class="lbl-hint">(optional reference while scoring yourself)</small></label>
             {% if rubrics_folder %}
             <button type="button" class="small pg-inline-open" data-open-path="{{ rubrics_folder }}">Open Rubrics folder</button>
             {% endif %}
@@ -119,10 +148,10 @@
       </div>
     </section>
 
-    <!-- ═══ Section 3B: AI configuration ═══ -->
+    <!-- ═══ Section 2B: AI configuration ═══ -->
     <section id="pg-ai-options" class="pg-step pg-configuration pg-configuration-ai"
              aria-labelledby="pg-ai-title" hidden>
-      <h2 id="pg-ai-title" class="pg-step-title">3. AI setup and source material</h2>
+      <h2 id="pg-ai-title" class="pg-step-title">2. AI setup and source material</h2>
       <div class="pg-ai-grid">
         <div class="pg-ai-settings">
           <h3 class="pg-panel-title">AI setup</h3>
@@ -154,7 +183,7 @@
               {% if persona_folder %}
               <button type="button" class="small pg-inline-open" data-open-path="{{ persona_folder }}">Open Personas folder</button>
               {% elif ai_ta_folder %}
-              <button type="button" class="small pg-inline-open" data-open-path="{{ ai_ta_folder }}">Open AI-TA folder</button>
+              <button type="button" class="small pg-inline-open" data-open-path="{{ ai_ta_folder }}">Open AI Authoring folder</button>
               {% endif %}
             </div>
             <select name="persona_id" id="pg-persona">
@@ -189,7 +218,7 @@
               <input type="checkbox" name="watch_late" id="pg-watch-late" checked>
               <span>Watch for late submissions</span>
             </label>
-            <small class="lbl-hint">Keeps this session open for later submissions without changing the grading route.</small>
+            <small class="lbl-hint">Keeps this session open for later submissions without changing the scoring route.</small>
           </div>
           <div class="pg-auto-post-wrap" id="pg-auto-post-wrap" hidden>
             <label class="pg-auto-post-label">
@@ -259,7 +288,7 @@
       </label>
       <div class="pg-start-primary">
         <button type="submit" class="primary" id="pg-start-btn" {% if not has_workspace %}disabled{% endif %}>
-          Start grading session
+          Start scoring session
         </button>
         <span id="pg-start-status" class="hint"></span>
       </div>

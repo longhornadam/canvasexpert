@@ -31,10 +31,17 @@
     <form id="workspace-form">
       <label>
         Workspace folder
-        <input type="text" name="path" id="workspace-path"
-               value="{{ workspace_suggestion }}"
-               placeholder="C:\Users\You\CanvasExpert" autocomplete="off" required>
+        <div class="ce-wizard-path-row">
+          <input type="text" name="path" id="workspace-path"
+                 value="{{ workspace_suggestion }}"
+                 placeholder="Choose a folder, ideally inside OneDrive" autocomplete="off" required>
+          <button type="button" id="workspace-browse" class="ce-wizard-browse">Browse…</button>
+        </div>
       </label>
+      {% if not workspace_suggestion %}
+      <p class="hint">We couldn't find OneDrive automatically. Pick a folder inside it (or another
+        sync/cloud folder) so your work is backed up and available on your other computers.</p>
+      {% endif %}
       <div id="workspace-result" class="ce-notice ce-wizard-initially-hidden"></div>
       <div class="ce-actions">
         <button type="submit" class="primary">Confirm folder</button>

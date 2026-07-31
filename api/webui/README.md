@@ -15,6 +15,31 @@ For the shared layout/template API and presentation ownership, see
 
 ---
 
+## Rendered verification (read-only)
+
+Use a lifespan-disabled server for read-only browser verification so enabled routines
+cannot fire:
+
+```powershell
+cd api
+py -m uvicorn webui.server:app --host 127.0.0.1 --port 8765 --lifespan off
+```
+
+The active execution brief names the affected routes, useful viewports, themes, and
+interactions. Do not expand that matrix by ritual. For each named route, confirm:
+
+- `document.documentElement.scrollWidth === window.innerWidth` unless an explicitly
+  documented data table owns horizontal scrolling.
+- Required page globals exist and scripts occur once in dependency order.
+- Deep links, course focus/targets, keyboard focus, dialogs, and theme initialization work.
+- Browser console has zero new CanvasExpert errors or warnings.
+- No Canvas write, external AI request, routine execution, or session start occurs during
+  read-only verification.
+
+Source tests never substitute for rendered verification.
+
+---
+
 ## Page map
 
 | Route | Page | JS |
@@ -24,12 +49,14 @@ For the shared layout/template API and presentation ownership, see
 | `/students/reports` | **Student reports** — packet and portfolio tools under Students | `student_reports.html` + `course_expert/student_reports.js` + `course_expert/portfolio.js` |
 | `/gradebook` | **Gradebook tools** — single-course grade operations | `gradebook.js` + `gradebook/*.js` |
 | `/roster` | **Rosters** — student-level Canvas-group and local settings console | `roster.js`, `roster/*.js` |
-| `/powergrader` | **PowerGrader** — grade one assignment with three routes: Grade myself, Prepare for my AI chat, or Draft-score with OpenRouter | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
+| `/powergrader` | **PowerGrader** — grade one assignment with three routes: Score myself, Prepare for my AI chat, or Draft-score with OpenRouter | `powergrader_setup.js` + `powergrader/setup_*.js`, `powergrader_queue.js` + `powergrader/queue_*.js` |
 | `/ai-expert` | **AI helper files** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
+| `/smartdeck` | **SmartDeck** — manage Decks: Active, Templates, Archived, Widgets | `smartdeck/smartdeck.js` |
+| `/smartdeck/display/{deck_id}` | **SmartDeck display** — headerless projector view for displaying Slides | `smartdeck/display.js` |
 | `/about` | What-is-Canvas-Expert explainer | — |
 
 Home's Canvas sync action queues local read-only coordinator work and polls its opaque
@@ -107,6 +134,19 @@ Roster has backend helper splits and browser feature files.
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
 
+### SmartDeck module routing
+
+SmartDeck is a teacher-authored Deck of Slides bound to Teacher Schedule block names,
+displayed full-screen on a classroom projector. Slides are structured data rendered by
+fixed templates (heading, body, bulleted list), never arbitrary code — no sandboxed
+iframe required.
+
+- Routes owner: `api/webui/routes/smartdeck.py`
+- Management page: `smartdeck.html`, `smartdeck/smartdeck.js`, `smartdeck/smartdeck.css`
+- Display page: `smartdeck_display.html`, `smartdeck/display.js`, `smartdeck/display.css`
+- Storage and validation: `api/webui/deck_store.py`, `api/webui/sf.py`
+- Schedule resolution: `api/webui/deck_schedule.py`, `api/webui/deps.py`
+
 ### Feedback tools module routing — PowerGrader advanced import
 
 `/feedback-expert` is a compatibility redirect to `/powergrader?advanced=import`.
@@ -123,7 +163,7 @@ the legacy direct-push presentation and routes are retired.
   `api/feedback_contract.py`, `api/feedback_results.py`, `api/feedback_vault.py`,
   `api/feedback_scrub.py`, `api/feedback_safety.py`
 
-For privacy-sensitive ownership, see `docs/reference/feedbackexpert-module-map.md`.
+For privacy-sensitive ownership, see `docs/reference/powergrader-scoring-map.md`.
 
 ---
 
@@ -144,9 +184,9 @@ names used throughout the app. Internally, `active_courses()` is the compatibili
 named Current-course boundary and the persisted `active` field remains unchanged.
 
 ### Academic calendars
-Load one or more calendars from your workspace **Calendars** folder, or paste a
+Load one or more calendars from your workspace **Library/Calendars** folder, or paste a
 custom CSV. The repo ships **no district data** — only a blank `calendar_template.csv`
-and a fictional `Summer_Session_Sample.csv` (seeded into the Calendars folder on
+and a fictional `Summer_Session_Sample.csv` (seeded into the Library/Calendars folder on
 first run). Whatever CSVs you drop into that folder appear as one-click "Load"
 buttons in Settings. Two CSV formats accepted:
 
@@ -315,7 +355,7 @@ file requests one, a student explainer page.
 ### Assignment evidence refresh
 Downloads student work from the **focused** course. Load assignments, filter by
 type and due-date range (All / Fall / Spring / 30d / 90d presets), select, download
-to a canonical course-first folder tree: `Courses/<Course>/Assignments/<Assignment>/Student Work/<Student>/Attempt <n>/`,
+to a canonical course-first folder tree: `Student Work/Submissions/<Course>/Assignments/<Assignment>/<Student>/Attempt <n>/`,
 `_index.csv` per assignment, `_portfolio.csv` per student. Files are named
 `<Asgn> - <F Last>.html`, `<Asgn> - <F Last> - URL.txt`, or
 `<Asgn> - <F Last> - <original file>`.
@@ -414,7 +454,7 @@ The setup page uses a wide responsive workspace with:
 - **Side-by-side course/assignment selection** on desktop — Course takes about 35%
   of the available width and Assignment takes about 65%, with course-wide search
   and module filtering unchanged.
-- **Mode-aware fast versus AI configuration** — Grade myself shows a compact
+- **Mode-aware fast versus AI configuration** — Score myself shows a compact
   rubric-only panel; AI modes show a two-column AI setup/source material layout.
 - **Course-wide search** that scans all assignments regardless of the selected
   module view, and module filtering that defaults to the last three modules.
@@ -438,17 +478,17 @@ the whole course, including assignments and quizzes outside the selected module 
 
 Modes:
 
-- **Grade Myself** — fetches submitted work and opens the queue with no AI packet
+- **Score myself** — fetches submitted work and opens the queue with no AI packet
   or API call.
-- **Use My AI Chat** — writes reviewed pseudonymized artifacts under `AI Packets
-  (Pseudonymized)/` and private originals/state under the canonical workspace,
+- **Score with AI chat** — writes reviewed pseudonymized artifacts under `For AI/`
+  and private originals/state under the canonical workspace,
   keeps the legacy
   Safe AI Packet ZIP, and also creates Copilot-friendly batch folders. Each batch
   folder has exactly three numbered upload files: assignment information, rubric
   and TA personality, and that batch's pseudonymized student work. Teachers start
   a fresh Copilot chat per batch, then paste each JSON response back into the
   matching batch panel in the same PowerGrader session.
-- **Auto-Score With API** — sends only the SAFE pseudonymized packet to the
+- **Auto-score with AI** — sends only the SAFE pseudonymized packet to the
   configured OpenRouter model after price checks, then loads AI suggestions into
   the same review queue.
 
@@ -465,7 +505,7 @@ the teacher explicitly enables one of two narrow automatic-post paths:
 - A scheduled Auto-Score job may opt one job/assignment into scheduled auto-push.
 - A newly created assisted or packet PowerGrader session may opt only that session into
   **Automatically post eligible AI results to Canvas**. The checkbox is default-off and
-  non-sticky. Grade Myself, Classic Quiz, and New Quiz sessions cannot enable it.
+  non-sticky. Score myself, Classic Quiz, and New Quiz sessions cannot enable it.
 
 Both paths require fresh Canvas state, supported points-based individual assignment metadata,
 unchanged submission identity, no existing Canvas work, valid in-range AI output, idempotency,
@@ -485,13 +525,13 @@ external chat tool.
 ## AI Helper Files (`/ai-expert`)
 
 Equips the teacher's LLM (MagicSchool, Copilot, …) with paste-ready plain-text
-skill files, served from the AI-TA library (`/api/ai-ta/file?name=…`):
+skill files, served from the Library/AI Authoring folder (`/api/ai-ta/file?name=…`):
 
 - **Start here** — orients any LLM to Canvas Expert.
 - **Authoring skills** — Author a Quiz / Assignment / Page / Rubric (the Forge
   contracts as skills). These same files power the Work tools inline
   "Forge one with your LLM" copy buttons.
-- **Scoring skills** — one per rubric in the Rubrics folder; paste a skill, then
+- **Scoring skills** — one per rubric in the Library/Rubrics folder; paste a skill, then
   paste essays one at a time.
 - **MagicSchool Toolkit** — setup recipes for building dedicated MagicSchool tools.
 

@@ -112,10 +112,50 @@ def private_groups(course_id, *, root=None, max_age_hours=None, now=None) -> dic
     )
 
 
+def _sync_freshness(course_id, *, root=None) -> dict:
+    """Freshness (state/last_success_at/last_attempt_at/error_code) derived
+    from the full/delta sync-pass envelopes (``store.read_sync``), not from
+    any particular mirror file's own envelope.
+
+    ``full_pass``/``delta_pass`` (``api/mirror/sync.py``) early-return with a
+    failed pass record whenever the assignment fetch itself errors (the
+    ``_assignment_receipt_error`` guard), so a successful full/delta pass is
+    an exact proxy for "assignments were confirmed this tick" — which is why
+    ``private_assignments`` below can source its freshness from here instead
+    of the assignments file's own envelope (whose timestamps get re-stamped,
+    and the file rewritten, on every tick otherwise). ``private_submissions``
+    has done this since it was introduced; this factors that shared logic out
+    so both scopes stay identical.
+    """
+    passes = store.read_sync(course_id, root=root).get("passes", {})
+    pass_values = [passes.get(name, {}) for name in ("full", "delta")]
+    last_success_at = max((str(value.get("last_success_at") or "") for value in pass_values), default="")
+    last_attempt_at = max((str(value.get("last_attempt_at") or "") for value in pass_values), default="")
+    newest = max(pass_values, key=lambda value: str(value.get("last_attempt_at") or ""), default={})
+    state = "current" if last_success_at else str(newest.get("state") or "unavailable")
+    return {
+        "state": state,
+        "last_success_at": last_success_at,
+        "last_attempt_at": last_attempt_at,
+        "error_code": str(newest.get("error_code") or ""),
+    }
+
+
 def private_assignments(course_id, *, root=None, max_age_hours=None, now=None) -> dict:
-    return _private_document(
-        course_id, PRIVATE_ASSIGNMENTS, store.read_assignments,
-        lambda document: list(document["assignments"].values()), root=root,
+    """Records come from the assignments mirror file; freshness comes from
+    the full/delta sync-pass envelopes (see ``_sync_freshness``), not from
+    the assignments file's own envelope — so a no-op sync tick that leaves
+    the file unwritten does not report stale records."""
+    document = store.read_assignments(course_id, root=root)
+    if document is None:
+        return _envelope(course_id, PRIVATE_ASSIGNMENTS, max_age_hours=max_age_hours, now=now)
+    freshness = _sync_freshness(course_id, root=root)
+    return _envelope(
+        course_id, PRIVATE_ASSIGNMENTS, state=freshness["state"], source="mirror",
+        last_success_at=freshness["last_success_at"], last_attempt_at=freshness["last_attempt_at"],
+        error_code=freshness["error_code"],
+        records=list(document["assignments"].values()),
+        generation_version=f"v{document.get('schema_version', 1)}",
         max_age_hours=max_age_hours, now=now,
     )
 
@@ -134,16 +174,11 @@ def private_submissions(course_id, *, root=None, max_age_hours=None, now=None) -
         if document is not None:
             records.extend(entry["current"] for _, entry in sorted(document["submissions"].items()))
 
-    passes = store.read_sync(course_id, root=root).get("passes", {})
-    pass_values = [passes.get(name, {}) for name in ("full", "delta")]
-    last_success_at = max((str(value.get("last_success_at") or "") for value in pass_values), default="")
-    last_attempt_at = max((str(value.get("last_attempt_at") or "") for value in pass_values), default="")
-    newest = max(pass_values, key=lambda value: str(value.get("last_attempt_at") or ""), default={})
-    state = "current" if last_success_at else str(newest.get("state") or "unavailable")
+    freshness = _sync_freshness(course_id, root=root)
     return _envelope(
-        course_id, PRIVATE_SUBMISSIONS, state=state, source="mirror",
-        last_success_at=last_success_at, last_attempt_at=last_attempt_at,
-        error_code=newest.get("error_code", ""), records=records,
+        course_id, PRIVATE_SUBMISSIONS, state=freshness["state"], source="mirror",
+        last_success_at=freshness["last_success_at"], last_attempt_at=freshness["last_attempt_at"],
+        error_code=freshness["error_code"], records=records,
         generation_version="v1", max_age_hours=max_age_hours, now=now,
     )
 

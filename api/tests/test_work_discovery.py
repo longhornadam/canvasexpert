@@ -61,7 +61,7 @@ def test_discovery_cache_round_trip_and_quarantine(workspace_root):
     path = storage.discovery_cache_path()
     path.write_text("not json", encoding="utf-8")
     assert storage.read_discovery_cache()["courses"] == {}
-    assert list((workspace_root / "_system" / "workbench" / "quarantine").glob("*.corrupt"))
+    assert list((workspace_root / "_System" / "workbench" / "quarantine").glob("*.corrupt"))
 
 
 def test_scan_caps_concurrency_and_persists_course_results(workspace_root, monkeypatch):

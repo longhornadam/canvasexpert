@@ -1,9 +1,10 @@
 """Library and AI-TA file routes for Canvas Expert.
 
-One APIRouter; 7 routes for file listing, AI-TA management, validation, and downloads.
+One APIRouter; 8 routes for file listing, AI-TA management, validation, and downloads.
 
 Routes: GET  /api/files
         GET  /api/rf/files
+        GET  /api/inbox-files
         GET  /api/ai-ta/files
         GET  /api/ai-ta/file
         GET  /api/ai-ta/toolkit-file
@@ -15,11 +16,16 @@ import os
 from fastapi import APIRouter, Form, Request, UploadFile, File
 from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 
-from .. import ai_ta
+from .. import af, ai_ta, pf, rf
 from api import runtime_paths
-from ..deps import REPO_ROOT, list_ai_ta_files, list_quiz_files, list_rubric_files
+from ..deps import REPO_ROOT, list_ai_ta_files, list_inbox_files, list_quiz_files, list_rubric_files
 
 router = APIRouter(tags=["library"])
+
+# Kinds Slice C's per-kind Inbox and this route both understand -- keeps the
+# unknown-kind rejection explicit rather than leaking a ValueError from
+# runtime_paths.inbox_folder.
+_INBOX_KINDS = ("quiz", "assignment", "page", "rubric")
 
 
 @router.get("/api/files")
@@ -30,6 +36,60 @@ def api_files():
 @router.get("/api/rf/files")
 def api_rf_files():
     return JSONResponse({"files": list_rubric_files()})
+
+
+def _validate_inbox_entry(kind: str, path: str):
+    """Run the same validator the matching /api/*/validate route uses.
+
+    Returns (ok, problems), mirroring push_validation.py's ok computation for
+    each kind exactly: quiz drops the QuizForge full-summary shape, the other
+    three only need the ok/problems half. Never raises -- an unreadable file
+    (e.g. a half-synced draft that slipped past the marker gate) becomes a
+    problem string instead of a 500.
+    """
+    try:
+        if kind == "quiz":
+            from api import validate_qf
+            problems = validate_qf.validate(path, set())
+            return not problems, problems
+        if kind == "assignment":
+            data, problems = af.parse_file(path)
+            return data is not None and not problems, problems
+        if kind == "page":
+            data, problems = pf.parse_file(path)
+            return data is not None and not problems, problems
+        if kind == "rubric":
+            data, problems = rf.parse_file(path)
+            return data is not None and not problems, problems
+    except FileNotFoundError:
+        return False, [f"file not found: {path}"]
+    raise ValueError(f"unknown kind: {kind}")
+
+
+@router.get("/api/inbox-files")
+def api_inbox_files(kind: str):
+    """Assistant-staged Inbox drafts for one content kind, pre-validated.
+
+    Read-only: lists Slice C's marker-gated Inbox (``deps.list_inbox_files``)
+    and runs each draft through the same validator its push tab already uses,
+    so a malformed draft is visible to the teacher instead of failing silently
+    once they try to push it. No mutation, no Canvas call.
+    """
+    if kind not in _INBOX_KINDS:
+        return JSONResponse(
+            {"ok": False, "error": f"unknown kind: {kind!r} (expected one of {_INBOX_KINDS})"},
+            status_code=400,
+        )
+    files = []
+    for entry in list_inbox_files(kind):
+        ok, problems = _validate_inbox_entry(kind, entry["path"])
+        files.append({
+            "label": entry["label"],
+            "path": entry["path"],
+            "ok": ok,
+            "problems": problems,
+        })
+    return JSONResponse({"ok": True, "files": files})
 
 
 @router.get("/api/ai-ta/files")
@@ -75,15 +135,32 @@ def api_ai_ta_rebuild():
     return JSONResponse({"ok": True, "files": [os.path.basename(p) for p in files]})
 
 
+_CONTRACT_FILE_MAP = {
+    "AssignmentForge_Base": "Author an Assignment (AssignmentForge).txt",
+    "PageForge_Base": "Author a Page (PageForge).txt",
+    "QuizForge_Base": "Author a Quiz (QuizForge).txt",
+    "RubricForge_Base": "Author a Rubric (RubricForge).txt",
+    "SlideForge_Base": "Author a SmartDeck (SlideForge).txt",
+    # Not Forge contracts, but the same "hand this text to an AI" delivery and
+    # the same canonical source, so they reuse this route rather than adding
+    # one. Both are also served by the MCP get_product_guide tool, so a pasted
+    # assistant and a connected one read identical bytes.
+    "CanvasAgent": "START HERE - CanvasAgent.txt",
+    "WritingTimeline": "Writing Timeline (tracked assignments).txt",
+}
+
+
 @router.get("/api/download-contract")
 def api_download_contract(name: str):
-    """Download a Forge contract file (e.g. AssignmentForge_Base, PageForge_Base)."""
-    valid_names = {"AssignmentForge_Base", "PageForge_Base", "QuizForge_Base",
-                   "RubricForge_Base"}
-    if name not in valid_names:
+    """Download a Forge contract file (e.g. AssignmentForge_Base, PageForge_Base).
+
+    ``name`` is a stable identifier kept for URL compatibility; it maps to the
+    one canonical file under ``api/default_docs/AI Authoring/`` that get_authoring_contract
+    (the MCP tool) also reads, so both readers return the same bytes."""
+    filename = _CONTRACT_FILE_MAP.get(name)
+    if filename is None:
         return JSONResponse({"error": "unknown contract"}, status_code=400)
-    path = os.path.join(REPO_ROOT, "LLM_Modules", f"{name}.md")
+    path = os.path.join(REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
     if not os.path.isfile(path):
         return JSONResponse({"error": "file not found"}, status_code=404)
-    return FileResponse(path, media_type="text/markdown",
-                        filename=f"{name}.md")
+    return FileResponse(path, media_type="text/plain", filename=filename)

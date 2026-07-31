@@ -1,5 +1,5 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import rail %}
+{% from "ui/_macros.html" import rail, page_header %}
 {% block title %}Settings — Canvas Expert{% endblock %}
 {% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}ce-settings-page{% endblock %}
@@ -8,21 +8,50 @@
 {% block left_rail %}
 {% call rail('left', 'Settings sections') %}
   <nav class="ce-settings-index" aria-label="Settings sections">
-    <p class="ce-settings-index__title">Settings</p>
-    <div class="ce-settings-index__links">
-      <a href="#workspace-card">Canvas account</a>
-      <a href="#openrouter-card">AI assistance</a>
-      <a href="#tier-tags-card">Differentiation tags</a>
-      <a href="#workspace-settings-card">Workspace</a>
-      <a href="#mirror-card">Canvas data</a>
-      <a href="#current-courses-card">Courses</a>
-      <a href="#download-root-card">Downloads</a>
-      <a href="#ai-ta-card">AI-TA Library</a>
-      <a href="#cal">Academic calendars</a>
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">Canvas connection</p>
+      <div class="ce-settings-index__links">
+        <a href="#workspace-card" data-rail-link>Canvas account</a>
+        <a href="#mirror-card" data-rail-link>Canvas data</a>
+      </div>
+    </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">Courses</p>
+      <div class="ce-settings-index__links">
+        <a href="#current-courses-card" data-rail-link>Courses</a>
+      </div>
+    </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">AI &amp; authoring</p>
+      <div class="ce-settings-index__links">
+        <a href="#openrouter-card" data-rail-link>AI assistance</a>
+        <a href="#tier-tags-card" data-rail-link>Differentiation tags</a>
+        <a href="#ai-ta-card" data-rail-link>AI Authoring</a>
+      </div>
+    </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">Files &amp; calendars</p>
+      <div class="ce-settings-index__links">
+        <a href="#workspace-settings-card" data-rail-link>Workspace</a>
+        <a href="#download-root-card" data-rail-link>Downloads</a>
+        <a href="#cal" data-rail-link>Academic calendars</a>
+      </div>
+    </div>
+
+    <div class="ce-settings-index__group">
+      <p class="ce-settings-index__kicker">About this app</p>
+      <div class="ce-settings-index__links">
+        <a href="#update-card" data-rail-link>Updates</a>
+      </div>
     </div>
   </nav>
 {% endcall %}
 {% endblock %}
+
+{% block workspace_header %}{{ page_header('Settings', 'Your Canvas connection, courses, AI keys, folders, and calendars.') }}{% endblock %}
 
 {% block primary %}
 
@@ -88,145 +117,6 @@
   </form>
   <div class="ce-actions ce-settings-restart-row">
     <a href="/welcome" class="small-link">Re-run setup wizard →</a>
-  </div>
-</section>
-
-<section class="ce-panel ce-settings-panel" id="openrouter-card" data-default-model="{{ default_openrouter_model }}">
-  <h2>AI assistance <small class="lbl-hint">(OpenRouter)</small></h2>
-  <p class="ce-hint">
-    PowerGrader can use OpenRouter to co-score submissions and draft feedback.
-    The API key is stored in <strong>Windows Credential Manager</strong>; the selected
-    model is stored locally on this computer.
-  </p>
-
-  <div class="ce-actions ce-settings-link-row ce-settings-actions-wrap">
-    <a class="small-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">Open API keys ↗</a>
-    <a class="small-link" href="https://openrouter.ai/models" target="_blank" rel="noopener">Open models ↗</a>
-    <a class="small-link" href="https://openrouter.ai/settings/credits" target="_blank" rel="noopener">Add credits ↗</a>
-    <button type="button" id="btn-openrouter-help" class="small">What is this?</button>
-  </div>
-
-  <div id="openrouter-help" class="ce-notice ce-settings-help" hidden>
-    <p>
-      OpenRouter is a paid API gateway for AI models. Canvas Expert sends only the
-      pseudonymized grading bundle after its safety gate passes, then brings the score
-      and feedback suggestion back for you to review.
-    </p>
-    <ol>
-      <li>Create or sign in to an OpenRouter account.</li>
-      <li>Go to <strong>API Keys</strong>, create a key named <strong>CanvasExpert - {{ computer_name }}</strong>, and optionally set a small credit limit.</li>
-      <li>Add a small amount of credits before using paid models.</li>
-      <li>Use <strong>DeepSeek V4 Pro</strong> (<code>{{ default_openrouter_model }}</code>) for routine grading.</li>
-      <li>Use the searchable model field below for exact OpenRouter model IDs, including latest aliases.</li>
-    </ol>
-  </div>
-
-  <form id="openrouter-form">
-    <label>
-      OpenRouter API key
-      {% if openrouter_is_set %}
-      <div class="token-row">
-        <span class="token-saved">●●●●●●●● saved in Windows Credential Manager</span>
-        <button type="button" id="btn-replace-openrouter-key" class="small">Replace</button>
-      </div>
-      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
-             placeholder="Paste new OpenRouter key to replace" class="ce-settings-initially-hidden">
-      {% else %}
-      <div class="ce-notice ce-settings-notice">
-        No OpenRouter key saved yet — create one at openrouter.ai/keys and paste it below.
-      </div>
-      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
-             placeholder="Paste your OpenRouter API key here">
-      {% endif %}
-    </label>
-
-    <label>
-      Model ID
-      <input type="text" name="model" id="openrouter-model-input"
-             value="{{ openrouter_model }}" placeholder="{{ default_openrouter_model }}"
-             list="openrouter-model-list" autocomplete="off">
-      <datalist id="openrouter-model-list">
-        {% for m in openrouter_model_presets %}
-        <option value="{{ m.id }}" label="{{ m.cost_tier }} · {{ m.label }} — input ${{ "%.3g"|format(m.input_per_mtok) }}/M; output ${{ "%.3g"|format(m.output_per_mtok) }}/M; 30 essays ~${{ "%.2f"|format(m.scenario_cost) }} — {{ m.note }}"></option>
-        {% endfor %}
-        <option value="openrouter/auto" label="Auto Router (advanced; variable cost)"></option>
-      </datalist>
-      <small class="lbl-hint">
-        Default: <code>{{ default_openrouter_model }}</code>. Avoid <code>openrouter/auto</code> for grading cost control.
-      </small>
-    </label>
-
-    <div class="ce-actions ce-settings-model-tools">
-      <button type="button" id="btn-openrouter-auto" class="small">Use DeepSeek V4 Pro</button>
-      <button type="button" id="btn-openrouter-load-models" class="small">Load current model IDs &amp; prices</button>
-      <button type="button" id="btn-openrouter-test" class="small">Test saved key</button>
-    </div>
-
-    <div id="openrouter-major-models" class="ce-settings-model-box" hidden>
-      <strong class="ce-settings-label">Current major models</strong>
-      <p class="ce-hint ce-settings-compact-hint">
-        Cost estimate assumes 30 1000-word essays with an attached rubric and feedback template.
-        It uses a rough 50k input tokens + 10k output tokens model; actual cost varies with essay length and feedback length.
-      </p>
-      <div id="openrouter-major-list"></div>
-    </div>
-
-    <div class="ce-actions">
-      <button type="submit" class="primary">Save OpenRouter settings</button>
-    </div>
-    <p id="openrouter-status" class="status"></p>
-  </form>
-</section>
-
-<section class="ce-panel ce-settings-panel" id="tier-tags-card">
-  <h2>Differentiation tags</h2>
-  <p class="ce-hint">
-    Optional. Canvas Expert's tiers — <strong>Support, Core, Accelerate, Extend</strong> —
-    stay private. The tag you set here is the only label a <em>student</em> sees on that
-    tier's assignment, so keep it neutral (a color, a form letter). Leave a tag blank for a
-    completely untagged assignment name. Tags double as version labels for anti-cheating and
-    A/B testing — students can't tell a tier from a random form.
-  </p>
-  <form id="tier-tags-form">
-    <div class="settings-grid ce-settings-tier-grid">
-      {% for name in ["Support", "Core", "Accelerate", "Extend"] %}
-      <label>{{ name }} tag <small class="lbl-hint">(student-visible; blank = none)</small>
-        <input type="text" class="tier-tag-input" data-tier="{{ name }}"
-               value="{{ tier_tags[name] }}" placeholder="e.g. {{ {'Support':'Red','Core':'Blue','Accelerate':'Silver','Extend':'White'}[name] }}"
-               autocomplete="off">
-      </label>
-      {% endfor %}
-    </div>
-    <div class="ce-actions">
-      <button type="submit" class="primary">Save tags</button>
-    </div>
-    <p id="tier-tags-status" class="status"></p>
-  </form>
-</section>
-
-<section class="ce-panel ce-settings-panel" id="workspace-settings-card">
-  <h2>Workspace</h2>
-  <p class="ce-hint">
-    {% if workspace_is_local %}
-    no OneDrive found — using local folders for now.
-    {% else %}
-    Your synced content home lives at <strong>{{ workspace_status }}</strong>.
-    {% endif %}
-    Downloaded student work is organized under <strong>Courses</strong> in
-    course → assignment → student → attempt order. <strong>_System</strong> is
-    private machine-owned state; pseudonymized AI packets live separately and
-    must be reviewed before sharing.
-  </p>
-  <div class="ce-actions">
-    <button type="button" id="btn-workspace-open" class="small" {% if workspace_is_local %}disabled{% endif %}>Open folder</button>
-  </div>
-  <div class="ce-settings-section-gap">
-    <strong class="ce-settings-label">Folders here</strong>
-    <ul id="workspace-file-list" class="ce-settings-list">
-      {% for item in workspace_files %}
-      <li>{{ item.name }}{% if item.path %} <span class="muted">({{ item.path }})</span>{% endif %}</li>
-      {% endfor %}
-    </ul>
   </div>
 </section>
 
@@ -344,6 +234,164 @@
   </div>
 </section>
 
+<section class="ce-panel ce-settings-panel" id="openrouter-card" data-default-model="{{ default_openrouter_model }}">
+  <h2>AI assistance <small class="lbl-hint">(OpenRouter)</small></h2>
+  <p class="ce-hint">
+    PowerGrader can use OpenRouter to co-score submissions and draft feedback.
+    The API key is stored in <strong>Windows Credential Manager</strong>; the selected
+    model is stored locally on this computer.
+  </p>
+
+  <div class="ce-actions ce-settings-link-row ce-settings-actions-wrap">
+    <a class="small-link" href="https://openrouter.ai/keys" target="_blank" rel="noopener">Open API keys ↗</a>
+    <a class="small-link" href="https://openrouter.ai/models" target="_blank" rel="noopener">Open models ↗</a>
+    <a class="small-link" href="https://openrouter.ai/settings/credits" target="_blank" rel="noopener">Add credits ↗</a>
+    <button type="button" id="btn-openrouter-help" class="small">What is this?</button>
+  </div>
+
+  <div id="openrouter-help" class="ce-notice ce-settings-help" hidden>
+    <p>
+      OpenRouter is a paid API gateway for AI models. Canvas Expert sends only the
+      pseudonymized grading bundle after its safety gate passes, then brings the score
+      and feedback suggestion back for you to review.
+    </p>
+    <ol>
+      <li>Create or sign in to an OpenRouter account.</li>
+      <li>Go to <strong>API Keys</strong>, create a key named <strong>CanvasExpert - {{ computer_name }}</strong>, and optionally set a small credit limit.</li>
+      <li>Add a small amount of credits before using paid models.</li>
+      <li>Use <strong>DeepSeek V4 Pro</strong> (<code>{{ default_openrouter_model }}</code>) for routine grading.</li>
+      <li>Use the searchable model field below for exact OpenRouter model IDs, including latest aliases.</li>
+    </ol>
+  </div>
+
+  <form id="openrouter-form">
+    <label>
+      OpenRouter API key
+      {% if openrouter_is_set %}
+      <div class="token-row">
+        <span class="token-saved">●●●●●●●● saved in Windows Credential Manager</span>
+        <button type="button" id="btn-replace-openrouter-key" class="small">Replace</button>
+      </div>
+      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
+             placeholder="Paste new OpenRouter key to replace" class="ce-settings-initially-hidden">
+      {% else %}
+      <div class="ce-notice ce-settings-notice">
+        No OpenRouter key saved yet — create one at openrouter.ai/keys and paste it below.
+      </div>
+      <input type="password" name="api_key" id="openrouter-key-input" autocomplete="off"
+             placeholder="Paste your OpenRouter API key here">
+      {% endif %}
+    </label>
+
+    <label>
+      Model ID
+      <input type="text" name="model" id="openrouter-model-input"
+             value="{{ openrouter_model }}" placeholder="{{ default_openrouter_model }}"
+             list="openrouter-model-list" autocomplete="off">
+      <datalist id="openrouter-model-list">
+        {% for m in openrouter_model_presets %}
+        <option value="{{ m.id }}" label="{{ m.cost_tier }} · {{ m.label }} — input ${{ "%.3g"|format(m.input_per_mtok) }}/M; output ${{ "%.3g"|format(m.output_per_mtok) }}/M; 30 essays ~${{ "%.2f"|format(m.scenario_cost) }} — {{ m.note }}"></option>
+        {% endfor %}
+        <option value="openrouter/auto" label="Auto Router (advanced; variable cost)"></option>
+      </datalist>
+      <small class="lbl-hint">
+        Default: <code>{{ default_openrouter_model }}</code>. Avoid <code>openrouter/auto</code> for grading cost control.
+      </small>
+    </label>
+
+    <div class="ce-actions ce-settings-model-tools">
+      <button type="button" id="btn-openrouter-auto" class="small">Use DeepSeek V4 Pro</button>
+      <button type="button" id="btn-openrouter-load-models" class="small">Load current model IDs &amp; prices</button>
+      <button type="button" id="btn-openrouter-test" class="small">Test saved key</button>
+    </div>
+
+    <div id="openrouter-major-models" class="ce-settings-model-box" hidden>
+      <strong class="ce-settings-label">Current major models</strong>
+      <p class="ce-hint ce-settings-compact-hint">
+        Cost estimate assumes 30 1000-word essays with an attached rubric and feedback template.
+        It uses a rough 50k input tokens + 10k output tokens model; actual cost varies with essay length and feedback length.
+      </p>
+      <div id="openrouter-major-list"></div>
+    </div>
+
+    <div class="ce-actions">
+      <button type="submit" class="primary">Save OpenRouter settings</button>
+    </div>
+    <p id="openrouter-status" class="status"></p>
+  </form>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="tier-tags-card">
+  <h2>Differentiation tags</h2>
+  <p class="ce-hint">
+    Optional. Canvas Expert's tiers — <strong>Support, Core, Accelerate, Extend</strong> —
+    stay private. The tag you set here is the only label a <em>student</em> sees on that
+    tier's assignment, so keep it neutral (a color, a form letter). Leave a tag blank for a
+    completely untagged assignment name. Tags double as version labels for anti-cheating and
+    A/B testing — students can't tell a tier from a random form.
+  </p>
+  <form id="tier-tags-form">
+    <div class="settings-grid ce-settings-tier-grid">
+      {% for name in ["Support", "Core", "Accelerate", "Extend"] %}
+      <label>{{ name }} tag <small class="lbl-hint">(student-visible; blank = none)</small>
+        <input type="text" class="tier-tag-input" data-tier="{{ name }}"
+               value="{{ tier_tags[name] }}" placeholder="e.g. {{ {'Support':'Red','Core':'Blue','Accelerate':'Silver','Extend':'White'}[name] }}"
+               autocomplete="off">
+      </label>
+      {% endfor %}
+    </div>
+    <div class="ce-actions">
+      <button type="submit" class="primary">Save tags</button>
+    </div>
+    <p id="tier-tags-status" class="status"></p>
+  </form>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="ai-ta-card" data-path="{{ ai_ta_dir }}">
+  <h2>AI Authoring</h2>
+  <p class="ce-hint">
+    This folder contains the paste-ready skill files you can load into MagicSchool or Copilot. Canvas Expert regenerates it from the current contracts and rubric library, so the contents stay current.
+  </p>
+  <p class="ce-hint">
+    Paste one whole file into your chat assistant, then keep the conversation inside that file's instructions.
+  </p>
+  <div class="ce-actions">
+    <button type="button" id="btn-ai-ta-open" class="small">Open folder</button>
+    <button type="button" id="btn-ai-ta-rebuild" class="primary small">Rebuild</button>
+    <span id="ai-ta-status" class="status ce-settings-inline-status"></span>
+  </div>
+  <div class="ce-settings-files">
+    <strong class="ce-settings-label">Files</strong>
+    <ul id="ai-ta-file-list" class="ce-settings-list"></ul>
+  </div>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="workspace-settings-card">
+  <h2>Workspace</h2>
+  <p class="ce-hint">
+    {% if workspace_is_local %}
+    no OneDrive found — using local folders for now.
+    {% else %}
+    Your synced content home lives at <strong>{{ workspace_status }}</strong>.
+    {% endif %}
+    Downloaded student work is organized under <strong>Student Work/Submissions</strong>
+    in course → assignment → student → attempt order. <strong>_System</strong> is
+    private machine-owned state; pseudonymized packets live in <strong>For AI</strong>
+    and must be reviewed before sharing.
+  </p>
+  <div class="ce-actions">
+    <button type="button" id="btn-workspace-open" class="small" {% if workspace_is_local %}disabled{% endif %}>Open folder</button>
+  </div>
+  <div class="ce-settings-section-gap">
+    <strong class="ce-settings-label">Folders here</strong>
+    <ul id="workspace-file-list" class="ce-settings-list">
+      {% for item in workspace_files %}
+      <li>{{ item.name }}{% if item.path %} <span class="muted">({{ item.path }})</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
 <section class="ce-panel ce-settings-panel" id="download-root-card">
   <h2>Download location</h2>
   <p class="ce-hint">
@@ -361,25 +409,6 @@
     </label>
     <p id="download-root-status" class="status ce-settings-status"></p>
   </form>
-</section>
-
-<section class="ce-panel ce-settings-panel" id="ai-ta-card" data-path="{{ ai_ta_dir }}">
-  <h2>AI-TA Library</h2>
-  <p class="ce-hint">
-    This folder contains the paste-ready skill files you can load into MagicSchool or Copilot. Canvas Expert regenerates it from the current contracts and rubric library, so the contents stay current.
-  </p>
-  <p class="ce-hint">
-    Paste one whole file into your chat assistant, then keep the conversation inside that file's instructions.
-  </p>
-  <div class="ce-actions">
-    <button type="button" id="btn-ai-ta-open" class="small">Open folder</button>
-    <button type="button" id="btn-ai-ta-rebuild" class="primary small">Rebuild</button>
-    <span id="ai-ta-status" class="status ce-settings-inline-status"></span>
-  </div>
-  <div class="ce-settings-files">
-    <strong class="ce-settings-label">Files</strong>
-    <ul id="ai-ta-file-list" class="ce-settings-list"></ul>
-  </div>
 </section>
 
 <section class="ce-panel ce-settings-panel" id="cal">
@@ -469,7 +498,42 @@
   </details>
 </section>
 
-<p class="ce-settings-version">CanvasExpert v{{ app_version }}</p>
+<section class="ce-panel ce-settings-panel" id="update-card">
+  <h2>Updates</h2>
+  <p class="ce-hint">
+    Canvas Expert can update itself in place. Every setting, saved course,
+    and workspace file stays exactly where it is.
+  </p>
+
+  <p class="ce-settings-version" id="update-current">You are on {{ app_version }}.</p>
+  <div class="ce-actions">
+    <button type="button" id="btn-update-check">Check for updates</button>
+  </div>
+
+  <div id="update-available" class="ce-settings-section-gap" hidden>
+    <p class="ce-hint">
+      <strong id="update-available-version"></strong> is available
+      (<span id="update-available-date"></span>).
+      <a id="update-notes-link" href="#" target="_blank" rel="noopener">Read what's new ↗</a>
+    </p>
+    <div class="ce-actions">
+      <button type="button" id="btn-update-download" class="primary">Download update</button>
+    </div>
+  </div>
+
+  <div id="update-ready" class="ce-settings-section-gap" hidden>
+    <p class="ce-hint">
+      Version <strong id="update-ready-version"></strong> is ready to install.
+      The app will close and reopen on its own — this takes a few seconds.
+    </p>
+    <div class="ce-actions">
+      <button type="button" id="btn-update-apply" class="primary">Restart and update</button>
+      <button type="button" id="btn-update-cancel" class="small">Cancel</button>
+    </div>
+  </div>
+
+  <p id="update-status" class="status ce-settings-status"></p>
+</section>
 
  </div>
 {% endblock %}
@@ -481,6 +545,8 @@
 <script src="/static/settings/courses.js?v={{ asset_v }}"></script>
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
 <script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
+<script src="/static/settings/updates.js?v={{ asset_v }}"></script>
+<script src="/static/settings/rail_nav.js?v={{ asset_v }}"></script>
 
 <script>
 (function () {

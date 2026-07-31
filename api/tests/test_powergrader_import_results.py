@@ -38,13 +38,14 @@ def _bundle(first_pseudonym, second_pseudonym):
     }
 
 
-def _result(pseudonym, item_id, feedback="Clear evidence."):
+def _result(pseudonym, item_id, feedback="Clear evidence.", observation=""):
     return [{
         "pseudonym": pseudonym,
         "item_id": item_id,
         "score": 2,
         "feedback": feedback,
         "disclosure": "Drafted by Sage (AI), reviewed by your teacher.",
+        **({"writing_process_observations": observation} if observation else {}),
     }]
 
 
@@ -228,6 +229,25 @@ def test_batch_import_updates_only_matching_batch(tmp_path):
     assert saved["students"][1]["ai_score"] is None
     assert saved["copilot_packet"]["batches"][0]["status"] == "imported"
     assert saved["copilot_packet"]["batches"][1]["status"] == "pending"
+
+
+def test_batch_import_preserves_teacher_only_writing_observation_separately(tmp_path):
+    vault = Vault(str(tmp_path / "vault.json"))
+    session, first, _ = _session(tmp_path, vault)
+    observation = "Revision activity spans several fictional timestamps."
+
+    payload, status, saved = _run_import(
+        session,
+        vault,
+        _result(first, "101", observation=observation),
+        "batch-01",
+    )
+
+    assert status == 200
+    assert payload["ok"] is True
+    student = saved["students"][0]
+    assert student["writing_process_observations"] == observation
+    assert observation not in student["ai_feedback"]
 
 
 def test_wrong_batch_paste_fails_without_updates(tmp_path):

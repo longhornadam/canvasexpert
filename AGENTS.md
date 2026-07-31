@@ -11,9 +11,14 @@ Every agent reads this file. An implementation executor then reads:
 1. the single direct brief in `docs/handoffs/`;
 2. only the files and exact document sections named by that brief.
 
-Do not preload archived handoffs, every module map, `TOOLS.md`, or a whole architecture
+Do not preload archived handoffs, every module map, `tools/TOOLS.md`, or a whole architecture
 vision. A handoff that cites a long document must name the required numbered sections.
 Historical handoffs are never implementation authority.
+
+Before deciding whether work is in scope, read `docs/reference/project-state.md`: Canvas
+Expert is pre-launch with a single user through the first semester, so migration,
+backward-compatibility, and legacy-record code is out of scope by default — prefer clean
+breaks, and keep one source of truth per artifact.
 
 ## Repository boundary
 
@@ -21,8 +26,8 @@ Historical handoffs are never implementation authority.
   handles private student data, and may perform Canvas writes.
 - `engine/` is the offline parse/validate/render/package library. It has no token, network,
   or student data.
-- `LLM_Modules/*_Base.md` are the canonical authoring contracts. Do not change their
-  meaning in backend code. Read `api/README.md` before changing Canvas push behavior.
+- `api/default_docs/AI Authoring/Author a *.txt` are the canonical authoring contracts. Do not
+  change their meaning in backend code. Read `api/README.md` before changing Canvas push behavior.
 
 ## Branch policy
 
@@ -44,7 +49,7 @@ Use only the row relevant to the active handoff.
 | Connections / diagnostics | `api/README.md`, then the exact owners named by the handoff | Read-only diagnostics; never edit client config, install software, change `PATH`, elevate, or start tunnels. |
 | Gradebook | `docs/reference/gradebook-module-map.md` | Grade/status operations and roster context are private; write work is high risk. |
 | Roster | `docs/reference/roster-module-map.md` | Names, IDs, groups, accommodations, and monitored notes are student data. |
-| FeedbackExpert compatibility | `docs/reference/feedbackexpert-module-map.md`, `docs/contracts/feedback-scoring-contract.md` | AI results are drafts; review and Canvas writes belong to PowerGrader. |
+| PowerGrader scoring / privacy engines | `docs/reference/powergrader-scoring-map.md`, `docs/contracts/feedback-scoring-contract.md` | AI results are drafts; review and Canvas writes belong to PowerGrader. |
 | PowerGrader | `docs/reference/powergrader-module-map.md` | Sessions are private; Canvas posting is review-first except for the two narrow default-off opt-ins documented there. |
 | Routines | `api/custom_routines/AUTHORING.md` | Local jobs only; scheduled Canvas posting requires a specific teacher opt-in and the PowerGrader write safeguards. |
 | CanvasMirror | `docs/mirror.md` for current behavior; exact sections of `docs/reference/canvasmirror-1.0beta-information-spine.md` for target design | The vision is section-routed only and never read wholesale for execution; cached state never authorizes a write. |
@@ -63,10 +68,18 @@ Use only the row relevant to the active handoff.
    notes, roster data, and course-derived exports never enter commits, fixtures, or
    printable logs. Private output belongs in the user-selected workspace or gitignored
    output directories. When uncertain, treat data as FERPA-protected.
-3. **No district-specific source configuration.** URLs, calendars, labels, rubric names,
-   school names, and teacher names belong in the UI/workspace. `CANVAS_BASE_DEFAULT`
-   remains empty. Shipped calendar data is limited to the blank template and fictional
-   sample.
+3. **No district-specific source configuration.** Canvas URLs, rosters, rubric names, and
+   teacher-identifying config belong in the UI/workspace, never source. `CANVAS_BASE_DEFAULT`
+   remains empty.
+
+   **Academic calendars and school bell schedules are not covered by this guardrail.** They
+   are public information — schools post them on their own front pages — with zero FERPA
+   exposure and zero student data. A real district calendar or bell schedule may ship as a
+   seed file under `api/default_docs/` (e.g. `api/default_docs/Calendars/*.csv`), alongside
+   the blank `calendar_template.csv` and fictional `Summer_Session_Sample.csv`, provided: it's
+   a seed file consumed by the existing data-driven loader (no district value hardcoded in
+   `.py`, no code path that branches on a district), and it contains no student data and no
+   per-teacher contact info. Do not "fix" real schedule data found there as a violation.
 4. **Local only.** The token-holding app binds `127.0.0.1`. Do not add public routes,
    external exposure, or public-infrastructure assumptions.
 5. **Describe AI privacy honestly.** SAFE artifacts are pseudonymized and scrubbed, not
@@ -191,7 +204,7 @@ console errors.
 
 ## Tool routing
 
-Tool discovery is conditional, not mandatory reading. Consult `TOOLS.md` and only the
+Tool discovery is conditional, not mandatory reading. Consult `tools/TOOLS.md` and only the
 relevant manifest before brute-force inspection of a large/repetitive document, log, diff,
 HTML/API response, or unfamiliar repository area. Skip it when the active brief already
 names a small set of files and symbols. A `planned` tool is unavailable and must not block

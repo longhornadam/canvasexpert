@@ -37,4 +37,13 @@ if not "%CUR%"=="%OLD%" (
 )
 
 py qf_ui.py
+if errorlevel 7 if not errorlevel 8 (
+  REM Exit code 7 means a self-update is staged. The app has already exited,
+  REM so this is the one moment nothing in the folder is open -- hand off to
+  REM a copy in %TEMP% so it can replace this very folder, then get out of
+  REM its way immediately (no pause, no /wait) so it isn't holding a handle.
+  copy /y "%~dp0api\scripts\apply_update.cmd" "%TEMP%\ce_apply_update.cmd" >nul
+  start "" "%TEMP%\ce_apply_update.cmd" "%~dp0"
+  exit /b
+)
 pause

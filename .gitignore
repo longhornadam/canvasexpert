@@ -6,6 +6,9 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Virtualenvs
 .venv/
@@ -36,3 +39,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Claude Code (shared config tracked; local overrides ignored)
+.claude/settings.local.json
+.claude/*.local.json

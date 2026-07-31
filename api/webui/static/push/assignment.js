@@ -76,6 +76,9 @@
     push.hideBanner(getBanner());
     log("Validating…\n");
     push.postForm("/api/af/validate", { path: path }).then(function (d) {
+      // A failed request comes back as {ok:false, error} with no problems and
+      // no summary, so without this the log would just stop at "Validating…".
+      if (d.error) { log("ERROR: " + d.error); return; }
       if (d.problems?.length) d.problems.forEach(function (p) { log("✗ " + p); });
       var s = d.summary;
       if (s) {

@@ -15,9 +15,11 @@ changes again.
 - Feature files: `api/webui/static/settings/*.js`
 - Settings route owner: `api/webui/routes/settings.py`
 - Calendar routes: `api/webui/routes/calendar.py`
-- AI-TA file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
+- AI Authoring file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
 - Persistence facade: `api/webui/config/__init__.py`
 - Persistence modules: `api/webui/config/*.py`
+- Self-update download/verify/stage: `api/webui/self_update.py`
+- Update routes: `api/webui/routes/updates.py`
 
 ## Source-size reports
 
@@ -31,9 +33,11 @@ reports; this map intentionally does not maintain line-count snapshots.
 - Canvas base/token reveal, save, and connection test flow
 - OpenRouter key/model save, test, and current-model price loading
 - Canvas course browser plus Current/Previous and removal actions
-- download root, workspace folder open, and AI-TA folder/rebuild actions
+- download root, workspace folder open, and AI Authoring folder/rebuild actions
 - academic calendar list, built-in load/remove, custom CSV parse, preview, save,
   and copy-LLM-prompt behavior
+- checking for, downloading, and applying an in-app update (teacher-initiated
+  only; no automatic check, ever)
 
 Current split:
 
@@ -41,8 +45,9 @@ Current split:
 - `settings/account.js` - Canvas token/base URL and connection testing
 - `settings/openrouter.js` - OpenRouter key/model/model-list UX
 - `settings/courses.js` - Canvas course browser and Current/Previous actions
-- `settings/workspace.js` - download root, workspace, AI-TA file actions
+- `settings/workspace.js` - download root, workspace, AI Authoring file actions
 - `settings/calendars.js` - calendar list/load/parse/save/copy prompt
+- `settings/updates.js` - update check/download/apply/cancel UX
 
 ## Backend Routing
 
@@ -55,6 +60,10 @@ Current split:
 - `/settings/courses/{course_id}/set-active`
 - `/settings/download-root`
 - `/settings/test-connection`
+
+`routes/updates.py` owns the self-update surface:
+
+- `/api/update/status`, `/api/update/download`, `/api/update/apply`, `/api/update/cancel`
 
 Config persistence is already split under `api/webui/config/`. Keep the
 `from .. import config` facade stable; callers should not import submodules directly
@@ -69,7 +78,7 @@ unless there is a strong reason.
   `config/courses.py`
 - calendar parse/load problems: `settings/calendars.js`, `settings.js`, `routes/calendar.py`,
   `config/calendars.py`
-- workspace/AI-TA folder issues: `settings.html`, `settings/workspace.js`, `settings.js`,
+- workspace/AI Authoring folder issues: `settings.html`, `settings/workspace.js`, `settings.js`,
   `api/webui/workspace.py`, `api/webui/ai_ta.py`
 
 ## Guardrails
@@ -84,3 +93,5 @@ unless there is a strong reason.
 - `config.active_courses()` is the compatibility-named Current-course boundary for
   normal pickers, Desk discovery, and automatic work. `saved_courses()` includes both
   Current and Previous courses.
+- The self-update downloader only ever talks to the pinned public GitHub repo (or a
+  loopback feed for local testing); never add a teacher-configurable update source.

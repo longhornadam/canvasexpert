@@ -14,6 +14,7 @@ environment variables. See runner.py. Push logic is never touched by this UI.
 """
 import os
 import threading
+import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -44,6 +45,7 @@ from .deps import (
 from .routes.calendar import router as _calendar_router
 from .routes.courses import router as _courses_router
 from .routes.course_catalog import router as _course_catalog_router
+from .routes.dailywriting import router as _dailywriting_router
 from .routes.feedback import router as _feedback_router
 from .routes.names import names_router as _names_router
 from .routes.gradebook import router as _gradebook_router
@@ -54,6 +56,8 @@ from .routes.push import router as _push_router
 from .routes.reports import router as _reports_router
 from .routes.routines import router as _routines_router, _load_custom_routines, _routines_heartbeat
 from .routes.roster import router as _roster_router
+from .routes.seating import router as _seating_router
+from .routes.smartdeck import router as _smartdeck_router
 from .routes.settings import router as _settings_router
 from .routes.powergrader import router as _powergrader_router
 from .routes.readiness import router as _readiness_router
@@ -63,7 +67,17 @@ from .routes.support import router as _support_router
 from .routes.work import router as _work_router
 from .routes.operations import router as _operations_router
 from .routes.mirror import router as _mirror_router
+from .routes.updates import router as _updates_router
 from .mirror_service import _mirror_heartbeat
+
+
+class _StaticFiles(StaticFiles):
+    """Serve bundled fonts to sandboxed iframes without diagnostics."""
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if path.replace("\\", "/").startswith("fonts/"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
 
 
 @asynccontextmanager
@@ -75,9 +89,20 @@ async def _lifespan(app):
     except Exception as e:
         print(f"Workspace setup note: {e}")
     try:
+        workspace.migrate_legacy_glass_folders()
+    except Exception as e:
+        print(f"Legacy Glass folder migration note: {e}")
+    try:
+        # Pin the resolved workspace path so the headless MCP server (launched by
+        # Claude Desktop / ChatGPT without the OneDrive env var) resolves the same
+        # workspace instead of falling back to stale machine-local state.
+        config.ensure_workspace_pinned()
+    except Exception as e:
+        print(f"Workspace pin note: {e}")
+    try:
         ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
     except Exception as e:
-        print(f"AI-TA library build failed: {e}")
+        print(f"AI Authoring library build failed: {e}")
     try:
         # Reconcile any operation-ledger targets left claimed/sent_unknown by a
         # crash mid-write, before the routines heartbeat can claim the same
@@ -92,7 +117,7 @@ async def _lifespan(app):
 
 
 app = FastAPI(title="Canvas Expert", lifespan=_lifespan)
-app.mount("/static", StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), name="static")
+app.mount("/static", _StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), name="static")
 
 # ── Onboarding gate ──────────────────────────────────────────────────────
 # If Canvas URL or token is not yet configured, redirect HTML page requests
@@ -117,10 +142,37 @@ async def _onboarding_gate(request: Request, call_next):
         return await call_next(request)
 
 
+@app.exception_handler(Exception)
+async def _api_errors_return_json(request: Request, exc: Exception):
+    """Keep the local API contract 'always JSON'.
+
+    Every /api/ route is consumed by fetch() callers that parse the body with
+    response.json(). Without this, an unhandled exception falls through to
+    Starlette's default 500 handler, whose body is the plain text
+    'Internal Server Error'; the browser's response.json() then raises the
+    misleading 'Unexpected token I ... is not valid JSON', masking the true
+    cause. Convert unhandled errors on API routes into a structured payload so
+    the real reason reaches the teacher, and always print the traceback to the
+    server console for debugging. Non-API (HTML) routes keep the plain-text 500.
+
+    The error payload uses a fixed generic message and never exposes the
+    exception type, message, absolute path, student detail, setting, or
+    credential.  The traceback is still printed locally for debugging.
+    """
+    print("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            {"ok": False, "error": "An unexpected server error occurred. Check the server console for details."},
+            status_code=500,
+        )
+    return PlainTextResponse("Internal Server Error", status_code=500)
+
+
 app.include_router(_onboarding_router)
 app.include_router(_calendar_router)
 app.include_router(_courses_router)
 app.include_router(_course_catalog_router)
+app.include_router(_dailywriting_router)
 app.include_router(_feedback_router)
 app.include_router(_names_router)
 app.include_router(_gradebook_router)
@@ -130,6 +182,8 @@ app.include_router(_push_router)
 app.include_router(_reports_router)
 app.include_router(_routines_router)
 app.include_router(_roster_router)
+app.include_router(_seating_router)
+app.include_router(_smartdeck_router)
 app.include_router(_settings_router)
 app.include_router(_powergrader_router)
 app.include_router(_readiness_router)
@@ -139,3 +193,4 @@ app.include_router(_support_router)
 app.include_router(_work_router)
 app.include_router(_operations_router)
 app.include_router(_mirror_router)
+app.include_router(_updates_router)

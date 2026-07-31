@@ -118,6 +118,7 @@
 .pg-no-text      { font-size:13px; font-style:italic; color:var(--ce-ink-muted); }
 .pg-already-graded { font-size:12px; padding:6px 10px; background:var(--ce-surface-soft);
                      color:var(--ce-ink-muted); margin-bottom:10px; }
+.pg-timeline-spark { display:block; width:100%; max-width:320px; margin:8px 0; }
 
 /* RIGHT — grade pane */
 .pg-grade-pane  {

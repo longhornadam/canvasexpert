@@ -17,7 +17,7 @@ from api.powergrader import (ai_workflow, assignment_refresh, canvas_fetch, cont
                              import_results, late_catchup, privacy,
                              new_quiz_csv, new_quiz_grader,
                              session_actions, session_builder, session_store,
-                             start_workflow)
+                             start_workflow, student_attachments, writing_timeline)
 from .powergrader_helpers import (
     build_late_preview_payload,
     build_late_watch_state,
@@ -79,7 +79,7 @@ def pg_open_assignment_folder(course_id: str = Form(""), assignment_id: str = Fo
     if error:
         return JSONResponse({"ok": False, "error": error})
     course_id, assignment_id, course_name = context_value
-    path = workspace.assignment_folder(course_name, course_id, assignment_id, assignment_id)
+    path = workspace.grading_keys_assignment_folder(course_name, course_id, assignment_id, assignment_id)
     if not path or not workspace.path_within_workspace(path):
         return JSONResponse({"ok": False, "error": "The local assignment folder is unavailable."})
     try:
@@ -118,8 +118,8 @@ def powergrader_setup(request: Request):
             default_openrouter_model=config.DEFAULT_OPENROUTER_MODEL,
             openrouter_model_presets=config.openrouter_model_presets(),
             has_workspace=bool(workspace.workspace_root()),
-            rubrics_folder=workspace.folder("Rubrics"),
-            ai_ta_folder=workspace.folder("AI-TA"),
+            rubrics_folder=workspace.library_folder("Rubrics"),
+            ai_ta_folder=workspace.library_folder("AI Authoring"),
             persona_folder=persona_dir,
             source_materials_folder=source_dir,
             source_material_files=source_materials.list_source_files(),
@@ -279,6 +279,12 @@ def pg_start(
     if not submitted:
         return JSONResponse({"ok": False, "error": "No submitted work found for this assignment.",
                              "privacy_steps": []})
+    writing_timeline_tracked = writing_timeline.is_tracked_assignment(adata)
+    if writing_timeline_tracked:
+        student_attachments.attach_writing_timelines(
+            submitted,
+            roster_submissions=subs,
+        )
 
     initial_missing_user_ids = late_catchup.initial_missing_user_ids(subs or [])
     submitted_user_ids = sorted({str(s.get("user_id", "")) for s in submitted if s.get("user_id")})
@@ -390,6 +396,7 @@ def pg_start(
         evidence_status=refresh.get("status", "unknown"),
         auto_post_enabled=auto_post_enabled,
     )
+    session["writing_timeline_tracked"] = writing_timeline_tracked
     _save_session(session)
 
     # For assisted mode with auto_post, run the initial trigger under the session lock
@@ -475,7 +482,7 @@ def pg_late_watch(
             return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
         session_actions.invalidate_pending_review(session)
         if session.get("mode") not in ("assisted", "packet"):
-            return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-Score With API or AI Chat mode."})
+            return JSONResponse({"ok": False, "error": "Late catch-up requires Auto-score with AI or AI chat mode."})
         if not (session.get("late_watch") or {}).get("supported"):
             return JSONResponse({"ok": False, "error": (session.get("late_watch") or {}).get("reason") or "Late catch-up is not supported for this session."})
         late_watch = session.get("late_watch") or {}
@@ -567,10 +574,14 @@ def pg_download_packet(session_id: str):
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
     artifacts = session.get("privacy_artifacts") or {}
     packet_zip = artifacts.get("packet_zip") or ""
-    if not packet_zip or not os.path.isfile(packet_zip):
+    # The ZIP can live past Windows' 260-char MAX_PATH in a deep workspace;
+    # resolve through extended_path so both the existence check and the send
+    # reach it (no-op on non-Windows / short paths).
+    resolved_zip = workspace.extended_path(packet_zip) if packet_zip else ""
+    if not resolved_zip or not os.path.isfile(resolved_zip):
         return JSONResponse({"ok": False, "error": "Safe AI Packet ZIP not found."}, status_code=404)
     filename = os.path.basename(packet_zip)
-    return FileResponse(packet_zip, media_type="application/zip", filename=filename)
+    return FileResponse(resolved_zip, media_type="application/zip", filename=filename)
 
 
 @router.post("/api/powergrader/session/{session_id}/import-results")

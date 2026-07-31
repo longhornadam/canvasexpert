@@ -31,7 +31,3 @@ def quarantine_dir() -> Path:
 
 def curve_events_file() -> Path:
     return private_root() / "curve_events.v1.json"
-
-
-def curve_migration_backups_dir() -> Path:
-    return private_root() / "migration-backups"

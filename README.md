@@ -15,11 +15,16 @@ Free. Private. Open source. Uses your secure Canvas "Personal Access Token". Run
 
 Step 1 - Click the green **Code** button near the top of this page, then **Download ZIP** and unzip it.
 Step 2 - Put the unzipped folder anywhere in your own files.
-Step 3 - Double-click `Open Canvas Expert.bat`. First run sets itself up automatically, no admin needed.
+Step 3 - Double-click `Open Canvas Expert.bat`. The first run installs what it needs into your own user account, no admin needed, then opens the app in your browser.
+
+One prerequisite it cannot install for you: **Python 3.13 or newer**. If the window says Python is not installed, get it from [python.org](https://www.python.org/downloads/), tick **Install for me only** (still no admin), then double-click `Open Canvas Expert.bat` again. If it ever stops starting, double-click `Repair.bat`.
 
 ## Learn more
 
-Want more detail? Give `LEARN_CANVASEXPERT.md` to a chatbot and ask it anything.
+Want more detail? Give `api/default_docs/AI Authoring/START HERE - CanvasAgent.txt` to a
+chatbot and ask it anything. That file is also the CanvasAgent instruction set: paste the
+whole thing into an AI chat, or just its CORE block into a custom-instructions box, and the
+assistant knows how to draft coursework CanvasExpert can validate and push.
 
 For developers: see `AGENTS.md` and `docs/README.md`.
 

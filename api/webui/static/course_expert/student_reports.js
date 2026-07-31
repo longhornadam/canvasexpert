@@ -22,25 +22,51 @@
     monBtn.dataset.mon = monitored ? "1" : "0";
   }
 
+  // Switching courses starts a new request without cancelling the old one, so a
+  // slower earlier response could land last and fill the dropdown with the
+  // previous course's students while the new course sits selected. Stamp each
+  // request and let only the newest one write, the same way inbox.js does.
+  var requestGeneration = 0;
+
   courseSel.addEventListener("change", function () {
+    var generation = ++requestGeneration;
     stuSel.innerHTML = '<option value="">Loading…</option>';
     genBtn.disabled = true;
     monBtn.hidden = true;
+    status.textContent = "";
     if (!courseSel.value) {
       stuSel.innerHTML = '<option value="">— pick a course first —</option>';
       return;
     }
     fetch("/api/students?course_id=" + encodeURIComponent(courseSel.value))
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
+      .then(function (r) {
+        return r.json().then(function (d) { return { ok: r.ok, body: d }; });
+      })
+      .then(function (result) {
+        if (generation !== requestGeneration) return;
+        var d = result.body;
+        // Route returns HTTP 200 with {ok:false, error} on a stale/expired
+        // token or a live Canvas error -- read that, don't just fall through
+        // to (d.students || []), which would render as an empty roster.
+        if (!result.ok || !d || d.ok !== true || !Array.isArray(d.students)) {
+          stuSel.innerHTML = '<option value="">— could not load students —</option>';
+          status.textContent = (d && d.error ? d.error : "Students couldn't be loaded.") +
+            " Check the Canvas token in Settings.";
+          return;
+        }
         stuSel.innerHTML = '<option value="">— pick a student —</option>';
-        (d.students || []).forEach(function (student) {
+        d.students.forEach(function (student) {
           var opt = document.createElement("option");
           opt.value = student.id;
           opt.textContent = student.name;
           opt.dataset.mon = student.monitored ? "1" : "0";
           stuSel.appendChild(opt);
         });
+      })
+      .catch(function () {
+        if (generation !== requestGeneration) return;
+        stuSel.innerHTML = '<option value="">— could not load students —</option>';
+        status.textContent = "Students couldn't be loaded. Check your connection and try again.";
       });
   });
 

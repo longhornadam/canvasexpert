@@ -9,6 +9,8 @@
   --ce-ink-muted: #6f6a61;
   --ce-rule: rgba(61, 55, 46, .2);
   --ce-rule-strong: rgba(61, 55, 46, .38);
+  --ce-grid-minor: rgba(61, 55, 46, .05);
+  --ce-grid-major: rgba(61, 55, 46, .09);
   --ce-chrome: #20252a;
   --ce-chrome-soft: #323940;
   --ce-accent-canvas: #2f7d77;
@@ -27,6 +29,11 @@
   --ce-grade: #5c718e;
   --ce-focus: #d9893f;
   --ce-on-accent: #fff;
+  /* Heading scale: page title, panel heading, subsection. Eyebrow labels are
+     11px uppercase and are labels rather than a heading rank. */
+  --ce-text-title: 30px;
+  --ce-text-heading: 20px;
+  --ce-text-sub: 15px;
   --ce-radius: 8px;
   --ce-radius-lg: 12px;
   --ce-shadow-panel: 0 8px 24px rgba(22, 25, 28, .08);
@@ -49,6 +56,8 @@ html[data-theme="dark"] {
   --ce-ink-muted: #b5afa5;
   --ce-rule: rgba(240, 234, 222, .2);
   --ce-rule-strong: rgba(240, 234, 222, .38);
+  --ce-grid-minor: rgba(240, 234, 222, .05);
+  --ce-grid-major: rgba(240, 234, 222, .09);
   --ce-chrome: #171a1d;
   --ce-chrome-soft: #343b42;
   --ce-accent-canvas: #75b8b1;

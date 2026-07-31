@@ -16,13 +16,13 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
     }
     for label in ("one", "two"):
         root = tmp_path / label
-        (root / "Rubrics").mkdir(parents=True)
-        (root / "AI-TA").mkdir(parents=True)
-        (root / "Rubrics" / f"{label}-rubric.txt").write_text(
+        (root / "Library" / "Rubrics").mkdir(parents=True)
+        (root / "Library" / "AI Authoring").mkdir(parents=True)
+        (root / "Library" / "Rubrics" / f"{label}-rubric.txt").write_text(
             f"{label} rubric marker\n", encoding="utf-8"
         )
-        (root / "AI-TA" / f"{label}-ai-ta.txt").write_text(
-            f"{label} AI-TA marker\n", encoding="utf-8"
+        (root / "Library" / "AI Authoring" / f"{label}-ai-authoring.txt").write_text(
+            f"{label} AI Authoring marker\n", encoding="utf-8"
         )
 
     monkeypatch.setattr(
@@ -43,7 +43,7 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
     assert all(str(tmp_path / "one") not in item["path"] for item in second_ai_ta)
 
     def fake_parse(path):
-        if str(tmp_path / "two" / "Rubrics") in str(path):
+        if str(tmp_path / "two" / "Library" / "Rubrics") in str(path):
             return {"title": "Workspace Two Marker"}, []
         return None, ["not a workspace sentinel"]
 
@@ -54,8 +54,8 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
         lambda data: f"rubric marker: {data['title']}",
     )
     built = ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
-    assert (tmp_path / "two" / "AI-TA" / "Score with - Workspace Two Marker.txt").exists()
-    assert not (tmp_path / "one" / "AI-TA" / "Score with - Workspace Two Marker.txt").exists()
+    assert (tmp_path / "two" / "Library" / "AI Authoring" / "Score with - Workspace Two Marker.txt").exists()
+    assert not (tmp_path / "one" / "Library" / "AI Authoring" / "Score with - Workspace Two Marker.txt").exists()
     assert all(Path(path).is_relative_to(tmp_path / "two") for path in built)
 
     rebuilt = json.loads(library.api_ai_ta_rebuild().body)
@@ -73,11 +73,12 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
     assert runtime_paths.python_executable() == Path(sys.executable).resolve()
 
 
-def test_quick_fix_contract_and_version(monkeypatch):
+def test_quick_fix_contract_and_version(monkeypatch, tmp_path):
     from api import __version__
-    from api.webui import server
+    from api.webui import server, workspace
 
     from api.mcp_server import tools
+    from api.mirror import store as mirror_store
 
     for module_name in (
         "api.webui.routes." + "feedback_" + "run",
@@ -105,13 +106,12 @@ def test_quick_fix_contract_and_version(monkeypatch):
             self.save_calls += 1
 
     vault = CountingVault()
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
     monkeypatch.setattr(tools.config, "active_courses", lambda: [{"id": "course-1"}])
-    monkeypatch.setattr(
-        tools.pseudonym,
-        "_fetch_students",
-        lambda _course_id: ([{"id": "student-1", "name": "Synthetic Student"}], None),
+    mirror_store.write_roster(
+        "course-1", [{"id": "student-1", "name": "Synthetic Student"}], {},
+        root=str(tmp_path),
     )
-    monkeypatch.setattr(tools, "_fetch_sections", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(tools, "_vault_factory", lambda: vault)
 
     result = tools.get_roster("course-1")

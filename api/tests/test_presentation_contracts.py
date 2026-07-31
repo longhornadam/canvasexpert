@@ -12,25 +12,27 @@ from api.webui.routes import pages, powergrader
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES = ROOT / "api" / "webui" / "templates"
 
-# Route -> (page template, layout, variant, real rail count, migrated).
+# Route -> (page template, layout, variant, real rail count).
+#
+# There used to be a fifth "migrated" flag here, plus a MIGRATED_ROUTES subset
+# derived from it. Every route carried True once the template-family rollout
+# finished, which made the subset identical to this dict and the assertion that
+# compared them unfailable. The rollout is done, so the column is gone.
 EXPECTED_PRESENTATION = {
-    "/": ("dashboard.html", "workspace", "full", 0, True),
-    "/course-expert": ("course_expert.html", "workspace", "three", 2, True),
-    "/powergrader": ("powergrader_setup.html", "workspace", "full", 0, True),
-    "/powergrader/session/{session_id}": ("powergrader_queue.html", "workspace", "full", 0, True),
-    "/gradebook": ("gradebook.html", "workspace", "left-main", 1, True),
-    "/roster": ("roster.html", "workspace", "left-main", 1, True),
-    "/settings": ("settings.html", "workspace", "left-main", 1, True),
-    "/routines": ("routines.html", "document", "wide", 0, True),
-    "/students/reports": ("student_reports.html", "document", "wide", 0, True),
-    "/course": ("course.html", "document", "wide", 0, True),
-    "/about": ("about.html", "document", "wide", 0, True),
-    "/ai-expert": ("ai_expert.html", "document", "standard", 0, True),
-    "/welcome": ("welcome.html", "wizard", "", 0, True),
-}
-
-MIGRATED_ROUTES = {
-    route: row for route, row in EXPECTED_PRESENTATION.items() if row[4]
+    "/": ("dashboard.html", "workspace", "full", 0),
+    "/course-expert": ("course_expert.html", "workspace", "three", 2),
+    "/powergrader": ("powergrader_setup.html", "workspace", "left-main", 1),
+    "/powergrader/session/{session_id}": ("powergrader_queue.html", "workspace", "full", 0),
+    "/gradebook": ("gradebook.html", "workspace", "left-main", 1),
+    "/roster": ("roster.html", "workspace", "left-main", 1),
+    "/settings": ("settings.html", "workspace", "left-main", 1),
+    # Automations sits on the workspace layout so its title shares a left edge
+    # with the other primary-nav pages instead of jumping inward.
+    "/routines": ("routines.html", "workspace", "full", 0),
+    "/course": ("course.html", "document", "wide", 0),
+    "/about": ("about.html", "document", "wide", 0),
+    "/ai-expert": ("ai_expert.html", "document", "standard", 0),
+    "/welcome": ("welcome.html", "wizard", "", 0),
 }
 FEATURE_CSS = (
     "api/webui/static/pages/dashboard.css",
@@ -81,9 +83,13 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages.workspace, "workspace_root", lambda: None)
     monkeypatch.setattr(pages.workspace, "onedrive_root", lambda: "Fictional")
     monkeypatch.setattr(pages.workspace, "folder", lambda name: "")
-    monkeypatch.setattr(pages.workspace, "courses_root", lambda: "")
-    monkeypatch.setattr(pages.workspace, "ai_packets_root", lambda: "")
-    monkeypatch.setattr(pages.workspace, "system_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "library_folder", lambda name: "")
+    monkeypatch.setattr(pages.workspace, "to_review_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "printables_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "canvas_uploads_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "student_work_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "for_ai_root", lambda: "")
+    monkeypatch.setattr(pages.workspace, "system_root", lambda root=None: "")
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
     monkeypatch.setattr(pages.work_routes, "_presentations", lambda jobs, finding_names=None: {})
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
@@ -115,13 +121,11 @@ def _configure_fictional(monkeypatch):
 
 
 def test_registry_is_the_full_program_route_map():
-    assert len(EXPECTED_PRESENTATION) == 13
-    assert set(MIGRATED_ROUTES) == set(EXPECTED_PRESENTATION)
+    assert len(EXPECTED_PRESENTATION) == 12
 
 
 def test_all_live_templates_use_layouts_and_no_inline_styles():
-    for _, (template, layout, _, _, migrated) in EXPECTED_PRESENTATION.items():
-        assert migrated
+    for _, (template, layout, _, _) in EXPECTED_PRESENTATION.items():
         text = (TEMPLATES / template).read_text(encoding="utf-8")
         assert f'{{% extends "layouts/{layout}.html" %}}' in text
         assert "stylesheet_bundle" not in text
@@ -129,7 +133,7 @@ def test_all_live_templates_use_layouts_and_no_inline_styles():
         if template == "gradebook.html" or template == "routines.html":
             assert 'style="' not in (TEMPLATES / "_routines_panel.html").read_text(encoding="utf-8")
 
-    for layout in ("workspace.html", "document.html", "wizard.html"):
+    for layout in ("workspace.html", "document.html", "wizard.html", "display.html"):
         assert '{% extends "base.html" %}' in (TEMPLATES / "layouts" / layout).read_text(encoding="utf-8")
 
     for template in TEMPLATES.rglob("*.html"):
@@ -178,7 +182,6 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/roster": "/roster",
         "/settings": "/settings",
         "/routines": "/routines",
-        "/students/reports": "/students/reports",
         "/course": "/course",
         "/about": "/about",
         "/ai-expert": "/ai-expert",
@@ -190,7 +193,7 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/static/ui/components.css", "/static/ui/layouts.css",
     )
     for key, url in routes.items():
-        _, layout, variant, rails, _ = EXPECTED_PRESENTATION[key]
+        _, layout, variant, rails = EXPECTED_PRESENTATION[key]
         response = client.get(url)
         assert response.status_code == 200, url
         text = response.text
@@ -199,7 +202,9 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
             assert f'ce-{layout}--{variant}' in text
         else:
             assert f'ce-{layout}' in text
-        assert text.count("<header") == (0 if layout == "wizard" else 1)
+        # The wizard and display families are both header-less on purpose: first-run
+        # setup stays focused, and a projected screen has no chrome to navigate.
+        assert text.count("<header") == (0 if layout in ("wizard", "display") else 1)
         assert text.count("<main") == 1
         assert len(re.findall(r'class="[^"]*\bce-rail\b', text)) == rails
         assert "/static/style.css" not in text
@@ -212,6 +217,29 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
 
 def test_student_reports_redirect_is_preserved(monkeypatch):
     _configure_fictional(monkeypatch)
-    response = _client().get("/course-expert?tab=students", follow_redirects=False)
-    assert response.status_code == 307
-    assert response.headers["location"] == "/students/reports"
+    for url in ("/course-expert?tab=students", "/students/reports"):
+        response = _client().get(url, follow_redirects=False)
+        assert response.status_code == 307, url
+        assert response.headers["location"] == "/roster?focus=reports", url
+
+
+def test_create_first_session_notice_is_present_only_without_current_courses(monkeypatch):
+    _configure_fictional(monkeypatch)
+    monkeypatch.setattr(pages.config, "active_courses", lambda: [])
+    empty_render = _client().get("/course-expert").text
+    assert empty_render.count('data-ce-hook="first-session-course-notice"') == 1
+    assert '/settings#add-courses-card' in empty_render
+    assert empty_render.index('data-ce-hook="first-session-course-notice"') < empty_render.index('class="ce-panel ce-forge-start"')
+    assert "Start in your assistant" in empty_render
+    assert 'data-ce-hook="course-tab"' in empty_render
+
+    _configure_fictional(monkeypatch)
+    configured_render = _client().get("/course-expert").text
+    assert 'data-ce-hook="first-session-course-notice"' not in configured_render
+
+
+def test_create_title_matches_its_navigation_and_page_title(monkeypatch):
+    _configure_fictional(monkeypatch)
+    text = _client().get("/course-expert").text
+    assert "<title>Create — Canvas Expert</title>" in text
+    assert ">Create<" in text

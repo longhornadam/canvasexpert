@@ -10,12 +10,6 @@
     return node.innerHTML;
   }
 
-  function modeLabel(mode) {
-    if (mode === 'packet') return 'Prepare for my AI chat';
-    if (mode === 'assisted') return 'Draft-score with OpenRouter';
-    return 'Grade myself';
-  }
-
   function createdLabel(value) {
     return value ? String(value).replace('T', ' ').slice(0, 16) : 'Date unavailable';
   }
@@ -40,7 +34,7 @@
       '<div class="pg-session-main">' +
         '<strong class="pg-session-name">' + esc(session.assignment_name || 'Untitled assignment') + '</strong>' +
         '<div class="pg-session-meta">' +
-          '<span>' + esc(session.mode_label || modeLabel(session.mode)) + '</span>' +
+          '<span>' + esc(session.mode_label) + '</span>' +
           '<span>' + esc(createdLabel(session.created)) + '</span>' +
           '<span>' + posted + ' / ' + total + ' posted</span>' +
         '</div>' + attention +
@@ -80,6 +74,8 @@
     setText('pg-continue-count', lanes.continue.length);
     setText('pg-completed-count', lanes.completed.length);
     setText('pg-completed-summary-count', lanes.completed.length);
+    setText('pg-rail-attention-count', lanes.attention.length);
+    setText('pg-rail-continue-count', lanes.continue.length);
     setText('pg-sessions-status', courseId
       ? filtered.length + (filtered.length === 1 ? ' local session in this course' : ' local sessions in this course')
       : filtered.length + (filtered.length === 1 ? ' local session' : ' local sessions'));
@@ -90,7 +86,7 @@
       var target = document.getElementById('pg-' + lane + '-list');
       if (target) target.innerHTML = '<p class="pg-session-empty pg-session-error">Sessions could not be loaded. Try refreshing this page.</p>';
     });
-    ['pg-attention-count', 'pg-continue-count', 'pg-completed-count', 'pg-completed-summary-count'].forEach(function(id){ setText(id, 0); });
+    ['pg-attention-count', 'pg-continue-count', 'pg-completed-count', 'pg-completed-summary-count', 'pg-rail-attention-count', 'pg-rail-continue-count'].forEach(function(id){ setText(id, 0); });
     setText('pg-sessions-status', 'Could not load sessions');
   }
 

@@ -94,7 +94,10 @@
         }
 
         updateProgress();
+        var timelineBadge = document.getElementById('pg-timeline-badge');
+        if (timelineBadge) timelineBadge.hidden = session.writing_timeline_tracked !== true;
         if (queue.renderPrivacyAudit) queue.renderPrivacyAudit(session);
+        if (queue.renderWritingTimelineStrip) queue.renderWritingTimelineStrip(session);
         if (queue.renderLateWatch) queue.renderLateWatch(session);
         if (queue.renderPacketPanel) queue.renderPacketPanel(session);
         if (queue.renderAutoPost) queue.renderAutoPost(session);
@@ -252,6 +255,26 @@
         '</ul>' +
         (st.attachment_eligibility && st.attachment_eligibility.held
           ? '<p class="pg-no-text">Held from automated scoring: ' + esc((st.attachment_eligibility.reasons || []).join('; ')) + '</p>' : '') +
+        '</div>';
+    }
+    if (session && session.writing_timeline_tracked === true) {
+      var timelined = allAtts.filter(function(a){ return a && a.writing_timeline; });
+      if (timelined.length) {
+        timelined.forEach(function(a){
+          subHtml += (queue.renderWritingTimeline ? queue.renderWritingTimeline(a.writing_timeline) : '');
+        });
+      } else {
+        // "Not examined" must never be mistaken for "no revision trail".
+        subHtml += '<div class="pg-sub-section"><div class="pg-sub-label">Writing Timeline</div>' +
+          '<p class="pg-no-text">No DOCX document was examined for this submission, so there is ' +
+          'nothing to report either way.</p>' +
+          '<p class="pg-no-text">This timeline describes editing process, not authorship or intent.</p></div>';
+      }
+    }
+    if (st.writing_process_observations && st.writing_process_observations.trim()) {
+      subHtml += '<div class="pg-sub-section">' +
+        '<div class="pg-sub-label">AI writing-process observation (teacher only)</div>' +
+        '<div class="pg-body-plain">' + esc(st.writing_process_observations) + '</div>' +
         '</div>';
     }
     if (st.new_quiz_files_error) {

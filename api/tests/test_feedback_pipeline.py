@@ -260,6 +260,9 @@ def test_upsert_roster_captures_preferred_name_as_nickname(tmp_path):
     rmap = scrub.build_replacement_map(v.entries(), config.active_protected_names())
     scrubbed = scrub.scrub_text("Joey wrote a great essay about Joey.", rmap)
     assert "Joey" not in scrubbed                      # preferred name is gone
+    assert scrubbed == (
+        f"{entry['pseudonym']} wrote a great essay about {entry['pseudonym']}."
+    )
     assert scrub.verify_clean(scrubbed, v) == []
 
 
@@ -341,6 +344,40 @@ def test_write_safe_and_private_writes_scrubbed_shared_context(tmp_path):
     assert "Source material: Passage" in shared_text
     assert "Ada" not in shared_text and "Lovelace" not in shared_text
     assert "Ada" not in safe_blob and "Lovelace" not in safe_blob
+
+
+def test_write_safe_and_private_forced_compact_uses_short_names(tmp_path):
+    """compact=True forces the shorter leaf names regardless of path depth."""
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
+    safe_dir = tmp_path / "SAFE"
+    priv_dir = tmp_path / "PRIVATE"
+    result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(priv_dir), compact=True)
+
+    assert (safe_dir / "bundle.json").is_file()
+    assert (safe_dir / "how-to-score.txt").is_file()
+    assert (priv_dir / "private.json").is_file()
+    assert (priv_dir / "who-is-who.csv").is_file()
+    assert result["safe_bundle"] == str(safe_dir / "bundle.json")
+    assert result["private_bundle"] == str(priv_dir / "private.json")
+    assert result["who_is_who"] == str(priv_dir / "who-is-who.csv")
+    for path in result["student_txts"]:
+        assert os.path.basename(path).startswith("s-")
+
+
+def test_write_safe_and_private_auto_detects_compact_on_deep_path(tmp_path):
+    """With compact left as None (the default), a workspace path deep enough to
+    push the readable names over the teacher-visible budget switches to the
+    compact scheme automatically -- mirrors PowerGrader's packet/batch fallback."""
+    v = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
+    deep_base = tmp_path / ("Deep" * 40) / ("Deep" * 40)
+    safe_dir = deep_base / "SAFE"
+    priv_dir = deep_base / "PRIVATE"
+    result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(priv_dir))
+
+    assert (safe_dir / "bundle.json").is_file()
+    assert result["safe_bundle"] == str(safe_dir / "bundle.json")
 
 
 def _code_submission():

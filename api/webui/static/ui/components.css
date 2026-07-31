@@ -1,9 +1,12 @@
-.ce-shell { width: 100%; min-width: 0; background: var(--ce-surface); color: var(--ce-ink); }
+.ce-shell { width: 100%; min-width: 0; color: var(--ce-ink); }
 .ce-panel { min-width: 0; padding: var(--ce-space-5); background: var(--ce-surface-raised); border: 1px solid var(--ce-rule); border-radius: var(--ce-radius); box-shadow: var(--ce-shadow-panel); }
-.ce-rail { min-width: 0; padding: 0 var(--ce-space-4); border-color: var(--ce-rule-strong); }
+.ce-rail { min-width: 0; padding: 0 var(--ce-space-4); background: var(--ce-surface); border-color: var(--ce-rule-strong); }
 .ce-page-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ce-space-4); margin-bottom: var(--ce-space-4); padding-bottom: var(--ce-space-2); border-bottom: 1px solid var(--ce-rule-strong); }
 .ce-page-header h1, .ce-page-header h2, .ce-page-header p { margin: 0; }
 .ce-page-header h1, .ce-page-header h2, .ce-display { font-family: var(--ce-font-display); letter-spacing: -.025em; }
+:where(h1) { font-size: var(--ce-text-title); line-height: 1.2; }
+:where(h2) { font-size: var(--ce-text-heading); line-height: 1.25; }
+:where(h3) { font-size: var(--ce-text-sub); line-height: 1.3; }
 .ce-page-header__eyebrow, .ce-eyebrow { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .ce-btn, .ce-actions button, .ce-actions a[role="button"] { display: inline-flex; align-items: center; justify-content: center; gap: var(--ce-space-2); min-height: 34px; padding: 6px 12px; border: 1px solid var(--ce-rule-strong); border-radius: var(--ce-radius); background: var(--ce-surface-raised); color: var(--ce-ink); font-size: 13px; font-weight: 700; text-decoration: none; }
 .ce-btn--primary, .ce-actions .primary { border-color: var(--ce-accent-canvas); background: var(--ce-accent-canvas); color: var(--ce-on-accent); }
@@ -11,6 +14,9 @@
 .ce-btn--small, .ce-actions .small { min-height: 28px; padding: 4px 8px; font-size: 12px; }
 .ce-btn:disabled, .ce-actions button:disabled { cursor: wait; opacity: .65; }
 .ce-field, label { display: grid; gap: var(--ce-space-1); color: var(--ce-ink); font-size: 13px; font-weight: 600; }
+/* A tick box belongs beside its words, not stacked above them. :where() keeps this
+   at zero specificity so a page can still style its own checkbox rows. */
+label:where(:has(> input[type="checkbox"], > input[type="radio"])) { display: flex; align-items: center; gap: var(--ce-space-2); }
 input:not([type="checkbox"]):not([type="radio"]), select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--ce-rule-strong); border-radius: var(--ce-radius); background: var(--ce-surface-raised); color: var(--ce-ink); }
 textarea { resize: vertical; }
 .ce-tabs { display: flex; flex-wrap: wrap; gap: var(--ce-space-1); border-bottom: 1px solid var(--ce-rule); }

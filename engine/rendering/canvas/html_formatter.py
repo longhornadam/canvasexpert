@@ -17,7 +17,6 @@ from .passage_numbering import _analyze_passage_content, add_passage_numbering
 from .text_cleaning import (
     _clean_code_content,
     _clean_text,
-    _clean_text_content,
     _clean_text_executable,
     _clean_text_verbatim,
 )

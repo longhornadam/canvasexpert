@@ -10,7 +10,6 @@ import csv
 import json
 import os
 import shutil
-from datetime import datetime
 
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
@@ -24,7 +23,7 @@ names_router = APIRouter(prefix="/api/names", tags=["names"])
 
 
 def _vault():
-    root = workspace.identity_vault_dir() or workspace.feedback_folder("_vault")
+    root = workspace.identity_vault_dir()
     return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
 
 
@@ -136,11 +135,11 @@ def scrub_test(text: str = Form(""), course_id: str = Form("")):
 
 @names_router.post("/who-is-who")
 def export_who_is_who(course_id: str = Form("")):
-    """Write a who-is-who.csv to PRIVATE/ and return the path."""
+    """Write a who-is-who.csv to Student Work/Grading Keys/ and return the path."""
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
     vault = _vault()
-    private_dir = workspace.courses_root()
+    private_dir = workspace.grading_keys_root()
     if not private_dir:
         return JSONResponse({"ok": False, "error": "No workspace configured."})
     os.makedirs(private_dir, exist_ok=True)
@@ -169,7 +168,6 @@ def backup_vault():
         return JSONResponse({"ok": False, "error": "No vault file found."})
     backup_dir = os.path.join(os.path.dirname(vault_path), "backups")
     os.makedirs(backup_dir, exist_ok=True)
-    date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    backup_path = os.path.join(backup_dir, f"vault-{date_str}.json")
+    backup_path = os.path.join(backup_dir, f"vault-{workspace.run_stamp()}.json")
     shutil.copy2(vault_path, backup_path)
     return JSONResponse({"ok": True, "path": backup_path, "entries": len(vault)})

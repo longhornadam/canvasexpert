@@ -18,14 +18,24 @@
 .ce-workspace__stage { min-width: 0; }
 .ce-workspace--three .ce-rail--left, .ce-workspace--left-main .ce-rail--left { padding-left: 0; border-right: 1px solid var(--ce-rule-strong); }
 .ce-workspace--three .ce-rail--right { padding-right: 0; border-left: 1px solid var(--ce-rule-strong); }
+/* Rail contents follow the stage as it scrolls; the rail itself keeps full height
+   so its divider still runs the length of the page. */
+.ce-rail__inner { position: sticky; top: var(--ce-space-4); max-height: calc(100vh - var(--ce-space-6) * 2); overflow-y: auto; }
 .ce-document { width: min(100%, var(--ce-width-doc)); margin: 0 auto; padding: clamp(var(--ce-space-4), 2.5vw, 40px); }
 .ce-document--wide { width: min(100%, var(--ce-width-doc-wide)); }
 .ce-wizard { width: min(100%, 680px); margin: 0 auto; padding: clamp(var(--ce-space-4), 6vw, 56px) var(--ce-space-4); }
+/* Display family: the projected image is the frame. Full bleed, no gutter, no
+   width clamp, and no page scroll, so a page on this family can trust that the
+   viewport is exactly the room it has to fill. */
+.ce-display-page { height: 100vh; overflow: hidden; }
+.ce-display-main { width: 100vw; height: 100vh; max-width: none; min-width: 0; margin: 0; padding: 0; overflow: hidden; }
+.ce-display { width: 100vw; height: 100vh; margin: 0; padding: 0; overflow: hidden; }
 @media (max-width: 1180px) {
   .ce-app-header { grid-template-columns: auto minmax(0, 1fr) auto; }
   .ce-app-header .ce-status-strip { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; padding-top: var(--ce-space-2); border-top: 1px solid var(--ce-rule); }
   .ce-workspace--three .ce-workspace__grid { grid-template-columns: 240px minmax(0, 1fr); }
   .ce-workspace--three .ce-rail--right { grid-column: 1 / -1; padding: var(--ce-space-4) 0 0; border-top: 1px solid var(--ce-rule-strong); border-left: 0; }
+  .ce-workspace--three .ce-rail--right .ce-rail__inner { position: static; max-height: none; overflow: visible; }
 }
 @media (max-width: 760px) {
   .ce-app-header { grid-template-columns: minmax(0, 1fr) auto; gap: var(--ce-space-2); padding: var(--ce-space-2) var(--ce-space-4); }
@@ -34,4 +44,6 @@
   .ce-workspace { padding: var(--ce-space-4); }
   .ce-workspace--three .ce-workspace__grid, .ce-workspace--left-main .ce-workspace__grid { grid-template-columns: minmax(0, 1fr); }
   .ce-workspace .ce-rail--left, .ce-workspace--three .ce-rail--right { grid-column: auto; padding: 0 0 var(--ce-space-3); border: 0; border-bottom: 1px solid var(--ce-rule-strong); }
+  /* Rails stack above the stage here, so pinning one would cover the content. */
+  .ce-rail__inner { position: static; max-height: none; overflow: visible; }
 }

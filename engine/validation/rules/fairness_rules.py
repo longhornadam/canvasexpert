@@ -13,7 +13,8 @@ from ...core.quiz import Quiz
 from ...core.questions import MCQuestion, MAQuestion
 
 
-# Standardized meta-answers (must match exactly - see LLM_Modules/QuizForge_Base.md Section 10)
+# Standardized meta-answers (must match exactly - see api/default_docs/AI Authoring/
+# Author a Quiz (QuizForge).txt, Section 10 of the embedded contract)
 # These serve structural/logical purposes rather than content-based choices
 META_ANSWERS = {
     "No change is needed",
@@ -82,7 +83,8 @@ def _is_meta_answer(text: str) -> bool:
     Students evaluate them differently, so comparing their length to substantive
     answers creates false positives.
     
-    These exact phrasings are required by LLM_Modules/QuizForge_Base.md Section 10.
+    These exact phrasings are required by Section 10 of the QuizForge contract
+    embedded in api/default_docs/AI Authoring/Author a Quiz (QuizForge).txt.
     LLMs are instructed to use only these standardized forms.
     
     Args:
@@ -190,9 +192,4 @@ def check_length_bias(quiz: Quiz) -> List[str]:
         errors.append(error_msg)
 
     return errors
-
-
-def _check_answer_position_pattern(questions: List[MCQuestion]) -> List[str]:
-    """Deprecated: answer-position streak warnings are suppressed (see check_fairness)."""
-    return []
 

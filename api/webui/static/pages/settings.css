@@ -1,11 +1,14 @@
 .ce-settings-page { min-width: 0; }
-.ce-settings-index { display: grid; gap: var(--ce-space-3); }
-.ce-settings-index__title { margin: 0; color: var(--ce-ink-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.ce-settings-index { display: grid; gap: var(--ce-space-4); }
+.ce-settings-index__group { display: grid; gap: var(--ce-space-2); }
+.ce-settings-index__group + .ce-settings-index__group { padding-top: var(--ce-space-3); border-top: 1px solid var(--ce-rule); }
+.ce-settings-index__kicker { margin: 0; padding: 0 var(--ce-space-3); color: var(--ce-ink-muted); font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .ce-settings-index__links { display: grid; gap: var(--ce-space-1); }
 .ce-settings-index__links a { padding: var(--ce-space-2) var(--ce-space-3); border-left: 2px solid transparent; color: var(--ce-ink-muted); font-size: 13px; font-weight: 600; text-decoration: none; }
 .ce-settings-index__links a:hover, .ce-settings-index__links a:focus-visible { border-color: var(--ce-accent-canvas); background: var(--ce-accent-canvas-soft); color: var(--ce-ink); }
+.ce-settings-index__links a.is-active { border-color: var(--ce-accent-canvas); background: var(--ce-accent-canvas-soft); color: var(--ce-ink); }
 .ce-settings-stack { display: grid; gap: var(--ce-space-4); }
-.ce-settings-panel { margin: 0; }
+.ce-settings-panel { margin: 0; scroll-margin-top: var(--ce-space-4); }
 .ce-settings-panel h2 { margin-top: 0; }
 .ce-settings-panel .ce-hint { margin: 0 0 var(--ce-space-2); }
 .ce-settings-panel code { overflow-wrap: anywhere; }

@@ -1,0 +1,48 @@
+name: Release
+
+# Builds the self-update payload for a tagged release: a single CanvasExpert.zip
+# (wrapping one top-level CanvasExpert/ folder) plus its SHA256SUMS.txt, attached
+# to the GitHub release for that tag. api/webui/self_update.py is the only
+# consumer of these two assets -- keep their names and shape in step with it.
+#
+# main is rebuilt as a clean orphan snapshot for releases (see
+# docs/reference/public-repo-structure.md); .github/ must survive that rebuild
+# or this workflow stops existing on main.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@v4
+
+      - name: Stage the release payload
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/payload/CanvasExpert
+          rsync -a --exclude='.git' --exclude='.github' --exclude='__pycache__' ./ /tmp/payload/CanvasExpert/
+          cd /tmp/payload
+          zip -r -X "$GITHUB_WORKSPACE/CanvasExpert.zip" CanvasExpert
+
+      - name: Compute the checksum file
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          sha256sum CanvasExpert.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            CanvasExpert.zip
+            SHA256SUMS.txt

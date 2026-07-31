@@ -26,6 +26,15 @@ def _make_session_state(session):
     return state, load_session, save_session
 
 
+def test_make_late_batch_id_matches_run_stamp_format():
+    """late-<workspace.RUN_STAMP_FORMAT> -- one shared stamp convention with
+    the other PowerGrader "For AI/" run-folder names."""
+    import re
+
+    batch_id = late_catchup.make_late_batch_id()
+    assert re.fullmatch(r"late-\d{8}-\d{6}-\d{6}", batch_id)
+
+
 def _base_late_watch():
     return {
         "enabled": True,
@@ -51,7 +60,7 @@ def _assist_session():
         "assignment_description": "Explain the text.",
         "points_possible": 10,
         "mode": "assisted",
-        "mode_label": "Auto-Score With API",
+        "mode_label": "Auto-score with AI",
         "rubric_name": "Rubric A",
         "persona_id": "sage",
         "model_id": "model-a",
@@ -322,7 +331,7 @@ def test_late_routes_reject_non_assisted_session(monkeypatch):
         data = _response_json(route("sid"))
         assert data == {
             "ok": False,
-            "error": "Late catch-up requires Auto-Score With API or AI Chat mode.",
+            "error": "Late catch-up requires Auto-score with AI or AI chat mode.",
         }
     assert state["mode"] == "fast"
 

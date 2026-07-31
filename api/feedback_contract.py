@@ -5,10 +5,10 @@ behavior used by the feedback tools pipeline and PowerGrader packet builders.
 """
 import json
 import os
-import re
 
 from api.nq_report import constructed_responses, html_to_text, parse_student_analysis_file
 from api.feedback_vault import Vault
+from engine.utils.text_utils import safe_filename_component
 
 CONTRACT_VERSION = "1.0"
 _REVIEW_NOTE = ("Pseudonymized for privacy. Review the response text for any "
@@ -16,8 +16,7 @@ _REVIEW_NOTE = ("Pseudonymized for privacy. Review the response text for any "
 
 
 def _safe(name, max_len=80):
-    s = re.sub(r'[^\w\- ]+', "", (name or "").strip())
-    return (re.sub(r'\s+', " ", s)[:max_len] or "quiz").strip()
+    return safe_filename_component(name, max_len=max_len, fallback="quiz")
 
 
 def persona_signoff(persona: dict | None = None,
@@ -79,7 +78,8 @@ You will receive a JSON bundle of pseudonymized responses. For EACH response ret
 one result object. Output ONLY a JSON array, each element exactly:
 
   {{"pseudonym": "<copy>", "item_id": "<copy>", "score": <number>,
-    "feedback": "<actionable, kind, rubric-anchored feedback for the student>"{disclosure_example}}}
+    "feedback": "<actionable, kind, rubric-anchored feedback for the student>",
+    "writing_process_observations": "<optional teacher-only observation>"{disclosure_example}}}
 
 Rules:
 - Copy `pseudonym` and `item_id` back EXACTLY so results can be matched.
@@ -88,6 +88,10 @@ Rules:
   is truly impossible to score without it.
 - Quote briefly from the response to justify the score.
 - Do not identify students.
+- When a response includes `writing_timeline`, you may return
+  `writing_process_observations` as an observational, teacher-only string.
+  It must never be an integrity conclusion, probability, or penalty recommendation.
+  It must not change the score or the student-facing `feedback`.
 - Do not invent a separate signature or disclosure beyond the selected persona.
 {disclosure_rule}
 - Use the full score range; `possible` gives each item's maximum.{signoff_clause}{rubric_block}"""

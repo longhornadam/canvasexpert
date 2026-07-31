@@ -5,7 +5,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from api import __version__, diagnostics, runtime_paths
+from api import __version__, ai_clients, diagnostics, runtime_paths
 from api.mcp_server.contract import TOOL_SCHEMA_VERSION
 
 
@@ -93,6 +93,7 @@ def connection_context() -> dict:
         "portable_tunnel_executable": str(app_root / "tools" / "tunnel-client.exe"),
         "chatgpt_powershell": _chatgpt_powershell(),
         "health": diagnostics.health_snapshot(),
+        "clients": ai_clients.clients_status(),
     }
 
 
@@ -104,16 +105,16 @@ def _zip_text_member(archive: zipfile.ZipFile, name: str, content: str) -> None:
 
 
 def build_claude_mcpb(destination: Path) -> Path:
-    """Create the folder-linked read-only Claude package at destination."""
+    """Create the folder-linked Claude package at destination."""
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     app_root, python_executable, _ = _resolved_paths()
     manifest = {
         "manifest_version": "0.3",
-        "name": "canvas-expert-read-only",
-        "display_name": "Canvas Expert (Read Only)",
+        "name": "canvas-expert",
+        "display_name": "Canvas Expert",
         "version": __version__,
-        "description": "Launches the read-only Canvas Expert MCP server from this computer's unzipped CanvasExpert folder.",
+        "description": "Launches the Canvas Expert MCP server from this computer's unzipped CanvasExpert folder.",
         "author": {"name": "Canvas Expert"},
         "server": {
             "type": "python",

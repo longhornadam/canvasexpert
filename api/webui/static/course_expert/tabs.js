@@ -123,6 +123,12 @@
     });
   }
 
+  function bindInboxSections() {
+    if (window.CE_PUSH && typeof window.CE_PUSH.bindInboxSections === "function") {
+      window.CE_PUSH.bindInboxSections();
+    }
+  }
+
   function bindCopySkill() {
     document.addEventListener("click", function (event) {
       var button = event.target.closest(".btn-copy-skill");
@@ -225,6 +231,7 @@
   bindDeliveryToggles();
   bindQuizModeToggle();
   bindFileSources();
+  bindInboxSections();
   bindCopySkill();
   bindCoursePickerDismiss();
 })();
