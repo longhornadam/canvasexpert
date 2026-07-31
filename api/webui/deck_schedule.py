@@ -12,13 +12,14 @@ Three functions parse and resolve schedule data:
 
 
 def parse_bell_schedule(content: str) -> tuple:
-    """CSV text -> ([{period_id, start, end}], problems).
+    """CSV text -> ([{seq, period_id, start, end, segment}], problems).
 
-    Columns: period_id,start,end (header row required).
+    Columns: period_id,start,end,label? (header row required).
     start/end are 24h "HH:MM" local wall-clock strings. No timezone math.
 
-    Returns (periods_list, problems_list):
-    - periods_list: [{period_id, start, end}, ...]
+    Returns (meetings_list, problems_list):
+    - meetings_list: ordered meetings with a zero-based ``seq`` and optional
+      ``segment`` from the CSV's ``label`` column
     - problems_list: human-readable issue strings (empty if no problems)
     """
     import csv as _csv
@@ -26,25 +27,35 @@ def parse_bell_schedule(content: str) -> tuple:
 
     periods = []
     problems = []
-    seen_ids = {}
-
     reader = _csv.DictReader(_io.StringIO(content))
     if not reader.fieldnames:
         return periods, problems
 
-    fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
+    field_map = {
+        field.strip().lower(): field
+        for field in (reader.fieldnames or [])
+        if isinstance(field, str)
+    }
+    fieldnames = set(field_map)
     if "period_id" not in fieldnames or "start" not in fieldnames or "end" not in fieldnames:
         return periods, problems
 
+    label_field = field_map.get("label")
     for row in reader:
-        period_id = (row.get("period_id") or "").strip()
-        start = (row.get("start") or "").strip()
-        end = (row.get("end") or "").strip()
+        period_id = (row.get(field_map["period_id"]) or "").strip()
+        start = (row.get(field_map["start"]) or "").strip()
+        end = (row.get(field_map["end"]) or "").strip()
+        segment = (row.get(label_field) or "").strip() if label_field else ""
 
         if not period_id or not start or not end:
             continue
 
-        entry = {"period_id": period_id, "start": start, "end": end}
+        entry = {
+            "period_id": period_id,
+            "start": start,
+            "end": end,
+            "segment": segment,
+        }
 
         # Validate time format (HH:MM)
         for time_val in [start, end]:
@@ -57,13 +68,13 @@ def parse_bell_schedule(content: str) -> tuple:
                 f"Period {period_id}: end time {end} is before start time {start}"
             )
 
-        # Track duplicates (last one wins)
-        if period_id in seen_ids:
-            problems.append(f"Duplicate period_id {period_id}; using the last row")
-            periods[seen_ids[period_id]] = entry
-        else:
-            seen_ids[period_id] = len(periods)
-            periods.append(entry)
+        periods.append(entry)
+
+    periods.sort(key=lambda meeting: meeting["start"])
+    periods = [
+        {"seq": seq, **meeting}
+        for seq, meeting in enumerate(periods)
+    ]
 
     return periods, problems
 
@@ -115,9 +126,10 @@ def parse_teacher_schedule(text: str) -> tuple:
 
     Shape:
     {"version": "1.0-json",
-     "blocks": [{"name": "4th/5th", "raw_periods": [4, 5], "label": "ELA 7", "course_id": "9000001", "weekdays": [0, 2]}, ...]}
+     "blocks": [{"name": "4th/5th", "raw_periods": [4, 5], "label": "ELA 7", "course_id": "9000001"}, ...]}
 
-    raw_periods is ordered and may span multiple bell periods. label and weekdays are optional.
+    raw_periods is ordered and may span multiple bell periods. label is optional.
+    A legacy weekdays key is ignored.
     Top-level "_comment" key (or any unknown top-level key) is silently ignored.
 
     Returns (data_dict, problems_list):
@@ -140,46 +152,6 @@ def parse_teacher_schedule(text: str) -> tuple:
     return data, problems
 
 
-def _weekday_set(block, name) -> tuple[set | None, list]:
-    """Return a block's weekday restriction and any malformed-field problem."""
-    if "weekdays" not in block:
-        return None, []
-
-    weekdays = block.get("weekdays")
-    if (
-        not isinstance(weekdays, list)
-        or any(
-            isinstance(day, bool)
-            or not isinstance(day, int)
-            or day < 0
-            or day > 6
-            for day in weekdays
-        )
-    ):
-        return None, [
-            f"block '{name}': weekdays must be a list of numbers, "
-            "0 for Monday through 6 for Sunday"
-        ]
-
-    return set(weekdays), []
-
-
-def _block_meets(block, name, weekday) -> tuple[bool, list]:
-    """Return whether a block applies today, failing open on bad input."""
-    weekdays, problems = _weekday_set(block, name)
-    if weekday is None or weekdays is None:
-        return True, problems
-    return weekday in weekdays, problems
-
-
-def effective_weekdays(block) -> set:
-    """Return the weekdays a block applies to, with absent or bad values unrestricted."""
-    if not isinstance(block, dict):
-        return set(range(7))
-    weekdays, _ = _weekday_set(block, block.get("name") or "")
-    return set(range(7)) if weekdays is None else weekdays
-
-
 def validate_teacher_schedule(data: dict) -> list:
     """Validate the teacher schedule shape for a write operation."""
     if not isinstance(data, dict):
@@ -190,7 +162,8 @@ def validate_teacher_schedule(data: dict) -> list:
         return ["blocks must be a list"]
 
     problems = []
-    named_blocks = []
+    names = set()
+    period_owners = {}
     for index, block in enumerate(blocks):
         if not isinstance(block, dict):
             problems.append(f"block at index {index} must be a dict")
@@ -218,9 +191,6 @@ def validate_teacher_schedule(data: dict) -> list:
                 "or non-empty strings for raw_periods"
             )
 
-        weekdays, weekday_problems = _weekday_set(block, display_name)
-        problems.extend(weekday_problems)
-
         if "label" in block and not isinstance(block.get("label"), str):
             problems.append(f"block '{display_name}': label must be a string")
 
@@ -228,16 +198,21 @@ def validate_teacher_schedule(data: dict) -> list:
             problems.append(f"block '{display_name}' course_id must be a string")
 
         if valid_name:
-            named_blocks.append((name, set(range(7)) if weekdays is None else weekdays))
+            if name in names:
+                problems.append(f"block '{name}' must be unique")
+            names.add(name)
 
-    for index, (name, weekdays) in enumerate(named_blocks):
-        for other_name, other_weekdays in named_blocks[:index]:
-            if name == other_name and weekdays.intersection(other_weekdays):
-                problems.append(
-                    f"block '{name}' is listed more than once for the same weekday; "
-                    "give one a different name or narrow its weekdays"
-                )
-                break
+        if valid_raw_periods:
+            for period in raw_periods:
+                period_id = str(period)
+                owner = period_owners.get(period_id)
+                if owner is not None and owner[0] != index:
+                    problems.append(
+                        f"period '{period_id}' is claimed by both blocks "
+                        f"'{owner[1]}' and '{display_name}'"
+                    )
+                else:
+                    period_owners[period_id] = (index, display_name)
 
     return problems
 
@@ -251,7 +226,8 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
     teacher_schedule: output of parse_teacher_schedule
 
     Returns (blocks_list, problems_list):
-    - blocks_list: [{name, label, start, end, raw_periods, schedule_id}, ...]
+    - blocks_list: [{name, label, start, end, raw_periods, schedule_id,
+      period_ids, segments, seq}, ...]
       sorted by start time
     - problems_list: human-readable issue strings
     """
@@ -268,12 +244,9 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
         problems.append(f"schedule '{schedule_id}' not found for {date}")
         return [], problems
 
-    # Get the bell schedule for today
+    # Get the ordered meetings for today. The parser has already sorted them
+    # chronologically; callers supplying parsed data may also provide seq.
     periods_list = bell_schedules[schedule_id]
-    period_map = {p["period_id"]: p for p in periods_list}
-
-    parsed = _parse_date(date)
-    weekday = parsed.weekday() if parsed else None
 
     # Parse teacher schedule blocks
     blocks_data = teacher_schedule.get("blocks") or []
@@ -296,36 +269,36 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
             problems.append(f"block '{name}' has no raw_periods")
             continue
 
-        meets, weekday_problems = _block_meets(block, name, weekday)
-        problems.extend(weekday_problems)
-        if not meets:
-            continue
-
-        # Convert raw_periods to strings for lookup
         period_ids = [str(p) for p in raw_periods]
 
-        # Check if all periods are present in today's schedule
-        missing_ids = [pid for pid in period_ids if pid not in period_map]
+        runs = []
+        current_run = []
+        for meeting_index, meeting in enumerate(periods_list):
+            if str(meeting.get("period_id")) in period_ids:
+                current_run.append((meeting_index, meeting))
+            elif current_run:
+                runs.append(current_run)
+                current_run = []
+        if current_run:
+            runs.append(current_run)
 
-        if missing_ids:
-            problems.append(
-                f"block '{name}' omitted: periods {missing_ids} not in schedule '{schedule_id}'"
-            )
-        else:
-            # All periods found: start = first period's start, end = last period's end
-            first_period = period_map[period_ids[0]]
-            last_period = period_map[period_ids[-1]]
+        for run in runs:
+            first_index, first_meeting = run[0]
+            last_meeting = run[-1][1]
             blocks.append({
                 "name": name,
                 "label": label,
-                "start": first_period["start"],
-                "end": last_period["end"],
+                "start": first_meeting["start"],
+                "end": last_meeting["end"],
                 "raw_periods": raw_periods,
                 "schedule_id": schedule_id,
+                "period_ids": [str(meeting.get("period_id")) for _, meeting in run],
+                "segments": [meeting.get("segment", "") or "" for _, meeting in run],
+                "seq": first_meeting.get("seq", first_index),
             })
 
     # Sort by start time
-    blocks.sort(key=lambda b: b["start"])
+    blocks.sort(key=lambda b: (b["start"], b.get("seq", 0)))
 
     seen_names = set()
     reported_names = set()
@@ -334,7 +307,7 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
         if name in seen_names and name not in reported_names:
             problems.append(
                 f"block '{name}' resolved twice for {date}; "
-                "a deck will only use the later one in the day"
+                "slides bind to the first meeting"
             )
             reported_names.add(name)
         seen_names.add(name)

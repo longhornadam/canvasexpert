@@ -28,7 +28,14 @@ def _resolve_slides(deck: dict, blocks: list) -> tuple[list, list]:
     rotation on whichever showed first. Decks are validated on save, so this only bites
     files edited by hand, which is a workflow the archive recovery path invites.
     """
-    blocks_by_name = {b["name"]: b for b in blocks}
+    blocks_by_name = {}
+    blocks_by_name_all = {}
+    for block in blocks:
+        name = block.get("name")
+        if not name:
+            continue
+        blocks_by_name_all.setdefault(name, []).append(block)
+        blocks_by_name.setdefault(name, block)
     widgets_by_id = {
         w["id"]: w for w in (deck.get("widgets") or [])
         if isinstance(w, dict) and w.get("id")
@@ -59,6 +66,13 @@ def _resolve_slides(deck: dict, blocks: list) -> tuple[list, list]:
             problems.append(
                 f"slide {slide_id!r}: block {slide.get('block')!r} is not in {day}, "
                 f"so it will not appear")
+        else:
+            for later in blocks_by_name_all.get(slide.get("block"), [])[1:]:
+                problems.append(
+                    f"slide {slide_id!r}: block {slide.get('block')!r} also meets "
+                    f"{later['start']}-{later['end']}; this slide shows at the "
+                    f"{block['start']} meeting only"
+                )
 
         resolved.append({
             "id": slide_id,

@@ -93,8 +93,9 @@ def list_bell_schedule_files():
 def load_bell_schedules() -> tuple:
     """Load all bell schedules from workspace Calendars folder.
 
-    Returns ({schedule_id: periods_list}, problems_list):
-    - First element is dict mapping schedule_id to period list from parse_bell_schedule
+    Returns ({schedule_id: meetings_list}, problems_list):
+    - First element is dict mapping schedule_id to ordered meeting lists from
+      parse_bell_schedule
     - Second element is list of problem strings (prefixed with filename/schedule_id)
     """
     from . import deck_schedule
@@ -113,8 +114,8 @@ def load_bell_schedules() -> tuple:
             all_problems.append(f"{schedule_id}: could not read file: {e}")
             continue
 
-        periods, problems = deck_schedule.parse_bell_schedule(content)
-        schedules[schedule_id] = periods
+        meetings, problems = deck_schedule.parse_bell_schedule(content)
+        schedules[schedule_id] = meetings
 
         for problem in problems:
             all_problems.append(f"{schedule_id}: {problem}")
@@ -204,7 +205,9 @@ def resolve_schedule_for(date: str) -> tuple:
     then deck_schedule.resolve_day(). Merges problems from all stages.
 
     date: "YYYY-MM-DD" string
-    Returns (blocks_list, problems_list).
+    Returns (resolved meeting blocks, problems_list). A block that spans more
+    than one consecutive meeting includes period_ids, segments, and seq; a
+    non-contiguous block produces one entry per consecutive run.
     """
     from . import deck_schedule
 

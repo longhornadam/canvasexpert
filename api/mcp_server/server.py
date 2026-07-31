@@ -183,7 +183,8 @@ def refresh_mirror(course_id: str) -> str:
 
 @mcp.tool()
 def get_bell_schedule(schedule_id: str = "") -> str:
-    """Bell schedule(s) from the workspace as {period_id, start, end} periods.
+    """Bell schedule(s) from the workspace as ordered meeting lists with
+    {seq, period_id, start, end, segment} entries.
     schedule_id="" returns all variants; else returns one variant or error.
     No student data."""
     return _compact(tools.get_bell_schedule(schedule_id))
@@ -192,7 +193,8 @@ def get_bell_schedule(schedule_id: str = "") -> str:
 @mcp.tool()
 def get_day_schedule(date: str) -> str:
     """Teacher blocks resolved for a specific date as {name, label, start, end,
-    raw_periods, schedule_id}, sorted by start time. date is YYYY-MM-DD.
+    raw_periods, schedule_id, period_ids, segments, seq}, sorted by start time.
+    Repeated blocks produce one entry per consecutive meeting run. date is YYYY-MM-DD.
     No student data."""
     return _compact(tools.get_day_schedule(date))
 

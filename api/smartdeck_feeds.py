@@ -80,9 +80,8 @@ def resolve_feed(name: str, date_str: str, *, lookahead_days: int = DEFAULT_LOOK
 def _bell_schedule_feed(date_str: str) -> dict:
     """{"day_type": schedule_id or None, "blocks": [...], "current_block": dict or None}.
 
-    day_type is the resolved schedule_id shared by every block for this date
-    (deck_schedule.resolve_day's blocks all come from one day's bell schedule,
-    so the first block's schedule_id represents the whole day). current_block
+    day_type comes directly from the day calendar, so it remains available even
+    when no teacher block meets on that date. current_block
     is only ever populated when date_str is today (a past/future date has no
     meaningful "right now") -- compare against the real local clock via
     datetime.now().strftime("%H:%M") against each block's start/end strings."""
@@ -90,7 +89,11 @@ def _bell_schedule_feed(date_str: str) -> dict:
         blocks, _problems = deps.resolve_schedule_for(date_str)
     except Exception:
         blocks = []
-    day_type = blocks[0]["schedule_id"] if blocks else None
+    try:
+        day_calendar, _problems = deps.load_day_calendar()
+        day_type = day_calendar.get(date_str)
+    except Exception:
+        day_type = None
     current_block = None
     try:
         if date_str == date_type.today().isoformat():

@@ -64,10 +64,6 @@
 .ce-schedule-block-list { display: grid; gap: var(--ce-space-2); }
 .ce-schedule-block-row { display: grid; grid-template-columns: minmax(140px, .9fr) minmax(90px, .5fr) minmax(150px, 1fr) minmax(230px, 1.3fr) auto; align-items: end; gap: var(--ce-space-2); padding: var(--ce-space-3); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
 .ce-schedule-block-row label { min-width: 0; }
-.ce-schedule-weekdays { display: grid; gap: var(--ce-space-1); }
-.ce-schedule-field-label { color: var(--ce-ink); font-size: 13px; font-weight: 600; }
-.ce-schedule-day-list { display: flex; flex-wrap: wrap; gap: var(--ce-space-2); min-height: 34px; align-items: center; }
-.ce-schedule-day-list label { display: inline-flex; align-items: center; gap: var(--ce-space-1); font-size: 12px; font-weight: 600; }
 @media (max-width: 760px) {
   .ce-settings-tier-grid { grid-template-columns: minmax(0, 1fr); }
   .url-row, .token-row, .ce-settings-input-row { align-items: stretch; flex-wrap: wrap; }

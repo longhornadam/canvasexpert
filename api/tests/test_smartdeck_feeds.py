@@ -82,6 +82,10 @@ class TestResolveFeedBellSchedule:
             "api.webui.deps.resolve_schedule_for",
             lambda date_str: (fixture_blocks, [])
         )
+        monkeypatch.setattr(
+            "api.webui.deps.load_day_calendar",
+            lambda: ({"2026-08-14": "bobcat"}, [])
+        )
 
         result = smartdeck_feeds.resolve_feed("bell_schedule", "2026-08-14")
         assert result["ok"] is True
@@ -92,17 +96,21 @@ class TestResolveFeedBellSchedule:
         assert len(data["blocks"]) == 2
         assert data["blocks"][0]["period_id"] == "1"
 
-    def test_bell_schedule_empty_blocks(self, monkeypatch):
-        """Bell schedule with no blocks returns day_type=None."""
+    def test_bell_schedule_empty_blocks_preserves_day_type(self, monkeypatch):
+        """A no-class day still reports the schedule selected by the calendar."""
         monkeypatch.setattr(
             "api.webui.deps.resolve_schedule_for",
             lambda date_str: ([], [])
+        )
+        monkeypatch.setattr(
+            "api.webui.deps.load_day_calendar",
+            lambda: ({"2026-08-14": "bobcat"}, [])
         )
 
         result = smartdeck_feeds.resolve_feed("bell_schedule", "2026-08-14")
         assert result["ok"] is True
         data = result["data"]
-        assert data["day_type"] is None
+        assert data["day_type"] == "bobcat"
         assert data["blocks"] == []
 
     def test_bell_schedule_exception_graceful(self, monkeypatch):

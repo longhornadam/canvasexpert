@@ -142,8 +142,35 @@ def load_blocks() -> tuple[list, list]:
     return (blocks if isinstance(blocks, list) else []), list(problems)
 
 
+def _validate_block_periods_against_bell_schedules(blocks: list) -> list:
+    """Reject teacher periods that do not exist in any workspace meeting list."""
+    bell_schedules, _problems = deps.load_bell_schedules()
+    known_periods = {
+        str(meeting.get("period_id"))
+        for meetings in bell_schedules.values()
+        if isinstance(meetings, list)
+        for meeting in meetings
+        if isinstance(meeting, dict) and meeting.get("period_id") is not None
+    }
+    if not known_periods:
+        return ["no bell schedules found; cannot validate teacher schedule periods"]
+
+    problems = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        name = block.get("name") or ""
+        for period in block.get("raw_periods") or []:
+            period_id = str(period)
+            if period_id not in known_periods:
+                problems.append(
+                    f"block '{name}': period '{period_id}' not found in any bell schedule"
+                )
+    return problems
+
+
 def save_blocks(blocks: list) -> tuple[dict | None, list]:
-    """Replace only ``blocks`` in Teacher Schedule.json, atomically."""
+    """Validate and atomically replace only ``blocks`` in Teacher Schedule.json."""
     validation_problems = deck_schedule.validate_teacher_schedule({"blocks": blocks})
     if validation_problems:
         return None, validation_problems
@@ -152,6 +179,10 @@ def save_blocks(blocks: list) -> tuple[dict | None, list]:
     smartdecks = _smartdecks_dir()
     if not path or not smartdecks:
         return None, ["no workspace available"]
+
+    period_problems = _validate_block_periods_against_bell_schedules(blocks)
+    if period_problems:
+        return None, period_problems
 
     data = {}
     if os.path.exists(path):

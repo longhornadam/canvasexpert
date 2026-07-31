@@ -1,6 +1,6 @@
 # Brief — Model the school day as an ordered list of meetings
 
-**Status:** current · **Author:** Claude Code (session of 2026-07-31)
+**Status:** GREEN; complete; retiring · **Author:** Claude Code (session of 2026-07-31)
 · **Executor:** external · **Lane:** one vertical improvement · **Branch:** `dev`
 
 ## Why this exists
@@ -255,7 +255,18 @@ New test in `api/tests/test_schedule_fixture.py`:
 
 ## Execution result
 
-*(Executor fills this in: traffic light, commit, changed files, evidence, deviations.)*
+- **Traffic light:** GREEN.
+- **Commit:** pending until this result is recorded and the brief is retired.
+- **Changed:** ordered Bell Schedule meetings with duplicate IDs and labels; consecutive-run
+  resolution with additive meeting fields; weekday-axis retirement and save-time period checks;
+  SmartDeck/feed/MCP consumers; Settings UI; defaults, fixtures, and focused regressions.
+- **Evidence:** baseline `1925 passed, 1 skipped`; focused changed-surface matrix `232 passed`;
+  full API suite `1915 passed, 1 skipped`; browser check returned Settings and Display 200,
+  confirmed the Days control absent, and recorded zero console/page errors.
+- **Deviations:** none. The lower final count reflects intentional removal of the obsolete
+  weekday test block and replacement with the meetings-model coverage. MCP schema v13/v14 were
+  left unchanged because they contain no Teacher Schedule block-shape contract. No unresolved
+  decisions.
 
 ## Retiring this brief
 

@@ -72,9 +72,9 @@ Class schedule setup is owned by `routes/schedule.py` and `schedule_setup.py`:
   validation and atomic file behavior.
 
 A block's `name` is the key a Slide binds to (`routes/smartdeck.py` `_resolve_slides` keys
-blocks by name); `label` is display text only, and two blocks may share one. The editor keeps
-them in separate fields for that reason. Deriving either from the other renames blocks on save,
-which breaks existing slides and trips the duplicate-name check.
+blocks by name); `label` is display text only. Block names and claimed period IDs are unique,
+and save-time validation checks each period against the workspace Bell Schedule CSVs. The editor
+keeps name and label in separate fields so changing display text does not rename a slide binding.
 
 `readiness()` returns only what the panel renders. Add a field there when a surface starts
 showing it, not in advance: an unrendered field costs a directory scan on every `/settings`

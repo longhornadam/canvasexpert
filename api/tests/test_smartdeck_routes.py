@@ -7,10 +7,29 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.webui import deck_store, workspace
+from api.webui.routes.smartdeck import _resolve_slides
 from api.webui.server import app
 
 
 client = TestClient(app)
+
+
+def test_resolve_slides_binds_repeated_block_to_first_meeting():
+    slides, problems = _resolve_slides(
+        {
+            "date": "2026-08-14",
+            "slides": [{"id": "x", "block": "ELA 7", "layout": "title_only"}],
+        },
+        [
+            {"name": "ELA 7", "start": "08:35", "end": "10:30"},
+            {"name": "ELA 7", "start": "12:40", "end": "15:55"},
+        ],
+    )
+    assert slides[0]["start"] == "08:35"
+    assert problems == [
+        "slide 'x': block 'ELA 7' also meets 12:40-15:55; "
+        "this slide shows at the 08:35 meeting only"
+    ]
 
 
 @pytest.fixture(autouse=True)

@@ -4,9 +4,8 @@ Version 1.0
 Use this guide when helping a teacher finish SmartDeck schedule setup. The schedule has three
 parts, all stored in the teacher's local workspace:
 
-1. Teacher Schedule.json maps stable block names to the bell periods and optional weekdays for
-   each class.
-2. Bell Schedule CSV files define the actual start and end time for each period. These are
+1. Teacher Schedule.json maps unique stable block names to the bell periods for each class.
+2. Bell Schedule CSV files define the ordered meetings and their actual start and end time. These are
    teacher-owned files in the Calendars folder.
 3. Day Calendar CSV files map school dates to the bell schedule used that day.
 
@@ -14,13 +13,18 @@ Use get_teacher_schedule to read the existing blocks before changing them. A blo
 binding key that a SmartDeck slide points to. Keep it steady once slides use it. The block label
 is display text only and may repeat. Do not derive a name from a course title or from the label.
 
-raw_periods is ordered. The first period supplies the block's start time and the last period
-supplies its end time. Keep the order that the class spans in the bell schedule.
+raw_periods names the bell meeting IDs claimed by a block. The day calendar chooses the bell
+schedule for each date, so the same Teacher Schedule works for an exam day, an early-release day,
+or a schedule that runs on an unusual weekday. Do not add a weekdays field. Block names and
+period IDs must be unique across the saved schedule. A block absent from a day's bell schedule
+is silently absent that day; the save operation catches a period ID that exists in no Bell
+Schedule CSV.
 
-The weekdays field on a block uses 0 for Monday through 6 for Sunday. When it is absent, the
-block meets every day. Two blocks may share a name when their weekday sets do not overlap. For
-example, two blocks named Reading may use weekdays [0] for Monday and [4] for Friday. This is
-intentional and keeps slides bound to the same class name on both days.
+Bell Schedule CSVs require period_id,start,end and may include label. They are ordered by start
+time when read. Duplicate period_id values are legal: a review meeting and a later exam can both
+use period 6. A block spanning consecutive claimed meetings resolves to one window. If another
+meeting interrupts it, it resolves to separate windows; a slide bound to that block uses the
+first window.
 
 To choose a bell schedule for a day calendar, first call get_bell_schedule. A schedule_id is the
 filename slug returned for a bell schedule file. Read it from that result and never invent one.

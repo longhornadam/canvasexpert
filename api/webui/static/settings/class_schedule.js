@@ -8,7 +8,6 @@
   var blockList = document.getElementById("class-schedule-block-list");
   var blockStatus = document.getElementById("class-schedule-status");
   var state = { blocks: [], folders: {}, courses: [] };
-  var weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
   function esc(value) {
     if (CE.esc) return CE.esc(value);
@@ -92,10 +91,6 @@
     return input ? input.value : "";
   }
 
-  function blockDays(block) {
-    return Array.isArray(block.weekdays) ? block.weekdays : [];
-  }
-
   function courseSelect(block) {
     var courses = Array.isArray(state.courses) ? state.courses : [];
     var selected = block.course_id == null ? "" : String(block.course_id);
@@ -138,7 +133,6 @@
       row.setAttribute("data-ce-hook", "block-row");
       row._sourceBlock = block;
       var periods = Array.isArray(block.raw_periods) ? block.raw_periods.join(", ") : "";
-      var days = blockDays(block);
       row.innerHTML =
         '<label>Block<input type="text" data-field="name" value="' +
         esc(block.name || "") + '" placeholder="1st/2nd"></label>' +
@@ -151,12 +145,6 @@
         '</select>' + (state.courses.length ? "" :
           '<span class="ce-field-hint">Bookmark a course under Settings &rarr; Current courses.</span>') +
         '</label>' +
-        '<div class="ce-schedule-weekdays"><span class="ce-schedule-field-label">Days</span><div class="ce-schedule-day-list">' +
-        weekdays.map(function (day, index) {
-          return '<label><input type="checkbox" data-weekday="' + index + '"' +
-            (days.indexOf(index) >= 0 ? " checked" : "") + ">" + day + "</label>";
-        }).join("") +
-        '</div></div>' +
         '<button type="button" class="small danger" data-block-action="remove">Remove</button>';
       blockList.appendChild(row);
     });
@@ -187,19 +175,7 @@
       } else {
         delete block.course_id;
       }
-      var selected = Array.prototype.map.call(
-        row.querySelectorAll('[data-weekday]:checked'),
-        function (input) { return Number(input.getAttribute("data-weekday")); }
-      );
-      var originalDays = blockDays(row._sourceBlock || {});
-      var weekend = originalDays.filter(function (day) { return day === 5 || day === 6; });
-      if (Array.isArray((row._sourceBlock || {}).weekdays) || selected.length) {
-        block.weekdays = selected.concat(weekend.filter(function (day) {
-          return selected.indexOf(day) < 0;
-        }));
-      } else {
-        delete block.weekdays;
-      }
+      delete block.weekdays;
       return block;
     });
   }

@@ -39,6 +39,22 @@ def _folders(root):
     return calendars, smartdecks
 
 
+def _bell_schedule(calendars):
+    path = calendars / "Bell Schedule - Example.csv"
+    path.write_text(
+        "period_id,start,end\n"
+        "1,08:00,08:45\n"
+        "2,08:50,09:35\n"
+        "3,09:40,10:25\n"
+        "4,10:30,11:15\n"
+        "5,11:20,12:05\n"
+        "6,12:10,12:55\n"
+        "7,13:00,13:45\n"
+        "8,13:50,14:35\n",
+        encoding="utf-8",
+    )
+
+
 def test_get_api_schedule_on_empty_workspace_reports_all_three_missing(isolated_workspace):
     response = client.get("/api/schedule")
     data = response.json()
@@ -124,6 +140,8 @@ def test_get_api_schedule_returns_blocks_verbatim_including_unknown_keys(isolate
 def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_courses(
     isolated_workspace, monkeypatch
 ):
+    calendars, _smartdecks = _folders(isolated_workspace)
+    _bell_schedule(calendars)
     courses = [
         {"id": "9000001", "name": "Course A", "nickname": "A", "active": True},
         {"id": "9000002", "name": "Course B", "nickname": "", "active": False},
@@ -138,7 +156,6 @@ def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_
         "raw_periods": [1, 2],
         "label": "Math 7",
         "course_id": "missing-course",
-        "weekdays": [0, 2],
         "custom": {"keep": True},
     }]
 
@@ -155,7 +172,9 @@ def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_
 
 
 def test_post_schedule_teacher_writes_blocks(isolated_workspace):
-    blocks = [{"name": "Algebra", "raw_periods": [1], "weekdays": [0]}]
+    calendars, _smartdecks = _folders(isolated_workspace)
+    _bell_schedule(calendars)
+    blocks = [{"name": "Algebra", "raw_periods": [1]}]
     response = client.post("/api/schedule/teacher", data={"blocks": json.dumps(blocks)})
     assert response.json()["ok"] is True
     path = isolated_workspace / "Library" / "SmartDecks" / "Teacher Schedule.json"
@@ -163,6 +182,8 @@ def test_post_schedule_teacher_writes_blocks(isolated_workspace):
 
 
 def test_post_schedule_teacher_creates_the_file_when_absent(isolated_workspace):
+    calendars, _smartdecks = _folders(isolated_workspace)
+    _bell_schedule(calendars)
     response = client.post(
         "/api/schedule/teacher",
         data={"blocks": json.dumps([{"name": "Algebra", "raw_periods": [1]}])},
@@ -202,6 +223,8 @@ def test_post_schedule_teacher_sets_version_only_when_absent(isolated_workspace)
 
 
 def test_post_schedule_teacher_keeps_block_order(isolated_workspace):
+    calendars, _smartdecks = _folders(isolated_workspace)
+    _bell_schedule(calendars)
     blocks = [
         {"name": "Later", "raw_periods": [2]},
         {"name": "Earlier", "raw_periods": [1]},
@@ -218,19 +241,17 @@ def test_post_schedule_teacher_keeps_block_order(isolated_workspace):
 def test_saving_the_fixture_schedule_back_unchanged_keeps_every_block(isolated_workspace):
     """A no-op editor round trip must leave every block exactly as it was.
 
-    A block's name is the key a slide binds to, and two blocks may legitimately
-    share a course label. An editor that derives one from the other renames blocks
-    on save and trips the duplicate-name check, so a realistic multi-block schedule
-    has to survive being read and written straight back.
+    A block's name is the key a slide binds to, and the new model has one unique
+    block per course period. The full fixture must survive being read and written
+    straight back.
     """
-    _calendars, smartdecks = _folders(isolated_workspace)
+    calendars, smartdecks = _folders(isolated_workspace)
+    _bell_schedule(calendars)
     shutil.copy2(FIXTURE / "Teacher Schedule.json", smartdecks / "Teacher Schedule.json")
 
     blocks = client.get("/api/schedule").json()["blocks"]
     assert len(blocks) > 1
-    assert len({block["name"] for block in blocks}) < len(blocks), (
-        "fixture should contain a shared block name, which is the case that used to break"
-    )
+    assert len({block["name"] for block in blocks}) == len(blocks)
 
     response = client.post("/api/schedule/teacher", data={"blocks": json.dumps(blocks)})
     assert response.json()["ok"] is True, response.json().get("problems")

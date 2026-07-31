@@ -1005,7 +1005,7 @@ def get_bell_schedule(schedule_id: str = "") -> dict:
     """Read bell schedule(s) from workspace Calendars folder.
 
     No course gate, no student data — no safety gate.
-    schedule_id: empty string ("") returns all variants as {schedule_id: periods},
+    schedule_id: empty string ("") returns all variants as {schedule_id: meetings},
                  non-empty returns just that one or error if not found.
     """
     bell_schedules, problems = deps.load_bell_schedules()
@@ -1027,7 +1027,7 @@ def get_bell_schedule(schedule_id: str = "") -> dict:
     return {
         "ok": True,
         "schedule_id": schedule_id,
-        "periods": bell_schedules[schedule_id],
+        "meetings": bell_schedules[schedule_id],
         "problems": problems,
     }
 
@@ -1037,7 +1037,9 @@ def get_day_schedule(date: str) -> dict:
 
     No course gate, no student data — no safety gate.
     date: "YYYY-MM-DD" string
-    Returns [{name, label, start, end, raw_periods, schedule_id}, ...] sorted by start time.
+    Returns [{name, label, start, end, raw_periods, schedule_id, period_ids,
+    segments, seq}, ...] sorted by start time. A repeated block produces one
+    entry per consecutive meeting run; slides bind to its first entry.
     """
     blocks, problems = deps.resolve_schedule_for(date)
     return {

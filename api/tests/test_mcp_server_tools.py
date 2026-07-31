@@ -1638,13 +1638,27 @@ def _teacher_schedule_workspace(monkeypatch, tmp_path):
         workspace, "library_folder", lambda name: str(workspace_root / "Library" / name)
     )
     smartdecks = workspace_root / "Library" / "SmartDecks"
+    calendars = workspace_root / "Library" / "Calendars"
     smartdecks.mkdir(parents=True)
+    calendars.mkdir(parents=True)
+    (calendars / "Bell Schedule - Example.csv").write_text(
+        "period_id,start,end\n"
+        "1,08:00,08:45\n"
+        "2,08:50,09:35\n"
+        "3,09:40,10:25\n"
+        "4,10:30,11:15\n"
+        "5,11:20,12:05\n"
+        "6,12:10,12:55\n"
+        "7,13:00,13:45\n"
+        "8,13:50,14:35\n",
+        encoding="utf-8",
+    )
     return smartdecks / "Teacher Schedule.json"
 
 
 def test_save_teacher_schedule_writes_blocks_and_returns_path(monkeypatch, tmp_path):
     path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    blocks = [{"name": "Algebra", "raw_periods": [1], "weekdays": [0]}]
+    blocks = [{"name": "Algebra", "raw_periods": [1]}]
 
     result = tools.save_teacher_schedule(blocks)
 
@@ -1730,23 +1744,33 @@ def test_save_teacher_schedule_rejects_non_list(monkeypatch, tmp_path):
 def test_save_teacher_schedule_rejects_intersecting_duplicate_names(monkeypatch, tmp_path):
     _teacher_schedule_workspace(monkeypatch, tmp_path)
     blocks = [
-        {"name": "Shared", "raw_periods": [1], "weekdays": [0, 1]},
-        {"name": "Shared", "raw_periods": [2], "weekdays": [1, 2]},
+        {"name": "Shared", "raw_periods": [1]},
+        {"name": "Shared", "raw_periods": [2]},
     ]
     result = tools.save_teacher_schedule(blocks)
     assert result["ok"] is False
-    assert "listed more than once for the same weekday" in result["problems"][-1]
+    assert result["problems"] == ["block 'Shared' must be unique"]
 
 
-def test_save_teacher_schedule_accepts_disjoint_duplicate_names(monkeypatch, tmp_path):
+def test_save_teacher_schedule_rejects_duplicate_names_even_when_periods_differ(monkeypatch, tmp_path):
     path = _teacher_schedule_workspace(monkeypatch, tmp_path)
     blocks = [
-        {"name": "Shared", "raw_periods": [1], "weekdays": [0]},
-        {"name": "Shared", "raw_periods": [2], "weekdays": [4]},
+        {"name": "Shared", "raw_periods": [1]},
+        {"name": "Shared", "raw_periods": [2]},
     ]
     result = tools.save_teacher_schedule(blocks)
-    assert result["ok"] is True
-    assert json.loads(path.read_text(encoding="utf-8"))["blocks"] == blocks
+    assert result == {"ok": False, "problems": ["block 'Shared' must be unique"]}
+    assert not path.exists()
+
+
+def test_save_teacher_schedule_rejects_unknown_period(monkeypatch, tmp_path):
+    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    result = tools.save_teacher_schedule([{"name": "Unknown", "raw_periods": [99]}])
+    assert result == {
+        "ok": False,
+        "problems": ["block 'Unknown': period '99' not found in any bell schedule"],
+    }
+    assert not path.exists()
 
 
 def test_server_registers_save_teacher_schedule_wrapper(monkeypatch):

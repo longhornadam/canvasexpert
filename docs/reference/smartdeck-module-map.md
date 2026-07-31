@@ -63,9 +63,10 @@ historical, not current -- this route card is authoritative).
 ```
 
 Teacher Schedule.json uses the additive schema `{version: "1.0-json", blocks: [{name,
-raw_periods, label?, weekdays?}]}`. `weekdays` is optional and contains numbers from 0 for
-Monday through 6 for Sunday. When absent, the block meets every day. A block name may appear
-more than once when its weekday sets do not overlap.
+raw_periods, label?}]}`. Block names and claimed period IDs are unique. The day calendar selects
+an ordered Bell Schedule meeting list for each date, so a block can be absent on one day without
+a weekday rule. A block spanning multiple consecutive meetings resolves to one window; a
+non-contiguous block produces one entry per run, and slides bind to the first entry.
 
 Revision numbers are unique per date across all three deck folders, not just within the
 active one: `next_revision()` takes the highest `r<N>` it can see in any of them. That is
