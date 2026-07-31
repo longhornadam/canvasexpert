@@ -47,6 +47,7 @@ Current split:
 - `settings/courses.js` - Canvas course browser and Current/Previous actions
 - `settings/workspace.js` - download root, workspace, AI Authoring file actions
 - `settings/calendars.js` - calendar list/load/parse/save/copy prompt
+- `settings/class_schedule.js` - class schedule readiness, block editor, folder actions, and example load/remove UX
 - `settings/updates.js` - update check/download/apply/cancel UX
 
 ## Backend Routing
@@ -60,6 +61,13 @@ Current split:
 - `/settings/courses/{course_id}/set-active`
 - `/settings/download-root`
 - `/settings/test-connection`
+
+Class schedule setup is owned by `routes/schedule.py` and `schedule_setup.py`:
+
+- `GET /api/schedule` returns readiness, raw Teacher Schedule blocks, folder paths, and example manifests.
+- `POST /api/schedule/teacher` atomically replaces only the blocks array.
+- `POST /api/schedule/examples/load` and `/api/schedule/examples/remove` copy or archive
+  shipped examples on explicit request.
 
 `routes/updates.py` owns the self-update surface:
 
@@ -88,6 +96,7 @@ unless there is a strong reason.
 - Do not add district URLs, real calendars, teacher names, or other district-specific
   defaults to source.
 - Keep Settings local-only and do not introduce a public callback or OAuth route.
+- Example schedule sets are copied only on explicit request and are never seeded into a workspace.
 - Preserve the `config.*` facade and storage keys unless a migration is explicitly
   planned and tested.
 - `config.active_courses()` is the compatibility-named Current-course boundary for

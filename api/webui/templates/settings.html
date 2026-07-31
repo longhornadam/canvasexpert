@@ -37,6 +37,7 @@
       <div class="ce-rail-nav__links">
         <a href="#workspace-settings-card" data-rail-link>Workspace</a>
         <a href="#download-root-card" data-rail-link>Downloads</a>
+        <a href="#class-schedule-card" data-rail-link>Class schedule</a>
         <a href="#cal" data-rail-link>Academic calendars</a>
       </div>
     </div>
@@ -411,6 +412,37 @@
   </form>
 </section>
 
+<section class="ce-panel ce-settings-panel" id="class-schedule-card">
+  <h2>Class schedule <small class="lbl-hint">(used by SmartDeck)</small></h2>
+  <p class="ce-hint">
+    Your class schedule is what SmartDeck uses to turn a block name like 4th/5th into today's real start and end time. It has three parts, all kept as plain files in your workspace, so you can edit any of them by hand at any time.
+  </p>
+  <div id="class-schedule-readiness" class="ce-schedule-readiness" aria-live="polite"></div>
+  <div id="class-schedule-blocks" class="ce-schedule-blocks">
+    <h3>Blocks</h3>
+    <p class="ce-hint">A block is one of your classes as it sits in the day. Give it a short name you will recognize on a slide, the bell periods it covers in order, and an optional label. A block that runs two periods back to back gets both period numbers.</p>
+    <p class="ce-hint">Leave the days blank if this block meets every school day. Otherwise check the days it meets.</p>
+    <p class="ce-hint">Two blocks can share a name as long as their days do not overlap. That is how one class can be first period on Monday and Wednesday, and fifth period on the Friday schedule, with your slides still finding it by the same name.</p>
+    <div id="class-schedule-block-list" class="ce-schedule-block-list"></div>
+    <div class="ce-actions">
+      <button type="button" id="class-schedule-add-block" class="small">Add a block</button>
+      <button type="button" id="class-schedule-save-blocks" class="primary small">Save blocks</button>
+      <span id="class-schedule-status" class="status ce-settings-inline-status"></span>
+    </div>
+  </div>
+  <div class="ce-actions">
+    <button type="button" id="class-schedule-open-calendars" class="small" disabled>Open the Calendars folder</button>
+    <button type="button" id="class-schedule-open-smartdecks" class="small" disabled>Open the SmartDecks folder</button>
+  </div>
+  <p class="ce-hint">Bell schedules and day calendars are CSV files you keep in your Calendars folder. Drop a new one in and it shows up here.</p>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="class-schedule-examples-card" data-rail-covered-by="class-schedule-card">
+  <h2>Class schedule examples</h2>
+  <p class="ce-hint">Three complete example sets ship with the app. Loading one writes its files into your workspace so you can see how the three parts fit together, then edit them into your own. The course names, bell times, and dates are all invented.</p>
+  <div id="class-schedule-examples" class="ce-schedule-examples"></div>
+</section>
+
 <section class="ce-panel ce-settings-panel" id="cal">
   <h2>Academic calendars <small class="lbl-hint">(used by Late Work Sweep &amp; Extensions)</small></h2>
   <p class="ce-hint">
@@ -546,6 +578,7 @@
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
 <script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
 <script src="/static/settings/updates.js?v={{ asset_v }}"></script>
+<script src="/static/settings/class_schedule.js?v={{ asset_v }}"></script>
 <script src="/static/ui/rail_nav.js?v={{ asset_v }}"></script>
 
 <script>

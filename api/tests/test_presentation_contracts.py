@@ -243,3 +243,10 @@ def test_create_title_matches_its_navigation_and_page_title(monkeypatch):
     text = _client().get("/course-expert").text
     assert "<title>Create — Canvas Expert</title>" in text
     assert ">Create<" in text
+
+
+def test_settings_has_a_class_schedule_panel_and_rail_link(monkeypatch):
+    _configure_fictional(monkeypatch)
+    text = _client().get("/settings").text
+    assert 'id="class-schedule-card"' in text
+    assert 'href="#class-schedule-card"' in text
