@@ -179,7 +179,7 @@ class TestResolveDay:
             ("11:19", "12:11"),
             ("13:17", "14:11"),
         ]
-        assert any("resolved twice" in problem for problem in problems)
+        assert problems == []
 
     def test_reordered_schedule_stays_chronological(self):
         blocks, problems = self.resolve(
@@ -213,7 +213,7 @@ class TestResolveDay:
             ("12:40", "15:55"),
         ]
         assert [block["segments"] for block in blocks] == [["Review", "Review"], ["EXAM", "EXAM"]]
-        assert any("slides bind to the first meeting" in problem for problem in problems)
+        assert problems == []
 
     def test_absent_block_is_silent(self):
         blocks, problems = self.resolve(
@@ -336,8 +336,5 @@ def test_default_resolved_runs_never_invert():
         blocks, resolve_problems = deck_schedule.resolve_day(
             "2026-08-19", {"2026-08-19": schedule_id}, {schedule_id: meetings}, teacher
         )
-        assert all("resolved twice" in problem for problem in resolve_problems), (
-            path.name,
-            resolve_problems,
-        )
+        assert resolve_problems == [], (path.name, resolve_problems)
         assert all(block["end"] >= block["start"] for block in blocks), path.name

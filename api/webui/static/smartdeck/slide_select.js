@@ -15,9 +15,10 @@
  * Decide what to show right now.
  *
  * @param {object} state
- * @param {Array}  state.slides   resolved Slides in authored order. start/end are "HH:MM"
- *                                strings, or null when the Slide's block did not resolve
- *                                against today's schedule.
+ * @param {Array}  state.slides   resolved Slides in authored order. windows is the ordered
+ *                                list of "HH:MM" start/end windows, or an empty list when
+ *                                the Slide's block did not resolve against today's schedule.
+ *                                Legacy Slides may carry only start/end strings.
  * @param {string} state.nowHHMM  the wall clock as "HH:MM", zero padded.
  * @param {boolean} state.shuffleOn
  * @param {number} state.shuffleIndex        only read when shuffleOn.
@@ -43,8 +44,8 @@ function chooseSlide(state) {
   }
 
   // Authored order breaks ties: two Slides on the same block show the earlier one.
-  const current = slides.find(
-    (slide) => hasTime(slide) && slide.start <= state.nowHHMM && state.nowHHMM < slide.end);
+  const current = slides.find((slide) => windowsOf(slide).some(
+    (window) => window.start <= state.nowHHMM && state.nowHHMM < window.end));
   if (current) {
     return { reason: "clock", slide: current, nextSlide: null };
   }
@@ -64,10 +65,22 @@ function chooseSlide(state) {
 function nextSlideAfter(slides, nowHHMM) {
   let best = null;
   for (const slide of slides) {
-    if (!hasTime(slide) || slide.start <= nowHHMM) continue;
-    if (best === null || slide.start < best.start) best = slide;
+    for (const window of windowsOf(slide)) {
+      if (window.start <= nowHHMM) continue;
+      if (best === null || window.start < best.start) best = { slide, start: window.start };
+    }
   }
-  return best;
+  return best ? { ...best.slide, start: best.start } : null;
+}
+
+/** Every time window a Slide occupies today, newest shape first, legacy shape second. */
+function windowsOf(slide) {
+  if (!slide) return [];
+  if (Array.isArray(slide.windows) && slide.windows.length) {
+    return slide.windows.filter(
+      (window) => window && typeof window.start === "string" && typeof window.end === "string");
+  }
+  return hasTime(slide) ? [{ start: slide.start, end: slide.end }] : [];
 }
 
 /** A Slide whose block resolved against today's schedule, so it has a real time window. */

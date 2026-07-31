@@ -1,7 +1,7 @@
 # Brief — A slide shows at every meeting of its block
 
-**Status:** current · **Author:** Claude Code (session of 2026-07-31)
-· **Executor:** external · **Lane:** one vertical improvement · **Branch:** `dev`
+**Status:** retired · GREEN · **Author:** Claude Code (session of 2026-07-31)
+· **Executor:** Codex · **Lane:** one vertical improvement · **Branch:** `dev`
 
 ## Why this exists
 
@@ -192,7 +192,49 @@ No test names this file, but `test_default_resolved_runs_never_invert` globs the
 
 ## Execution result
 
-*(Executor fills this in: traffic light, commit, changed files, evidence, deviations.)*
+**Traffic light:** GREEN
+
+**Commit:** `81f0bb2` (`Support repeated SmartDeck meeting windows`). No push, merge, or
+branch was created.
+
+**Changed files:**
+
+- `api/webui/routes/smartdeck.py` — resolved slides carry every ordered block window;
+  first `start`/`end` are preserved; obsolete repeated-meeting problem removed.
+- `api/webui/static/smartdeck/slide_select.js` — current/next selection scans `windows`,
+  with legacy `start`/`end` fallback; `display.js` unchanged.
+- `api/webui/deck_schedule.py` — obsolete repeated-block diagnostic/bookkeeping removed.
+- `api/default_docs/Calendars/Bell Schedule - Exam Review Day.csv` — corrected seed times.
+- `api/tests/smartdeck/slide_select.test.mjs`, `api/tests/test_smartdeck_display.py`,
+  `api/tests/test_smartdeck_routes.py`, `api/tests/test_deck_schedule.py` — focused
+  regressions and updated expectations for ordinary repeated meetings.
+
+**Evidence:**
+
+- Current preflight: clean `dev`; `HEAD == origin/dev == 80f297d`; remote refresh completed;
+  `origin/main == c75b6f5`.
+- Baseline before edits: `python -m pytest -q` → `1915 passed, 1 skipped`.
+- Focused implementation gate: `python -m pytest -q api/tests/test_smartdeck_display.py
+  api/tests/test_deck_schedule.py` → `56 passed`.
+- Direct Node suites: `node --test api/tests/smartdeck/slide_select.test.mjs
+  api/tests/smartdeck/widget_lifecycle.test.mjs` → `25 passed`.
+- Pytest Node bridge: `python -m pytest -q api/tests/smartdeck/test_display_js.py -vv`;
+  explicitly ran and passed `slide_select.test.mjs` and `widget_lifecycle.test.mjs`.
+- Named full gate: `python -m pytest -q` → `1916 passed, 1 skipped in 64.03s`.
+- Bobcat Hour acceptance reproduced exactly: `11:30` → `clock`, ELA 7 Pre-AP GT;
+  `12:30` → `none`, next ELA 7 Pre-AP GT at `13:17`; `13:30` → `clock`, ELA 7 Pre-AP GT.
+- Browser check: local `canvas-expert-verify` on `127.0.0.1:8766`, live display route
+  loaded with a temporary student-free deck; root/control state and not-scheduled render
+  were present, with zero browser error/warning logs. The four synthetic files were removed
+  afterward (`4 removed, 0 remaining`), and port `8766` is no longer listening.
+- `git diff --check` passed; no obsolete repeated-meeting warning references remain in
+  implementation or tests.
+
+**Deviations:** The Node directory form `node --test api/tests/smartdeck/` is not accepted
+by this Windows Node 22 invocation; both suites were run explicitly by file and through the
+pytest bridge, so no coverage was skipped.
+
+**Unresolved decisions:** none.
 
 ## Retiring this brief
 

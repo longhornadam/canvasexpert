@@ -25,6 +25,10 @@ function slide(id, start, end, block = id) {
   return { id, block, start, end, layout: "title_only", title: id, body: "", widgets: [] };
 }
 
+function slideWithWindows(id, windows, block = id) {
+  return { ...slide(id, windows[0].start, windows[0].end, block), windows };
+}
+
 const DAY = [
   slide("s1", "08:00", "08:50", "1st Period"),
   slide("s2", "09:00", "09:50", "2nd Period"),
@@ -47,6 +51,41 @@ test("start is inclusive and end is exclusive", () => {
   assert.equal(decide(DAY, "09:00").slide.id, "s2");
   assert.equal(decide(DAY, "08:50").reason, "none", "08:50 is past the end of 1st period");
   assert.equal(decide(DAY, "09:49").slide.id, "s2");
+});
+
+test("a slide with multiple windows is current inside its second window", () => {
+  const repeated = slideWithWindows("repeated", [
+    { start: "11:19", end: "12:09" },
+    { start: "13:17", end: "14:07" },
+  ]);
+  const d = decide([repeated], "13:30");
+  assert.equal(d.reason, "clock");
+  assert.equal(d.slide.id, "repeated");
+});
+
+test("a slide with multiple windows is not current in the gap", () => {
+  const repeated = slideWithWindows("repeated", [
+    { start: "11:19", end: "12:09" },
+    { start: "13:17", end: "14:07" },
+  ]);
+  const d = decide([repeated], "12:30");
+  assert.equal(d.reason, "none");
+});
+
+test("the next repeated window advertises its own start", () => {
+  const repeated = slideWithWindows("repeated", [
+    { start: "11:19", end: "12:09" },
+    { start: "13:17", end: "14:07" },
+  ], "ELA 7 Pre-AP GT");
+  const d = decide([repeated], "12:30");
+  assert.equal(d.nextSlide.block, "ELA 7 Pre-AP GT");
+  assert.equal(d.nextSlide.start, "13:17");
+});
+
+test("a legacy slide carrying only start/end still behaves as before", () => {
+  const legacy = slide("legacy", "09:00", "09:50");
+  assert.equal(decide([legacy], "09:30").slide.id, "legacy");
+  assert.equal(decide([legacy], "08:00").nextSlide.start, "09:00");
 });
 
 test("nothing current, and nothing pressed, means none", () => {

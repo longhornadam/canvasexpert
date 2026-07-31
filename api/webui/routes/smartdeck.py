@@ -29,13 +29,11 @@ def _resolve_slides(deck: dict, blocks: list) -> tuple[list, list]:
     files edited by hand, which is a workflow the archive recovery path invites.
     """
     blocks_by_name = {}
-    blocks_by_name_all = {}
     for block in blocks:
         name = block.get("name")
         if not name:
             continue
-        blocks_by_name_all.setdefault(name, []).append(block)
-        blocks_by_name.setdefault(name, block)
+        blocks_by_name.setdefault(name, []).append(block)
     widgets_by_id = {
         w["id"]: w for w in (deck.get("widgets") or [])
         if isinstance(w, dict) and w.get("id")
@@ -61,18 +59,12 @@ def _resolve_slides(deck: dict, blocks: list) -> tuple[list, list]:
             continue
         seen_ids.add(slide_id)
 
-        block = blocks_by_name.get(slide.get("block"))
+        matches = blocks_by_name.get(slide.get("block"), [])
+        block = matches[0] if matches else None
         if block is None:
             problems.append(
                 f"slide {slide_id!r}: block {slide.get('block')!r} is not in {day}, "
                 f"so it will not appear")
-        else:
-            for later in blocks_by_name_all.get(slide.get("block"), [])[1:]:
-                problems.append(
-                    f"slide {slide_id!r}: block {slide.get('block')!r} also meets "
-                    f"{later['start']}-{later['end']}; this slide shows at the "
-                    f"{block['start']} meeting only"
-                )
 
         resolved.append({
             "id": slide_id,
@@ -84,6 +76,8 @@ def _resolve_slides(deck: dict, blocks: list) -> tuple[list, list]:
                         if wid in widgets_by_id],
             "start": block["start"] if block else None,
             "end": block["end"] if block else None,
+            "windows": [{"start": match["start"], "end": match["end"]}
+                        for match in matches],
         })
 
     return resolved, problems

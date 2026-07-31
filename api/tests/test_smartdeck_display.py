@@ -297,6 +297,64 @@ def test_smartdeck_display_data_multiple_slides_same_block(isolated_workspace, s
     assert slide1b["end"] == "09:25"
 
 
+@pytest.fixture
+def bobcat_schedule_fixture(schedule_fixture):
+    """Replace the simple fixture schedule with the shipped Bobcat Hour example."""
+    calendars_dir = Path(schedule_fixture).parent / "Calendars"
+    default_schedule = (
+        Path(__file__).resolve().parents[1]
+        / "default_docs"
+        / "Calendars"
+        / "Bell Schedule - Bobcat Hour.csv"
+    )
+    (calendars_dir / default_schedule.name).write_text(
+        default_schedule.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (calendars_dir / "Day Calendar.csv").write_text(
+        "date,schedule_id\n2026-08-19,bell_schedule_bobcat_hour\n",
+        encoding="utf-8",
+    )
+    (Path(schedule_fixture) / "Teacher Schedule.json").write_text(
+        json.dumps({
+            "version": "1.0-json",
+            "blocks": [{"name": "ELA 7 Pre-AP GT", "raw_periods": [4, 5]}],
+        }),
+        encoding="utf-8",
+    )
+    return schedule_fixture
+
+
+def test_smartdeck_display_data_repeats_a_block_for_each_meeting(
+    isolated_workspace, bobcat_schedule_fixture
+):
+    """A non-contiguous block carries every window while preserving first start/end."""
+    saved, problems = deck_store.save_deck({
+        "version": "1.0-json",
+        "type": "DECK",
+        "date": "2026-08-19",
+        "title": "Bobcat Hour",
+        "widgets": [],
+        "slides": [{
+            "id": "ela-7",
+            "block": "ELA 7 Pre-AP GT",
+            "layout": "title_only",
+            "title": "ELA 7 Pre-AP GT",
+            "widgets": [],
+        }],
+    })
+    assert problems == []
+
+    data = client.get(f"/smartdeck/display/{saved['deck_id']}/data").json()
+    assert data["problems"] == []
+    slide = data["slides"][0]
+    assert slide["windows"] == [
+        {"start": "11:19", "end": "12:09"},
+        {"start": "13:17", "end": "14:07"},
+    ]
+    assert slide["start"] == "11:19"
+    assert slide["end"] == "12:09"
+
+
 def test_smartdeck_display_data_includes_schedule_problems(isolated_workspace, schedule_fixture):
     """Problems from schedule resolution (missing schedules, etc.) are included."""
     # Save a deck with a date that isn't in the day calendar

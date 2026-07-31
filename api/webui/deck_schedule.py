@@ -300,18 +300,6 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
     # Sort by start time
     blocks.sort(key=lambda b: (b["start"], b.get("seq", 0)))
 
-    seen_names = set()
-    reported_names = set()
-    for block in blocks:
-        name = block["name"]
-        if name in seen_names and name not in reported_names:
-            problems.append(
-                f"block '{name}' resolved twice for {date}; "
-                "slides bind to the first meeting"
-            )
-            reported_names.add(name)
-        seen_names.add(name)
-
     return blocks, problems
 
 
