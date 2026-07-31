@@ -1,0 +1,13 @@
+{
+  "_comment": "The same seven single periods meet every school day. No block sets weekdays. The lunch row is not a block because nothing refers to it.",
+  "version": "1.0-json",
+  "blocks": [
+    {"name": "1st Period", "raw_periods": [1], "label": "Reading Workshop"},
+    {"name": "2nd Period", "raw_periods": [2], "label": "Reading Workshop"},
+    {"name": "3rd Period", "raw_periods": [3], "label": "Planning"},
+    {"name": "4th Period", "raw_periods": [4], "label": "Writing Workshop"},
+    {"name": "5th Period", "raw_periods": [5], "label": "Writing Workshop"},
+    {"name": "6th Period", "raw_periods": [6], "label": "Reading Workshop"},
+    {"name": "7th Period", "raw_periods": [7], "label": "Study Skills"}
+  ]
+}

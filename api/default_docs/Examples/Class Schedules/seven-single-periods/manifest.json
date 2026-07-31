@@ -1,0 +1,11 @@
+{
+  "format": "canvasexpert.schedule_example/1",
+  "slug": "seven-single-periods",
+  "name": "Seven single periods",
+  "summary": "A regular seven-period day with one block per period.",
+  "demonstrates": "Every block meets every day when weekdays is absent.",
+  "teacher_schedule": "Teacher Schedule.json",
+  "bell_schedules": ["Bell Schedule - Example Seven Period Day.csv"],
+  "day_calendar": "Day Calendar - Example Seven Period Day.csv",
+  "check_dates": ["2026-08-17", "2026-09-11"]
+}

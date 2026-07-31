@@ -1,0 +1,14 @@
+{
+  "format": "canvasexpert.schedule_example/1",
+  "slug": "double-block-mixed",
+  "name": "Double block mixed",
+  "summary": "A regular day and an early release day with blocks spanning two periods.",
+  "demonstrates": "A block's first and last raw periods determine its resolved start and end.",
+  "teacher_schedule": "Teacher Schedule.json",
+  "bell_schedules": [
+    "Bell Schedule - Example Double Block Day.csv",
+    "Bell Schedule - Example Double Block Early Release.csv"
+  ],
+  "day_calendar": "Day Calendar - Example Double Block Mixed.csv",
+  "check_dates": ["2026-08-17", "2026-08-28"]
+}
