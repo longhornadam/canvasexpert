@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 14.
+Tool schema version 15.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -49,6 +49,8 @@ Tool schema version 14.
 | `get_day_schedule(date)` | Resolved schedule blocks for one date | No |
 | `get_teacher_schedule()` | The teacher's own block-name mapping | No |
 | `save_deck(date, title, slides, widgets=None)` | Validates and writes a SmartDeck deck live (no review queue) | No |
+| `save_teacher_schedule(blocks)` | Replaces the teacher's SmartDeck blocks live | No |
+| `save_day_calendar(label, start_date, end_date, default_schedule_id, ...)` | Generates and writes a day calendar CSV live | No |
 | `list_active_decks()` | Lists active decks | No |
 | `archive_deck(deck_id)` | Moves a deck to archived | No |
 
@@ -65,6 +67,10 @@ needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`
 then receive the Forge-only staging appendix. SmartDeck (`deck`) reads its canonical contract
 from the same source but has no staging/review appendix — unlike other Forge kinds, SmartDeck
 writes live to the workspace immediately with no teacher review queue.
+
+`save_deck`, `save_teacher_schedule`, `save_day_calendar`, `list_active_decks`, and
+`archive_deck` also take no `course_id` and carry no student data. They use the same
+local-only exemption: no course gate, no identity vault, and no safety scan.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
 the app actually does — an assistant that sees only the read tools cannot tell that

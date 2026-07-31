@@ -493,7 +493,7 @@ def test_get_authoring_contract_unknown_kind_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown kind 'essay'; expected one of: "
-                  "quiz, assignment, page, rubric, deck"),
+                  "quiz, assignment, page, rubric, deck, schedule"),
     }
 
 
@@ -520,6 +520,17 @@ def test_get_authoring_contract_matches_the_one_canonical_repo_file():
             assert result["contract"] == canonical_text
         else:
             assert result["contract"].startswith(canonical_text)
+
+
+def test_get_authoring_contract_schedule_is_direct_write_without_staging_appendix():
+    canonical_path = os.path.join(
+        tools.REPO_ROOT, "api", "default_docs", "AI Authoring", "Author a Class Schedule.txt"
+    )
+    with open(canonical_path, encoding="utf-8") as handle:
+        canonical_text = handle.read()
+    result = tools.get_authoring_contract("schedule")
+    assert result == {"ok": True, "kind": "schedule", "contract": canonical_text}
+    assert "Staging this for the teacher" not in result["contract"]
 
 
 

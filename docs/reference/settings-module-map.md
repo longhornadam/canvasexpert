@@ -66,6 +66,10 @@ Class schedule setup is owned by `routes/schedule.py` and `schedule_setup.py`:
 
 - `GET /api/schedule` returns readiness, the raw Teacher Schedule blocks, and folder paths.
 - `POST /api/schedule/teacher` atomically replaces only the blocks array.
+- `schedule_setup.save_blocks()` owns the Teacher Schedule JSON write path.
+- `schedule_setup.save_day_calendar()` owns generated day-calendar CSV writes.
+- The MCP schedule write tools call these same functions, so the panel and assistant share
+  validation and atomic file behavior.
 
 A block's `name` is the key a Slide binds to (`routes/smartdeck.py` `_resolve_slides` keys
 blocks by name); `label` is display text only, and two blocks may share one. The editor keeps

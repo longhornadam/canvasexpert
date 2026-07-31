@@ -476,7 +476,10 @@ _CONTRACT_FILES = {
     "page": "Author a Page (PageForge).txt",
     "rubric": "Author a Rubric (RubricForge).txt",
     "deck": "Author a SmartDeck (SlideForge).txt",
+    "schedule": "Author a Class Schedule.txt",
 }
+_DIRECT_WRITE_CONTRACT_KINDS = frozenset({"deck", "schedule"})
+_STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric", "deck")
 
 # Product knowledge the tool surface does not imply. An assistant that only
 # sees the tool list cannot tell that Writing Timeline exists, or that every
@@ -539,8 +542,8 @@ def get_authoring_contract(kind: str) -> dict:
     """Return one canonical Forge authoring contract.
 
     Contracts come from ``api/default_docs/AI Authoring/``. Most receive
-    the Forge-only staging appendix; deck is an exception (direct write via
-    save_deck, no review queue). No course_id, student data, vault,
+    the Forge-only staging appendix; deck and schedule are exceptions (direct
+    writes with no review queue). No course_id, student data, vault,
     or safety gate applies.
     """
     filename = _CONTRACT_FILES.get(kind)
@@ -555,9 +558,9 @@ def get_authoring_contract(kind: str) -> dict:
     if error:
         return {"ok": False, "error": error}
 
-    # Deck has no staging/review queue -- it writes directly via save_deck.
-    # Skip the staging appendix for this one kind only.
-    if kind == "deck":
+    # Deck and schedule have no staging/review queue. They write directly to
+    # the teacher's local workspace.
+    if kind in _DIRECT_WRITE_CONTRACT_KINDS:
         return {"ok": True, "kind": kind, "contract": contract_text}
 
     return {"ok": True, "kind": kind,
@@ -603,15 +606,15 @@ def list_staged_content(kind: str = "") -> dict:
     gate. Only each draft's label (name) is returned, never its absolute
     path."""
     if kind:
-        if kind not in _CONTRACT_FILES:
+        if kind not in _STAGED_CONTRACT_KINDS:
             return {
                 "ok": False,
                 "error": (f"unknown kind '{kind}'; expected one of: "
-                          f"{', '.join(_CONTRACT_FILES)} (or omit for all)"),
+                      f"{', '.join(_STAGED_CONTRACT_KINDS)} (or omit for all)"),
             }
         kinds = [kind]
     else:
-        kinds = list(_CONTRACT_FILES)
+        kinds = list(_STAGED_CONTRACT_KINDS)
 
     rows = [
         {"kind": k, "label": entry["label"]}

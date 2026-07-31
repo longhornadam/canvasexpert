@@ -1,0 +1,36 @@
+CLASS SCHEDULE AUTHORING
+Version 1.0
+
+Use this guide when helping a teacher finish SmartDeck schedule setup. The schedule has three
+parts, all stored in the teacher's local workspace:
+
+1. Teacher Schedule.json maps stable block names to the bell periods and optional weekdays for
+   each class.
+2. Bell Schedule CSV files define the actual start and end time for each period. These are
+   teacher-owned files in the Calendars folder.
+3. Day Calendar CSV files map school dates to the bell schedule used that day.
+
+Use get_teacher_schedule to read the existing blocks before changing them. A block's name is the
+binding key that a SmartDeck slide points to. Keep it steady once slides use it. The block label
+is display text only and may repeat. Do not derive a name from a course title or from the label.
+
+raw_periods is ordered. The first period supplies the block's start time and the last period
+supplies its end time. Keep the order that the class spans in the bell schedule.
+
+The weekdays field on a block uses 0 for Monday through 6 for Sunday. When it is absent, the
+block meets every day. Two blocks may share a name when their weekday sets do not overlap. For
+example, two blocks named Reading may use weekdays [0] for Monday and [4] for Friday. This is
+intentional and keeps slides bound to the same class name on both days.
+
+To choose a bell schedule for a day calendar, first call get_bell_schedule. A schedule_id is the
+filename slug returned for a bell schedule file. Read it from that result and never invent one.
+The save_day_calendar tool refuses unknown IDs and reports the available IDs.
+
+The day calendar tool accepts a date range and can apply a default schedule, weekday overrides,
+date overrides, and skip_dates for holidays. Date overrides beat weekday overrides, and weekday
+overrides beat the default. Saturdays and Sundays are not emitted. A date left out of the day
+calendar is a no-school day. Do not create a no_school schedule ID.
+
+When the teacher is ready, call save_teacher_schedule with the complete blocks list and
+save_day_calendar with the requested range and rules. These tools write the local files directly,
+with no staging queue. The tools return counts and paths rather than every generated CSV row.
