@@ -7,43 +7,44 @@
 
 {% block left_rail %}
 {% call rail('left', 'Settings sections') %}
-  <nav class="ce-settings-index" aria-label="Settings sections">
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">Canvas connection</p>
-      <div class="ce-settings-index__links">
+  <nav class="ce-rail-nav" aria-label="Settings sections">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Canvas connection</p>
+      <div class="ce-rail-nav__links">
         <a href="#workspace-card" data-rail-link>Canvas account</a>
         <a href="#mirror-card" data-rail-link>Canvas data</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">Courses</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Courses</p>
+      <div class="ce-rail-nav__links">
         <a href="#current-courses-card" data-rail-link>Courses</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">AI &amp; authoring</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">AI &amp; authoring</p>
+      <div class="ce-rail-nav__links">
         <a href="#openrouter-card" data-rail-link>AI assistance</a>
         <a href="#tier-tags-card" data-rail-link>Differentiation tags</a>
         <a href="#ai-ta-card" data-rail-link>AI Authoring</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">Files &amp; calendars</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Files &amp; calendars</p>
+      <div class="ce-rail-nav__links">
         <a href="#workspace-settings-card" data-rail-link>Workspace</a>
         <a href="#download-root-card" data-rail-link>Downloads</a>
+        <a href="#class-schedule-card" data-rail-link>Class schedule</a>
         <a href="#cal" data-rail-link>Academic calendars</a>
       </div>
     </div>
 
-    <div class="ce-settings-index__group">
-      <p class="ce-settings-index__kicker">About this app</p>
-      <div class="ce-settings-index__links">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">About this app</p>
+      <div class="ce-rail-nav__links">
         <a href="#update-card" data-rail-link>Updates</a>
       </div>
     </div>
@@ -182,7 +183,7 @@
   {% endif %}
 </section>
 
-<section class="ce-panel ce-settings-panel" id="previous-courses-card">
+<section class="ce-panel ce-settings-panel" id="previous-courses-card" data-rail-covered-by="current-courses-card">
   <h2>Previous courses</h2>
   <p class="ce-hint">
     Previous courses stay saved with their local sessions, receipts, downloads, and
@@ -215,7 +216,7 @@
   {% endif %}
 </section>
 
-<section class="ce-panel ce-settings-panel" id="add-courses-card">
+<section class="ce-panel ce-settings-panel" id="add-courses-card" data-rail-covered-by="current-courses-card">
   <h2>Add courses from Canvas</h2>
   <p class="ce-hint">
     Browse every course available to your Canvas account. Adding a course makes it
@@ -411,6 +412,27 @@
   </form>
 </section>
 
+<section class="ce-panel ce-settings-panel" id="class-schedule-card">
+  <h2>Class schedule <small class="lbl-hint">(used by SmartDeck)</small></h2>
+  <p class="ce-hint">
+    Your blocks live here. The bell schedule and day calendar are CSV files in your Calendars folder. SmartDeck reads all three to turn a block into today's real start and end time.
+  </p>
+  <div id="class-schedule-readiness" class="ce-schedule-readiness" aria-live="polite"></div>
+  <div id="class-schedule-blocks" class="ce-schedule-blocks">
+    <h3>Your blocks</h3>
+    <p class="ce-hint">One row per class. <strong>Block</strong> is the name your slides point to, so keep it steady once slides use it. <strong>Periods</strong> are the bell periods it covers, in order. <strong>Course</strong> is what shows on the deck. Leave the days unchecked when a block meets every school day.</p>
+    <div id="class-schedule-block-list" class="ce-schedule-block-list"></div>
+    <div class="ce-actions">
+      <button type="button" id="class-schedule-add-block" class="small">Add a block</button>
+      <button type="button" id="class-schedule-save-blocks" class="primary small">Save blocks</button>
+      <span id="class-schedule-status" class="status ce-settings-inline-status"></span>
+    </div>
+  </div>
+  <div class="ce-actions">
+    <button type="button" id="class-schedule-open-calendars" class="small" disabled>Open the Calendars folder</button>
+  </div>
+</section>
+
 <section class="ce-panel ce-settings-panel" id="cal">
   <h2>Academic calendars <small class="lbl-hint">(used by Late Work Sweep &amp; Extensions)</small></h2>
   <p class="ce-hint">
@@ -546,7 +568,8 @@
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
 <script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
 <script src="/static/settings/updates.js?v={{ asset_v }}"></script>
-<script src="/static/settings/rail_nav.js?v={{ asset_v }}"></script>
+<script src="/static/settings/class_schedule.js?v={{ asset_v }}"></script>
+<script src="/static/ui/rail_nav.js?v={{ asset_v }}"></script>
 
 <script>
 (function () {

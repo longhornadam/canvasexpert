@@ -32,6 +32,16 @@ def test_smartdeck_page_get_returns_200_and_html():
     assert "text/html" in response.headers.get("content-type", "")
 
 
+def test_smartdeck_page_has_section_rail_and_settings_link():
+    text = client.get("/smartdeck").text
+    assert "Decks of classroom-display Slides for your projector." not in text
+    for panel_id in ("smartdeck-active", "smartdeck-templates", "smartdeck-archived", "smartdeck-widgets"):
+        assert f'id="{panel_id}"' in text
+        assert f'href="#{panel_id}"' in text
+    assert 'href="/settings#class-schedule-card"' in text
+    assert "/static/ui/rail_nav.js" in text
+
+
 def test_smartdeck_api_decks_empty_workspace_returns_empty_lists():
     """GET /smartdeck/api/decks with empty workspace returns ok=True and empty lists."""
     response = client.get("/smartdeck/api/decks")
@@ -150,3 +160,31 @@ def test_smartdeck_api_readiness_returns_problems_list():
     # With empty workspace, we expect problems about missing schedules
     assert any("schedule" in str(p).lower() or "calendar" in str(p).lower()
                for p in data["missing"])
+
+
+def test_smartdeck_readiness_keeps_ready_and_missing_keys():
+    data = client.get("/smartdeck/api/readiness").json()
+    assert data["ok"] is True
+    assert isinstance(data["ready"], bool)
+    assert isinstance(data["missing"], list)
+
+
+def test_smartdeck_readiness_adds_pieces():
+    data = client.get("/smartdeck/api/readiness").json()
+    assert set(data["pieces"]) == {"teacher_schedule", "bell_schedules", "day_calendar"}
+
+
+def test_smartdeck_readiness_names_the_missing_bell_schedules(isolated_workspace):
+    calendars = isolated_workspace / "Library" / "Calendars"
+    smartdecks = isolated_workspace / "Library" / "SmartDecks"
+    calendars.mkdir(parents=True)
+    smartdecks.mkdir(parents=True)
+    (smartdecks / "Teacher Schedule.json").write_text(
+        json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
+        encoding="utf-8",
+    )
+    (calendars / "Day Calendar.csv").write_text(
+        "date,schedule_id\n2026-08-17,missing_bell\n", encoding="utf-8"
+    )
+    data = client.get("/smartdeck/api/readiness").json()
+    assert "no bell schedules found" in data["missing"]

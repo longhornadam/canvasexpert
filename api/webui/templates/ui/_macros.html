@@ -3,8 +3,8 @@
 {% macro page_header(title, lede='') -%}
 <div class="ce-page-header"><div><h1>{{ title }}</h1>{% if lede %}<p class="ce-hint">{{ lede }}</p>{% endif %}</div></div>
 {%- endmacro %}
-{% macro panel(title='') -%}
-<section class="ce-panel">{% if title %}<h2 class="ce-display">{{ title }}</h2>{% endif %}{{ caller() }}</section>
+{% macro panel(title='', id='') -%}
+<section class="ce-panel"{% if id %} id="{{ id }}"{% endif %}>{% if title %}<h2 class="ce-display">{{ title }}</h2>{% endif %}{{ caller() }}</section>
 {%- endmacro %}
 {% macro notice(kind='attention') -%}
 <div class="ce-notice ce-notice--{{ kind }}">{{ caller() }}</div>

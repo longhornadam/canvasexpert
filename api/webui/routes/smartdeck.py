@@ -14,7 +14,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from .. import deps, deck_store
+from .. import deps, deck_store, schedule_setup
 
 router = APIRouter(tags=["smartdeck"])
 
@@ -156,27 +156,8 @@ def smartdeck_delete_deck(deck_id: str):
 
 @router.get("/smartdeck/api/readiness")
 def smartdeck_readiness():
-    """Check if all required schedules are configured for SmartDeck.
-
-    Composes schedule readiness from three loaders in deps.py:
-    - load_teacher_schedule()
-    - load_bell_schedules()
-    - load_day_calendar()
-
-    Returns {ok: True, ready: bool, missing: [str]}
-    """
-    teacher_schedule, teacher_problems = deps.load_teacher_schedule()
-    bell_schedules, bell_problems = deps.load_bell_schedules()
-    day_calendar, day_cal_problems = deps.load_day_calendar()
-
-    ready = bool(teacher_schedule) and bool(bell_schedules) and bool(day_calendar)
-    missing = teacher_problems + bell_problems + day_cal_problems
-
-    return JSONResponse({
-        "ok": True,
-        "ready": ready,
-        "missing": missing,
-    })
+    """Return the local class schedule readiness projection."""
+    return JSONResponse({"ok": True, **schedule_setup.readiness()})
 
 
 @router.get("/smartdeck/display/{deck_id}", response_class=HTMLResponse)

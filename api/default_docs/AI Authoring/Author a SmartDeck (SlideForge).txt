@@ -50,7 +50,7 @@
   - `params` (required for a timer): `duration_seconds` (integer, 1-86400), `label` (optional string), `autostart` (optional bool, default false).
 - `slides` (required, non-empty array): each entry is `{id, block, layout, title, body, widgets}`.
   - `id` (required, string): unique within the deck.
-  - `block` (required, string): the exact block **name** from the teacher's own Teacher Schedule (e.g. `"4th/5th"`, `"1st Period"`) -- never a clock time, never a bare period number. Ask the teacher which block names they use, or call get_teacher_schedule, rather than guessing.
+  - `block` (required, string): the exact block **name** from the teacher's own Teacher Schedule (e.g. `"4th/5th"`, `"1st Period"`) -- never a clock time, never a bare period number. Ask the teacher which block names they use, or call get_teacher_schedule, rather than guessing. A block may meet only on some days, so call get_day_schedule for the deck's own date rather than assuming every block from get_teacher_schedule exists on it.
   - `layout` (required): one of `"title_body"` (heading + paragraph), `"title_only"` (heading alone, for a short announcement), `"bulleted"` (heading + a list -- put list items as `body` lines, one per line).
   - `title` (required, string): the slide heading.
   - `body` (optional, string): the slide's main text. For `"bulleted"`, put one item per line; for `"title_only"`, leave empty.

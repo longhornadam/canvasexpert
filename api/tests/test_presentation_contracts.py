@@ -206,7 +206,7 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         # setup stays focused, and a projected screen has no chrome to navigate.
         assert text.count("<header") == (0 if layout in ("wizard", "display") else 1)
         assert text.count("<main") == 1
-        assert len(re.findall(r'class="[^"]*\bce-rail\b', text)) == rails
+        assert len(re.findall(r'class="[^"]*\bce-rail(?=\s|")', text)) == rails
         assert "/static/style.css" not in text
         assert "/static/workbench.css" not in text
         for href in bundle:
@@ -243,3 +243,23 @@ def test_create_title_matches_its_navigation_and_page_title(monkeypatch):
     text = _client().get("/course-expert").text
     assert "<title>Create — Canvas Expert</title>" in text
     assert ">Create<" in text
+
+
+def test_settings_has_a_class_schedule_panel_and_rail_link(monkeypatch):
+    _configure_fictional(monkeypatch)
+    text = _client().get("/settings").text
+    assert 'id="class-schedule-card"' in text
+    assert 'href="#class-schedule-card"' in text
+
+
+def test_class_schedule_editor_edits_block_periods_and_course_separately():
+    """The block name is what a slide binds to, so it gets its own field.
+
+    Collapsing name and label into one input rewrites the binding key on every
+    save, which breaks slides and trips the duplicate-name check.
+    """
+    text = _source("api/webui/static/settings/class_schedule.js")
+    assert 'data-field="name"' in text
+    assert 'data-field="periods"' in text
+    assert 'data-field="label"' in text
+    assert 'data-field="course"' not in text

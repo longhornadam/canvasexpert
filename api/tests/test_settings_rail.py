@@ -15,14 +15,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SETTINGS = ROOT / "api" / "webui" / "templates" / "settings.html"
-RAIL_NAV = ROOT / "api" / "webui" / "static" / "settings" / "rail_nav.js"
+RAIL_NAV = ROOT / "api" / "webui" / "static" / "ui" / "rail_nav.js"
 
 RAIL_LINK_RE = re.compile(r'<a\s+href="#([\w-]+)"\s+data-rail-link')
 PANEL_RE = re.compile(
     r'<section[^>]*class="[^"]*ce-settings-panel[^"]*"[^>]*id="([\w-]+)"'
 )
-# 'previous-courses-card': 'current-courses-card'
-COVERAGE_RE = re.compile(r"'([\w-]+)'\s*:\s*'([\w-]+)'")
+COVERAGE_RE = re.compile(
+    r'id="([\w-]+)"\s+data-rail-covered-by="([\w-]+)"'
+)
 
 
 def _rail_links():
@@ -34,10 +35,9 @@ def _panels():
 
 
 def _extra_coverage():
-    """The unlinked-panel -> covering-link map declared in rail_nav.js."""
-    source = RAIL_NAV.read_text(encoding="utf-8")
-    block = source.split("var extraCoverage = {", 1)[1].split("}", 1)[0]
-    return dict(COVERAGE_RE.findall(block))
+    """The unlinked-panel -> covering-link map declared in settings.html."""
+    source = SETTINGS.read_text(encoding="utf-8")
+    return dict(COVERAGE_RE.findall(source))
 
 
 def test_every_rail_link_points_at_a_real_panel():

@@ -330,3 +330,198 @@ class TestResolveDay:
         assert blocks_1[0]["end"] != blocks_2[0]["end"]
         assert blocks_1[0]["schedule_id"] == "bobcat"
         assert blocks_2[0]["schedule_id"] == "friday"
+
+
+class TestResolveDayWeekdays:
+    """Weekday-restricted teacher schedule blocks."""
+
+    @staticmethod
+    def resolve(date, blocks, periods=None):
+        return deck_schedule.resolve_day(
+            date,
+            {date: "schedule"},
+            {"schedule": periods or [
+                {"period_id": "1", "start": "08:00", "end": "08:45"},
+                {"period_id": "2", "start": "08:50", "end": "09:35"},
+            ]},
+            {"blocks": blocks},
+        )
+
+    def test_block_without_weekdays_meets_every_day(self):
+        blocks, problems = self.resolve(
+            "2026-08-18", [{"name": "Every day", "raw_periods": [1]}]
+        )
+        assert [block["name"] for block in blocks] == ["Every day"]
+        assert problems == []
+
+    def test_block_meets_only_on_listed_weekdays(self):
+        monday, monday_problems = self.resolve(
+            "2026-08-17", [{"name": "MW", "raw_periods": [1], "weekdays": [0, 2]}]
+        )
+        tuesday, tuesday_problems = self.resolve(
+            "2026-08-18", [{"name": "MW", "raw_periods": [1], "weekdays": [0, 2]}]
+        )
+        assert [block["name"] for block in monday] == ["MW"]
+        assert monday_problems == []
+        assert tuesday == []
+        assert tuesday_problems == []
+
+    def test_block_omitted_on_unlisted_weekday_is_silent(self):
+        blocks, problems = self.resolve(
+            "2026-08-18", [{"name": "Monday", "raw_periods": [1], "weekdays": [0]}]
+        )
+        assert blocks == []
+        assert problems == []
+
+    def test_weekday_zero_is_monday(self):
+        blocks, problems = self.resolve(
+            "2026-08-17", [{"name": "Monday", "raw_periods": [1], "weekdays": [0]}]
+        )
+        assert [block["name"] for block in blocks] == ["Monday"]
+        assert problems == []
+
+    def test_missing_period_still_reports_for_a_meeting_block(self):
+        blocks, problems = self.resolve(
+            "2026-08-17", [{"name": "Monday", "raw_periods": [9], "weekdays": [0]}]
+        )
+        assert blocks == []
+        assert problems == ["block 'Monday' omitted: periods ['9'] not in schedule 'schedule'"]
+
+    def test_missing_period_is_silent_for_a_non_meeting_block(self):
+        blocks, problems = self.resolve(
+            "2026-08-18", [{"name": "Monday", "raw_periods": [9], "weekdays": [0]}]
+        )
+        assert blocks == []
+        assert problems == []
+
+    def test_malformed_weekdays_reports_and_block_still_meets(self):
+        blocks, problems = self.resolve(
+            "2026-08-17", [{"name": "Malformed", "raw_periods": [1], "weekdays": "0"}]
+        )
+        assert [block["name"] for block in blocks] == ["Malformed"]
+        assert problems == [
+            "block 'Malformed': weekdays must be a list of numbers, 0 for Monday through 6 for Sunday"
+        ]
+
+    def test_weekday_out_of_range_reports_and_block_still_meets(self):
+        blocks, problems = self.resolve(
+            "2026-08-17", [{"name": "Out of range", "raw_periods": [1], "weekdays": [7]}]
+        )
+        assert [block["name"] for block in blocks] == ["Out of range"]
+        assert len(problems) == 1
+        assert "weekdays must be a list of numbers" in problems[0]
+
+    def test_boolean_weekday_entry_is_rejected(self):
+        blocks, problems = self.resolve(
+            "2026-08-17", [{"name": "Boolean", "raw_periods": [1], "weekdays": [True]}]
+        )
+        assert [block["name"] for block in blocks] == ["Boolean"]
+        assert len(problems) == 1
+        assert "weekdays must be a list of numbers" in problems[0]
+
+    def test_no_raw_periods_reports_even_on_a_non_meeting_weekday(self):
+        blocks, problems = self.resolve(
+            "2026-08-18", [{"name": "Monday", "raw_periods": [], "weekdays": [0]}]
+        )
+        assert blocks == []
+        assert problems == ["block 'Monday' has no raw_periods"]
+
+    def test_same_name_on_disjoint_weekdays_resolves_to_one_block_per_day(self):
+        teacher_blocks = [
+            {"name": "Algebra I", "raw_periods": [1], "weekdays": [0]},
+            {"name": "Algebra I", "raw_periods": [2], "weekdays": [4]},
+        ]
+        monday, monday_problems = self.resolve("2026-08-17", teacher_blocks)
+        friday, friday_problems = self.resolve("2026-08-21", teacher_blocks)
+        assert [(block["name"], block["raw_periods"]) for block in monday] == [("Algebra I", [1])]
+        assert [(block["name"], block["raw_periods"]) for block in friday] == [("Algebra I", [2])]
+        assert monday_problems == []
+        assert friday_problems == []
+
+    def test_duplicate_resolved_name_reports_once(self):
+        blocks, problems = self.resolve(
+            "2026-08-17",
+            [
+                {"name": "Planning", "raw_periods": [1]},
+                {"name": "Planning", "raw_periods": [2]},
+                {"name": "Planning", "raw_periods": [1]},
+            ],
+        )
+        assert len(blocks) == 3
+        assert problems.count(
+            "block 'Planning' resolved twice for 2026-08-17; a deck will only use the later one in the day"
+        ) == 1
+
+
+class TestValidateTeacherSchedule:
+    """Strict validation for the Teacher Schedule write path."""
+
+    def test_valid_schedule_has_no_problems(self):
+        assert deck_schedule.validate_teacher_schedule({
+            "version": "1.0-json",
+            "blocks": [
+                {"name": "Algebra", "raw_periods": [1], "weekdays": [0, 2]},
+                {"name": "Algebra", "raw_periods": [2], "weekdays": [4], "label": "Math"},
+            ],
+        }) == []
+
+    def test_blocks_must_be_a_list(self):
+        problems = deck_schedule.validate_teacher_schedule({"blocks": {}})
+        assert problems == ["blocks must be a list"]
+
+    def test_block_needs_a_name(self):
+        problems = deck_schedule.validate_teacher_schedule({"blocks": [{"raw_periods": [1]}]})
+        assert any("non-empty string name" in problem for problem in problems)
+
+    def test_block_needs_raw_periods(self):
+        problems = deck_schedule.validate_teacher_schedule({"blocks": [{"name": "Algebra"}]})
+        assert any("raw_periods" in problem for problem in problems)
+
+    def test_duplicate_name_on_overlapping_weekdays_is_rejected(self):
+        problems = deck_schedule.validate_teacher_schedule({
+            "blocks": [
+                {"name": "Algebra", "raw_periods": [1], "weekdays": [0, 2]},
+                {"name": "Algebra", "raw_periods": [2], "weekdays": [2, 4]},
+            ]
+        })
+        assert problems == [
+            "block 'Algebra' is listed more than once for the same weekday; give one a different name or narrow its weekdays"
+        ]
+
+    def test_duplicate_name_on_disjoint_weekdays_is_allowed(self):
+        assert deck_schedule.validate_teacher_schedule({
+            "blocks": [
+                {"name": "Algebra", "raw_periods": [1], "weekdays": [0]},
+                {"name": "Algebra", "raw_periods": [2], "weekdays": [4]},
+            ]
+        }) == []
+
+    def test_duplicate_name_is_rejected_when_one_block_has_no_weekdays(self):
+        problems = deck_schedule.validate_teacher_schedule({
+            "blocks": [
+                {"name": "Algebra", "raw_periods": [1]},
+                {"name": "Algebra", "raw_periods": [2], "weekdays": [4]},
+            ]
+        })
+        assert any("listed more than once for the same weekday" in problem for problem in problems)
+
+    def test_weekdays_must_be_numbers_zero_through_six(self):
+        problems = deck_schedule.validate_teacher_schedule({
+            "blocks": [{"name": "Algebra", "raw_periods": [1], "weekdays": [0, True, 7]}]
+        })
+        assert problems == [
+            "block 'Algebra': weekdays must be a list of numbers, 0 for Monday through 6 for Sunday"
+        ]
+
+    def test_unknown_top_level_keys_are_not_problems(self):
+        assert deck_schedule.validate_teacher_schedule({
+            "_comment": "teacher note",
+            "custom": {"source": "hand edit"},
+            "blocks": [{"name": "Algebra", "raw_periods": [1], "custom": True}],
+        }) == []
+
+    def test_version_is_not_validated(self):
+        assert deck_schedule.validate_teacher_schedule({
+            "version": "future-format",
+            "blocks": [{"name": "Algebra", "raw_periods": [1]}],
+        }) == []
