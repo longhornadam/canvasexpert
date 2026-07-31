@@ -150,3 +150,31 @@ def test_smartdeck_api_readiness_returns_problems_list():
     # With empty workspace, we expect problems about missing schedules
     assert any("schedule" in str(p).lower() or "calendar" in str(p).lower()
                for p in data["missing"])
+
+
+def test_smartdeck_readiness_keeps_ready_and_missing_keys():
+    data = client.get("/smartdeck/api/readiness").json()
+    assert data["ok"] is True
+    assert isinstance(data["ready"], bool)
+    assert isinstance(data["missing"], list)
+
+
+def test_smartdeck_readiness_adds_pieces():
+    data = client.get("/smartdeck/api/readiness").json()
+    assert set(data["pieces"]) == {"teacher_schedule", "bell_schedules", "day_calendar"}
+
+
+def test_smartdeck_readiness_names_the_missing_bell_schedules(isolated_workspace):
+    calendars = isolated_workspace / "Library" / "Calendars"
+    smartdecks = isolated_workspace / "Library" / "SmartDecks"
+    calendars.mkdir(parents=True)
+    smartdecks.mkdir(parents=True)
+    (smartdecks / "Teacher Schedule.json").write_text(
+        json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
+        encoding="utf-8",
+    )
+    (calendars / "Day Calendar.csv").write_text(
+        "date,schedule_id\n2026-08-17,missing_bell\n", encoding="utf-8"
+    )
+    data = client.get("/smartdeck/api/readiness").json()
+    assert "no bell schedules found" in data["missing"]
