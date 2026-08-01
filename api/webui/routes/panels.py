@@ -14,7 +14,7 @@ Two properties hold this together and are easy to break by accident:
   and says plainly when that data is missing, rather than reaching out.
 
 * The port and the URL shape are PUBLIC CONTRACT. A teacher pastes
-  ``http://127.0.0.1:8765/panels/whats-due?course=123`` into a board they
+  ``http://127.0.0.1:8765/panels/whats-due?block=ELA-7-B`` into a board they
   save, and that string has to still work after restarts and upgrades. Do not
   add "helpfully pick a free port" fallback to the launcher, and do not move
   Panels onto generated ids: both silently kill every saved board weeks later.
@@ -138,10 +138,8 @@ def resolve_panel_course(block: str, *, now=None, schedule_reader=None,
 
     A stable ``?block=<teacher-block-name>`` pins the panel to that Teacher
     Schedule block: it still resolves through the Teacher Schedule and still
-    enforces the Current-course boundary, but bypasses date/clock resolution
-    -- the contract's one intentional override (raw ``?course=`` pinning is
-    retired: a pinned course id died at the year rollover and took a saved
-    board quietly with it, where a stable block name does not). Otherwise the
+    enforces the Current-course boundary, but bypasses date/clock resolution.
+    Otherwise the
     panel follows the live calendar/clock: the block meeting now, or the next
     one today.
 
@@ -181,7 +179,7 @@ def resolve_panel_course(block: str, *, now=None, schedule_reader=None,
 
     reader = schedule_reader or deps.resolve_schedule_for
     try:
-        blocks, _problems = reader(date_str)
+        blocks = reader(date_str).get("blocks") or []
     except Exception:
         blocks = []
 

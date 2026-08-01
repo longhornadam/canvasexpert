@@ -13,7 +13,29 @@
     el.className = "status ce-calendar-status" + (kind ? " " + kind : "");
   }
 
-  var state = { billSchedules: [], teacherBlocks: [], folders: {}, courses: [] };
+  /** "2026-08-17" -> "Mon, Aug 17". Built from local Y/M/D components (not
+      `new Date(dateStr)`, which parses as UTC midnight and can render the
+      previous local day west of UTC). Falls back to the raw string if it
+      cannot be parsed rather than showing a garbled date. */
+  function friendlyDate(dateStr) {
+    var parts = String(dateStr || "").split("-");
+    if (parts.length !== 3) return esc(dateStr);
+    var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    if (isNaN(d.getTime())) return esc(dateStr);
+    return esc(d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }));
+  }
+
+  var state = { bellSchedules: [], teacherBlocks: [], courses: [] };
+
+  /** The teacher-facing Bell Schedule name for a schedule_id, so a preview or
+      upcoming row never shows only the raw id. */
+  function scheduleLabel(scheduleId) {
+    if (!scheduleId) return "";
+    for (var i = 0; i < state.bellSchedules.length; i++) {
+      if (state.bellSchedules[i].schedule_id === scheduleId) return state.bellSchedules[i].label;
+    }
+    return "";
+  }
 
   // ── Readiness & upcoming ────────────────────────────────────────────────
 
@@ -42,10 +64,15 @@
       }
       notice.textContent = "Needs attention: " + (reasons.join("; ") || "check coverage") + ".";
     } else {
+      var today = readiness.today || {};
+      var todayDetail = today.state === "instructional" || today.state === "ready"
+        ? (scheduleLabel(today.schedule_id) || today.schedule_id || "")
+        : (today.label || "");
       notice.className = "ce-notice ce-notice--ok";
-      notice.textContent = "Ready. School year " + esc(readiness.school_year || "") +
-        ", coverage " + esc((readiness.coverage || {}).start || "") + " through " +
-        esc((readiness.coverage || {}).end || "") + ".";
+      notice.textContent = "Ready. School year " + (readiness.school_year || "") +
+        ", coverage " + ((readiness.coverage || {}).start || "") + " through " +
+        ((readiness.coverage || {}).end || "") +
+        (todayDetail ? ". Today: " + todayDetail + "." : ".");
     }
     el.appendChild(notice);
   }
@@ -59,13 +86,23 @@
       el.innerHTML = '<p class="ce-hint">No upcoming dates to show.</p>';
       return;
     }
-    var rows = keys.map(function (date) {
-      var entry = days[date] || {};
-      var detail = entry.kind === "instructional"
-        ? esc(entry.schedule_id || "unknown schedule")
-        : esc(entry.label || entry.kind);
-      return '<div class="ce-calendar-upcoming-row"><strong>' + esc(date) + '</strong> — ' +
-        esc(entry.kind) + " (" + detail + ")</div>";
+    var rows = keys.map(function (dateKey) {
+      var entry = days[dateKey] || {};
+      var kindLabel = entry.kind === "instructional" ? "Instructional"
+        : entry.kind === "no_regular_classes" ? "No regular classes"
+        : entry.kind === "no_school" ? "No school" : esc(entry.kind);
+      var detail;
+      if (entry.kind === "instructional") {
+        var label = scheduleLabel(entry.schedule_id);
+        detail = label ? esc(label) : "Unknown Bell Schedule";
+        if (entry.schedule_id) {
+          detail += ' <span class="muted ce-calendar-id">(' + esc(entry.schedule_id) + ')</span>';
+        }
+      } else {
+        detail = esc(entry.label || "");
+      }
+      return '<div class="ce-calendar-upcoming-row"><strong>' + friendlyDate(dateKey) + '</strong> — ' +
+        kindLabel + (detail ? ": " + detail : "") + '</div>';
     });
     el.innerHTML = rows.join("");
   }
@@ -75,16 +112,30 @@
   function renderBellSchedules(data) {
     var bell = data.bell_schedules || {};
     var found = bell.found || [];
-    state.billSchedules = found;
+    state.bellSchedules = found;
     var list = document.getElementById("calendar-bell-list");
     if (!found.length) {
       list.innerHTML = '<p class="ce-empty">No Bell Schedule CSVs found in your Calendars folder.</p>';
     } else {
       list.innerHTML = found.map(function (entry) {
+        var periods = Array.isArray(entry.periods) ? entry.periods : [];
+        var periodRows = periods.map(function (p) {
+          var segment = p.segment ? ' <span class="muted">' + esc(p.segment) + "</span>" : "";
+          return '<div class="ce-calendar-period-row"><span class="ce-calendar-period-id">' +
+            esc(p.period_id) + "</span><span>" + esc(p.start) + "&ndash;" + esc(p.end) + "</span>" +
+            segment + "</div>";
+        }).join("");
         return '<div class="ce-calendar-bell-row"><strong>' + esc(entry.label) + '</strong>' +
-          ' <span class="muted">(' + esc(entry.schedule_id) + ", " + entry.period_count + " period(s))</span></div>";
+          ' <span class="muted ce-calendar-id">(' + esc(entry.schedule_id) + ')</span>' +
+          '<div class="ce-calendar-period-list">' +
+          (periodRows || '<p class="ce-empty">No periods parsed.</p>') + "</div></div>";
       }).join("");
     }
+    if ((bell.problems || []).length) {
+      list.innerHTML += '<div class="ce-notice ce-notice--warn">' +
+        bell.problems.map(esc).join("<br>") + "</div>";
+    }
+
     var options = found.map(function (entry) {
       return '<option value="' + esc(entry.schedule_id) + '">' + esc(entry.label) + '</option>';
     }).join("");
@@ -92,12 +143,22 @@
     var createSelect = document.getElementById("cal-create-default-schedule");
     if (changeSelect) changeSelect.innerHTML = options;
     if (createSelect) createSelect.innerHTML = options;
+  }
 
-    var folderButton = document.getElementById("calendar-open-folder");
-    if (folderButton && data.folders && data.folders.calendars) {
-      folderButton.setAttribute("data-open-path", data.folders.calendars);
-      folderButton.disabled = false;
-    }
+  var openFolderButton = document.getElementById("calendar-open-folder");
+  if (openFolderButton) {
+    openFolderButton.addEventListener("click", async function () {
+      openFolderButton.disabled = true;
+      try {
+        var response = await fetch("/api/calendar/open-folder", { method: "POST" });
+        var data = await response.json();
+        if (!data.ok) {
+          openFolderButton.title = data.error || "Could not open the Calendars folder.";
+        }
+      } finally {
+        openFolderButton.disabled = false;
+      }
+    });
   }
 
   // ── Teacher Schedule (block editor) ──────────────────────────────────────
@@ -106,22 +167,18 @@
     var courses = Array.isArray(state.courses) ? state.courses : [];
     var selected = block.course_id == null ? "" : String(block.course_id);
     var html = '<option value="">(none)</option>';
-    [true, false].forEach(function (active) {
-      var matching = courses.filter(function (course) {
-        return Boolean(course && course.active !== false) === active;
-      });
-      if (!matching.length) return;
-      html += active ? '<optgroup label="Current">' : '<optgroup label="Previous">';
-      matching.forEach(function (course) {
-        var id = String(course.id == null ? "" : course.id);
-        if (!id) return;
-        html += '<option value="' + esc(id) + '"' +
-          (id === selected ? " selected" : "") + ">" + esc(course.name || id) + "</option>";
-      });
-      html += "</optgroup>";
+    courses.forEach(function (course) {
+      var id = String(course.id == null ? "" : course.id);
+      if (!id) return;
+      html += '<option value="' + esc(id) + '"' +
+        (id === selected ? " selected" : "") + ">" + esc(course.name || id) + "</option>";
     });
-    if (selected && !courses.some(function (course) { return String(course && course.id) === selected; })) {
-      html += '<option value="' + esc(selected) + '" selected>' + esc(selected + " (not a saved course)") + "</option>";
+    // A block already naming a Previous/unknown course stays visible as a
+    // concise repair warning, but is never offered as a valid choice: it
+    // renders disabled, so the teacher must pick a Current course or clear it.
+    if (selected && !courses.some(function (course) { return String(course.id) === selected; })) {
+      html += '<option value="' + esc(selected) + '" selected disabled>' +
+        esc(selected) + " — not a Current course; choose one or clear</option>";
     }
     return html;
   }
@@ -212,6 +269,17 @@
 
   var lastPreview = null;
 
+  /** Teacher-facing description of a day entry for a preview: the actual
+      Bell Schedule name for an instructional day, never a bare "instructional". */
+  function describeDayEntry(entry) {
+    if (!entry) return "(unset)";
+    if (entry.kind === "instructional") {
+      var label = scheduleLabel(entry.schedule_id);
+      return esc(label || entry.schedule_id || "unknown schedule");
+    }
+    return esc(entry.label || entry.kind || "");
+  }
+
   function selectedWeekdays() {
     var boxes = document.querySelectorAll("#cal-change-weekdays input[type=checkbox]");
     var all = Array.prototype.map.call(boxes, function (box) { return box; });
@@ -261,8 +329,8 @@
     var affected = data.affected || [];
     resultEl.hidden = false;
     resultEl.innerHTML = affected.map(function (entry) {
-      return '<div>' + esc(entry.date) + ": " +
-        esc(entry.before ? entry.before.kind : "(unset)") + " &rarr; " + esc(entry.after.kind) + '</div>';
+      return '<div>' + friendlyDate(entry.date) + ": " +
+        describeDayEntry(entry.before) + " &rarr; " + describeDayEntry(entry.after) + '</div>';
     }).join("");
     setStatus(status, data.is_noop
       ? "No change — every date already matches."
@@ -292,7 +360,9 @@
     await loadState();
   });
 
-  // ── Create / replace school year ─────────────────────────────────────────
+  // ── Create / replace school year (staged preview/apply) ──────────────────
+
+  var lastYearPreview = null;
 
   document.getElementById("cal-import-parse").addEventListener("click", async function () {
     var status = document.getElementById("cal-import-status");
@@ -317,8 +387,7 @@
     window._calImportDateLabels = data.date_labels || {};
   });
 
-  document.getElementById("cal-create-submit").addEventListener("click", async function () {
-    var status = document.getElementById("cal-create-status");
+  function yearMutationBody() {
     var noSchool = document.getElementById("cal-create-no-school").value
       .split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
     var body = {
@@ -334,16 +403,71 @@
     if (window._calImportDateLabels) {
       body.date_labels = JSON.stringify(window._calImportDateLabels);
     }
-    var response = await fetch("/api/calendar/create", {
+    return body;
+  }
+
+  document.getElementById("cal-create-preview").addEventListener("click", async function () {
+    var status = document.getElementById("cal-create-status");
+    var resultEl = document.getElementById("cal-create-preview-result");
+    var applyBtn = document.getElementById("cal-create-apply");
+
+    var response = await fetch("/api/calendar/year/preview", {
       method: "POST",
-      body: new URLSearchParams(body),
+      body: new URLSearchParams(yearMutationBody()),
     });
     var data = await response.json();
     if (!data.ok) {
-      setStatus(status, "Not created: " + (data.problems || []).join(" "), "error");
+      setStatus(status, "Preview failed: " + (data.problems || []).join(" "), "error");
+      resultEl.hidden = true;
+      applyBtn.hidden = true;
       return;
     }
-    setStatus(status, "Created " + data.school_year + " (" + data.day_count + " days, revision " + data.revision + ").", "ok");
+    lastYearPreview = data;
+    var isReplace = data.operation === "replace";
+    var lines = [];
+    if (isReplace) {
+      lines.push('<div>Current: ' + esc(data.current_school_year) + " (" +
+        esc((data.current_coverage || {}).start) + " through " +
+        esc((data.current_coverage || {}).end) + ")</div>");
+    }
+    lines.push('<div>Proposed: ' + esc(data.proposed_school_year) + " (" +
+      esc((data.proposed_coverage || {}).start) + " through " +
+      esc((data.proposed_coverage || {}).end) + ")</div>");
+    lines.push('<div>' + data.day_count + " day(s), " + data.grading_period_count +
+      " grading period(s), " + data.event_count + " event(s)</div>");
+    if (isReplace) {
+      var changes = data.material_changes || {};
+      lines.push('<div>Changes from the active calendar: ' + (changes.days_added || 0) +
+        " added, " + (changes.days_removed || 0) + " removed, " + (changes.days_changed || 0) +
+        " changed</div>");
+    }
+    resultEl.hidden = false;
+    resultEl.innerHTML = lines.join("");
+    applyBtn.textContent = isReplace ? "Replace calendar" : "Create calendar";
+    applyBtn.hidden = false;
+    setStatus(status, "Review the summary, then " + (isReplace ? "Replace" : "Create") + ".", "");
+  });
+
+  document.getElementById("cal-create-apply").addEventListener("click", async function () {
+    var status = document.getElementById("cal-create-status");
+    if (!lastYearPreview) return;
+    var response = await fetch("/api/calendar/year/apply", {
+      method: "POST",
+      body: new URLSearchParams({
+        expected_revision: String(lastYearPreview.base_revision),
+        preview: JSON.stringify(lastYearPreview),
+      }),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Not applied: " + (data.problems || []).join(" "), "error");
+      return;
+    }
+    setStatus(status, "Applied " + data.school_year + " (" + data.day_count +
+      " days, revision " + data.revision + ").", "ok");
+    document.getElementById("cal-create-apply").hidden = true;
+    document.getElementById("cal-create-preview-result").hidden = true;
+    lastYearPreview = null;
     await loadState();
   });
 
@@ -353,9 +477,9 @@
     var response = await fetch("/api/calendar");
     var data = await response.json();
     state.courses = Array.isArray(data.courses) ? data.courses : [];
+    renderBellSchedules(data);
     renderReadiness(data);
     renderUpcoming(data);
-    renderBellSchedules(data);
     renderTeacherBlocks((data.teacher_schedule || {}).blocks || []);
   }
 

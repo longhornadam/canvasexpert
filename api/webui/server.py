@@ -37,7 +37,7 @@ from .schooldays import (
 
 from .deps import (
     WEBUI_DIR, API_DIR, REPO_ROOT,
-    _key_to_year, templates,
+    templates,
     _CUSTOM_DIR, list_quiz_files, list_assignment_files, list_page_files,
     list_rubric_files, list_ai_ta_files,
 )

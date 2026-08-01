@@ -43,14 +43,6 @@ def test_readiness_is_unconfigured_with_no_document(tmp_path):
     assert readiness["status"] == "unconfigured"
 
 
-def test_is_configured_reflects_document_presence(tmp_path):
-    assert sc.is_configured(_root(tmp_path)) is False
-    sc.create_school_year(
-        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-21",
-        default_schedule_id="ordinary", root=_root(tmp_path))
-    assert sc.is_configured(_root(tmp_path)) is True
-
-
 # ── create_school_year ──────────────────────────────────────────────────────
 
 def test_create_school_year_covers_every_date_with_weekends_generated(tmp_path):
@@ -100,7 +92,7 @@ def test_create_school_year_writes_atomically_and_is_readable_back(tmp_path):
     assert doc["revision"] == 1
 
 
-def test_create_school_year_replaces_an_existing_calendar_at_revision_1(tmp_path):
+def test_create_school_year_replacing_an_existing_calendar_never_resets_revision(tmp_path):
     sc.create_school_year(
         school_year="2025-26", coverage_start="2025-08-17", coverage_end="2025-08-17",
         default_schedule_id="ordinary", root=_root(tmp_path))
@@ -108,7 +100,7 @@ def test_create_school_year_replaces_an_existing_calendar_at_revision_1(tmp_path
         school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-17",
         default_schedule_id="ordinary", root=_root(tmp_path))
     assert problems == []
-    assert doc["revision"] == 1
+    assert doc["revision"] == 2
     assert doc["school_year"] == "2026-27"
 
 
@@ -231,27 +223,90 @@ def test_resolve_date_no_school_and_no_regular_classes(tmp_path):
     assert sc.resolve_date(doc, "2026-08-18", set())["state"] == "no_regular_classes"
 
 
-# ── no_count_dates ───────────────────────────────────────────────────────────
+# ── resolve_instructional_range / add_school_days_checked / count_school_days_checked ──
 
-def test_no_count_dates_empty_when_unconfigured(tmp_path):
-    assert sc.no_count_dates(root=_root(tmp_path)) == set()
+def test_resolve_instructional_range_fails_closed_when_unconfigured(tmp_path):
+    result = sc.resolve_instructional_range(
+        "2026-08-17", "2026-08-20", set(), root=_root(tmp_path))
+    assert result["state"] == "unconfigured"
+    assert result["repair_url"] == "/calendar"
 
 
-def test_no_count_dates_includes_weekends_and_explicit_no_school(tmp_path):
+def test_resolve_instructional_range_reports_no_count_dates_in_range(tmp_path):
     sc.create_school_year(
         school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-23",
         default_schedule_id="ordinary", no_school_dates=["2026-08-19"],
         root=_root(tmp_path))
-    result = sc.no_count_dates(root=_root(tmp_path))
-    assert result == {"2026-08-19", "2026-08-22", "2026-08-23"}
+    result = sc.resolve_instructional_range(
+        "2026-08-17", "2026-08-23", {"ordinary"}, root=_root(tmp_path))
+    assert result["state"] == "ready"
+    assert set(result["no_count_dates"]) == {"2026-08-19", "2026-08-22", "2026-08-23"}
 
 
-def test_no_count_dates_scoped_to_a_range(tmp_path):
+def test_resolve_instructional_range_refuses_partial_coverage_rather_than_clipping(tmp_path):
     sc.create_school_year(
         school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-23",
         default_schedule_id="ordinary", root=_root(tmp_path))
-    result = sc.no_count_dates("2026-08-17", "2026-08-20", root=_root(tmp_path))
-    assert result == set()  # no weekend in that narrower range
+    result = sc.resolve_instructional_range(
+        "2026-08-20", "2026-09-01", {"ordinary"}, root=_root(tmp_path))
+    assert result["state"] == "outside_coverage"
+
+
+def test_resolve_instructional_range_reports_unknown_schedule(tmp_path):
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-18",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+    result = sc.resolve_instructional_range(
+        "2026-08-17", "2026-08-18", set(), root=_root(tmp_path))
+    assert result["state"] == "unknown_schedule"
+
+
+def test_add_school_days_checked_advances_past_weekends_and_no_school_days(tmp_path):
+    from datetime import datetime
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-25",
+        default_schedule_id="ordinary", no_school_dates=["2026-08-20"],
+        root=_root(tmp_path))
+    start = datetime(2026, 8, 19)  # Wednesday
+    result, failure = sc.add_school_days_checked(start, 2, {"ordinary"}, root=_root(tmp_path))
+    assert failure is None
+    # Aug 20 is no-school, Aug 21 (Fri) and Aug 24 (Mon) are the next two school days.
+    assert result.date().isoformat() == "2026-08-24"
+
+
+def test_add_school_days_checked_refuses_rather_than_walking_past_coverage(tmp_path):
+    from datetime import datetime
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-21",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+    start = datetime(2026, 8, 21)  # coverage's final Friday
+    result, failure = sc.add_school_days_checked(start, 1, {"ordinary"}, root=_root(tmp_path))
+    assert result is None
+    assert failure["state"] == "outside_coverage"
+
+
+def test_count_school_days_checked_excludes_no_count_dates(tmp_path):
+    from datetime import datetime
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-25",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+    due = datetime(2026, 8, 19)  # Wednesday
+    submitted = datetime(2026, 8, 24)  # following Monday
+    count, failure = sc.count_school_days_checked(due, submitted, {"ordinary"}, root=_root(tmp_path))
+    assert failure is None
+    assert count == 3  # Thu, Fri, Mon -- weekend excluded
+
+
+def test_count_school_days_checked_reports_unknown_schedule(tmp_path):
+    from datetime import datetime
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-25",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+    due = datetime(2026, 8, 19)
+    submitted = datetime(2026, 8, 21)
+    count, failure = sc.count_school_days_checked(due, submitted, set(), root=_root(tmp_path))
+    assert count is None
+    assert failure["state"] == "unknown_schedule"
 
 
 # ── preview_change / apply_change ───────────────────────────────────────────
@@ -269,10 +324,13 @@ def _seeded(tmp_path, **kwargs):
 def test_preview_change_reports_affected_dates_and_base_revision(tmp_path):
     _seeded(tmp_path)
     preview, problems = sc.preview_change(
-        kind="no_school", label="Field day", dates=["2026-08-18"], root=_root(tmp_path))
+        kind="no_school", label="Field day", dates=["2026-08-18"],
+        known_schedule_ids=set(), root=_root(tmp_path))
     assert problems == []
     assert preview["base_revision"] == 1
     assert preview["is_noop"] is False
+    assert preview["operation"] == "date_change"
+    assert preview["conflicts"] == []
     assert preview["affected"] == [{
         "date": "2026-08-18",
         "before": {"kind": "instructional", "schedule_id": "ordinary"},
@@ -280,12 +338,21 @@ def test_preview_change_reports_affected_dates_and_base_revision(tmp_path):
     }]
 
 
+def test_preview_change_rejects_an_unknown_schedule_id(tmp_path):
+    _seeded(tmp_path)
+    preview, problems = sc.preview_change(
+        kind="instructional", schedule_id="friday_schedule", dates=["2026-08-21"],
+        known_schedule_ids=set(), root=_root(tmp_path))
+    assert preview is None
+    assert "not a currently loaded Bell Schedule" in problems[0]
+
+
 def test_preview_change_range_with_weekday_subset(tmp_path):
     _seeded(tmp_path)
     preview, problems = sc.preview_change(
         kind="instructional", schedule_id="friday_schedule",
         date_from="2026-08-17", date_to="2026-08-28", weekdays=[4],
-        root=_root(tmp_path))
+        known_schedule_ids={"friday_schedule"}, root=_root(tmp_path))
     assert problems == []
     dates = [entry["date"] for entry in preview["affected"]]
     assert dates == ["2026-08-21", "2026-08-28"]  # the two Fridays in range
@@ -295,7 +362,8 @@ def test_preview_change_refuses_both_dates_and_range(tmp_path):
     _seeded(tmp_path)
     preview, problems = sc.preview_change(
         kind="no_school", label="X", dates=["2026-08-18"],
-        date_from="2026-08-17", date_to="2026-08-18", root=_root(tmp_path))
+        date_from="2026-08-17", date_to="2026-08-18",
+        known_schedule_ids=set(), root=_root(tmp_path))
     assert preview is None
     assert "either an explicit date list or a date range" in problems[0]
 
@@ -303,7 +371,8 @@ def test_preview_change_refuses_both_dates_and_range(tmp_path):
 def test_preview_change_rejects_dates_outside_coverage(tmp_path):
     _seeded(tmp_path)
     preview, problems = sc.preview_change(
-        kind="no_school", label="X", dates=["2026-09-01"], root=_root(tmp_path))
+        kind="no_school", label="X", dates=["2026-09-01"],
+        known_schedule_ids=set(), root=_root(tmp_path))
     assert preview is None
     assert "outside coverage" in problems[0]
 
@@ -312,7 +381,7 @@ def test_preview_change_is_noop_when_nothing_would_change(tmp_path):
     _seeded(tmp_path)
     preview, problems = sc.preview_change(
         kind="instructional", schedule_id="ordinary", dates=["2026-08-17"],
-        root=_root(tmp_path))
+        known_schedule_ids={"ordinary"}, root=_root(tmp_path))
     assert problems == []
     assert preview["is_noop"] is True
 
@@ -320,7 +389,8 @@ def test_preview_change_is_noop_when_nothing_would_change(tmp_path):
 def test_apply_change_writes_and_increments_revision(tmp_path):
     _seeded(tmp_path)
     preview, _ = sc.preview_change(
-        kind="no_school", label="Field day", dates=["2026-08-18"], root=_root(tmp_path))
+        kind="no_school", label="Field day", dates=["2026-08-18"],
+        known_schedule_ids=set(), root=_root(tmp_path))
     doc, problems = sc.apply_change(preview, expected_revision=1, root=_root(tmp_path))
     assert problems == []
     assert doc["revision"] == 2
@@ -332,7 +402,7 @@ def test_apply_change_noop_does_not_increment_revision(tmp_path):
     _seeded(tmp_path)
     preview, _ = sc.preview_change(
         kind="instructional", schedule_id="ordinary", dates=["2026-08-17"],
-        root=_root(tmp_path))
+        known_schedule_ids={"ordinary"}, root=_root(tmp_path))
     doc, problems = sc.apply_change(preview, expected_revision=1, root=_root(tmp_path))
     assert problems == []
     assert doc["revision"] == 1
@@ -341,10 +411,12 @@ def test_apply_change_noop_does_not_increment_revision(tmp_path):
 def test_apply_change_refuses_a_stale_revision(tmp_path):
     _seeded(tmp_path)
     preview, _ = sc.preview_change(
-        kind="no_school", label="Field day", dates=["2026-08-18"], root=_root(tmp_path))
+        kind="no_school", label="Field day", dates=["2026-08-18"],
+        known_schedule_ids=set(), root=_root(tmp_path))
     # Someone else applies a change first, advancing the real revision to 2.
     other_preview, _ = sc.preview_change(
-        kind="no_school", label="Other", dates=["2026-08-19"], root=_root(tmp_path))
+        kind="no_school", label="Other", dates=["2026-08-19"],
+        known_schedule_ids=set(), root=_root(tmp_path))
     sc.apply_change(other_preview, expected_revision=1, root=_root(tmp_path))
 
     doc, problems = sc.apply_change(preview, expected_revision=1, root=_root(tmp_path))
@@ -357,11 +429,105 @@ def test_apply_change_refuses_a_stale_revision(tmp_path):
     assert current["days"]["2026-08-18"]["kind"] == "instructional"
 
 
+def test_apply_change_refuses_an_altered_mutation_via_digest_mismatch(tmp_path):
+    _seeded(tmp_path)
+    preview, _ = sc.preview_change(
+        kind="no_school", label="Field day", dates=["2026-08-18"],
+        known_schedule_ids=set(), root=_root(tmp_path))
+    tampered = dict(preview)
+    tampered["mutation"] = dict(preview["mutation"], dates=["2026-08-19"])
+    doc, problems = sc.apply_change(tampered, expected_revision=1, root=_root(tmp_path))
+    assert doc is None
+    assert "digest mismatch" in problems[0]
+
+
 def test_apply_change_requires_a_valid_preview_object(tmp_path):
     _seeded(tmp_path)
     doc, problems = sc.apply_change({"not": "a preview"}, expected_revision=1, root=_root(tmp_path))
     assert doc is None
     assert "valid preview is required" in problems[0]
+
+
+# ── preview_replacement / apply_replacement ─────────────────────────────────
+
+def test_preview_replacement_is_create_at_base_revision_zero_when_unconfigured(tmp_path):
+    preview, problems = sc.preview_replacement(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-18",
+        default_schedule_id="ordinary", known_schedule_ids={"ordinary"}, root=_root(tmp_path))
+    assert problems == []
+    assert preview["operation"] == "create"
+    assert preview["base_revision"] == 0
+    assert preview["current_school_year"] is None
+    assert preview["day_count"] == 2
+
+
+def test_apply_replacement_writes_revision_1_on_first_create(tmp_path):
+    preview, _ = sc.preview_replacement(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-18",
+        default_schedule_id="ordinary", known_schedule_ids={"ordinary"}, root=_root(tmp_path))
+    doc, problems = sc.apply_replacement(preview, expected_revision=0, root=_root(tmp_path))
+    assert problems == []
+    assert doc["revision"] == 1
+
+
+def test_preview_replacement_is_replace_at_current_revision_when_already_configured(tmp_path):
+    _seeded(tmp_path)
+    preview, problems = sc.preview_replacement(
+        school_year="2027-28", coverage_start="2027-08-16", coverage_end="2027-08-17",
+        default_schedule_id="ordinary", known_schedule_ids={"ordinary"}, root=_root(tmp_path))
+    assert problems == []
+    assert preview["operation"] == "replace"
+    assert preview["base_revision"] == 1
+    assert preview["current_school_year"] == "2026-27"
+
+
+def test_apply_replacement_never_resets_revision_on_replace(tmp_path):
+    _seeded(tmp_path)  # revision 1
+    preview, _ = sc.preview_replacement(
+        school_year="2027-28", coverage_start="2027-08-16", coverage_end="2027-08-17",
+        default_schedule_id="ordinary", known_schedule_ids={"ordinary"}, root=_root(tmp_path))
+    doc, problems = sc.apply_replacement(preview, expected_revision=1, root=_root(tmp_path))
+    assert problems == []
+    assert doc["revision"] == 2
+    assert doc["school_year"] == "2027-28"
+
+
+def test_apply_replacement_refuses_a_stale_preview(tmp_path):
+    _seeded(tmp_path)  # revision 1
+    preview, _ = sc.preview_replacement(
+        school_year="2027-28", coverage_start="2027-08-16", coverage_end="2027-08-17",
+        default_schedule_id="ordinary", known_schedule_ids={"ordinary"}, root=_root(tmp_path))
+    # Someone else replaces first, advancing the real revision to 2.
+    other_preview, _ = sc.preview_replacement(
+        school_year="2028-29", coverage_start="2028-08-14", coverage_end="2028-08-15",
+        default_schedule_id="ordinary", known_schedule_ids={"ordinary"}, root=_root(tmp_path))
+    sc.apply_replacement(other_preview, expected_revision=1, root=_root(tmp_path))
+
+    doc, problems = sc.apply_replacement(preview, expected_revision=1, root=_root(tmp_path))
+    assert doc is None
+    assert "stale revision" in problems[0]
+    current, _ = sc.read(_root(tmp_path))
+    assert current["revision"] == 2
+    assert current["school_year"] == "2028-29"
+
+
+def test_preview_replacement_rejects_an_unknown_bell_schedule(tmp_path):
+    preview, problems = sc.preview_replacement(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-18",
+        default_schedule_id="ordinary", known_schedule_ids=set(), root=_root(tmp_path))
+    assert preview is None
+    assert "not currently loaded" in problems[0]
+
+
+def test_apply_replacement_refuses_an_altered_mutation_via_digest_mismatch(tmp_path):
+    preview, _ = sc.preview_replacement(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-18",
+        default_schedule_id="ordinary", known_schedule_ids={"ordinary"}, root=_root(tmp_path))
+    tampered = dict(preview)
+    tampered["mutation"] = dict(preview["mutation"], school_year="2099-00")
+    doc, problems = sc.apply_replacement(tampered, expected_revision=0, root=_root(tmp_path))
+    assert doc is None
+    assert "digest mismatch" in problems[0]
 
 
 # ── range_projection ─────────────────────────────────────────────────────────

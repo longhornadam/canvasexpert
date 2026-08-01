@@ -92,7 +92,7 @@ instead of overwriting it.
   they reference it) or `"slide"` (fresh mount/unmount with every Slide's own showing, no
   preserved state).
 
-## MCP tools (schema v16, 24 tools total; SmartDeck's own 8)
+## MCP tools (schema v17, 25 tools total; SmartDeck's own 8)
 
 | Tool | Reads/writes |
 |---|---|
@@ -107,10 +107,11 @@ instead of overwriting it.
 
 All eight skip the course gate and the outbound safety gate (no `course_id`, no student data)
 -- same class of exception as `get_product_guide`/`list_staged_content`. The canonical Calendar
-domain's four tools (`get_school_calendar`, `create_school_calendar`,
-`preview_school_calendar_change`, `apply_school_calendar_change`) share the same exemption but
-are documented in `docs/contracts/canonical-school-calendar-contract.md`, not here -- they own
-day kinds/schedule resolution, not SmartDeck's deck/slide content.
+domain's five tools (`get_school_calendar`, `preview_school_calendar_replacement`,
+`apply_school_calendar_replacement`, `preview_school_calendar_change`,
+`apply_school_calendar_change`) share the same exemption but are documented in
+`docs/contracts/canonical-school-calendar-contract.md`, not here -- they own day kinds/schedule
+resolution, not SmartDeck's deck/slide content.
 
 ## Feed system (backend-only, not yet wired to authoring or display)
 

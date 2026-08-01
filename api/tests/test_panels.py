@@ -183,8 +183,8 @@ def _block(name, start, end, course_id="9000001", label=""):
             "course_id": course_id}
 
 
-def _schedule(blocks, problems=()):
-    return lambda _date: (list(blocks), list(problems))
+def _schedule(blocks, problems=(), state="ready"):
+    return lambda _date: {"state": state, "blocks": list(blocks), "problems": list(problems)}
 
 
 def _teacher(blocks):

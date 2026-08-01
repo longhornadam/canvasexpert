@@ -1,10 +1,13 @@
 """School-day date math — calendar-aware lateness + date arithmetic.
 
 Pure: callers pass a `no_count_dates` set (the canonical calendar's no_school
-and no_regular_classes dates for the relevant range, from
-api.webui.school_calendar.no_count_dates()) instead of a skip_weekends flag
-plus a parallel holiday list. One calendar decides what a no-count day is;
-this module only does the arithmetic.
+and no_regular_classes dates for the relevant range, from a checked seam such
+as `api.webui.school_calendar.resolve_instructional_range()`) instead of a
+weekend-skipping flag plus a parallel holiday list. One calendar decides what
+a no-count day is; this module only does the arithmetic. Most callers that need
+coverage/unknown-schedule failure handling should prefer
+`school_calendar.add_school_days_checked()`/`count_school_days_checked()`
+over calling these pure helpers directly with a hand-fetched set.
 """
 from datetime import datetime, timedelta
 

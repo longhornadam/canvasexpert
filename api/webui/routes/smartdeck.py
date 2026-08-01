@@ -14,7 +14,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from .. import deps, deck_store, schedule_setup
+from .. import deps, deck_store, schedule_setup, school_calendar
 
 router = APIRouter(tags=["smartdeck"])
 
@@ -96,10 +96,12 @@ def _deck_problems(deck_id: str, date: str, schedule_cache: dict) -> list:
 
     if date not in schedule_cache:
         schedule_cache[date] = deps.resolve_schedule_for(date)
-    blocks, schedule_problems = schedule_cache[date]
+    result = schedule_cache[date]
 
-    _resolved, slide_problems = _resolve_slides(deck, blocks)
-    return list(schedule_problems) + slide_problems
+    _resolved, slide_problems = _resolve_slides(deck, result["blocks"])
+    state_problem = school_calendar.state_message(result["state"])
+    schedule_problems = ([state_problem] if state_problem else []) + list(result["problems"])
+    return schedule_problems + slide_problems
 
 
 @router.get("/smartdeck", response_class=HTMLResponse)
@@ -194,9 +196,11 @@ def smartdeck_display_data(deck_id: str):
     if deck is None:
         return JSONResponse({"ok": False, "problems": problems}, status_code=404)
 
-    blocks, schedule_problems = deps.resolve_schedule_for(deck.get("date", ""))
-    resolved_slides, slide_problems = _resolve_slides(deck, blocks)
-    slide_problems = list(schedule_problems) + slide_problems
+    result = deps.resolve_schedule_for(deck.get("date", ""))
+    resolved_slides, slide_problems = _resolve_slides(deck, result["blocks"])
+    state_problem = school_calendar.state_message(result["state"])
+    schedule_problems = ([state_problem] if state_problem else []) + list(result["problems"])
+    slide_problems = schedule_problems + slide_problems
 
     return JSONResponse({
         "ok": True,

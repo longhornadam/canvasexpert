@@ -142,6 +142,33 @@ def _validate_block_periods_against_bell_schedules(blocks: list) -> list:
     return problems
 
 
+def _validate_block_courses(blocks: list) -> list:
+    """Reject a nonempty course_id that is not a Current (active) course.
+
+    Calendar lists only Current courses as selectable Teacher Schedule
+    bindings; a Previous or unknown course_id is rejected here rather than
+    silently saved, whether the caller is the web UI or an MCP assistant --
+    both routes call this same seam. An existing file naming a Previous/
+    unknown course remains readable (see schedule_setup.readiness()); the
+    teacher must choose a Current course or clear it before saving again.
+    """
+    active_ids = {
+        str(course.get("id"))
+        for course in config.active_courses()
+        if isinstance(course, dict) and course.get("id") is not None
+    }
+    problems = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        course_id = block.get("course_id")
+        if isinstance(course_id, str) and course_id and course_id not in active_ids:
+            problems.append(
+                f"block '{block.get('name', '')}': course_id '{course_id}' is not a "
+                "Current course -- choose a Current course or clear it before saving")
+    return problems
+
+
 def save_blocks(blocks: list) -> tuple[dict | None, list]:
     """Validate and atomically replace only ``blocks`` in Teacher Schedule.json."""
     validation_problems = deck_schedule.validate_teacher_schedule({"blocks": blocks})
@@ -156,6 +183,10 @@ def save_blocks(blocks: list) -> tuple[dict | None, list]:
     period_problems = _validate_block_periods_against_bell_schedules(blocks)
     if period_problems:
         return None, period_problems
+
+    course_problems = _validate_block_courses(blocks)
+    if course_problems:
+        return None, course_problems
 
     data = {}
     if os.path.exists(path):

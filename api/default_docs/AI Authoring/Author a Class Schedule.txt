@@ -36,12 +36,21 @@ Call get_school_calendar first: with no arguments it returns readiness only (whe
 exists, today's resolved state, and any low-coverage warning); with date_from and date_to it also
 returns the day/grading-period/event rows in that range.
 
-To build a complete year from scratch (or replace one entirely), call create_school_calendar with
-school_year, coverage_start, coverage_end, and default_schedule_id. Every date in the requested
-coverage becomes instructional (on the default schedule, or a weekday_schedules override),
-a generated weekend, or an explicit no_school_dates/no_regular_classes_dates entry you pass in.
-There is no partial creation — a full year is validated and written in one call, replacing
-whatever calendar was active before.
+To build a complete year from scratch (or replace one entirely), use
+preview_school_calendar_replacement then apply_school_calendar_replacement:
+
+1. Call preview with school_year, coverage_start, coverage_end, and default_schedule_id. Every
+   date in the requested coverage becomes instructional (on the default schedule, or a
+   weekday_schedules override), a generated weekend, or an explicit no_school_dates/
+   no_regular_classes_dates entry you pass in. There is no partial creation — a full year is
+   validated as one unit.
+2. The preview returns operation ("create" when no calendar exists yet, else "replace"),
+   base_revision (0 for a first-ever calendar), the current and proposed school year/coverage,
+   and material change counts. Summarize this to the teacher in plain language — a replacement
+   overwrites every date in the new coverage — and get their confirmation before applying.
+3. Call apply with that same preview object and expected_revision set to its base_revision. A
+   stale revision (the calendar changed since your preview) is refused rather than silently
+   reapplied — preview again if that happens.
 
 For a one-off or short-range correction to an existing calendar (a snow day, a pep-rally
 schedule for one date, "use Friday Schedule Monday through Friday for the next two weeks"),

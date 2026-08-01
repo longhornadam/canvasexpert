@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Berry Miller Junior High</title>
+<link rel="stylesheet" href="/static/panels/panel.css">
+<style>
+  .panel {
+    --bg: #0e1626;
+    --ink: #eef2f8;
+    --title: #ffffff;
+    --muted: #7f92b2;
+    --rule: #27384f;
+    --accent: #f0b429;
+    background: radial-gradient(125% 105% at 12% 0%, #1d2d49 0%, #101a2c 55%, #0a1120 100%);
+  }
+  .p-head { gap: .55em; }
+  .brandwrap { display: flex; align-items: center; gap: .5em; min-width: 0; }
+  .crest {
+    flex: 0 0 auto; width: 1.5em; height: 1.5em; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: .58em; font-weight: 900; letter-spacing: -.04em;
+    color: #0e1626; background: linear-gradient(160deg, #ffd66b, #eda820);
+  }
+  .titles { min-width: 0; }
+  .kicker { font-size: .3em; font-weight: 800; letter-spacing: .24em;
+            text-transform: uppercase; color: var(--accent); }
+  .p-title { font-size: .72em; }
+
+  /* the date takes what it needs; the event title gets everything else.
+     A fractional first column starves the title as the panel narrows. */
+  .p-row { grid-template-columns: auto minmax(0, 1fr); }
+  .when { font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
+          color: #92a6c6; font-size: min(30cqh, 5.4cqw); }
+  .p-stack { --c1: 13fr; --c2: 8fr; }
+  .p-a { font-weight: 700; color: #eef2f8; }
+  .p-b { color: #8397b7; text-align: right; }
+
+  .p-row.today {
+    --row-bg: rgba(240,180,41,.15);
+    --row-accent: #f0b429;
+  }
+  .p-row.today .when { color: #ffd66b; }
+  .p-row.today .p-a  { color: #fff6e0; font-weight: 800; }
+  .p-row.today .p-b  { color: #d9bd8c; }
+  .p-row.soon  .when { color: #c3d1e6; }
+
+  @media (max-width: 470px) { .p-b { text-align: left; } }
+
+  /* compact mode: the kit enlarges .p-title, but this panel's header also
+     carries a crest and kicker that would render at a few pixels */
+  @media (max-width: 300px) and (max-height: 200px) {
+    .crest, .kicker { display: none; }
+    .brandwrap { min-width: 0; }
+    /* this panel's own .p-title rule is later in the cascade than the kit's
+       compact rule, so it has to restate the size here */
+    .p-title { font-size: min(13vw, 22vh); white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="p-head">
+    <div class="brandwrap">
+      <div class="crest">BM</div>
+      <div class="titles">
+        <div class="kicker">What's coming up</div>
+        <div class="p-title">Berry Miller Junior High</div>
+      </div>
+    </div>
+    <div class="p-sub" id="count"></div>
+  </div>
+
+  <div class="p-body" id="body"></div>
+
+  <div class="p-foot">
+    <span class="p-cta">Go Bulldogs</span>
+    <span class="p-dots" id="dots"></span>
+  </div>
+</div>
+
+<script src="/static/panels/panel.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* d counts SCHOOL days out, so nothing lands on a weekend */
+  var EVENTS = [
+    { d: 0,  t: "Picture Day (all grades)",           w: "Gym, all day" },
+    { d: 0,  t: "Robotics Club showcase",             w: "Rm 214, 3:15" },
+    { d: 1,  t: "Volleyball vs. Pearland West",       w: "Home, 5:30" },
+    { d: 2,  t: "Book Fair opens",                    w: "Library, all week" },
+    { d: 3,  t: "Spirit Day: class colors",           w: "Wear your grade" },
+    { d: 4,  t: "7th grade field trip: Space Center", w: "Bus loop, 7:30" },
+    { d: 6,  t: "Late start, staff PD",               w: "Doors 9:45" },
+    { d: 7,  t: "Fall choir concert",                 w: "Auditorium, 7:00" },
+    { d: 8,  t: "Progress reports go home",           w: "Advisory" },
+    { d: 10, t: "NJHS induction",                     w: "Cafeteria, 6:30" },
+    { d: 11, t: "Cross country meet",                 w: "Independence Pk, 8:00" },
+    { d: 13, t: "Yearbook deadline: club photos",     w: "Rm 108" },
+    { d: 14, t: "Band fundraiser pickup",             w: "Bus loop, 4:00" },
+    { d: 16, t: "Sixth grade orientation",            w: "Auditorium, 6:00" }
+  ];
+
+  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var MONS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  function isWeekend(dt) { return dt.getDay() === 0 || dt.getDay() === 6; }
+
+  function schoolDate(n) {
+    var dt = new Date();
+    dt.setHours(0, 0, 0, 0);
+    while (isWeekend(dt)) dt.setDate(dt.getDate() + 1);
+    for (var added = 0; added < n; ) {
+      dt.setDate(dt.getDate() + 1);
+      if (!isWeekend(dt)) added++;
+    }
+    return dt;
+  }
+
+  function label(d) {
+    var dt = schoolDate(d);
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var diff = Math.round((dt - today) / 86400000);
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Tomorrow";
+    if (diff < 7)   return DAYS[dt.getDay()];
+    return MONS[dt.getMonth()] + " " + dt.getDate();
+  }
+
+  document.getElementById("count").textContent = EVENTS.length + " events";
+
+  Panel.list({
+    body:  document.getElementById("body"),
+    dots:  document.getElementById("dots"),
+    items: EVENTS,
+    every: 11000,
+    render: function (e, row) {
+      if (e.d === 0) row.classList.add("today");
+      else if (e.d <= 2) row.classList.add("soon");
+
+      var when = document.createElement("span");
+      when.className   = "when";
+      when.textContent = label(e.d);
+
+      var stack = document.createElement("span");
+      stack.className = "p-stack";
+      var what  = document.createElement("span");
+      var where = document.createElement("span");
+      what.className  = "p-a";
+      where.className = "p-b";
+      what.textContent  = e.t;
+      where.textContent = e.w;
+      stack.appendChild(what); stack.appendChild(where);
+
+      row.appendChild(when); row.appendChild(stack);
+    }
+  });
+})();
+</script>
+</body>
+</html>

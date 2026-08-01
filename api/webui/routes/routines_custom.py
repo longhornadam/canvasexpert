@@ -29,18 +29,35 @@ def _combined_calendar_for_routines(date_from: str | None = None, date_to: str |
     the requested range (the whole configured year when unspecified). A
     routine author no longer passes weekend/holiday policy -- Calendar is the
     only source of an exceptional school day.
+
+    Returns an explicit ``ok``: on failure (unconfigured, invalid, an
+    out-of-range request, or an instructional date naming an unloaded Bell
+    Schedule) the response carries ``state``/``problems``/``repair_url`` and
+    never a usable partial no-count list -- a routine author must check
+    ``ok`` before trusting ``no_count_dates``.
     """
     bell_schedules, _problems = deps.load_bell_schedules()
+    known_schedule_ids = set(bell_schedules)
     readiness = school_calendar.readiness(bell_schedule_ids=bell_schedules)
-    doc, _problems = school_calendar.read()
+    doc, read_problems = school_calendar.read()
     if doc is None:
-        return {"readiness": readiness, "no_count_dates": [], "grading_periods": [], "events": []}
+        state = (read_problems[0] if read_problems
+                 and read_problems[0] in ("unconfigured", "invalid_calendar") else "unconfigured")
+        return {"ok": False, "state": state, "problems": read_problems,
+                "repair_url": school_calendar.CALENDAR_REPAIR_TARGET, "readiness": readiness}
+
     start = date_from or doc["coverage"]["start"]
     end = date_to or doc["coverage"]["end"]
+    result = school_calendar.resolve_instructional_range(start, end, known_schedule_ids)
+    if result["state"] != "ready":
+        return {"ok": False, "state": result["state"], "problems": result["problems"],
+                "repair_url": result["repair_url"], "readiness": readiness}
+
     projection, _problems = school_calendar.range_projection(start, end)
     return {
+        "ok": True,
         "readiness": readiness,
-        "no_count_dates": sorted(school_calendar.no_count_dates(start, end)),
+        "no_count_dates": result["no_count_dates"],
         "grading_periods": (projection or {}).get("grading_periods", []),
         "events": (projection or {}).get("events", []),
     }

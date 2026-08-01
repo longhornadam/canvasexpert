@@ -208,7 +208,11 @@ def gradebook_page(request: Request):
     calendar_readiness = school_calendar.readiness()
     doc, _problems = school_calendar.read()
     all_gp = sorted(doc["grading_periods"], key=lambda g: g["start"]) if doc else []
-    total_no_count = len(school_calendar.no_count_dates()) if doc else 0
+    total_no_count = (
+        sum(1 for entry in doc["days"].values()
+            if entry.get("kind") in ("no_school", "no_regular_classes"))
+        if doc else 0
+    )
     return templates.TemplateResponse(request, "gradebook.html", {
         "nav_section":          "grade",
         "csrf_token":           csrf_token(),

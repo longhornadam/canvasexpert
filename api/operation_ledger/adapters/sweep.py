@@ -5,7 +5,7 @@ current Canvas state, applies per-student ``seconds_late_override`` via
 Canvas Submissions API, and returns per-student results.
 """
 from .. import models
-from api.webui import canvas_client, config, school_calendar
+from api.webui import canvas_client, config, deps, school_calendar
 from api.webui.schooldays import (
     _parse_iso_local, _school_days_late_detail,
 )
@@ -281,18 +281,17 @@ def _compute_sweep(course_id: str, settings: dict):
     value is the school-day count with no-count dates already excluded;
     ``excluded`` is display detail only, never a reason to drop a row.
 
-    No-count dates come only from the canonical School Calendar -- there is
-    no caller-supplied skip_weekends/holidays override for this operation.
+    No-count dates come only from the canonical School Calendar; callers do not
+    supply a second set of day exclusions for this operation.
+    Every due/submitted date this sweep would need is validated as one
+    covered range before any entry is produced; a broken or out-of-range
+    calendar refuses the whole sweep rather than silently under-counting.
 
     Returns (entries, skipped, error).
     """
-    if not school_calendar.is_configured():
-        return [], [], school_calendar.CALENDAR_REPAIR_MESSAGE
-
     honor_extra = bool(settings.get("honor_extra_time", True))
     date_from = str(settings.get("date_from") or "").strip()
     date_to = str(settings.get("date_to") or "").strip()
-    no_count = school_calendar.no_count_dates()
 
     assignments, err = canvas_client._canvas_get_all(
         f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
@@ -326,7 +325,8 @@ def _compute_sweep(course_id: str, settings: dict):
                   for s in students}
     amap = {a["id"]: a for a in assignments if a.get("published", True)}
 
-    entries, skipped = [], []
+    candidates = []
+    span_start = span_end = None
     for sub in subs:
         if sub.get("excused") or not sub.get("submitted_at"):
             continue
@@ -334,7 +334,6 @@ def _compute_sweep(course_id: str, settings: dict):
         a = amap.get(aid)
         if not a:
             continue
-        uid = sub.get("user_id")
         if sub.get("workflow_state", "") != "late":
             continue
 
@@ -351,6 +350,23 @@ def _compute_sweep(course_id: str, settings: dict):
         if date_to and due_day > date_to:
             continue
 
+        candidates.append((sub, a, due, subd))
+        span_start = due.date() if span_start is None else min(span_start, due.date())
+        span_end = subd.date() if span_end is None else max(span_end, subd.date())
+
+    no_count: set[str] = set()
+    if candidates:
+        bell_schedules, _problems = deps.load_bell_schedules()
+        result = school_calendar.resolve_instructional_range(
+            span_start.isoformat(), span_end.isoformat(), set(bell_schedules))
+        if result["state"] != "ready":
+            return [], [], school_calendar.CALENDAR_REPAIR_MESSAGE
+        no_count = set(result["no_count_dates"])
+
+    entries, skipped = [], []
+    for sub, a, due, subd in candidates:
+        aid = sub.get("assignment_id")
+        uid = sub.get("user_id")
         school_days, excluded = _school_days_late_detail(
             due, subd, no_count)
         extra_days = min(extra_by_uid.get(str(uid), 0), school_days)

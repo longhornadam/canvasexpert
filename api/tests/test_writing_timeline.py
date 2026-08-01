@@ -978,8 +978,12 @@ def test_late_catchup_attaches_timelines_for_tracked_assignment(monkeypatch, tmp
     ):
         monkeypatch.setattr(powergrader_routes.config, name, value)
     from api.webui import school_calendar as school_calendar_module
-    monkeypatch.setattr(school_calendar_module, "is_configured", lambda root=None: True)
-    monkeypatch.setattr(school_calendar_module, "no_count_dates", lambda *a, **kw: set())
+    monkeypatch.setattr(
+        school_calendar_module, "resolve_instructional_range",
+        lambda date_from, date_to, known_schedule_ids, **kw: {
+            "state": "ready", "date_from": date_from, "date_to": date_to,
+            "days": {}, "no_count_dates": [],
+        })
 
     response = powergrader_routes.pg_late_score("sid")
 

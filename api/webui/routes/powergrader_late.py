@@ -2,11 +2,40 @@
 
 from datetime import datetime
 
-from .. import config, school_calendar
+from .. import config, deps, school_calendar
+from ..schooldays import _parse_iso_local
 from api.powergrader import (ai_workflow, canvas_fetch, late_catchup, session_builder,
                              student_attachments, writing_timeline)
 
 from api.nq_report import html_to_text
+
+
+def _resolve_late_catchup_no_count(assignment: dict, submitted: list[dict]) -> tuple[set | None, dict | None]:
+    """Validate the due/submitted date span this late-catch-up batch needs
+    BEFORE any AI or Canvas-write lane runs.
+
+    Returns (no_count_dates, None) on success -- an empty set when no row in
+    ``submitted`` has both a parseable due date and submitted date, since
+    there is then nothing to validate. Returns (None, failure_dict) when the
+    Calendar cannot cover the span (unconfigured, invalid, out of coverage,
+    or an instructional date naming an unloaded Bell Schedule).
+    """
+    span_start = span_end = None
+    for sub in submitted:
+        due = _parse_iso_local(sub.get("cached_due_date") or (assignment or {}).get("due_at"))
+        submitted_dt = _parse_iso_local(sub.get("submitted_at"))
+        if not due or not submitted_dt:
+            continue
+        span_start = due.date() if span_start is None else min(span_start, due.date())
+        span_end = submitted_dt.date() if span_end is None else max(span_end, submitted_dt.date())
+    if span_start is None:
+        return set(), None
+    bell_schedules, _problems = deps.load_bell_schedules()
+    result = school_calendar.resolve_instructional_range(
+        span_start.isoformat(), span_end.isoformat(), set(bell_schedules))
+    if result["state"] != "ready":
+        return None, result
+    return set(result["no_count_dates"]), None
 
 
 def _late_watch_error(session: dict, *, require_key: bool = False, require_source_context: bool = False) -> str | None:
@@ -37,6 +66,7 @@ def _build_late_catchup_students(
     ai_by_uid: dict,
     ai_failures: dict | None = None,
     batch_id: str,
+    no_count: set,
 ) -> list[dict]:
     roster_settings = config.get_roster_student_settings(course_id)
     tier_map = config.roster_tier_by_id(course_id)
@@ -53,7 +83,6 @@ def _build_late_catchup_students(
         monitored=monitored,
         extra_time_map=extra_time_map,
     )
-    no_count = school_calendar.no_count_dates() if school_calendar.is_configured() else None
     missing_by_user_id: dict[str, dict] = {}
     for sub in submitted:
         uid = str(sub.get("user_id", ""))
@@ -104,6 +133,15 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
             "ai_result": None,
             "appended_user_ids": [],
         }
+
+    # Resolve the school-day math this batch needs BEFORE any AI or
+    # Canvas-write lane: a broken or out-of-range Calendar refuses the whole
+    # batch here rather than running (and billing) the AI workflow and then
+    # silently attaching school_days_late: null.
+    no_count, calendar_failure = _resolve_late_catchup_no_count(adata, new_subs)
+    if calendar_failure is not None:
+        return {"ok": False, "error": school_calendar.CALENDAR_REPAIR_MESSAGE,
+                "status_code": 200, "privacy_steps": []}
 
     is_new_quiz = (adata or {}).get("is_quiz_lti_assignment") is True
     if not is_new_quiz:
@@ -173,6 +211,7 @@ def _run_late_catchup_score(session: dict, *, save_session) -> dict:
         ai_by_uid=ai_result.get("ai_by_uid") or {},
         ai_failures=ai_result.get("ai_failures") or {},
         batch_id=batch_id,
+        no_count=no_count,
     )
     appended_user_ids = [str(st.get("user_id", "")) for st in students if st.get("user_id")]
 

@@ -125,8 +125,10 @@
     </label>
   </div>
   <div class="ce-actions">
-    <button type="button" id="cal-create-submit" class="primary">Create / replace</button>
+    <button type="button" id="cal-create-preview">Preview</button>
+    <button type="button" id="cal-create-apply" class="primary" hidden>Create calendar</button>
   </div>
+  <div id="cal-create-preview-result" class="ce-calendar-preview" hidden></div>
   <p id="cal-create-status" class="status ce-calendar-status"></p>
 </section>
 
@@ -135,7 +137,7 @@
   <p class="ce-hint">CSV files in your Calendars folder. Edit them there; this lists what Calendar can see.</p>
   <div id="calendar-bell-list" class="ce-calendar-bell-list"></div>
   <div class="ce-actions">
-    <button type="button" id="calendar-open-folder" class="small" disabled>Open the Calendars folder</button>
+    <button type="button" id="calendar-open-folder" class="small">Open the Calendars folder</button>
   </div>
 </section>
 

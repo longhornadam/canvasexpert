@@ -33,7 +33,7 @@ def test_both_csv_shapes_keep_legacy_no_count_dates_and_project_events():
         {"name": "Quarter 2", "code": "Q2", "start": "2027-10-16", "end": "2027-12-20"},
     ]
     assert simple_periods == [
-        {"name": "Quarter 1", "code": "", "start": "2027-08-16", "end": "2027-10-15"},
+        {"name": "Quarter 1", "code": "QUARTER_1", "start": "2027-08-16", "end": "2027-10-15"},
     ]
     assert canonical_events == [
         {"kind": "no_school", "label": "Fall Break", "start": "2027-10-10",
@@ -46,5 +46,16 @@ def test_both_csv_shapes_keep_legacy_no_count_dates_and_project_events():
     assert simple_events == [
         {"kind": "no_school", "label": "Fall Break", "start": "2027-10-10",
          "end": "2027-10-12", "source_subtype": "student day off"},
-        {"kind": "grading_period_end", "label": "Quarter 1", "code": "", "end": "2027-10-15"},
+        {"kind": "grading_period_end", "label": "Quarter 1", "code": "QUARTER_1", "end": "2027-10-15"},
     ]
+
+
+def test_simple_format_derives_unique_codes_in_source_order_when_missing():
+    csv_text = (
+        "Category,Name,Start Date,End Date\n"
+        "Academic Period,Term 1,08/16/2027,10/15/2027\n"
+        "Academic Period,Term 1,10/16/2027,12/20/2027\n"
+        "Academic Period,!!!,01/05/2028,03/01/2028\n"
+    )
+    _dates, periods, _events = _parse_calendar_csv(csv_text)
+    assert [p["code"] for p in periods] == ["TERM_1", "TERM_1_2", "PERIOD"]

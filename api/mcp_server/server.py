@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Twenty-four thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Twenty-five thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -192,10 +192,12 @@ def get_bell_schedule(schedule_id: str = "") -> str:
 
 @mcp.tool()
 def get_day_schedule(date: str) -> str:
-    """Teacher blocks resolved for a specific date as {name, label, start, end,
-    raw_periods, schedule_id, period_ids, segments, seq}, sorted by start time.
-    Repeated blocks produce one entry per consecutive meeting run. date is YYYY-MM-DD.
-    No student data."""
+    """Teacher blocks resolved for a specific date, plus the Calendar's own
+    resolution state (unconfigured, invalid_calendar, outside_coverage,
+    no_school, no_regular_classes, unknown_schedule, or ready). Blocks are
+    {name, label, start, end, raw_periods, schedule_id, period_ids, segments,
+    seq}, sorted by start time. Repeated blocks produce one entry per
+    consecutive meeting run. date is YYYY-MM-DD. No student data."""
     return _compact(tools.get_day_schedule(date))
 
 
@@ -231,21 +233,34 @@ def get_school_calendar(date_from: str = "", date_to: str = "") -> str:
 
 
 @mcp.tool()
-def create_school_calendar(school_year: str, coverage_start: str, coverage_end: str,
-                          default_schedule_id: str, weekday_schedules: dict = None,
-                          no_school_dates: list = None, no_regular_classes_dates: list = None,
-                          date_labels: dict = None, grading_periods: list = None,
-                          events: list = None) -> str:
-    """Create or replace the complete canonical School Calendar for one school
-    year. Every date in coverage becomes instructional, a generated weekend,
-    or an explicit no-school/no-regular-classes day. No course ID or student
-    data. Writes live immediately -- there is no review queue for this tool;
-    summarize the request to the teacher before calling it."""
-    return _compact(tools.create_school_calendar(
+def preview_school_calendar_replacement(school_year: str, coverage_start: str, coverage_end: str,
+                                       default_schedule_id: str, weekday_schedules: dict = None,
+                                       no_school_dates: list = None,
+                                       no_regular_classes_dates: list = None,
+                                       date_labels: dict = None, grading_periods: list = None,
+                                       events: list = None) -> str:
+    """Preview creating or replacing the complete canonical School Calendar for
+    one school year: every date in coverage becomes instructional, a generated
+    weekend, or an explicit no-school/no-regular-classes day. Returns the base
+    revision (0 for a first-ever calendar), current vs. proposed school year
+    and coverage, and material change counts. Summarize this to the teacher
+    and get their confirmation before calling
+    apply_school_calendar_replacement with its base_revision as
+    expected_revision. No course ID or student data."""
+    return _compact(tools.preview_school_calendar_replacement(
         school_year, coverage_start, coverage_end, default_schedule_id,
         weekday_schedules, no_school_dates, no_regular_classes_dates,
         date_labels, grading_periods, events,
     ))
+
+
+@mcp.tool()
+def apply_school_calendar_replacement(preview: dict, expected_revision: int) -> str:
+    """Apply a preview returned by preview_school_calendar_replacement. Pass
+    the preview object back verbatim along with its base_revision as
+    expected_revision; a stale revision is refused rather than silently
+    reapplied against newer state. No course ID or student data."""
+    return _compact(tools.apply_school_calendar_replacement(preview, expected_revision))
 
 
 @mcp.tool()

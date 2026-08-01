@@ -5,11 +5,10 @@ Keeping service functions here breaks circular-import risk and makes them
 unit-testable without HTTP.
 """
 import json
-from datetime import timedelta
 from pathlib import Path
 
-from . import config, school_calendar
-from .schooldays import _parse_iso_local, _add_school_days
+from . import config, deps, school_calendar
+from .schooldays import _parse_iso_local
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
 
@@ -164,21 +163,23 @@ def _apply_curve_model(scored_students, curve_type, settings, points_possible):
 
 
 def _split_for_extra_time(course_id, student_ids, base_due_iso, base_lock_iso=None):
-    """Partition a tier's student_ids by the course extra-time roster."""
+    """Partition a tier's student_ids by the course extra-time roster.
+
+    Returns ``{"ok": True, "standard": [...], "extended": [...]}`` on success.
+    On a Calendar failure (unconfigured, invalid, the due/lock date outside
+    coverage, or an instructional day in range naming an unloaded Bell
+    Schedule) returns ``{"ok": False, "error": ..., "problems": [...]}``
+    instead of silently treating every student as standard -- a broken
+    calendar must not silently drop extended due dates.
+    """
     roster = {str(e["id"]): int(e.get("days", 1))
               for e in config.get_extra_time(course_id)}
     base_due = _parse_iso_local(base_due_iso) if base_due_iso else None
-    # An unconfigured calendar has no reliable school-day math -- decline the
-    # extension rather than silently compute it counting weekends as school
-    # days (which would make every extended due date too early).
-    if not roster or not base_due or not school_calendar.is_configured():
-        return {"standard": list(student_ids), "extended": []}
+    if not roster or not base_due:
+        return {"ok": True, "standard": list(student_ids), "extended": []}
 
-    # 120 calendar days is a wide safety margin over any realistic extra-time
-    # day count (single digits in practice); _add_school_days only needs the
-    # no-count set to cover as far as it will actually walk.
-    horizon = (base_due.date() + timedelta(days=120)).isoformat()
-    no_count = school_calendar.no_count_dates(base_due.date().isoformat(), horizon)
+    bell_schedules, _problems = deps.load_bell_schedules()
+    known_schedule_ids = set(bell_schedules)
     base_lock = _parse_iso_local(base_lock_iso) if base_lock_iso else None
 
     standard, buckets = [], {}
@@ -191,16 +192,30 @@ def _split_for_extra_time(course_id, student_ids, base_due_iso, base_lock_iso=No
 
     extended = []
     for days in sorted(buckets):
-        ext = {"days": days, "student_ids": buckets[days],
-               "due_at": _add_school_days(base_due, days, no_count).isoformat()}
+        due_at, failure = school_calendar.add_school_days_checked(
+            base_due, days, known_schedule_ids)
+        if failure is not None:
+            return {"ok": False, "error": school_calendar.CALENDAR_REPAIR_MESSAGE,
+                    "problems": failure["problems"]}
+        ext = {"days": days, "student_ids": buckets[days], "due_at": due_at.isoformat()}
         if base_lock:
-            ext["lock_at"] = _add_school_days(base_lock, days, no_count).isoformat()
+            lock_at, failure = school_calendar.add_school_days_checked(
+                base_lock, days, known_schedule_ids)
+            if failure is not None:
+                return {"ok": False, "error": school_calendar.CALENDAR_REPAIR_MESSAGE,
+                        "problems": failure["problems"]}
+            ext["lock_at"] = lock_at.isoformat()
         extended.append(ext)
-    return {"standard": standard, "extended": extended}
+    return {"ok": True, "standard": standard, "extended": extended}
 
 
 def _expand_variants_extra_time(course_id, entries, settings):
-    """Bake per-student extra-time overrides into a push_tiers manifest."""
+    """Bake per-student extra-time overrides into a push_tiers manifest.
+
+    A tier whose extra-time split fails closed (see _split_for_extra_time)
+    keeps its whole-group override and carries an explicit "extra_time_error"
+    instead of silently pushing every student on the standard due date.
+    """
     try:
         s = json.loads(settings) if settings else {}
     except json.JSONDecodeError:
@@ -211,6 +226,9 @@ def _expand_variants_extra_time(course_id, entries, settings):
         if not sids:
             continue
         split = _split_for_extra_time(course_id, sids, base_due, base_lock)
+        if not split.get("ok", True):
+            e["extra_time_error"] = split.get("error")
+            continue
         if not split["extended"]:
             continue
         label = e.get("label", "tier")

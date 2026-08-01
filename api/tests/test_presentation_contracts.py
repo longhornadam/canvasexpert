@@ -80,7 +80,6 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages.config, "get_download_root", lambda: "")
     monkeypatch.setattr(pages.school_calendar, "readiness", lambda **kw: {"status": "unconfigured", "problems": ["unconfigured"]})
     monkeypatch.setattr(pages.school_calendar, "read", lambda root=None: (None, ["unconfigured"]))
-    monkeypatch.setattr(pages.school_calendar, "no_count_dates", lambda *a, **kw: set())
     monkeypatch.setattr(pages.config, "get_tier_tags", lambda: {
         "Support": "", "Core": "", "Accelerate": "", "Extend": "",
     })
@@ -280,10 +279,8 @@ def test_class_schedule_editor_edits_block_periods_and_course_separately():
     assert 'data-field="periods"' in text
     assert 'data-field="label"' in text
     assert 'data-field="course_id"' in text
-    assert '<optgroup label="Current">' in text
-    assert '<optgroup label="Previous">' in text
     assert '<option value="">(none)</option>' in text
-    assert "not a saved course" in text
+    assert "not a Current course; choose one or clear" in text
     assert "disabled" in text
     assert "Settings &rarr; Current courses" in text
     assert 'data-field="course"' not in text

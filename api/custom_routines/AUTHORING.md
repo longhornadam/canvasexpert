@@ -55,7 +55,7 @@ Everything below is already in scope when your file runs. There are no imports t
 | `canvas_send(method, path, body)` | `"PUT"|"POST"|"PATCH", str, dict` | `(data, err)` — `data` is parsed JSON or `{}` |
 | `active_courses()` | no args | `[{id, name, nickname, active}]` — only bookmarked+active courses |
 | `sweep_settings()` | no args | `{honor_extra_time: bool}` |
-| `combined_calendar(date_from, date_to)` | optional `date_from`, `date_to` YYYY-MM-DD (whole configured year if omitted) | `{readiness: {…}, no_count_dates: [str], grading_periods: […], events: […]}` |
+| `combined_calendar(date_from, date_to)` | optional `date_from`, `date_to` YYYY-MM-DD (whole configured year if omitted) | success: `{ok: true, readiness: {…}, no_count_dates: [str], grading_periods: […], events: […]}`; failure: `{ok: false, state, problems: […], repair_url, readiness: {…}}` — always check `ok` before trusting `no_count_dates` |
 | `school_days_late(due_dt, sub_dt, no_count_dates)` | two datetimes + a `{date_str, …}` set | `int` — school-day count |
 | `parse_iso_local(s)` | Canvas ISO string | `datetime` or `None` |
 | `datetime` | Python's `datetime` module | — |

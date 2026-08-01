@@ -87,7 +87,7 @@ def _bell_schedule_feed(date_str: str) -> dict:
     clock via datetime.now().strftime("%H:%M") against each block's start/end
     strings."""
     try:
-        blocks, _problems = deps.resolve_schedule_for(date_str)
+        blocks = deps.resolve_schedule_for(date_str)["blocks"]
     except Exception:
         blocks = []
     try:
@@ -146,8 +146,7 @@ def _synthesize_academic_events(projection: dict) -> list[dict]:
 
 def _school_events_feed(date_str: str, lookahead_days: int, root) -> list[dict]:
     """Teacher-recorded public school events from the canonical calendar's
-    events array, tagged, filtered, stripped -- same pipeline as before, now
-    sourced from School Calendar.json instead of the retired school-events.json."""
+    events array, tagged, filtered, and stripped for classroom display."""
     try:
         day = date_type.fromisoformat(date_str)
         horizon = day + timedelta(days=lookahead_days)

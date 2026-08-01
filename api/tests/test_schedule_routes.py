@@ -72,9 +72,6 @@ def test_get_api_schedule_reports_missing_bell_schedules_explicitly(isolated_wor
         json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
         encoding="utf-8",
     )
-    (calendars / "Day Calendar.csv").write_text(
-        "date,schedule_id\n2026-08-17,missing_bell\n", encoding="utf-8"
-    )
     data = client.get("/api/schedule").json()
     assert data["ready"] is False
     assert "no bell schedules found" in data["missing"]
@@ -91,9 +88,7 @@ def test_get_api_schedule_returns_blocks_verbatim_including_unknown_keys(isolate
     assert client.get("/api/schedule").json()["blocks"] == blocks
 
 
-def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_courses(
-    isolated_workspace, monkeypatch
-):
+def test_schedule_course_binding_lists_saved_courses(isolated_workspace, monkeypatch):
     calendars, _smartdecks = _folders(isolated_workspace)
     _bell_schedule(calendars)
     courses = [
@@ -101,6 +96,7 @@ def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_
         {"id": "9000002", "name": "Course B", "nickname": "", "active": False},
     ]
     monkeypatch.setattr(config, "saved_courses", lambda: courses)
+    monkeypatch.setattr(config, "active_courses", lambda: [c for c in courses if c["active"]])
     monkeypatch.setattr(
         config, "course_display_name",
         lambda course_id: {"9000001": "A", "9000002": "Course B"}[str(course_id)],
@@ -109,7 +105,7 @@ def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_
         "name": "Algebra",
         "raw_periods": [1, 2],
         "label": "Math 7",
-        "course_id": "missing-course",
+        "course_id": "9000001",
         "custom": {"keep": True},
     }]
 
@@ -122,6 +118,35 @@ def test_schedule_course_binding_round_trip_reports_unknown_ids_and_lists_saved_
         {"id": "9000001", "name": "A", "active": True},
         {"id": "9000002", "name": "Course B", "active": False},
     ]
+
+
+def test_schedule_course_binding_rejects_a_non_current_course_id(isolated_workspace, monkeypatch):
+    calendars, _smartdecks = _folders(isolated_workspace)
+    _bell_schedule(calendars)
+    courses = [{"id": "9000001", "name": "Course A", "nickname": "A", "active": True}]
+    monkeypatch.setattr(config, "saved_courses", lambda: courses)
+    monkeypatch.setattr(config, "active_courses", lambda: courses)
+    blocks = [{"name": "Algebra", "raw_periods": [1], "course_id": "missing-course"}]
+
+    response = client.post("/api/schedule/teacher", data={"blocks": json.dumps(blocks)})
+    data = response.json()
+    assert data["ok"] is False
+    assert "not a Current course" in data["problems"][0]
+
+
+def test_schedule_reports_unknown_course_id_already_on_disk_without_blocking_the_read(
+    isolated_workspace, monkeypatch
+):
+    _calendars, smartdecks = _folders(isolated_workspace)
+    courses = [{"id": "9000001", "name": "Course A", "nickname": "A", "active": True}]
+    monkeypatch.setattr(config, "saved_courses", lambda: courses)
+    monkeypatch.setattr(config, "active_courses", lambda: courses)
+    (smartdecks / "Teacher Schedule.json").write_text(
+        json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1],
+                                "course_id": "missing-course"}]}),
+        encoding="utf-8",
+    )
+    data = client.get("/api/schedule").json()
     assert data["pieces"]["teacher_schedule"]["unknown_course_ids"] == ["missing-course"]
 
 

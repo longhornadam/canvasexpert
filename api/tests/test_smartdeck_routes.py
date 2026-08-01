@@ -204,8 +204,5 @@ def test_smartdeck_readiness_names_the_missing_bell_schedules(isolated_workspace
         json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
         encoding="utf-8",
     )
-    (calendars / "Day Calendar.csv").write_text(
-        "date,schedule_id\n2026-08-17,missing_bell\n", encoding="utf-8"
-    )
     data = client.get("/smartdeck/api/readiness").json()
     assert "no bell schedules found" in data["missing"]

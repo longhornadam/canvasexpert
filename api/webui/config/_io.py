@@ -125,15 +125,10 @@ DOWNLOAD_ROOT_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Canvas
 # self-update mirrors wholesale -- see runtime_paths.migrate_legacy_file().
 LEGACY_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "config.json")
 CONFIG_PATH = str(runtime_paths.local_app_dir() / "config.json")
-SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "calendars", "tier_tags",
+SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "tier_tags",
                "ai_ta_persona", "roster_student_settings", "roster_tier_schemes",
                "roster_group_schemes", "roster_score_matrices", "roster_relationships",
                "seating_course_states", "monitored_students")
-
-
-def _source_label(key: str) -> str:
-    """Prettify a calendar key into a display label (district-agnostic)."""
-    return key.replace("_", " ").title().replace("Isd", "ISD")
 
 
 def _machine_load():
@@ -144,18 +139,6 @@ def _machine_load():
         data = json.load(f)
     data.setdefault("canvas_base", CANVAS_BASE_DEFAULT)
     data.setdefault("saved_courses", [])
-    # One-time migration: flat academic_calendar → calendars dict
-    if "academic_calendar" in data and "calendars" not in data:
-        old = data.pop("academic_calendar", {})
-        src = old.get("source") or "custom"
-        data["calendars"] = {}
-        if old.get("no_count_dates") or old.get("grading_periods"):
-            data["calendars"][src] = {
-                "label":          _source_label(src),
-                "no_count_dates": sorted(set(old.get("no_count_dates") or [])),
-                "grading_periods": old.get("grading_periods") or [],
-            }
-        _machine_save(data)
     return data
 
 

@@ -112,6 +112,7 @@
 
 </div>
 
+<script src="/static/pages/panels_clipboard.js?v={{ asset_v }}"></script>
 <script>
 (function () {
   "use strict";
@@ -125,40 +126,14 @@
      stays short and a later change of default is not frozen into old boards. */
   var DEFAULT_THEME = document.querySelector(".pn-stack").dataset.defaultTheme;
 
-  /* Select an element's text via Range/Selection so execCommand("copy") has
-     something to act on -- the address is shown in a <code>, not an input,
-     so it cannot .select() itself the way the embed <input> can. */
-  function selectText(el) {
-    var range = document.createRange();
-    range.selectNodeContents(el);
-    var selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
-
-  function execCommandCopy(el) {
-    try {
-      selectText(el);
-      var ok = document.execCommand("copy");
-      window.getSelection().removeAllRanges();
-      return ok;
-    } catch (e) {
-      return false;
-    }
-  }
-
   /* Copy feedback must reflect what actually happened: the Clipboard API can
      silently fail to be available, and execCommand can return false. Reporting
      "Copied" regardless would tell a teacher their embed code is on the
-     clipboard when it never left the page. */
-  function copyText(text, fallbackEl) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text).then(
-        function () { return true; },
-        function () { return execCommandCopy(fallbackEl); }
-      );
-    }
-    return Promise.resolve(execCommandCopy(fallbackEl));
+     clipboard when it never left the page. copyPanelText (panels_clipboard.js)
+     picks the right native selection for each source element: Range/Selection
+     for the address <code>, input .select() for the embed <input>. */
+  function copyText(text, fallbackEl, isInput) {
+    return copyPanelText(text, fallbackEl, isInput, document, window);
   }
 
   document.querySelectorAll(".pn-card").forEach(function (card) {
@@ -202,8 +177,7 @@
         var isLink = button.dataset.copy === "link";
         var text = isLink ? url() : embed.value;
         var fallbackEl = isLink ? address : embed;
-        if (!isLink) embed.select();
-        copyText(text, fallbackEl).then(function (ok) {
+        copyText(text, fallbackEl, !isLink).then(function (ok) {
           copied.hidden = false;
           copied.textContent = ok ? "Copied" : "Could not copy — select and copy the address below.";
         });

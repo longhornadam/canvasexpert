@@ -33,7 +33,7 @@ def isolated_workspace(tmp_path, monkeypatch):
 
 @pytest.fixture
 def schedule_fixture(isolated_workspace):
-    """Set up a complete Teacher Schedule + Bell Schedule + Day Calendar."""
+    """Set up a complete Teacher Schedule + Bell Schedule + canonical School Calendar."""
     workspace_root = isolated_workspace
     smartdecks_dir = workspace_root / "Library" / "SmartDecks"
     smartdecks_dir.mkdir(parents=True, exist_ok=True)

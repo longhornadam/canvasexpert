@@ -5,7 +5,7 @@ import json
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import config, schedule_setup, workspace
+from .. import config, schedule_setup
 
 
 router = APIRouter(tags=["schedule"])
@@ -33,10 +33,6 @@ def get_schedule():
             }
             for course in config.saved_courses()
         ],
-        "folders": {
-            "calendars": workspace.library_folder("Calendars"),
-            "smartdecks": workspace.library_folder("SmartDecks"),
-        },
     })
 
 

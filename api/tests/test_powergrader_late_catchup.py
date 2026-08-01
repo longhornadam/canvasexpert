@@ -123,8 +123,12 @@ def _patch_late_score_env(monkeypatch):
     monkeypatch.setattr(powergrader.config, "get_openrouter_model", lambda: "model-a")
     monkeypatch.setattr(powergrader.config, "has_openrouter_key", lambda: True)
     from api.webui import school_calendar as school_calendar_module
-    monkeypatch.setattr(school_calendar_module, "is_configured", lambda root=None: True)
-    monkeypatch.setattr(school_calendar_module, "no_count_dates", lambda *a, **kw: set())
+    monkeypatch.setattr(
+        school_calendar_module, "resolve_instructional_range",
+        lambda date_from, date_to, known_schedule_ids, **kw: {
+            "state": "ready", "date_from": date_from, "date_to": date_to,
+            "days": {}, "no_count_dates": [],
+        })
 
 
 def test_find_new_submissions_filters_unsubmitted_and_existing_students():
@@ -315,6 +319,36 @@ def test_push_grades_includes_late_override_for_late_catchup_student():
     assert payloads[0]["submission"]["seconds_late_override"] == 86400
     assert payloads[0]["comment"]["text_comment"] == "Nice work."
     assert saved["students"][0]["posted"] is True
+
+
+def test_late_score_refuses_before_ai_when_calendar_cannot_cover_the_range(monkeypatch):
+    """A broken Calendar must refuse the whole late-catch-up batch with the
+    shared repair message before the AI workflow (or any Canvas write) runs
+    -- never silently attach school_days_late: null."""
+    state, load_session, save_session = _make_session_state(_assist_session())
+    _patch_late_score_env(monkeypatch)
+
+    from api.webui import school_calendar as school_calendar_module
+    monkeypatch.setattr(
+        school_calendar_module, "resolve_instructional_range",
+        lambda date_from, date_to, known_schedule_ids, **kw: {
+            "state": "unconfigured", "problems": ["unconfigured"], "repair_url": "/calendar",
+        })
+
+    monkeypatch.setattr(powergrader, "_load_session", load_session)
+    monkeypatch.setattr(powergrader, "_save_session", save_session)
+    monkeypatch.setattr(powergrader.canvas_fetch, "fetch_submissions", lambda course_id, assignment_id: (_late_submission_rows(), {"name": "Essay", "description": "Explain the text.", "due_at": "2026-09-10T23:59:00Z"}, None))
+    monkeypatch.setattr(powergrader.canvas_fetch, "ingest_ordinary_attachments",
+                        lambda subs, **kwargs: (_ for _ in ()).throw(AssertionError("must not ingest before the calendar check")))
+    monkeypatch.setattr(powergrader.ai_workflow, "run_ai_workflow",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("AI workflow should not run")))
+
+    response = powergrader.pg_late_score("sid")
+    data = _response_json(response)
+
+    assert data["ok"] is False
+    assert data["error"] == school_calendar_module.CALENDAR_REPAIR_MESSAGE
+    assert len(state["students"]) == 1  # nothing appended
 
 
 def test_late_routes_reject_non_assisted_session(monkeypatch):

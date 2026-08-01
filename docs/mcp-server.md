@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 16.
+Tool schema version 17.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -51,7 +51,8 @@ Tool schema version 16.
 | `save_deck(date, title, slides, widgets=None)` | Validates and writes a SmartDeck deck live (no review queue) | No |
 | `save_teacher_schedule(blocks)` | Replaces the teacher's SmartDeck blocks live | No |
 | `get_school_calendar(date_from="", date_to="")` | Canonical School Calendar readiness, plus a bounded range of days/grading-periods/events when both dates are given | No |
-| `create_school_calendar(school_year, coverage_start, coverage_end, default_schedule_id, ...)` | Creates/replaces the complete canonical School Calendar for one year, live | No |
+| `preview_school_calendar_replacement(school_year, coverage_start, coverage_end, default_schedule_id, ...)` | Previews creating/replacing the complete canonical School Calendar for one year; returns the base revision (0 for a first-ever calendar) and material change counts | No |
+| `apply_school_calendar_replacement(preview, expected_revision)` | Applies a previewed create/replace; refuses a stale `expected_revision` | No |
 | `preview_school_calendar_change(kind, ...)` | Previews a day-kind/schedule/label change against the live calendar; returns the base revision and affected dates | No |
 | `apply_school_calendar_change(preview, expected_revision)` | Applies a previewed change; refuses a stale `expected_revision` | No |
 | `list_active_decks()` | Lists active decks | No |
@@ -77,13 +78,17 @@ and no safety scan. `save_teacher_schedule` has no `course_id` parameter and mak
 Canvas call; a teacher-set block `course_id` passes through untouched after string
 validation, so an assistant can read, edit, and write the binding safely.
 
-The four canonical Calendar tools (`get_school_calendar`, `create_school_calendar`,
+The five canonical Calendar tools (`get_school_calendar`,
+`preview_school_calendar_replacement`, `apply_school_calendar_replacement`,
 `preview_school_calendar_change`, `apply_school_calendar_change`) share the same
-exemption: no `course_id`, no student data, no course gate, no safety scan. `create` and
-`apply` write live with no review queue, so the authoring contract instructs the
-assistant to translate pasted public schedule facts into a preview, summarize affected
-dates and conflicts, and apply only after the teacher accepts that summary — never
-inside an email/inbox integration or a free-text parser built into CanvasExpert itself.
+exemption: no `course_id`, no student data, no course gate, no safety scan. Both writes
+are staged preview/apply pairs, never a one-click overwrite: base revision is 0 only
+before any calendar exists, and every successful write after that — including a complete
+replacement — advances the revision by exactly one, never resetting it. The authoring
+contract instructs the assistant to translate pasted public schedule facts into a
+preview, summarize affected dates/years and conflicts, and apply only after the teacher
+accepts that summary — never inside an email/inbox integration or a free-text parser
+built into CanvasExpert itself.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
 the app actually does — an assistant that sees only the read tools cannot tell that

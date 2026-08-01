@@ -27,6 +27,7 @@ def _parse_calendar_csv(content: str) -> tuple:
     """
     import csv as _csv
     import io as _io
+    import re as _re
     from datetime import date as _date, timedelta as _td
 
     _NO_SCHOOL_TYPES = {"holiday", "no school for students",
@@ -52,9 +53,25 @@ def _parse_calendar_csv(content: str) -> tuple:
             out.add(d.isoformat())
             d += _td(days=1)
 
+    def _derive_code(name: str, used: set) -> str:
+        """Deterministic uppercase alphanumeric/underscore slug from a Simple-
+        format period's name, for a source row that carries no code column.
+        Collisions resolve with _2, _3, ... in source order."""
+        slug = _re.sub(r"[^A-Z0-9]+", "_", (name or "").strip().upper()).strip("_")
+        if not slug:
+            slug = "PERIOD"
+        candidate = slug
+        suffix = 2
+        while candidate in used:
+            candidate = f"{slug}_{suffix}"
+            suffix += 1
+        used.add(candidate)
+        return candidate
+
     dates: set = set()
     periods: list = []
     events: list = []
+    used_codes: set = set()
     reader = _csv.DictReader(_io.StringIO(content))
     fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
     canonical = "row_type" in fieldnames and "start_date" in fieldnames
@@ -106,6 +123,8 @@ def _parse_calendar_csv(content: str) -> tuple:
                                "start": d_start.isoformat(), "end": d_end.isoformat(),
                                "source_subtype": row_type})
             elif "academic period" in row_type:
+                if not code:
+                    code = _derive_code(name, used_codes)
                 period = {"name": name, "code": code,
                                 "start": d_start.isoformat(),
                                 "end":   d_end.isoformat()}

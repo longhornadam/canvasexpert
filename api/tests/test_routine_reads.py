@@ -197,11 +197,13 @@ def test_grading_debt_uses_read_scope_with_zero_live_calls_when_fresh(monkeypatc
     monkeypatch.setattr(routines_builtin.config, "active_courses",
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
-                        lambda: {"skip_weekends": True, "holidays": []})
-    monkeypatch.setattr(routines_builtin.school_calendar, "is_configured",
-                        lambda root=None: True)
-    monkeypatch.setattr(routines_builtin.school_calendar, "no_count_dates",
-                        lambda *a, **kw: set())
+                        lambda: {"honor_extra_time": True})
+    monkeypatch.setattr(
+        routines_builtin.school_calendar, "resolve_instructional_range",
+        lambda date_from, date_to, known_schedule_ids, **kw: {
+            "state": "ready", "date_from": date_from, "date_to": date_to,
+            "days": {}, "no_count_dates": [],
+        })
     result = routines_builtin._run_routine_grading_debt({"school_days": 3})
     assert result["ok"] is True
     assert "1 ungraded" in result["summary"]
@@ -213,11 +215,13 @@ def test_grading_debt_falls_back_live_via_read_scope_when_stale(monkeypatch, tmp
     monkeypatch.setattr(routines_builtin.config, "active_courses",
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
-                        lambda: {"skip_weekends": True, "holidays": []})
-    monkeypatch.setattr(routines_builtin.school_calendar, "is_configured",
-                        lambda root=None: True)
-    monkeypatch.setattr(routines_builtin.school_calendar, "no_count_dates",
-                        lambda *a, **kw: set())
+                        lambda: {"honor_extra_time": True})
+    monkeypatch.setattr(
+        routines_builtin.school_calendar, "resolve_instructional_range",
+        lambda date_from, date_to, known_schedule_ids, **kw: {
+            "state": "ready", "date_from": date_from, "date_to": date_to,
+            "days": {}, "no_count_dates": [],
+        })
 
     def fake_get(path, params=None, timeout=None):
         if path.endswith("/assignments"):
@@ -262,11 +266,13 @@ def test_grading_debt_lines_never_serialize_the_source_envelope(monkeypatch, tmp
     monkeypatch.setattr(routines_builtin.config, "active_courses",
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
-                        lambda: {"skip_weekends": True, "holidays": []})
-    monkeypatch.setattr(routines_builtin.school_calendar, "is_configured",
-                        lambda root=None: True)
-    monkeypatch.setattr(routines_builtin.school_calendar, "no_count_dates",
-                        lambda *a, **kw: set())
+                        lambda: {"honor_extra_time": True})
+    monkeypatch.setattr(
+        routines_builtin.school_calendar, "resolve_instructional_range",
+        lambda date_from, date_to, known_schedule_ids, **kw: {
+            "state": "ready", "date_from": date_from, "date_to": date_to,
+            "days": {}, "no_count_dates": [],
+        })
     result = routines_builtin._run_routine_grading_debt({"school_days": 3})
     blob = " ".join(result["lines"]) + result["summary"]
     for leaked in ("mirror", "canvas", "generation", "synced_at"):

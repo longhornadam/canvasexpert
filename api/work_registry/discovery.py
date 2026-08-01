@@ -11,8 +11,8 @@ from api.webui.canvas_client import _canvas_get_all
 
 from . import storage
 from .models import validate_job, validate_registry_document
-from .providers import (CourseTimeout, DiscoveryDeadline, CourseUnavailable,
-                         ProviderFailure, WorkCourseReads)
+from .providers import (CalendarNeedsAttention, CourseTimeout, DiscoveryDeadline,
+                         CourseUnavailable, ProviderFailure, WorkCourseReads)
 from .providers import grading_debt, home_attention, late_work, roster_warnings
 
 
@@ -37,6 +37,8 @@ def _error_code(exc: Exception) -> str:
         return "course_timeout"
     if isinstance(exc, CourseUnavailable):
         return "course_unavailable"
+    if isinstance(exc, CalendarNeedsAttention):
+        return "calendar_needs_attention"
     if isinstance(exc, ProviderFailure):
         return "provider_failed"
     return "provider_failed"

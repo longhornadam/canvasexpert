@@ -80,7 +80,7 @@ class TestResolveFeedBellSchedule:
         ]
         monkeypatch.setattr(
             "api.webui.deps.resolve_schedule_for",
-            lambda date_str: (fixture_blocks, [])
+            lambda date_str: {"state": "ready", "blocks": fixture_blocks, "problems": []}
         )
         monkeypatch.setattr(
             "api.webui.deps.load_bell_schedules",
@@ -104,7 +104,7 @@ class TestResolveFeedBellSchedule:
         """A no-class day still reports the schedule selected by the calendar."""
         monkeypatch.setattr(
             "api.webui.deps.resolve_schedule_for",
-            lambda date_str: ([], [])
+            lambda date_str: {"state": "ready", "blocks": [], "problems": []}
         )
         monkeypatch.setattr(
             "api.webui.deps.load_bell_schedules",
@@ -142,7 +142,7 @@ class TestResolveFeedBellSchedule:
         ]
         monkeypatch.setattr(
             "api.webui.deps.resolve_schedule_for",
-            lambda date_str: (fixture_blocks, [])
+            lambda date_str: {"state": "ready", "blocks": fixture_blocks, "problems": []}
         )
 
         # Test with a past date
@@ -163,7 +163,7 @@ class TestResolveFeedBellSchedule:
         ]
         monkeypatch.setattr(
             "api.webui.deps.resolve_schedule_for",
-            lambda date_str: (fixture_blocks, [])
+            lambda date_str: {"state": "ready", "blocks": fixture_blocks, "problems": []}
         )
 
         today_str = date.today().isoformat()

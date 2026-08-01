@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from api.webui import config, school_calendar
+from api.webui import config, deps, school_calendar
 from api.webui.schooldays import _parse_iso_local, _school_days_late_detail
 
-from . import WorkCourseReads, check_deadline, finding, text
+from . import CalendarNeedsAttention, WorkCourseReads, check_deadline, finding, text
 
 
 def _int(value, default=0) -> int:
@@ -18,10 +18,6 @@ def _int(value, default=0) -> int:
 
 
 def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
-    if not school_calendar.is_configured():
-        # No calendar means no reliable school-day math -- decline rather
-        # than silently treat every day (weekends included) as instructional.
-        return []
     check_deadline(reads._deadline)
     assignments = reads.assignments()
     check_deadline(reads._deadline)
@@ -36,15 +32,9 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         for item in assignments
         if isinstance(item, dict) and text(item.get("id")) and item.get("published", True)
     }
-    aggregates: dict[str, dict] = defaultdict(lambda: {
-        "total": 0,
-        "pending": 0,
-        "affected": 0,
-        "latest_submitted_at": "",
-        "latest_attempt_number": 0,
-        "due_at": "",
-    })
-    no_count = school_calendar.no_count_dates()
+
+    candidates = []
+    span_start = span_end = None
     for submission in submissions:
         if not isinstance(submission, dict) or submission.get("excused"):
             continue
@@ -61,6 +51,33 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         submitted = _parse_iso_local(submitted_at)
         if not due or not submitted:
             continue
+        candidates.append((submission, assignment_id, due, submitted, due_at, submitted_at))
+        span_start = due.date() if span_start is None else min(span_start, due.date())
+        span_end = submitted.date() if span_end is None else max(span_end, submitted.date())
+
+    # No calendar (or one that can't cover every due/submitted date here)
+    # means no reliable school-day math -- raise rather than silently treat
+    # every day (weekends included) as instructional. The caller marks this
+    # course's scan stale and falls back to its last-known-good findings
+    # instead of confidently reporting zero.
+    no_count: set[str] = set()
+    if candidates:
+        bell_schedules, _problems = deps.load_bell_schedules()
+        result = school_calendar.resolve_instructional_range(
+            span_start.isoformat(), span_end.isoformat(), set(bell_schedules))
+        if result["state"] != "ready":
+            raise CalendarNeedsAttention()
+        no_count = set(result["no_count_dates"])
+
+    aggregates: dict[str, dict] = defaultdict(lambda: {
+        "total": 0,
+        "pending": 0,
+        "affected": 0,
+        "latest_submitted_at": "",
+        "latest_attempt_number": 0,
+        "due_at": "",
+    })
+    for submission, assignment_id, due, submitted, due_at, submitted_at in candidates:
         school_days, _ = _school_days_late_detail(due, submitted, no_count)
         allowed_days = extra_days.get(text(submission.get("user_id")), 0)
         if school_days <= allowed_days:

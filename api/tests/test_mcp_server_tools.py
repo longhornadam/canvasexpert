@@ -1609,7 +1609,8 @@ def test_server_registers_the_expected_tool_set():
         "get_authoring_contract", "get_product_guide", "list_staged_content",
         "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
         "save_deck", "save_teacher_schedule",
-        "get_school_calendar", "create_school_calendar",
+        "get_school_calendar",
+        "preview_school_calendar_replacement", "apply_school_calendar_replacement",
         "preview_school_calendar_change", "apply_school_calendar_change",
         "list_active_decks", "archive_deck",
     }
@@ -1696,6 +1697,8 @@ def test_save_teacher_schedule_preserves_unknown_keys_and_block_order(monkeypatc
 
 def test_save_teacher_schedule_preserves_course_id(monkeypatch, tmp_path):
     path = _teacher_schedule_workspace(monkeypatch, tmp_path)
+    monkeypatch.setattr(tools.config, "active_courses",
+                        lambda: [{"id": "9000001", "name": "Algebra", "active": True}])
     blocks = [{
         "name": "Algebra",
         "raw_periods": [1],
@@ -1797,16 +1800,31 @@ def test_server_registers_get_school_calendar_wrapper(monkeypatch):
     assert json.loads(wire) == {"ok": True, "readiness": {"status": "ready"}}
 
 
-def test_server_registers_create_school_calendar_wrapper(monkeypatch):
+def test_server_registers_preview_school_calendar_replacement_wrapper(monkeypatch):
     from api.mcp_server import server
 
-    monkeypatch.setattr(tools, "create_school_calendar", lambda *args: {
+    monkeypatch.setattr(tools, "preview_school_calendar_replacement", lambda *args: {
+        "ok": True, "operation": "create", "base_revision": 0,
+        "proposed_school_year": "2026-27",
+    })
+    wire = server.preview_school_calendar_replacement(
+        "2026-27", "2026-08-17", "2027-06-04", "ordinary"
+    )
+    assert json.loads(wire) == {
+        "ok": True, "operation": "create", "base_revision": 0,
+        "proposed_school_year": "2026-27",
+    }
+
+
+def test_server_registers_apply_school_calendar_replacement_wrapper(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "apply_school_calendar_replacement",
+                        lambda preview, expected_revision: {
         "ok": True, "revision": 1, "school_year": "2026-27",
         "coverage": {"start": "2026-08-17", "end": "2027-06-04"}, "day_count": 292,
     })
-    wire = server.create_school_calendar(
-        "2026-27", "2026-08-17", "2027-06-04", "ordinary"
-    )
+    wire = server.apply_school_calendar_replacement({"base_revision": 0}, 0)
     assert json.loads(wire) == {
         "ok": True, "revision": 1, "school_year": "2026-27",
         "coverage": {"start": "2026-08-17", "end": "2027-06-04"}, "day_count": 292,

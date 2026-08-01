@@ -18,7 +18,7 @@ BELL_FILES = [
     "Bell Schedule - Example Day B.csv",
     "Bell Schedule - Example Short Day.csv",
 ]
-DAY_CALENDAR_FILE = "Day Calendar - Example Alternating Day Split.csv"
+SCHEDULE_MAP_FILE = "Schedule Map - Example Alternating Day Split.csv"
 MONDAY = "2026-08-17"
 TUESDAY = "2026-08-18"
 WEDNESDAY = "2026-08-19"
@@ -28,12 +28,11 @@ SECOND_SHORT_DAY = "2026-08-27"
 ALL_CHECK_DATES = [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SECOND_SHORT_DAY]
 
 
-def _read_fixture_day_map(content: str) -> dict:
+def _read_fixture_schedule_map(content: str) -> dict:
     """A tiny local reader for the fixture's date,schedule_id CSV.
 
-    The production day-calendar parser is retired (dates now live in the
-    canonical School Calendar.json); this fixture format is still the
-    convenient way to express "which schedule applies which day" test data.
+    This test-only map is a convenient way to express which schedule applies
+    on each date without making the pure schedule resolver read workspace data.
     """
     mapping = {}
     reader = csv.DictReader(io.StringIO(content))
@@ -53,8 +52,8 @@ def schedule():
         assert problems == [], f"{filename}: {problems}"
         bell[_file_key(filename)] = meetings
 
-    day_calendar = _read_fixture_day_map(
-        (FIXTURE / DAY_CALENDAR_FILE).read_text(encoding="utf-8")
+    day_calendar = _read_fixture_schedule_map(
+        (FIXTURE / SCHEDULE_MAP_FILE).read_text(encoding="utf-8")
     )
     return teacher, bell, day_calendar
 

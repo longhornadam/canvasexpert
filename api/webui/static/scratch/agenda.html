@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELA 7 Agenda</title>
+<link rel="stylesheet" href="/static/panels/panel.css">
+<style>
+  .panel {
+    --bg: #fffdf8;
+    --ink: #232830;
+    --title: #16403c;
+    --muted: #93917f;
+    --rule: #e4dccb;
+    --accent: #2f6f6a;
+    background: linear-gradient(180deg, #fffefb 0%, #f7f1e4 100%);
+  }
+  .p-title b { color: var(--accent); }
+  .p-sub .left { display: block; font-size: 1.35em; color: var(--accent); letter-spacing: .02em; }
+
+  .p-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    position: relative; overflow: hidden;
+  }
+  .num {
+    display: grid; place-items: center;
+    width: 1.7em; height: 1.7em; border-radius: 50%;
+    font-weight: 800; background: #e9e2d3; color: #8b8778;
+    font-size: min(26cqh, 4.6cqw) !important;
+  }
+  /* a badge, not a text cell: keep it out of the kit's wrapping tiers */
+  .num { flex: none; }
+  /* Activity names are long. Rows are size containers, so wrapping to a
+     second line cannot change the layout, only fill it. */
+  .what {
+    font-weight: 600;
+    white-space: normal;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  }
+  .mins { justify-self: end; font-weight: 700; color: var(--muted);
+          font-variant-numeric: tabular-nums; }
+  /* in a narrow panel the activity name matters, the duration does not */
+  @media (max-width: 430px) {
+    .p-row { grid-template-columns: auto minmax(0, 1fr); }
+    .mins { display: none; }
+  }
+  /* tighter still: the step number goes too, the activity is the whole point */
+  @media (max-width: 300px) {
+    .p-row { grid-template-columns: minmax(0, 1fr); }
+    .num { display: none; }
+  }
+
+  /* completed */
+  .p-row.done { opacity: .38; }
+  .p-row.done .what { text-decoration: line-through; text-decoration-thickness: .05em; }
+  .p-row.done .num  { background: var(--accent); color: #fff; }
+
+  /* happening right now */
+  .p-row.now {
+    --row-bg: #fdefcf;
+    --row-accent: #c98a12;
+  }
+  .p-row.now .num  { background: #c98a12; color: #fff; }
+  .p-row.now .what { font-weight: 800; color: #5e3f06; }
+  .p-row.now .mins { color: #a5700c; font-weight: 800; }
+  .p-row.now::after {
+    content: ""; position: absolute; left: 0; bottom: 0; height: .09em;
+    background: #c98a12; opacity: .6;
+    width: var(--p, 0%); transition: width 1s linear;
+  }
+
+  .more { color: var(--muted); font-weight: 800; letter-spacing: .1em;
+          text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="p-head">
+    <div class="p-title">ELA <b>7</b> &middot; Period 3</div>
+    <div class="p-sub">
+      <span id="date"></span>
+      <span class="left" id="left"></span>
+    </div>
+  </div>
+
+  <div class="p-body" id="body"></div>
+
+  <div class="p-foot">
+    <span class="p-cta" id="upnext"></span>
+    <span id="bring">Novel &middot; comp book &middot; pencil</span>
+  </div>
+</div>
+
+<script src="/static/panels/panel.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* 1 = real time. Set to 120 to watch a whole period run in 25 seconds. */
+  var SPEED = 1;
+
+  var ITEMS = [
+    { t: "Bell ringer: Sentence of the Day",     m: 5  },
+    { t: "Vocab check: candid, elicit, wary",    m: 7  },
+    { t: "Read aloud: The Landlady, pp. 41-48",  m: 15 },
+    { t: "Turn & talk: what does Billy miss?",   m: 8  },
+    { t: "Quick write: foreshadowing one-pager", m: 12 },
+    { t: "Exit ticket + pack up",                m: 3  }
+  ];
+
+  var TOTAL = ITEMS.reduce(function (a, it) { return a + it.m; }, 0);
+  var bodyEl = document.getElementById("body");
+  var startedAt = Date.now();
+  var fit = ITEMS.length;
+
+  function mmss(mins) {
+    var s = Math.max(0, Math.round(mins * 60));
+    return Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+  }
+
+  function measure() {
+    var n = Panel.rowsThatFit(bodyEl, {
+      max: ITEMS.length,
+      fallback: Math.min(3, ITEMS.length)
+    });
+    if (n !== fit) { fit = n; render(); }
+  }
+
+  function render() {
+    var elapsed = (((Date.now() - startedAt) / 60000) * SPEED) % TOTAL;
+
+    var cum = 0, current = 0, into = 0;
+    for (var i = 0; i < ITEMS.length; i++) {
+      if (elapsed < cum + ITEMS[i].m) { current = i; into = elapsed - cum; break; }
+      cum += ITEMS[i].m;
+    }
+
+    /* When everything cannot fit, slide a window over the agenda that keeps
+       the current activity visible with one step of context behind it. */
+    var start = 0;
+    if (fit < ITEMS.length) {
+      start = Panel.clamp(current - 1, 0, ITEMS.length - fit);
+    }
+    var end = Math.min(start + fit, ITEMS.length);
+
+    bodyEl.innerHTML = "";
+    for (var k = start; k < end; k++) {
+      var it = ITEMS[k];
+      var row = document.createElement("div");
+      row.className = "p-row " + (k < current ? "done" : (k === current ? "now" : ""));
+
+      var num = document.createElement("span");
+      num.className = "num p-fixed";
+      num.textContent = k + 1;
+
+      var what = document.createElement("span");
+      what.className = "what";
+      what.textContent = it.t;
+
+      var mins = document.createElement("span");
+      mins.className = "mins";
+
+      if (k === current) {
+        row.style.setProperty("--p", (into / it.m * 100).toFixed(1) + "%");
+        mins.textContent = mmss(it.m - into) + " left";
+      } else {
+        mins.textContent = it.m + " min";
+      }
+
+      row.appendChild(num); row.appendChild(what); row.appendChild(mins);
+      bodyEl.appendChild(row);
+    }
+
+    document.getElementById("left").textContent = mmss(TOTAL - elapsed) + " left";
+    var nxt = ITEMS[current + 1];
+    document.getElementById("upnext").textContent =
+      nxt ? "Up next: " + nxt.t : "Last activity of the period";
+  }
+
+  document.getElementById("date").textContent =
+    new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
+  Panel.onResize(bodyEl, measure);
+  measure();
+  render();
+  setInterval(render, 1000);
+})();
+</script>
+</body>
+</html>

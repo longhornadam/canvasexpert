@@ -192,8 +192,7 @@ def test_workspace_migration_is_idempotent(tmp_path, monkeypatch):
             "canvas_base": config.CANVAS_BASE_DEFAULT,
             "saved_courses": [{"id": "1", "name": "History", "nickname": "Hist", "active": True}],
             "extra_time": {"1": [{"id": "a", "name": "Ada", "days": 2}]},
-            "late_sweep": {"skip_weekends": False},
-            "calendars": {"custom": {"label": "Custom", "no_count_dates": ["2026-01-01"], "grading_periods": []}},
+            "late_sweep": {},
         },
     )
 

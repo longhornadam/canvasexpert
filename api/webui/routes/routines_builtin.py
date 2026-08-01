@@ -7,7 +7,7 @@ import json
 import uuid as _uuid
 from datetime import datetime, timedelta
 
-from .. import config, mirror_service, school_calendar
+from .. import config, deps, mirror_service, school_calendar
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
 from ..mirror_reads import students_or_live, submissions_or_live
@@ -24,14 +24,12 @@ from api.nq_report import html_to_text
 
 def _run_routine_sweep(params):
     from ..schooldays import _school_days_late_detail
-    if not school_calendar.is_configured():
-        return {"ok": False, "lines": [f"✗ {school_calendar.CALENDAR_REPAIR_MESSAGE}"],
-                "summary": "calendar not configured"}
-    no_count = school_calendar.no_count_dates()
     window = int(params.get("window_days", 30))
     cutoff = (datetime.now().date() - timedelta(days=window)).isoformat()
 
-    lines, ok, total = [], True, 0
+    lines, ok = [], True
+    per_course = {}
+    span_start = span_end = None
     for c in config.active_courses():
         cid = str(c["id"])
         asgns, err = _canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
@@ -64,6 +62,7 @@ def _run_routine_sweep(params):
         extra = {str(e["id"]): int(e.get("days", 1))
                  for e in config.get_extra_time(cid)} if params.get("honor_extra_time", True) else {}
 
+        candidates = []
         for sub in (subs or []):
             if sub.get("excused") or not sub.get("submitted_at"):
                 continue
@@ -74,6 +73,24 @@ def _run_routine_sweep(params):
             submitted = _parse_iso_local(sub.get("submitted_at"))
             if not due or not submitted:
                 continue
+            candidates.append((sub, a, due, submitted))
+            span_start = due.date() if span_start is None else min(span_start, due.date())
+            span_end = submitted.date() if span_end is None else max(span_end, submitted.date())
+        per_course[cid] = (c, candidates, name_by_id, extra)
+
+    no_count: set[str] = set()
+    if span_start is not None:
+        bell_schedules, _problems = deps.load_bell_schedules()
+        result = school_calendar.resolve_instructional_range(
+            span_start.isoformat(), span_end.isoformat(), set(bell_schedules))
+        if result["state"] != "ready":
+            return {"ok": False, "lines": [f"✗ {school_calendar.CALENDAR_REPAIR_MESSAGE}"],
+                    "summary": "calendar not configured"}
+        no_count = set(result["no_count_dates"])
+
+    total = 0
+    for cid, (c, candidates, name_by_id, extra) in per_course.items():
+        for sub, a, due, submitted in candidates:
             raw_days, excluded = _school_days_late_detail(due, submitted, no_count)
             if raw_days <= 0:
                 continue
@@ -259,12 +276,10 @@ def _run_routine_curve(params):
 
 def _run_routine_grading_debt(params):
     min_days = int(params.get("school_days", 3))
-    if not school_calendar.is_configured():
-        return {"ok": False, "lines": [f"✗ {school_calendar.CALENDAR_REPAIR_MESSAGE}"],
-                "summary": "calendar not configured"}
-    no_count = school_calendar.no_count_dates()
     now_dt = datetime.now().astimezone()
-    lines, ok, total = [], True, 0
+    lines, ok = [], True
+    per_course = {}
+    span_start = None
     for c in config.active_courses():
         cid = str(c["id"])
         asgns_result = routine_reads.read_scope(
@@ -280,17 +295,35 @@ def _run_routine_grading_debt(params):
             lines.append(f"✗ {c['nickname']}: {subs_result['error']}")
             ok = False
             continue
-        subs = subs_result["records"]
-        debts = []
-        for s_ in (subs or []):
+
+        candidates = []
+        for s_ in (subs_result["records"] or []):
             if s_.get("workflow_state") != "submitted" or not s_.get("submitted_at"):
                 continue
             sub_dt = _parse_iso_local(s_["submitted_at"])
             if not sub_dt:
                 continue
+            candidates.append((sub_dt, aname.get(str(s_.get("assignment_id")), "?")))
+            span_start = sub_dt.date() if span_start is None else min(span_start, sub_dt.date())
+        per_course[cid] = (c, candidates)
+
+    no_count: set[str] = set()
+    if span_start is not None:
+        bell_schedules, _problems = deps.load_bell_schedules()
+        result = school_calendar.resolve_instructional_range(
+            span_start.isoformat(), now_dt.date().isoformat(), set(bell_schedules))
+        if result["state"] != "ready":
+            return {"ok": False, "lines": [f"✗ {school_calendar.CALENDAR_REPAIR_MESSAGE}"],
+                    "summary": "calendar not configured"}
+        no_count = set(result["no_count_dates"])
+
+    total = 0
+    for cid, (c, candidates) in per_course.items():
+        debts = []
+        for sub_dt, name in candidates:
             days = _school_days_late(sub_dt, now_dt, no_count)
             if days >= min_days:
-                debts.append((days, aname.get(str(s_.get("assignment_id")), "?")))
+                debts.append((days, name))
         total += len(debts)
         if debts:
             debts.sort(reverse=True)

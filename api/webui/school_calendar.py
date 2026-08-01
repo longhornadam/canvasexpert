@@ -12,6 +12,7 @@ this module stays importable before a workspace exists.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -390,44 +391,173 @@ def range_projection(date_from: str, date_to: str, *, root=None) -> tuple[dict |
 
 
 CALENDAR_REPAIR_MESSAGE = "Calendar needs attention. Open Calendar in Canvas Expert to set it up."
+CALENDAR_REPAIR_TARGET = "/calendar"
+
+_STATE_MESSAGES = {
+    "unconfigured": CALENDAR_REPAIR_MESSAGE,
+    "invalid_calendar": CALENDAR_REPAIR_MESSAGE,
+    "outside_coverage": CALENDAR_REPAIR_MESSAGE,
+    "unknown_schedule": CALENDAR_REPAIR_MESSAGE,
+    "no_school": "No school today.",
+    "no_regular_classes": "No regular classes today.",
+}
 
 
-def is_configured(root=None) -> bool:
-    """True when a valid canonical document exists.
+def state_message(state: str) -> str | None:
+    """A teacher-facing message for a non-ready resolve_date()/
+    resolve_schedule_for() state, or None for "ready" (nothing to report).
+    Named day states (no_school/no_regular_classes) get their own message
+    rather than collapsing into the generic Calendar repair message."""
+    return _STATE_MESSAGES.get(state)
 
-    School-day arithmetic callers (sweep, extensions, late catch-up, routines)
-    must check this before trusting no_count_dates(): an unconfigured or
-    invalid calendar returns an empty no-count set, which silently treats
-    weekends as instructional days rather than refusing the operation.
+
+def _repair_failure(state: str, problems: list[str]) -> dict:
+    return {"state": state, "problems": problems, "repair_url": CALENDAR_REPAIR_TARGET}
+
+
+def _document_or_failure(root) -> tuple[dict | None, dict | None]:
+    """(doc, None) for a valid canonical document, else (None, failure_dict).
+
+    Shared entry point for every checked seam below: a consumer doing
+    instructional-day arithmetic must fail closed on unconfigured/invalid
+    calendar state rather than silently treating an empty no-count set as
+    "no exceptional days" (which would count weekends as instructional).
     """
-    doc, _problems = read(root)
-    return doc is not None
-
-
-def no_count_dates(date_from: str | None = None, date_to: str | None = None,
-                   *, root=None) -> set[str]:
-    """The dates in [date_from, date_to] that do not count as instructional.
-
-    A date counts as no-count when its kind is no_school or
-    no_regular_classes -- weekends included, since they are generated
-    no_school days in the canonical document. Callers doing school-day
-    lateness/due-date arithmetic (schooldays.py) use this instead of a
-    skip_weekends flag plus a parallel holiday list: one calendar, one set.
-    Omitting date_from/date_to returns the whole configured year's no-count
-    set. An unconfigured or invalid calendar returns an empty set; the
-    caller's own readiness gate is what should refuse the operation, not a
-    guessed default.
-    """
-    doc, _problems = read(root)
+    doc, problems = read(root)
     if doc is None:
-        return set()
-    start = date_from or doc["coverage"]["start"]
-    end = date_to or doc["coverage"]["end"]
-    return {
-        date_key for date_key, entry in doc["days"].items()
-        if start <= date_key <= end
-        and entry.get("kind") in ("no_school", "no_regular_classes")
-    }
+        state = problems[0] if problems and problems[0] in ("unconfigured", "invalid_calendar") else "unconfigured"
+        return None, _repair_failure(state, problems)
+    return doc, None
+
+
+def resolve_instructional_range(date_from: str, date_to: str, known_schedule_ids,
+                                *, root=None) -> dict:
+    """A checked day/no-count projection for one inclusive range.
+
+    Success: {state: "ready", date_from, date_to, days, no_count_dates}.
+    Failure uses the canonical state (unconfigured, invalid_calendar,
+    outside_coverage, or unknown_schedule), concrete problems, and the shared
+    /calendar repair target. A date outside coverage, or an instructional
+    date naming a Bell Schedule not in known_schedule_ids, fails the WHOLE
+    request -- this never returns a clipped/partial success.
+    """
+    doc, failure = _document_or_failure(root)
+    if doc is None:
+        return failure
+    start = _parse_date(date_from)
+    end = _parse_date(date_to)
+    if not start or not end or start > end:
+        return _repair_failure(
+            "invalid_calendar",
+            ["date_from/date_to must be exact ISO dates with date_from <= date_to"])
+
+    coverage = doc["coverage"]
+    if date_from < coverage["start"] or date_to > coverage["end"]:
+        return _repair_failure(
+            "outside_coverage",
+            [f"requested range {date_from}..{date_to} is not wholly inside "
+             f"coverage {coverage['start']}..{coverage['end']}"])
+
+    known = set(known_schedule_ids or ())
+    days = {}
+    no_count = []
+    unknown = []
+    for day in _daterange(start, end):
+        key = day.isoformat()
+        entry = doc["days"].get(key)
+        if not isinstance(entry, dict):
+            return _repair_failure("invalid_calendar", [f"{key}: missing day entry"])
+        days[key] = entry
+        kind = entry.get("kind")
+        if kind in ("no_school", "no_regular_classes"):
+            no_count.append(key)
+        elif kind == "instructional" and entry.get("schedule_id") not in known:
+            unknown.append(key)
+    if unknown:
+        return _repair_failure(
+            "unknown_schedule",
+            [f"{key}: instructional day names a Bell Schedule that is not currently loaded"
+             for key in unknown[:3]])
+
+    return {"state": "ready", "date_from": date_from, "date_to": date_to,
+            "days": days, "no_count_dates": no_count}
+
+
+def add_school_days_checked(start_dt, days: int, known_schedule_ids, *, root=None):
+    """Add N instructional days to ``start_dt``.
+
+    Returns (result_datetime, None) on success, or (None, failure_dict) when
+    coverage ends before the calculation can complete, ``start_dt`` itself is
+    outside coverage, or an instructional day the walk must inspect names a
+    Bell Schedule that is not currently loaded. Never silently walks past the
+    known calendar (e.g. treating the day after coverage's last Friday as an
+    ordinary school day).
+    """
+    doc, failure = _document_or_failure(root)
+    if doc is None:
+        return None, failure
+    coverage = doc["coverage"]
+    known = set(known_schedule_ids or ())
+    start_key = start_dt.date().isoformat()
+    if start_key < coverage["start"] or start_key > coverage["end"]:
+        return None, _repair_failure(
+            "outside_coverage",
+            [f"{start_key} is outside coverage {coverage['start']}..{coverage['end']}"])
+
+    cursor = start_dt
+    added = 0
+    while added < days:
+        cursor = cursor + timedelta(days=1)
+        key = cursor.date().isoformat()
+        if key > coverage["end"]:
+            return None, _repair_failure(
+                "outside_coverage",
+                [f"coverage ends {coverage['end']}, before {days} school day(s) "
+                 f"from {start_key} can be counted"])
+        resolution = resolve_date(doc, key, known)
+        if resolution["state"] == "unknown_schedule":
+            return None, _repair_failure(
+                "unknown_schedule",
+                [f"{key}: instructional day names a Bell Schedule that is not currently loaded"])
+        if resolution["state"] not in ("no_school", "no_regular_classes"):
+            added += 1
+    return cursor, None
+
+
+def count_school_days_checked(due_dt, submitted_dt, known_schedule_ids, *, root=None):
+    """School days in (due_dt, submitted_dt] as (count, None), or (None,
+    failure_dict) on the same fail-closed terms as add_school_days_checked."""
+    doc, failure = _document_or_failure(root)
+    if doc is None:
+        return None, failure
+    coverage = doc["coverage"]
+    known = set(known_schedule_ids or ())
+    due_key = due_dt.date().isoformat()
+    if due_key < coverage["start"] or due_key > coverage["end"]:
+        return None, _repair_failure(
+            "outside_coverage",
+            [f"{due_key} is outside coverage {coverage['start']}..{coverage['end']}"])
+    if submitted_dt.date() <= due_dt.date():
+        return 0, None
+
+    cursor = due_dt
+    count = 0
+    while cursor.date() < submitted_dt.date():
+        cursor = cursor + timedelta(days=1)
+        key = cursor.date().isoformat()
+        if key > coverage["end"]:
+            return None, _repair_failure(
+                "outside_coverage",
+                [f"coverage ends {coverage['end']}, before lateness through "
+                 f"{submitted_dt.date().isoformat()} can be counted"])
+        resolution = resolve_date(doc, key, known)
+        if resolution["state"] == "unknown_schedule":
+            return None, _repair_failure(
+                "unknown_schedule",
+                [f"{key}: instructional day names a Bell Schedule that is not currently loaded"])
+        if resolution["state"] not in ("no_school", "no_regular_classes"):
+            count += 1
+    return count, None
 
 
 def readiness(*, bell_schedule_ids=None, today: str | None = None, root=None) -> dict:
@@ -509,16 +639,14 @@ def _atomic_write(path: str, payload: dict) -> list[str]:
     return []
 
 
-def create_school_year(*, school_year, coverage_start, coverage_end, default_schedule_id,
-                       weekday_schedules=None, no_school_dates=None,
-                       no_regular_classes_dates=None, date_labels=None,
-                       grading_periods=None, events=None, root=None) -> tuple[dict | None, list]:
-    """Build and atomically write a complete school year. Revision starts at 1.
-
-    Every calendar date in the requested coverage becomes an instructional
-    weekday (using ``default_schedule_id`` or a matching ``weekday_schedules``
-    override), a generated weekend, or an explicit no-school/no-regular-classes
-    day -- there is no implied or missing date once this returns.
+def _normalize_replacement_mutation(*, school_year, coverage_start, coverage_end,
+                                    default_schedule_id, weekday_schedules=None,
+                                    no_school_dates=None, no_regular_classes_dates=None,
+                                    date_labels=None, grading_periods=None,
+                                    events=None) -> tuple[dict | None, list]:
+    """Validate and normalize raw create/replace inputs into a stable,
+    JSON-serializable mutation dict: sorted lists/dicts so two equivalent
+    requests (same content, different client-side ordering) digest the same.
     """
     start = _parse_date(coverage_start)
     end = _parse_date(coverage_end)
@@ -535,13 +663,45 @@ def create_school_year(*, school_year, coverage_start, coverage_end, default_sch
     if problems:
         return None, problems
 
-    no_school = set(no_school_dates or [])
-    no_regular = set(no_regular_classes_dates or [])
-    overlap = no_school & no_regular
+    no_school = sorted(set(no_school_dates or []))
+    no_regular = sorted(set(no_regular_classes_dates or []))
+    overlap = set(no_school) & set(no_regular)
     if overlap:
         return None, ["date(s) cannot be both no_school and no_regular_classes: "
                      + ", ".join(sorted(overlap)[:3])]
-    labels = date_labels or {}
+
+    return {
+        "school_year": school_year,
+        "coverage_start": start.isoformat(),
+        "coverage_end": end.isoformat(),
+        "default_schedule_id": default_schedule_id,
+        "weekday_schedules": {str(weekday): schedule_id
+                             for weekday, schedule_id in sorted(weekday_map.items())},
+        "no_school_dates": no_school,
+        "no_regular_classes_dates": no_regular,
+        "date_labels": dict(sorted((date_labels or {}).items())),
+        "grading_periods": grading_periods or [],
+        "events": events or [],
+    }, []
+
+
+def _build_replacement_document(mutation: dict, *, revision: int) -> dict:
+    """The complete candidate document for a normalized replacement mutation.
+
+    Every calendar date in coverage becomes an instructional weekday (using
+    ``default_schedule_id`` or a matching ``weekday_schedules`` override), a
+    generated weekend, or an explicit no-school/no-regular-classes day --
+    there is no implied or missing date once this returns. Not validated or
+    written here; callers run this through parse_document and the write path.
+    """
+    start = _parse_date(mutation["coverage_start"])
+    end = _parse_date(mutation["coverage_end"])
+    weekday_map = {int(weekday): schedule_id
+                  for weekday, schedule_id in mutation["weekday_schedules"].items()}
+    no_school = set(mutation["no_school_dates"])
+    no_regular = set(mutation["no_regular_classes_dates"])
+    labels = mutation["date_labels"]
+    default_schedule_id = mutation["default_schedule_id"]
 
     days = {}
     for day in _daterange(start, end):
@@ -558,20 +718,64 @@ def create_school_year(*, school_year, coverage_start, coverage_end, default_sch
             days[key] = {"kind": "instructional",
                         "schedule_id": weekday_map.get(day.weekday(), default_schedule_id)}
 
-    payload = {
+    return {
         "version": FORMAT_VERSION,
         "type": DOCUMENT_TYPE,
-        "revision": 1,
-        "school_year": school_year,
+        "revision": revision,
+        "school_year": mutation["school_year"],
         "coverage": {"start": start.isoformat(), "end": end.isoformat()},
         "days": days,
-        "grading_periods": grading_periods or [],
-        "events": events or [],
+        "grading_periods": mutation["grading_periods"],
+        "events": mutation["events"],
     }
-    parsed, problems = parse_document(payload)
-    if problems:
-        return None, problems
 
+
+def _validate_known_schedules(days: dict, known_schedule_ids) -> list[str]:
+    """Write-time companion to resolve_date's read-time unknown_schedule
+    state: a create/replace/date write rejects an instructional date naming
+    a Bell Schedule that is not currently loaded, rather than accepting it
+    silently and only discovering the problem the next time the date resolves.
+    """
+    known = set(known_schedule_ids or ())
+    unknown = sorted(
+        key for key, entry in days.items()
+        if isinstance(entry, dict) and entry.get("kind") == "instructional"
+        and entry.get("schedule_id") not in known
+    )
+    if not unknown:
+        return []
+    sample = ", ".join(unknown[:3])
+    return [f"{len(unknown)} instructional date(s) name a Bell Schedule that is not "
+            f"currently loaded, e.g. {sample}"]
+
+
+def _diff_days(before: dict, after: dict) -> dict:
+    """Material day-level change counts between two ``days`` dicts, for a
+    replacement preview's teacher-facing summary."""
+    before_keys, after_keys = set(before), set(after)
+    changed = {key for key in (before_keys & after_keys) if before[key] != after[key]}
+    return {
+        "days_added": len(after_keys - before_keys),
+        "days_removed": len(before_keys - after_keys),
+        "days_changed": len(changed),
+    }
+
+
+def _digest_for_mutation(operation: str, base_revision: int, mutation: dict) -> str:
+    """Deterministic digest over an operation's normalized mutation input.
+
+    A local correctness boundary against a stale or accidentally altered
+    preview payload (a UI bug, or fields from two different previews mixed
+    together) -- not an authentication mechanism, since apply recomputes this
+    from the same client-echoed mutation it verifies against.
+    """
+    payload = json.dumps({"operation": operation, "base_revision": base_revision,
+                          "mutation": mutation},
+                         sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _write_document(parsed: dict, root) -> tuple[dict | None, list]:
     path = calendar_path(root)
     if not path:
         return None, ["no workspace available"]
@@ -579,11 +783,126 @@ def create_school_year(*, school_year, coverage_start, coverage_end, default_sch
         os.makedirs(os.path.dirname(path), exist_ok=True)
     except OSError as exc:
         return None, [f"could not create Calendars folder: {exc}"]
-
     write_problems = _atomic_write(path, parsed)
     if write_problems:
         return None, write_problems
     return parsed, []
+
+
+def create_school_year(*, school_year, coverage_start, coverage_end, default_schedule_id,
+                       weekday_schedules=None, no_school_dates=None,
+                       no_regular_classes_dates=None, date_labels=None,
+                       grading_periods=None, events=None, root=None) -> tuple[dict | None, list]:
+    """Build and atomically write a complete school year directly, bypassing
+    preview/apply. Revision is current+1 (1 for a first write) and never
+    resets, even when replacing an existing document.
+
+    This is a test/internal convenience seam only -- no route or MCP tool
+    calls it directly. Production create/replace goes through
+    preview_replacement/apply_replacement, which additionally stage a
+    teacher-facing preview and reject an unknown Bell Schedule at write time.
+    """
+    mutation, problems = _normalize_replacement_mutation(
+        school_year=school_year, coverage_start=coverage_start, coverage_end=coverage_end,
+        default_schedule_id=default_schedule_id, weekday_schedules=weekday_schedules,
+        no_school_dates=no_school_dates, no_regular_classes_dates=no_regular_classes_dates,
+        date_labels=date_labels, grading_periods=grading_periods, events=events)
+    if problems:
+        return None, problems
+
+    current_doc, _current_problems = read(root)
+    base_revision = current_doc["revision"] if current_doc else 0
+
+    candidate = _build_replacement_document(mutation, revision=base_revision + 1)
+    parsed, problems = parse_document(candidate)
+    if problems:
+        return None, problems
+    return _write_document(parsed, root)
+
+
+def preview_replacement(*, school_year, coverage_start, coverage_end, default_schedule_id,
+                        weekday_schedules=None, no_school_dates=None,
+                        no_regular_classes_dates=None, date_labels=None,
+                        grading_periods=None, events=None, known_schedule_ids,
+                        root=None) -> tuple[dict | None, list]:
+    """Preview a complete school-year create/replace. Never writes.
+
+    Returns a staged preview with ``operation`` ("create" when no document
+    exists yet, else "replace"), ``base_revision``, the normalized
+    ``mutation``, current/proposed school year and coverage, day/grading-
+    period/event counts, ``material_changes``, ``conflicts``, and a
+    ``preview_digest``. Rejects an instructional date naming a Bell Schedule
+    outside ``known_schedule_ids`` here, at write time, rather than only at
+    later resolution.
+    """
+    mutation, problems = _normalize_replacement_mutation(
+        school_year=school_year, coverage_start=coverage_start, coverage_end=coverage_end,
+        default_schedule_id=default_schedule_id, weekday_schedules=weekday_schedules,
+        no_school_dates=no_school_dates, no_regular_classes_dates=no_regular_classes_dates,
+        date_labels=date_labels, grading_periods=grading_periods, events=events)
+    if problems:
+        return None, problems
+
+    current_doc, _current_problems = read(root)
+    base_revision = current_doc["revision"] if current_doc else 0
+    operation = "replace" if current_doc else "create"
+
+    candidate = _build_replacement_document(mutation, revision=base_revision + 1)
+    parsed, problems = parse_document(candidate)
+    if problems:
+        return None, problems
+    schedule_problems = _validate_known_schedules(parsed["days"], known_schedule_ids)
+    if schedule_problems:
+        return None, schedule_problems
+
+    preview = {
+        "operation": operation,
+        "base_revision": base_revision,
+        "mutation": mutation,
+        "current_school_year": current_doc["school_year"] if current_doc else None,
+        "current_coverage": current_doc["coverage"] if current_doc else None,
+        "proposed_school_year": parsed["school_year"],
+        "proposed_coverage": parsed["coverage"],
+        "day_count": len(parsed["days"]),
+        "grading_period_count": len(parsed["grading_periods"]),
+        "event_count": len(parsed["events"]),
+        "material_changes": _diff_days(current_doc["days"] if current_doc else {}, parsed["days"]),
+        "conflicts": [],
+    }
+    preview["preview_digest"] = _digest_for_mutation(operation, base_revision, mutation)
+    return preview, []
+
+
+def apply_replacement(preview: dict, *, expected_revision: int, root=None) -> tuple[dict | None, list]:
+    """Apply a previously returned replacement preview.
+
+    Re-derives the candidate document from the preview's own normalized
+    ``mutation`` -- never from a client-supplied document -- and refuses a
+    stale ``expected_revision`` or a preview whose digest no longer matches
+    its own mutation.
+    """
+    if not isinstance(preview, dict) or not isinstance(preview.get("mutation"), dict):
+        return None, ["a valid preview is required"]
+    operation = preview.get("operation")
+    if operation not in ("create", "replace"):
+        return None, ["a valid preview is required"]
+    mutation = preview["mutation"]
+
+    current_doc, _current_problems = read(root)
+    current_revision = current_doc["revision"] if current_doc else 0
+    if current_revision != expected_revision or preview.get("base_revision") != expected_revision:
+        return None, [f"stale revision: expected {expected_revision}, "
+                     f"calendar is at revision {current_revision}"]
+
+    expected_digest = _digest_for_mutation(operation, expected_revision, mutation)
+    if preview.get("preview_digest") != expected_digest:
+        return None, ["stale or altered preview: digest mismatch"]
+
+    candidate = _build_replacement_document(mutation, revision=expected_revision + 1)
+    parsed, problems = parse_document(candidate)
+    if problems:
+        return None, problems
+    return _write_document(parsed, root)
 
 
 def _resolve_target_dates(*, dates=None, date_from=None, date_to=None,
@@ -633,8 +952,15 @@ def _resolve_target_dates(*, dates=None, date_from=None, date_to=None,
 
 
 def preview_change(*, kind, schedule_id=None, label=None, dates=None, date_from=None,
-                   date_to=None, weekdays=None, root=None) -> tuple[dict | None, list[str]]:
-    """Preview a day-kind/schedule/label change against the live document."""
+                   date_to=None, weekdays=None, known_schedule_ids,
+                   root=None) -> tuple[dict | None, list[str]]:
+    """Preview a day-kind/schedule/label change against the live document.
+
+    Rejects an instructional new value naming a Bell Schedule outside
+    ``known_schedule_ids`` here, at write time. The returned preview carries
+    a normalized ``mutation`` (kind/entry/dates) and a ``preview_digest``;
+    ``affected`` is display-only -- apply never trusts it as write authority.
+    """
     if kind not in DAY_KINDS:
         return None, [f"kind must be one of {sorted(DAY_KINDS)}"]
 
@@ -656,6 +982,8 @@ def preview_change(*, kind, schedule_id=None, label=None, dates=None, date_from=
     if kind == "instructional":
         if not isinstance(schedule_id, str) or not schedule_id.strip():
             return None, ["instructional day requires schedule_id"]
+        if schedule_id not in set(known_schedule_ids or ()):
+            return None, [f"schedule_id '{schedule_id}' is not a currently loaded Bell Schedule"]
         new_entry["schedule_id"] = schedule_id
         if label is not None:
             if not isinstance(label, str):
@@ -674,17 +1002,33 @@ def preview_change(*, kind, schedule_id=None, label=None, dates=None, date_from=
         before = doc["days"].get(date_key)
         affected.append({"date": date_key, "before": before, "after": dict(new_entry)})
 
-    return {
+    mutation = {"kind": kind, "entry": new_entry, "dates": target_dates}
+    preview = {
+        "operation": "date_change",
         "base_revision": doc["revision"],
         "kind": kind,
+        "mutation": mutation,
         "affected": affected,
         "is_noop": all(entry["before"] == entry["after"] for entry in affected),
-    }, []
+        "conflicts": [],
+    }
+    preview["preview_digest"] = _digest_for_mutation("date_change", doc["revision"], mutation)
+    return preview, []
 
 
 def apply_change(preview: dict, *, expected_revision: int, root=None) -> tuple[dict | None, list[str]]:
-    """Apply a previously returned preview. Refuses a stale expected_revision."""
-    if not isinstance(preview, dict) or not isinstance(preview.get("affected"), list):
+    """Apply a previously returned preview. Refuses a stale expected_revision
+    or a preview whose digest no longer matches its own mutation.
+
+    Re-derives the write purely from the preview's normalized ``mutation`` --
+    a client-edited ``affected``/``before``/``after`` row is never write
+    authority.
+    """
+    if not isinstance(preview, dict):
+        return None, ["a valid preview is required"]
+    mutation = preview.get("mutation")
+    if (not isinstance(mutation, dict) or not isinstance(mutation.get("dates"), list)
+            or not isinstance(mutation.get("entry"), dict)):
         return None, ["a valid preview is required"]
 
     doc, read_problems = read(root)
@@ -694,22 +1038,21 @@ def apply_change(preview: dict, *, expected_revision: int, root=None) -> tuple[d
         return None, [f"stale revision: expected {expected_revision}, "
                      f"calendar is at revision {doc['revision']}"]
 
-    if preview.get("is_noop"):
+    expected_digest = _digest_for_mutation("date_change", expected_revision, mutation)
+    if preview.get("preview_digest") != expected_digest:
+        return None, ["stale or altered preview: digest mismatch"]
+
+    entry = mutation["entry"]
+    dates = mutation["dates"]
+    if all(doc["days"].get(date_key) == entry for date_key in dates):
         return doc, []
 
     next_days = dict(doc["days"])
-    for entry in preview["affected"]:
-        next_days[entry["date"]] = entry["after"]
+    for date_key in dates:
+        next_days[date_key] = dict(entry)
 
     next_doc = {**doc, "days": next_days, "revision": doc["revision"] + 1}
     parsed, problems = parse_document(next_doc)
     if problems:
         return None, problems
-
-    path = calendar_path(root)
-    if not path:
-        return None, ["no workspace available"]
-    write_problems = _atomic_write(path, parsed)
-    if write_problems:
-        return None, write_problems
-    return parsed, []
+    return _write_document(parsed, root)

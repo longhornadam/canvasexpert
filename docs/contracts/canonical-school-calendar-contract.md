@@ -88,14 +88,19 @@ It is a closed, versioned JSON document:
 }
 ```
 
-`revision` starts at 1 and increases by one for every successful write. Writes validate the
-whole next document and replace the file atomically. Unknown keys are rejected at every
-level. API and MCP responses never expose an absolute path.
+`revision` starts at 1 on the first successful creation and increases by one for every
+successful write after that, including complete-school-year replacement. A replacement never
+resets revision numbering. Writes validate the whole next document and replace the file
+atomically. Unknown keys are rejected at every level. API and MCP responses never expose an
+absolute path.
 
 There is no live `config.calendars` copy, `Day Calendar*.csv`, `Day Overrides.csv`, or
 `school-events.json`. Academic CSVs and other public files may remain as import/seed inputs,
 but they are not read at runtime after import. Pre-launch means this is a clean replacement:
 there is no dual read, migration, backup-renaming protocol, or compatibility API.
+Retired Calendar files are removed from repository seeds. Existing copies already present in a
+teacher's workspace are ignored and left untouched; Canvas Expert does not silently delete or
+archive user files.
 
 ## 3. Date model and validation
 
@@ -164,6 +169,13 @@ families:
   optional weekday subset;
 - edit Bell Schedule, Teacher Schedule, grading-period, and public-event definitions.
 
+Initial creation and complete-year replacement use an explicit preview/apply pair. The first
+apply expects base revision 0 and writes revision 1. A replacement preview names the current and
+proposed school year and coverage, summarizes day/grading-period/event changes and validation
+conflicts, and records the current revision. Replacement apply requires that exact revision and
+writes `revision + 1`; it never performs a one-click overwrite. The UI uses an inline staged
+preview with an explicit Create or Replace action, not a generic browser confirmation dialog.
+
 Range and weekday rules are authoring conveniences only. A change such as “use Friday Schedule
 Monday through Friday for the next two weeks” materializes those ten exact dates. No recurring
 schedule rule survives beside the day records, so runtime precedence is impossible to hide.
@@ -175,6 +187,12 @@ after values, conflicts, and validation problems. Apply requires that `expected_
 stale preview is refused. A no-op is successful without incrementing the revision. The UI shows
 the preview before Apply. MCP exposes separate read, preview, and apply tools, and its authoring
 contract instructs the assistant to summarize the preview before applying it.
+
+Apply never trusts client-supplied `before`, `after`, or affected-date projections as write
+authority. It re-derives and validates the proposed result from the normalized mutation carried
+by the preview and refuses a preview whose revision or canonical preview digest no longer
+matches. This is a local correctness boundary against stale or accidentally altered preview
+payloads, not an authentication mechanism.
 
 ## 6. Calendar surface
 
@@ -191,6 +209,11 @@ The same page owns the Teacher Schedule editor, Bell Schedule definitions, acade
 import, grading periods, and public events. Settings removes its Class schedule and Academic
 calendars editors and links to Calendar only where calendar readiness is relevant. Other
 features link directly to the exact Calendar section that resolves their gate.
+
+Academic import accepts both the canonical seven-column format and the advertised Simple
+four-column format. When a Simple-format academic period has no explicit code, import derives a
+deterministic, unique, stable code from its name before canonical validation; the teacher is not
+sent from a successful import into an impossible Create/Replace operation.
 
 The page follows the WebUI presentation contract: controls before explanation, no sales copy,
 no permanent onboarding tour. Readiness is calm but unmissable. It becomes
@@ -235,6 +258,13 @@ Consumers also stop accepting their own `skip_weekends`, `holidays`, or “addit
 days” calendar overrides. An exceptional school day is edited once in Calendar, then every
 instructional-day calculation sees it. Student-specific extra-time accommodations remain a
 separate roster fact and are not calendar overrides.
+
+Existence of a valid document is not sufficient for instructional-day arithmetic. Before a
+consumer calculates lateness or adds school days, the Calendar service must confirm that every
+date the calculation can inspect is inside coverage and that instructional dates in that range
+resolve to loaded Bell Schedules. Unconfigured, invalid, out-of-coverage, and unknown-schedule
+states fail closed with the shared Calendar repair target. A bounded range projection never
+silently clips the caller's requested dates.
 
 ## 9. Privacy and locality
 

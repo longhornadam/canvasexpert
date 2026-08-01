@@ -30,6 +30,18 @@ class ProviderFailure(RuntimeError):
     """A provider could not reduce its source to an aggregate projection."""
 
 
+class CalendarNeedsAttention(RuntimeError):
+    """The canonical School Calendar cannot validate a date range this
+    provider needs (unconfigured, invalid, out of coverage, or an
+    instructional date naming an unloaded Bell Schedule).
+
+    A provider raises this instead of returning an empty finding list, so
+    the course's scan record is marked stale with a distinct error code and
+    the caller falls back to its last-known-good findings rather than
+    confidently reporting zero.
+    """
+
+
 class WorkCourseReads:
     """Typed read context for one course's Work discovery providers.
 
@@ -296,7 +308,8 @@ def finding(
 
 
 __all__ = [
-    "CourseTimeout", "CourseUnavailable", "DiscoveryDeadline", "ProviderFailure",
+    "CalendarNeedsAttention", "CourseTimeout", "CourseUnavailable",
+    "DiscoveryDeadline", "ProviderFailure",
     "WorkCourseReads",
     "as_datetime", "check_deadline", "finding", "iso_now",
     "safe_id", "text",

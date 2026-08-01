@@ -39,27 +39,6 @@ def _calendar_label(filename: str) -> str:
     return stem.replace("_", " ").replace("-", " ").strip()
 
 
-def list_calendar_files():
-    """CSV calendars available in the user's workspace Calendars folder.
-
-    Data-driven: whatever the teacher (or the first-run seed) placed in the
-    Calendars folder shows up here. No district names are baked into source.
-    Returns [{name, label, path}] sorted by name.
-    """
-    cal_dir = _calendars_dir()
-    if not cal_dir or not os.path.isdir(cal_dir):
-        return []
-    found = []
-    for path in sorted(_glob.glob(os.path.join(cal_dir, "*.csv"))):
-        name = os.path.basename(path)
-        found.append({
-            "name":  name,
-            "label": _calendar_label(name),
-            "path":  os.path.abspath(path),
-        })
-    return found
-
-
 def _smartdecks_dir():
     """Resolve SmartDecks folder in the workspace Library."""
     from . import workspace as _ws
@@ -153,7 +132,7 @@ def load_teacher_schedule() -> tuple:
     return deck_schedule.parse_teacher_schedule(content)
 
 
-def resolve_schedule_for(date: str) -> tuple:
+def resolve_schedule_for(date: str) -> dict:
     """Resolve blocks for a specific date.
 
     Gets the date's schedule_id from the canonical calendar service, loads
@@ -161,9 +140,14 @@ def resolve_schedule_for(date: str) -> tuple:
     Merges problems from all stages.
 
     date: "YYYY-MM-DD" string
-    Returns (resolved meeting blocks, problems_list). A block that spans more
-    than one consecutive meeting includes period_ids, segments, and seq; a
-    non-contiguous block produces one entry per consecutive run.
+    Returns {"state": ..., "blocks": [...], "problems": [...]}. ``state`` is
+    the canonical calendar's own resolution state for this date
+    (unconfigured, invalid_calendar, outside_coverage, no_school,
+    no_regular_classes, unknown_schedule, or ready) so a consumer can show
+    the actual reason a day has no schedule instead of a generic message. A
+    block that spans more than one consecutive meeting includes period_ids,
+    segments, and seq; a non-contiguous block produces one entry per
+    consecutive run.
     """
     from . import deck_schedule, school_calendar
 
@@ -172,21 +156,15 @@ def resolve_schedule_for(date: str) -> tuple:
 
     doc, calendar_problems = school_calendar.read()
     resolution = school_calendar.resolve_date(doc, date, bell_schedules)
-    schedule_id = resolution.get("schedule_id") if resolution["state"] == "ready" else None
+    state = resolution["state"]
+    schedule_id = resolution.get("schedule_id") if state == "ready" else None
 
     blocks, resolve_problems = deck_schedule.resolve_day(
         schedule_id, bell_schedules, teacher_schedule
     )
 
     all_problems = calendar_problems + bell_problems + teacher_problems + resolve_problems
-    return blocks, all_problems
-
-
-def _key_to_year(key: str) -> str:
-    """'something_2025_26' → '25-26', 'custom' → ''"""
-    import re as _re
-    m = _re.search(r'(\d{4})_(\d{2})$', key)
-    return f"{m.group(1)[-2:]}-{m.group(2)}" if m else ""
+    return {"state": state, "blocks": blocks, "problems": all_problems}
 
 
 def _workspace_folder(name: str):

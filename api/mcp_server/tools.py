@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 24 MCP tools.
+"""Plain, testable implementations of the 25 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -11,7 +11,8 @@ Current-course scope the web UI uses. ``list_courses``,
 ``get_authoring_contract``, ``get_product_guide``, ``list_staged_content``,
 ``get_bell_schedule``, ``get_day_schedule``, ``get_teacher_schedule``,
 ``save_deck``, ``save_teacher_schedule``,
-``get_school_calendar``, ``create_school_calendar``,
+``get_school_calendar``, ``preview_school_calendar_replacement``,
+``apply_school_calendar_replacement``,
 ``preview_school_calendar_change``, ``apply_school_calendar_change``,
 ``list_active_decks``, and ``archive_deck`` are
 the only tools with no ``course_id`` and no student data, so they skip both the
@@ -1039,16 +1040,20 @@ def get_day_schedule(date: str) -> dict:
 
     No course gate, no student data — no safety gate.
     date: "YYYY-MM-DD" string
-    Returns [{name, label, start, end, raw_periods, schedule_id, period_ids,
-    segments, seq}, ...] sorted by start time. A repeated block produces one
-    entry per consecutive meeting run; slides bind to its first entry.
+    Returns the canonical calendar's own resolution ``state`` (unconfigured,
+    invalid_calendar, outside_coverage, no_school, no_regular_classes,
+    unknown_schedule, or ready) alongside blocks: [{name, label, start, end,
+    raw_periods, schedule_id, period_ids, segments, seq}, ...] sorted by
+    start time. A repeated block produces one entry per consecutive meeting
+    run; slides bind to its first entry.
     """
-    blocks, problems = deps.resolve_schedule_for(date)
+    result = deps.resolve_schedule_for(date)
     return {
         "ok": True,
         "date": date,
-        "blocks": blocks,
-        "problems": problems,
+        "state": result["state"],
+        "blocks": result["blocks"],
+        "problems": result["problems"],
     }
 
 
@@ -1133,23 +1138,44 @@ def get_school_calendar(date_from: str = "", date_to: str = "") -> dict:
     return result
 
 
-def create_school_calendar(school_year: str, coverage_start: str, coverage_end: str,
-                          default_schedule_id: str, weekday_schedules: dict = None,
-                          no_school_dates: list = None, no_regular_classes_dates: list = None,
-                          date_labels: dict = None, grading_periods: list = None,
-                          events: list = None) -> dict:
-    """Create/replace the complete canonical School Calendar for one year.
+def preview_school_calendar_replacement(school_year: str, coverage_start: str, coverage_end: str,
+                                       default_schedule_id: str, weekday_schedules: dict = None,
+                                       no_school_dates: list = None,
+                                       no_regular_classes_dates: list = None,
+                                       date_labels: dict = None, grading_periods: list = None,
+                                       events: list = None) -> dict:
+    """Preview a complete school-year create/replace. Never writes.
 
     No course_id, no student data -- no course gate, no safety gate.
-    Materializes every date in coverage as instructional, a generated
-    weekend, or an explicit no-school/no-regular-classes day. Never raises.
+    Returns a staged preview (operation, base_revision, current/proposed
+    school year and coverage, material change counts, and a preview_digest)
+    to summarize for the teacher before calling
+    apply_school_calendar_replacement with its base_revision as
+    expected_revision. Rejects an instructional date naming a Bell Schedule
+    that is not currently loaded. Never raises.
     """
-    doc, problems = school_calendar.create_school_year(
+    bell_schedules, _bell_problems = deps.load_bell_schedules()
+    preview, problems = school_calendar.preview_replacement(
         school_year=school_year, coverage_start=coverage_start, coverage_end=coverage_end,
         default_schedule_id=default_schedule_id, weekday_schedules=weekday_schedules,
         no_school_dates=no_school_dates, no_regular_classes_dates=no_regular_classes_dates,
         date_labels=date_labels, grading_periods=grading_periods, events=events,
+        known_schedule_ids=set(bell_schedules),
     )
+    if preview is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, **preview}
+
+
+def apply_school_calendar_replacement(preview: dict, expected_revision: int) -> dict:
+    """Apply a preview returned by preview_school_calendar_replacement.
+
+    No course_id, no student data -- no course gate, no safety gate. Pass the
+    preview object back verbatim along with its base_revision as
+    expected_revision; a stale revision or an altered preview digest is
+    refused rather than silently written. Never raises.
+    """
+    doc, problems = school_calendar.apply_replacement(preview, expected_revision=expected_revision)
     if doc is None:
         return {"ok": False, "problems": problems}
     return {"ok": True, "revision": doc["revision"], "school_year": doc["school_year"],
@@ -1163,12 +1189,14 @@ def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str 
 
     No course_id, no student data -- no course gate, no safety gate.
     Summarize the affected dates and any conflicts for the teacher before
-    calling apply_school_calendar_change. Never raises.
+    calling apply_school_calendar_change. Rejects an instructional new value
+    naming a Bell Schedule that is not currently loaded. Never raises.
     """
+    bell_schedules, _bell_problems = deps.load_bell_schedules()
     preview, problems = school_calendar.preview_change(
         kind=kind, schedule_id=(schedule_id or None), label=(label or None),
         dates=dates, date_from=(date_from or None), date_to=(date_to or None),
-        weekdays=weekdays,
+        weekdays=weekdays, known_schedule_ids=set(bell_schedules),
     )
     if preview is None:
         return {"ok": False, "problems": problems}

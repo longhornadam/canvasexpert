@@ -59,7 +59,7 @@ mirror and reports missing data as a named state. `whats-due` uses
 disk-only path `mcp_server/tools.get_course_assignments` uses.
 
 **2. The port and URL shape are public contract.** A teacher pastes
-`http://127.0.0.1:8765/panels/whats-due?course=123` into a board that Classroomscreen
+`http://127.0.0.1:8765/panels/whats-due?block=ELA-7-B` into a board that Classroomscreen
 saves, and that exact string has to keep working across restarts and upgrades. Two
 reasonable-looking future changes would silently break every saved board weeks later:
 
@@ -205,15 +205,13 @@ one (`config.active_courses()`), so a block mapped to a Previous course reports
 `previous_course` rather than reading that course's catalog. `_bell_schedule_feed` in
 `smartdeck_feeds.py` does the same last step for SmartDeck's own display.
 
-**Why a stable block name is a durability fix, not a convenience.** A raw `?course=123`
-pin expires: the following August that id is dead, and a board saved in September
-renders an empty panel with no error, because a Panel cannot tell "nothing due" from
-"that course is gone". A schedule survives the rollover: the teacher updates it once and
-every saved board follows.
+**Why a stable block name is a durability fix, not a convenience.** A course ID can
+expire at the year rollover, leaving a saved board unable to distinguish "nothing due"
+from "that course is gone". A schedule survives the rollover: the teacher updates it
+once and every saved board follows.
 
-`?block=<teacher-block-name>` is the one intentional override, replacing raw `?course=`
-pinning outright (not retained as a second contract): a second monitor dedicated to one
-section, or showing next period during conference. It still resolves through the
+`?block=<teacher-block-name>` is the one intentional override: a second monitor dedicated
+to one section, or showing next period during conference. It still resolves through the
 Teacher Schedule and still enforces the Current-course boundary -- it bypasses only
 date/clock resolution, not the schedule or the course gate.
 
@@ -233,9 +231,7 @@ or a broken calendar all resolve to a named state with a calm message -- a proje
 Panel shows the canonical Calendar's own repair states (`calendar_needs_attention`,
 `not_school_day`) rather than a distinct, parallel notion of "no schedule."
 
-Retired in the canonical Calendar cutover: the Panels console's own "Correcting today"
-control (`#pn-today`, `GET`/`POST /api/schedule/today`, `Day Overrides.csv`). Correcting
-a bell schedule for one date is now the same operation as any other day edit --
+Correcting a bell schedule for one date is the same operation as any other day edit --
 preview/apply on the Calendar page -- not a Panels-local shortcut.
 
 ## Themes
@@ -329,56 +325,6 @@ Two things on the page are deliberate:
 - **The address is shown in full next to the embed code.** A teacher who does not want
   an iframe still needs the URL, and the whole string visible is what makes the
   durability claim checkable.
-
-## State as of this card
-
-Shipped and committed: the three routes, the `whats-due` panel, the console with a
-course picker, days control, live preview and copy-embed button, the shared kit, and
-10 tests. The console was then rebuilt on the workspace `left-main` layout with a rail
-nav and its own `static/pages/panels.css`, replacing the inline `<style>` block and its
-colour literals.
-
-Fixed on the way through: `.ce-display` named two different things. `components.css`
-uses it for the display typeface every `page_section` heading wears; `layouts.css` used
-it for the display-family full-bleed shell. Every `page_section` heading in the app was
-therefore a 100vw x 100vh box with hidden overflow. The shell is now
-`.ce-display-shell`, matching its `.ce-display-page` / `.ce-display-main` siblings.
-
-Observed by measurement: every route and status, both empty states, the 31-day clamp,
-the panel across seven shapes from 240x140 to 900x500 with no overflow or clipping
-and message text 14.4-44px, and the console's embed string updating live.
-
-Schedule-following shipped after that: `resolve_panel_course`, the four new states, the
-`next_change` bell timer, the today's-bell-schedule row with its own override store, and
-27 tests. Observed live: with no day-calendar entry for
-today the route returns `not_school_day` / "No classes scheduled today." rather than the
-old "Choose a course for this panel."; a pinned `?course=` still reports `no_catalog` as
-before; and a stubbed `next` block renders its header as `Next · ELA 7 B`.
-
-Themes shipped before that: eight skins, the `?theme=` param, and 4 tests. Swept across
-eight shapes (240x140 through 1920x1080) with rows injected into the live panel from the
-console page, so the populated layout is measured rather than inferred: row count
-identical across all eight themes at every shape, no overflow, worst text contrast
-4.6:1, smallest leaf 14.2px at 240x140.
-
-**Two defects that sweep caught**, both invisible while every course is empty:
-
-- `.msg[hidden]` did nothing. An author `display: grid` beats the UA's
-  `[hidden] { display: none }`, so the empty message box kept its flex share and starved
-  the rows: at 900x500 the body measured 146px of 500 and the panel showed **one** row
-  where three fit. Fixed in `panel_whats_due.html`.
-- **Long titles ellipsize at wide shapes, and this is still open.** `maxRow` bounds the
-  row *count*, but `.p-row { flex: 1 1 0 }` then stretches rows past it, so at 900x500
-  rows land near 130px and text sizes to ~43px off `min(34cqh, 6cqw)`. `6cqw` measures
-  the whole row, while the title is confined to its stack column, so "Chapter 4 close
-  reading" asks for 488px in a 348px column and gets cut. This is the hazard the `maxRow`
-  comment in `panel.js` already names. Fixing it means re-tuning the width coefficients
-  for text inside `.p-stack`, which changes every panel and needs its own full sweep, so
-  it was left out of the theme work rather than done quietly.
-
-Inferred rather than observed: nothing about layout now. Real assignment *data* still
-cannot be observed until the district populates courses in mid-August; a local
-`list_courses` returning zero is the expected state before then, not a broken install.
 
 ## Natural next steps
 

@@ -16,8 +16,12 @@
 .ce-calendar-details { margin-bottom: var(--ce-space-3); }
 .ce-calendar-details .delivery-inner { margin-top: var(--ce-space-2); padding-top: var(--ce-space-3); border-top: 1px solid var(--ce-rule); }
 .ce-calendar-details .delivery-summary { cursor: pointer; color: var(--ce-ink); font-weight: 700; }
-.ce-calendar-bell-list { display: grid; gap: var(--ce-space-1); margin-bottom: var(--ce-space-3); }
-.ce-calendar-bell-row { padding: var(--ce-space-1) 0; border-bottom: 1px solid var(--ce-rule); font-size: 13px; }
+.ce-calendar-bell-list { display: grid; gap: var(--ce-space-2); margin-bottom: var(--ce-space-3); }
+.ce-calendar-bell-row { padding: var(--ce-space-2) 0; border-bottom: 1px solid var(--ce-rule); font-size: 13px; }
+.ce-calendar-period-list { display: grid; gap: 2px; margin-top: var(--ce-space-1); }
+.ce-calendar-period-row { display: flex; gap: var(--ce-space-2); font-size: 12px; color: var(--ce-ink-muted); }
+.ce-calendar-period-id { font-weight: 600; min-width: 2em; }
+.ce-calendar-id { font-size: 11px; }
 .ce-schedule-block-list { display: grid; gap: var(--ce-space-2); }
 .ce-schedule-block-row { display: grid; grid-template-columns: minmax(140px, .9fr) minmax(90px, .5fr) minmax(150px, 1fr) minmax(230px, 1.3fr) auto; align-items: end; gap: var(--ce-space-2); padding: var(--ce-space-3); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
 .ce-schedule-block-row label { min-width: 0; }

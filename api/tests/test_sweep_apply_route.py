@@ -54,12 +54,11 @@ def sweep_env(tmp_path, monkeypatch):
         lambda: [{"id": 101, "name": "Fictional Algebra"}],
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.sweep.school_calendar.is_configured",
-        lambda root=None: True,
-    )
-    monkeypatch.setattr(
-        "api.operation_ledger.adapters.sweep.school_calendar.no_count_dates",
-        lambda *a, **kw: _weekend_dates(),
+        "api.operation_ledger.adapters.sweep.school_calendar.resolve_instructional_range",
+        lambda date_from, date_to, known_schedule_ids, **kw: {
+            "state": "ready", "date_from": date_from, "date_to": date_to,
+            "days": {}, "no_count_dates": sorted(_weekend_dates()),
+        },
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.sweep.config.get_extra_time",
@@ -112,7 +111,7 @@ def _headers():
 def _prepare(client, payload=None):
     return client.post(
         "/api/operations/gradebook.sweep/prepare",
-        json={"payload": payload or {"skip_weekends": True},
+        json={"payload": payload or {"honor_extra_time": True},
               "targets": [{"course_id": "101"}]},
         headers=_headers(),
     )
@@ -152,7 +151,7 @@ def test_client_authored_entries_cannot_become_the_write_set(sweep_env):
     match the recomputed values, never the client's."""
     client, _canvas, writes = sweep_env
     tampered_payload = {
-        "skip_weekends": True,
+        "honor_extra_time": True,
         # Attempted injection — build_payload accepts settings only.
         "entries": [{"user_id": 999, "assignment_id": 77,
                      "seconds_override": 9999999}],
@@ -232,7 +231,7 @@ def _preview(client, settings=None):
     return client.post(
         "/api/sweep/preview",
         data={"course_id": "101",
-              "settings": json.dumps(settings or {"skip_weekends": True})},
+              "settings": json.dumps(settings or {"honor_extra_time": True})},
     )
 
 
@@ -285,11 +284,11 @@ def test_date_range_bounds_filter_assignments(sweep_env):
     both = _preview(client).json()
     assert {e["assignment_id"] for e in both["entries"]} == {10, 30}
     lower_bounded = _preview(client, {
-        "skip_weekends": True, "date_from": "2026-06-10",
+        "honor_extra_time": True, "date_from": "2026-06-10",
         "date_to": "2026-06-30"}).json()
     assert {e["assignment_id"] for e in lower_bounded["entries"]} == {30}
     upper_bounded = _preview(client, {
-        "skip_weekends": True, "date_to": "2026-06-10"}).json()
+        "honor_extra_time": True, "date_to": "2026-06-10"}).json()
     assert {e["assignment_id"] for e in upper_bounded["entries"]} == {10}
 
 
@@ -328,8 +327,7 @@ def test_extra_time_reduces_or_skips_rows(sweep_env, monkeypatch):
     assert covered["entries"] == []
     assert covered["skipped"][0]["reason"] == "covered by extra time"
 
-    ignored = _preview(client, {"skip_weekends": True,
-                                "honor_extra_time": False}).json()
+    ignored = _preview(client, {"honor_extra_time": False}).json()
     assert len(ignored["entries"]) == 1
     assert ignored["entries"][0]["school_days"] == 1
 

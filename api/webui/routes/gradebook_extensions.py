@@ -4,9 +4,9 @@ import json
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import school_calendar
+from .. import deps, school_calendar
 from ..canvas_client import _canvas_get, _canvas_send
-from ..schooldays import _add_school_days, _parse_iso_local
+from ..schooldays import _parse_iso_local
 
 router = APIRouter(tags=["gradebook"])
 
@@ -21,8 +21,6 @@ def extend_due(course_id: str = Form(...), assignment_id: str = Form(...),
         return JSONResponse({"ok": False, "error": f"bad request: {e}"})
     if not sids:
         return JSONResponse({"ok": False, "error": "no students selected"})
-    if not school_calendar.is_configured():
-        return JSONResponse({"ok": False, "error": school_calendar.CALENDAR_REPAIR_MESSAGE})
 
     a, err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
     if err:
@@ -32,8 +30,14 @@ def extend_due(course_id: str = Form(...), assignment_id: str = Form(...),
         return JSONResponse({"ok": False,
                              "error": "assignment has no due date — set one in Canvas first"})
 
-    no_count = school_calendar.no_count_dates()
-    new_due = _add_school_days(due, days, no_count)
+    # Resolve the requested addition before any Canvas send: a broken or
+    # out-of-range calendar refuses here rather than silently writing an
+    # override computed with weekends counted as school days.
+    bell_schedules, _problems = deps.load_bell_schedules()
+    new_due, failure = school_calendar.add_school_days_checked(due, days, set(bell_schedules))
+    if failure is not None:
+        return JSONResponse({"ok": False, "error": school_calendar.CALENDAR_REPAIR_MESSAGE,
+                             "problems": failure["problems"]})
     resp, err = _canvas_send(
         "POST", f"/api/v1/courses/{course_id}/assignments/{assignment_id}/overrides",
         {"assignment_override": {
