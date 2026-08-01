@@ -38,7 +38,8 @@ Owner: `api/webui/routes/panels.py`, registered in `api/webui/server.py` next to
 
 | Concern | File |
 | --- | --- |
-| Routes, catalog, due-window logic | `api/webui/routes/panels.py` |
+| Routes, catalog, and dispatch | `api/webui/routes/panels.py` |
+| Public Calendar payload joins | `api/webui/panel_data.py` |
 | Console page | `api/webui/templates/panels.html` |
 | Console page CSS | `api/webui/static/pages/panels.css` |
 | Today's bell schedule | `api/webui/routes/schedule.py`, `api/webui/schedule_setup.py` |
@@ -84,6 +85,9 @@ PANEL_CATALOG = {
         "template": "panel_whats_due.html",
         "needs_course": True,
     },
+    "upcoming-events": {"template": "panel_upcoming_events.html"},
+    "sports-results": {"template": "panel_sports_results.html"},
+    "bobcat-hour": {"template": "panel_bobcat_hour.html"},
 }
 ```
 

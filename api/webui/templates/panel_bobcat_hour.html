@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" data-panel-theme="{{ theme }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ panel_title }}</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/panels/panel.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/panels/themes.css?v={{ asset_v }}">
+<style>
+.p-row { grid-template-columns: auto auto minmax(0, 1fr); --row-bg: var(--row); }
+.p-row:nth-child(odd) { --row-bg: var(--row-alt, var(--row)); }
+.p-title, .p-sub { line-height: 1; }
+.p-row.current { --row-bg: var(--today-bg); --row-accent: var(--today-accent); }
+.p-slot, .p-kind { color: var(--accent); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.p-kind { color: var(--muted); }
+.p-a { color: var(--ink); }
+.p-b { color: var(--muted); }
+.msg { flex: 1 1 auto; display: grid; place-items: center; text-align: center; padding: .4em 1em; color: var(--muted); font-size: clamp(14px, min(6vw, 16vh), 44px); font-weight: 600; line-height: 1.25; }
+.msg[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="p-head"><div class="p-title">{{ panel_title }}</div><div class="p-sub" id="sub"></div></div>
+  <div class="p-body" id="body"></div><div class="msg" id="msg" hidden></div>
+  <div class="p-foot"><span class="p-cta" id="foot"></span><span class="p-dots" id="dots"></span></div>
+</div>
+<script src="/static/panels/panel.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+  var body = document.getElementById("body"), msg = document.getElementById("msg");
+  function show(text) { body.hidden = true; msg.hidden = false; msg.textContent = text; }
+  function render(payload) {
+    document.getElementById("sub").textContent = payload.current_block ? "Block " + payload.current_block + " now" : "Today";
+    if (payload.state !== "ready") { show(payload.message || "Nothing scheduled."); document.getElementById("foot").textContent = ""; return; }
+    body.hidden = false; msg.hidden = true; document.getElementById("foot").textContent = payload.date || "";
+    Panel.list({ body: body, dots: document.getElementById("dots"), items: payload.activities, every: 10000,
+      render: function (item, row) {
+        if (payload.current_block === item.slot) row.classList.add("current");
+        var slot = document.createElement("span"); slot.className = "p-slot p-fixed"; slot.textContent = item.slot;
+        var kind = document.createElement("span"); kind.className = "p-kind p-fixed"; kind.textContent = item.kind;
+        var stack = document.createElement("span"); stack.className = "p-stack"; stack.style.setProperty("--c1", "12fr"); stack.style.setProperty("--c2", "8fr");
+        var label = document.createElement("span"); label.className = "p-a"; label.textContent = item.label || "Activity";
+        var detail = document.createElement("span"); detail.className = "p-b"; detail.textContent = item.detail || "";
+        stack.appendChild(label); stack.appendChild(detail); row.appendChild(slot); row.appendChild(kind); row.appendChild(stack);
+      }});
+  }
+  function load() { fetch("/panels/bobcat-hour/data", {cache: "no-store"}).then(function (r) { return r.json(); }).then(render).catch(function () { show("CanvasExpert is not running on this computer."); }); }
+  load(); setInterval(load, 15 * 60 * 1000);
+}());
+</script>
+</body>
+</html>

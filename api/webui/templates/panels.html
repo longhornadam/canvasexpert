@@ -58,6 +58,10 @@
         <label>Days ahead
           <input type="number" class="pn-days" data-days value="{{ default_days }}" min="1" max="{{ max_days }}">
         </label>
+        {% elif p.days %}
+        <label>{% if p.kind == 'sports-results' %}Days back{% else %}Days ahead{% endif %}
+          <input type="number" class="pn-days" data-days value="{{ p.default_days }}" min="1" max="{{ p.max_days }}">
+        </label>
         {% endif %}
         <label>Theme
           <select data-theme>

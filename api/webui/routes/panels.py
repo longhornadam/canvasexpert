@@ -25,19 +25,17 @@ three fixed layouts: a closed set is what keeps this from sprawling.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from api.course_catalog import read_catalog
-from api.mirror import read_service
-from api.webui import config, deps, school_calendar
+from api.webui import config, deps, panel_data as panel_data_service, school_calendar
 
 router = APIRouter()
 
-DEFAULT_LOOKAHEAD_DAYS = 7
-MAX_LOOKAHEAD_DAYS = 31
+DEFAULT_LOOKAHEAD_DAYS = panel_data_service.DEFAULT_DUE_DAYS
+MAX_LOOKAHEAD_DAYS = panel_data_service.MAX_DUE_DAYS
 
 PANEL_CATALOG = {
     "whats-due": {
@@ -45,6 +43,30 @@ PANEL_CATALOG = {
         "blurb": "Upcoming assignment due dates for one course. No student data.",
         "template": "panel_whats_due.html",
         "needs_course": True,
+    },
+    "upcoming-events": {
+        "title": "Upcoming events",
+        "blurb": "Public Calendar events and academic dates for the classroom.",
+        "template": "panel_upcoming_events.html",
+        "needs_course": False,
+        "days": True,
+        "default_days": panel_data_service.DEFAULT_UPCOMING_DAYS,
+        "max_days": panel_data_service.MAX_UPCOMING_DAYS,
+    },
+    "sports-results": {
+        "title": "Sports results",
+        "blurb": "Recent public game results recorded in Calendar.",
+        "template": "panel_sports_results.html",
+        "needs_course": False,
+        "days": True,
+        "default_days": panel_data_service.DEFAULT_SPORTS_DAYS,
+        "max_days": panel_data_service.MAX_SPORTS_DAYS,
+    },
+    "bobcat-hour": {
+        "title": "Bobcat Hour",
+        "blurb": "Today's canonical tutorial and club blocks.",
+        "template": "panel_bobcat_hour.html",
+        "needs_course": False,
     },
 }
 
@@ -208,89 +230,7 @@ def _no_course(state: str, message: str, block: str = "") -> dict:
             "state": state, "message": message, "next_change": ""}
 
 
-def _parse_due(value):
-    """A Canvas ``due_at`` as an aware UTC datetime, or None when absent or
-    unparseable. Assignments with no due date are not late, they are simply
-    not part of a due-date panel."""
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
-def whats_due_payload(course_id: str, days: int, *, now=None,
-                      catalog_reader=None) -> dict:
-    """Published assignments due through ``today + days`` (local calendar
-    days), future items first then earlier-today items, each bucket
-    chronological.
-
-    Always ``ok``: a Panel on a wall has no way to report an exception, so
-    every outcome is a named ``state`` the template can render calmly.
-    An earlier-today item stays visible all day rather than disappearing the
-    moment its due time passes -- it is described neutrally, never as missing
-    or late. ``now`` and ``catalog_reader`` are injected by tests.
-    """
-    now = now or datetime.now(timezone.utc)
-    local_now = now.astimezone()
-    today = local_now.date()
-    days = max(1, min(int(days), MAX_LOOKAHEAD_DAYS))
-    horizon_date = today + timedelta(days=days)
-
-    if not course_id:
-        return {"ok": True, "state": "no_course", "days": days,
-                "assignments": [],
-                "message": "Choose a course for this panel."}
-
-    reader = catalog_reader or (lambda cid: read_catalog(cid))
-    read_result = reader(course_id)
-    scope = read_service.catalog_assignments(course_id, catalog_reader=reader)
-
-    if scope.get("source") == "none":
-        return {"ok": True, "state": "no_catalog", "days": days,
-                "assignments": [],
-                "message": "No local course catalog yet. Refresh it in "
-                           "CanvasExpert, then this panel fills in."}
-
-    catalog = (read_result or {}).get("catalog") or {}
-
-    items = []
-    for record in scope.get("records") or []:
-        if not isinstance(record, dict):
-            continue
-        if not record.get("published", True):
-            continue
-        due = _parse_due(record.get("due_at"))
-        if due is None:
-            continue
-        due_date = due.astimezone().date()
-        if due_date < today or due_date > horizon_date:
-            continue
-        items.append({
-            "title": str(record.get("name") or "Untitled assignment"),
-            "due_at": due.isoformat(),
-            "points": record.get("points_possible"),
-            "_earlier_today": due_date == today and due < now,
-        })
-    # Future/upcoming items first, then earlier-today items; each bucket
-    # chronological so ties stay deterministic.
-    items.sort(key=lambda item: (item["_earlier_today"], item["due_at"]))
-    for item in items:
-        del item["_earlier_today"]
-
-    return {
-        "ok": True,
-        "state": "ready" if items else "nothing_due",
-        "days": days,
-        "course_name": str(catalog.get("course_name") or ""),
-        "synced_at": scope.get("last_success_at", ""),
-        "stale": scope.get("state") != "current",
-        "assignments": items,
-        "message": "" if items else f"Nothing due in the next {days} days.",
-    }
+whats_due_payload = panel_data_service.whats_due_payload
 
 
 @router.get("/panels", response_class=HTMLResponse)
@@ -334,27 +274,34 @@ def panel_page(request: Request, kind: str, theme: str = DEFAULT_THEME):
 
 
 @router.get("/panels/{kind}/data")
-def panel_data(kind: str, block: str = "", days: int = DEFAULT_LOOKAHEAD_DAYS):
+def panel_data(kind: str, block: str = "", days: int | None = None):
     """The Panel's single data fetch. Disk-only; never calls Canvas."""
     if kind not in PANEL_CATALOG:
         return JSONResponse({"ok": False, "error": f"Unknown panel: {kind}"},
                             status_code=404)
     if kind == "whats-due":
+        requested_days = DEFAULT_LOOKAHEAD_DAYS if days is None else days
         scope = resolve_panel_course(block)
         if scope["state"]:
             return JSONResponse({
-                "ok": True, "state": scope["state"], "days": days,
+                "ok": True, "state": scope["state"], "days": requested_days,
                 "assignments": [], "message": scope["message"],
                 "relation": "", "block": scope["block"], "next_change": "",
             })
-        payload = whats_due_payload(scope["course_id"], days)
+        payload = whats_due_payload(scope["course_id"], requested_days)
         payload["relation"] = scope["relation"]
         payload["block"] = scope["block"]
         payload["next_change"] = scope["next_change"]
         if not payload.get("course_name"):
             payload["course_name"] = scope["block"]
         return JSONResponse(payload)
-    # Unreachable while PANEL_CATALOG and this branch agree, but a Panel must
-    # never 500 onto a projector.
-    return JSONResponse({"ok": True, "state": "no_catalog", "assignments": [],
-                         "message": "This panel has no data source yet."})
+    if kind == "upcoming-events":
+        return JSONResponse(panel_data_service.upcoming_events_payload(
+            panel_data_service.DEFAULT_UPCOMING_DAYS if days is None else days))
+    if kind == "sports-results":
+        return JSONResponse(panel_data_service.sports_results_payload(
+            panel_data_service.DEFAULT_SPORTS_DAYS if days is None else days))
+    if kind == "bobcat-hour":
+        return JSONResponse(panel_data_service.bobcat_hour_payload())
+    return JSONResponse({"ok": True, "state": "calendar_needs_attention",
+                         "events": [], "message": "This panel needs attention."})
