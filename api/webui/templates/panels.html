@@ -1,0 +1,118 @@
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import page_header, page_section, empty_state %}
+{% block title %}Panels — Canvas Expert{% endblock %}
+{% block head_extra %}
+<style>
+  .pn-card { display: grid; gap: .75rem; }
+  .pn-controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; }
+  .pn-controls label { display: grid; gap: .25rem; font-size: .85rem; }
+  .pn-days { width: 5rem; }
+  .pn-embed { display: flex; gap: .5rem; align-items: center; }
+  .pn-embed input {
+    flex: 1 1 auto; min-width: 0; font-family: ui-monospace, Consolas, monospace;
+    font-size: .8rem; padding: .45rem .6rem;
+  }
+  .pn-preview {
+    width: 100%; max-width: 720px; aspect-ratio: 16 / 9;
+    border: 1px solid var(--ce-rule, #d8dee6); border-radius: .4rem;
+  }
+  .pn-copied { font-size: .8rem; color: #2e7d4f; }
+</style>
+{% endblock %}
+
+{% block primary %}
+{{ page_header('Panels',
+   'A Panel is one page showing one thing, sized to whatever box you drop it into. Paste the embed code into Classroomscreen, or just open the link fullscreen on a second screen.') }}
+
+{% for p in panels %}
+{% call page_section(p.title, 'panel-' + p.kind) %}
+<div class="pn-card" data-kind="{{ p.kind }}">
+  <p class="ce-hint">{{ p.blurb }}</p>
+
+  <div class="pn-controls">
+    {% if p.needs_course %}
+    <label>Course
+      <select data-course>
+        {% if courses %}
+          {% for c in courses %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        {% else %}
+          <option value="">No saved courses yet</option>
+        {% endif %}
+      </select>
+    </label>
+    <label>Days ahead
+      <input type="number" class="pn-days" data-days value="{{ default_days }}" min="1" max="31">
+    </label>
+    {% endif %}
+  </div>
+
+  {% if p.needs_course and not courses %}
+  {{ empty_state('Save a course in CanvasExpert first. The panel still opens, it just has nothing to list yet.') }}
+  {% endif %}
+
+  <div class="pn-embed">
+    <input type="text" data-embed readonly aria-label="Embed code for {{ p.title }}">
+    <button type="button" class="ce-btn" data-copy>Copy embed code</button>
+    <a class="ce-btn" data-open target="_blank" rel="noopener">Open</a>
+    <span class="pn-copied" data-copied hidden>Copied</span>
+  </div>
+
+  <iframe class="pn-preview" data-preview title="{{ p.title }} preview"></iframe>
+</div>
+{% endcall %}
+{% endfor %}
+
+<script>
+(function () {
+  "use strict";
+
+  /* The origin is baked into the embed code on purpose. A saved
+     Classroomscreen board stores this string verbatim, so it has to be the
+     absolute URL of this machine's CanvasExpert, not a relative path. */
+  var ORIGIN = window.location.origin;
+
+  document.querySelectorAll(".pn-card").forEach(function (card) {
+    var kind    = card.dataset.kind;
+    var course  = card.querySelector("[data-course]");
+    var days    = card.querySelector("[data-days]");
+    var embed   = card.querySelector("[data-embed]");
+    var preview = card.querySelector("[data-preview]");
+    var open    = card.querySelector("[data-open]");
+    var copied  = card.querySelector("[data-copied]");
+
+    function url() {
+      var u = ORIGIN + "/panels/" + kind;
+      var q = [];
+      if (course && course.value) q.push("course=" + encodeURIComponent(course.value));
+      if (days && days.value)     q.push("days=" + encodeURIComponent(days.value));
+      return q.length ? u + "?" + q.join("&") : u;
+    }
+
+    function sync() {
+      var u = url();
+      embed.value = '<iframe src="' + u + '" width="900" height="500"></iframe>';
+      open.href = u;
+      preview.src = u;
+      copied.hidden = true;
+    }
+
+    [course, days].forEach(function (el) {
+      if (el) { el.addEventListener("change", sync); el.addEventListener("input", sync); }
+    });
+
+    card.querySelector("[data-copy]").addEventListener("click", function () {
+      embed.select();
+      navigator.clipboard.writeText(embed.value).then(function () {
+        copied.hidden = false;
+      }, function () {
+        /* clipboard can be blocked; the text is selected either way */
+        document.execCommand("copy");
+        copied.hidden = false;
+      });
+    });
+
+    sync();
+  });
+})();
+</script>
+{% endblock %}

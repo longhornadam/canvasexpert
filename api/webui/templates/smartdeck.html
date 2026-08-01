@@ -1,5 +1,5 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import rail, page_header, panel, notice, empty_state %}
+{% from "ui/_macros.html" import rail, page_header, page_section, notice, empty_state %}
 {% block title %}SmartDeck — Canvas Expert{% endblock %}
 {% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}smartdeck-page{% endblock %}
@@ -32,22 +32,22 @@
   {% endcall %}
 </div>
 
-{% call panel('Active', 'smartdeck-active') %}
+{% call page_section('Active', 'smartdeck-active') %}
   <div id="smartdeck-active-list">{{ empty_state('Loading...') }}</div>
 {% endcall %}
 
-{% call panel('Templates', 'smartdeck-templates') %}
+{% call page_section('Templates', 'smartdeck-templates') %}
   <h3>Deck Templates</h3>
   <div id="smartdeck-deck-templates-list">{{ empty_state('Loading...') }}</div>
   <h3>Slide Templates</h3>
   <div id="smartdeck-slide-templates-list">{{ empty_state('Loading...') }}</div>
 {% endcall %}
 
-{% call panel('Archived', 'smartdeck-archived') %}
+{% call page_section('Archived', 'smartdeck-archived') %}
   <div id="smartdeck-archived-list">{{ empty_state('Loading...') }}</div>
 {% endcall %}
 
-{% call panel('Widgets', 'smartdeck-widgets') %}
+{% call page_section('Widgets', 'smartdeck-widgets') %}
   <p class="ce-hint">Widgets are added inside a deck's own Slides while authoring, not managed separately here.</p>
   <ul class="smartdeck-widget-kinds">
     <li><strong>Timer</strong> -- a countdown, scoped to one Slide or the whole Deck. The only widget kind in v1.</li>

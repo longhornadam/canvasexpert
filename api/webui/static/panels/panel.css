@@ -1,0 +1,191 @@
+/* ── CanvasExpert panel kit ──────────────────────────────────────────────
+   Shared chrome for Classroomscreen embed panels.
+
+   SIZING MODEL (the whole point of this file):
+
+   The iframe viewport IS the widget box, so vw/vh track the teacher's drag
+   directly. But sizing text off min(vw,vh) and then multiplying down with em
+   fractions collapses on a wide short panel, which is the shape teachers
+   actually make. So:
+
+     1. Panel chrome (title, footer) scales off vw/vh, generously.
+     2. Rows FLEX to fill whatever height is left over.
+     3. Row text scales off each row's OWN height via container queries,
+        so text is always a fixed fraction of the row it sits in.
+     4. Row COUNT is chosen in JS (_panel.js) from the space available.
+
+   4 is the part that matters. A short panel shows three big rows and pages
+   faster; a tall panel shows eight. Nothing ever shrinks into illegibility,
+   and there is never dead space.
+   ──────────────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--bg, #fff);
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui,
+               -apple-system, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.panel {
+  height: 100%;
+  display: flex; flex-direction: column;
+  padding: clamp(5px, 2.2vmin, 22px) clamp(8px, 2.8vmin, 28px);
+  gap: clamp(2px, .9vmin, 10px);
+  color: var(--ink);
+  background: var(--bg);
+  /* the chrome unit: deliberately large, and no longer strangled by vh */
+  font-size: clamp(13px, min(5vw, 13.5vh), 58px);
+  line-height: 1.1;
+}
+
+/* ── header ─────────────────────────────────────────────────────────── */
+.p-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .7em; padding-bottom: .3em;
+  border-bottom: .07em solid var(--rule);
+}
+.p-title {
+  font-size: .84em; font-weight: 800; letter-spacing: -.02em;
+  color: var(--title, var(--ink));
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.p-sub {
+  flex: 0 0 auto;
+  font-size: .36em; font-weight: 800; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+  white-space: nowrap; text-align: right;
+}
+
+/* ── body: rows flex to fill, always ────────────────────────────────── */
+.p-body {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
+  justify-content: center;      /* leftover space centres, never pools at one end */
+  gap: .09em;
+}
+.p-body.p-in { animation: p-fade .42s ease both; }
+@keyframes p-fade {
+  from { opacity: 0; transform: translateY(.3em); }
+  to   { opacity: 1; transform: none; }
+}
+
+.p-row {
+  flex: 1 1 0; min-height: 0;
+  container-type: size;            /* rows become the query container */
+  display: grid; align-items: center;
+  gap: .5em;
+  padding: 0 .45em;
+  border-radius: .16em;
+  background: var(--row-bg, transparent);
+  box-shadow: inset .22em 0 0 0 var(--row-accent, transparent);
+  transition: background .3s ease;
+}
+.p-row--ghost { visibility: hidden; }
+
+/* Every direct child scales to the ROW's height, not the viewport.
+   The cqw term keeps text sane when a panel is dragged very narrow. */
+.p-row > * {
+  font-size: min(36cqh, 6.5cqw);
+  line-height: 1.05;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.p-row > .p-dim   { font-size: min(29cqh, 5.2cqw); color: var(--muted); }
+.p-row > .p-strong{ font-weight: 800; }
+
+/* Two-slot content: a primary label and a secondary one. Side by side when
+   there is room, stacked onto two lines when the panel is dragged narrow.
+   Without this, three columns of nowrap text ellipsize into uselessness. */
+.p-stack {
+  display: grid; min-width: 0; align-items: center;
+  grid-template-columns: minmax(0, var(--c1, 9fr)) minmax(0, var(--c2, 11fr));
+  gap: .5em;
+}
+.p-stack > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-a { font-size: min(34cqh, 6cqw);   font-weight: 800; }
+.p-b { font-size: min(29cqh, 5.2cqw); color: var(--muted); }
+
+/* Pill, for counts and ages. MUST stay above the tier media queries below:
+   it carries !important, and an equally-specific !important later in the
+   file would beat every tier override no matter how narrow the panel got. */
+.p-pill {
+  justify-self: end;
+  font-weight: 800; font-variant-numeric: tabular-nums;
+  padding: .16em .55em; border-radius: 2em;
+  font-size: min(28cqh, 5cqw) !important;
+}
+
+/* Narrowing is a content decision, not a scaling one. Each tier gives up
+   information so what remains stays legible from the back of a room. */
+
+/* "Text cells" means every leaf that actually renders words, whichever
+   shape the panel used: direct children of a row, or children of a stack.
+   Targeting the kit's own class names instead would make responsiveness
+   opt-in, and a panel that did not happen to use them would silently keep
+   shrinking its type instead of adapting. Mark badges and pills .p-fixed
+   to keep them out of the wrapping rules. */
+@media (max-width: 470px) {
+  .p-stack { grid-template-columns: minmax(0, 1fr); gap: 0; align-content: center; }
+  .p-row > *:not(.p-stack):not(.p-pill):not(.p-fixed),
+  .p-stack > * {
+    white-space: normal;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  }
+  .p-row > *:not(.p-stack):not(.p-pill):not(.p-fixed),
+  .p-a { font-size: min(32cqh, 8cqw); }
+  .p-b { font-size: min(24cqh, 6cqw); }
+  .p-pill { font-size: min(26cqh, 7.5cqw) !important; }
+  .p-hide-narrow { display: none; }
+}
+
+/* tier 2: give up the secondary line. A legible name on two lines beats a
+   complete record nobody can read. */
+@media (max-width: 300px) {
+  .p-b, .p-hide-tight { display: none; }
+  .p-row > *:not(.p-stack):not(.p-pill):not(.p-fixed),
+  .p-a { font-size: min(34cqh, 10cqw); }
+  .p-pill { font-size: min(30cqh, 9cqw) !important; }
+}
+
+/* tier 3: too small to be a list at all. Show the headline number instead
+   of pretending. */
+@media (max-width: 300px) and (max-height: 200px) {
+  .p-body, .p-foot { display: none; }
+  .p-head {
+    flex: 1 1 auto; flex-direction: column; justify-content: center;
+    align-items: flex-start; gap: .15em; border-bottom: 0;
+  }
+  .p-title { font-size: min(13vw, 22vh); white-space: normal; }
+  .p-sub   { font-size: min(7vw, 12vh); text-align: left; }
+}
+
+/* ── footer ─────────────────────────────────────────────────────────── */
+.p-foot {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1em; padding-top: .28em;
+  border-top: .07em solid var(--rule);
+  font-size: .33em; font-weight: 800; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--muted);
+  white-space: nowrap; overflow: hidden;
+}
+.p-foot .p-cta { color: var(--accent); overflow: hidden; text-overflow: ellipsis; }
+
+.p-dots { display: flex; gap: .55em; flex: 0 0 auto; }
+.p-dot {
+  width: .7em; height: .7em; border-radius: 50%;
+  background: var(--rule); transition: background .35s;
+}
+.p-dot.on { background: var(--accent); }
+
+/* Below this the footer is noise, not information. */
+@media (max-height: 190px) {
+  .p-foot { display: none; }
+}
+@media (max-height: 130px) {
+  .p-head { border-bottom: 0; padding-bottom: .1em; }
+}

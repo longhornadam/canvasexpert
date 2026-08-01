@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ panel_title }}</title>
+<link rel="stylesheet" href="/static/panels/panel.css?v={{ asset_v }}">
+<style>
+  .panel {
+    --bg: #f7fbff;
+    --ink: #1b2430;
+    --title: #123a5c;
+    --muted: #8593a3;
+    --rule: #d8e4ef;
+    --accent: #1d6fa5;
+    background: linear-gradient(180deg, #fbfdff 0%, #eef5fb 100%);
+  }
+  .p-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    --row-bg: #fff;
+  }
+  .p-row:nth-child(odd) { --row-bg: #fcfeff; }
+
+  .when {
+    font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
+    color: #5d7a92;
+    font-size: min(28cqh, 5cqw);
+  }
+  .p-a { color: #1b2430; }
+  .pts { justify-self: end; background: #e7f0f8; color: #2c5f80; }
+
+  .p-row.today    { --row-bg: #fff4d9; --row-accent: #d99311; }
+  .p-row.today .when { color: #9a6608; }
+  .p-row.today .p-a  { font-weight: 800; color: #5c3d02; }
+  .p-row.tomorrow { --row-accent: #6ea8cd; }
+
+  /* an empty panel is a normal state, not a failure: say the one useful
+     thing large enough to read from the back of the room */
+  .msg {
+    flex: 1 1 auto; display: grid; place-items: center; text-align: center;
+    padding: .4em 1em; color: var(--muted);
+    /* clamped, not raw min(): on a wide short panel the vh term alone
+       collapses this to a few pixels, which is the same mistake the row
+       sizing in panel.css exists to avoid */
+    font-size: clamp(14px, min(6vw, 16vh), 44px);
+    font-weight: 600; line-height: 1.25;
+  }
+  .stale { color: #9a6608; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="p-head">
+    <div class="p-title" id="title">{{ panel_title }}</div>
+    <div class="p-sub" id="sub"></div>
+  </div>
+
+  <div class="p-body" id="body"></div>
+  <div class="msg" id="msg" hidden></div>
+
+  <div class="p-foot">
+    <span class="p-cta" id="foot"></span>
+    <span class="p-dots" id="dots"></span>
+  </div>
+</div>
+
+<script src="/static/panels/panel.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+
+  var params = new URLSearchParams(location.search);
+  var course = params.get("course") || "";
+  var days   = params.get("days") || "7";
+
+  var bodyEl = document.getElementById("body");
+  var msgEl  = document.getElementById("msg");
+  var DAYS   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+  function midnight(d) {
+    var c = new Date(d.getTime()); c.setHours(0, 0, 0, 0); return c;
+  }
+
+  function whenLabel(due) {
+    var delta = Math.round((midnight(due) - midnight(new Date())) / 86400000);
+    if (delta <= 0) return "Today";
+    if (delta === 1) return "Tomorrow";
+    if (delta < 7)  return DAYS[due.getDay()];
+    return (due.getMonth() + 1) + "/" + due.getDate();
+  }
+
+  function clockLabel(due) {
+    var h = due.getHours(), m = due.getMinutes();
+    var ampm = h >= 12 ? "pm" : "am";
+    h = h % 12; if (h === 0) h = 12;
+    return h + (m ? ":" + (m < 10 ? "0" : "") + m : "") + ampm;
+  }
+
+  function showMessage(text) {
+    bodyEl.hidden = true;
+    msgEl.hidden = false;
+    msgEl.textContent = text;
+  }
+
+  function render(payload) {
+    document.getElementById("sub").textContent = payload.course_name || "";
+
+    if (payload.state !== "ready") {
+      showMessage(payload.message || "Nothing to show.");
+      document.getElementById("foot").textContent = "";
+      return;
+    }
+
+    bodyEl.hidden = false;
+    msgEl.hidden = true;
+    document.getElementById("foot").textContent =
+      "Next " + payload.days + " days";
+    if (payload.stale) {
+      document.getElementById("foot").classList.add("stale");
+      document.getElementById("foot").textContent += " (catalog out of date)";
+    }
+
+    Panel.list({
+      body:  bodyEl,
+      dots:  document.getElementById("dots"),
+      items: payload.assignments,
+      every: 10000,
+      render: function (a, row) {
+        var due = new Date(a.due_at);
+        var label = whenLabel(due);
+        if (label === "Today") row.classList.add("today");
+        else if (label === "Tomorrow") row.classList.add("tomorrow");
+
+        var when = document.createElement("span");
+        when.className = "when";
+        when.textContent = label;
+
+        var stack = document.createElement("span");
+        stack.className = "p-stack";
+        stack.style.setProperty("--c1", "13fr");
+        stack.style.setProperty("--c2", "5fr");
+        var title = document.createElement("span");
+        var at = document.createElement("span");
+        title.className = "p-a";
+        at.className = "p-b";
+        title.textContent = a.title;
+        at.textContent = "due " + clockLabel(due);
+        stack.appendChild(title); stack.appendChild(at);
+
+        row.appendChild(when);
+        row.appendChild(stack);
+
+        if (a.points !== null && a.points !== undefined) {
+          var pts = document.createElement("span");
+          pts.className = "p-pill pts";
+          pts.textContent = a.points + " pt" + (a.points === 1 ? "" : "s");
+          row.appendChild(pts);
+        } else {
+          row.appendChild(document.createElement("span"));
+        }
+      }
+    });
+  }
+
+  function load() {
+    var url = "/panels/whats-due/data?course=" + encodeURIComponent(course) +
+              "&days=" + encodeURIComponent(days);
+    fetch(url, { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function () {
+        showMessage("CanvasExpert is not running on this computer.");
+      });
+  }
+
+  load();
+  /* A projector panel is left up all period and across the bell. Re-read the
+     local catalog occasionally so a refresh done mid-day shows up without
+     the teacher touching the board. */
+  setInterval(load, 15 * 60 * 1000);
+})();
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 {% macro page_header(title, lede='') -%}
 <div class="ce-page-header"><div><h1>{{ title }}</h1>{% if lede %}<p class="ce-hint">{{ lede }}</p>{% endif %}</div></div>
 {%- endmacro %}
-{% macro panel(title='', id='') -%}
+{% macro page_section(title='', id='') -%}
 <section class="ce-panel"{% if id %} id="{{ id }}"{% endif %}>{% if title %}<h2 class="ce-display">{{ title }}</h2>{% endif %}{{ caller() }}</section>
 {%- endmacro %}
 {% macro notice(kind='attention') -%}
