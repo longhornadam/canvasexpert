@@ -5,8 +5,6 @@ Uses lazy module-reference so monkeypatches to config._io propagate correctly.
 from . import _io as _io_mod
 
 SWEEP_DEFAULTS = {
-    "skip_weekends":    True,
-    "holidays":         [],
     "honor_extra_time": True,
 }
 

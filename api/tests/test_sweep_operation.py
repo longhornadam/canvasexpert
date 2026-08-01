@@ -20,19 +20,26 @@ def test_adapter_is_registered():
 
 def test_payload_build():
     adapter = SweepAdapter()
-    payload = adapter.build_payload({"skip_weekends": True, "holidays": ["2026-01-01"]})
-    assert payload["settings"]["skip_weekends"] is True
-    assert "2026-01-01" in payload["settings"]["holidays"]
+    payload = adapter.build_payload({"honor_extra_time": False, "date_from": "2026-01-01"})
+    assert payload["settings"]["honor_extra_time"] is False
+    assert payload["settings"]["date_from"] == "2026-01-01"
+
+def test_payload_build_ignores_caller_supplied_calendar_overrides():
+    """The operation ledger no longer accepts skip_weekends/holidays -- Calendar
+    is the only source of an exceptional school day."""
+    adapter = SweepAdapter()
+    payload = adapter.build_payload({"skip_weekends": False, "holidays": ["2026-01-01"]})
+    assert "skip_weekends" not in payload["settings"]
+    assert "holidays" not in payload["settings"]
 
 def test_payload_build_defaults():
     adapter = SweepAdapter()
     payload = adapter.build_payload({})
-    assert payload["settings"]["skip_weekends"] is True
     assert payload["settings"]["honor_extra_time"] is True
 
 def test_source_digest_deterministic():
     adapter = SweepAdapter()
-    p = {"settings": {"skip_weekends": True, "holidays": []}}
+    p = {"settings": {"honor_extra_time": True}}
     assert adapter.source_digest(p) == adapter.source_digest(p)
 
 def test_verify_targets_valid(monkeypatch):
@@ -60,8 +67,10 @@ def test_freeze_review(monkeypatch):
 def test_baseline_canvas_error_detects_drift(monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all",
                         lambda *a, **kw: ([], None))
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.is_configured",
+                        lambda root=None: True)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.no_count_dates",
+                        lambda *a, **kw: set())
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
                         lambda course_id: [])
     adapter = SweepAdapter()
@@ -105,13 +114,15 @@ def test_execute_applies_sweep(tmp_path, monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _mock_canvas_get_all)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_send", _mock_canvas_send)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.is_configured",
+                        lambda root=None: True)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.no_count_dates",
+                        lambda *a, **kw: set())
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
                         lambda course_id: [])
 
     adapter = SweepAdapter()
-    payload = adapter.build_payload({"skip_weekends": True})
+    payload = adapter.build_payload({})
     op = models.new_operation(
         operation_id="op-sw-execute",
         kind="gradebook.sweep", source_ref=None,
@@ -148,13 +159,15 @@ def test_execute_no_late_subs(tmp_path, monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _no_late)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_send", _mock_canvas_send)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.is_configured",
+                        lambda root=None: True)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.no_count_dates",
+                        lambda *a, **kw: set())
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
                         lambda course_id: [])
 
     adapter = SweepAdapter()
-    payload = adapter.build_payload({"skip_weekends": True})
+    payload = adapter.build_payload({})
     baseline = adapter.capture_baseline(payload, {"course_id": "42"})
     assert baseline["entry_count"] == 0
 
@@ -191,8 +204,10 @@ def test_pipeline_with_mocks(tmp_path, monkeypatch):
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _mock_canvas_get_all)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_send", _mock_canvas_send)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.is_configured",
+                        lambda root=None: True)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.school_calendar.no_count_dates",
+                        lambda *a, **kw: set())
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.get_extra_time",
                         lambda course_id: [])
 
@@ -200,8 +215,8 @@ def test_pipeline_with_mocks(tmp_path, monkeypatch):
     assert adapter is not None
 
     # 1. Build
-    payload = adapter.build_payload({"skip_weekends": True, "honor_extra_time": True})
-    assert payload["settings"]["skip_weekends"] is True
+    payload = adapter.build_payload({"honor_extra_time": True})
+    assert payload["settings"]["honor_extra_time"] is True
 
     # 2. Verify
     targets = adapter.verify_targets(payload, [{"course_id": "101"}])

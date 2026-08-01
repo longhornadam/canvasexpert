@@ -1,0 +1,158 @@
+{% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import rail, page_header %}
+{% block title %}Calendar — Canvas Expert{% endblock %}
+{% block workspace_variant %}left-main{% endblock %}
+{% block workspace_body_class %}ce-calendar-page{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/pages/calendar.css?v={{ asset_v }}">{% endblock %}
+
+{% block left_rail %}
+{% call rail('left', 'Calendar sections') %}
+  <nav class="ce-rail-nav" aria-label="Calendar sections">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">This year</p>
+      <div class="ce-rail-nav__links">
+        <a href="#calendar-readiness-card" data-rail-link>Readiness &amp; upcoming</a>
+        <a href="#calendar-change-card" data-rail-link>Change a date</a>
+        <a href="#calendar-create-card" data-rail-link>Create / replace school year</a>
+      </div>
+    </div>
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Definitions</p>
+      <div class="ce-rail-nav__links">
+        <a href="#calendar-bell-card" data-rail-link>Bell Schedules</a>
+        <a href="#calendar-teacher-card" data-rail-link>Teacher Schedule</a>
+      </div>
+    </div>
+  </nav>
+{% endcall %}
+{% endblock %}
+
+{% block workspace_header %}{{ page_header('Calendar', 'School dates, bell schedules, and the teacher schedule that SmartDeck and Panels read.') }}{% endblock %}
+
+{% block primary %}
+<div class="ce-calendar-stack">
+
+<section class="ce-panel ce-calendar-panel" id="calendar-readiness-card">
+  <h2>Readiness &amp; upcoming</h2>
+  <div id="calendar-readiness" class="ce-calendar-readiness" aria-live="polite"></div>
+  <div id="calendar-upcoming" class="ce-calendar-upcoming"></div>
+</section>
+
+<section class="ce-panel ce-calendar-panel" id="calendar-change-card">
+  <h2>Change a date</h2>
+  <p class="ce-hint">
+    Correct one date, or a range (optionally limited to certain weekdays) — for example
+    "use Friday Schedule Monday through Friday for the next two weeks."
+  </p>
+  <div class="ce-calendar-grid ce-calendar-grid--change">
+    <label>Dates <small class="lbl-hint">(comma-separated, optional if using a range)</small>
+      <input type="text" id="cal-change-dates" placeholder="2026-10-16">
+    </label>
+    <label>From <input type="date" id="cal-change-from"></label>
+    <label>To <input type="date" id="cal-change-to"></label>
+  </div>
+  <div class="ce-calendar-grid ce-calendar-grid--single">
+    <label>Weekdays <small class="lbl-hint">(optional subset, e.g. Mon-Fri only)</small>
+      <div class="ce-calendar-weekdays" id="cal-change-weekdays">
+        <label><input type="checkbox" value="0" checked>Mon</label>
+        <label><input type="checkbox" value="1" checked>Tue</label>
+        <label><input type="checkbox" value="2" checked>Wed</label>
+        <label><input type="checkbox" value="3" checked>Thu</label>
+        <label><input type="checkbox" value="4" checked>Fri</label>
+        <label><input type="checkbox" value="5">Sat</label>
+        <label><input type="checkbox" value="6">Sun</label>
+      </div>
+    </label>
+  </div>
+  <div class="ce-calendar-grid ce-calendar-grid--change">
+    <label>Kind
+      <select id="cal-change-kind">
+        <option value="instructional">Instructional (names a Bell Schedule)</option>
+        <option value="no_school">No school</option>
+        <option value="no_regular_classes">No regular classes</option>
+      </select>
+    </label>
+    <label>Bell Schedule <small class="lbl-hint">(instructional only)</small>
+      <select id="cal-change-schedule"></select>
+    </label>
+    <label>Label <small class="lbl-hint">(required for no school / no regular classes)</small>
+      <input type="text" id="cal-change-label" placeholder="Field day">
+    </label>
+  </div>
+  <div class="ce-actions">
+    <button type="button" id="cal-change-preview">Preview</button>
+    <button type="button" id="cal-change-apply" class="primary" hidden>Apply</button>
+  </div>
+  <div id="cal-change-preview-result" class="ce-calendar-preview" hidden></div>
+  <p id="cal-change-status" class="status ce-calendar-status"></p>
+</section>
+
+<section class="ce-panel ce-calendar-panel" id="calendar-create-card">
+  <h2>Create / replace school year</h2>
+  <p class="ce-hint">
+    Builds a complete, validated calendar for one coverage range: every day becomes
+    instructional (on your default Bell Schedule), a weekend, or an explicit no-school day.
+    Replaces the active calendar entirely.
+  </p>
+  <details class="ce-calendar-details">
+    <summary class="delivery-summary">Start from an academic-calendar CSV</summary>
+    <div class="delivery-inner">
+      <p class="ce-hint">
+        Paste a calendar CSV (Canonical 7-column or Simple 4-column format —
+        <a href="/api/calendar/import/template" download="calendar_template.csv">download the blank template</a>)
+        to pre-fill no-school dates and grading periods below.
+      </p>
+      <label>CSV contents
+        <textarea id="cal-import-csv" rows="6"></textarea>
+      </label>
+      <div class="ce-actions">
+        <button type="button" id="cal-import-parse">Parse into the form below</button>
+      </div>
+      <p id="cal-import-status" class="status ce-calendar-status"></p>
+    </div>
+  </details>
+  <div class="ce-calendar-grid ce-calendar-grid--change">
+    <label>School year <input type="text" id="cal-create-year" placeholder="2026-27"></label>
+    <label>Coverage start <input type="date" id="cal-create-start"></label>
+    <label>Coverage end <input type="date" id="cal-create-end"></label>
+  </div>
+  <div class="ce-calendar-grid ce-calendar-grid--single">
+    <label>Default Bell Schedule <select id="cal-create-default-schedule"></select></label>
+  </div>
+  <div class="ce-calendar-grid ce-calendar-grid--single">
+    <label>No-school dates <small class="lbl-hint">(YYYY-MM-DD, one per line — pre-filled by CSV import)</small>
+      <textarea id="cal-create-no-school" rows="4"></textarea>
+    </label>
+  </div>
+  <div class="ce-actions">
+    <button type="button" id="cal-create-submit" class="primary">Create / replace</button>
+  </div>
+  <p id="cal-create-status" class="status ce-calendar-status"></p>
+</section>
+
+<section class="ce-panel ce-calendar-panel" id="calendar-bell-card">
+  <h2>Bell Schedules</h2>
+  <p class="ce-hint">CSV files in your Calendars folder. Edit them there; this lists what Calendar can see.</p>
+  <div id="calendar-bell-list" class="ce-calendar-bell-list"></div>
+  <div class="ce-actions">
+    <button type="button" id="calendar-open-folder" class="small" disabled>Open the Calendars folder</button>
+  </div>
+</section>
+
+<section class="ce-panel ce-calendar-panel" id="calendar-teacher-card">
+  <h2>Teacher Schedule</h2>
+  <p class="ce-hint">One row per class. <strong>Block</strong> is the name your slides point to, so keep it steady once slides use it. <strong>Periods</strong> are the bell periods it covers, in order. <strong>Course</strong> is a teacher-facing label. <strong>Canvas course</strong> is optional and links the block to a saved Canvas course.</p>
+  <div id="calendar-teacher-block-list" class="ce-schedule-block-list"></div>
+  <div class="ce-actions">
+    <button type="button" id="calendar-teacher-add-block" class="small">Add a block</button>
+    <button type="button" id="calendar-teacher-save-blocks" class="primary small">Save blocks</button>
+    <span id="calendar-teacher-status" class="status ce-settings-inline-status"></span>
+  </div>
+</section>
+
+</div>
+{% endblock %}
+
+{% block workspace_scripts %}
+<script src="/static/pages/calendar.js?v={{ asset_v }}"></script>
+{% endblock %}

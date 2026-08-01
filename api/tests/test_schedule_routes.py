@@ -2,7 +2,6 @@
 
 import json
 import shutil
-from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -55,7 +54,7 @@ def _bell_schedule(calendars):
     )
 
 
-def test_get_api_schedule_on_empty_workspace_reports_all_three_missing(isolated_workspace):
+def test_get_api_schedule_on_empty_workspace_reports_both_missing(isolated_workspace):
     response = client.get("/api/schedule")
     data = response.json()
     assert response.status_code == 200
@@ -63,10 +62,8 @@ def test_get_api_schedule_on_empty_workspace_reports_all_three_missing(isolated_
     assert data["ready"] is False
     assert data["pieces"]["teacher_schedule"]["present"] is False
     assert data["pieces"]["bell_schedules"]["present"] is False
-    assert data["pieces"]["day_calendar"]["present"] is False
     assert "no teacher schedule found" in data["missing"]
     assert "no bell schedules found" in data["missing"]
-    assert "no day calendar found" in data["missing"]
 
 
 def test_get_api_schedule_reports_missing_bell_schedules_explicitly(isolated_workspace):
@@ -82,49 +79,6 @@ def test_get_api_schedule_reports_missing_bell_schedules_explicitly(isolated_wor
     assert data["ready"] is False
     assert "no bell schedules found" in data["missing"]
     assert data["pieces"]["bell_schedules"]["found"] == []
-
-
-def test_get_api_schedule_reports_unknown_schedule_ids_in_the_day_calendar(isolated_workspace):
-    calendars, smartdecks = _folders(isolated_workspace)
-    (smartdecks / "Teacher Schedule.json").write_text(
-        json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
-        encoding="utf-8",
-    )
-    (calendars / "Bell Schedule - Example.csv").write_text(
-        "period_id,start,end\n1,08:00,08:45\n", encoding="utf-8"
-    )
-    (calendars / "Day Calendar.csv").write_text(
-        "date,schedule_id\n2026-08-17,renamed_schedule\n", encoding="utf-8"
-    )
-    data = client.get("/api/schedule").json()
-    assert data["pieces"]["day_calendar"]["unknown_schedule_ids"] == ["renamed_schedule"]
-
-
-def test_get_api_schedule_reports_a_day_calendar_that_ran_out(isolated_workspace):
-    calendars, smartdecks = _folders(isolated_workspace)
-    today = date.today()
-    yesterday = (today - timedelta(days=1)).isoformat()
-    tomorrow = (today + timedelta(days=1)).isoformat()
-    (smartdecks / "Teacher Schedule.json").write_text(
-        json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
-        encoding="utf-8",
-    )
-    (calendars / "Bell Schedule - Example.csv").write_text(
-        "period_id,start,end\n1,08:00,08:45\n", encoding="utf-8"
-    )
-    day_path = calendars / "Day Calendar.csv"
-
-    def ends_before_today(*dates):
-        rows = "".join(f"{value},bell_schedule_example\n" for value in dates)
-        day_path.write_text(f"date,schedule_id\n{rows}", encoding="utf-8")
-        return client.get("/api/schedule").json()["pieces"]["day_calendar"]["ends_before_today"]
-
-    assert ends_before_today(yesterday) is True
-    assert ends_before_today(today.isoformat()) is False
-    assert ends_before_today(tomorrow) is False
-    # Weekends and holidays are absent from a healthy calendar, so a gap over
-    # today is not exhaustion as long as later dates remain.
-    assert ends_before_today(yesterday, tomorrow) is False
 
 
 def test_get_api_schedule_returns_blocks_verbatim_including_unknown_keys(isolated_workspace):

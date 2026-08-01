@@ -34,13 +34,6 @@
 {% block primary %}
 <div class="pn-stack" data-default-theme="{{ default_theme }}">
 
-<div class="pn-today" id="pn-today" hidden>
-  <label class="pn-today__pick">Today's bell schedule
-    <select id="pn-today-select"></select>
-  </label>
-  <span class="pn-today__note" id="pn-today-note" role="status" aria-live="polite"></span>
-</div>
-
 {% if not courses %}
 {% call notice('attention') %}
   No courses saved. <a href="/settings#add-courses-card">Add one in Settings</a>.
@@ -56,10 +49,10 @@
     <div class="pn-build__form">
       <div class="pn-controls">
         {% if p.needs_course %}
-        <label>Course
-          <select data-course>
+        <label>Fixed block <small class="lbl-hint">(optional)</small>
+          <select data-block>
             <option value="">Follow my schedule</option>
-            {% for c in courses %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+            {% for b in blocks %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
           </select>
         </label>
         <label>Days ahead
@@ -132,9 +125,45 @@
      stays short and a later change of default is not frozen into old boards. */
   var DEFAULT_THEME = document.querySelector(".pn-stack").dataset.defaultTheme;
 
+  /* Select an element's text via Range/Selection so execCommand("copy") has
+     something to act on -- the address is shown in a <code>, not an input,
+     so it cannot .select() itself the way the embed <input> can. */
+  function selectText(el) {
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function execCommandCopy(el) {
+    try {
+      selectText(el);
+      var ok = document.execCommand("copy");
+      window.getSelection().removeAllRanges();
+      return ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /* Copy feedback must reflect what actually happened: the Clipboard API can
+     silently fail to be available, and execCommand can return false. Reporting
+     "Copied" regardless would tell a teacher their embed code is on the
+     clipboard when it never left the page. */
+  function copyText(text, fallbackEl) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { return execCommandCopy(fallbackEl); }
+      );
+    }
+    return Promise.resolve(execCommandCopy(fallbackEl));
+  }
+
   document.querySelectorAll(".pn-card").forEach(function (card) {
     var kind    = card.dataset.kind;
-    var course  = card.querySelector("[data-course]");
+    var block   = card.querySelector("[data-block]");
     var days    = card.querySelector("[data-days]");
     var theme   = card.querySelector("[data-theme]");
     var embed   = card.querySelector("[data-embed]");
@@ -147,7 +176,7 @@
     function url() {
       var u = ORIGIN + "/panels/" + kind;
       var q = [];
-      if (course && course.value) q.push("course=" + encodeURIComponent(course.value));
+      if (block && block.value)  q.push("block=" + encodeURIComponent(block.value));
       if (days && days.value)     q.push("days=" + encodeURIComponent(days.value));
       if (theme && theme.value && theme.value !== DEFAULT_THEME) {
         q.push("theme=" + encodeURIComponent(theme.value));
@@ -164,20 +193,19 @@
       copied.hidden = true;
     }
 
-    [course, days, theme].forEach(function (el) {
+    [block, days, theme].forEach(function (el) {
       if (el) { el.addEventListener("change", sync); el.addEventListener("input", sync); }
     });
 
     card.querySelectorAll("[data-copy]").forEach(function (button) {
       button.addEventListener("click", function () {
-        var text = button.dataset.copy === "link" ? url() : embed.value;
-        if (button.dataset.copy !== "link") embed.select();
-        navigator.clipboard.writeText(text).then(function () {
+        var isLink = button.dataset.copy === "link";
+        var text = isLink ? url() : embed.value;
+        var fallbackEl = isLink ? address : embed;
+        if (!isLink) embed.select();
+        copyText(text, fallbackEl).then(function (ok) {
           copied.hidden = false;
-        }, function () {
-          /* clipboard can be blocked; the embed text is selected either way */
-          document.execCommand("copy");
-          copied.hidden = false;
+          copied.textContent = ok ? "Copied" : "Could not copy — select and copy the address below.";
         });
       });
     });
@@ -196,74 +224,6 @@
 
     sync();
   });
-
-  /* ── Today's bell schedule ──────────────────────────────────────────────
-     A bell schedule changes for an assembly or a late start and nobody
-     updates the calendar. That failure is silent: panels resolve to the wrong
-     class and look perfectly healthy doing it. One dropdown, only ever about
-     today, is the cheapest way to make it correctable in the place the
-     teacher is already standing. It stays hidden when there is nothing to
-     choose between, so a teacher who never set this up is not nagged. */
-  var todayBox    = document.getElementById("pn-today");
-  var todaySelect = document.getElementById("pn-today-select");
-  var todayNote   = document.getElementById("pn-today-note");
-
-  function note(text, kind) {
-    todayNote.textContent = text || "";
-    todayNote.dataset.kind = kind || "";
-  }
-
-  function paintToday(data) {
-    if (!data.ok || !data.options.length) return;   /* nothing to correct with */
-
-    todaySelect.innerHTML = "";
-    var fromCalendar = document.createElement("option");
-    fromCalendar.value = "";
-    fromCalendar.textContent = "— from calendar —";
-    todaySelect.appendChild(fromCalendar);
-
-    data.options.forEach(function (option) {
-      var el = document.createElement("option");
-      el.value = option.schedule_id;
-      el.textContent = option.label;
-      todaySelect.appendChild(el);
-    });
-
-    todaySelect.value = data.schedule_id || "";
-    if (data.unknown_schedule) note("Calendar names a schedule that is missing", "warn");
-    else if (data.corrected)    note("Corrected for today", "ok");
-    else                        note("");
-    todayBox.hidden = false;
-  }
-
-  function loadToday() {
-    fetch("/api/schedule/today", { cache: "no-store" })
-      .then(function (r) { return r.json(); })
-      .then(paintToday)
-      .catch(function () { /* leave the strip hidden rather than half-drawn */ });
-  }
-
-  todaySelect.addEventListener("change", function () {
-    var body = new FormData();
-    body.append("schedule_id", todaySelect.value);
-    note("Saving…");
-    fetch("/api/schedule/today", { method: "POST", body: body })
-      .then(function (r) { return r.json(); })
-      .then(function (result) {
-        if (!result.ok) {
-          note((result.problems || ["Could not save"])[0], "warn");
-          return;
-        }
-        note(todaySelect.value ? "Corrected for today" : "Following the calendar", "ok");
-        /* The panels below are now answering a different question. */
-        document.querySelectorAll("[data-preview]").forEach(function (frame) {
-          frame.contentWindow.location.reload();
-        });
-      })
-      .catch(function () { note("Could not save", "warn"); });
-  });
-
-  loadToday();
 })();
 </script>
 {% endblock %}

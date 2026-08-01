@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 15.
+Tool schema version 16.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -50,7 +50,10 @@ Tool schema version 15.
 | `get_teacher_schedule()` | The teacher's own block-name mapping | No |
 | `save_deck(date, title, slides, widgets=None)` | Validates and writes a SmartDeck deck live (no review queue) | No |
 | `save_teacher_schedule(blocks)` | Replaces the teacher's SmartDeck blocks live | No |
-| `save_day_calendar(label, start_date, end_date, default_schedule_id, ...)` | Generates and writes a day calendar CSV live | No |
+| `get_school_calendar(date_from="", date_to="")` | Canonical School Calendar readiness, plus a bounded range of days/grading-periods/events when both dates are given | No |
+| `create_school_calendar(school_year, coverage_start, coverage_end, default_schedule_id, ...)` | Creates/replaces the complete canonical School Calendar for one year, live | No |
+| `preview_school_calendar_change(kind, ...)` | Previews a day-kind/schedule/label change against the live calendar; returns the base revision and affected dates | No |
+| `apply_school_calendar_change(preview, expected_revision)` | Applies a previewed change; refuses a stale `expected_revision` | No |
 | `list_active_decks()` | Lists active decks | No |
 | `archive_deck(deck_id)` | Moves a deck to archived | No |
 
@@ -68,11 +71,19 @@ then receive the Forge-only staging appendix. SmartDeck (`deck`) reads its canon
 from the same source but has no staging/review appendix — unlike other Forge kinds, SmartDeck
 writes live to the workspace immediately with no teacher review queue.
 
-`save_deck`, `save_day_calendar`, `list_active_decks`, and `archive_deck` take no
-`course_id` and carry no student data. They use the same local-only exemption: no course
-gate, no identity vault, and no safety scan. `save_teacher_schedule` has no `course_id`
-parameter and makes no Canvas call; a teacher-set block `course_id` passes through untouched
-after string validation, so an assistant can read, edit, and write the binding safely.
+`save_deck`, `list_active_decks`, and `archive_deck` take no `course_id` and carry no
+student data. They use the same local-only exemption: no course gate, no identity vault,
+and no safety scan. `save_teacher_schedule` has no `course_id` parameter and makes no
+Canvas call; a teacher-set block `course_id` passes through untouched after string
+validation, so an assistant can read, edit, and write the binding safely.
+
+The four canonical Calendar tools (`get_school_calendar`, `create_school_calendar`,
+`preview_school_calendar_change`, `apply_school_calendar_change`) share the same
+exemption: no `course_id`, no student data, no course gate, no safety scan. `create` and
+`apply` write live with no review queue, so the authoring contract instructs the
+assistant to translate pasted public schedule facts into a preview, summarize affected
+dates and conflicts, and apply only after the teacher accepts that summary — never
+inside an email/inbox integration or a free-text parser built into CanvasExpert itself.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
 the app actually does — an assistant that sees only the read tools cannot tell that

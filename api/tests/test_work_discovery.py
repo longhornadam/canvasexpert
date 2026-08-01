@@ -164,17 +164,9 @@ def test_course_provider_failure_does_not_stop_other_providers(monkeypatch):
 
 def test_scan_course_shares_successful_assignment_and_submission_reads(monkeypatch):
     monkeypatch.setattr(grading_debt, "powergrader_evidence", lambda: {})
-    monkeypatch.setattr(
-        late_work.config,
-        "get_sweep_settings",
-        lambda: {"skip_weekends": False, "holidays": []},
-    )
     monkeypatch.setattr(late_work.config, "get_extra_time", lambda course_id: [])
-    monkeypatch.setattr(
-        late_work.config,
-        "get_combined_calendar_for_range",
-        lambda: {"no_count_dates": []},
-    )
+    monkeypatch.setattr(late_work.school_calendar, "is_configured", lambda root=None: True)
+    monkeypatch.setattr(late_work.school_calendar, "no_count_dates", lambda *a, **kw: set())
     monkeypatch.setattr(roster_warnings, "scan_course", lambda *args, **kwargs: [])
 
     assignments_path = "/api/v1/courses/course-1/assignments"
@@ -257,8 +249,9 @@ def test_grading_debt_counts_zero_as_graded_and_teacher_comment_as_touched(monke
 
 
 def test_late_work_uses_school_day_and_extra_time(monkeypatch):
-    monkeypatch.setattr(late_work.config, "get_sweep_settings", lambda: {"skip_weekends": True, "holidays": []})
     monkeypatch.setattr(late_work.config, "get_extra_time", lambda course_id: [])
+    monkeypatch.setattr(late_work.school_calendar, "is_configured", lambda root=None: True)
+    monkeypatch.setattr(late_work.school_calendar, "no_count_dates", lambda *a, **kw: set())
 
     def fake_get(path, params=None, timeout=None):
         if path.endswith("/assignments"):

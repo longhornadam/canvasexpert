@@ -83,8 +83,12 @@ class TestResolveFeedBellSchedule:
             lambda date_str: (fixture_blocks, [])
         )
         monkeypatch.setattr(
-            "api.webui.deps.load_day_calendar",
-            lambda: ({"2026-08-14": "bobcat"}, [])
+            "api.webui.deps.load_bell_schedules",
+            lambda: ({"bobcat": []}, [])
+        )
+        monkeypatch.setattr(
+            "api.webui.school_calendar.resolve_date",
+            lambda doc, date_str, known: {"state": "ready", "schedule_id": "bobcat"}
         )
 
         result = smartdeck_feeds.resolve_feed("bell_schedule", "2026-08-14")
@@ -103,8 +107,12 @@ class TestResolveFeedBellSchedule:
             lambda date_str: ([], [])
         )
         monkeypatch.setattr(
-            "api.webui.deps.load_day_calendar",
-            lambda: ({"2026-08-14": "bobcat"}, [])
+            "api.webui.deps.load_bell_schedules",
+            lambda: ({"bobcat": []}, [])
+        )
+        monkeypatch.setattr(
+            "api.webui.school_calendar.resolve_date",
+            lambda doc, date_str, known: {"state": "ready", "schedule_id": "bobcat"}
         )
 
         result = smartdeck_feeds.resolve_feed("bell_schedule", "2026-08-14")
@@ -123,7 +131,6 @@ class TestResolveFeedBellSchedule:
         result = smartdeck_feeds.resolve_feed("bell_schedule", "2026-08-14")
         assert result["ok"] is True
         data = result["data"]
-        assert data["day_type"] is None
         assert data["blocks"] == []
         assert data["current_block"] is None
 
@@ -175,37 +182,41 @@ class TestResolveFeedBellSchedule:
 
 
 class TestResolveFeedDistrictCalendarEvents:
-    """Test resolve_feed('district_calendar_events', ...)."""
+    """Test resolve_feed('district_calendar_events', ...) -- synthesized from
+    the canonical calendar's day kinds and grading periods."""
 
-    def test_district_calendar_events_classroom_only(self, monkeypatch):
-        """Only classroom-facing events are returned."""
-        fixture_payload = {
-            "events": [
-                {"kind": "no_school", "label": "Fall Break"},
-                {"kind": "ssn", "label": "Secret student number"},
-            ]
+    def test_district_calendar_events_synthesizes_no_school_and_grading_period(self, monkeypatch):
+        fixture_projection = {
+            "days": {
+                "2026-08-20": {"kind": "no_school", "schedule_id": None, "label": "Fall Break"},
+                "2026-08-21": {"kind": "instructional", "schedule_id": "bobcat"},
+            },
+            "grading_periods": [
+                {"code": "Q1", "name": "Quarter 1", "start": "2026-08-01",
+                 "end": "2026-10-15", "report_issue_date": "2026-10-20"},
+            ],
         }
         monkeypatch.setattr(
-            "api.webui.config.get_combined_calendar_for_range",
-            lambda start, end: fixture_payload
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: (fixture_projection, [])
         )
 
         result = smartdeck_feeds.resolve_feed("district_calendar_events", "2026-08-14")
         assert result["ok"] is True
         data = result["data"]
-        assert len(data) == 1
-        assert data[0]["kind"] == "no_school"
+        kinds = {event["kind"] for event in data}
+        assert kinds == {"no_school", "grading_period_end", "report_card"}
+        assert any(event["label"] == "Fall Break" for event in data)
 
     def test_district_calendar_events_no_audience_tag(self, monkeypatch):
         """Returned events have no 'audience' key."""
-        fixture_payload = {
-            "events": [
-                {"kind": "no_school", "label": "Fall Break"},
-            ]
+        fixture_projection = {
+            "days": {"2026-08-20": {"kind": "no_school", "schedule_id": None, "label": "Fall Break"}},
+            "grading_periods": [],
         }
         monkeypatch.setattr(
-            "api.webui.config.get_combined_calendar_for_range",
-            lambda start, end: fixture_payload
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: (fixture_projection, [])
         )
 
         result = smartdeck_feeds.resolve_feed("district_calendar_events", "2026-08-14")
@@ -214,10 +225,10 @@ class TestResolveFeedDistrictCalendarEvents:
             assert "audience" not in event
 
     def test_district_calendar_events_exception_graceful(self, monkeypatch):
-        """Exception in config.get_combined_calendar_for_range returns empty list."""
+        """Exception in range_projection returns empty list."""
         monkeypatch.setattr(
-            "api.webui.config.get_combined_calendar_for_range",
-            lambda start, end: (_ for _ in ()).throw(Exception("calendar error"))
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: (_ for _ in ()).throw(Exception("calendar error"))
         )
 
         result = smartdeck_feeds.resolve_feed("district_calendar_events", "2026-08-14")
@@ -226,28 +237,36 @@ class TestResolveFeedDistrictCalendarEvents:
 
     def test_district_calendar_events_invalid_date_graceful(self, monkeypatch):
         """Invalid date string returns graceful response."""
+        result = smartdeck_feeds.resolve_feed("district_calendar_events", "not_a_date")
+        assert result["ok"] is True
+        assert result["data"] == []
+
+    def test_district_calendar_events_unconfigured_returns_empty(self, monkeypatch):
+        """An unconfigured calendar (range_projection returns None) yields no events."""
         monkeypatch.setattr(
-            "api.webui.config.get_combined_calendar_for_range",
-            lambda start, end: {"events": []}
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: (None, ["unconfigured"])
         )
 
-        result = smartdeck_feeds.resolve_feed("district_calendar_events", "not_a_date")
+        result = smartdeck_feeds.resolve_feed("district_calendar_events", "2026-08-14")
         assert result["ok"] is True
         assert result["data"] == []
 
 
 class TestResolveFeedSchoolEvents:
-    """Test resolve_feed('school_events', ...)."""
+    """Test resolve_feed('school_events', ...) -- the canonical calendar's
+    public events array (games, dances, assemblies, etc)."""
 
     def test_school_events_classroom_only(self, monkeypatch):
         """Only classroom-facing events are returned."""
         fixture_events = [
-            {"kind": "game", "label": "Football game", "start": "2026-08-15"},
+            {"kind": "game", "label": "Football game", "start": "2026-08-15", "end": "2026-08-15"},
             {"kind": "ssn", "label": "Secret data"},
         ]
         monkeypatch.setattr(
-            "api.webui.school_events.events_for_range",
-            lambda date_from, date_to, root: fixture_events
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: ({"days": {}, "grading_periods": [],
+                                                     "events": fixture_events}, [])
         )
 
         result = smartdeck_feeds.resolve_feed("school_events", "2026-08-14")
@@ -259,11 +278,12 @@ class TestResolveFeedSchoolEvents:
     def test_school_events_no_audience_tag(self, monkeypatch):
         """Returned events have no 'audience' key."""
         fixture_events = [
-            {"kind": "game", "label": "Football game", "start": "2026-08-15"},
+            {"kind": "game", "label": "Football game", "start": "2026-08-15", "end": "2026-08-15"},
         ]
         monkeypatch.setattr(
-            "api.webui.school_events.events_for_range",
-            lambda date_from, date_to, root: fixture_events
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: ({"days": {}, "grading_periods": [],
+                                                     "events": fixture_events}, [])
         )
 
         result = smartdeck_feeds.resolve_feed("school_events", "2026-08-14")
@@ -272,10 +292,10 @@ class TestResolveFeedSchoolEvents:
             assert "audience" not in event
 
     def test_school_events_exception_graceful(self, monkeypatch):
-        """Exception in school_events.events_for_range returns empty list."""
+        """Exception in range_projection returns empty list."""
         monkeypatch.setattr(
-            "api.webui.school_events.events_for_range",
-            lambda date_from, date_to, root: (_ for _ in ()).throw(Exception("events error"))
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: (_ for _ in ()).throw(Exception("events error"))
         )
 
         result = smartdeck_feeds.resolve_feed("school_events", "2026-08-14")
@@ -285,12 +305,13 @@ class TestResolveFeedSchoolEvents:
     def test_school_events_sorted(self, monkeypatch):
         """School events are sorted by _event_sort_key."""
         fixture_events = [
-            {"kind": "club", "label": "Club B", "start": "2026-08-20"},
-            {"kind": "game", "label": "Game A", "start": "2026-08-15"},
+            {"kind": "club", "label": "Club B", "start": "2026-08-20", "end": "2026-08-20"},
+            {"kind": "game", "label": "Game A", "start": "2026-08-15", "end": "2026-08-15"},
         ]
         monkeypatch.setattr(
-            "api.webui.school_events.events_for_range",
-            lambda date_from, date_to, root: fixture_events
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: ({"days": {}, "grading_periods": [],
+                                                     "events": fixture_events}, [])
         )
 
         result = smartdeck_feeds.resolve_feed("school_events", "2026-08-14")
@@ -306,16 +327,15 @@ class TestResolveFeedLookaheadDays:
 
     def test_lookahead_days_capped_at_max(self, monkeypatch):
         """lookahead_days is capped at MAX_LOOKAHEAD_DAYS."""
-        fixture_events = []
         call_log = []
 
-        def mock_events_for_range(date_from, date_to, root):
+        def mock_range_projection(date_from, date_to, root=None):
             call_log.append((date_from, date_to))
-            return fixture_events
+            return {"days": {}, "grading_periods": [], "events": []}, []
 
         monkeypatch.setattr(
-            "api.webui.school_events.events_for_range",
-            mock_events_for_range
+            "api.webui.school_calendar.range_projection",
+            mock_range_projection
         )
 
         # Request with lookahead_days > MAX_LOOKAHEAD_DAYS
@@ -325,21 +345,20 @@ class TestResolveFeedLookaheadDays:
         # Verify the date range was capped
         assert len(call_log) == 1
         date_from, date_to = call_log[0]
-        delta = (date_to - date_from).days
+        delta = (date.fromisoformat(date_to) - date.fromisoformat(date_from)).days
         assert delta == smartdeck_feeds.MAX_LOOKAHEAD_DAYS
 
     def test_lookahead_days_negative_becomes_zero(self, monkeypatch):
         """Negative lookahead_days is treated as zero."""
-        fixture_events = []
         call_log = []
 
-        def mock_events_for_range(date_from, date_to, root):
+        def mock_range_projection(date_from, date_to, root=None):
             call_log.append((date_from, date_to))
-            return fixture_events
+            return {"days": {}, "grading_periods": [], "events": []}, []
 
         monkeypatch.setattr(
-            "api.webui.school_events.events_for_range",
-            mock_events_for_range
+            "api.webui.school_calendar.range_projection",
+            mock_range_projection
         )
 
         result = smartdeck_feeds.resolve_feed("school_events", "2026-08-14", lookahead_days=-10)
@@ -365,22 +384,22 @@ class TestResolveScheduleRobustness:
         assert result["available"] is True
         # Should have a valid response, not raise
 
-    def test_district_calendar_malformed_payload_graceful(self, monkeypatch):
-        """Malformed calendar payload is handled gracefully."""
+    def test_district_calendar_malformed_projection_graceful(self, monkeypatch):
+        """A malformed projection (not a dict) is handled gracefully."""
         monkeypatch.setattr(
-            "api.webui.config.get_combined_calendar_for_range",
-            lambda start, end: "not a dict"  # Wrong type
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: ("not a dict", [])
         )
 
         result = smartdeck_feeds.resolve_feed("district_calendar_events", "2026-08-14")
         assert result["ok"] is True
         assert result["data"] == []
 
-    def test_school_events_non_list_return_graceful(self, monkeypatch):
-        """Non-list return from events_for_range is handled gracefully."""
+    def test_school_events_malformed_projection_graceful(self, monkeypatch):
+        """A malformed projection (not a dict) is handled gracefully."""
         monkeypatch.setattr(
-            "api.webui.school_events.events_for_range",
-            lambda date_from, date_to, root: "not a list"  # Wrong type
+            "api.webui.school_calendar.range_projection",
+            lambda date_from, date_to, root=None: ("not a dict", [])
         )
 
         result = smartdeck_feeds.resolve_feed("school_events", "2026-08-14")

@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import config
+from .. import school_calendar
 from ..canvas_client import _canvas_get, _canvas_send
 from ..schooldays import _add_school_days, _parse_iso_local
 
@@ -13,18 +13,16 @@ router = APIRouter(tags=["gradebook"])
 
 @router.post("/api/extend-due")
 def extend_due(course_id: str = Form(...), assignment_id: str = Form(...),
-               student_ids: str = Form(...), days: int = Form(...),
-               skip_weekends: str = Form("true"), holidays: str = Form("[]")):
+               student_ids: str = Form(...), days: int = Form(...)):
     """Give specific students +N school days on one assignment."""
     try:
         sids = json.loads(student_ids)
-        hols = set(json.loads(holidays))
     except json.JSONDecodeError as e:
         return JSONResponse({"ok": False, "error": f"bad request: {e}"})
     if not sids:
         return JSONResponse({"ok": False, "error": "no students selected"})
-    skip_we = skip_weekends.lower() in ("true", "1", "yes")
-    hols.update(config.get_combined_calendar_for_range().get("no_count_dates") or [])
+    if not school_calendar.is_configured():
+        return JSONResponse({"ok": False, "error": school_calendar.CALENDAR_REPAIR_MESSAGE})
 
     a, err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
     if err:
@@ -34,7 +32,8 @@ def extend_due(course_id: str = Form(...), assignment_id: str = Form(...),
         return JSONResponse({"ok": False,
                              "error": "assignment has no due date — set one in Canvas first"})
 
-    new_due = _add_school_days(due, days, skip_we, hols)
+    no_count = school_calendar.no_count_dates()
+    new_due = _add_school_days(due, days, no_count)
     resp, err = _canvas_send(
         "POST", f"/api/v1/courses/{course_id}/assignments/{assignment_id}/overrides",
         {"assignment_override": {

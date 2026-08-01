@@ -139,11 +139,6 @@
   var sweepEntries = [];
   var curveResults = [];
 
-  function collectHolidays() {
-    return (document.getElementById("sw-holidays")?.value || "")
-      .split(/[\n,]/).map(s => s.trim())
-      .filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
-  }
 
   // ── Shared namespace for feature files ────────────────────────────────
 
@@ -162,7 +157,6 @@
     showBanner:    showBanner,
     canvasWriteReview: window.CE_WRITE_REVIEW.confirm,
     postForm:      postForm,
-    collectHolidays: collectHolidays,
     // Mutable state for feature files
     get sweepEntries() { return sweepEntries; },
     set sweepEntries(v) { sweepEntries = v; },

@@ -1,0 +1,365 @@
+(function () {
+  "use strict";
+
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char];
+    });
+  }
+
+  function setStatus(el, message, kind) {
+    if (!el) return;
+    el.textContent = message;
+    el.className = "status ce-calendar-status" + (kind ? " " + kind : "");
+  }
+
+  var state = { billSchedules: [], teacherBlocks: [], folders: {}, courses: [] };
+
+  // ── Readiness & upcoming ────────────────────────────────────────────────
+
+  function renderReadiness(data) {
+    var el = document.getElementById("calendar-readiness");
+    var readiness = data.readiness || {};
+    el.innerHTML = "";
+    var notice = document.createElement("div");
+    if (readiness.status === "unconfigured") {
+      notice.className = "ce-notice";
+      notice.textContent = "No school calendar yet. Create one below to get started.";
+    } else if (readiness.status === "invalid_calendar") {
+      notice.className = "ce-notice ce-notice--warn";
+      notice.textContent = "The saved calendar could not be read. Create/replace it below.";
+    } else if (readiness.status === "needs_attention") {
+      notice.className = "ce-notice ce-notice--warn";
+      var reasons = [];
+      if (readiness.today && readiness.today.state === "outside_coverage") {
+        reasons.push("today is outside the configured coverage");
+      }
+      if ((readiness.unknown_schedule_dates || []).length) {
+        reasons.push(readiness.unknown_schedule_dates.length + " date(s) name an unknown Bell Schedule");
+      }
+      if (readiness.remaining_coverage_days != null && readiness.remaining_coverage_days < 30) {
+        reasons.push(readiness.remaining_coverage_days + " day(s) of coverage remaining");
+      }
+      notice.textContent = "Needs attention: " + (reasons.join("; ") || "check coverage") + ".";
+    } else {
+      notice.className = "ce-notice ce-notice--ok";
+      notice.textContent = "Ready. School year " + esc(readiness.school_year || "") +
+        ", coverage " + esc((readiness.coverage || {}).start || "") + " through " +
+        esc((readiness.coverage || {}).end || "") + ".";
+    }
+    el.appendChild(notice);
+  }
+
+  function renderUpcoming(data) {
+    var el = document.getElementById("calendar-upcoming");
+    var upcoming = data.upcoming || {};
+    var days = upcoming.days || {};
+    var keys = Object.keys(days).sort();
+    if (!keys.length) {
+      el.innerHTML = '<p class="ce-hint">No upcoming dates to show.</p>';
+      return;
+    }
+    var rows = keys.map(function (date) {
+      var entry = days[date] || {};
+      var detail = entry.kind === "instructional"
+        ? esc(entry.schedule_id || "unknown schedule")
+        : esc(entry.label || entry.kind);
+      return '<div class="ce-calendar-upcoming-row"><strong>' + esc(date) + '</strong> — ' +
+        esc(entry.kind) + " (" + detail + ")</div>";
+    });
+    el.innerHTML = rows.join("");
+  }
+
+  // ── Bell Schedules ───────────────────────────────────────────────────────
+
+  function renderBellSchedules(data) {
+    var bell = data.bell_schedules || {};
+    var found = bell.found || [];
+    state.billSchedules = found;
+    var list = document.getElementById("calendar-bell-list");
+    if (!found.length) {
+      list.innerHTML = '<p class="ce-empty">No Bell Schedule CSVs found in your Calendars folder.</p>';
+    } else {
+      list.innerHTML = found.map(function (entry) {
+        return '<div class="ce-calendar-bell-row"><strong>' + esc(entry.label) + '</strong>' +
+          ' <span class="muted">(' + esc(entry.schedule_id) + ", " + entry.period_count + " period(s))</span></div>";
+      }).join("");
+    }
+    var options = found.map(function (entry) {
+      return '<option value="' + esc(entry.schedule_id) + '">' + esc(entry.label) + '</option>';
+    }).join("");
+    var changeSelect = document.getElementById("cal-change-schedule");
+    var createSelect = document.getElementById("cal-create-default-schedule");
+    if (changeSelect) changeSelect.innerHTML = options;
+    if (createSelect) createSelect.innerHTML = options;
+
+    var folderButton = document.getElementById("calendar-open-folder");
+    if (folderButton && data.folders && data.folders.calendars) {
+      folderButton.setAttribute("data-open-path", data.folders.calendars);
+      folderButton.disabled = false;
+    }
+  }
+
+  // ── Teacher Schedule (block editor) ──────────────────────────────────────
+
+  function courseSelectHtml(block) {
+    var courses = Array.isArray(state.courses) ? state.courses : [];
+    var selected = block.course_id == null ? "" : String(block.course_id);
+    var html = '<option value="">(none)</option>';
+    [true, false].forEach(function (active) {
+      var matching = courses.filter(function (course) {
+        return Boolean(course && course.active !== false) === active;
+      });
+      if (!matching.length) return;
+      html += active ? '<optgroup label="Current">' : '<optgroup label="Previous">';
+      matching.forEach(function (course) {
+        var id = String(course.id == null ? "" : course.id);
+        if (!id) return;
+        html += '<option value="' + esc(id) + '"' +
+          (id === selected ? " selected" : "") + ">" + esc(course.name || id) + "</option>";
+      });
+      html += "</optgroup>";
+    });
+    if (selected && !courses.some(function (course) { return String(course && course.id) === selected; })) {
+      html += '<option value="' + esc(selected) + '" selected>' + esc(selected + " (not a saved course)") + "</option>";
+    }
+    return html;
+  }
+
+  function renderTeacherBlocks(blocks) {
+    state.teacherBlocks = Array.isArray(blocks) ? blocks : [];
+    var list = document.getElementById("calendar-teacher-block-list");
+    if (!state.teacherBlocks.length) {
+      list.innerHTML = '<p class="ce-empty">No blocks yet. Add a block to get started.</p>';
+      return;
+    }
+    list.innerHTML = "";
+    state.teacherBlocks.forEach(function (source) {
+      var block = source && typeof source === "object" ? Object.assign({}, source) : {};
+      var row = document.createElement("div");
+      row.className = "ce-schedule-block-row";
+      row.setAttribute("data-ce-hook", "block-row");
+      row._sourceBlock = block;
+      var periods = Array.isArray(block.raw_periods) ? block.raw_periods.join(", ") : "";
+      row.innerHTML =
+        '<label>Block<input type="text" data-field="name" value="' + esc(block.name || "") + '" placeholder="1st/2nd"></label>' +
+        '<label>Periods<input type="text" data-field="periods" value="' + esc(periods) + '" placeholder="1, 2"></label>' +
+        '<label>Course<input type="text" data-field="label" value="' + esc(block.label || "") + '" placeholder="Intensive Reading"></label>' +
+        '<label>Canvas course<select data-field="course_id"' + (state.courses.length ? "" : " disabled") + '>' +
+        courseSelectHtml(block) + '</select>' +
+        (state.courses.length ? "" : '<span class="ce-field-hint">Bookmark a course under Settings &rarr; Current courses.</span>') +
+        '</label>' +
+        '<button type="button" class="small danger" data-block-action="remove">Remove</button>';
+      list.appendChild(row);
+    });
+  }
+
+  function parsePeriods(value) {
+    return value.split(",").map(function (part) {
+      var trimmed = part.trim();
+      return /^-?\d+$/.test(trimmed) ? Number(trimmed) : trimmed;
+    }).filter(function (part) { return part !== ""; });
+  }
+
+  function inputValue(row, field) {
+    var input = row.querySelector('[data-field="' + field + '"]');
+    return input ? input.value : "";
+  }
+
+  function readTeacherBlocks() {
+    var list = document.getElementById("calendar-teacher-block-list");
+    return Array.prototype.map.call(list.querySelectorAll('[data-ce-hook="block-row"]'), function (row) {
+      var block = Object.assign({}, row._sourceBlock || {});
+      block.name = inputValue(row, "name").trim();
+      block.raw_periods = parsePeriods(inputValue(row, "periods"));
+      var course = inputValue(row, "label").trim();
+      if (course) block.label = course; else delete block.label;
+      var courseId = inputValue(row, "course_id").trim();
+      if (courseId) block.course_id = courseId; else delete block.course_id;
+      delete block.weekdays;
+      return block;
+    });
+  }
+
+  document.getElementById("calendar-teacher-add-block").addEventListener("click", function () {
+    state.teacherBlocks.push({ name: "", raw_periods: [] });
+    renderTeacherBlocks(state.teacherBlocks);
+  });
+
+  document.getElementById("calendar-teacher-block-list").addEventListener("click", function (event) {
+    var button = event.target.closest('[data-block-action="remove"]');
+    if (!button) return;
+    var row = button.closest('[data-ce-hook="block-row"]');
+    if (row) row.remove();
+  });
+
+  document.getElementById("calendar-teacher-save-blocks").addEventListener("click", async function () {
+    var status = document.getElementById("calendar-teacher-status");
+    var response = await fetch("/api/schedule/teacher", {
+      method: "POST",
+      body: new URLSearchParams({ blocks: JSON.stringify(readTeacherBlocks()) }),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Nothing was saved. Fix these first: " + (data.problems || []).join(" "), "error");
+      return;
+    }
+    setStatus(status, "Saved " + data.count + " block(s) to Teacher Schedule.json.", "ok");
+    await loadState();
+  });
+
+  // ── Change a date (preview/apply) ────────────────────────────────────────
+
+  var lastPreview = null;
+
+  function selectedWeekdays() {
+    var boxes = document.querySelectorAll("#cal-change-weekdays input[type=checkbox]");
+    var all = Array.prototype.map.call(boxes, function (box) { return box; });
+    var checked = all.filter(function (box) { return box.checked; });
+    if (checked.length === all.length) return null; // all selected == no filter
+    return checked.map(function (box) { return Number(box.value); });
+  }
+
+  document.getElementById("cal-change-preview").addEventListener("click", async function () {
+    var status = document.getElementById("cal-change-status");
+    var resultEl = document.getElementById("cal-change-preview-result");
+    var applyBtn = document.getElementById("cal-change-apply");
+    var kind = document.getElementById("cal-change-kind").value;
+    var scheduleId = document.getElementById("cal-change-schedule").value;
+    var label = document.getElementById("cal-change-label").value.trim();
+    var datesRaw = document.getElementById("cal-change-dates").value.trim();
+    var from = document.getElementById("cal-change-from").value;
+    var to = document.getElementById("cal-change-to").value;
+    var weekdays = selectedWeekdays();
+
+    var body = { kind: kind };
+    if (datesRaw) {
+      body.dates = JSON.stringify(datesRaw.split(",").map(function (s) { return s.trim(); }).filter(Boolean));
+    } else {
+      body.date_from = from;
+      body.date_to = to;
+      if (weekdays) body.weekdays = JSON.stringify(weekdays);
+    }
+    if (kind === "instructional") {
+      body.schedule_id = scheduleId;
+    } else {
+      body.label = label;
+    }
+
+    var response = await fetch("/api/calendar/change/preview", {
+      method: "POST",
+      body: new URLSearchParams(body),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Preview failed: " + (data.problems || []).join(" "), "error");
+      resultEl.hidden = true;
+      applyBtn.hidden = true;
+      return;
+    }
+    lastPreview = data;
+    var affected = data.affected || [];
+    resultEl.hidden = false;
+    resultEl.innerHTML = affected.map(function (entry) {
+      return '<div>' + esc(entry.date) + ": " +
+        esc(entry.before ? entry.before.kind : "(unset)") + " &rarr; " + esc(entry.after.kind) + '</div>';
+    }).join("");
+    setStatus(status, data.is_noop
+      ? "No change — every date already matches."
+      : affected.length + " date(s) will change. Review, then Apply.", "");
+    applyBtn.hidden = false;
+  });
+
+  document.getElementById("cal-change-apply").addEventListener("click", async function () {
+    var status = document.getElementById("cal-change-status");
+    if (!lastPreview) return;
+    var response = await fetch("/api/calendar/change/apply", {
+      method: "POST",
+      body: new URLSearchParams({
+        expected_revision: String(lastPreview.base_revision),
+        preview: JSON.stringify(lastPreview),
+      }),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Apply failed: " + (data.problems || []).join(" "), "error");
+      return;
+    }
+    setStatus(status, "Applied. Calendar is now at revision " + data.revision + ".", "ok");
+    document.getElementById("cal-change-apply").hidden = true;
+    document.getElementById("cal-change-preview-result").hidden = true;
+    lastPreview = null;
+    await loadState();
+  });
+
+  // ── Create / replace school year ─────────────────────────────────────────
+
+  document.getElementById("cal-import-parse").addEventListener("click", async function () {
+    var status = document.getElementById("cal-import-status");
+    var content = document.getElementById("cal-import-csv").value;
+    if (!content.trim()) {
+      setStatus(status, "Paste a CSV first.", "error");
+      return;
+    }
+    var response = await fetch("/api/calendar/import", {
+      method: "POST",
+      body: new URLSearchParams({ content: content }),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Could not parse: " + (data.problems || []).join(" "), "error");
+      return;
+    }
+    document.getElementById("cal-create-no-school").value = (data.no_school_dates || []).join("\n");
+    setStatus(status, "Parsed " + (data.no_school_dates || []).length + " no-school date(s) and " +
+      (data.grading_periods || []).length + " grading period(s) into the form below.", "ok");
+    window._calImportGradingPeriods = data.grading_periods || [];
+    window._calImportDateLabels = data.date_labels || {};
+  });
+
+  document.getElementById("cal-create-submit").addEventListener("click", async function () {
+    var status = document.getElementById("cal-create-status");
+    var noSchool = document.getElementById("cal-create-no-school").value
+      .split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var body = {
+      school_year: document.getElementById("cal-create-year").value.trim(),
+      coverage_start: document.getElementById("cal-create-start").value,
+      coverage_end: document.getElementById("cal-create-end").value,
+      default_schedule_id: document.getElementById("cal-create-default-schedule").value,
+      no_school_dates: JSON.stringify(noSchool),
+    };
+    if (window._calImportGradingPeriods) {
+      body.grading_periods = JSON.stringify(window._calImportGradingPeriods);
+    }
+    if (window._calImportDateLabels) {
+      body.date_labels = JSON.stringify(window._calImportDateLabels);
+    }
+    var response = await fetch("/api/calendar/create", {
+      method: "POST",
+      body: new URLSearchParams(body),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Not created: " + (data.problems || []).join(" "), "error");
+      return;
+    }
+    setStatus(status, "Created " + data.school_year + " (" + data.day_count + " days, revision " + data.revision + ").", "ok");
+    await loadState();
+  });
+
+  // ── Load ──────────────────────────────────────────────────────────────
+
+  async function loadState() {
+    var response = await fetch("/api/calendar");
+    var data = await response.json();
+    state.courses = Array.isArray(data.courses) ? data.courses : [];
+    renderReadiness(data);
+    renderUpcoming(data);
+    renderBellSchedules(data);
+    renderTeacherBlocks((data.teacher_schedule || {}).blocks || []);
+  }
+
+  loadState().catch(function (error) {
+    setStatus(document.getElementById("cal-change-status"), "Could not load Calendar: " + error, "error");
+  });
+})();

@@ -10,6 +10,7 @@ All Canvas data below is fictional.
 """
 import copy
 import json
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,18 @@ from fastapi.testclient import TestClient
 from api.operation_ledger import paths
 from api.webui.local_request_guard import csrf_token
 from api.webui.server import app
+
+
+def _weekend_dates(start="2026-01-01", end="2026-12-31"):
+    """Stand-in for the canonical calendar's generated weekend no-school days."""
+    cursor = date.fromisoformat(start)
+    end_d = date.fromisoformat(end)
+    found = set()
+    while cursor <= end_d:
+        if cursor.weekday() >= 5:
+            found.add(cursor.isoformat())
+        cursor += timedelta(days=1)
+    return found
 
 
 FAKE_ASSIGNMENTS = [{
@@ -41,8 +54,12 @@ def sweep_env(tmp_path, monkeypatch):
         lambda: [{"id": 101, "name": "Fictional Algebra"}],
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.sweep.config.get_combined_calendar_for_range",
-        lambda: {"no_count_dates": []},
+        "api.operation_ledger.adapters.sweep.school_calendar.is_configured",
+        lambda root=None: True,
+    )
+    monkeypatch.setattr(
+        "api.operation_ledger.adapters.sweep.school_calendar.no_count_dates",
+        lambda *a, **kw: _weekend_dates(),
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.sweep.config.get_extra_time",
@@ -235,7 +252,7 @@ def test_preview_returns_200_and_counts_weekend_crossing_row(sweep_env):
     assert entry["seconds_override"] == 86400
     assert entry["canvas_days"] == 3
     assert len(entry["excluded_dates"]) == 2
-    assert all("(weekend)" in d for d in entry["excluded_dates"])
+    assert all("(no-count)" in d for d in entry["excluded_dates"])
     assert body["skipped"] == []
 
 

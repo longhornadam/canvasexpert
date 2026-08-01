@@ -66,18 +66,16 @@ def _smartdecks_dir():
     return _ws.library_folder("SmartDecks")
 
 
-# A teacher's hand corrections to the day calendar. deps owns the name because
-# load_day_calendar has to skip it in discovery and apply it last; schedule_setup
-# aliases this rather than declaring a second copy that could drift.
-DAY_OVERRIDE_FILENAME = "Day Overrides.csv"
+def _file_key(filename: str) -> str:
+    """'Bell Schedule - A Day.csv' -> 'bell_schedule_a_day' (schedule_id)."""
+    import re as _re
+    stem = os.path.splitext(filename)[0]
+    return _re.sub(r'[^a-z0-9]+', '_', stem.lower()).strip('_')
 
 
 def list_bell_schedule_files():
     """[{name, label, schedule_id, path}] for every 'Bell Schedule*'-prefixed
-    CSV in the workspace Calendars folder. schedule_id derived via the same
-    slug function as api/webui/routes/calendar.py's _file_key()."""
-    from .routes.calendar import _file_key
-
+    CSV in the workspace Calendars folder."""
     cal_dir = _calendars_dir()
     if not cal_dir or not os.path.isdir(cal_dir):
         return []
@@ -129,78 +127,6 @@ def load_bell_schedules() -> tuple:
     return schedules, all_problems
 
 
-def load_day_calendar() -> tuple:
-    """Load day calendar from workspace Calendars folder.
-
-    Discovers CSVs whose header is 'date,schedule_id' (case-insensitive).
-    Returns ({date_isoformat: schedule_id}, problems_list).
-    """
-    from . import deck_schedule
-
-    cal_dir = _calendars_dir()
-    if not cal_dir or not os.path.isdir(cal_dir):
-        return {}, ["no workspace Calendars folder found"]
-
-    # Find day-calendar CSVs (header line is 'date,schedule_id')
-    day_calendar_mapping = {}
-    all_problems = []
-
-    for path in sorted(_glob.glob(os.path.join(cal_dir, "*.csv"))):
-        name = os.path.basename(path)
-
-        # Skip bell schedules
-        if name.lower().startswith("bell schedule"):
-            continue
-
-        # Teacher corrections are applied after this loop, on purpose. Merging
-        # them here would make precedence depend on where the filename lands in
-        # sorted order, so a district calendar renamed next year could silently
-        # start beating them.
-        if name == DAY_OVERRIDE_FILENAME:
-            continue
-
-        try:
-            with open(path, encoding="utf-8") as f:
-                content = f.read()
-        except OSError:
-            continue
-
-        # Check if this looks like a day calendar (header contains 'date' and 'schedule_id')
-        lines = content.strip().split("\n")
-        if not lines:
-            continue
-
-        header = lines[0].lower()
-        # Check for both columns in the header
-        if "date" in header and "schedule_id" in header:
-            mapping, problems = deck_schedule.parse_day_calendar(content)
-            day_calendar_mapping.update(mapping)
-
-            for problem in problems:
-                all_problems.append(f"{name}: {problem}")
-
-    # Last word, always. A teacher who corrected today from the Panels page
-    # outranks whatever the generated calendar says, which is the whole point:
-    # the calendar is the thing that went stale.
-    override_path = os.path.join(cal_dir, DAY_OVERRIDE_FILENAME)
-    if os.path.exists(override_path):
-        try:
-            with open(override_path, encoding="utf-8") as f:
-                override_content = f.read()
-        except OSError as e:
-            all_problems.append(f"{DAY_OVERRIDE_FILENAME}: could not read: {e}")
-        else:
-            mapping, problems = deck_schedule.parse_day_calendar(override_content)
-            day_calendar_mapping.update(mapping)
-            for problem in problems:
-                all_problems.append(f"{DAY_OVERRIDE_FILENAME}: {problem}")
-
-    if not day_calendar_mapping and all_problems == []:
-        all_problems.append("no day calendar found")
-
-    return day_calendar_mapping, all_problems
-
-
 def load_teacher_schedule() -> tuple:
     """Load teacher schedule from SmartDecks folder.
 
@@ -230,25 +156,29 @@ def load_teacher_schedule() -> tuple:
 def resolve_schedule_for(date: str) -> tuple:
     """Resolve blocks for a specific date.
 
-    Calls load_day_calendar(), load_bell_schedules(), load_teacher_schedule(),
-    then deck_schedule.resolve_day(). Merges problems from all stages.
+    Gets the date's schedule_id from the canonical calendar service, loads
+    Bell Schedules and the Teacher Schedule, then deck_schedule.resolve_day().
+    Merges problems from all stages.
 
     date: "YYYY-MM-DD" string
     Returns (resolved meeting blocks, problems_list). A block that spans more
     than one consecutive meeting includes period_ids, segments, and seq; a
     non-contiguous block produces one entry per consecutive run.
     """
-    from . import deck_schedule
+    from . import deck_schedule, school_calendar
 
-    day_calendar, day_cal_problems = load_day_calendar()
     bell_schedules, bell_problems = load_bell_schedules()
     teacher_schedule, teacher_problems = load_teacher_schedule()
 
+    doc, calendar_problems = school_calendar.read()
+    resolution = school_calendar.resolve_date(doc, date, bell_schedules)
+    schedule_id = resolution.get("schedule_id") if resolution["state"] == "ready" else None
+
     blocks, resolve_problems = deck_schedule.resolve_day(
-        date, day_calendar, bell_schedules, teacher_schedule
+        schedule_id, bell_schedules, teacher_schedule
     )
 
-    all_problems = day_cal_problems + bell_problems + teacher_problems + resolve_problems
+    all_problems = calendar_problems + bell_problems + teacher_problems + resolve_problems
     return blocks, all_problems
 
 

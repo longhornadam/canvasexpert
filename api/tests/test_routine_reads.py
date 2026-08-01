@@ -198,8 +198,10 @@ def test_grading_debt_uses_read_scope_with_zero_live_calls_when_fresh(monkeypatc
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
                         lambda: {"skip_weekends": True, "holidays": []})
-    monkeypatch.setattr(routines_builtin.config, "get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr(routines_builtin.school_calendar, "is_configured",
+                        lambda root=None: True)
+    monkeypatch.setattr(routines_builtin.school_calendar, "no_count_dates",
+                        lambda *a, **kw: set())
     result = routines_builtin._run_routine_grading_debt({"school_days": 3})
     assert result["ok"] is True
     assert "1 ungraded" in result["summary"]
@@ -212,8 +214,10 @@ def test_grading_debt_falls_back_live_via_read_scope_when_stale(monkeypatch, tmp
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
                         lambda: {"skip_weekends": True, "holidays": []})
-    monkeypatch.setattr(routines_builtin.config, "get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr(routines_builtin.school_calendar, "is_configured",
+                        lambda root=None: True)
+    monkeypatch.setattr(routines_builtin.school_calendar, "no_count_dates",
+                        lambda *a, **kw: set())
 
     def fake_get(path, params=None, timeout=None):
         if path.endswith("/assignments"):
@@ -259,8 +263,10 @@ def test_grading_debt_lines_never_serialize_the_source_envelope(monkeypatch, tmp
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
                         lambda: {"skip_weekends": True, "holidays": []})
-    monkeypatch.setattr(routines_builtin.config, "get_combined_calendar_for_range",
-                        lambda: {"no_count_dates": []})
+    monkeypatch.setattr(routines_builtin.school_calendar, "is_configured",
+                        lambda root=None: True)
+    monkeypatch.setattr(routines_builtin.school_calendar, "no_count_dates",
+                        lambda *a, **kw: set())
     result = routines_builtin._run_routine_grading_debt({"school_days": 3})
     blob = " ".join(result["lines"]) + result["summary"]
     for leaked in ("mirror", "canvas", "generation", "synced_at"):

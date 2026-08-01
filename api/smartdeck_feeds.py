@@ -26,7 +26,7 @@ from __future__ import annotations
 from datetime import date as date_type, datetime, timedelta
 
 from api import audience
-from api.webui import deps, school_events, config
+from api.webui import deps, school_calendar
 
 DEFAULT_LOOKAHEAD_DAYS = 14
 MAX_LOOKAHEAD_DAYS = 31
@@ -68,7 +68,7 @@ def resolve_feed(name: str, date_str: str, *, lookahead_days: int = DEFAULT_LOOK
     if name == "bell_schedule":
         data = _bell_schedule_feed(date_str)
     elif name == "district_calendar_events":
-        data = _district_calendar_events_feed(date_str, span)
+        data = _district_calendar_events_feed(date_str, span, root)
     elif name == "school_events":
         data = _school_events_feed(date_str, span, root)
     else:
@@ -80,18 +80,21 @@ def resolve_feed(name: str, date_str: str, *, lookahead_days: int = DEFAULT_LOOK
 def _bell_schedule_feed(date_str: str) -> dict:
     """{"day_type": schedule_id or None, "blocks": [...], "current_block": dict or None}.
 
-    day_type comes directly from the day calendar, so it remains available even
-    when no teacher block meets on that date. current_block
-    is only ever populated when date_str is today (a past/future date has no
-    meaningful "right now") -- compare against the real local clock via
-    datetime.now().strftime("%H:%M") against each block's start/end strings."""
+    day_type comes from the canonical calendar's resolution for this date, so
+    it remains available even when no teacher block meets on that date.
+    current_block is only ever populated when date_str is today (a past/future
+    date has no meaningful "right now") -- compare against the real local
+    clock via datetime.now().strftime("%H:%M") against each block's start/end
+    strings."""
     try:
         blocks, _problems = deps.resolve_schedule_for(date_str)
     except Exception:
         blocks = []
     try:
-        day_calendar, _problems = deps.load_day_calendar()
-        day_type = day_calendar.get(date_str)
+        bell_schedules, _problems = deps.load_bell_schedules()
+        doc, _cal_problems = school_calendar.read()
+        resolution = school_calendar.resolve_date(doc, date_str, bell_schedules)
+        day_type = resolution.get("schedule_id")
     except Exception:
         day_type = None
     current_block = None
@@ -105,32 +108,52 @@ def _bell_schedule_feed(date_str: str) -> dict:
     return {"day_type": day_type, "blocks": blocks, "current_block": current_block}
 
 
-def _district_calendar_events_feed(date_str: str, lookahead_days: int) -> list[dict]:
-    """District calendar events (config.get_combined_calendar_for_range), tagged
-    via audience.tag, filtered via audience.classroom_only, tag stripped before
-    returning -- exactly day_context.py's original _district_events pipeline,
-    just scoped to this one feed instead of merged with school events."""
+def _district_calendar_events_feed(date_str: str, lookahead_days: int, root=None) -> list[dict]:
+    """Academic-calendar facts synthesized from the canonical document:
+    no-school/no-regular-classes days and grading-period end/report-card
+    dates. These are structural fields in School Calendar.json now (a day
+    kind, a grading_periods entry), not a stored events list, so this feed
+    reconstructs the same event shape SmartDeck slides already expect."""
     try:
         day = date_type.fromisoformat(date_str)
         horizon = day + timedelta(days=lookahead_days)
-        payload = config.get_combined_calendar_for_range(day.isoformat(), horizon.isoformat())
-        raw = payload.get("events") if isinstance(payload, dict) else None
+        projection, _problems = school_calendar.range_projection(
+            day.isoformat(), horizon.isoformat(), root=root)
+        raw = _synthesize_academic_events(projection) if projection else []
     except Exception:
-        raw = None
-    events = [audience.tag(e) for e in raw] if isinstance(raw, (list, tuple)) else []
+        raw = []
+    events = [audience.tag(e) for e in raw]
     safe = audience.classroom_only(events)
     return [_untagged(e) for e in safe]
 
 
+def _synthesize_academic_events(projection: dict) -> list[dict]:
+    events = []
+    for day_key, entry in projection.get("days", {}).items():
+        if entry.get("kind") in ("no_school", "no_regular_classes") and entry.get("label"):
+            events.append({"kind": "no_school", "label": entry["label"],
+                           "start": day_key, "end": day_key})
+    for period in projection.get("grading_periods", []):
+        label = period.get("name") or period.get("code") or ""
+        events.append({"kind": "grading_period_end", "label": label,
+                       "code": period.get("code", ""), "end": period["end"]})
+        if period.get("report_issue_date"):
+            events.append({"kind": "report_card", "label": label,
+                           "code": period.get("code", ""),
+                           "report_issue_date": period["report_issue_date"]})
+    return sorted(events, key=_event_sort_key)
+
+
 def _school_events_feed(date_str: str, lookahead_days: int, root) -> list[dict]:
-    """Teacher-recorded school events (api.webui.school_events.events_for_range),
-    tagged, filtered, stripped -- same pipeline, this module's own event stream
-    (not merged with district events -- they're two separate feeds per the
-    brief's own naming, sourced from two different modules)."""
+    """Teacher-recorded public school events from the canonical calendar's
+    events array, tagged, filtered, stripped -- same pipeline as before, now
+    sourced from School Calendar.json instead of the retired school-events.json."""
     try:
         day = date_type.fromisoformat(date_str)
         horizon = day + timedelta(days=lookahead_days)
-        found = school_events.events_for_range(day, horizon, root=root)
+        projection, _problems = school_calendar.range_projection(
+            day.isoformat(), horizon.isoformat(), root=root)
+        found = projection.get("events", []) if projection else []
     except Exception:
         found = []
     events = [audience.tag(e) for e in found] if isinstance(found, list) else []

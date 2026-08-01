@@ -5,7 +5,7 @@ current Canvas state, applies per-student ``seconds_late_override`` via
 Canvas Submissions API, and returns per-student results.
 """
 from .. import models
-from api.webui import canvas_client, config
+from api.webui import canvas_client, config, school_calendar
 from api.webui.schooldays import (
     _parse_iso_local, _school_days_late_detail,
 )
@@ -21,14 +21,8 @@ class SweepAdapter:
 
     def build_payload(self, prepare_request: dict) -> dict:
         settings = {
-            "skip_weekends": bool(prepare_request.get("skip_weekends", True)),
             "honor_extra_time": bool(prepare_request.get("honor_extra_time", True)),
         }
-        holidays = prepare_request.get("holidays", [])
-        if isinstance(holidays, list):
-            settings["holidays"] = [
-                str(h).strip() for h in holidays if str(h).strip()
-            ]
         date_from = prepare_request.get("date_from")
         if date_from:
             settings["date_from"] = str(date_from).strip()
@@ -284,24 +278,21 @@ def _compute_sweep(course_id: str, settings: dict):
     apply will write. Semantics match the healthy
     ``_school_days_late_detail`` consumers (PowerGrader late catch-up, the
     work-registry late-work provider, the routine sweep): the first return
-    value is the school-day count with weekends/holidays already excluded;
+    value is the school-day count with no-count dates already excluded;
     ``excluded`` is display detail only, never a reason to drop a row.
+
+    No-count dates come only from the canonical School Calendar -- there is
+    no caller-supplied skip_weekends/holidays override for this operation.
 
     Returns (entries, skipped, error).
     """
-    skip_we = settings.get("skip_weekends", True)
-    hols = set(settings.get("holidays", []))
+    if not school_calendar.is_configured():
+        return [], [], school_calendar.CALENDAR_REPAIR_MESSAGE
+
     honor_extra = bool(settings.get("honor_extra_time", True))
     date_from = str(settings.get("date_from") or "").strip()
     date_to = str(settings.get("date_to") or "").strip()
-
-    # Merge calendar holidays
-    try:
-        hols.update(
-            config.get_combined_calendar_for_range().get("no_count_dates") or []
-        )
-    except Exception:
-        pass
+    no_count = school_calendar.no_count_dates()
 
     assignments, err = canvas_client._canvas_get_all(
         f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
@@ -361,7 +352,7 @@ def _compute_sweep(course_id: str, settings: dict):
             continue
 
         school_days, excluded = _school_days_late_detail(
-            due, subd, skip_we, hols)
+            due, subd, no_count)
         extra_days = min(extra_by_uid.get(str(uid), 0), school_days)
         effective_days = school_days - extra_days
         if effective_days <= 0:

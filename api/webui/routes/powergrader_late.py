@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from .. import config
+from .. import config, school_calendar
 from api.powergrader import (ai_workflow, canvas_fetch, late_catchup, session_builder,
                              student_attachments, writing_timeline)
 
@@ -53,9 +53,7 @@ def _build_late_catchup_students(
         monitored=monitored,
         extra_time_map=extra_time_map,
     )
-    sweep_settings = config.get_sweep_settings()
-    holidays = set(sweep_settings.get("holidays") or [])
-    holidays.update(config.get_combined_calendar_for_range().get("no_count_dates") or [])
+    no_count = school_calendar.no_count_dates() if school_calendar.is_configured() else None
     missing_by_user_id: dict[str, dict] = {}
     for sub in submitted:
         uid = str(sub.get("user_id", ""))
@@ -66,8 +64,7 @@ def _build_late_catchup_students(
             assignment=assignment or sub.get("assignment") or {},
             course_id=course_id,
             extra_time_days=int(extra_time_map.get(uid, 0) or 0),
-            skip_weekends=bool(sweep_settings.get("skip_weekends", True)),
-            holidays=holidays,
+            no_count_dates=no_count,
             batch_id=batch_id,
         )
         missing_by_user_id[uid] = meta

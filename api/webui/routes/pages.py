@@ -16,15 +16,15 @@ import sys
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import config, workspace
+from .. import config, school_calendar, workspace
 from api import runtime_paths
 from ..local_request_guard import csrf_token
 from api.operation_ledger import operations as operation_store
 from api.operation_ledger import receipts as receipt_store
 from . import work as work_routes
 from ..deps import (
-    API_DIR, REPO_ROOT, _CUSTOM_DIR, _key_to_year, templates,
-    list_ai_ta_files, list_assignment_files, list_calendar_files,
+    API_DIR, REPO_ROOT, _CUSTOM_DIR, templates,
+    list_ai_ta_files, list_assignment_files,
     list_page_files, list_quiz_files,
 )
 
@@ -205,25 +205,19 @@ def course_page(request: Request, course_id: str = ""):
 
 @router.get("/gradebook", response_class=HTMLResponse)
 def gradebook_page(request: Request):
-    cals = config.get_calendars()
-    all_gp: list = []
-    total_days = 0
-    for key, cal in cals.items():
-        total_days += len(cal.get("no_count_dates", []))
-        year = _key_to_year(key)
-        for gp in cal.get("grading_periods", []):
-            all_gp.append({**gp, "year": year})
-    all_gp.sort(key=lambda g: g["start"])
+    calendar_readiness = school_calendar.readiness()
+    doc, _problems = school_calendar.read()
+    all_gp = sorted(doc["grading_periods"], key=lambda g: g["start"]) if doc else []
+    total_no_count = len(school_calendar.no_count_dates()) if doc else 0
     return templates.TemplateResponse(request, "gradebook.html", {
         "nav_section":          "grade",
         "csrf_token":           csrf_token(),
         "token_is_set":         config.token_is_set(),
         "canvas_base":          config.get_canvas_base(),
         "saved_courses":        config.active_courses(),
-        "calendars":            cals,
-        "has_calendars":        bool(cals),
+        "calendar_status":      calendar_readiness["status"],
         "all_grading_periods":  all_gp,
-        "total_holiday_count":  total_days,
+        "total_no_count_days":  total_no_count,
         **_routines_template_context(),
     })
 
@@ -310,8 +304,6 @@ def settings_page(request: Request):
         "base_default":  config.CANVAS_BASE_DEFAULT,
         "download_root": config.get_download_root(),
         "ai_ta_dir":     str(runtime_paths.ai_ta_dir()),
-        "calendars":     config.get_calendars(),
-        "calendar_files": list_calendar_files(),
         "workspace_root": root,
         "workspace_files": [
             {"name": "Library / AI Authoring", "path": workspace.library_folder("AI Authoring")},

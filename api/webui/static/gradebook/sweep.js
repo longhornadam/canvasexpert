@@ -3,7 +3,7 @@
 
   var gb = window.CE_GRADEBOOK || {};
   var ready = ["postForm", "showLog", "showBanner", "hideBanner", "esc",
-               "gbCourseId", "gbCourseName", "gbTargets", "collectHolidays", "sweepEntries",
+               "gbCourseId", "gbCourseName", "gbTargets", "sweepEntries",
                "canvasWriteReview"]
     .every(function (name) {
       if (name === "sweepEntries") return typeof Object.getOwnPropertyDescriptor(gb, "sweepEntries") !== "undefined";
@@ -20,8 +20,6 @@
 
   function sweepSettings() {
     return {
-      skip_weekends:    document.getElementById("sw-weekends").checked,
-      holidays:         gb.collectHolidays(),
       honor_extra_time: document.getElementById("sw-extra").checked,
       date_from:        document.getElementById("sw-from")?.value || null,
       date_to:          document.getElementById("sw-to")?.value   || null,

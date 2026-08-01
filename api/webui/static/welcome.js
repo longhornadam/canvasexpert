@@ -1,6 +1,8 @@
 /* ── Onboarding wizard (welcome.html) ─────────────────────────────────────
  * Step navigation and form submission for the first-run flow.
- * Workspace → Canvas URL → API token → Calendars → Done.
+ * Workspace → Canvas URL → API token → Done. Calendar setup (school dates,
+ * bell schedules) happens on its own page (/calendar) after onboarding, not
+ * as a wizard step -- it is a teacher-maintained record, not a one-time pick.
  */
 
 var WIZARD_HIDDEN_CLASS = "ce-wizard-initially-hidden";
@@ -11,7 +13,7 @@ function setWizardVisible(el, visible) {
 
 var WIZARD = {
   currentStep: 0,
-  totalSteps:  4,
+  totalSteps:  2,
 
   // ── Step tracking ────────────────────────────────────────────────────
 
@@ -245,92 +247,6 @@ var WIZARD = {
     });
   },
 
-  // ── Step 3: Calendars ────────────────────────────────────────────────
-
-  loadCalendars: function () {
-    fetch('/api/calendar')
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      var container = document.getElementById('calendar-list');
-      var form = document.getElementById('calendar-form');
-      var checkboxes = document.getElementById('calendar-checkboxes');
-      if (!d.available || d.available.length === 0) {
-        container.innerHTML = '<p class="hint">No calendar files found in your workspace Library/Calendars folder. You can add them later in <a href="/settings">Settings</a>.</p>';
-        return;
-      }
-      container.innerHTML = '';
-      setWizardVisible(form, true);
-      checkboxes.innerHTML = '';
-      d.available.forEach(function (cal) {
-        var label = document.createElement('label');
-        label.style.cssText = 'display:flex;align-items:center;gap:8px;margin:6px 0;font-weight:400;cursor:pointer';
-        var cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = cal.name;
-        cb.name = 'calendars';
-        label.appendChild(cb);
-        label.appendChild(document.createTextNode(cal.label || cal.name));
-        checkboxes.appendChild(label);
-      });
-    })
-    .catch(function () {
-      document.getElementById('calendar-list').innerHTML = '<p class="ce-notice">Could not load calendars.</p>';
-    });
-  },
-
-  saveCalendars: function (e) {
-    e.preventDefault();
-    var checked = document.querySelectorAll('#calendar-checkboxes input[type="checkbox"]:checked');
-    if (checked.length === 0) {
-      WIZARD.finish();
-      return;
-    }
-
-    var btn = e.target.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.textContent = 'Activating…';
-
-    var promises = [];
-    Array.prototype.forEach.call(checked, function (cb) {
-      promises.push(
-        fetch('/api/calendar/load-builtin', {
-          method: 'POST',
-          body: new URLSearchParams({ name: cb.value }),
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        }).then(function (r) { return r.json(); })
-      );
-    });
-
-    Promise.all(promises)
-    .then(function (results) {
-      var ok = results.filter(function (r) { return r.ok; });
-      var msg = document.getElementById('calendar-ok-msg');
-      var done = document.getElementById('calendar-done');
-      var form = document.getElementById('calendar-form');
-      var result = document.getElementById('calendar-result');
-      if (ok.length > 0) {
-        msg.textContent = '✓ ' + ok.length + ' calendar(s) activated.';
-        setWizardVisible(result, false);
-        setWizardVisible(form, false);
-        var skipRow = document.getElementById('calendar-skip-row');
-        setWizardVisible(skipRow, false);
-        setWizardVisible(done, true);
-        WIZARD.markStepDone(3);
-      } else {
-        result.className = 'ce-notice';
-        result.textContent = 'Could not activate calendars.';
-        setWizardVisible(result, true);
-        btn.disabled = false;
-        btn.textContent = 'Activate selected';
-      }
-    })
-    .catch(function () {
-      WIZARD.showResult('calendar-result', 'Network error.', true);
-      btn.disabled = false;
-      btn.textContent = 'Activate selected';
-    });
-  },
-
   // ── Helpers ──────────────────────────────────────────────────────────
 
   markStepDone: function (step) {
@@ -376,23 +292,6 @@ var wizardFinish = WIZARD.finish.bind(WIZARD);
   var savedBase = canvasUrlInput ? canvasUrlInput.getAttribute('data-saved') : '';
   if (savedBase && canvasUrlInput) {
     canvasUrlInput.value = savedBase;
-  }
-
-  // Step 3: Calendar form
-  var calForm = document.getElementById('calendar-form');
-  if (calForm) {
-    calForm.addEventListener('submit', WIZARD.saveCalendars.bind(WIZARD));
-    // Auto-load calendars when we get to step 3 (lazy)
-    var mutationObserver = new MutationObserver(function () {
-      var panel = document.getElementById('step-3');
-      if (panel && !panel.classList.contains(WIZARD_HIDDEN_CLASS)) {
-        WIZARD.loadCalendars();
-        mutationObserver.disconnect();
-      }
-    });
-    mutationObserver.observe(document.getElementById('step-3'), {
-      attributes: true, attributeFilter: ['class']
-    });
   }
 
   // Pre-fill workspace path suggestion from template

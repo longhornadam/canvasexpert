@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 21 MCP tools.
+"""Plain, testable implementations of the 24 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -10,7 +10,9 @@ Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses``,
 ``get_authoring_contract``, ``get_product_guide``, ``list_staged_content``,
 ``get_bell_schedule``, ``get_day_schedule``, ``get_teacher_schedule``,
-``save_deck``, ``save_teacher_schedule``, ``save_day_calendar``,
+``save_deck``, ``save_teacher_schedule``,
+``get_school_calendar``, ``create_school_calendar``,
+``preview_school_calendar_change``, ``apply_school_calendar_change``,
 ``list_active_decks``, and ``archive_deck`` are
 the only tools with no ``course_id`` and no student data, so they skip both the
 course gate and the outbound safety gate. ``get_writing_history`` breaks that
@@ -36,7 +38,7 @@ from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snaps
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
-from api.webui import config, mirror_service, workspace, deck_store, sf, schedule_setup
+from api.webui import config, mirror_service, workspace, deck_store, sf, schedule_setup, school_calendar
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_vault
@@ -1110,23 +1112,78 @@ def save_teacher_schedule(blocks: list) -> dict:
     }
 
 
-def save_day_calendar(label: str, start_date: str, end_date: str,
-                      default_schedule_id: str, weekday_schedules: dict = None,
-                      date_schedules: dict = None, skip_dates: list = None,
-                      replace: bool = False) -> dict:
-    """Generate and save a teacher's day calendar live in the workspace.
+def get_school_calendar(date_from: str = "", date_to: str = "") -> dict:
+    """Read the canonical School Calendar: readiness, plus a bounded range.
 
-    No course_id, no student data, no course gate, no safety gate.
-    The response contains summary metadata, never the expanded rows.
-    Never raises.
+    No course_id, no student data -- no course gate, no safety gate.
+    date_from/date_to: pass both for day/grading-period/event rows in that
+    inclusive range; omit both for readiness only (revision, coverage,
+    today's resolution, low-coverage warning). Never raises.
     """
-    result, problems = schedule_setup.save_day_calendar(
-        label, start_date, end_date, default_schedule_id,
-        weekday_schedules, date_schedules, skip_dates, replace,
+    bell_schedules, _bell_problems = deps.load_bell_schedules()
+    readiness = school_calendar.readiness(bell_schedule_ids=bell_schedules)
+    result = {"ok": True, "readiness": readiness}
+    if date_from and date_to:
+        projection, problems = school_calendar.range_projection(date_from, date_to)
+        if projection is None:
+            return {"ok": False, "problems": problems}
+        result["days"] = projection["days"]
+        result["grading_periods"] = projection["grading_periods"]
+        result["events"] = projection["events"]
+    return result
+
+
+def create_school_calendar(school_year: str, coverage_start: str, coverage_end: str,
+                          default_schedule_id: str, weekday_schedules: dict = None,
+                          no_school_dates: list = None, no_regular_classes_dates: list = None,
+                          date_labels: dict = None, grading_periods: list = None,
+                          events: list = None) -> dict:
+    """Create/replace the complete canonical School Calendar for one year.
+
+    No course_id, no student data -- no course gate, no safety gate.
+    Materializes every date in coverage as instructional, a generated
+    weekend, or an explicit no-school/no-regular-classes day. Never raises.
+    """
+    doc, problems = school_calendar.create_school_year(
+        school_year=school_year, coverage_start=coverage_start, coverage_end=coverage_end,
+        default_schedule_id=default_schedule_id, weekday_schedules=weekday_schedules,
+        no_school_dates=no_school_dates, no_regular_classes_dates=no_regular_classes_dates,
+        date_labels=date_labels, grading_periods=grading_periods, events=events,
     )
-    if result is not None:
-        return result
-    return {"ok": False, "problems": problems}
+    if doc is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, "revision": doc["revision"], "school_year": doc["school_year"],
+            "coverage": doc["coverage"], "day_count": len(doc["days"])}
+
+
+def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str = "",
+                                   dates: list = None, date_from: str = "", date_to: str = "",
+                                   weekdays: list = None) -> dict:
+    """Preview a day-kind/schedule/label change against the live calendar.
+
+    No course_id, no student data -- no course gate, no safety gate.
+    Summarize the affected dates and any conflicts for the teacher before
+    calling apply_school_calendar_change. Never raises.
+    """
+    preview, problems = school_calendar.preview_change(
+        kind=kind, schedule_id=(schedule_id or None), label=(label or None),
+        dates=dates, date_from=(date_from or None), date_to=(date_to or None),
+        weekdays=weekdays,
+    )
+    if preview is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, **preview}
+
+
+def apply_school_calendar_change(preview: dict, expected_revision: int) -> dict:
+    """Apply a previously returned preview. Refuses a stale expected_revision.
+
+    No course_id, no student data -- no course gate, no safety gate. Never raises.
+    """
+    doc, problems = school_calendar.apply_change(preview, expected_revision=expected_revision)
+    if doc is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, "revision": doc["revision"]}
 
 
 def list_active_decks() -> dict:

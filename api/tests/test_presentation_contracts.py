@@ -26,6 +26,7 @@ EXPECTED_PRESENTATION = {
     "/gradebook": ("gradebook.html", "workspace", "left-main", 1),
     "/roster": ("roster.html", "workspace", "left-main", 1),
     "/settings": ("settings.html", "workspace", "left-main", 1),
+    "/calendar": ("calendar.html", "workspace", "left-main", 1),
     # Automations sits on the workspace layout so its title shares a left edge
     # with the other primary-nav pages instead of jumping inward.
     "/routines": ("routines.html", "workspace", "full", 0),
@@ -42,6 +43,7 @@ FEATURE_CSS = (
     "api/webui/static/pages/gradebook.css",
     "api/webui/static/roster_workbench.css",
     "api/webui/static/pages/settings.css",
+    "api/webui/static/pages/calendar.css",
     "api/webui/static/pages/routines.css",
     "api/webui/static/pages/student_reports.css",
     "api/webui/static/pages/course.css",
@@ -76,7 +78,9 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages.config, "get_openrouter_model", lambda: "model/fictional")
     monkeypatch.setattr(pages.config, "openrouter_model_presets", lambda: [])
     monkeypatch.setattr(pages.config, "get_download_root", lambda: "")
-    monkeypatch.setattr(pages.config, "get_calendars", lambda: {})
+    monkeypatch.setattr(pages.school_calendar, "readiness", lambda **kw: {"status": "unconfigured", "problems": ["unconfigured"]})
+    monkeypatch.setattr(pages.school_calendar, "read", lambda root=None: (None, ["unconfigured"]))
+    monkeypatch.setattr(pages.school_calendar, "no_count_dates", lambda *a, **kw: set())
     monkeypatch.setattr(pages.config, "get_tier_tags", lambda: {
         "Support": "", "Core": "", "Accelerate": "", "Extend": "",
     })
@@ -98,7 +102,6 @@ def _configure_fictional(monkeypatch):
     monkeypatch.setattr(pages, "list_quiz_files", lambda: [])
     monkeypatch.setattr(pages, "list_assignment_files", lambda: [])
     monkeypatch.setattr(pages, "list_page_files", lambda: [])
-    monkeypatch.setattr(pages, "list_calendar_files", lambda: [])
     monkeypatch.setattr(pages, "_routines_template_context", lambda: {
         "custom_dir": "Fictional/custom_routines",
         "authoring_path": "Fictional/custom_routines/AUTHORING.md",
@@ -121,7 +124,7 @@ def _configure_fictional(monkeypatch):
 
 
 def test_registry_is_the_full_program_route_map():
-    assert len(EXPECTED_PRESENTATION) == 12
+    assert len(EXPECTED_PRESENTATION) == 13
 
 
 def test_all_live_templates_use_layouts_and_no_inline_styles():
@@ -181,6 +184,7 @@ def test_migrated_routes_render_the_expected_isolated_shell(monkeypatch):
         "/gradebook": "/gradebook",
         "/roster": "/roster",
         "/settings": "/settings",
+        "/calendar": "/calendar",
         "/routines": "/routines",
         "/course": "/course",
         "/about": "/about",
@@ -245,14 +249,24 @@ def test_create_title_matches_its_navigation_and_page_title(monkeypatch):
     assert ">Create<" in text
 
 
-def test_settings_has_a_class_schedule_panel_and_rail_link(monkeypatch):
+def test_settings_links_to_calendar_for_class_schedule(monkeypatch):
+    """Settings no longer owns the Class schedule editor -- Calendar does."""
     _configure_fictional(monkeypatch)
     text = _client().get("/settings").text
-    assert 'id="class-schedule-card"' in text
-    assert 'href="#class-schedule-card"' in text
-    assert 'href="/connections">AI Connections</a>' in text
-    assert "teacher-facing label" in text
-    assert "optional" in text
+    assert 'id="calendar-card"' in text
+    assert 'href="#calendar-card"' in text
+    assert 'href="/calendar"' in text
+    assert 'id="class-schedule-card"' not in text
+    assert 'id="cal"' not in text
+
+
+def test_calendar_page_has_the_teacher_schedule_editor(monkeypatch):
+    _configure_fictional(monkeypatch)
+    text = _client().get("/calendar").text
+    assert 'id="calendar-teacher-block-list"' in text
+    assert 'id="calendar-bell-card"' in text
+    assert 'id="calendar-change-card"' in text
+    assert 'id="calendar-create-card"' in text
 
 
 def test_class_schedule_editor_edits_block_periods_and_course_separately():
@@ -261,7 +275,7 @@ def test_class_schedule_editor_edits_block_periods_and_course_separately():
     Collapsing name and label into one input rewrites the binding key on every
     save, which breaks slides and trips the duplicate-name check.
     """
-    text = _source("api/webui/static/settings/class_schedule.js")
+    text = _source("api/webui/static/pages/calendar.js")
     assert 'data-field="name"' in text
     assert 'data-field="periods"' in text
     assert 'data-field="label"' in text

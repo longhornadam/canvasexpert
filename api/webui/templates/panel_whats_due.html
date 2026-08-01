@@ -74,7 +74,7 @@
   "use strict";
 
   var params = new URLSearchParams(location.search);
-  var course = params.get("course") || "";
+  var block  = params.get("block") || "";
   var days   = params.get("days") || "7";
 
   var bodyEl = document.getElementById("body");
@@ -184,7 +184,7 @@
   }
 
   function load() {
-    var url = "/panels/whats-due/data?course=" + encodeURIComponent(course) +
+    var url = "/panels/whats-due/data?block=" + encodeURIComponent(block) +
               "&days=" + encodeURIComponent(days);
     fetch(url, { cache: "no-store" })
       .then(function (r) { return r.json(); })

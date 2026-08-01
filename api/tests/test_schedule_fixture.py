@@ -1,5 +1,7 @@
 """Resolve a complete alternating-day schedule from its on-disk fixtures."""
 
+import csv
+import io
 import json
 from datetime import date
 from pathlib import Path
@@ -7,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from api.webui import deck_schedule
-from api.webui.routes.calendar import _file_key
+from api.webui.deps import _file_key
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "class_schedule"
@@ -26,6 +28,20 @@ SECOND_SHORT_DAY = "2026-08-27"
 ALL_CHECK_DATES = [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SECOND_SHORT_DAY]
 
 
+def _read_fixture_day_map(content: str) -> dict:
+    """A tiny local reader for the fixture's date,schedule_id CSV.
+
+    The production day-calendar parser is retired (dates now live in the
+    canonical School Calendar.json); this fixture format is still the
+    convenient way to express "which schedule applies which day" test data.
+    """
+    mapping = {}
+    reader = csv.DictReader(io.StringIO(content))
+    for row in reader:
+        mapping[date.fromisoformat(row["date"]).isoformat()] = row["schedule_id"]
+    return mapping
+
+
 @pytest.fixture(scope="module")
 def schedule():
     teacher = json.loads((FIXTURE / "Teacher Schedule.json").read_text(encoding="utf-8"))
@@ -37,10 +53,9 @@ def schedule():
         assert problems == [], f"{filename}: {problems}"
         bell[_file_key(filename)] = meetings
 
-    day_calendar, problems = deck_schedule.parse_day_calendar(
+    day_calendar = _read_fixture_day_map(
         (FIXTURE / DAY_CALENDAR_FILE).read_text(encoding="utf-8")
     )
-    assert problems == [], problems
     return teacher, bell, day_calendar
 
 
@@ -68,23 +83,23 @@ def test_the_day_calendar_covers_weekdays_only_and_skips_the_holiday(schedule):
 @pytest.mark.parametrize("check_date", ALL_CHECK_DATES)
 def test_resolves_with_zero_problems(schedule, check_date):
     teacher, bell, day_calendar = schedule
-    blocks, problems = deck_schedule.resolve_day(check_date, day_calendar, bell, teacher)
+    blocks, problems = deck_schedule.resolve_day(day_calendar[check_date], bell, teacher)
     assert problems == []
     assert blocks
 
 
 def test_day_a_and_day_b_resolve_different_class_sets(schedule):
     teacher, bell, day_calendar = schedule
-    day_a = _names(deck_schedule.resolve_day(MONDAY, day_calendar, bell, teacher)[0])
-    day_b = _names(deck_schedule.resolve_day(TUESDAY, day_calendar, bell, teacher)[0])
+    day_a = _names(deck_schedule.resolve_day(day_calendar[MONDAY], bell, teacher)[0])
+    day_b = _names(deck_schedule.resolve_day(day_calendar[TUESDAY], bell, teacher)[0])
     assert day_a != day_b
 
 
 def test_short_day_resolves_the_same_class_set_on_different_weekdays(schedule):
     teacher, bell, day_calendar = schedule
-    friday = _names(deck_schedule.resolve_day(FRIDAY, day_calendar, bell, teacher)[0])
+    friday = _names(deck_schedule.resolve_day(day_calendar[FRIDAY], bell, teacher)[0])
     wednesday = _names(
-        deck_schedule.resolve_day(SECOND_SHORT_DAY, day_calendar, bell, teacher)[0]
+        deck_schedule.resolve_day(day_calendar[SECOND_SHORT_DAY], bell, teacher)[0]
     )
     assert friday == wednesday
     assert len(friday) == 8

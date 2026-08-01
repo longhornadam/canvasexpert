@@ -1,79 +1,161 @@
-"""Calendar API routes for Canvas Expert.
+"""Calendar page and APIs -- the canonical School Calendar surface.
 
-One APIRouter; 5 routes for managing the academic calendar used by the
-gradebook sweep (no-count dates, grading periods).
+One primary-nav working page plus the routes that back it: readiness/upcoming
+projection, complete-year create (optionally seeded from a parsed academic
+CSV), and the shared preview/apply day-change operation the UI and MCP both
+call through api/webui/school_calendar.py.
 
-Routes: GET  /api/calendar
-        POST /api/calendar/load-builtin
-        POST /api/calendar/set
-        GET  /api/calendar/template
-        POST /api/calendar/clear
+Routes: GET  /calendar
+        GET  /api/calendar
+        POST /api/calendar/create
+        POST /api/calendar/import
+        GET  /api/calendar/import/template
+        POST /api/calendar/change/preview
+        POST /api/calendar/change/apply
 """
 import json
 import os
-import re
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from .. import config
-from ..calendar_csv import _parse_calendar_csv
-from ..deps import API_DIR, _calendar_label, _calendars_dir, list_calendar_files
+from .. import calendar_csv, config, deps, school_calendar, schedule_setup, workspace
+from ..deps import API_DIR, templates
 
 router = APIRouter(tags=["calendar"])
 
 _TEMPLATE_PATH = os.path.join(API_DIR, "default_docs", "Calendars", "calendar_template.csv")
 
+# How far past today the Calendar page's first screenful looks for upcoming
+# dates. A separate, larger number from Panels' whats-due window -- this is a
+# glance at the calendar itself, not an assignment due-date projection.
+UPCOMING_LOOKAHEAD_DAYS = 14
 
-def _file_key(filename: str) -> str:
-    """'Summer_Session_Sample.csv' → 'summer_session_sample' (calendar storage key)."""
-    stem = os.path.splitext(filename)[0]
-    return re.sub(r'[^a-z0-9]+', '_', stem.lower()).strip('_')
+
+@router.get("/calendar")
+def calendar_page(request: Request):
+    return templates.TemplateResponse(request, "calendar.html", {"nav_section": "calendar"})
+
+
+def _bell_schedule_summary() -> dict:
+    bell_schedules, bell_problems = deps.load_bell_schedules()
+    found = [
+        {"name": entry["name"], "label": entry["label"], "schedule_id": entry["schedule_id"],
+         "period_count": len(bell_schedules.get(entry["schedule_id"], []))}
+        for entry in deps.list_bell_schedule_files()
+    ]
+    return {"found": found, "problems": schedule_setup.real_problems(bell_problems)}
 
 
 @router.get("/api/calendar")
 def get_calendar():
-    return JSONResponse({"ok": True, "calendars": config.get_calendars(),
-                         "available": list_calendar_files()})
+    bell_schedules, _bell_problems = deps.load_bell_schedules()
+    calendar_readiness = school_calendar.readiness(bell_schedule_ids=bell_schedules)
+    teacher_blocks, teacher_problems = schedule_setup.load_blocks()
+
+    upcoming = {}
+    if calendar_readiness.get("status") != "unconfigured":
+        today = date.today()
+        horizon = today + timedelta(days=UPCOMING_LOOKAHEAD_DAYS)
+        projection, _problems = school_calendar.range_projection(
+            today.isoformat(), horizon.isoformat())
+        upcoming = projection or {}
+
+    return JSONResponse({
+        "ok": True,
+        "readiness": calendar_readiness,
+        "bell_schedules": _bell_schedule_summary(),
+        "teacher_schedule": {
+            "blocks": teacher_blocks,
+            "problems": schedule_setup.real_problems(teacher_problems),
+            "path": schedule_setup.teacher_schedule_path(),
+        },
+        "courses": [
+            {"id": str(course["id"]), "name": config.course_display_name(course["id"]),
+             "active": bool(course.get("active", True))}
+            for course in config.saved_courses()
+        ],
+        "upcoming": upcoming,
+        "folders": {
+            "calendars": workspace.library_folder("Calendars"),
+            "smartdecks": workspace.library_folder("SmartDecks"),
+        },
+    })
 
 
-@router.post("/api/calendar/load-builtin")
-def load_builtin_calendar(name: str = Form(...)):
-    """Load a calendar CSV from the workspace Calendars folder by filename.
-
-    District-agnostic: `name` is a file the teacher placed (or that was seeded)
-    in their Calendars folder. No district data is baked into source.
-    """
-    cal_dir = _calendars_dir()
-    safe = os.path.basename(name)  # never traverse outside the Calendars folder
-    path = os.path.join(cal_dir or "", safe)
-    if not cal_dir or not os.path.exists(path):
-        return JSONResponse({"ok": False, "error": f"Calendar file not found: {safe}"})
-    with open(path, encoding="utf-8") as f:
-        content = f.read()
-    dates, periods, events = _parse_calendar_csv(content)
-    key   = _file_key(safe)
-    label = _calendar_label(safe)
-    config.set_calendar(key, label, dates, periods, events)
-    return JSONResponse({"ok": True, "key": key, "label": label,
-                         "count": len(dates), "grading_periods": periods, "events": events})
-
-
-@router.post("/api/calendar/set")
-def set_calendar_route(source: str = Form(...), dates: str = Form(...),
-                       grading_periods: str = Form(default="[]"), events: str = Form(default="[]")):
+@router.post("/api/calendar/create")
+def create_calendar(
+    school_year: str = Form(...),
+    coverage_start: str = Form(...),
+    coverage_end: str = Form(...),
+    default_schedule_id: str = Form(...),
+    weekday_schedules: str = Form(default="{}"),
+    no_school_dates: str = Form(default="[]"),
+    no_regular_classes_dates: str = Form(default="[]"),
+    date_labels: str = Form(default="{}"),
+    grading_periods: str = Form(default="[]"),
+):
     try:
-        date_list = json.loads(dates)
-        periods   = json.loads(grading_periods)
-        parsed_events = json.loads(events)
-    except json.JSONDecodeError as e:
-        return JSONResponse({"ok": False, "error": f"bad request: {e}"})
-    config.set_calendar("custom", source or "Custom", date_list, periods, parsed_events)
-    return JSONResponse({"ok": True})
+        weekday_map = json.loads(weekday_schedules)
+        no_school = json.loads(no_school_dates)
+        no_regular = json.loads(no_regular_classes_dates)
+        labels = json.loads(date_labels)
+        periods = json.loads(grading_periods)
+    except json.JSONDecodeError as exc:
+        return JSONResponse({"ok": False, "problems": [f"bad request: {exc}"]})
+
+    doc, problems = school_calendar.create_school_year(
+        school_year=school_year, coverage_start=coverage_start, coverage_end=coverage_end,
+        default_schedule_id=default_schedule_id, weekday_schedules=weekday_map,
+        no_school_dates=no_school, no_regular_classes_dates=no_regular,
+        date_labels=labels, grading_periods=periods,
+    )
+    if problems or doc is None:
+        return JSONResponse({"ok": False, "problems": problems})
+    return JSONResponse({
+        "ok": True,
+        "revision": doc["revision"],
+        "school_year": doc["school_year"],
+        "coverage": doc["coverage"],
+        "day_count": len(doc["days"]),
+    })
 
 
-@router.get("/api/calendar/template")
-def calendar_template(year: str = ""):
+@router.post("/api/calendar/import")
+def import_academic_csv(content: str = Form(...)):
+    """Parse an academic-calendar CSV into create() inputs for teacher review.
+
+    Read-only: nothing is written here. The teacher reviews the parsed dates
+    and periods on the Calendar page, then /api/calendar/create writes the
+    complete validated document in one step.
+    """
+    no_school_dates, periods, events = calendar_csv._parse_calendar_csv(content)
+    date_labels = {
+        event["start"]: event["label"]
+        for event in events
+        if event.get("kind") == "no_school" and event.get("start") and event.get("label")
+    }
+    report_issue_by_code = {
+        event["code"]: event["report_issue_date"]
+        for event in events
+        if event.get("kind") == "report_card" and event.get("code")
+    }
+    grading_periods = [
+        {**period, "report_issue_date": report_issue_by_code[period["code"]]}
+        if period.get("code") in report_issue_by_code else period
+        for period in periods
+    ]
+    return JSONResponse({
+        "ok": True,
+        "no_school_dates": no_school_dates,
+        "date_labels": date_labels,
+        "grading_periods": grading_periods,
+    })
+
+
+@router.get("/api/calendar/import/template")
+def calendar_import_template():
     """Download a blank, district-agnostic calendar CSV template for editing."""
     fname = "calendar_template.csv"
     if os.path.exists(_TEMPLATE_PATH):
@@ -96,10 +178,41 @@ def calendar_template(year: str = ""):
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
-@router.post("/api/calendar/clear")
-def clear_calendar(source: str = Form(default="")):
-    if source:
-        config.remove_calendar(source)
-    else:
-        config.clear_all_calendars()
-    return JSONResponse({"ok": True})
+@router.post("/api/calendar/change/preview")
+def preview_calendar_change(
+    kind: str = Form(...),
+    schedule_id: str = Form(default=""),
+    label: str = Form(default=""),
+    dates: str = Form(default=""),
+    date_from: str = Form(default=""),
+    date_to: str = Form(default=""),
+    weekdays: str = Form(default=""),
+):
+    try:
+        dates_list = json.loads(dates) if dates else None
+        weekdays_list = json.loads(weekdays) if weekdays else None
+    except json.JSONDecodeError as exc:
+        return JSONResponse({"ok": False, "problems": [f"bad request: {exc}"]})
+
+    preview, problems = school_calendar.preview_change(
+        kind=kind, schedule_id=(schedule_id or None), label=(label or None),
+        dates=dates_list, date_from=(date_from or None), date_to=(date_to or None),
+        weekdays=weekdays_list,
+    )
+    if problems or preview is None:
+        return JSONResponse({"ok": False, "problems": problems})
+    return JSONResponse({"ok": True, **preview})
+
+
+@router.post("/api/calendar/change/apply")
+def apply_calendar_change(expected_revision: int = Form(...), preview: str = Form(...)):
+    try:
+        preview_payload = json.loads(preview)
+    except json.JSONDecodeError as exc:
+        return JSONResponse({"ok": False, "problems": [f"bad request: {exc}"]})
+
+    doc, problems = school_calendar.apply_change(
+        preview_payload, expected_revision=expected_revision)
+    if problems or doc is None:
+        return JSONResponse({"ok": False, "problems": problems})
+    return JSONResponse({"ok": True, "revision": doc["revision"]})

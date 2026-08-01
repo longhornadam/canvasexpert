@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from api.course_catalog import read_catalog
 from api.mirror import read_service
-from api.webui import config, deps
+from api.webui import config, deps, school_calendar
 
 router = APIRouter()
 
@@ -76,57 +76,34 @@ def resolve_theme(value) -> str:
     return key if key in _THEME_KEYS else DEFAULT_THEME
 
 
-# deck_schedule.resolve_day emits this when the day calendar has no entry for
-# a date, which is how a weekend or holiday is told apart from a teacher who
-# never set a schedule up at all. test_no_school_day_marker_still_matches
-# pins it, so a reword there fails a test instead of silently turning every
-# summer day into "set up your schedule".
-_NO_SCHOOL_DAY_MARKER = "no schedule for"
+# Calendar resolution states that mean "the calendar itself needs a teacher
+# repair" versus "this is legitimately not a school day" -- kept distinct so a
+# summer weekend never nags for setup and a broken calendar never reads as a
+# quiet day off. See docs/contracts/canonical-school-calendar-contract.md §4.
+_CALENDAR_REPAIR_STATES = {"unconfigured", "invalid_calendar", "outside_coverage", "unknown_schedule"}
+_CALENDAR_NO_SCHOOL_STATES = {"no_school", "no_regular_classes"}
+_CALENDAR_REPAIR_MESSAGE = "Calendar needs attention. Open Calendar in Canvas Expert."
 
 
-def resolve_panel_course(course: str, *, now=None, schedule_reader=None) -> dict:
-    """Which course a Panel should show right now.
-
-    An explicit ``course`` pins the panel to one section. Otherwise it follows
-    the teacher's own schedule, which the app already resolves for SmartDeck:
-    the block meeting now, or the next one today. A pinned course id dies at
-    the year rollover and takes a saved board quietly with it; a schedule does
-    not, because the teacher updates it once and every board follows.
-
-    Returns ``course_id`` plus a ``relation`` of pinned/now/next, or a named
-    ``state`` when no course applies. Never raises: this runs for a page on a
-    classroom wall.
-    """
-    if course:
-        return {"course_id": str(course), "relation": "pinned",
-                "block": "", "state": "", "message": "", "next_change": ""}
-
-    now = now or datetime.now()
-    reader = schedule_reader or deps.resolve_schedule_for
+def _resolve_calendar_state(date_str: str) -> str:
+    """The canonical calendar's resolution state for one date, or "ready" on
+    any internal failure -- the schedule_reader's own result decides in that
+    case, so this never independently takes the panel down."""
     try:
-        blocks, problems = reader(now.date().isoformat())
+        bell_schedules, _problems = deps.load_bell_schedules()
+        doc, _problems = school_calendar.read()
+        return school_calendar.resolve_date(doc, date_str, bell_schedules)["state"]
     except Exception:
-        blocks, problems = [], []
+        return "ready"
 
-    if not blocks:
-        if any(_NO_SCHOOL_DAY_MARKER in str(p) for p in problems):
-            return _no_course("not_school_day", "No classes scheduled today.")
-        return _no_course(
-            "no_schedule",
-            "Set your class schedule in Canvas Expert and this follows your day.")
 
-    now_hhmm = now.strftime("%H:%M")
-    block = next((b for b in blocks if b["start"] <= now_hhmm < b["end"]), None)
-    relation = "now"
-    if block is None:
-        # resolve_day sorts by start, so the first block still ahead is next.
-        block = next((b for b in blocks if b["start"] > now_hhmm), None)
-        relation = "next"
-    if block is None:
-        return _no_course("day_over", "No more classes today.")
-
-    name = str(block.get("label") or block.get("name") or "")
-    course_id = str(block.get("course_id") or "")
+def _course_for_block(block: dict, *, relation: str, next_change: str,
+                      active_courses_reader) -> dict:
+    """Turn a resolved Teacher Schedule block into a Panel course result,
+    enforcing the Current-course boundary: a block mapped to a Previous (or
+    unknown) course never reads its catalog."""
+    name = str((block or {}).get("label") or (block or {}).get("name") or "")
+    course_id = str((block or {}).get("course_id") or "")
     if not course_id:
         # Conference, duty, advisory: a real block with no Canvas course.
         # Name it rather than reporting an error nobody can act on mid-class.
@@ -134,7 +111,14 @@ def resolve_panel_course(course: str, *, now=None, schedule_reader=None) -> dict
                           f"No Canvas course linked to {name}." if name
                           else "No Canvas course linked to this block.",
                           block=name)
-
+    try:
+        active_ids = {str(c.get("id")) for c in (active_courses_reader() or [])}
+    except Exception:
+        active_ids = set()
+    if course_id not in active_ids:
+        return _no_course("previous_course",
+                          "This class is no longer current. Update its Canvas course in Calendar.",
+                          block=name)
     return {
         "course_id": course_id,
         "relation": relation,
@@ -143,8 +127,82 @@ def resolve_panel_course(course: str, *, now=None, schedule_reader=None) -> dict
         "message": "",
         # When this panel stops being right. The panel re-reads at the bell
         # instead of drifting for up to a refresh interval into the next class.
-        "next_change": str(block["end"] if relation == "now" else block["start"]),
+        "next_change": next_change,
     }
+
+
+def resolve_panel_course(block: str, *, now=None, schedule_reader=None,
+                         teacher_schedule_reader=None, active_courses_reader=None,
+                         calendar_state=None) -> dict:
+    """Which course a Panel should show right now.
+
+    A stable ``?block=<teacher-block-name>`` pins the panel to that Teacher
+    Schedule block: it still resolves through the Teacher Schedule and still
+    enforces the Current-course boundary, but bypasses date/clock resolution
+    -- the contract's one intentional override (raw ``?course=`` pinning is
+    retired: a pinned course id died at the year rollover and took a saved
+    board quietly with it, where a stable block name does not). Otherwise the
+    panel follows the live calendar/clock: the block meeting now, or the next
+    one today.
+
+    Returns ``course_id`` plus a ``relation`` of pinned/now/next, or a named
+    ``state`` when no course applies. Never raises: this runs for a page on a
+    classroom wall.
+    """
+    active_reader = active_courses_reader or config.active_courses
+    teacher_reader = teacher_schedule_reader or deps.load_teacher_schedule
+    try:
+        teacher_schedule, _problems = teacher_reader()
+    except Exception:
+        teacher_schedule = {}
+    teacher_blocks = teacher_schedule.get("blocks") if isinstance(teacher_schedule, dict) else []
+    if not isinstance(teacher_blocks, list):
+        teacher_blocks = []
+
+    if block:
+        matched = next(
+            (b for b in teacher_blocks
+             if isinstance(b, dict) and str(b.get("name") or "") == block),
+            None)
+        if matched is None:
+            return _no_course("no_schedule",
+                              "This block is not in your Teacher Schedule.", block=block)
+        return _course_for_block(matched, relation="pinned", next_change="",
+                                 active_courses_reader=active_reader)
+
+    now = now or datetime.now()
+    date_str = now.date().isoformat()
+
+    state = _resolve_calendar_state(date_str) if calendar_state is None else calendar_state
+    if state in _CALENDAR_REPAIR_STATES:
+        return _no_course("calendar_needs_attention", _CALENDAR_REPAIR_MESSAGE)
+    if state in _CALENDAR_NO_SCHOOL_STATES:
+        return _no_course("not_school_day", "No classes scheduled today.")
+
+    reader = schedule_reader or deps.resolve_schedule_for
+    try:
+        blocks, _problems = reader(date_str)
+    except Exception:
+        blocks = []
+
+    if not blocks:
+        return _no_course(
+            "no_schedule",
+            "Set your class schedule in Canvas Expert and this follows your day.")
+
+    now_hhmm = now.strftime("%H:%M")
+    active_block = next((b for b in blocks if b["start"] <= now_hhmm < b["end"]), None)
+    relation = "now"
+    if active_block is None:
+        # resolve_day sorts by start, so the first block still ahead is next.
+        active_block = next((b for b in blocks if b["start"] > now_hhmm), None)
+        relation = "next"
+    if active_block is None:
+        return _no_course("day_over", "No more classes today.")
+
+    next_change = str(active_block["end"] if relation == "now" else active_block["start"])
+    return _course_for_block(active_block, relation=relation, next_change=next_change,
+                             active_courses_reader=active_reader)
 
 
 def _no_course(state: str, message: str, block: str = "") -> dict:
@@ -168,14 +226,21 @@ def _parse_due(value):
 
 def whats_due_payload(course_id: str, days: int, *, now=None,
                       catalog_reader=None) -> dict:
-    """Published assignments due between now and ``days`` out, soonest first.
+    """Published assignments due through ``today + days`` (local calendar
+    days), future items first then earlier-today items, each bucket
+    chronological.
 
     Always ``ok``: a Panel on a wall has no way to report an exception, so
     every outcome is a named ``state`` the template can render calmly.
-    ``now`` and ``catalog_reader`` are injected by tests.
+    An earlier-today item stays visible all day rather than disappearing the
+    moment its due time passes -- it is described neutrally, never as missing
+    or late. ``now`` and ``catalog_reader`` are injected by tests.
     """
     now = now or datetime.now(timezone.utc)
+    local_now = now.astimezone()
+    today = local_now.date()
     days = max(1, min(int(days), MAX_LOOKAHEAD_DAYS))
+    horizon_date = today + timedelta(days=days)
 
     if not course_id:
         return {"ok": True, "state": "no_course", "days": days,
@@ -193,7 +258,6 @@ def whats_due_payload(course_id: str, days: int, *, now=None,
                            "CanvasExpert, then this panel fills in."}
 
     catalog = (read_result or {}).get("catalog") or {}
-    horizon = now + timedelta(days=days)
 
     items = []
     for record in scope.get("records") or []:
@@ -202,14 +266,22 @@ def whats_due_payload(course_id: str, days: int, *, now=None,
         if not record.get("published", True):
             continue
         due = _parse_due(record.get("due_at"))
-        if due is None or due < now or due > horizon:
+        if due is None:
+            continue
+        due_date = due.astimezone().date()
+        if due_date < today or due_date > horizon_date:
             continue
         items.append({
             "title": str(record.get("name") or "Untitled assignment"),
             "due_at": due.isoformat(),
             "points": record.get("points_possible"),
+            "_earlier_today": due_date == today and due < now,
         })
-    items.sort(key=lambda item: item["due_at"])
+    # Future/upcoming items first, then earlier-today items; each bucket
+    # chronological so ties stay deterministic.
+    items.sort(key=lambda item: (item["_earlier_today"], item["due_at"]))
+    for item in items:
+        del item["_earlier_today"]
 
     return {
         "ok": True,
@@ -225,16 +297,24 @@ def whats_due_payload(course_id: str, days: int, *, now=None,
 
 @router.get("/panels", response_class=HTMLResponse)
 def panels_page(request: Request):
-    """Console: pick a Panel, point it at a course, copy the embed code."""
+    """Console: pick a Panel, optionally fix it to one Teacher Schedule
+    block, copy the embed code."""
     courses = [
         {"id": str(c.get("id", "")), "name": str(c.get("name", "")) or f"Course {c.get('id', '')}"}
-        for c in (config.saved_courses() or [])
+        for c in (config.active_courses() or [])
+    ]
+    teacher_schedule, _problems = deps.load_teacher_schedule()
+    teacher_blocks = teacher_schedule.get("blocks") if isinstance(teacher_schedule, dict) else []
+    blocks = [
+        str(b.get("name") or "") for b in (teacher_blocks or [])
+        if isinstance(b, dict) and b.get("name")
     ]
     panels = [dict(spec, kind=kind) for kind, spec in sorted(PANEL_CATALOG.items())]
     return deps.templates.TemplateResponse(request, "panels.html", {
         "nav_section": "panels",
         "panels": panels,
         "courses": courses,
+        "blocks": blocks,
         "default_days": DEFAULT_LOOKAHEAD_DAYS,
         "max_days": MAX_LOOKAHEAD_DAYS,
         "themes": [{"key": key, "label": label} for key, label in PANEL_THEMES],
@@ -256,13 +336,13 @@ def panel_page(request: Request, kind: str, theme: str = DEFAULT_THEME):
 
 
 @router.get("/panels/{kind}/data")
-def panel_data(kind: str, course: str = "", days: int = DEFAULT_LOOKAHEAD_DAYS):
+def panel_data(kind: str, block: str = "", days: int = DEFAULT_LOOKAHEAD_DAYS):
     """The Panel's single data fetch. Disk-only; never calls Canvas."""
     if kind not in PANEL_CATALOG:
         return JSONResponse({"ok": False, "error": f"Unknown panel: {kind}"},
                             status_code=404)
     if kind == "whats-due":
-        scope = resolve_panel_course(course)
+        scope = resolve_panel_course(block)
         if scope["state"]:
             return JSONResponse({
                 "ok": True, "state": scope["state"], "days": days,

@@ -1608,7 +1608,9 @@ def test_server_registers_the_expected_tool_set():
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "list_staged_content",
         "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
-        "save_deck", "save_teacher_schedule", "save_day_calendar",
+        "save_deck", "save_teacher_schedule",
+        "get_school_calendar", "create_school_calendar",
+        "preview_school_calendar_change", "apply_school_calendar_change",
         "list_active_decks", "archive_deck",
     }
 
@@ -1785,15 +1787,49 @@ def test_server_registers_save_teacher_schedule_wrapper(monkeypatch):
     }
 
 
-def test_server_registers_save_day_calendar_wrapper(monkeypatch):
+def test_server_registers_get_school_calendar_wrapper(monkeypatch):
     from api.mcp_server import server
 
-    monkeypatch.setattr(tools, "save_day_calendar", lambda *args: {
-        "ok": True, "count": 5, "path": "Day Calendar Generated.csv",
+    monkeypatch.setattr(tools, "get_school_calendar", lambda date_from, date_to: {
+        "ok": True, "readiness": {"status": "ready"},
     })
-    wire = server.save_day_calendar(
-        "Generated", "2026-08-17", "2026-08-21", "ordinary"
+    wire = server.get_school_calendar("2026-08-17", "2026-08-21")
+    assert json.loads(wire) == {"ok": True, "readiness": {"status": "ready"}}
+
+
+def test_server_registers_create_school_calendar_wrapper(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "create_school_calendar", lambda *args: {
+        "ok": True, "revision": 1, "school_year": "2026-27",
+        "coverage": {"start": "2026-08-17", "end": "2027-06-04"}, "day_count": 292,
+    })
+    wire = server.create_school_calendar(
+        "2026-27", "2026-08-17", "2027-06-04", "ordinary"
     )
     assert json.loads(wire) == {
-        "ok": True, "count": 5, "path": "Day Calendar Generated.csv",
+        "ok": True, "revision": 1, "school_year": "2026-27",
+        "coverage": {"start": "2026-08-17", "end": "2027-06-04"}, "day_count": 292,
     }
+
+
+def test_server_registers_preview_school_calendar_change_wrapper(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "preview_school_calendar_change", lambda *args: {
+        "ok": True, "base_revision": 1, "affected": [], "is_noop": True,
+    })
+    wire = server.preview_school_calendar_change("no_school", "", "Field day")
+    assert json.loads(wire) == {
+        "ok": True, "base_revision": 1, "affected": [], "is_noop": True,
+    }
+
+
+def test_server_registers_apply_school_calendar_change_wrapper(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "apply_school_calendar_change", lambda preview, expected_revision: {
+        "ok": True, "revision": expected_revision + 1,
+    })
+    wire = server.apply_school_calendar_change({"base_revision": 1}, 1)
+    assert json.loads(wire) == {"ok": True, "revision": 2}

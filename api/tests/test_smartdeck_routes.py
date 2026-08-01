@@ -53,13 +53,13 @@ def test_smartdeck_page_get_returns_200_and_html():
     assert "text/html" in response.headers.get("content-type", "")
 
 
-def test_smartdeck_page_has_section_rail_and_settings_link():
+def test_smartdeck_page_has_section_rail_and_calendar_link():
     text = client.get("/smartdeck").text
     assert "Decks of classroom-display Slides for your projector." not in text
     for panel_id in ("smartdeck-active", "smartdeck-templates", "smartdeck-archived", "smartdeck-widgets"):
         assert f'id="{panel_id}"' in text
         assert f'href="#{panel_id}"' in text
-    assert 'href="/settings#class-schedule-card"' in text
+    assert 'href="/calendar"' in text
     assert "/static/ui/rail_nav.js" in text
 
 
@@ -192,7 +192,7 @@ def test_smartdeck_readiness_keeps_ready_and_missing_keys():
 
 def test_smartdeck_readiness_adds_pieces():
     data = client.get("/smartdeck/api/readiness").json()
-    assert set(data["pieces"]) == {"teacher_schedule", "bell_schedules", "day_calendar"}
+    assert set(data["pieces"]) == {"teacher_schedule", "bell_schedules"}
 
 
 def test_smartdeck_readiness_names_the_missing_bell_schedules(isolated_workspace):

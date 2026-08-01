@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from api.webui import deck_store, deps, workspace
 from api.webui.server import app
+from api.tests.calendar_fixtures import write_school_calendar
 
 
 client = TestClient(app)
@@ -44,9 +45,7 @@ def schedule_fixture(isolated_workspace):
     bell_schedule_content = "period_id,start,end\n1,08:35,09:25\n2,09:29,10:21\n3,10:25,11:17\n4,11:21,12:13\n5,12:13,13:05\n6,13:09,14:01\n7,14:05,14:57\n"
     (calendars_dir / "Bell Schedule.csv").write_text(bell_schedule_content, encoding="utf-8")
 
-    # Day calendar CSV (map dates to bell schedules)
-    day_calendar_content = "date,schedule_id\n2026-08-19,bell_schedule\n"
-    (calendars_dir / "Day Calendar.csv").write_text(day_calendar_content, encoding="utf-8")
+    write_school_calendar(calendars_dir, {"2026-08-19": "bell_schedule"})
 
     # Teacher schedule JSON
     teacher_schedule_content = json.dumps({
@@ -310,10 +309,7 @@ def bobcat_schedule_fixture(schedule_fixture):
     (calendars_dir / default_schedule.name).write_text(
         default_schedule.read_text(encoding="utf-8"), encoding="utf-8"
     )
-    (calendars_dir / "Day Calendar.csv").write_text(
-        "date,schedule_id\n2026-08-19,bell_schedule_bobcat_hour\n",
-        encoding="utf-8",
-    )
+    write_school_calendar(calendars_dir, {"2026-08-19": "bell_schedule_bobcat_hour"})
     (Path(schedule_fixture) / "Teacher Schedule.json").write_text(
         json.dumps({
             "version": "1.0-json",

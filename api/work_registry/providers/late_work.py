@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from api.webui import config
+from api.webui import config, school_calendar
 from api.webui.schooldays import _parse_iso_local, _school_days_late_detail
 
 from . import WorkCourseReads, check_deadline, finding, text
@@ -17,23 +17,15 @@ def _int(value, default=0) -> int:
         return default
 
 
-def _holidays() -> set[str]:
-    settings = config.get_sweep_settings()
-    holidays = set(settings.get("holidays") or [])
-    try:
-        holidays.update(config.get_combined_calendar_for_range().get("no_count_dates") or [])
-    except Exception:
-        pass
-    return holidays
-
-
 def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
+    if not school_calendar.is_configured():
+        # No calendar means no reliable school-day math -- decline rather
+        # than silently treat every day (weekends included) as instructional.
+        return []
     check_deadline(reads._deadline)
     assignments = reads.assignments()
     check_deadline(reads._deadline)
     submissions = reads.submissions()
-    settings = config.get_sweep_settings()
-    skip_weekends = bool(settings.get("skip_weekends", True))
     extra_days = {
         text(item.get("id")): max(_int(item.get("days")), 0)
         for item in config.get_extra_time(course_id)
@@ -52,7 +44,7 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         "latest_attempt_number": 0,
         "due_at": "",
     })
-    holidays = _holidays()
+    no_count = school_calendar.no_count_dates()
     for submission in submissions:
         if not isinstance(submission, dict) or submission.get("excused"):
             continue
@@ -69,7 +61,7 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         submitted = _parse_iso_local(submitted_at)
         if not due or not submitted:
             continue
-        school_days, _ = _school_days_late_detail(due, submitted, skip_weekends, holidays)
+        school_days, _ = _school_days_late_detail(due, submitted, no_count)
         allowed_days = extra_days.get(text(submission.get("user_id")), 0)
         if school_days <= allowed_days:
             continue

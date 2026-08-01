@@ -119,8 +119,6 @@
         assignment_id: aSel.value,
         student_ids:   JSON.stringify(sids),
         days:          String(days),
-        skip_weekends: document.getElementById("sw-weekends")?.checked ? "true" : "false",
-        holidays:      JSON.stringify(gb.collectHolidays()),
       });
       if (d.ok) {
         gb.showBanner(banner, "ok",

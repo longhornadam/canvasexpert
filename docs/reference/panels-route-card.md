@@ -90,9 +90,10 @@ PANEL_CATALOG = {
 ### whats-due
 
 `whats_due_payload(course_id, days, *, now=None, catalog_reader=None)` returns
-published assignments due between now and `days` out, soonest first. It always
-returns `ok`, because a Panel on a wall has no way to report an exception; every
-outcome is a named `state` the template renders calmly:
+published assignments due through `today + days` local calendar days, future/upcoming
+items first then earlier-today items (each bucket chronological). It always returns
+`ok`, because a Panel on a wall has no way to report an exception; every outcome is a
+named `state` the template renders calmly:
 
 | state | Meaning |
 | --- | --- |
@@ -100,14 +101,19 @@ outcome is a named `state` the template renders calmly:
 | `no_catalog` | No local catalog; tells the teacher to refresh it |
 | `nothing_due` | Catalog is fine, window is empty |
 | `ready` | Assignments present; `stale` flags an out-of-date catalog but still serves |
-| `no_schedule` | Following the schedule, but none is set up |
-| `not_school_day` | Weekend, holiday, summer |
+| `no_schedule` | Following the schedule, but no Teacher Schedule block resolves |
+| `calendar_needs_attention` | The canonical School Calendar is unconfigured, invalid, out of coverage, or names an unknown Bell Schedule for today |
+| `not_school_day` | A canonical `no_school`/`no_regular_classes` day: weekend, holiday, summer |
 | `day_over` | School day, past the last block |
 | `block_without_course` | In a real block with no Canvas course linked (conference, duty, advisory) |
+| `previous_course` | The resolved block's course is not a Current course; the panel never reads its catalog |
 
+An earlier-today item stays visible through the end of the local calendar day even
+after its due time passes, and is described neutrally, never as missing or late.
 `days` is clamped to `MAX_LOOKAHEAD_DAYS = 31` so a hand-edited URL cannot ask for a
-year. Assignments with no due date, an unparseable due date, or `published: false`
-are excluded. Naive timestamps are read as UTC rather than dropped.
+year; an item due on local `today + 7` is included, `today + 8` is excluded (with the
+default `days=7`). Assignments with no due date, an unparseable due date, or
+`published: false` are excluded. Naive timestamps are read as UTC rather than dropped.
 
 `now` and `catalog_reader` exist as injection seams for tests. `catalog_reader` is
 the same seam `read_service` already exposes, so tests never write a course to disk.
@@ -183,30 +189,33 @@ rather than fill.
 `resolve_panel_course` in `panels.py` is the single resolver every kind calls, so a
 timer Panel and a what's-due Panel can never disagree about what period it is.
 
-The chain already existed for SmartDeck and Panels now reuses it end to end:
+The chain reuses SmartDeck's own resolution, now via the canonical calendar:
 
 ```
-today  -> deps.load_day_calendar()      which bell schedule is running
-       -> deps.load_bell_schedules()    periods with start/end
-       -> deps.load_teacher_schedule()  blocks with raw_periods and course_id
-       -> deck_schedule.resolve_day()   today's blocks, sorted by start
-       -> now "HH:MM"                   the block meeting now, else the next one
+today  -> school_calendar.resolve_date()   day kind + schedule_id, or a named repair state
+       -> deps.load_bell_schedules()       periods with start/end
+       -> deps.load_teacher_schedule()     blocks with raw_periods and course_id
+       -> deck_schedule.resolve_day()      today's blocks, sorted by start
+       -> now "HH:MM"                      the block meeting now, else the next one
 ```
 
 `course_id` is an optional field on every schedule block, which is what makes this
-work at all. `_bell_schedule_feed` in `smartdeck_feeds.py` does the same last step for
-SmartDeck's own display.
+work at all; the resolver also enforces the Current-course boundary before returning
+one (`config.active_courses()`), so a block mapped to a Previous course reports
+`previous_course` rather than reading that course's catalog. `_bell_schedule_feed` in
+`smartdeck_feeds.py` does the same last step for SmartDeck's own display.
 
-**Why this is a durability fix, not a convenience.** `?course=123` expires. The
-following August that id is dead, and a board saved in September renders an empty panel
-with no error, because a Panel cannot tell "nothing due" from "that course is gone". A
-schedule survives the rollover: the teacher updates it once and every saved board
-follows. The URL contract exists to keep boards working, so the default has to be the
-one that does.
+**Why a stable block name is a durability fix, not a convenience.** A raw `?course=123`
+pin expires: the following August that id is dead, and a board saved in September
+renders an empty panel with no error, because a Panel cannot tell "nothing due" from
+"that course is gone". A schedule survives the rollover: the teacher updates it once and
+every saved board follows.
 
-`?course=123` still pins a Panel, and is still wanted: a second monitor dedicated to one
-section, or showing next period during conference. The default changed from *required*
-to *follow the schedule*; the capability did not go away.
+`?block=<teacher-block-name>` is the one intentional override, replacing raw `?course=`
+pinning outright (not retained as a second contract): a second monitor dedicated to one
+section, or showing next period during conference. It still resolves through the
+Teacher Schedule and still enforces the Current-course boundary -- it bypasses only
+date/clock resolution, not the schedule or the course gate.
 
 Between blocks the Panel looks ahead to the next one and labels itself `Next · ELA 7`,
 rather than going blank during passing period. After the last block it stops, instead of
@@ -220,53 +229,14 @@ sets one timer for 20 seconds past it. The 15-minute poll stays as the backstop 
 catalog refreshes.
 
 `resolve_panel_course` never raises. A missing workspace, an unreadable schedule file,
-or a malformed calendar all resolve to a named state with a calm message.
+or a broken calendar all resolve to a named state with a calm message -- a projected
+Panel shows the canonical Calendar's own repair states (`calendar_needs_attention`,
+`not_school_day`) rather than a distinct, parallel notion of "no schedule."
 
-### Correcting today
-
-Following a schedule inherits the schedule's staleness. Assemblies, late starts and
-pep rallies change the bell schedule and nobody updates the calendar, and that failure
-is silent in the worst way: the panels resolve to the wrong class and look perfectly
-healthy doing it. So the Panels console opens with one row, `#pn-today`, that sets
-today's bell schedule from a dropdown of the ones already on disk.
-
-It is deliberately only about today. A recurring change belongs in Settings, where the
-calendar is generated; this is the "the schedule is wrong right now and I have a class
-in four minutes" control, so it stays one line and stays out of the way. It hides
-entirely when no bell schedules exist, so a teacher who never set this up is not nagged
-by a control they cannot use.
-
-| Piece | Owner |
-| --- | --- |
-| Read + write routes | `GET`/`POST /api/schedule/today` in `api/webui/routes/schedule.py` |
-| Storage | `schedule_setup.set_day_override` / `read_day_overrides` |
-| Precedence | `deps.load_day_calendar`, applied after discovery |
-| Tests | `api/tests/test_schedule_day_override.py` |
-
-Four decisions worth keeping:
-
-- **Corrections live in their own file**, `Day Overrides.csv`, never edited into the
-  district's generated calendar. Regenerating that calendar cannot wipe them, and a
-  correction stays visibly a correction rather than becoming indistinguishable from
-  source data.
-- **Precedence is explicit, not alphabetical.** `load_day_calendar` merges
-  `sorted(glob(...))` with `dict.update`, so whoever sorts last wins. The override file
-  is skipped during discovery and applied afterwards by name. Without that, a district
-  calendar renamed past `Day Overrides.csv` would silently start beating the teacher.
-  `test_precedence_is_by_name_not_alphabetical_luck` pins it.
-- **An unknown schedule id is refused at the write.** An override naming a schedule
-  nobody has resolves to an empty day, which on a projector is indistinguishable from a
-  holiday.
-- **Clearing the last correction deletes the file.** A header-only CSV left in a synced
-  workspace implies a correction that is not there.
-
-Because the override goes through `load_day_calendar`, SmartDeck honours it too. That is
-intended: it is the same fact about the same day, and two surfaces disagreeing about
-which schedule is running would be worse than either being wrong alone.
-
-Choice labels drop the `Bell Schedule` prefix every file shares, since under a control
-already labelled "Today's bell schedule" it is the same five words in front of the one
-that tells the options apart.
+Retired in the canonical Calendar cutover: the Panels console's own "Correcting today"
+control (`#pn-today`, `GET`/`POST /api/schedule/today`, `Day Overrides.csv`). Correcting
+a bell schedule for one date is now the same operation as any other day edit --
+preview/apply on the Calendar page -- not a Panels-local shortcut.
 
 ## Themes
 
@@ -328,7 +298,7 @@ enforces this repo-wide.
 
 - `py -m pytest api/tests/test_panels.py api/tests/test_route_contract.py -q`
 - Full suite for anything touching `server.py` or the macros:
-  `py -m pytest api/tests -q` (1761 passing at time of writing)
+  `py -m pytest api/tests -q`
 - **Responsive sweep, required for any new or changed Panel.** Load the panel in
   iframes at a spread of shapes and assert no overflow, no clipped text, and a
   legible floor. Shapes that have caught real defects: `240x140`, `430x200`,

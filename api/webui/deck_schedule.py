@@ -1,13 +1,15 @@
-"""Parse bell schedule, day calendar, and teacher schedule CSVs and JSON.
+"""Parse bell schedule and teacher schedule CSVs/JSON, and resolve a day's blocks.
 
 Pure stdlib — no FastAPI, no workspace imports, no file IO at all. Called by
 deps.py and potentially by MCP tools.
 
-Three functions parse and resolve schedule data:
+Day-kind/schedule resolution for a date is the canonical calendar service's
+job (see school_calendar.py); this module only turns an already-resolved
+schedule_id into a teacher's blocks.
+
 - parse_bell_schedule(content: str) -> (periods, problems)
-- parse_day_calendar(content: str) -> (mapping, problems)
 - parse_teacher_schedule(text: str) -> (data, problems)
-- resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> (blocks, problems)
+- resolve_day(schedule_id, bell_schedules, teacher_schedule) -> (blocks, problems)
 """
 
 
@@ -77,48 +79,6 @@ def parse_bell_schedule(content: str) -> tuple:
     ]
 
     return periods, problems
-
-
-def parse_day_calendar(content: str) -> tuple:
-    """CSV text -> ({"YYYY-MM-DD": schedule_id}, problems).
-
-    Columns: date,schedule_id (header row required).
-    Accepts YYYY-MM-DD or MM/DD/YYYY on input; keys are always YYYY-MM-DD.
-
-    Returns (mapping_dict, problems_list):
-    - mapping_dict: {date_isoformat: schedule_id}
-    - problems_list: human-readable issue strings
-    """
-    import csv as _csv
-    import io as _io
-    from datetime import date as _date
-
-    mapping = {}
-    problems = []
-
-    reader = _csv.DictReader(_io.StringIO(content))
-    if not reader.fieldnames:
-        return mapping, problems
-
-    fieldnames = [f.strip().lower() for f in (reader.fieldnames or [])]
-    if "date" not in fieldnames or "schedule_id" not in fieldnames:
-        return mapping, problems
-
-    for row in reader:
-        date_str = (row.get("date") or "").strip()
-        schedule_id = (row.get("schedule_id") or "").strip()
-
-        if not date_str or not schedule_id:
-            continue
-
-        parsed_date = _parse_date(date_str)
-        if not parsed_date:
-            problems.append(f"Invalid date format: {date_str}")
-            continue
-
-        mapping[parsed_date.isoformat()] = schedule_id
-
-    return mapping, problems
 
 
 def parse_teacher_schedule(text: str) -> tuple:
@@ -217,11 +177,13 @@ def validate_teacher_schedule(data: dict) -> list:
     return problems
 
 
-def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
-    """Resolve a teacher's blocks for a specific date.
+def resolve_day(schedule_id, bell_schedules, teacher_schedule) -> tuple:
+    """Resolve a teacher's blocks for an already-identified Bell Schedule.
 
-    date: "YYYY-MM-DD" string
-    day_calendar: output of parse_day_calendar
+    schedule_id: the schedule_id the canonical calendar service resolved for
+      this date, or a falsy value when the date has no instructional schedule
+      (unconfigured, outside coverage, no_school, no_regular_classes, or an
+      unresolved/unknown schedule).
     bell_schedules: {schedule_id: output of parse_bell_schedule}
     teacher_schedule: output of parse_teacher_schedule
 
@@ -234,14 +196,11 @@ def resolve_day(date, day_calendar, bell_schedules, teacher_schedule) -> tuple:
     blocks = []
     problems = []
 
-    # Look up what schedule applies today
-    if date not in day_calendar:
-        problems.append(f"no schedule for {date}")
+    if not schedule_id:
+        problems.append("no schedule for this date")
         return [], problems
-
-    schedule_id = day_calendar[date]
     if schedule_id not in bell_schedules:
-        problems.append(f"schedule '{schedule_id}' not found for {date}")
+        problems.append(f"schedule '{schedule_id}' not found")
         return [], problems
 
     # Get the ordered meetings for today. The parser has already sorted them
@@ -323,23 +282,3 @@ def _is_valid_time(time_str: str) -> bool:
         return 0 <= h <= 23 and 0 <= m <= 59
     except ValueError:
         return False
-
-
-def _parse_date(s: str):
-    """Parse YYYY-MM-DD or MM/DD/YYYY; return date object or None."""
-    from datetime import date as _date
-
-    s = s.strip()
-    try:
-        return _date.fromisoformat(s)
-    except ValueError:
-        pass
-
-    parts = s.split("/")
-    if len(parts) == 3:
-        try:
-            return _date(int(parts[2]), int(parts[0]), int(parts[1]))
-        except ValueError:
-            pass
-
-    return None

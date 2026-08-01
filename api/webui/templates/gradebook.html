@@ -50,14 +50,14 @@
           <option value="{{ c.id }}" data-name="{{ c.name }}">{{ c.nickname }}</option>
           {% endfor %}
         </select>
-        {% if has_calendars %}
-        <span class="gb-cal-badge" title="{% for key, cal in calendars.items() %}{{ cal.label }}{% if not loop.last %}, {% endif %}{% endfor %}">
-          📅 {{ total_holiday_count }} day(s) off ·
+        {% if calendar_status == "ready" %}
+        <span class="gb-cal-badge">
+          📅 {{ total_no_count_days }} day(s) off ·
           {{ all_grading_periods | length }} grading periods
         </span>
         {% else %}
         <span class="gb-cal-badge">
-          No calendar · <a href="/settings#cal">add in Settings</a>
+          No calendar · <a href="/calendar">set up Calendar</a>
         </span>
         {% endif %}
       </div>
@@ -117,15 +117,15 @@
       <h2>Late work sweep</h2>
       <p class="ce-hint ce-gradebook-snapshot-lede">
         Finds every late submission in the selected date range, counts
-        <strong>school days</strong> (weekends, district holidays, extra time from Students), then sets
-        Canvas's lateness override to the corrected count. Canvas applies its own late policy —
-        no grade math here. Re-running is safe.
+        <strong>school days</strong> (every no-count date from Calendar, plus extra time from
+        Students), then sets Canvas's lateness override to the corrected count. Canvas applies
+        its own late policy — no grade math here. Re-running is safe.
       </p>
 
-      {% if not has_calendars %}
+      {% if calendar_status != "ready" %}
       <p class="ce-gradebook-warn">
-        No academic calendar — only weekends are skipped.
-        <a href="/settings#cal">Add one in Settings</a> to skip district holidays automatically.
+        No school calendar configured — every day counts as instructional until one is set up.
+        <a href="/calendar">Set up Calendar</a> to skip weekends and no-school days automatically.
       </p>
       {% endif %}
 
@@ -137,13 +137,7 @@
       <!-- Period preset chips (populated by JS) -->
       <div id="sw-period-chips" class="ce-gradebook-chips"></div>
 
-      <div class="ce-gradebook-grid ce-gradebook-grid--single">
-        <label>Additional no-count days <small class="lbl-hint">(YYYY-MM-DD, one per line — adds to the calendar)</small>
-          <textarea id="sw-holidays" rows="2" placeholder="2026-04-03&#10;2026-05-25"></textarea>
-        </label>
-      </div>
       <div class="opt-checks ce-gradebook-options ce-gradebook-options--spaced">
-        <label class="opt-check"><input type="checkbox" id="sw-weekends" checked> Skip weekends</label>
         <label class="opt-check"><input type="checkbox" id="sw-extra" checked> Honor extra time from Students</label>
       </div>
       <p class="gb-roster-note">

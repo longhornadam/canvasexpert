@@ -17,7 +17,6 @@
     <div class="wiz-step active" data-step="0">1. Workspace</div>
     <div class="wiz-step" data-step="1">2. Canvas URL</div>
     <div class="wiz-step" data-step="2">3. API Token</div>
-    <div class="wiz-step" data-step="3">4. Calendars</div>
   </div>
 
   <!-- Step 0 — Workspace -->
@@ -123,38 +122,6 @@
       <div class="ce-notice ce-notice--ok" id="token-ok-msg">✓ Connected as <span id="connected-name"></span></div>
       <div class="ce-actions">
         <button type="button" onclick="wizardBack()">← Back</button>
-        <button type="button" class="primary" onclick="wizardNext()">Continue →</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Step 3 — Calendars -->
-  <div class="ce-panel wizard-panel ce-wizard-initially-hidden" id="step-3">
-    <h2 class="ce-display">Activate school calendars (optional)</h2>
-    <p class="hint">
-      Calendar files tell Canvas Expert about your school's holidays, grading
-      periods, and semester dates. This powers the <strong>late-work,
-      extension, and grading period</strong> features. You can skip this and
-      set it up later in Settings.
-    </p>
-    <div id="calendar-list">
-      <p class="hint">Loading available calendars…</p>
-    </div>
-    <form id="calendar-form" class="ce-wizard-initially-hidden">
-      <div id="calendar-checkboxes"></div>
-      <div id="calendar-result" class="ce-notice ce-wizard-initially-hidden"></div>
-      <div class="ce-actions">
-        <button type="submit" class="primary">Activate selected</button>
-      </div>
-    </form>
-    <div class="ce-actions ce-wizard-skip-row" id="calendar-skip-row">
-      <button type="button" onclick="wizardBack()">← Back</button>
-      <button type="button" onclick="wizardFinish()">Skip — set up calendars later</button>
-    </div>
-    <div id="calendar-done" class="ce-wizard-initially-hidden">
-      <div class="ce-notice ce-notice--ok" id="calendar-ok-msg"></div>
-      <div class="ce-actions">
-        <button type="button" onclick="wizardBack()">← Back</button>
         <button type="button" class="primary" onclick="wizardFinish()">Done — start using Canvas Expert!</button>
       </div>
     </div>
@@ -165,8 +132,14 @@
     <div class="ce-notice ce-notice--ok ce-wizard-finish">
       ✓ All set! You're ready to use Canvas Expert.
     </div>
+    <p class="hint">
+      Next, set up your school calendar and bell schedules on the
+      <a href="/calendar">Calendar</a> page — that powers late-work, extensions, and
+      grading periods.
+    </p>
     <div class="ce-actions ce-wizard-finish-actions">
       <a href="/" class="primary button-like">Go to Dashboard</a>
+      <a href="/calendar" class="button-like">Set up Calendar</a>
     </div>
   </div>
 

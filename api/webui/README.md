@@ -53,6 +53,7 @@ Source tests never substitute for rendered verification.
 | `/ai-expert` | **AI helper files** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
+| `/calendar` | **Calendar** — school dates, Bell Schedules, Teacher Schedule (see `docs/reference/panels-route-card.md`) | `pages/calendar.js` |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
 | `/smartdeck` | **SmartDeck** — manage Decks: Active, Templates, Archived, Widgets | `smartdeck/smartdeck.js` |
@@ -100,6 +101,19 @@ Settings is stable but still browser-heavy.
 - Persistence facade: `config/__init__.py` with split modules under `config/`
 
 For the full ownership map, see `docs/reference/settings-module-map.md`.
+
+### Calendar module routing
+
+The canonical School Calendar, Bell Schedules, and Teacher Schedule editor live on one
+primary-nav page, not in Settings.
+
+- Page/template owner: `api/webui/routes/calendar.py`, `templates/calendar.html`
+- Browser owner: `static/pages/calendar.js`, `static/pages/calendar.css`
+- Canonical service (schema, validation, create/preview/apply): `api/webui/school_calendar.py`
+- Teacher Schedule/Bell Schedule read-write: `api/webui/routes/schedule.py`, `api/webui/schedule_setup.py`
+
+For the full contract, see `docs/contracts/canonical-school-calendar-contract.md`; for the
+Panels/SmartDeck consumer relationship, see `docs/reference/panels-route-card.md`.
 
 ### PowerGrader module routing
 
@@ -183,23 +197,10 @@ surface that browses every live Canvas course. Nicknames set here are the displa
 names used throughout the app. Internally, `active_courses()` is the compatibility-
 named Current-course boundary and the persisted `active` field remains unchanged.
 
-### Academic calendars
-Load one or more calendars from your workspace **Library/Calendars** folder, or paste a
-custom CSV. The repo ships **no district data** — only a blank `calendar_template.csv`
-and a fictional `Summer_Session_Sample.csv` (seeded into the Library/Calendars folder on
-first run). Whatever CSVs you drop into that folder appear as one-click "Load"
-buttons in Settings. Two CSV formats accepted:
-
-- **Canonical 7-col:** `school_year,row_type,code,name,start_date,end_date,report_issue_date,basis`
-  — row_type values `Holiday`, `No School for Students`, `Holiday for Students/Teachers`
-  → no-count dates; `Academic Period` → grading-period presets.
-- **Simple 4-col:** `Category,Name,Start Date,End Date` — `Student Day Off` →
-  no-count dates; `Academic Period` → presets.
-
-Multiple calendars can be active simultaneously; none are active by default. The
-sweep automatically filters to holidays within the swept date range. To build a
-new calendar, download the template and ask an LLM to fill it in for your district
-and year (there's a ready-made prompt in Settings).
+### Class schedule & calendar
+Moved to the primary-nav **Calendar** page (`/calendar`) — see
+`docs/contracts/canonical-school-calendar-contract.md` and
+`docs/reference/panels-route-card.md`. Settings links to it only.
 
 ### Download location
 Root folder for submission downloads. Each course gets its own subfolder.
@@ -417,12 +418,13 @@ selected course via five tabs.
 Auto-loads when a course is selected. Writes via Canvas native late-policy API.
 
 **Late-work sweep**: user picks a date range (grading-period chips default to
-current/next period). The sweep counts *school days* late — weekends + district
-holidays from the active academic calendar(s) + Rosters extra-time settings — then
-sets Canvas's `seconds_late_override`. No grade math here; Canvas applies its own
-policy. Re-running is safe; preview before writing.
+current/next period). The sweep counts *school days* late — every no-count date from
+the canonical Calendar (`/calendar`) + Rosters extra-time settings — then sets Canvas's
+`seconds_late_override`. No grade math here; Canvas applies its own policy. Re-running
+is safe; preview before writing. An unconfigured Calendar refuses the sweep rather than
+silently treating weekends as school days.
 
-Grading-period chips are labeled by `code` from the calendar (P1–P8 progress,
+Grading-period chips are labeled by `code` from the Calendar (P1–P8 progress,
 T1–T4 terms for PISD) with year suffix when multi-year (e.g. `T1 (25-26)`).
 
 ### Tab 2 — Extra-time

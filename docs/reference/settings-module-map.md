@@ -14,7 +14,6 @@ changes again.
 - Browser owner: `api/webui/static/settings.js`
 - Feature files: `api/webui/static/settings/*.js`
 - Settings route owner: `api/webui/routes/settings.py`
-- Calendar routes: `api/webui/routes/calendar.py`
 - AI Authoring file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
 - Persistence facade: `api/webui/config/__init__.py`
 - Persistence modules: `api/webui/config/*.py`
@@ -34,10 +33,12 @@ reports; this map intentionally does not maintain line-count snapshots.
 - OpenRouter key/model save, test, and current-model price loading
 - Canvas course browser plus Current/Previous and removal actions
 - download root, workspace folder open, and AI Authoring folder/rebuild actions
-- academic calendar list, built-in load/remove, custom CSV parse, preview, save,
-  and copy-LLM-prompt behavior
 - checking for, downloading, and applying an in-app update (teacher-initiated
   only; no automatic check, ever)
+
+Class schedule (Teacher Schedule editor, Bell Schedules) and the school calendar moved out of
+Settings onto the primary-nav Calendar page; see `docs/reference/panels-route-card.md` and
+`docs/contracts/canonical-school-calendar-contract.md`. Settings links to `/calendar` only.
 
 Current split:
 
@@ -46,8 +47,6 @@ Current split:
 - `settings/openrouter.js` - OpenRouter key/model/model-list UX
 - `settings/courses.js` - Canvas course browser and Current/Previous actions
 - `settings/workspace.js` - download root, workspace, AI Authoring file actions
-- `settings/calendars.js` - calendar list/load/parse/save/copy prompt
-- `settings/class_schedule.js` - class schedule readiness line, block editor, and Calendars folder action
 - `settings/updates.js` - update check/download/apply/cancel UX
 
 ## Backend Routing
@@ -62,13 +61,13 @@ Current split:
 - `/settings/download-root`
 - `/settings/test-connection`
 
-Class schedule setup is owned by `routes/schedule.py` and `schedule_setup.py`:
+Class schedule setup (Teacher Schedule blocks, Bell Schedules) is owned by `routes/schedule.py`
+and `schedule_setup.py`, rendered on the Calendar page, not Settings:
 
 - `GET /api/schedule` returns readiness, the raw Teacher Schedule blocks, and folder paths.
 - `POST /api/schedule/teacher` atomically replaces only the blocks array.
 - `schedule_setup.save_blocks()` owns the Teacher Schedule JSON write path.
-- `schedule_setup.save_day_calendar()` owns generated day-calendar CSV writes.
-- The MCP schedule write tools call these same functions, so the panel and assistant share
+- The MCP `save_teacher_schedule` tool calls the same function, so the page and assistant share
   validation and atomic file behavior.
 
 A block's `name` is the key a Slide binds to (`routes/smartdeck.py` `_resolve_slides` keys
@@ -76,9 +75,11 @@ blocks by name); `label` is display text only. Block names and claimed period ID
 and save-time validation checks each period against the workspace Bell Schedule CSVs. The editor
 keeps name and label in separate fields so changing display text does not rename a slide binding.
 
-`readiness()` returns only what the panel renders. Add a field there when a surface starts
-showing it, not in advance: an unrendered field costs a directory scan on every `/settings`
-load and reads as covered when it is not.
+`schedule_setup.readiness()` composes only the Teacher Schedule + Bell Schedule pieces; whole-
+calendar readiness (coverage, today's resolution, low-coverage warning) is
+`api/webui/school_calendar.py:readiness()`, composed alongside it by the Calendar page. Add a
+field only when a surface starts showing it, not in advance: an unrendered field costs a
+directory scan on every load and reads as covered when it is not.
 
 `routes/updates.py` owns the self-update surface:
 
@@ -95,8 +96,8 @@ unless there is a strong reason.
   `config/canvas.py`, `api/openrouter_client.py`
 - Current/Previous course problems: `settings/courses.js`, `settings.js`, `routes/settings.py`,
   `config/courses.py`
-- calendar parse/load problems: `settings/calendars.js`, `settings.js`, `routes/calendar.py`,
-  `config/calendars.py`
+- calendar/schedule problems: see `docs/reference/panels-route-card.md` and
+  `docs/contracts/canonical-school-calendar-contract.md` (owned by the Calendar page, not Settings)
 - workspace/AI Authoring folder issues: `settings.html`, `settings/workspace.js`, `settings.js`,
   `api/webui/workspace.py`, `api/webui/ai_ta.py`
 
@@ -107,9 +108,9 @@ unless there is a strong reason.
 - Do not add district URLs, real calendars, teacher names, or other district-specific
   defaults to source.
 - Keep Settings local-only and do not introduce a public callback or OAuth route.
-- Nothing in Settings writes to the Calendars folder. Bell schedule and day calendar CSVs are
-  teacher-authored; the panel reads them and reports what it found. Every workspace is seeded
-  with real district calendars, so the CSV shape is already on disk before anyone asks.
+- Nothing in Settings writes to the Calendars folder. Bell Schedule CSVs are teacher-authored;
+  the canonical `School Calendar.json` is written only by the Calendar page and MCP calendar
+  tools (see `docs/contracts/canonical-school-calendar-contract.md`).
 - Preserve the `config.*` facade and storage keys unless a migration is explicitly
   planned and tested.
 - `config.active_courses()` is the compatibility-named Current-course boundary for

@@ -61,13 +61,6 @@ from .feedback import (
     list_feedback_patterns, set_feedback_patterns,
 )
 
-# --- academic calendars ---
-from .calendars import (
-    get_calendars, set_calendar,
-    remove_calendar, clear_all_calendars,
-    get_combined_calendar_for_range,
-)
-
 # --- protected names ---
 from .protected_names import (
     LITERARY_PACKS,

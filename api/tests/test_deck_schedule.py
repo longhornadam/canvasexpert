@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from api.webui import deck_schedule
-from api.webui.routes.calendar import _file_key
+from api.webui.deps import _file_key
 
 
 def _meeting(period_id, start, end, segment=""):
@@ -71,39 +71,6 @@ class TestParseBellSchedule:
         assert problems == []
 
 
-class TestParseDayCalendar:
-    def test_valid_day_calendar(self):
-        content = (
-            "date,schedule_id\n"
-            "2026-08-19,bell_schedule_example_day_a\n"
-            "2026-08-20,bell_schedule_example_day_b"
-        )
-        mapping, problems = deck_schedule.parse_day_calendar(content)
-        assert mapping == {
-            "2026-08-19": "bell_schedule_example_day_a",
-            "2026-08-20": "bell_schedule_example_day_b",
-        }
-        assert problems == []
-
-    def test_mm_dd_yyyy_format(self):
-        mapping, problems = deck_schedule.parse_day_calendar(
-            "date,schedule_id\n08/19/2026,bell_schedule_example_day_a"
-        )
-        assert mapping == {"2026-08-19": "bell_schedule_example_day_a"}
-        assert problems == []
-
-    def test_invalid_date(self):
-        _mapping, problems = deck_schedule.parse_day_calendar(
-            "date,schedule_id\n2026-13-45,bell_schedule_example_day_a"
-        )
-        assert "Invalid date" in problems[0]
-
-    def test_empty_day_calendar(self):
-        mapping, problems = deck_schedule.parse_day_calendar("date,schedule_id")
-        assert mapping == {}
-        assert problems == []
-
-
 class TestParseTeacherSchedule:
     def test_valid_teacher_schedule(self):
         data, problems = deck_schedule.parse_teacher_schedule(
@@ -132,10 +99,9 @@ class TestParseTeacherSchedule:
 
 class TestResolveDay:
     @staticmethod
-    def resolve(periods, blocks, date="2026-08-19"):
+    def resolve(periods, blocks):
         return deck_schedule.resolve_day(
-            date,
-            {date: "schedule"},
+            "schedule",
             {"schedule": periods},
             {"blocks": blocks},
         )
@@ -227,19 +193,18 @@ class TestResolveDay:
         blocks, problems = self.resolve(
             [_meeting("1", "08:35", "09:25")],
             [{"name": "Every day", "raw_periods": [1], "weekdays": [0]}],
-            date="2026-08-18",
         )
         assert [block["name"] for block in blocks] == ["Every day"]
         assert problems == []
 
-    def test_date_not_in_calendar_is_reported(self):
-        blocks, problems = deck_schedule.resolve_day("2026-08-19", {}, {}, {})
+    def test_no_schedule_id_is_reported(self):
+        blocks, problems = deck_schedule.resolve_day(None, {}, {})
         assert blocks == []
-        assert "2026-08-19" in problems[0]
+        assert "no schedule" in problems[0]
 
     def test_schedule_id_not_found_is_reported(self):
         blocks, problems = deck_schedule.resolve_day(
-            "2026-08-19", {"2026-08-19": "missing"}, {"other": []}, {"blocks": []}
+            "missing", {"other": []}, {"blocks": []}
         )
         assert blocks == []
         assert "missing" in problems[0]
@@ -334,7 +299,7 @@ def test_default_resolved_runs_never_invert():
         assert not problems, f"{path.name}: {problems}"
         schedule_id = _file_key(path.name)
         blocks, resolve_problems = deck_schedule.resolve_day(
-            "2026-08-19", {"2026-08-19": schedule_id}, {schedule_id: meetings}, teacher
+            schedule_id, {schedule_id: meetings}, teacher
         )
         assert resolve_problems == [], (path.name, resolve_problems)
         assert all(block["end"] >= block["start"] for block in blocks), path.name

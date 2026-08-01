@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Twenty-one thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Twenty-four thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -223,16 +223,53 @@ def save_teacher_schedule(blocks: list) -> str:
 
 
 @mcp.tool()
-def save_day_calendar(label: str, start_date: str, end_date: str,
-                      default_schedule_id: str, weekday_schedules: dict = None,
-                      date_schedules: dict = None, skip_dates: list = None,
-                      replace: bool = False) -> str:
-    """Generate and save a day calendar for a date range.
-    No course ID or student data. The response contains counts and paths only."""
-    return _compact(tools.save_day_calendar(
-        label, start_date, end_date, default_schedule_id,
-        weekday_schedules, date_schedules, skip_dates, replace,
+def get_school_calendar(date_from: str = "", date_to: str = "") -> str:
+    """Read the canonical School Calendar: readiness plus a bounded range of
+    days/grading-periods/events. Pass both date_from and date_to for range
+    rows; omit both for readiness only. No student data."""
+    return _compact(tools.get_school_calendar(date_from, date_to))
+
+
+@mcp.tool()
+def create_school_calendar(school_year: str, coverage_start: str, coverage_end: str,
+                          default_schedule_id: str, weekday_schedules: dict = None,
+                          no_school_dates: list = None, no_regular_classes_dates: list = None,
+                          date_labels: dict = None, grading_periods: list = None,
+                          events: list = None) -> str:
+    """Create or replace the complete canonical School Calendar for one school
+    year. Every date in coverage becomes instructional, a generated weekend,
+    or an explicit no-school/no-regular-classes day. No course ID or student
+    data. Writes live immediately -- there is no review queue for this tool;
+    summarize the request to the teacher before calling it."""
+    return _compact(tools.create_school_calendar(
+        school_year, coverage_start, coverage_end, default_schedule_id,
+        weekday_schedules, no_school_dates, no_regular_classes_dates,
+        date_labels, grading_periods, events,
     ))
+
+
+@mcp.tool()
+def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str = "",
+                                   dates: list = None, date_from: str = "", date_to: str = "",
+                                   weekdays: list = None) -> str:
+    """Preview a day-kind/schedule/label change against the live School
+    Calendar: pass either an explicit dates list or a date_from/date_to range
+    (optionally narrowed by weekdays). Returns the base revision and the
+    affected dates' before/after values. Summarize this to the teacher and
+    get their confirmation before calling apply_school_calendar_change with
+    its expected_revision. No course ID or student data."""
+    return _compact(tools.preview_school_calendar_change(
+        kind, schedule_id, label, dates, date_from, date_to, weekdays,
+    ))
+
+
+@mcp.tool()
+def apply_school_calendar_change(preview: dict, expected_revision: int) -> str:
+    """Apply a preview returned by preview_school_calendar_change. Pass the
+    preview object back verbatim along with its base_revision as
+    expected_revision; a stale revision is refused rather than silently
+    reapplied against newer state. No course ID or student data."""
+    return _compact(tools.apply_school_calendar_change(preview, expected_revision))
 
 
 @mcp.tool()

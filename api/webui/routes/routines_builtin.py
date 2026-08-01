@@ -7,7 +7,7 @@ import json
 import uuid as _uuid
 from datetime import datetime, timedelta
 
-from .. import config, mirror_service
+from .. import config, mirror_service, school_calendar
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
 from ..mirror_reads import students_or_live, submissions_or_live
@@ -24,9 +24,10 @@ from api.nq_report import html_to_text
 
 def _run_routine_sweep(params):
     from ..schooldays import _school_days_late_detail
-    skip_we = params.get("skip_weekends", True)
-    hols = set(params.get("holidays", []))
-    hols.update(config.get_combined_calendar_for_range().get("no_count_dates") or [])
+    if not school_calendar.is_configured():
+        return {"ok": False, "lines": [f"✗ {school_calendar.CALENDAR_REPAIR_MESSAGE}"],
+                "summary": "calendar not configured"}
+    no_count = school_calendar.no_count_dates()
     window = int(params.get("window_days", 30))
     cutoff = (datetime.now().date() - timedelta(days=window)).isoformat()
 
@@ -73,7 +74,7 @@ def _run_routine_sweep(params):
             submitted = _parse_iso_local(sub.get("submitted_at"))
             if not due or not submitted:
                 continue
-            raw_days, excluded = _school_days_late_detail(due, submitted, skip_we, hols)
+            raw_days, excluded = _school_days_late_detail(due, submitted, no_count)
             if raw_days <= 0:
                 continue
             uid = str(sub.get("user_id"))
@@ -258,9 +259,10 @@ def _run_routine_curve(params):
 
 def _run_routine_grading_debt(params):
     min_days = int(params.get("school_days", 3))
-    sweep_s = config.get_sweep_settings()
-    hols = set(sweep_s.get("holidays") or [])
-    hols.update(config.get_combined_calendar_for_range().get("no_count_dates") or [])
+    if not school_calendar.is_configured():
+        return {"ok": False, "lines": [f"✗ {school_calendar.CALENDAR_REPAIR_MESSAGE}"],
+                "summary": "calendar not configured"}
+    no_count = school_calendar.no_count_dates()
     now_dt = datetime.now().astimezone()
     lines, ok, total = [], True, 0
     for c in config.active_courses():
@@ -286,7 +288,7 @@ def _run_routine_grading_debt(params):
             sub_dt = _parse_iso_local(s_["submitted_at"])
             if not sub_dt:
                 continue
-            days = _school_days_late(sub_dt, now_dt, sweep_s.get("skip_weekends", True), hols)
+            days = _school_days_late(sub_dt, now_dt, no_count)
             if days >= min_days:
                 debts.append((days, aname.get(str(s_.get("assignment_id")), "?")))
         total += len(debts)

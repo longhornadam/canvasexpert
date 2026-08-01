@@ -54,9 +54,9 @@ Everything below is already in scope when your file runs. There are no imports t
 | `canvas_get_all(path, params)` | `str, dict` — paginated GET | `([…], err)` — concatenated list |
 | `canvas_send(method, path, body)` | `"PUT"|"POST"|"PATCH", str, dict` | `(data, err)` — `data` is parsed JSON or `{}` |
 | `active_courses()` | no args | `[{id, name, nickname, active}]` — only bookmarked+active courses |
-| `sweep_settings()` | no args | `{skip_weekends: bool, holidays: [str], honor_extra_time: bool}` |
-| `combined_calendar(from, to)` | optional `date_from`, `date_to` YYYY-MM-DD | `{no_count_dates: [str], grading_periods: […]}` |
-| `school_days_late(due_dt, sub_dt, skip_weekends, holidays)` | two datetimes + bool + holiday `[str]` | `int` — school-day count |
+| `sweep_settings()` | no args | `{honor_extra_time: bool}` |
+| `combined_calendar(date_from, date_to)` | optional `date_from`, `date_to` YYYY-MM-DD (whole configured year if omitted) | `{readiness: {…}, no_count_dates: [str], grading_periods: […], events: […]}` |
+| `school_days_late(due_dt, sub_dt, no_count_dates)` | two datetimes + a `{date_str, …}` set | `int` — school-day count |
 | `parse_iso_local(s)` | Canvas ISO string | `datetime` or `None` |
 | `datetime` | Python's `datetime` module | — |
 | `timedelta` | Python's `timedelta` class | — |

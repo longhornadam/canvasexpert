@@ -5,9 +5,10 @@ Keeping service functions here breaks circular-import risk and makes them
 unit-testable without HTTP.
 """
 import json
+from datetime import timedelta
 from pathlib import Path
 
-from . import config
+from . import config, school_calendar
 from .schooldays import _parse_iso_local, _add_school_days
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
@@ -167,11 +168,17 @@ def _split_for_extra_time(course_id, student_ids, base_due_iso, base_lock_iso=No
     roster = {str(e["id"]): int(e.get("days", 1))
               for e in config.get_extra_time(course_id)}
     base_due = _parse_iso_local(base_due_iso) if base_due_iso else None
-    if not roster or not base_due:
+    # An unconfigured calendar has no reliable school-day math -- decline the
+    # extension rather than silently compute it counting weekends as school
+    # days (which would make every extended due date too early).
+    if not roster or not base_due or not school_calendar.is_configured():
         return {"standard": list(student_ids), "extended": []}
 
-    skip_we = True
-    hols = set(config.get_combined_calendar_for_range().get("no_count_dates") or [])
+    # 120 calendar days is a wide safety margin over any realistic extra-time
+    # day count (single digits in practice); _add_school_days only needs the
+    # no-count set to cover as far as it will actually walk.
+    horizon = (base_due.date() + timedelta(days=120)).isoformat()
+    no_count = school_calendar.no_count_dates(base_due.date().isoformat(), horizon)
     base_lock = _parse_iso_local(base_lock_iso) if base_lock_iso else None
 
     standard, buckets = [], {}
@@ -185,9 +192,9 @@ def _split_for_extra_time(course_id, student_ids, base_due_iso, base_lock_iso=No
     extended = []
     for days in sorted(buckets):
         ext = {"days": days, "student_ids": buckets[days],
-               "due_at": _add_school_days(base_due, days, skip_we, hols).isoformat()}
+               "due_at": _add_school_days(base_due, days, no_count).isoformat()}
         if base_lock:
-            ext["lock_at"] = _add_school_days(base_lock, days, skip_we, hols).isoformat()
+            ext["lock_at"] = _add_school_days(base_lock, days, no_count).isoformat()
         extended.append(ext)
     return {"standard": standard, "extended": extended}
 

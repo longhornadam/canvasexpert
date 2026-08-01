@@ -69,8 +69,7 @@ def compute_late_meta(
     assignment: dict,
     course_id: str,
     extra_time_days: int,
-    skip_weekends: bool,
-    holidays: set[str],
+    no_count_dates: set[str],
     batch_id: str,
 ) -> dict:
     """Return late_catchup metadata, including seconds_late_override."""
@@ -86,10 +85,10 @@ def compute_late_meta(
 
     due_dt = _parse_iso_local(due_iso)
     submitted_dt = _parse_iso_local(submitted_iso)
-    if not due_dt or not submitted_dt:
+    if not due_dt or not submitted_dt or no_count_dates is None:
         return meta
 
-    raw_days, _excluded = _school_days_late_detail(due_dt, submitted_dt, skip_weekends, holidays)
+    raw_days, _excluded = _school_days_late_detail(due_dt, submitted_dt, no_count_dates)
     school_days = max(int(raw_days or 0) - max(int(extra_time_days or 0), 0), 0)
     meta["school_days_late"] = school_days
     meta["seconds_late_override"] = school_days * 86400

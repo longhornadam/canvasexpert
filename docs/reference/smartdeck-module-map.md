@@ -38,8 +38,9 @@ historical, not current -- this route card is authoritative).
 
 | Path | Owns |
 |---|---|
-| `api/webui/deck_schedule.py` | Pure stdlib: parses Bell Schedule / Day Calendar CSVs and a Teacher Schedule JSON; `resolve_day()` binds a block name to today's actual start/end. No file IO, no FastAPI, no workspace import. |
-| `api/webui/deps.py` | IO layer over `deck_schedule.py`: discovers the workspace's Bell Schedule/Day Calendar CSVs and Teacher Schedule, and `resolve_schedule_for(date)` ties them together. |
+| `api/webui/deck_schedule.py` | Pure stdlib: parses Bell Schedule CSVs and a Teacher Schedule JSON; `resolve_day(schedule_id, bell_schedules, teacher_schedule)` binds a block name to a start/end for an already-resolved schedule_id. No file IO, no FastAPI, no workspace import, no day-calendar concept -- that lives in `school_calendar.py`. |
+| `api/webui/school_calendar.py` | The canonical School Calendar service (see `docs/contracts/canonical-school-calendar-contract.md`): one `Library/Calendars/School Calendar.json` resolves every date's kind and schedule_id. |
+| `api/webui/deps.py` | IO layer over `deck_schedule.py`: discovers the workspace's Bell Schedule CSVs and Teacher Schedule; `resolve_schedule_for(date)` gets the date's schedule_id from `school_calendar.py`, then ties Bell Schedule + Teacher Schedule together via `deck_schedule.resolve_day()`. |
 | `api/webui/sf.py` | SlideForge parse/validate -- the `<SLIDEFORGE_JSON>` envelope, structural twin of `pf.py`/`af.py`/`rf.py`. |
 | `api/webui/deck_store.py` | Revisioned, path-jailed (`Library/SmartDecks/`), atomic Deck storage: `save_deck`, `list_decks`, `load_deck`, `archive_deck`, `delete_deck`, `list_templates`. |
 | `api/webui/routes/smartdeck.py` | `GET /smartdeck` (management page), `GET/POST /smartdeck/api/*` (list/archive/delete/readiness), `GET /smartdeck/display/{deck_id}` (display page) and `.../data` (the one-shot display payload). `_resolve_slides()` is shared by the display payload and the management list, so both see the same problems. |
@@ -47,7 +48,7 @@ historical, not current -- this route card is authoritative).
 | `api/webui/static/smartdeck/slide_select.js` | `chooseSlide()`: the pure decision half of the display page. Given Slides, a `"HH:MM"` reading, and the Shuffle/Home flags, returns which Slide to show and why. No DOM, no timers, no state, so it is testable without a browser and is where the display's subtle rules belong. |
 | `api/webui/templates/smartdeck_display.html` + `static/smartdeck/display.{js,css}` | The projector display: the DOM and lifecycle half. Loads `slide_select.js` first and defers every which-Slide question to it, keeping widget mount/unmount, the wall-clock-based timer widget (never `requestAnimationFrame`), and the persistent Maximize/Minimize/Close chrome. Extends the generic, feature-agnostic `layouts/display.html` (no app header, fills the viewport, no page scroll). |
 | `api/smartdeck_feeds.py` | Feed resolution -- see "Feed system" below. Moved here from a now-deleted `api/glass/day_context.py`. |
-| `api/default_docs/Calendars/` | Seeded Bell Schedule/Day Calendar CSVs (real Berry Miller Junior High / Pearland ISD data, public and non-PII) and academic-calendar CSVs (an older, unrelated feature). |
+| `api/default_docs/Calendars/` | Seeded Bell Schedule CSVs (real Berry Miller Junior High / Pearland ISD data, public and non-PII) and academic-calendar CSVs (import inputs for the canonical Calendar page's create/import flow). |
 | `api/default_docs/SmartDecks/` | Seeded `Teacher Schedule.template.json` (a placeholder; the real one is created in the workspace, never the repo). |
 
 ## Storage layout
@@ -63,9 +64,10 @@ historical, not current -- this route card is authoritative).
 ```
 
 Teacher Schedule.json uses the additive schema `{version: "1.0-json", blocks: [{name,
-raw_periods, label?}]}`. Block names and claimed period IDs are unique. The day calendar selects
-an ordered Bell Schedule meeting list for each date, so a block can be absent on one day without
-a weekday rule. A block spanning multiple consecutive meetings resolves to one window; a
+raw_periods, label?}]}`. Block names and claimed period IDs are unique. The canonical School
+Calendar (`Library/Calendars/School Calendar.json`) resolves each date's schedule_id, which
+selects an ordered Bell Schedule meeting list, so a block can be absent on one day without a
+weekday rule. A block spanning multiple consecutive meetings resolves to one window; a
 non-contiguous block produces one entry per run, and slides bind to the first entry.
 
 Revision numbers are unique per date across all three deck folders, not just within the
@@ -90,28 +92,39 @@ instead of overwriting it.
   they reference it) or `"slide"` (fresh mount/unmount with every Slide's own showing, no
   preserved state).
 
-## MCP tools (schema v15, 21 tools total; SmartDeck's own 9)
+## MCP tools (schema v16, 24 tools total; SmartDeck's own 8)
 
 | Tool | Reads/writes |
 |---|---|
 | `get_bell_schedule(schedule_id="")` | Bell schedule CSV(s) from the workspace |
 | `get_day_schedule(date)` | Resolved blocks for one date |
 | `get_teacher_schedule()` | The teacher's own block-name mapping |
+| `save_teacher_schedule(blocks)` | Validates and atomically replaces the Teacher Schedule blocks |
 | `get_authoring_contract("deck")` | The SlideForge contract text (no staging/review appendix -- SmartDeck has no review queue, unlike every other Forge kind) |
 | `save_deck(date, title, slides, widgets=None)` | Validates and writes a Deck live |
 | `list_active_decks()` | Active decks only |
 | `archive_deck(deck_id)` | Moves a Deck to Archived |
 
-All seven skip the course gate and the outbound safety gate (no `course_id`, no student data)
--- same class of exception as `get_product_guide`/`list_staged_content`.
+All eight skip the course gate and the outbound safety gate (no `course_id`, no student data)
+-- same class of exception as `get_product_guide`/`list_staged_content`. The canonical Calendar
+domain's four tools (`get_school_calendar`, `create_school_calendar`,
+`preview_school_calendar_change`, `apply_school_calendar_change`) share the same exemption but
+are documented in `docs/contracts/canonical-school-calendar-contract.md`, not here -- they own
+day kinds/schedule resolution, not SmartDeck's deck/slide content.
 
 ## Feed system (backend-only, not yet wired to authoring or display)
 
 `api/smartdeck_feeds.py` holds a closed allowlist (`FEED_CATALOG`) of named references to
 classroom-facing data: `bell_schedule`, `district_calendar_events`, and `school_events` have
-real producers; `birthdays_today`, `missing_assignments`, `positive_achievements`, and
-`staar_masters` are named (so a typo is still rejected the same way) but resolve to a graceful
-"not yet available" -- that data has no producer yet (unstarted Canvas Mirror/roster work).
+real producers, all now sourced from the canonical `School Calendar.json` via
+`api/webui/school_calendar.py` (`resolve_date()`/`range_projection()`) rather than the retired
+day-calendar CSVs, `config.calendars`, or `school_events.py`. `district_calendar_events`
+synthesizes `no_school`/`grading_period_end`/`report_card` events from the calendar's day kinds
+and grading periods (that shape is structural now, not a stored events list); `school_events`
+reads the calendar's own `events` array directly. `birthdays_today`, `missing_assignments`,
+`positive_achievements`, and `staar_masters` are named (so a typo is still rejected the same way)
+but resolve to a graceful "not yet available" -- that data has no producer yet (unstarted Canvas
+Mirror/roster work).
 `resolve_feed(name, date)` raises only for a name outside the catalog entirely; a recognized
 name never raises, degrading to less data on any internal failure. Every event resolved
 through this module is tagged via `api/audience.py`, filtered to classroom-safe items only,

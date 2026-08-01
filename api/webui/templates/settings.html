@@ -37,8 +37,7 @@
       <div class="ce-rail-nav__links">
         <a href="#workspace-settings-card" data-rail-link>Workspace</a>
         <a href="#download-root-card" data-rail-link>Downloads</a>
-        <a href="#class-schedule-card" data-rail-link>Class schedule</a>
-        <a href="#cal" data-rail-link>Academic calendars</a>
+        <a href="#calendar-card" data-rail-link>Class schedule &amp; calendar</a>
       </div>
     </div>
 
@@ -412,113 +411,15 @@
   </form>
 </section>
 
-<section class="ce-panel ce-settings-panel" id="class-schedule-card">
-  <h2>Class schedule <small class="lbl-hint">(used by SmartDeck)</small></h2>
+<section class="ce-panel ce-settings-panel" id="calendar-card">
+  <h2>Class schedule &amp; calendar</h2>
   <p class="ce-hint">
-    Your blocks live here. The bell schedule and day calendar are CSV files in your Calendars folder. SmartDeck reads all three to turn a block into today's real start and end time.
+    The Teacher Schedule, Bell Schedules, and the school-year calendar (used by SmartDeck, Panels,
+    Late Work Sweep, and Extensions) all live on one page now.
   </p>
-  <div id="class-schedule-readiness" class="ce-schedule-readiness" aria-live="polite"></div>
-  <div id="class-schedule-blocks" class="ce-schedule-blocks">
-    <h3>Your blocks</h3>
-    <p class="ce-hint">One row per class. <strong>Block</strong> is the name your slides point to, so keep it steady once slides use it. <strong>Periods</strong> are the bell periods it covers, in order. <strong>Course</strong> is a teacher-facing label for the block. <strong>Canvas course</strong> is optional and links the block to a saved Canvas course so an assistant can pull that course's assignments when authoring.</p>
-    <div id="class-schedule-block-list" class="ce-schedule-block-list"></div>
-    <div class="ce-actions">
-      <button type="button" id="class-schedule-add-block" class="small">Add a block</button>
-      <button type="button" id="class-schedule-save-blocks" class="primary small">Save blocks</button>
-      <span id="class-schedule-status" class="status ce-settings-inline-status"></span>
-    </div>
-  </div>
   <div class="ce-actions">
-    <button type="button" id="class-schedule-open-calendars" class="small" disabled>Open the Calendars folder</button>
+    <a href="/calendar" class="ce-btn">Open Calendar</a>
   </div>
-  <p class="ce-hint">Your assistant can set the bell schedule and day calendar up for you. Connect it under <a href="/connections">AI Connections</a>, then tell it your semester dates and which days are different.</p>
-</section>
-
-<section class="ce-panel ce-settings-panel" id="cal">
-  <h2>Academic calendars <small class="lbl-hint">(used by Late Work Sweep &amp; Extensions)</small></h2>
-  <p class="ce-hint">
-    Multiple calendars can be active at once. The sweep automatically uses holidays from
-    whichever calendar covers the selected date range.
-    No calendar = only weekends are skipped.
-  </p>
-
-  <div id="cal-list" class="ce-settings-cal-list">
-    {% if calendars %}
-      {% for key, cal in calendars.items() %}
-      <div class="cal-row" data-cal-key="{{ key }}">
-        <div>
-          <strong>{{ cal.label }}</strong>
-          <span class="muted ce-settings-cal-meta">
-            {{ cal.no_count_dates | length }} day(s) off ·
-            {{ cal.grading_periods | length }} grading period(s)
-          </span>
-        </div>
-        <button class="danger small cal-remove-btn" data-cal-key="{{ key }}">Remove</button>
-      </div>
-      {% endfor %}
-    {% else %}
-      <div class="callout warn" id="cal-none-callout">
-        No academic calendar configured — only weekends are skipped by default.
-      </div>
-    {% endif %}
-  </div>
-
-  {% if calendar_files %}
-  <p class="ce-hint ce-settings-cal-note">
-    Calendars found in your workspace <strong>Calendars</strong> folder — click to load one.
-    Drop more CSVs in that folder (or add one below) and they'll appear here.
-  </p>
-  <div class="ce-actions ce-settings-cal-actions" id="cal-builtin-actions">
-    {% for cal in calendar_files %}
-    <button type="button" class="cal-load-btn" data-cal-file="{{ cal.name }}">Load {{ cal.label }}</button>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="ce-hint ce-settings-cal-empty">
-    No calendar files in your workspace <strong>Calendars</strong> folder yet. Add one below,
-    or download the template to build your own.
-  </p>
-  {% endif %}
-  <p id="cal-op-status" class="status ce-settings-cal-status"></p>
-
-  <details class="ce-settings-calendar-details">
-    <summary class="delivery-summary">Add a custom CSV calendar</summary>
-    <div class="delivery-inner">
-      <p class="ce-hint ce-settings-cal-note">
-        Paste a calendar CSV. Two formats are accepted:<br>
-        <strong>Canonical (7 columns):</strong> <code>school_year,row_type,code,name,start_date,end_date,report_issue_date,basis</code>
-        — <code>row_type</code> values <em>Holiday</em>, <em>No School for Students</em>, and <em>Holiday for Students/Teachers</em> become no-count dates;
-        <em>Academic Period</em> rows become grading-period presets in the sweep.<br>
-        <strong>Simple (4 columns):</strong> <code>Category,Name,Start Date,End Date</code>
-        — <em>Student Day Off</em> becomes no-count dates; <em>Academic Period</em> becomes grading-period presets.
-        Dates can be <code>MM/DD/YYYY</code> or <code>YYYY-MM-DD</code>.
-      </p>
-      <p class="ce-hint ce-settings-compact-hint">
-        Need a starting point?
-        <a href="/api/calendar/template" download="calendar_template.csv">Download the blank template</a>
-        — then ask an LLM to fill it in for your district and year.
-      </p>
-      <details class="ce-settings-calendar-details ce-settings-calendar-details--nested">
-        <summary class="delivery-summary">LLM prompt for generating a new year's calendar</summary>
-        <div class="delivery-inner">
-          <p class="ce-hint ce-settings-compact-hint">Copy this, attach the downloaded CSV, and send to any LLM:</p>
-          <textarea id="llm-prompt-text" readonly rows="5"
-            class="ce-settings-prompt"
->Update the attached CSV to the [DISTRICT NAME] [YEAR]-[YEAR+1] school year. Keep the same 7-column format (school_year,row_type,code,name,start_date,end_date,report_issue_date,basis) exactly. Use YYYY-MM-DD dates. Include all grading periods as "Academic Period" rows (use row_type exactly) and all student days off (holidays, breaks, staff days without students) as "Holiday" or "No School for Students" rows with correct start and end dates. Do not add extra columns or change the header.</textarea>
-          <button type="button" id="btn-copy-llm-prompt" class="small">Copy prompt</button>
-        </div>
-      </details>
-      <label>CSV contents
-        <textarea id="cal-csv-input" rows="8" placeholder="school_year,row_type,code,name,start_date,end_date,report_issue_date,basis&#10;2026-27,Academic Period,T1,Term 1 / Report Card 1,2026-09-01,2026-10-09,,&#10;2026-27,Holiday,,Labor Day,2026-09-07,2026-09-07,,"></textarea>
-      </label>
-      <div id="cal-parse-preview" class="ce-settings-preview" hidden></div>
-      <div class="ce-actions">
-        <button type="button" id="btn-cal-parse">Parse &amp; preview</button>
-        <button type="button" id="btn-cal-save" class="primary" hidden>Save this calendar</button>
-      </div>
-      <p id="cal-custom-status" class="status ce-settings-status"></p>
-    </div>
-  </details>
 </section>
 
 <section class="ce-panel ce-settings-panel" id="update-card">
@@ -567,9 +468,7 @@
 <script src="/static/settings/openrouter.js?v={{ asset_v }}"></script>
 <script src="/static/settings/courses.js?v={{ asset_v }}"></script>
 <script src="/static/settings/workspace.js?v={{ asset_v }}"></script>
-<script src="/static/settings/calendars.js?v={{ asset_v }}"></script>
 <script src="/static/settings/updates.js?v={{ asset_v }}"></script>
-<script src="/static/settings/class_schedule.js?v={{ asset_v }}"></script>
 <script src="/static/ui/rail_nav.js?v={{ asset_v }}"></script>
 
 <script>

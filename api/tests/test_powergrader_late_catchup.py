@@ -120,10 +120,11 @@ def _patch_late_score_env(monkeypatch):
     monkeypatch.setattr(powergrader.config, "roster_tier_by_id", lambda course_id: {})
     monkeypatch.setattr(powergrader.config, "get_monitored_students", lambda: {})
     monkeypatch.setattr(powergrader.config, "get_extra_time", lambda course_id: [])
-    monkeypatch.setattr(powergrader.config, "get_sweep_settings", lambda: {"skip_weekends": True, "holidays": []})
-    monkeypatch.setattr(powergrader.config, "get_combined_calendar_for_range", lambda: {"no_count_dates": []})
     monkeypatch.setattr(powergrader.config, "get_openrouter_model", lambda: "model-a")
     monkeypatch.setattr(powergrader.config, "has_openrouter_key", lambda: True)
+    from api.webui import school_calendar as school_calendar_module
+    monkeypatch.setattr(school_calendar_module, "is_configured", lambda root=None: True)
+    monkeypatch.setattr(school_calendar_module, "no_count_dates", lambda *a, **kw: set())
 
 
 def test_find_new_submissions_filters_unsubmitted_and_existing_students():
