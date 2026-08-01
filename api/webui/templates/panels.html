@@ -1,66 +1,123 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import page_header, page_section, empty_state %}
+{% from "ui/_macros.html" import rail, page_header, page_section, notice %}
 {% block title %}Panels — Canvas Expert{% endblock %}
+{% block workspace_variant %}left-main{% endblock %}
+{% block workspace_body_class %}panels-page{% endblock %}
 {% block head_extra %}
-<style>
-  .pn-card { display: grid; gap: .75rem; }
-  .pn-controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: flex-end; }
-  .pn-controls label { display: grid; gap: .25rem; font-size: .85rem; }
-  .pn-days { width: 5rem; }
-  .pn-embed { display: flex; gap: .5rem; align-items: center; }
-  .pn-embed input {
-    flex: 1 1 auto; min-width: 0; font-family: ui-monospace, Consolas, monospace;
-    font-size: .8rem; padding: .45rem .6rem;
-  }
-  .pn-preview {
-    width: 100%; max-width: 720px; aspect-ratio: 16 / 9;
-    border: 1px solid var(--ce-rule, #d8dee6); border-radius: .4rem;
-  }
-  .pn-copied { font-size: .8rem; color: #2e7d4f; }
-</style>
+<link rel="stylesheet" href="/static/pages/panels.css?v={{ asset_v }}">
 {% endblock %}
 
+{% block left_rail %}
+{% call rail('left', 'Panels') %}
+  <nav class="ce-rail-nav" aria-label="Panels">
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Panels</p>
+      <div class="ce-rail-nav__links">
+        {% for p in panels %}
+        <a href="#panel-{{ p.kind }}" data-rail-link>{{ p.title }}</a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="ce-rail-nav__group">
+      <p class="ce-rail-nav__kicker">Reference</p>
+      <div class="ce-rail-nav__links">
+        <a href="#panels-embedding" data-rail-link>Embedding</a>
+        <a href="#panels-limits" data-rail-link>Limits</a>
+      </div>
+    </div>
+  </nav>
+{% endcall %}
+{% endblock %}
+
+{% block workspace_header %}{{ page_header('Panels') }}{% endblock %}
+
 {% block primary %}
-{{ page_header('Panels',
-   'A Panel is one page showing one thing, sized to whatever box you drop it into. Paste the embed code into Classroomscreen, or just open the link fullscreen on a second screen.') }}
+<div class="pn-stack" data-default-theme="{{ default_theme }}">
+
+<div class="pn-today" id="pn-today" hidden>
+  <label class="pn-today__pick">Today's bell schedule
+    <select id="pn-today-select"></select>
+  </label>
+  <span class="pn-today__note" id="pn-today-note" role="status" aria-live="polite"></span>
+</div>
+
+{% if not courses %}
+{% call notice('attention') %}
+  No courses saved. <a href="/settings#add-courses-card">Add one in Settings</a>.
+{% endcall %}
+{% endif %}
 
 {% for p in panels %}
 {% call page_section(p.title, 'panel-' + p.kind) %}
 <div class="pn-card" data-kind="{{ p.kind }}">
   <p class="ce-hint">{{ p.blurb }}</p>
 
-  <div class="pn-controls">
-    {% if p.needs_course %}
-    <label>Course
-      <select data-course>
-        {% if courses %}
-          {% for c in courses %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-        {% else %}
-          <option value="">No saved courses yet</option>
+  <div class="pn-build">
+    <div class="pn-build__form">
+      <div class="pn-controls">
+        {% if p.needs_course %}
+        <label>Course
+          <select data-course>
+            <option value="">Follow my schedule</option>
+            {% for c in courses %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>Days ahead
+          <input type="number" class="pn-days" data-days value="{{ default_days }}" min="1" max="{{ max_days }}">
+        </label>
         {% endif %}
-      </select>
-    </label>
-    <label>Days ahead
-      <input type="number" class="pn-days" data-days value="{{ default_days }}" min="1" max="31">
-    </label>
-    {% endif %}
+        <label>Theme
+          <select data-theme>
+            {% for t in themes %}<option value="{{ t.key }}">{{ t.label }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <label class="pn-embed">Embed code
+        <input type="text" data-embed readonly aria-label="Embed code for {{ p.title }}">
+      </label>
+      <div class="pn-embed__row">
+        <button type="button" class="ce-btn ce-btn--primary" data-copy="embed">Copy embed</button>
+        <button type="button" class="ce-btn" data-copy="link">Copy link</button>
+        <a class="ce-btn" data-open target="_blank" rel="noopener">Open</a>
+        <span class="pn-copied" data-copied hidden role="status" aria-live="polite">Copied</span>
+      </div>
+      <p class="pn-address"><code data-address></code></p>
+    </div>
+
+    <div class="pn-preview">
+      <div class="pn-preview__grip" role="group" aria-label="Preview shape">
+        <button type="button" class="ce-btn ce-btn--small" data-shape="wide" aria-pressed="true">Wide</button>
+        <button type="button" class="ce-btn ce-btn--small" data-shape="banner" aria-pressed="false">Banner</button>
+        <button type="button" class="ce-btn ce-btn--small" data-shape="tall" aria-pressed="false">Tall</button>
+        <button type="button" class="ce-btn ce-btn--small" data-shape="small" aria-pressed="false">Small</button>
+      </div>
+      <iframe class="pn-preview__frame" data-preview data-shape="wide" title="{{ p.title }} preview"></iframe>
+    </div>
   </div>
-
-  {% if p.needs_course and not courses %}
-  {{ empty_state('Save a course in CanvasExpert first. The panel still opens, it just has nothing to list yet.') }}
-  {% endif %}
-
-  <div class="pn-embed">
-    <input type="text" data-embed readonly aria-label="Embed code for {{ p.title }}">
-    <button type="button" class="ce-btn" data-copy>Copy embed code</button>
-    <a class="ce-btn" data-open target="_blank" rel="noopener">Open</a>
-    <span class="pn-copied" data-copied hidden>Copied</span>
-  </div>
-
-  <iframe class="pn-preview" data-preview title="{{ p.title }} preview"></iframe>
 </div>
 {% endcall %}
 {% endfor %}
+
+{% call page_section('Embedding', 'panels-embedding') %}
+  <ol class="pn-steps">
+    <li>Copy the embed code.</li>
+    <li>Classroomscreen: widget menu, Embed, paste.</li>
+    <li>Drag to size. The panel refits itself.</li>
+  </ol>
+  <p class="ce-hint">The plain link works the same in a fullscreen browser tab or an OBS browser source.</p>
+{% endcall %}
+
+{% call page_section('Limits', 'panels-limits') %}
+  <ul class="pn-limits">
+    <li>Loads on this computer only. The link will not open anywhere else.</li>
+    <li>Canvas Expert has to be running.</li>
+    <li>Reads the local course copy, never Canvas live. Refresh the catalog to change what a panel shows.</li>
+    <li>The address survives restarts and updates, so a saved board keeps working.</li>
+  </ul>
+{% endcall %}
+
+</div>
 
 <script>
 (function () {
@@ -68,51 +125,149 @@
 
   /* The origin is baked into the embed code on purpose. A saved
      Classroomscreen board stores this string verbatim, so it has to be the
-     absolute URL of this machine's CanvasExpert, not a relative path. */
+     absolute URL of this machine's Canvas Expert, not a relative path. */
   var ORIGIN = window.location.origin;
+
+  /* Left out of the URL when it is the default, so the common embed code
+     stays short and a later change of default is not frozen into old boards. */
+  var DEFAULT_THEME = document.querySelector(".pn-stack").dataset.defaultTheme;
 
   document.querySelectorAll(".pn-card").forEach(function (card) {
     var kind    = card.dataset.kind;
     var course  = card.querySelector("[data-course]");
     var days    = card.querySelector("[data-days]");
+    var theme   = card.querySelector("[data-theme]");
     var embed   = card.querySelector("[data-embed]");
+    var address = card.querySelector("[data-address]");
     var preview = card.querySelector("[data-preview]");
     var open    = card.querySelector("[data-open]");
     var copied  = card.querySelector("[data-copied]");
+    var shapes  = card.querySelectorAll("[data-shape][aria-pressed]");
 
     function url() {
       var u = ORIGIN + "/panels/" + kind;
       var q = [];
       if (course && course.value) q.push("course=" + encodeURIComponent(course.value));
       if (days && days.value)     q.push("days=" + encodeURIComponent(days.value));
+      if (theme && theme.value && theme.value !== DEFAULT_THEME) {
+        q.push("theme=" + encodeURIComponent(theme.value));
+      }
       return q.length ? u + "?" + q.join("&") : u;
     }
 
     function sync() {
       var u = url();
       embed.value = '<iframe src="' + u + '" width="900" height="500"></iframe>';
+      address.textContent = u;
       open.href = u;
       preview.src = u;
       copied.hidden = true;
     }
 
-    [course, days].forEach(function (el) {
+    [course, days, theme].forEach(function (el) {
       if (el) { el.addEventListener("change", sync); el.addEventListener("input", sync); }
     });
 
-    card.querySelector("[data-copy]").addEventListener("click", function () {
-      embed.select();
-      navigator.clipboard.writeText(embed.value).then(function () {
-        copied.hidden = false;
-      }, function () {
-        /* clipboard can be blocked; the text is selected either way */
-        document.execCommand("copy");
-        copied.hidden = false;
+    card.querySelectorAll("[data-copy]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var text = button.dataset.copy === "link" ? url() : embed.value;
+        if (button.dataset.copy !== "link") embed.select();
+        navigator.clipboard.writeText(text).then(function () {
+          copied.hidden = false;
+        }, function () {
+          /* clipboard can be blocked; the embed text is selected either way */
+          document.execCommand("copy");
+          copied.hidden = false;
+        });
+      });
+    });
+
+    /* Shape buttons stand in for dragging the widget's corner, so the panel's
+       resize behavior is visible here rather than described. Only the preview
+       frame changes; the address and embed code are untouched. */
+    shapes.forEach(function (button) {
+      button.addEventListener("click", function () {
+        preview.dataset.shape = button.dataset.shape;
+        shapes.forEach(function (other) {
+          other.setAttribute("aria-pressed", String(other === button));
+        });
       });
     });
 
     sync();
   });
+
+  /* ── Today's bell schedule ──────────────────────────────────────────────
+     A bell schedule changes for an assembly or a late start and nobody
+     updates the calendar. That failure is silent: panels resolve to the wrong
+     class and look perfectly healthy doing it. One dropdown, only ever about
+     today, is the cheapest way to make it correctable in the place the
+     teacher is already standing. It stays hidden when there is nothing to
+     choose between, so a teacher who never set this up is not nagged. */
+  var todayBox    = document.getElementById("pn-today");
+  var todaySelect = document.getElementById("pn-today-select");
+  var todayNote   = document.getElementById("pn-today-note");
+
+  function note(text, kind) {
+    todayNote.textContent = text || "";
+    todayNote.dataset.kind = kind || "";
+  }
+
+  function paintToday(data) {
+    if (!data.ok || !data.options.length) return;   /* nothing to correct with */
+
+    todaySelect.innerHTML = "";
+    var fromCalendar = document.createElement("option");
+    fromCalendar.value = "";
+    fromCalendar.textContent = "— from calendar —";
+    todaySelect.appendChild(fromCalendar);
+
+    data.options.forEach(function (option) {
+      var el = document.createElement("option");
+      el.value = option.schedule_id;
+      el.textContent = option.label;
+      todaySelect.appendChild(el);
+    });
+
+    todaySelect.value = data.schedule_id || "";
+    if (data.unknown_schedule) note("Calendar names a schedule that is missing", "warn");
+    else if (data.corrected)    note("Corrected for today", "ok");
+    else                        note("");
+    todayBox.hidden = false;
+  }
+
+  function loadToday() {
+    fetch("/api/schedule/today", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(paintToday)
+      .catch(function () { /* leave the strip hidden rather than half-drawn */ });
+  }
+
+  todaySelect.addEventListener("change", function () {
+    var body = new FormData();
+    body.append("schedule_id", todaySelect.value);
+    note("Saving…");
+    fetch("/api/schedule/today", { method: "POST", body: body })
+      .then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (!result.ok) {
+          note((result.problems || ["Could not save"])[0], "warn");
+          return;
+        }
+        note(todaySelect.value ? "Corrected for today" : "Following the calendar", "ok");
+        /* The panels below are now answering a different question. */
+        document.querySelectorAll("[data-preview]").forEach(function (frame) {
+          frame.contentWindow.location.reload();
+        });
+      })
+      .catch(function () { note("Could not save", "warn"); });
+  });
+
+  loadToday();
 })();
 </script>
+{% endblock %}
+
+{% block workspace_scripts %}
+<script src="/static/ui/rail_nav.js?v={{ asset_v }}"></script>
 {% endblock %}

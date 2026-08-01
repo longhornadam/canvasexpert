@@ -66,6 +66,12 @@ def _smartdecks_dir():
     return _ws.library_folder("SmartDecks")
 
 
+# A teacher's hand corrections to the day calendar. deps owns the name because
+# load_day_calendar has to skip it in discovery and apply it last; schedule_setup
+# aliases this rather than declaring a second copy that could drift.
+DAY_OVERRIDE_FILENAME = "Day Overrides.csv"
+
+
 def list_bell_schedule_files():
     """[{name, label, schedule_id, path}] for every 'Bell Schedule*'-prefixed
     CSV in the workspace Calendars folder. schedule_id derived via the same
@@ -146,6 +152,13 @@ def load_day_calendar() -> tuple:
         if name.lower().startswith("bell schedule"):
             continue
 
+        # Teacher corrections are applied after this loop, on purpose. Merging
+        # them here would make precedence depend on where the filename lands in
+        # sorted order, so a district calendar renamed next year could silently
+        # start beating them.
+        if name == DAY_OVERRIDE_FILENAME:
+            continue
+
         try:
             with open(path, encoding="utf-8") as f:
                 content = f.read()
@@ -165,6 +178,22 @@ def load_day_calendar() -> tuple:
 
             for problem in problems:
                 all_problems.append(f"{name}: {problem}")
+
+    # Last word, always. A teacher who corrected today from the Panels page
+    # outranks whatever the generated calendar says, which is the whole point:
+    # the calendar is the thing that went stale.
+    override_path = os.path.join(cal_dir, DAY_OVERRIDE_FILENAME)
+    if os.path.exists(override_path):
+        try:
+            with open(override_path, encoding="utf-8") as f:
+                override_content = f.read()
+        except OSError as e:
+            all_problems.append(f"{DAY_OVERRIDE_FILENAME}: could not read: {e}")
+        else:
+            mapping, problems = deck_schedule.parse_day_calendar(override_content)
+            day_calendar_mapping.update(mapping)
+            for problem in problems:
+                all_problems.append(f"{DAY_OVERRIDE_FILENAME}: {problem}")
 
     if not day_calendar_mapping and all_problems == []:
         all_problems.append("no day calendar found")

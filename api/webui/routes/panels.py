@@ -48,6 +48,109 @@ PANEL_CATALOG = {
     },
 }
 
+DEFAULT_THEME = "ce"
+
+# Themes are a skin, not a layout: each one is a set of custom properties in
+# static/panels/themes.css, so a theme can never change what a panel shows or
+# how many rows fit. Ordered for the console's dropdown.
+PANEL_THEMES = (
+    ("ce", "Canvas Expert"),
+    ("natural", "Natural"),
+    ("ocean", "Ocean"),
+    ("cottage", "Cottage"),
+    ("console", "Console"),
+    ("wizardtrain", "Wizard train"),
+    ("bauhaus", "Bauhaus"),
+    ("lisa", "Lisa"),
+)
+_THEME_KEYS = frozenset(key for key, _label in PANEL_THEMES)
+
+
+def resolve_theme(value) -> str:
+    """A known theme key, or the default.
+
+    Never rejects. A theme retired between releases, or a hand-edited one,
+    would otherwise take a saved board down weeks later over a decoration.
+    """
+    key = str(value or "").strip().lower()
+    return key if key in _THEME_KEYS else DEFAULT_THEME
+
+
+# deck_schedule.resolve_day emits this when the day calendar has no entry for
+# a date, which is how a weekend or holiday is told apart from a teacher who
+# never set a schedule up at all. test_no_school_day_marker_still_matches
+# pins it, so a reword there fails a test instead of silently turning every
+# summer day into "set up your schedule".
+_NO_SCHOOL_DAY_MARKER = "no schedule for"
+
+
+def resolve_panel_course(course: str, *, now=None, schedule_reader=None) -> dict:
+    """Which course a Panel should show right now.
+
+    An explicit ``course`` pins the panel to one section. Otherwise it follows
+    the teacher's own schedule, which the app already resolves for SmartDeck:
+    the block meeting now, or the next one today. A pinned course id dies at
+    the year rollover and takes a saved board quietly with it; a schedule does
+    not, because the teacher updates it once and every board follows.
+
+    Returns ``course_id`` plus a ``relation`` of pinned/now/next, or a named
+    ``state`` when no course applies. Never raises: this runs for a page on a
+    classroom wall.
+    """
+    if course:
+        return {"course_id": str(course), "relation": "pinned",
+                "block": "", "state": "", "message": "", "next_change": ""}
+
+    now = now or datetime.now()
+    reader = schedule_reader or deps.resolve_schedule_for
+    try:
+        blocks, problems = reader(now.date().isoformat())
+    except Exception:
+        blocks, problems = [], []
+
+    if not blocks:
+        if any(_NO_SCHOOL_DAY_MARKER in str(p) for p in problems):
+            return _no_course("not_school_day", "No classes scheduled today.")
+        return _no_course(
+            "no_schedule",
+            "Set your class schedule in Canvas Expert and this follows your day.")
+
+    now_hhmm = now.strftime("%H:%M")
+    block = next((b for b in blocks if b["start"] <= now_hhmm < b["end"]), None)
+    relation = "now"
+    if block is None:
+        # resolve_day sorts by start, so the first block still ahead is next.
+        block = next((b for b in blocks if b["start"] > now_hhmm), None)
+        relation = "next"
+    if block is None:
+        return _no_course("day_over", "No more classes today.")
+
+    name = str(block.get("label") or block.get("name") or "")
+    course_id = str(block.get("course_id") or "")
+    if not course_id:
+        # Conference, duty, advisory: a real block with no Canvas course.
+        # Name it rather than reporting an error nobody can act on mid-class.
+        return _no_course("block_without_course",
+                          f"No Canvas course linked to {name}." if name
+                          else "No Canvas course linked to this block.",
+                          block=name)
+
+    return {
+        "course_id": course_id,
+        "relation": relation,
+        "block": name,
+        "state": "",
+        "message": "",
+        # When this panel stops being right. The panel re-reads at the bell
+        # instead of drifting for up to a refresh interval into the next class.
+        "next_change": str(block["end"] if relation == "now" else block["start"]),
+    }
+
+
+def _no_course(state: str, message: str, block: str = "") -> dict:
+    return {"course_id": "", "relation": "", "block": block,
+            "state": state, "message": message, "next_change": ""}
+
 
 def _parse_due(value):
     """A Canvas ``due_at`` as an aware UTC datetime, or None when absent or
@@ -129,14 +232,18 @@ def panels_page(request: Request):
     ]
     panels = [dict(spec, kind=kind) for kind, spec in sorted(PANEL_CATALOG.items())]
     return deps.templates.TemplateResponse(request, "panels.html", {
+        "nav_section": "panels",
         "panels": panels,
         "courses": courses,
         "default_days": DEFAULT_LOOKAHEAD_DAYS,
+        "max_days": MAX_LOOKAHEAD_DAYS,
+        "themes": [{"key": key, "label": label} for key, label in PANEL_THEMES],
+        "default_theme": DEFAULT_THEME,
     })
 
 
 @router.get("/panels/{kind}", response_class=HTMLResponse)
-def panel_page(request: Request, kind: str):
+def panel_page(request: Request, kind: str, theme: str = DEFAULT_THEME):
     """One Panel, chrome-free, sized to whatever box it is dropped into."""
     spec = PANEL_CATALOG.get(kind)
     if spec is None:
@@ -144,6 +251,7 @@ def panel_page(request: Request, kind: str):
     return deps.templates.TemplateResponse(request, spec["template"], {
         "kind": kind,
         "panel_title": spec["title"],
+        "theme": resolve_theme(theme),
     })
 
 
@@ -154,7 +262,20 @@ def panel_data(kind: str, course: str = "", days: int = DEFAULT_LOOKAHEAD_DAYS):
         return JSONResponse({"ok": False, "error": f"Unknown panel: {kind}"},
                             status_code=404)
     if kind == "whats-due":
-        return JSONResponse(whats_due_payload(course, days))
+        scope = resolve_panel_course(course)
+        if scope["state"]:
+            return JSONResponse({
+                "ok": True, "state": scope["state"], "days": days,
+                "assignments": [], "message": scope["message"],
+                "relation": "", "block": scope["block"], "next_change": "",
+            })
+        payload = whats_due_payload(scope["course_id"], days)
+        payload["relation"] = scope["relation"]
+        payload["block"] = scope["block"]
+        payload["next_change"] = scope["next_change"]
+        if not payload.get("course_name"):
+            payload["course_name"] = scope["block"]
+        return JSONResponse(payload)
     # Unreachable while PANEL_CATALOG and this branch agree, but a Panel must
     # never 500 onto a projector.
     return JSONResponse({"ok": True, "state": "no_catalog", "assignments": [],

@@ -1,38 +1,37 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-panel-theme="{{ theme }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ panel_title }}</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css?v={{ asset_v }}">
 <link rel="stylesheet" href="/static/panels/panel.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/panels/themes.css?v={{ asset_v }}">
 <style>
-  .panel {
-    --bg: #f7fbff;
-    --ink: #1b2430;
-    --title: #123a5c;
-    --muted: #8593a3;
-    --rule: #d8e4ef;
-    --accent: #1d6fa5;
-    background: linear-gradient(180deg, #fbfdff 0%, #eef5fb 100%);
-  }
+  /* Structure and this panel's own mapping onto theme variables. No colour
+     literals: a theme owns every one of them, and a value hardcoded here
+     would survive theme switching and look broken in seven of eight skins. */
   .p-row {
     grid-template-columns: auto minmax(0, 1fr) auto;
-    --row-bg: #fff;
+    --row-bg: var(--row);
   }
-  .p-row:nth-child(odd) { --row-bg: #fcfeff; }
+  .p-row:nth-child(odd) { --row-bg: var(--row-alt, var(--row)); }
 
   .when {
     font-weight: 800; text-transform: uppercase; letter-spacing: .05em;
-    color: #5d7a92;
+    color: var(--when-ink, var(--muted));
     font-size: min(28cqh, 5cqw);
   }
-  .p-a { color: #1b2430; }
-  .pts { justify-self: end; background: #e7f0f8; color: #2c5f80; }
+  .p-a { color: var(--ink); }
+  .pts { justify-self: end; background: var(--pill-bg); color: var(--pill-ink); }
 
-  .p-row.today    { --row-bg: #fff4d9; --row-accent: #d99311; }
-  .p-row.today .when { color: #9a6608; }
-  .p-row.today .p-a  { font-weight: 800; color: #5c3d02; }
-  .p-row.tomorrow { --row-accent: #6ea8cd; }
+  .p-row.today    { --row-bg: var(--today-bg); --row-accent: var(--today-accent); }
+  .p-row.today .when { color: var(--today-ink); }
+  .p-row.today .p-a  { font-weight: 800; color: var(--today-ink); }
+  /* The secondary line keeps the muted colour everywhere except here: muted
+     grey on a tinted today row is the one pairing that drops under 4.5:1. */
+  .p-row.today .p-b  { color: var(--today-ink); }
+  .p-row.tomorrow { --row-accent: var(--accent); }
 
   /* an empty panel is a normal state, not a failure: say the one useful
      thing large enough to read from the back of the room */
@@ -45,7 +44,12 @@
     font-size: clamp(14px, min(6vw, 16vh), 44px);
     font-weight: 600; line-height: 1.25;
   }
-  .stale { color: #9a6608; }
+  /* An author display: rule beats the UA's [hidden] { display: none }, so
+     without this the empty message box keeps its flex share and steals height
+     from the rows. Invisible until a course actually has assignments, which
+     is the one state that could not be observed before August. */
+  .msg[hidden] { display: none; }
+  .stale { color: var(--warn-ink, var(--muted)); }
 </style>
 </head>
 <body>
@@ -75,6 +79,7 @@
 
   var bodyEl = document.getElementById("body");
   var msgEl  = document.getElementById("msg");
+  var boundaryTimer = null;
   var DAYS   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
   function midnight(d) {
@@ -102,8 +107,24 @@
     msgEl.textContent = text;
   }
 
+  /* Follow the bell. Without this the panel keeps last period's work on the
+     wall until the next refresh lands, which is the whole point of following
+     a schedule rather than a pinned course. */
+  function atBoundary(hhmm) {
+    clearTimeout(boundaryTimer);
+    if (!hhmm) return;
+    var parts = String(hhmm).split(":");
+    var when = new Date();
+    when.setHours(+parts[0], +parts[1], 20, 0);   /* just past the bell */
+    var wait = when - new Date();
+    if (wait > 0) boundaryTimer = setTimeout(load, wait);
+  }
+
   function render(payload) {
-    document.getElementById("sub").textContent = payload.course_name || "";
+    var sub = payload.course_name || payload.block || "";
+    if (payload.relation === "next" && sub) sub = "Next · " + sub;
+    document.getElementById("sub").textContent = sub;
+    atBoundary(payload.next_change);
 
     if (payload.state !== "ready") {
       showMessage(payload.message || "Nothing to show.");

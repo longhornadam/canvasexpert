@@ -26,6 +26,32 @@ Workspace variants are `full`, `three`, and `left-main`. The layout owns outer
 columns and responsive reflow; a page owns only real rail contents. At 1180px the
 right rail flows below the stage; at 760px all workspace variants become one column.
 
+## Who these pages are for
+
+A teacher opening Canvas Expert is at work, mid-day, often with a class in the room.
+They are a professional using a tool, not a visitor being sold one. Every page is a
+working surface for someone who has already decided to be here.
+
+That rules out a whole category of page that is easy to write by reflex:
+
+- **No taglines, no value propositions, no "why this exists" copy.** If a control needs
+  a sentence explaining its worth, the control is wrong. Fix the control.
+- **The working surface comes first.** A page opens on the thing the teacher operates:
+  the list, the queue, the builder, the editor. Explanation goes below it, or in a rail
+  group named Reference, or nowhere.
+- **No onboarding-first layout.** Pages are seen hundreds of times and read once. A
+  first-run tour occupying permanent space is a tax on every later visit. Setup guidance
+  belongs in Welcome or Settings, not at the top of a daily surface.
+- **Design carries the information.** Show state with state: a pressed button, a filled
+  field, a live preview. Prose describing what the UI would do if you used it is a sign
+  the UI is not showing it.
+- **No roadmaps.** What the tool does not do yet is not page content.
+- **Reference copy is terse and factual.** Limits, addresses, and steps are a short list.
+  Nothing is repeated for reassurance.
+
+Related: `docs/reference/panels-route-card.md` describes the surface this convention was
+written against.
+
 ## Page conventions
 
 - **One title block per page.** Every page opens with a single `page_header` whose

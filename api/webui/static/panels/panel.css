@@ -24,8 +24,9 @@
 html, body {
   margin: 0; height: 100%; overflow: hidden;
   background: var(--bg, #fff);
-  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui,
-               -apple-system, "Helvetica Neue", sans-serif;
+  /* Themes swap the face; the fallback is what an unthemed panel gets. */
+  font-family: var(--panel-font, "Segoe UI Variable Display", "Segoe UI",
+               system-ui, -apple-system, "Helvetica Neue", sans-serif);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

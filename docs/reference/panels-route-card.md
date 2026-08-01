@@ -27,7 +27,7 @@ costs nothing.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /panels` | Console: pick a Panel, point it at a course, copy the embed code |
+| `GET /panels` | Console: pick a Panel, set its options, copy the embed code |
 | `GET /panels/{kind}` | The Panel itself, chrome-free |
 | `GET /panels/{kind}/data` | The Panel's single data fetch, JSON |
 
@@ -40,7 +40,10 @@ Owner: `api/webui/routes/panels.py`, registered in `api/webui/server.py` next to
 | --- | --- |
 | Routes, catalog, due-window logic | `api/webui/routes/panels.py` |
 | Console page | `api/webui/templates/panels.html` |
+| Console page CSS | `api/webui/static/pages/panels.css` |
+| Today's bell schedule | `api/webui/routes/schedule.py`, `api/webui/schedule_setup.py` |
 | what's due panel | `api/webui/templates/panel_whats_due.html` |
+| Themes | `api/webui/static/panels/themes.css` |
 | Shared responsive kit (CSS) | `api/webui/static/panels/panel.css` |
 | Shared responsive kit (JS) | `api/webui/static/panels/panel.js` |
 | Tests | `api/tests/test_panels.py` |
@@ -93,10 +96,14 @@ outcome is a named `state` the template renders calmly:
 
 | state | Meaning |
 | --- | --- |
-| `no_course` | No course chosen yet |
+| `no_course` | No course chosen yet (only reachable by calling the payload directly) |
 | `no_catalog` | No local catalog; tells the teacher to refresh it |
 | `nothing_due` | Catalog is fine, window is empty |
 | `ready` | Assignments present; `stale` flags an out-of-date catalog but still serves |
+| `no_schedule` | Following the schedule, but none is set up |
+| `not_school_day` | Weekend, holiday, summer |
+| `day_over` | School day, past the last block |
+| `block_without_course` | In a real block with no Canvas course linked (conference, duty, advisory) |
 
 `days` is clamped to `MAX_LOOKAHEAD_DAYS = 31` so a hand-edited URL cannot ask for a
 year. Assignments with no due date, an unparseable due date, or `published: false`
@@ -170,9 +177,140 @@ Defaults worth leaving alone unless measured: `divisor 4.5`, `minRow 52`,
 is sized against row width but constrained to its own column, so very tall rows clip
 rather than fill.
 
+## Following the schedule
+
+**A Panel does not ask which course. It works that out from the clock.**
+`resolve_panel_course` in `panels.py` is the single resolver every kind calls, so a
+timer Panel and a what's-due Panel can never disagree about what period it is.
+
+The chain already existed for SmartDeck and Panels now reuses it end to end:
+
+```
+today  -> deps.load_day_calendar()      which bell schedule is running
+       -> deps.load_bell_schedules()    periods with start/end
+       -> deps.load_teacher_schedule()  blocks with raw_periods and course_id
+       -> deck_schedule.resolve_day()   today's blocks, sorted by start
+       -> now "HH:MM"                   the block meeting now, else the next one
+```
+
+`course_id` is an optional field on every schedule block, which is what makes this
+work at all. `_bell_schedule_feed` in `smartdeck_feeds.py` does the same last step for
+SmartDeck's own display.
+
+**Why this is a durability fix, not a convenience.** `?course=123` expires. The
+following August that id is dead, and a board saved in September renders an empty panel
+with no error, because a Panel cannot tell "nothing due" from "that course is gone". A
+schedule survives the rollover: the teacher updates it once and every saved board
+follows. The URL contract exists to keep boards working, so the default has to be the
+one that does.
+
+`?course=123` still pins a Panel, and is still wanted: a second monitor dedicated to one
+section, or showing next period during conference. The default changed from *required*
+to *follow the schedule*; the capability did not go away.
+
+Between blocks the Panel looks ahead to the next one and labels itself `Next · ELA 7`,
+rather than going blank during passing period. After the last block it stops, instead of
+rolling to tomorrow, because an after-school board showing tomorrow's work reads as
+today's.
+
+**Following a schedule changes the refresh contract.** A 15-minute poll would leave last
+period's work on the wall for up to 15 minutes after the bell, which defeats the point.
+The payload returns `next_change` (the boundary this answer is good until) and the panel
+sets one timer for 20 seconds past it. The 15-minute poll stays as the backstop for
+catalog refreshes.
+
+`resolve_panel_course` never raises. A missing workspace, an unreadable schedule file,
+or a malformed calendar all resolve to a named state with a calm message.
+
+### Correcting today
+
+Following a schedule inherits the schedule's staleness. Assemblies, late starts and
+pep rallies change the bell schedule and nobody updates the calendar, and that failure
+is silent in the worst way: the panels resolve to the wrong class and look perfectly
+healthy doing it. So the Panels console opens with one row, `#pn-today`, that sets
+today's bell schedule from a dropdown of the ones already on disk.
+
+It is deliberately only about today. A recurring change belongs in Settings, where the
+calendar is generated; this is the "the schedule is wrong right now and I have a class
+in four minutes" control, so it stays one line and stays out of the way. It hides
+entirely when no bell schedules exist, so a teacher who never set this up is not nagged
+by a control they cannot use.
+
+| Piece | Owner |
+| --- | --- |
+| Read + write routes | `GET`/`POST /api/schedule/today` in `api/webui/routes/schedule.py` |
+| Storage | `schedule_setup.set_day_override` / `read_day_overrides` |
+| Precedence | `deps.load_day_calendar`, applied after discovery |
+| Tests | `api/tests/test_schedule_day_override.py` |
+
+Four decisions worth keeping:
+
+- **Corrections live in their own file**, `Day Overrides.csv`, never edited into the
+  district's generated calendar. Regenerating that calendar cannot wipe them, and a
+  correction stays visibly a correction rather than becoming indistinguishable from
+  source data.
+- **Precedence is explicit, not alphabetical.** `load_day_calendar` merges
+  `sorted(glob(...))` with `dict.update`, so whoever sorts last wins. The override file
+  is skipped during discovery and applied afterwards by name. Without that, a district
+  calendar renamed past `Day Overrides.csv` would silently start beating the teacher.
+  `test_precedence_is_by_name_not_alphabetical_luck` pins it.
+- **An unknown schedule id is refused at the write.** An override naming a schedule
+  nobody has resolves to an empty day, which on a projector is indistinguishable from a
+  holiday.
+- **Clearing the last correction deletes the file.** A header-only CSV left in a synced
+  workspace implies a correction that is not there.
+
+Because the override goes through `load_day_calendar`, SmartDeck honours it too. That is
+intended: it is the same fact about the same day, and two surfaces disagreeing about
+which schedule is running would be worse than either being wrong alone.
+
+Choice labels drop the `Bell Schedule` prefix every file shares, since under a control
+already labelled "Today's bell schedule" it is the same five words in front of the one
+that tells the options apart.
+
+## Themes
+
+`?theme=` skins a Panel. `PANEL_THEMES` in `panels.py` is the allowlist and the
+dropdown order; `static/panels/themes.css` holds one rule block per key. Eight ship:
+`ce` (default, the app's own palette), `natural`, `ocean`, `cottage`, `console`,
+`wizardtrain`, `bauhaus`, `lisa`.
+
+**A theme is a palette, a font, and one decorative layer. Nothing else.** It sets
+custom properties on `html[data-panel-theme="…"]` and draws ornament on `body::before`.
+It must never set a box property on `.p-row`, `.p-body`, `.p-head`, `.p-foot`,
+`.p-stack` or `.p-title`, because `panel.js` measures the body box to decide the row
+count: a theme that moved that box would change *what a panel shows*, not just how it
+looks. `test_themes_never_restyle_the_sizing_model` enforces the selector boundary, and
+the sweep below confirms the row count is identical across all eight themes at every
+shape.
+
+Three details worth keeping:
+
+- **Ornament sits under the panel, not over it.** `.panel` is transparent so decoration
+  shows through the gutters, while `.p-row` keeps an opaque background so row text
+  always lands on flat colour. That is what lets `lisa` and `cottage` be busy without
+  becoming unreadable. Ornament is switched off below 320x210, where the panel is
+  already dropping content.
+- **Colour literals belong to themes only.** `panel_whats_due.html` maps its own classes
+  onto theme variables (`--row`, `--pill-bg`, `--today-ink`, `--when-ink`, `--warn-ink`)
+  and hardcodes nothing. A literal left in a panel survives theme switching and looks
+  broken in the other seven skins.
+- **`resolve_theme` never rejects.** An unknown, retired, or hand-edited theme falls back
+  to `ce` with a 200. 404-ing here would take a saved board down weeks later over a
+  decoration.
+
+Fonts come from `/static/fonts/fonts.css`, which is self-hosted. A theme must not
+reference a webfont the machine would have to fetch; `cottage`'s serif is Georgia
+precisely because it is already on every machine this ships to.
+
+Contrast is a correctness property, not taste: a panel is read from the back of a room.
+Every text-on-background pairing in every theme measures at least 4.5:1, verified rather
+than eyeballed. When adding a theme, measure it.
+
 ## Adding a Panel
 
 1. Add an entry to `PANEL_CATALOG` with `title`, `blurb`, `template`, `needs_course`.
+   Consume theme variables for every colour; hardcode none.
 2. Add a payload function returning `ok` plus a named `state`, never raising.
 3. Branch to it in `panel_data`.
 4. Write the template: link `panel.css` and `panel.js`, use `.panel` / `.p-head` /
@@ -201,26 +339,82 @@ enforces this repo-wide.
   (`fetch(url, { cache: "reload" })`), or the sweep silently measures a cached
   `panel.css`.
 
+## The console
+
+`/panels` is a builder, not a brochure. It sits in the top nav where SmartDeck used to,
+and SmartDeck moved into More.
+
+The rail lists the panel kinds first and a Reference group (Embedding, Limits) second.
+The stage opens on one builder per kind. Explanation lives in those two reference
+sections and nowhere else, per the "Who these pages are for" section of
+`docs/reference/webui-presentation-system.md`: a teacher opening this page mid-day is
+configuring a panel, not learning what panels are.
+
+Two things on the page are deliberate:
+
+- **The shape buttons under the preview** (Wide, Banner, Tall, Small) stand in for a
+  teacher dragging the widget's corner. They resize only the preview frame, never the
+  address. Resize behavior is the property most likely to disappoint someone who only
+  ever saw one screenshot, so the page shows it instead of describing it.
+- **The address is shown in full next to the embed code.** A teacher who does not want
+  an iframe still needs the URL, and the whole string visible is what makes the
+  durability claim checkable.
+
 ## State as of this card
 
 Shipped and committed: the three routes, the `whats-due` panel, the console with a
 course picker, days control, live preview and copy-embed button, the shared kit, and
-10 tests.
+10 tests. The console was then rebuilt on the workspace `left-main` layout with a rail
+nav and its own `static/pages/panels.css`, replacing the inline `<style>` block and its
+colour literals.
+
+Fixed on the way through: `.ce-display` named two different things. `components.css`
+uses it for the display typeface every `page_section` heading wears; `layouts.css` used
+it for the display-family full-bleed shell. Every `page_section` heading in the app was
+therefore a 100vw x 100vh box with hidden overflow. The shell is now
+`.ce-display-shell`, matching its `.ce-display-page` / `.ce-display-main` siblings.
 
 Observed by measurement: every route and status, both empty states, the 31-day clamp,
 the panel across seven shapes from 240x140 to 900x500 with no overflow or clipping
 and message text 14.4-44px, and the console's embed string updating live.
 
-Inferred rather than observed: the populated-row layout. Its markup is structurally
-identical to the swept demo panels, but no course catalog exists to fill it until the
-district populates courses in mid-August. A local `list_courses` returning zero is
-the expected state before then, not a broken install.
+Schedule-following shipped after that: `resolve_panel_course`, the four new states, the
+`next_change` bell timer, the today's-bell-schedule row with its own override store, and
+27 tests. Observed live: with no day-calendar entry for
+today the route returns `not_school_day` / "No classes scheduled today." rather than the
+old "Choose a course for this panel."; a pinned `?course=` still reports `no_catalog` as
+before; and a stubbed `next` block renders its header as `Next · ELA 7 B`.
+
+Themes shipped before that: eight skins, the `?theme=` param, and 4 tests. Swept across
+eight shapes (240x140 through 1920x1080) with rows injected into the live panel from the
+console page, so the populated layout is measured rather than inferred: row count
+identical across all eight themes at every shape, no overflow, worst text contrast
+4.6:1, smallest leaf 14.2px at 240x140.
+
+**Two defects that sweep caught**, both invisible while every course is empty:
+
+- `.msg[hidden]` did nothing. An author `display: grid` beats the UA's
+  `[hidden] { display: none }`, so the empty message box kept its flex share and starved
+  the rows: at 900x500 the body measured 146px of 500 and the panel showed **one** row
+  where three fit. Fixed in `panel_whats_due.html`.
+- **Long titles ellipsize at wide shapes, and this is still open.** `maxRow` bounds the
+  row *count*, but `.p-row { flex: 1 1 0 }` then stretches rows past it, so at 900x500
+  rows land near 130px and text sizes to ~43px off `min(34cqh, 6cqw)`. `6cqw` measures
+  the whole row, while the title is confined to its stack column, so "Chapter 4 close
+  reading" asks for 488px in a 348px column and gets cut. This is the hazard the `maxRow`
+  comment in `panel.js` already names. Fixing it means re-tuning the width coefficients
+  for text inside `.p-stack`, which changes every panel and needs its own full sweep, so
+  it was left out of the theme work rather than done quietly.
+
+Inferred rather than observed: nothing about layout now. Real assignment *data* still
+cannot be observed until the district populates courses in mid-August; a local
+`list_courses` returning zero is the expected state before then, not a broken install.
 
 ## Natural next steps
 
-- A `/panels` entry in the top nav.
 - More kinds from local data: today's schedule, a timer bound to the bell schedule,
-  gradebook summaries.
+  gradebook summaries. The console's "Coming next" section names these, so adding one
+  means removing its card there.
 - MCP authoring. Two distinct modes worth keeping separate: *configuring* a data
   panel (pick kind, course, options, hand back a URL), and *authoring* a content
   panel (write the words, route through the existing staging and approval flow).
@@ -234,6 +428,6 @@ the expected state before then, not a broken install.
 
 - `docs/reference/smartdeck-module-map.md` - SmartDeck's own route card. SmartDeck is
   CanvasExpert's in-house projector surface; Panels target surfaces the teacher
-  already uses. SmartDeck's schedule resolution, deck store and feed system are the
-  reusable engine if a schedule-aware Panel is ever wanted.
+  already uses. Panels now share SmartDeck's schedule resolution (see Following the
+  schedule above); its deck store and feed system remain unused by Panels.
 - `api/webui/README.md` - rendered-verification recipe.

@@ -56,7 +56,7 @@ Use only the row relevant to the active handoff.
 | Course Catalog | `docs/contracts/course-catalog-contract.md` | Student-free navigation/search projection only; no PII, raw HTML, URLs, credentials, private paths, evidence, or write preflight. |
 | Operation Ledger | `docs/reference/operation-ledger-module-map.md` | High-risk Canvas write boundary; preserve checkpoints, idempotency, verification, and receipts. |
 | New Quizzes grading | `docs/reference/new-quizzes-grading-transport.md` | PowerGrader's live-course item-finalization lane uses Canvas's short-lived signed grader transport for teacher-reviewed item scores and per-item feedback. Active/current instructor enrollment is required; closed, concluded, past-enrollment, or otherwise restricted courses may return `403`. |
-| Web UI / teacher surfaces | `api/webui/README.md` | Preserve route-specific load order and verify affected rendered routes. |
+| Web UI / teacher surfaces | `api/webui/README.md`, then `docs/reference/webui-presentation-system.md` | Preserve route-specific load order and verify affected rendered routes. These are working surfaces for professionals: no taglines or value-proposition copy, working controls before explanation, and no onboarding-first layout. |
 | Physical output | relevant Forge contract and rendering owner named by the handoff | PDF uses installed Microsoft Edge through Playwright; do not add managed browser downloads. DOCX uses `pypandoc-binary`. |
 
 ## Non-negotiable guardrails
