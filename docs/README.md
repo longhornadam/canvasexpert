@@ -17,6 +17,8 @@ Useful starting references for new debugging and refactor sessions:
   spine without weakening live write preflights.
 - `docs/reference/panels-route-card.md` - Panels route/template/kit ownership map, the disk-only
   and URL-stability contracts, and the responsive model every Panel depends on.
+- `docs/contracts/canonical-school-calendar-contract.md` - target authority for school dates,
+  bell/teacher schedule relationships, Calendar UI/MCP edits, and dependent-feature gates.
 - `docs/reference/course-expert-module-map.md` - Work tools push/download route, script, and template ownership map.
 - `docs/reference/settings-module-map.md` - Settings route/script/config ownership map.
 - `docs/reference/powergrader-scoring-map.md` - PowerGrader scoring route/pipeline/template ownership and privacy-sensitive routing map.

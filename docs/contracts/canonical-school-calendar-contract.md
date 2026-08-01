@@ -1,0 +1,244 @@
+# Canonical School Calendar contract
+
+**Status:** accepted target design · **Owner:** Calendar domain
+
+Canvas Expert has one school-calendar authority. It answers, for any covered date, whether
+regular classes meet, which named bell schedule applies, which grading period contains the
+date, and which public school events belong on teacher-facing surfaces. Every feature and
+every AI tool reads and writes that same authority.
+
+This is a teacher-maintained operational record, not a passive import. A principal can email
+a change, the teacher can paste the relevant public schedule facts into an MCP-connected
+assistant, and the assistant can preview and apply the same structured change the Calendar UI
+would make.
+
+## 1. Domain boundary
+
+The Calendar domain owns four related artifacts from one top-level `/calendar` surface:
+
+1. the canonical date record described below;
+2. reusable Bell Schedule definitions (period IDs and clock times);
+3. the Teacher Schedule (stable block names mapped to period IDs and Current Canvas courses);
+4. public school events such as assemblies, performances, tutorials, and spirit weeks.
+
+Only the first item decides what kind of day a date is and which Bell Schedule it uses. Bell
+Schedules and the Teacher Schedule remain separately validated, reusable definitions because
+copying either into every date would create a second truth. The Calendar page is their common
+editor and readiness surface.
+
+Canvas assignment due dates, Canvas course-calendar events, student schedules, grades, and
+roster facts are outside this domain. Pasted email text is input to the assistant, never stored
+in the calendar. Persist only the short public label and structured change the teacher intends.
+
+## 2. Canonical storage
+
+The one active document is:
+
+```text
+<workspace>/Library/Calendars/School Calendar.json
+```
+
+It is a closed, versioned JSON document:
+
+```json
+{
+  "version": "1.0-json",
+  "type": "SCHOOL_CALENDAR",
+  "revision": 12,
+  "school_year": "2026-27",
+  "coverage": {"start": "2026-07-01", "end": "2027-06-30"},
+  "days": {
+    "2026-08-19": {
+      "kind": "instructional",
+      "schedule_id": "bell_schedule_bobcat_hour",
+      "label": "First day"
+    },
+    "2026-09-07": {
+      "kind": "no_school",
+      "schedule_id": null,
+      "label": "Labor Day"
+    },
+    "2026-10-16": {
+      "kind": "no_regular_classes",
+      "schedule_id": null,
+      "label": "Field day"
+    }
+  },
+  "grading_periods": [
+    {
+      "code": "T1",
+      "name": "Term 1",
+      "start": "2026-08-19",
+      "end": "2026-10-09",
+      "report_issue_date": "2026-10-16"
+    }
+  ],
+  "events": [
+    {
+      "id": "fall-concert",
+      "kind": "performance",
+      "label": "Fall concert",
+      "shape": "date",
+      "date": "2026-10-22",
+      "detail": "6:30 PM",
+      "from": "18:30",
+      "to": "20:00"
+    }
+  ]
+}
+```
+
+`revision` starts at 1 and increases by one for every successful write. Writes validate the
+whole next document and replace the file atomically. Unknown keys are rejected at every
+level. API and MCP responses never expose an absolute path.
+
+There is no live `config.calendars` copy, `Day Calendar*.csv`, `Day Overrides.csv`, or
+`school-events.json`. Academic CSVs and other public files may remain as import/seed inputs,
+but they are not read at runtime after import. Pre-launch means this is a clean replacement:
+there is no dual read, migration, backup-renaming protocol, or compatibility API.
+
+## 3. Date model and validation
+
+`coverage.start` and `coverage.end` are exact ISO dates and `start <= end`. `days` contains
+exactly one entry for every calendar date in that inclusive range, including weekends. A
+missing day is invalid rather than an implied weekend or instructional day. Keys outside the
+range are invalid.
+
+Each day has one of three kinds:
+
+| Kind | Meaning | `schedule_id` | Label |
+|---|---|---|---|
+| `instructional` | Regular classes meet | required and must name a loaded Bell Schedule | optional |
+| `no_regular_classes` | Students may be present, but ordinary class blocks do not meet | must be null | required |
+| `no_school` | Students do not attend | must be null | required except generated weekends may use `Weekend` |
+
+Both non-instructional kinds are excluded from class-meeting and instructional-day arithmetic.
+They remain distinct in UI and classroom messages: a field day is not called a holiday.
+
+Grading-period codes are unique. Period bounds are exact ISO dates, ordered, and inside
+coverage; `report_issue_date` is optional. Overlapping grading periods are invalid because a
+consumer must never choose one by list order.
+
+Public event kinds remain the closed classroom-safe set: `game`, `dance`, `assembly`,
+`performance`, `spirit`, `tutorial`, `club`, `library`, and `other`. Event IDs are unique and
+stable. An event has exactly one shape: one `date`, an inclusive `start`/`end` span, or a
+`weekdays` recurrence with an optional effective range. Events can inform a display but never
+silently change a day's kind or schedule. A pep-rally event and a pep-rally Bell Schedule are
+two explicit facts.
+
+## 4. Resolution and failure semantics
+
+One service owns document parsing, validation, range projection, mutation, and schedule
+resolution. Existing feature facades may call it, but no consumer parses the file or retains a
+second calendar projection.
+
+Date resolution has explicit states:
+
+- `unconfigured`: no canonical document;
+- `invalid_calendar`: the document cannot be parsed or validated;
+- `outside_coverage`: the requested date is not covered;
+- `no_school`;
+- `no_regular_classes`;
+- `unknown_schedule`: an instructional day names a missing/invalid Bell Schedule;
+- `ready`: the date and its Bell Schedule are valid.
+
+Teacher-Schedule validation and the ordinary `between_blocks`, `day_over`, and
+`block_without_course` states remain downstream schedule outcomes. Missing, expired, or broken
+calendar state never degrades to “weekends only,” “nothing scheduled,” or a guessed weekday
+schedule. A feature that needs instructional-day math or a current class blocks elegantly and
+links to `/calendar`.
+
+A fixed teacher-block override is the one intentional bypass: a Panel URL may use
+`?block=<stable-teacher-block-name>` to display that block regardless of the live date or clock.
+It still resolves the block through the Teacher Schedule and still enforces the Current-course
+boundary. Raw `?course=` pinning is replaced, not retained as a second override contract.
+
+## 5. Editing operations
+
+The UI and MCP call the same application service and validators. There are three operation
+families:
+
+- create/replace a complete school year from coverage, weekday defaults, optional imported
+  academic-calendar facts, grading periods, and events;
+- preview/apply a day change to either an explicit date list or an inclusive date range plus
+  optional weekday subset;
+- edit Bell Schedule, Teacher Schedule, grading-period, and public-event definitions.
+
+Range and weekday rules are authoring conveniences only. A change such as “use Friday Schedule
+Monday through Friday for the next two weeks” materializes those ten exact dates. No recurring
+schedule rule survives beside the day records, so runtime precedence is impossible to hide.
+One-offs and changes used two or three times per year use the same operation with a smaller
+selection.
+
+Every date change is previewable. Preview returns the base revision, affected dates, before and
+after values, conflicts, and validation problems. Apply requires that `expected_revision`; a
+stale preview is refused. A no-op is successful without incrementing the revision. The UI shows
+the preview before Apply. MCP exposes separate read, preview, and apply tools, and its authoring
+contract instructs the assistant to summarize the preview before applying it.
+
+## 6. Calendar surface
+
+`/calendar` is a primary-nav working surface, not a Settings subsection. Its title and nav label
+are both **Calendar**. Panels remains in primary navigation.
+
+The first screenful contains:
+
+- a compact readiness line for the active school year and coverage;
+- today and the upcoming dates, with the resolved day kind and Bell Schedule visibly named;
+- the date/range change control.
+
+The same page owns the Teacher Schedule editor, Bell Schedule definitions, academic-calendar
+import, grading periods, and public events. Settings removes its Class schedule and Academic
+calendars editors and links to Calendar only where calendar readiness is relevant. Other
+features link directly to the exact Calendar section that resolves their gate.
+
+The page follows the WebUI presentation contract: controls before explanation, no sales copy,
+no permanent onboarding tour. Readiness is calm but unmissable. It becomes
+`needs_attention` when no valid calendar exists, today is outside coverage, an instructional
+date references an unknown Bell Schedule, or fewer than 30 calendar days remain in coverage.
+Warnings name the concrete repair and take the teacher to its control.
+
+## 7. Panels contract carried by Calendar
+
+Panels normally mirror the live local date and clock. The builder does not gain a fake day,
+period, or clock preview. A fixed-block URL is a deliberate display override, not a preview
+mode, and the builder offers it by teacher-block label.
+
+If live resolution fails, the projected Panel shows the schedule/calendar problem rather than
+quietly behaving like an empty day. Its action text is brief (for example, “Calendar needs
+attention. Open Calendar in Canvas Expert.”). The builder provides the clickable repair link.
+
+The What's due panel:
+
+- reads only a Current course, including when reached through a teacher block;
+- includes every due-today assignment through the end of the local calendar day, even after
+  its due time;
+- includes dates through `today + 7 calendar days` (today plus the next seven named dates);
+- orders future/upcoming items first, then earlier-today items; ties are chronological and
+  deterministic;
+- describes an earlier-today item neutrally, never as missing or late;
+- shows a Previous-course mapping as “This class is no longer current. Update its Canvas
+  course in Calendar.”
+
+Copy controls report success only when the Clipboard API or a selected-text fallback actually
+copies. Failure leaves the full address visible and says to select and copy it.
+
+## 8. Consumer rule
+
+All current consumers must use the canonical service in the cutover batch: SmartDeck and its
+feeds, Panels, Late Work Sweep, Gradebook date arithmetic, Extensions, PowerGrader late work,
+built-in and custom routines, operation-ledger sweep planning, and MCP schedule/calendar reads.
+No consumer may import `config.calendars`, parse an academic/day-calendar file, or silently
+invent weekend-only behavior.
+
+Consumers also stop accepting their own `skip_weekends`, `holidays`, or “additional no-count
+days” calendar overrides. An exceptional school day is edited once in Calendar, then every
+instructional-day calculation sees it. Student-specific extra-time accommodations remain a
+separate roster fact and are not calendar overrides.
+
+## 9. Privacy and locality
+
+The calendar is public, student-free school configuration. It may contain public district
+dates and bell times under the repository guardrail for seed files. It must not contain student
+data, teacher contact details, email bodies, Canvas credentials, private workspace paths, or
+Canvas transport data. Everything remains local to the token-holding app and MCP server.
