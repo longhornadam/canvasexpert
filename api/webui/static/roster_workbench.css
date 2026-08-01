@@ -60,6 +60,7 @@
 .roster-v2-status-error { color: var(--ce-danger); font-weight: 600; }
 .roster-col-check { width: 28px; }
 .roster-col-name { width: 210px; }
+.roster-col-classroom-profile { width: 360px; }
 .roster-col-nicknames { width: 190px; }
 .roster-col-pseudo { width: 220px; }
 .roster-col-extratime { width: 105px; }
@@ -69,6 +70,13 @@
 .roster-col-front-row, .roster-col-near-teacher { width: 100px; }
 .roster-col-private-note, .roster-col-ai-context-note { width: 180px; }
 .roster-col-status { width: 150px; }
+.roster-classroom-profile { display: grid; gap: 4px; white-space: normal; }
+.roster-classroom-profile > label { display: grid; gap: 2px; }
+.roster-celebrations { display: grid; gap: 3px; }
+.roster-celebration { display: grid; grid-template-columns: minmax(90px, 1fr) 104px 104px auto; gap: 3px; align-items: center; }
+.roster-classroom-profile input[type="date"] { width: 104px; margin: 0; padding: 2px; font-size: 11px; }
+.roster-classroom-profile button { padding: 2px 5px; font-size: 10px; white-space: nowrap; }
+.roster-profile-error { color: var(--ce-danger); font-size: 10px; }
 .roster-empty { padding: var(--ce-space-4) !important; color: var(--ce-ink-muted); font-size: 13px; text-align: center; }
 .roster-score-matrix, .roster-relationships { padding: var(--ce-space-3) var(--ce-space-4); }
 .roster-score-matrix-heading { display: flex; align-items: start; justify-content: space-between; gap: var(--ce-space-3); }

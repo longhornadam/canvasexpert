@@ -44,6 +44,20 @@ PANEL_CATALOG = {
         "template": "panel_whats_due.html",
         "needs_course": True,
     },
+    "random-student": {
+        "title": "Random student",
+        "blurb": "Choose a current student from the local roster.",
+        "template": "panel_random_student.html",
+        "needs_course": True,
+        "interactive": True,
+    },
+    "random-student-no-repeats": {
+        "title": "Random student — no repeats",
+        "blurb": "Choose each current student once, then reset the cycle.",
+        "template": "panel_random_student_no_repeats.html",
+        "needs_course": True,
+        "interactive": True,
+    },
     "upcoming-events": {
         "title": "Upcoming events",
         "blurb": "Public Calendar events and academic dates for the classroom.",
@@ -67,6 +81,21 @@ PANEL_CATALOG = {
         "blurb": "Today's canonical tutorial and club blocks.",
         "template": "panel_bobcat_hour.html",
         "needs_course": False,
+    },
+    "missing-work": {
+        "title": "Missing work",
+        "blurb": "Published work marked missing in the current local roster.",
+        "template": "panel_missing_work.html",
+        "needs_course": True,
+    },
+    "birthdays-celebrations": {
+        "title": "Birthdays & celebrations",
+        "blurb": "Current roster birthdays and teacher-entered celebrations.",
+        "template": "panel_birthdays_celebrations.html",
+        "needs_course": True,
+        "days": True,
+        "default_days": panel_data_service.DEFAULT_BIRTHDAY_DAYS,
+        "max_days": panel_data_service.MAX_BIRTHDAY_DAYS,
     },
 }
 
@@ -294,6 +323,34 @@ def panel_data(kind: str, block: str = "", days: int | None = None):
         payload["next_change"] = scope["next_change"]
         if not payload.get("course_name"):
             payload["course_name"] = scope["block"]
+        return JSONResponse(payload)
+    if kind in {"random-student", "random-student-no-repeats", "missing-work",
+                "birthdays-celebrations"}:
+        scope = resolve_panel_course(block)
+        if scope["state"]:
+            key = "items" if kind == "birthdays-celebrations" else (
+                "students" if kind == "missing-work" else "names")
+            payload = {"ok": True, "state": scope["state"], key: [],
+                       "message": scope["message"], "block": scope["block"]}
+            if kind == "birthdays-celebrations":
+                payload["days"] = panel_data_service.clamp_days(
+                    days if days is not None else panel_data_service.DEFAULT_BIRTHDAY_DAYS,
+                    panel_data_service.DEFAULT_BIRTHDAY_DAYS,
+                    panel_data_service.MAX_BIRTHDAY_DAYS)
+            return JSONResponse(payload)
+        if kind == "random-student":
+            payload = panel_data_service.random_student_payload(scope["course_id"])
+        elif kind == "random-student-no-repeats":
+            payload = panel_data_service.random_student_no_repeats_payload(scope["course_id"])
+        elif kind == "missing-work":
+            payload = panel_data_service.missing_work_payload(scope["course_id"])
+        else:
+            payload = panel_data_service.birthdays_celebrations_payload(
+                scope["course_id"],
+                panel_data_service.DEFAULT_BIRTHDAY_DAYS if days is None else days)
+        payload["relation"] = scope["relation"]
+        payload["block"] = scope["block"]
+        payload["next_change"] = scope["next_change"]
         return JSONResponse(payload)
     if kind == "upcoming-events":
         return JSONResponse(panel_data_service.upcoming_events_payload(

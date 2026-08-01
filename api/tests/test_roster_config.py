@@ -96,6 +96,36 @@ def test_seating_context_removal_keeps_other_local_settings():
     assert result["101"]["tier"] == "Support"
 
 
+def test_classroom_profile_round_trip_and_clear_preserves_other_settings():
+    profile = {
+        "birthday": "09-08",
+        "celebrations": [{
+            "id": "celebration-1", "label": "Helpful teammate",
+            "start": "2026-09-08", "end": "2026-09-12",
+        }],
+    }
+    config.set_roster_student_settings("100", {"101": {"tier": "Support"}})
+    config.update_roster_student_settings("100", "101", {"classroom_profile": profile})
+    assert config.get_roster_student_settings("100")["101"]["classroom_profile"] == profile
+
+    config.update_roster_student_settings("100", "101", {"classroom_profile": None})
+    result = config.get_roster_student_settings("100")["101"]
+    assert "classroom_profile" not in result
+    assert result["tier"] == "Support"
+
+
+@pytest.mark.parametrize("profile", [
+    {"birthday": "2026-09-08", "celebrations": []},
+    {"birthday": "02-30", "celebrations": []},
+    {"birthday": "", "celebrations": [{"id": "x", "label": "<b>bad</b>", "start": "2026-09-08", "end": "2026-09-08"}]},
+    {"birthday": "", "celebrations": [{"id": "x", "label": "Bad", "start": "2026-09-09", "end": "2026-09-08"}]},
+    {"birthday": "", "celebrations": [{"id": "x", "label": "One", "start": "2026-09-08", "end": "2026-09-08"}, {"id": "x", "label": "Two", "start": "2026-09-09", "end": "2026-09-09"}]},
+])
+def test_classroom_profile_rejects_invalid_values(profile):
+    with pytest.raises(ValueError):
+        config.validate_classroom_profile(profile)
+
+
 def test_score_matrix_round_trip_is_course_scoped():
     first = {
         "columns": [{"id": "score-writing", "label": "Writing"}],

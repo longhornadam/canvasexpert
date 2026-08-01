@@ -1,19 +1,20 @@
 # Classroomscreen Panel library initiative
 
-**Status:** Batch B accepted GREEN and retired; Batch C is the next queued batch
+**Status:** Batch C accepted GREEN and retired; Batch D is the next queued batch
 
 **Last senior review:** 2026-08-01
 
 **Active prerequisite:** the canonical Calendar correction closed GREEN and was retired in commit
-`a91182e`. Batch A and Batch B are accepted GREEN. Batch B passed its focused gate (100 passed),
-full API suite (1849 passed), responsive Panel render checks (216/216), and `git diff --check`;
-its integration commit is the current senior checkout. There is no active direct brief.
+`a91182e`. Batch A and Batch B are accepted GREEN. Batch C passed its focused gate (180 passed),
+full API suite (1863 passed), local browser route/theme checks, and `git diff --check`; its
+integration commit is the current senior checkout. There is no active direct brief.
 
-**Next batch pointer:** promote **Batch C - Roster-backed Panels** from §7 only when execution
-is requested. The next senior/executor needs §§2, 3, 5, 7 (Batch C), 8, 9, 10, and 11, plus
-`docs/reference/roster-module-map.md`, the relevant Mirror read-service route card, the current
-Panel route card, and the exact rendered-verification sections named by the promoted brief.
-Outstanding decisions: none carried from Batch A or Batch B.
+**Next batch pointer:** promote **Batch D - Learning objective authoring and Panel** from §7
+only when execution is requested. The next senior/executor needs §§2, 3, 6, 7 (Batch D), 8, 9,
+10, and 11, plus `docs/contracts/course-catalog-contract.md`, the Course Catalog module map,
+the relevant CanvasMirror typed-catalog sections, the MCP server/tool route card, the current
+Panel route card, the classroom-facing data contract, and the exact rendered-verification
+sections named by the promoted brief. Outstanding decisions: none carried from Batch C.
 
 **Batch A timing decision:** the teacher confirmed the 2026-27 Bobcat Hour split as
 `bobcat_a` 12:11–12:41 and `bobcat_b` 12:43–13:13. This is the locked seed timing for the

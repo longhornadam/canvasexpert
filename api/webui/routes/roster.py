@@ -42,6 +42,7 @@ router = APIRouter(prefix="/api/roster", tags=["roster"])
 ALLOWED_STUDENT_PATCH_KEYS = {
     "nicknames", "pseudonym", "regenerate_pseudonym",
     "extra_time", "monitored", "canvas_group", "seating_context",
+    "classroom_profile",
 }
 
 # Legacy keys that are rejected with clear errors
@@ -298,6 +299,13 @@ def roster_get(course_id: str = Query("")):
         seating_context = roster_updates.normalize_seating_context(
             local_settings.get("seating_context") if isinstance(local_settings, dict) else None
         )
+        try:
+            classroom_profile = config.validate_classroom_profile(
+                local_settings.get("classroom_profile", config.empty_classroom_profile())
+                if isinstance(local_settings, dict) else config.empty_classroom_profile()
+            )
+        except ValueError:
+            classroom_profile = config.empty_classroom_profile()
 
         row = {
             "id": uid,
@@ -313,6 +321,7 @@ def roster_get(course_id: str = Query("")):
             "extra_time": et,
             "monitored": {"enabled": monitored_flag, "note": monitored_note},
             "seating_context": seating_context,
+            "classroom_profile": classroom_profile,
             "canvas_groups": canvas_groups,
             "canvas_group": canvas_group,
             "warnings": [],
@@ -375,7 +384,7 @@ def roster_student_update(
     """Update one student's roster settings (V3: Canvas groups are source of truth).
 
     Accepted patch fields: nicknames, pseudonym, regenerate_pseudonym,
-    extra_time, monitored, canvas_group.
+    extra_time, monitored, canvas_group, seating_context, classroom_profile.
 
     Obsolete fields (rejected with clear error): tier_id, tier, planned_group.
     """
@@ -389,6 +398,7 @@ def roster_student_update(
         set_monitored_student=config.set_monitored_student,
         remove_monitored_student=config.remove_monitored_student,
         update_roster_student_settings=config.update_roster_student_settings,
+        validate_classroom_profile=config.validate_classroom_profile,
         as_int=_as_int,
         validate_canvas_group_target=_validate_canvas_group_target,
         update_student_canvas_group=_update_student_canvas_group,

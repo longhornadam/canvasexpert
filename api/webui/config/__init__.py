@@ -86,6 +86,8 @@ from .roster import (
     ROSTER_DEFAULT_TIER_SCHEME, ROSTER_SCORE_MATRIX_DEFAULT, ROSTER_RELATIONSHIPS_DEFAULT, DEFAULT_GROUP_LABELS,
     get_roster_student_settings, set_roster_student_settings,
     update_roster_student_settings,
+    CLASSROOM_PROFILE_KEYS, CLASSROOM_CELEBRATION_KEYS,
+    validate_classroom_profile, empty_classroom_profile,
     get_roster_score_matrix, set_roster_score_matrix,
     get_roster_relationships, set_roster_relationships,
     _validate_tier_scheme, _normalize_tier_scheme,

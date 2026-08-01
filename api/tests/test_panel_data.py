@@ -1,7 +1,12 @@
 from datetime import datetime
 
+from api.mirror import read_service
+from api.webui import panel_data
 from api.webui.panel_data import (
     bobcat_hour_payload,
+    birthdays_celebrations_payload,
+    missing_work_payload,
+    random_student_payload,
     upcoming_events_payload,
     sports_results_payload,
 )
@@ -23,8 +28,12 @@ def _reader(projection):
     return lambda _start, _end: (projection, [])
 
 
-def test_catalog_has_only_the_four_batch_b_kinds():
-    assert set(PANEL_CATALOG) == {"whats-due", "upcoming-events", "sports-results", "bobcat-hour"}
+def test_catalog_has_the_four_batch_b_kinds_and_the_four_batch_c_kinds():
+    assert set(PANEL_CATALOG) == {
+        "whats-due", "upcoming-events", "sports-results", "bobcat-hour",
+        "random-student", "random-student-no-repeats", "missing-work",
+        "birthdays-celebrations",
+    }
 
 
 def test_upcoming_unions_public_events_and_academic_facts_and_strips_claimed_audience():
@@ -128,3 +137,96 @@ def test_bobcat_preserves_calendar_states_and_rejects_other_instructional_schedu
     assert no_school["state"] == "no_school"
     assert no_school["groups"] == {"A": {"tutorial": [], "club": []},
                                     "B": {"tutorial": [], "club": []}}
+
+
+def _private_scope(scope, records, *, state="current"):
+    return {"course_id": "course-c", "scope": scope, "state": state,
+            "capability": "supported", "source": "mirror", "records": records}
+
+
+def test_roster_panels_gate_non_current_scopes_and_strip_identifiers():
+    calls = []
+
+    def reader(scope, course_id, **kwargs):
+        calls.append((scope, kwargs.get("intent")))
+        return _private_scope(scope, [{"id": "student-1", "name": "Alpha One",
+                                      "sis_user_id": "private"}], state="stale")
+
+    out = random_student_payload("course-c", scope_reader=reader)
+
+    assert out == {"ok": True, "state": "mirror_needs_attention", "names": [],
+                   "message": "Sync now in Canvas Expert to show this panel."}
+    assert calls == [(read_service.PRIVATE_ROSTER, read_service.LOCAL_DISPLAY)]
+    assert "student-1" not in str(out)
+
+
+def test_random_names_expand_only_collisions_and_fingerprint_the_safe_set():
+    def reader(scope, course_id, **kwargs):
+        return _private_scope(scope, [
+            {"id": "student-1", "name": "Alpha One", "sis_user_id": "hidden"},
+            {"id": "student-2", "name": "Alpha Oak", "sis_user_id": "hidden"},
+            {"id": "student-3", "name": "Beta Two"},
+        ])
+
+    out = random_student_payload("course-c", scope_reader=reader)
+
+    assert out["names"] == ["Alpha Oak", "Alpha One", "Beta T."]
+    assert len(out["fingerprint"]) == 64
+    assert "student-" not in str(out)
+    assert "sis_user_id" not in str(out)
+
+
+def test_missing_work_uses_published_missing_and_excused_flags_and_orders_rows():
+    scopes = {
+        read_service.PRIVATE_ROSTER: _private_scope(read_service.PRIVATE_ROSTER, [
+            {"id": "student-1", "name": "Alpha One"},
+            {"id": "student-2", "name": "Beta Two"},
+        ]),
+        read_service.PRIVATE_ASSIGNMENTS: _private_scope(read_service.PRIVATE_ASSIGNMENTS, [
+            {"id": "assignment-late", "name": "Later", "due_at": "2026-08-25T12:00:00Z", "published": True},
+            {"id": "assignment-soon", "name": "Sooner", "due_at": "2026-08-18T12:00:00Z", "published": True},
+            {"id": "assignment-draft", "name": "Draft", "due_at": "2026-08-17T12:00:00Z", "published": False},
+        ]),
+        read_service.PRIVATE_SUBMISSIONS: _private_scope(read_service.PRIVATE_SUBMISSIONS, [
+            {"assignment_id": "assignment-late", "user_id": "student-1", "missing": True, "excused": False},
+            {"assignment_id": "assignment-soon", "user_id": "student-1", "missing": True, "excused": True},
+            {"assignment_id": "assignment-draft", "user_id": "student-2", "missing": True, "excused": False},
+        ]),
+    }
+
+    out = missing_work_payload("course-c", scope_reader=lambda scope, course_id, **kwargs: scopes[scope])
+
+    assert out["state"] == "ready"
+    assert out["students"] == [
+        {"kind": "missing_work", "student_name": "Alpha O.", "missing_count": 1,
+         "assignment_titles": ["Later"]},
+        {"kind": "missing_work", "student_name": "Beta T.", "missing_count": 0,
+         "assignment_titles": []},
+    ]
+    assert all("student-" not in str(row) for row in out["students"])
+
+
+def test_birthdays_are_annual_and_celebrations_are_window_intersections():
+    scopes = {read_service.PRIVATE_ROSTER: _private_scope(read_service.PRIVATE_ROSTER, [
+        {"id": "student-1", "name": "Alpha One"},
+        {"id": "student-2", "name": "Beta Two"},
+    ])}
+    profiles = {
+        "student-1": {"classroom_profile": {"birthday": "01-02", "celebrations": []}},
+        "student-2": {"classroom_profile": {"birthday": "", "celebrations": [
+            {"id": "celebration-1", "label": "Helpful teammate", "start": "2026-12-30", "end": "2027-01-03"}
+        ]}},
+    }
+
+    out = birthdays_celebrations_payload(
+        "course-c", days=7, now=datetime(2026, 12, 29),
+        scope_reader=lambda scope, course_id, **kwargs: scopes[scope],
+        profile_reader=lambda course_id: profiles,
+    )
+
+    assert out["state"] == "ready"
+    assert out["items"] == [
+        {"kind": "achievement", "student_name": "Beta T.", "date": "Dec 30–Jan 3", "label": "Helpful teammate"},
+        {"kind": "birthday", "student_name": "Alpha O.", "date": "Jan 2", "label": "Birthday"},
+    ]
+    assert "celebration-1" not in str(out)

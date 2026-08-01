@@ -23,6 +23,7 @@ def update_student(
     set_monitored_student: Callable[..., None],
     remove_monitored_student: Callable[[str], None],
     update_roster_student_settings: Callable[[str, str, dict], None],
+    validate_classroom_profile: Callable[[object], dict],
     as_int: Callable[[object, str], tuple[int | None, str | None]],
     validate_canvas_group_target: Callable[
         [str, str, str | None], tuple[list[dict], dict | None, str | None]
@@ -64,6 +65,13 @@ def update_student(
         seating_context, err = validate_seating_context(data["seating_context"])
         if err:
             return {"ok": False, "error": err}
+
+    classroom_profile = None
+    if "classroom_profile" in data and data["classroom_profile"] is not None:
+        try:
+            classroom_profile = validate_classroom_profile(data["classroom_profile"])
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
 
     vault = vault_factory()
 
@@ -140,6 +148,10 @@ def update_student(
     if "seating_context" in data:
         update_roster_student_settings(
             course_id, user_id, {"seating_context": seating_context}
+        )
+    if "classroom_profile" in data:
+        update_roster_student_settings(
+            course_id, user_id, {"classroom_profile": classroom_profile}
         )
 
     return {"ok": True}

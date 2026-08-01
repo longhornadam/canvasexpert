@@ -70,6 +70,11 @@
           } else {
             var apiMsg = data.error || "Save failed.";
             roster.setRowStatus(userId, "Error: " + apiMsg, "roster-v2-status-error");
+            if (key === "classroom_profile") {
+              var profileRow = tableBody.querySelector('tr[data-id="' + userId + '"]');
+              var profileError = profileRow && profileRow.querySelector(".roster-profile-error");
+              if (profileError) profileError.textContent = apiMsg;
+            }
             roster.toast(apiMsg, true);
           }
         })
@@ -120,7 +125,63 @@
       s.monitored = { enabled: !!value.enabled, note: value.note || "" };
     } else if (key === "seating_context") {
       s.seating_context = value;
+    } else if (key === "classroom_profile") {
+      s.classroom_profile = value;
     }
+  }
+
+  function buildClassroomProfile(row) {
+    var birthday = row.querySelector(".roster-v2-birthday");
+    var celebrations = [];
+    row.querySelectorAll(".roster-celebration").forEach(function (item) {
+      celebrations.push({
+        id: item.dataset.celebrationId || "",
+        label: (item.querySelector(".roster-v2-celebration-label") || {}).value || "",
+        start: (item.querySelector(".roster-v2-celebration-start") || {}).value || "",
+        end: (item.querySelector(".roster-v2-celebration-end") || {}).value || ""
+      });
+    });
+    return {birthday: birthday ? birthday.value.trim() : "", celebrations: celebrations};
+  }
+
+  function saveClassroomProfile(userId, row) {
+    saveField(userId, "classroom_profile", buildClassroomProfile(row));
+  }
+
+  function newCelebrationId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+    return "celebration-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+
+  function addCelebration(row) {
+    var wrap = row.querySelector(".roster-celebrations");
+    if (!wrap) return;
+    var id = newCelebrationId();
+    var item = document.createElement("div");
+    item.className = "roster-celebration"; item.dataset.celebrationId = id;
+    item.innerHTML = '<input type="text" class="roster-v2-input roster-v2-celebration-label" placeholder="Celebration" maxlength="160" data-id="' + row.dataset.id + '">' +
+      '<input type="date" class="roster-v2-celebration-start" aria-label="Celebration start" data-id="' + row.dataset.id + '">' +
+      '<input type="date" class="roster-v2-celebration-end" aria-label="Celebration end" data-id="' + row.dataset.id + '">' +
+      '<button type="button" class="roster-v2-celebration-remove" data-id="' + row.dataset.id + '">Remove</button>';
+    wrap.appendChild(item); attachProfileEvents(row); saveClassroomProfile(row.dataset.id, row);
+  }
+
+  function attachProfileEvents(row) {
+    row.querySelectorAll(".roster-v2-birthday, .roster-v2-celebration-label, .roster-v2-celebration-start, .roster-v2-celebration-end").forEach(function (el) {
+      if (el.dataset.profileBound) return;
+      el.dataset.profileBound = "1";
+      el.addEventListener("change", function () { saveClassroomProfile(row.dataset.id, row); });
+    });
+    row.querySelectorAll(".roster-v2-celebration-remove").forEach(function (button) {
+      if (button.dataset.profileBound) return;
+      button.dataset.profileBound = "1";
+      button.addEventListener("click", function () { button.closest(".roster-celebration").remove(); saveClassroomProfile(row.dataset.id, row); });
+    });
+    row.querySelectorAll(".roster-v2-celebration-add").forEach(function (button) {
+      if (button.dataset.profileBound) return;
+      button.dataset.profileBound = "1";
+      button.addEventListener("click", function () { addCelebration(row); });
+    });
   }
 
   function saveSeatingContext(userId) {
@@ -239,6 +300,9 @@
       el.addEventListener("change", function () {
         saveSeatingContext(el.dataset.id);
       });
+    });
+    tableBody.querySelectorAll(".roster-classroom-profile").forEach(function (editor) {
+      attachProfileEvents(editor.closest("tr"));
     });
   }
 

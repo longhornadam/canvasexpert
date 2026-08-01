@@ -954,6 +954,49 @@ def test_roster_student_saves_and_clears_seating_context(monkeypatch, isolated_r
     }
 
 
+def test_roster_student_saves_and_clears_classroom_profile(monkeypatch, isolated_roster):
+    users = [{"id": 101, "name": "Test Student", "sortable_name": "Student, Test",
+              "short_name": "Test", "enrollments": []}]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
+    profile = {"birthday": "09-08", "celebrations": [{
+        "id": "celebration-1", "label": "Helpful teammate",
+        "start": "2026-09-08", "end": "2026-09-12",
+    }]}
+    saved = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({"classroom_profile": profile}),
+    }).json()
+    row = client.get("/api/roster?course_id=1").json()["students"][0]
+
+    assert saved["ok"] is True
+    assert row["classroom_profile"] == profile
+    assert isolated_roster["settings"]["1"]["101"]["classroom_profile"] == profile
+
+    cleared = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({"classroom_profile": None}),
+    }).json()
+    assert cleared["ok"] is True
+    assert "classroom_profile" not in isolated_roster["settings"]["1"]["101"]
+
+
+@pytest.mark.parametrize("profile", [
+    {"birthday": "09-08", "celebrations": [{"id": "x", "label": "<bad>", "start": "2026-09-08", "end": "2026-09-08"}]},
+    {"birthday": "", "celebrations": [{"id": "x", "label": "One", "start": "2026-09-09", "end": "2026-09-08"}]},
+    {"birthday": "", "celebrations": [{"id": "x", "label": "One", "start": "2026-09-08", "end": "2026-09-08", "unexpected": True}]},
+])
+def test_roster_student_rejects_invalid_classroom_profile_without_write(isolated_roster, profile):
+    original = {"tier": "Support"}
+    isolated_roster["settings"]["1"] = {"101": original.copy()}
+    response = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({"classroom_profile": profile}),
+    }).json()
+    assert response["ok"] is False
+    assert isolated_roster["settings"]["1"]["101"] == original
+
+
 @pytest.mark.parametrize("context", [
     {
         "front_row": "unsupported",

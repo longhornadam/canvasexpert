@@ -139,13 +139,32 @@
     return html;
   }
 
+  function classroomProfileEditor(profile, id) {
+    profile = profile || {birthday: "", celebrations: []};
+    var html = '<div class="roster-classroom-profile" data-id="' + esc(id) + '">' +
+      '<label>Birthday <input type="text" class="roster-v2-input roster-v2-birthday" value="' + esc(profile.birthday || "") + '" placeholder="MM-DD" maxlength="5" data-id="' + esc(id) + '"></label>' +
+      '<div class="roster-celebrations">';
+    var celebrations = Array.isArray(profile.celebrations) ? profile.celebrations : [];
+    for (var i = 0; i < celebrations.length; i++) {
+      var item = celebrations[i] || {};
+      html += '<div class="roster-celebration" data-celebration-id="' + esc(item.id || "") + '">' +
+        '<input type="text" class="roster-v2-input roster-v2-celebration-label" value="' + esc(item.label || "") + '" placeholder="Celebration" maxlength="160" data-id="' + esc(id) + '">' +
+        '<input type="date" class="roster-v2-celebration-start" value="' + esc(item.start || "") + '" aria-label="Celebration start" data-id="' + esc(id) + '">' +
+        '<input type="date" class="roster-v2-celebration-end" value="' + esc(item.end || "") + '" aria-label="Celebration end" data-id="' + esc(id) + '">' +
+        '<button type="button" class="roster-v2-celebration-remove" data-id="' + esc(id) + '">Remove</button></div>';
+    }
+    html += '</div><button type="button" class="roster-v2-celebration-add" data-id="' + esc(id) + '">Add celebration</button>' +
+      '<span class="roster-profile-error" data-profile-error="' + esc(id) + '" role="status"></span></div>';
+    return html;
+  }
+
   function renderTable() {
     var filteredStudents = roster.getFilteredStudents() || [];
     var state = roster.getGroupState() || {};
     var categoryGroups = state.currentCategoryGroups || [];
 
     if (filteredStudents.length === 0) {
-      tableBody.innerHTML = '<tr><td colspan="13" class="roster-empty">No students.</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="14" class="roster-empty">No students.</td></tr>';
       updateSelectedNameMap();
       if (typeof roster.notifyTableRendered === "function") {
         roster.notifyTableRendered();
@@ -170,6 +189,7 @@
       html += "<tr data-id=\"" + esc(s.id) + "\">" +
         '<td class="roster-col-check"><input type="checkbox" class="roster-row-check" data-id="' + esc(s.id) + '"></td>' +
         '<td class="roster-col-name"><span class="roster-v2-name">' + esc(s.display_name || s.name) + "</span></td>" +
+        '<td class="roster-col-classroom-profile">' + classroomProfileEditor(s.classroom_profile, s.id) + "</td>" +
         '<td class="roster-col-nicknames"><input type="text" class="roster-v2-input roster-v2-nicknames" value="' + nnVal + '" placeholder="nicknames" data-id="' + esc(s.id) + '"></td>' +
         '<td class="roster-col-pseudo"><span class="roster-v2-pseudo-row"><input type="text" class="roster-v2-input roster-v2-pseudo" value="' + pseudoVal + '" placeholder="pseudonym" data-id="' + esc(s.id) + '" data-field="pseudo"><button type="button" class="roster-v2-regen" data-id="' + esc(s.id) + '" title="Regenerate">&#x21bb;</button></span></td>' +
         '<td class="roster-col-extratime"><label class="roster-v2-et"><input type="checkbox" class="roster-v2-et-cb" data-id="' + esc(s.id) + '"' + (s.extra_time.enabled ? " checked" : "") + ">" +

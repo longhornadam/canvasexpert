@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" data-panel-theme="{{ theme }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ panel_title }}</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/panels/panel.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/panels/themes.css?v={{ asset_v }}">
+<style>
+.p-row { grid-template-columns: auto minmax(0, 1fr) minmax(0, 2fr); --row-bg: var(--row); }
+.p-row:nth-child(odd) { --row-bg: var(--row-alt, var(--row)); }
+.p-date { color: var(--accent); font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.p-a { color: var(--ink); font-weight: 800; }
+.p-b { color: var(--muted); }
+.msg { flex: 1 1 auto; display: grid; place-items: center; text-align: center; padding: .4em 1em; color: var(--muted); font-size: clamp(14px, min(6vw, 16vh), 44px); font-weight: 600; line-height: 1.25; }
+.msg[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="p-head"><div class="p-title">{{ panel_title }}</div><div class="p-sub" id="sub"></div></div>
+  <div class="p-body" id="body"></div><div class="msg" id="msg" hidden></div>
+  <div class="p-foot"><span class="p-cta" id="foot"></span><span class="p-dots" id="dots"></span></div>
+</div>
+<script src="/static/panels/panel.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+  var params = new URLSearchParams(location.search), block = params.get("block") || "", days = params.get("days") || "7";
+  var body = document.getElementById("body"), msg = document.getElementById("msg");
+  function show(text) { body.hidden = true; msg.hidden = false; msg.textContent = text; }
+  function render(payload) {
+    document.getElementById("sub").textContent = payload.items ? payload.items.length + " items" : "";
+    if (payload.state !== "ready") { show(payload.message || "Nothing to celebrate."); document.getElementById("foot").textContent = ""; return; }
+    body.hidden = false; msg.hidden = true; document.getElementById("foot").textContent = "Next " + payload.days + " days";
+    Panel.list({body: body, dots: document.getElementById("dots"), items: payload.items, every: 10000,
+      render: function (item, row) {
+        var when = document.createElement("span"); when.className = "p-date p-fixed"; when.textContent = item.date;
+        var name = document.createElement("span"); name.className = "p-a"; name.textContent = item.student_name;
+        var label = document.createElement("span"); label.className = "p-b"; label.textContent = item.label;
+        row.appendChild(when); row.appendChild(name); row.appendChild(label);
+      }});
+  }
+  function load() { fetch("/panels/birthdays-celebrations/data?block=" + encodeURIComponent(block) + "&days=" + encodeURIComponent(days), {cache: "no-store"}).then(function (r) { return r.json(); }).then(render).catch(function () { show("CanvasExpert is not running on this computer."); }); }
+  load(); setInterval(load, 15 * 60 * 1000);
+}());
+</script>
+</body>
+</html>
