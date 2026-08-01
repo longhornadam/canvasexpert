@@ -3,7 +3,7 @@
    Extends layouts/display.html which provides:
    - .ce-display-page { height: 100vh; overflow: hidden; }
    - .ce-display-main { width: 100vw; height: 100vh; ... overflow: hidden; }
-   - .ce-display { width: 100vw; height: 100vh; ... overflow: hidden; }
+   - .ce-display-shell { width: 100vw; height: 100vh; ... overflow: hidden; }
 
    This page consumes the full viewport with no page scroll.
 */

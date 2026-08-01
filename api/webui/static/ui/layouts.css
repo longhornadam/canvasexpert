@@ -34,7 +34,11 @@
    viewport is exactly the room it has to fill. */
 .ce-display-page { height: 100vh; overflow: hidden; }
 .ce-display-main { width: 100vw; height: 100vh; max-width: none; min-width: 0; margin: 0; padding: 0; overflow: hidden; }
-.ce-display { width: 100vw; height: 100vh; margin: 0; padding: 0; overflow: hidden; }
+/* Named -shell, not .ce-display, because components.css already owns
+   .ce-display as the display-font class every heading in page_section wears.
+   Sharing the name gave every one of those headings a 100vw x 100vh box with
+   hidden overflow. Keep this family's three class names in step. */
+.ce-display-shell { width: 100vw; height: 100vh; margin: 0; padding: 0; overflow: hidden; }
 @media (max-width: 1180px) {
   .ce-app-header { flex-wrap: wrap; }
   .ce-app-header .ce-status-strip { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; padding-top: var(--ce-space-2); border-top: 1px solid var(--ce-rule); }
