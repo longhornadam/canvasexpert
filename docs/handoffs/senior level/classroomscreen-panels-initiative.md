@@ -7,7 +7,7 @@
 **Active prerequisite:** the canonical Calendar correction closed GREEN and was retired in commit
 `a91182e`. Batches A, B, and C are accepted GREEN. Batch D passed its focused gate (211 passed),
 full API suite (1872 passed), v3/MCP closure searches, local browser route/theme checks, and
-`git diff --check`; its integration commit will be the current senior checkout after closure.
+`git diff --check`; its integration commit is `0dfc9bc`, the current senior checkout.
 There is no active direct brief.
 
 **Next batch pointer:** none. Batch D closes the four-row Panels initiative. Do not promote
