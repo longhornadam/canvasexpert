@@ -572,6 +572,8 @@ def _seed_catalog_with_modules_and_groups(tmp_path, *, course_id=COURSE, course_
             return [{"id": "10", "name": "Module 1", "position": 1, "items": []}], None, True
         if path.endswith("/assignment_groups"):
             return [{"id": "44", "name": "Projects", "position": 1, "group_weight": 25}], None, True
+        if path.endswith("/pages"):
+            return [], None, True
         raise AssertionError(f"unexpected canvas_get_all_complete call: {path}")
 
     return course_catalog.refresh_catalog(

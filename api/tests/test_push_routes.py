@@ -18,10 +18,10 @@ def _catalog(*, state="current", records=None):
     }
 
 
-def _v2_catalog(*, state="current", records=None):
+def _catalog_with_groups(*, state="current", records=None):
     return {
         "catalog": {
-            "version": 2,
+            "version": 3,
             "assignment_groups": {
                 "state": state,
                 "records": records if records is not None else [
@@ -103,8 +103,8 @@ def test_assignment_groups_remains_live_when_catalog_modules_are_current(monkeyp
     assert calls == [("/api/v1/courses/course-1/assignment_groups", None)]
 
 
-def test_assignment_groups_uses_exactly_current_v2_catalog_without_canvas(monkeypatch):
-    monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: _v2_catalog())
+def test_assignment_groups_uses_exactly_current_v3_catalog_without_canvas(monkeypatch):
+    monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: _catalog_with_groups())
     monkeypatch.setattr(
         push, "_canvas_get",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Canvas must not be called")),
@@ -117,9 +117,9 @@ def test_assignment_groups_uses_exactly_current_v2_catalog_without_canvas(monkey
 
 def test_assignment_groups_falls_back_live_for_noncurrent_or_malformed_v2_scope(monkeypatch):
     catalogs = [
-        _v2_catalog(state="stale"),
-        _v2_catalog(records=[{"id": "3"}]),
-        _v2_catalog(records=[{"id": "3", "name": "Projects", "position": 1, "group_weight": 20, "url": "drop"}]),
+        _catalog_with_groups(state="stale"),
+        _catalog_with_groups(records=[{"id": "3"}]),
+        _catalog_with_groups(records=[{"id": "3", "name": "Projects", "position": 1, "group_weight": 20, "url": "drop"}]),
         {"catalog": {"version": 1}},
     ]
     calls = []

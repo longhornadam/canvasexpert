@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en" data-panel-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ panel_title }}</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/panels/panel.css?v={{ asset_v }}">
+<link rel="stylesheet" href="/static/panels/themes.css?v={{ asset_v }}">
+<style>
+  .p-body { justify-content: center; }
+  .p-row { grid-template-columns: minmax(0, 1fr); --row-bg: var(--row); }
+  .objective { white-space: normal; text-align: center; font-size: min(36cqh, 6.5cqw); }
+  .msg { flex: 1 1 auto; display: grid; place-items: center; text-align: center;
+    padding: .4em 1em; color: var(--muted); font-size: clamp(14px, min(6vw, 16vh), 44px);
+    font-weight: 600; line-height: 1.25; }
+  .msg[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="p-head">
+    <div class="p-title">{{ panel_title }}</div>
+    <div class="p-sub" id="sub"></div>
+  </div>
+  <div class="p-body" id="body" hidden><div class="p-row"><div class="objective" id="objective"></div></div></div>
+  <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  <div class="p-foot"><span class="p-cta" id="foot"></span></div>
+</div>
+<script src="/static/panels/panel.js?v={{ asset_v }}"></script>
+<script>
+(function () {
+  "use strict";
+  var params = new URLSearchParams(location.search);
+  var block = params.get("block") || "";
+  var body = document.getElementById("body");
+  var msg = document.getElementById("msg");
+  function load() {
+    fetch("/panels/learning-objective/data?block=" + encodeURIComponent(block), {cache: "no-store"})
+      .then(function (response) { return response.json(); })
+      .then(function (payload) {
+        var sub = payload.course_name || payload.block || "";
+        if (payload.relation === "next" && sub) sub = "Next · " + sub;
+        document.getElementById("sub").textContent = sub;
+        if (payload.state === "ready") {
+          body.hidden = false;
+          msg.hidden = true;
+          document.getElementById("objective").textContent = payload.objective || "";
+          document.getElementById("foot").textContent = "Reviewed objective";
+        } else {
+          body.hidden = true;
+          msg.hidden = false;
+          msg.textContent = payload.message || "No objective to show.";
+          document.getElementById("foot").textContent = "";
+        }
+      })
+      .catch(function () {
+        body.hidden = true;
+        msg.hidden = false;
+        msg.textContent = "CanvasExpert is not running on this computer.";
+      });
+  }
+  load();
+  setInterval(load, 15 * 60 * 1000);
+})();
+</script>
+</body>
+</html>

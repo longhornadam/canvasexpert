@@ -1,4 +1,4 @@
-"""Canonical workspace ownership: the single source of truth for the v2
+"""Canonical workspace ownership: the single source of truth for the v3
 synced-workspace tree (``Library/``, ``To Review/``, ``Printables/``,
 ``Canvas Uploads/``, ``Student Work/``, ``For AI/``, ``_System/``).
 
@@ -42,7 +42,7 @@ LIBRARY_NAME = "Library"
 AI_AUTHORING_SUBFOLDER = "AI Authoring"
 LIBRARY_SUBFOLDERS = [
     AI_AUTHORING_SUBFOLDER, "Rubrics", "Quizzes", "Assignments", "Pages",
-    "Calendars", "SmartDecks", "Source Materials",
+    "Calendars", "SmartDecks", "Source Materials", "Panels",
 ]
 
 # Assistant-staged drafts waiting for the teacher to push to Canvas.
@@ -432,24 +432,20 @@ def course_catalog_dir(course_id, root=None):
     return os.path.join(base, safe_id(course_id)) if base else None
 
 
-def course_catalog_path(course_id, root=None):
+def course_catalog_v3_path(course_id, root=None):
     directory = course_catalog_dir(course_id, root)
-    return os.path.join(directory, "catalog.v1.json") if directory else None
+    return os.path.join(directory, "catalog.v3.json") if directory else None
 
 
-def course_catalog_previous_path(course_id, root=None):
+def course_catalog_v3_previous_path(course_id, root=None):
     directory = course_catalog_dir(course_id, root)
-    return os.path.join(directory, "catalog.v1.previous.json") if directory else None
+    return os.path.join(directory, "catalog.v3.previous.json") if directory else None
 
 
-def course_catalog_v2_path(course_id, root=None):
-    directory = course_catalog_dir(course_id, root)
-    return os.path.join(directory, "catalog.v2.json") if directory else None
-
-
-def course_catalog_v2_previous_path(course_id, root=None):
-    directory = course_catalog_dir(course_id, root)
-    return os.path.join(directory, "catalog.v2.previous.json") if directory else None
+def learning_objectives_path(root=None):
+    """The sole canonical reviewed Learning Objectives document."""
+    directory = library_folder("Panels", root)
+    return os.path.join(directory, "Learning Objectives.json") if directory else None
 
 
 def canvas_mirror_root(root=None):
@@ -724,7 +720,7 @@ def _seed_workspace_readme(root):
 
 
 def ensure_workspace():
-    """Create the v2 canonical tree and seed defaults."""
+    """Create the v3 canonical tree and seed defaults."""
     root = workspace_root()
     if not root:
         return None

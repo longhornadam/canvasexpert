@@ -32,7 +32,7 @@ def test_catalog_has_the_four_batch_b_kinds_and_the_four_batch_c_kinds():
     assert set(PANEL_CATALOG) == {
         "whats-due", "upcoming-events", "sports-results", "bobcat-hour",
         "random-student", "random-student-no-repeats", "missing-work",
-        "birthdays-celebrations",
+        "birthdays-celebrations", "learning-objective",
     }
 
 

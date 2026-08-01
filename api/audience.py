@@ -51,6 +51,8 @@ CLASSROOM_FACING = frozenset({
     # Names, and per-student facts a school announces publicly.
     "student_name", "teacher_name",
     "birthday", "achievement", "missing_work", "staar_masters",
+    # A teacher-reviewed, student-free classroom objective.
+    "learning_objective",
 })
 
 # Facts that stay with the teacher. Of these, the Special Ed and 504

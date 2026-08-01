@@ -26,6 +26,7 @@ May be shown on a projector, wall display, or any student-visible surface.
 | School events | games, dances, assemblies, performances, spirit weeks, picture day, library hours, tutorial schedules, club schedules |
 | Names | student names, teacher names |
 | Per-student, publicly celebrated | birthdays, missing assignments, numeric scores **at or above 90%** (4+/5 and equivalent), positive achievements, STAAR Masters |
+| Reviewed course context | teacher-reviewed learning objectives |
 
 ## Teacher-facing only
 

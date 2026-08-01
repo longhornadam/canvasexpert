@@ -1,8 +1,9 @@
 """Durable, student-data-free Canvas course metadata projection.
 
-The catalog is a local read model for navigation and search. Canvas remains the
-authority for focused reads and every write. Only the explicit v1 allowlists in
-this module may enter the configured synced workspace.
+The catalog is a local read model for navigation, search, and reviewed classroom
+objective evidence. Canvas remains the authority for focused reads and every
+write. Only the explicit v3 allowlists in this module may enter the configured
+synced workspace.
 """
 
 from __future__ import annotations
@@ -28,11 +29,9 @@ from api.storage_support import quarantine_corrupt_file
 from api.webui import workspace
 
 
-CATALOG_VERSION = 2
-CATALOG_V1_VERSION = 1
+CATALOG_VERSION = 3
 CATALOG_STATES = {"current", "stale", "incomplete", "unavailable"}
-ROOT_KEYS = {"version", "course_id", "course_name", "updated_at", "assignments", "modules", "assignment_groups"}
-V1_ROOT_KEYS = ROOT_KEYS - {"assignment_groups"}
+ROOT_KEYS = {"version", "course_id", "course_name", "updated_at", "assignments", "modules", "assignment_groups", "pages"}
 SCOPE_KEYS = {"state", "last_success_at", "last_attempt_at", "error_code", "records"}
 ASSIGNMENT_KEYS = {
     "id", "name", "description_text", "points_possible", "due_at", "unlock_at", "lock_at",
@@ -48,10 +47,12 @@ RUBRIC_SETTINGS_KEYS = {
 MODULE_KEYS = {"id", "name", "position", "items"}
 MODULE_ITEM_KEYS = {"id", "type", "title", "position", "content_id"}
 ASSIGNMENT_GROUP_KEYS = {"id", "name", "position", "group_weight"}
+PAGE_KEYS = {"id", "title", "body_text", "published", "front_page", "updated_at"}
 
 MODULES_PATH = "/api/v1/courses/{course_id}/modules"
 MODULE_ITEMS_PATH = "/api/v1/courses/{course_id}/modules/{module_id}/items"
 ASSIGNMENT_GROUPS_PATH = "/api/v1/courses/{course_id}/assignment_groups"
+PAGES_PATH = "/api/v1/courses/{course_id}/pages"
 MODULE_ITEM_CONCURRENCY = 3
 
 CanvasGetAll = Callable[[str, dict], tuple[list | None, str | None]]
@@ -237,12 +238,30 @@ def _validate_assignment_groups(records) -> None:
             raise ValueError("assignment group weight is invalid")
 
 
+def _validate_pages(records) -> None:
+    if not isinstance(records, list):
+        raise ValueError("page records must be a list")
+    seen_ids: set[str] = set()
+    for page in records:
+        _require_exact_keys(page, PAGE_KEYS, "page")
+        page_id = page["id"]
+        if not isinstance(page_id, str) or not page_id or page_id in seen_ids:
+            raise ValueError("page stable id is invalid")
+        seen_ids.add(page_id)
+        if not all(isinstance(page[key], str) for key in ("title", "body_text", "updated_at")):
+            raise ValueError("page text or timestamp is invalid")
+        if not _valid_iso(page["updated_at"], allow_empty=True):
+            raise ValueError("page timestamp is invalid")
+        if not all(isinstance(page[key], bool) for key in ("published", "front_page")):
+            raise ValueError("page flags are invalid")
+
+
 def validate_catalog(document: dict) -> dict:
-    """Validate a strict v1 compatibility or canonical v2 document."""
-    if not isinstance(document, dict) or document.get("version") not in {CATALOG_V1_VERSION, CATALOG_VERSION}:
+    """Validate the canonical v3 document and every exact scope envelope."""
+    if not isinstance(document, dict) or document.get("version") != CATALOG_VERSION:
         raise ValueError("catalog version is invalid")
     version = document["version"]
-    _require_exact_keys(document, ROOT_KEYS if version == CATALOG_VERSION else V1_ROOT_KEYS, "catalog")
+    _require_exact_keys(document, ROOT_KEYS, "catalog")
     if not isinstance(document["course_id"], str) or not document["course_id"]:
         raise ValueError("catalog course id is invalid")
     if not isinstance(document["course_name"], str) or not _valid_iso(document["updated_at"]):
@@ -265,16 +284,19 @@ def validate_catalog(document: dict) -> dict:
                 _validate_assignment(record, assignment_id)
         else:
             _validate_modules(scope["records"])
-    if version == CATALOG_VERSION:
-        scope = document["assignment_groups"]
-        _require_exact_keys(scope, SCOPE_KEYS, "assignment groups scope")
+    for scope_name in ("assignment_groups", "pages"):
+        scope = document[scope_name]
+        _require_exact_keys(scope, SCOPE_KEYS, f"{scope_name} scope")
         if scope["state"] not in CATALOG_STATES:
-            raise ValueError("assignment groups state is invalid")
+            raise ValueError(f"{scope_name} state is invalid")
         if not _valid_iso(scope["last_success_at"], allow_empty=True) or not _valid_iso(scope["last_attempt_at"], allow_empty=True):
-            raise ValueError("assignment groups timestamps are invalid")
+            raise ValueError(f"{scope_name} timestamps are invalid")
         if not isinstance(scope["error_code"], str):
-            raise ValueError("assignment groups error code is invalid")
-        _validate_assignment_groups(scope["records"])
+            raise ValueError(f"{scope_name} error code is invalid")
+        if scope_name == "assignment_groups":
+            _validate_assignment_groups(scope["records"])
+        else:
+            _validate_pages(scope["records"])
     return document
 
 
@@ -386,6 +408,42 @@ def _normalized_items(rows) -> tuple[list[dict], bool]:
             dropped = True
     items.sort(key=lambda item: (item["position"], item["id"]))
     return items, dropped
+
+
+def _page_text(value) -> str:
+    raw = "" if value is None else str(value)
+    if any(ord(char) < 32 and char not in "\t\n\r" for char in raw):
+        raise ValueError("page text contains control characters")
+    parser = _DescriptionText()
+    try:
+        parser.feed(raw)
+        parser.close()
+    except (TypeError, ValueError) as error:
+        raise ValueError("page text cannot be normalized") from error
+    text = _normalize_text(" ".join(parser.parts))
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    return re.sub(r"\b(?:https?://|www\.)\S+", "[link]", text, flags=re.IGNORECASE)
+
+
+def normalize_page(row: dict) -> dict:
+    """Return the strict, URL-free, plain-text page allowlist."""
+    if not isinstance(row, dict) or not _id(row.get("id")):
+        raise ValueError("page row has no stable id")
+    if row.get("title") is not None and not isinstance(row.get("title"), str):
+        raise ValueError("page title cannot be normalized")
+    if row.get("body") is not None and not isinstance(row.get("body"), str):
+        raise ValueError("page body cannot be normalized")
+    title = _page_text(row.get("title"))
+    if not title:
+        raise ValueError("page title is empty")
+    return {
+        "id": _id(row.get("id")),
+        "title": title,
+        "body_text": _page_text(row.get("body")),
+        "published": row.get("published") is True,
+        "front_page": row.get("front_page") is True,
+        "updated_at": _timestamp(row.get("updated_at")),
+    }
 
 
 def _error_code(error) -> str:
@@ -583,6 +641,59 @@ def _acquire_assignment_groups(
     return _assignment_group_scope_from_receipt(rows, error, complete, attempted_at, previous_scope)
 
 
+def _page_scope_from_receipt(
+    rows,
+    error,
+    complete,
+    attempted_at: str,
+    previous_scope: dict | None,
+) -> dict:
+    failure = _top_level_failure(error, complete, rows, previous_scope, attempted_at, empty_records=[])
+    if failure is not None:
+        return failure
+    if not rows:
+        return {
+            "state": "current", "last_success_at": attempted_at, "last_attempt_at": attempted_at,
+            "error_code": "", "records": [],
+        }
+    records = []
+    seen_ids: set[str] = set()
+    invalid_membership = False
+    for row in rows:
+        try:
+            record = normalize_page(row)
+        except ValueError:
+            invalid_membership = True
+            continue
+        if record["id"] in seen_ids:
+            invalid_membership = True
+            continue
+        seen_ids.add(record["id"])
+        records.append(record)
+    records.sort(key=lambda page: (page["title"].casefold(), page["id"]))
+    if invalid_membership:
+        return _incomplete_membership(
+            previous_scope, attempted_at, "invalid_page_record",
+            valid_records=records, empty_records=[],
+        )
+    return {
+        "state": "current", "last_success_at": attempted_at, "last_attempt_at": attempted_at,
+        "error_code": "", "records": records,
+    }
+
+
+def _acquire_pages(
+    course_id: str,
+    canvas_get_all_complete: CanvasGetAllComplete,
+    attempted_at: str,
+    previous_scope: dict | None,
+) -> dict:
+    rows, error, complete = canvas_get_all_complete(
+        PAGES_PATH.format(course_id=course_id), {"per_page": 100, "include[]": "body"},
+    )
+    return _page_scope_from_receipt(rows, error, complete, attempted_at, previous_scope)
+
+
 def _module_previous_by_id(previous_scope: dict | None) -> dict[str, dict]:
     if not isinstance(previous_scope, dict) or not isinstance(previous_scope.get("records"), list):
         return {}
@@ -703,10 +814,8 @@ def _catalog_conflicts(course_id: str, root=None) -> list[Path]:
     # (which can itself fail past MAX_PATH). All catalog files share one dir, so
     # a basename check is sufficient and precise.
     excluded_names = {
-        os.path.basename(workspace.course_catalog_path(course_id, root) or ""),
-        os.path.basename(workspace.course_catalog_previous_path(course_id, root) or ""),
-        os.path.basename(workspace.course_catalog_v2_path(course_id, root) or ""),
-        os.path.basename(workspace.course_catalog_v2_previous_path(course_id, root) or ""),
+        os.path.basename(workspace.course_catalog_v3_path(course_id, root) or ""),
+        os.path.basename(workspace.course_catalog_v3_previous_path(course_id, root) or ""),
     }
     conflicts = [
         Path(os.path.join(directory_value, name))
@@ -737,27 +846,22 @@ def _read_valid(path: Path) -> dict | None:
 
 
 def read_catalog(course_id: str, *, root=None) -> dict:
-    """Read validated v2 then v1 compatibility documents without contacting Canvas."""
-    versions = (
-        (CATALOG_VERSION, workspace.course_catalog_v2_path, workspace.course_catalog_v2_previous_path),
-        (CATALOG_V1_VERSION, workspace.course_catalog_path, workspace.course_catalog_previous_path),
-    )
+    """Read the validated v3 canonical/previous pair without contacting Canvas."""
     warnings = ["competing_catalog_files"] if _catalog_conflicts(course_id, root) else []
-    if any(not path_fn(course_id, root) for _, *path_fns in versions for path_fn in path_fns):
+    if not workspace.course_catalog_v3_path(course_id, root) or not workspace.course_catalog_v3_previous_path(course_id, root):
         return {"catalog": None, "source": "none", "warnings": warnings + ["workspace_not_configured"]}
-    for version, canonical_fn, previous_fn in versions:
-        canonical_path = Path(canonical_fn(course_id, root))
-        previous_path = Path(previous_fn(course_id, root))
-        canonical = _read_valid(canonical_path)
-        if canonical is not None and canonical["course_id"] == str(course_id):
-            return {"catalog": canonical, "source": "canonical", "warnings": warnings}
-        if canonical is not None:
-            _quarantine(canonical_path)
-        previous = _read_valid(previous_path)
-        if previous is not None and previous["course_id"] == str(course_id):
-            return {"catalog": previous, "source": "previous", "warnings": warnings + ["using_previous_catalog"]}
-        if previous is not None:
-            _quarantine(previous_path)
+    canonical_path = Path(workspace.course_catalog_v3_path(course_id, root))
+    previous_path = Path(workspace.course_catalog_v3_previous_path(course_id, root))
+    canonical = _read_valid(canonical_path)
+    if canonical is not None and canonical["course_id"] == str(course_id):
+        return {"catalog": canonical, "source": "canonical", "warnings": warnings}
+    if canonical is not None:
+        _quarantine(canonical_path)
+    previous = _read_valid(previous_path)
+    if previous is not None and previous["course_id"] == str(course_id):
+        return {"catalog": previous, "source": "previous", "warnings": warnings + ["using_previous_catalog"]}
+    if previous is not None:
+        _quarantine(previous_path)
     return {"catalog": None, "source": "none", "warnings": warnings}
 
 
@@ -789,13 +893,13 @@ def _atomic_write(path: Path, document: dict) -> None:
 
 
 def write_catalog(document: dict, *, root=None) -> dict:
-    """Atomically replace v2 canonical while preserving its validated last-good value."""
+    """Atomically replace v3 canonical while preserving its validated last-good value."""
     validate_catalog(document)
     if document["version"] != CATALOG_VERSION:
-        raise ValueError("catalog_v2_required")
+        raise ValueError("catalog_v3_required")
     course_id = document["course_id"]
-    canonical_value = workspace.course_catalog_v2_path(course_id, root)
-    previous_value = workspace.course_catalog_v2_previous_path(course_id, root)
+    canonical_value = workspace.course_catalog_v3_path(course_id, root)
+    previous_value = workspace.course_catalog_v3_previous_path(course_id, root)
     if not canonical_value or not previous_value:
         raise ValueError("workspace_not_configured")
     canonical_path = Path(canonical_value)
@@ -810,7 +914,7 @@ def write_catalog(document: dict, *, root=None) -> dict:
     return {"catalog": copy.deepcopy(document), "warnings": ["competing_catalog_files"] if _catalog_conflicts(course_id, root) else []}
 
 
-INVALIDATABLE_SCOPES = {"assignments", "modules", "assignment_groups"}
+INVALIDATABLE_SCOPES = {"assignments", "modules", "assignment_groups", "pages"}
 
 
 def invalidate_scope(
@@ -823,7 +927,7 @@ def invalidate_scope(
     """Mark one catalog scope stale after a confirmed ledger-applied Canvas write.
 
     Mirrors ``mirror_store.invalidate_groups`` exactly: no-op (no write,
-    returns ``None``) when no v2 catalog document exists yet, never
+    returns ``None``) when no v3 catalog document exists yet, never
     fabricates a document, flips only the named scope's ``state`` to
     ``"stale"`` with ``error_code="invalidated"`` and a fresh
     ``last_attempt_at``, leaves every other scope and every record
@@ -861,7 +965,7 @@ def refresh_catalog(
     attempted_at: str | None = None,
     assignment_receipt: AssignmentCollectionReceipt | None = None,
 ) -> dict:
-    """Refresh both scopes, optionally using one already-acquired assignment receipt."""
+    """Refresh all v3 scopes, optionally using one already-acquired assignment receipt."""
     course_id = str(course_id or "").strip()
     if not course_id:
         raise ValueError("course_id_required")
@@ -871,13 +975,17 @@ def refresh_catalog(
         timestamp = attempted_at or _now()
         previous_assignments = previous.get("assignments") if isinstance(previous, dict) else None
         previous_modules = previous.get("modules") if isinstance(previous, dict) else None
-        previous_groups = previous.get("assignment_groups") if isinstance(previous, dict) and previous.get("version") == CATALOG_VERSION else None
-        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="course-catalog") as executor:
+        previous_groups = previous.get("assignment_groups") if isinstance(previous, dict) else None
+        previous_pages = previous.get("pages") if isinstance(previous, dict) else None
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="course-catalog") as executor:
             module_future = executor.submit(
                 _acquire_modules, course_id, canvas_get_all, canvas_get_all_complete, timestamp, previous_modules,
             )
             group_future = executor.submit(
                 _acquire_assignment_groups, course_id, canvas_get_all_complete, timestamp, previous_groups,
+            )
+            page_future = executor.submit(
+                _acquire_pages, course_id, canvas_get_all_complete, timestamp, previous_pages,
             )
             if assignment_receipt is None:
                 assignment_future = executor.submit(
@@ -891,6 +999,7 @@ def refresh_catalog(
                 )
             modules = module_future.result()
             assignment_groups = group_future.result()
+            pages = page_future.result()
         document = {
             "version": CATALOG_VERSION,
             "course_id": course_id,
@@ -899,6 +1008,7 @@ def refresh_catalog(
             "assignments": assignments,
             "modules": modules,
             "assignment_groups": assignment_groups,
+            "pages": pages,
         }
         validate_catalog(document)
         written = write_catalog(document, root=root)
@@ -921,9 +1031,9 @@ def refresh_catalog_assignments_only(
     are never live-fetched here: they pass through byte-identical to their
     previously-committed value, falling back to the same unavailable/empty-
     records stub this file already uses for a scope with no previous data
-    when there is no previous catalog at all (or no previous v2 groups
+    when there is no previous catalog at all (or no previous v3 groups/pages
     scope). The manual ``POST /api/course-catalog/refresh`` route continues
-    to use ``refresh_catalog`` for a full three-scope refresh.
+    to use ``refresh_catalog`` for a full four-scope refresh.
     """
     course_id = str(course_id or "").strip()
     if not course_id:
@@ -934,7 +1044,8 @@ def refresh_catalog_assignments_only(
         timestamp = attempted_at or _now()
         previous_assignments = previous.get("assignments") if isinstance(previous, dict) else None
         previous_modules = previous.get("modules") if isinstance(previous, dict) else None
-        previous_groups = previous.get("assignment_groups") if isinstance(previous, dict) and previous.get("version") == CATALOG_VERSION else None
+        previous_groups = previous.get("assignment_groups") if isinstance(previous, dict) else None
+        previous_pages = previous.get("pages") if isinstance(previous, dict) else None
 
         rows, error, complete = assignment_receipt
         assignments = _assignment_scope_from_receipt(
@@ -946,6 +1057,10 @@ def refresh_catalog_assignments_only(
         )
         assignment_groups = (
             copy.deepcopy(previous_groups) if previous_groups is not None
+            else _scope_failure(None, timestamp, "", empty_records=[])
+        )
+        pages = (
+            copy.deepcopy(previous_pages) if previous_pages is not None
             else _scope_failure(None, timestamp, "", empty_records=[])
         )
 
@@ -960,6 +1075,7 @@ def refresh_catalog_assignments_only(
             "assignments": assignments,
             "modules": modules,
             "assignment_groups": assignment_groups,
+            "pages": pages,
         }
         validate_catalog(document)
         written = write_catalog(document, root=root)
@@ -983,10 +1099,12 @@ def public_projection(read_result: dict, *, course_id: str) -> dict:
                 "assignments": {"state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": ""},
                 "modules": {"state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": ""},
                 "assignment_groups": {"state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": ""},
+                "pages": {"state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": ""},
             },
             "assignments": [],
             "modules": [],
             "assignment_groups": [],
+            "pages": [],
         }
     assignments = list(document["assignments"]["records"].values())
     assignments.sort(key=lambda row: row["due_at"] or "0000-00-00", reverse=True)
@@ -997,22 +1115,14 @@ def public_projection(read_result: dict, *, course_id: str) -> dict:
         module["quiz_ids"] = [item["content_id"] for item in module["items"] if item["type"].lower() == "quiz" and item["content_id"]]
         modules.append(module)
     assignment_groups = copy.deepcopy(document.get("assignment_groups", {}).get("records", []))
+    pages = copy.deepcopy(document["pages"]["records"])
     scope_status = {
         name: {key: document[name][key] for key in ("state", "last_success_at", "last_attempt_at", "error_code")}
-        for name in ("assignments", "modules")
+        for name in ("assignments", "modules", "assignment_groups", "pages")
     }
-    if document["version"] == CATALOG_VERSION:
-        scope_status["assignment_groups"] = {
-            key: document["assignment_groups"][key]
-            for key in ("state", "last_success_at", "last_attempt_at", "error_code")
-        }
-    else:
-        scope_status["assignment_groups"] = {
-            "state": "unavailable", "last_success_at": "", "last_attempt_at": "", "error_code": "",
-        }
     return {
         "ok": True,
-        "available": bool(assignments or modules or assignment_groups),
+        "available": bool(assignments or modules or assignment_groups or pages),
         "course_id": document["course_id"],
         "course_name": document["course_name"],
         "updated_at": document["updated_at"],
@@ -1022,4 +1132,5 @@ def public_projection(read_result: dict, *, course_id: str) -> dict:
         "assignments": assignments,
         "modules": modules,
         "assignment_groups": assignment_groups,
+        "pages": pages,
     }

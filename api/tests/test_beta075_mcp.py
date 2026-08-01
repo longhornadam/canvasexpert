@@ -18,7 +18,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 18
+    assert contract.TOOL_SCHEMA_VERSION == 19
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -35,6 +35,7 @@ def test_live_mcp_schema_matches_versioned_contract():
     # preview_school_calendar_replacement/apply_school_calendar_replacement pair
     # (revision-safe complete-year create/replace; v16 stays inert history).
     # v18 adds the revision-safe public-event preview/apply pair; v17 stays inert history.
+    # v19 adds the disk-only Course Catalog pages read and reviewed objective pair.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -68,7 +69,7 @@ def test_live_mcp_schema_matches_versioned_contract():
     v17 = contract.load_contract(17)
     assert v17["schema_version"] == 17
     assert len(v17["tools"]) == 25
-    assert len(live["tools"]) == 27
+    assert len(live["tools"]) == 30
     assert all("canvas" not in tool["name"].lower() for tool in live["tools"])
 
 

@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 18.
+Tool schema version 19.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -37,6 +37,9 @@ Tool schema version 18.
 | `list_sections(course_id)` | Section names from the local mirror roster; how to find the exact `section_name` `get_seating_context` requires | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
+| `get_course_pages(course_id, full_text=false)` | Published normalized pages from the Current course's local v3 catalog; body text is bounded unless explicitly requested | No |
+| `preview_learning_objective(course_id, objective, effective_start, effective_end, source_refs)` | Exact reviewed preview grounded in current local module, assignment, or page records | No |
+| `apply_learning_objective(course_id, preview, preview_digest, expected_revision)` | Applies only the exact reviewed preview after catalog/source/revision checks | No |
 | `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/`, or SmartDeck (`deck`) with no staging/review appendix (unlike other Forge kinds) | No |
 | `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
@@ -122,7 +125,8 @@ retry the same read once it reports `"synced"`.
 Student-data tools (`get_roster`, `get_submissions`, `get_gradebook_snapshot`, and
 `get_seating_context`) are scoped to Current courses (`config.active_courses()`). The
 catalog reads (`list_sections`, `get_course_assignments`, and `get_modules`) and
-`refresh_mirror` accept any saved course, including Previous courses. `get_seating_context`
+`refresh_mirror` accept any saved course, including Previous courses. `get_course_pages` and
+the Learning Objective preview/apply pair require a Current course. `get_seating_context`
 requires exactly one matching mirror section name and withholds all student data when the
 name is absent or ambiguous. Pseudonymized
 artifacts are scrubbed, not anonymous or guaranteed FERPA-safe; teachers review them before

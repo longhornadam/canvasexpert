@@ -38,7 +38,7 @@ def _catalog_reader(course_id):
     scope = {"state": "current", "last_success_at": STAMP,
              "last_attempt_at": STAMP, "error_code": ""}
     return {"catalog": {
-        "version": 2, "course_id": course_id, "course_name": "Synthetic course",
+        "version": 3, "course_id": course_id, "course_name": "Synthetic course",
         "assignments": {**scope, "records": {"assignment-1": {
             "id": "assignment-1", "name": "Practice", "description_text": "",
         }}},

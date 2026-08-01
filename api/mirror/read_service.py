@@ -30,6 +30,7 @@ PRIVATE_SUBMISSION_COMMENTS = "private.submission_comments"
 CATALOG_ASSIGNMENTS = "catalog.assignments"
 CATALOG_MODULES = "catalog.modules"
 CATALOG_ASSIGNMENT_GROUPS = "catalog.assignment_groups"
+CATALOG_PAGES = "catalog.pages"
 
 _LOCAL_INTENTS = {LOCAL_DISPLAY, OFFLINE}
 
@@ -244,6 +245,13 @@ def catalog_assignment_groups(course_id, *, catalog_reader=None, root=None, max_
                           max_age_hours=max_age_hours, now=now)
 
 
+def catalog_pages(course_id, *, catalog_reader=None, root=None, max_age_hours=None, now=None) -> dict:
+    """Typed disk-only published-page projection from the v3 Catalog."""
+    return _catalog_scope(course_id, CATALOG_PAGES, "pages",
+                          catalog_reader=catalog_reader, root=root,
+                          max_age_hours=max_age_hours, now=now)
+
+
 def read(scope: str, course_id, *, intent: str = LOCAL_DISPLAY, root=None,
          max_age_hours=None, now=None, catalog_reader=None) -> dict:
     """Read one typed local scope; unsupported intents never fall through to Canvas."""
@@ -262,6 +270,7 @@ def read(scope: str, course_id, *, intent: str = LOCAL_DISPLAY, root=None,
         CATALOG_ASSIGNMENTS: catalog_assignments,
         CATALOG_MODULES: catalog_modules,
         CATALOG_ASSIGNMENT_GROUPS: catalog_assignment_groups,
+        CATALOG_PAGES: catalog_pages,
     }
     if scope in catalog_readers:
         return catalog_readers[scope](course_id, catalog_reader=catalog_reader,

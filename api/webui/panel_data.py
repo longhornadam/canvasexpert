@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 import hashlib
 import json
 
-from api import audience
+from api import audience, learning_objectives
 from api.mirror import read_service
 from api.course_catalog import read_catalog
 from api.webui import config, deps, school_calendar
@@ -422,6 +422,66 @@ def whats_due_payload(course_id: str, days: int, *, now=None,
             "synced_at": scope.get("last_success_at", ""),
             "stale": scope.get("state") != "current", "assignments": items,
             "message": "" if items else f"Nothing due in the next {days} days."}
+
+
+def learning_objective_payload(course_id: str, *, now=None, catalog_reader=None,
+                               document_reader=None) -> dict:
+    """Render one reviewed objective from disk and current local evidence."""
+    if not course_id:
+        return {"ok": True, "state": "no_course", "objective": "",
+                "message": "Choose a course for this panel."}
+    reader = document_reader or learning_objectives.read_document
+    try:
+        document = reader()
+        learning_objectives.validate_document(document)
+    except Exception:
+        return {"ok": True, "state": "catalog_needs_attention", "objective": "",
+                "message": "Learning Objectives needs attention. Repair the local document in Canvas Expert."}
+    entries = (document.get("objectives", {}).get(str(course_id), [])
+               if isinstance(document, dict) else [])
+    if not isinstance(entries, list):
+        return {"ok": True, "state": "catalog_needs_attention", "objective": "",
+                "message": "Catalog needs attention. Refresh it in Canvas Expert."}
+    today = _local_date(now).isoformat()
+    covering = [entry for entry in entries
+                if isinstance(entry, dict)
+                and str(entry.get("effective_start")) <= today <= str(entry.get("effective_end"))]
+    if not covering:
+        expired = any(isinstance(entry, dict) and str(entry.get("effective_end")) < today
+                      for entry in entries)
+        state = "expired" if expired else "no_objective"
+        message = ("This learning objective has expired." if expired else
+                   "No learning objective is scheduled for today.")
+        return {"ok": True, "state": state, "objective": "", "message": message}
+    if len(covering) != 1:
+        return {"ok": True, "state": "catalog_needs_attention", "objective": "",
+                "message": "Catalog needs attention. Refresh it in Canvas Expert."}
+    reader = catalog_reader or (lambda cid: read_catalog(cid))
+    try:
+        read_result = reader(course_id)
+        catalog = read_result.get("catalog") if isinstance(read_result, dict) else None
+        if not isinstance(catalog, dict) or catalog.get("version") != 3:
+            return {"ok": True, "state": "catalog_needs_attention", "objective": "",
+                    "message": "Catalog needs attention. Refresh it in Canvas Expert."}
+        entry = learning_objectives.normalize_entry(covering[0])
+        if learning_objectives.source_digest(catalog, entry["source_refs"]) != entry["source_digest"]:
+            raise ValueError("source changed")
+    except Exception:
+        return {"ok": True, "state": "changed_source", "objective": "",
+                "message": "Objective needs review."}
+    fact = audience.tag({"kind": "learning_objective", "text": entry["objective"]})
+    safe = audience.classroom_only([fact])
+    if not safe:
+        return {"ok": True, "state": "catalog_needs_attention", "objective": "",
+                "message": "Catalog needs attention. Refresh it in Canvas Expert."}
+    return {
+        "ok": True,
+        "state": "ready",
+        "objective": safe[0]["text"],
+        "kind": safe[0]["kind"],
+        "course_name": str(catalog.get("course_name") or ""),
+        "message": "",
+    }
 
 
 # ---------------------------------------------------------------------------

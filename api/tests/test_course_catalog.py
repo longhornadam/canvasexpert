@@ -70,6 +70,8 @@ def _canvas_success(path, params):
         return [_assignment()], None
     if path.endswith("/modules"):
         return [_module()], None
+    if path.endswith("/pages"):
+        return [], None
     raise AssertionError(f"unexpected Canvas call: {path}")
 
 
@@ -80,6 +82,9 @@ def _canvas_success_complete(path, params):
         return [_module()], None, True
     if path.endswith("/assignment_groups"):
         return [_assignment_group()], None, True
+    if path.endswith("/pages"):
+        assert params == {"include[]": "body", "per_page": 100}
+        return [], None, True
     raise AssertionError(f"unexpected Canvas call: {path}")
 
 
@@ -87,6 +92,8 @@ def _with_assignment_groups(callback):
     def wrapped(path, params):
         if path.endswith("/assignment_groups"):
             return [_assignment_group()], None, True
+        if path.endswith("/pages"):
+            return [], None, True
         return callback(path, params)
     return wrapped
 
@@ -136,7 +143,7 @@ def test_refresh_succeeds_for_both_scopes_and_persists_projection(tmp_path):
     assert stored["catalog"] == document
 
 
-def test_v2_assignment_groups_are_sorted_strict_and_public(tmp_path):
+def test_v3_assignment_groups_are_sorted_strict_and_public(tmp_path):
     groups = [
         _assignment_group("20", name="  Later  ", position=2, group_weight=75, html_url="drop"),
         _assignment_group("10", name=" Earlier ", position=1, group_weight=25, rules={"drop": True}),
@@ -153,7 +160,7 @@ def test_v2_assignment_groups_are_sorted_strict_and_public(tmp_path):
         canvas_get_all_complete=complete, root=str(tmp_path), attempted_at=STAMP_1,
     )
     document = result["catalog"]
-    assert document["version"] == 2
+    assert document["version"] == 3
     assert document["assignment_groups"] == {
         "state": "current", "last_success_at": STAMP_1, "last_attempt_at": STAMP_1,
         "error_code": "", "records": [
@@ -197,7 +204,7 @@ def test_assignment_group_membership_requires_complete_valid_collection(tmp_path
         assert result["records"] == first["assignment_groups"]["records"]
 
 
-def test_read_catalog_uses_v2_previous_then_v1_without_rewriting_v1(tmp_path):
+def test_read_catalog_uses_v3_previous_and_rejects_older_documents(tmp_path):
     document = course_catalog.refresh_catalog(
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
         canvas_get_all_complete=_canvas_success_complete, root=str(tmp_path), attempted_at=STAMP_1,
@@ -207,22 +214,20 @@ def test_read_catalog_uses_v2_previous_then_v1_without_rewriting_v1(tmp_path):
         "course-1", "Fictional Course", canvas_get_all=_canvas_success,
         canvas_get_all_complete=_canvas_success_complete, root=str(tmp_path), attempted_at=STAMP_2,
     )
-    (directory / "catalog.v2.json").write_text("{broken", encoding="utf-8")
+    (directory / "catalog.v3.json").write_text("{broken", encoding="utf-8")
     recovered = course_catalog.read_catalog("course-1", root=str(tmp_path))
     assert recovered["source"] == "previous"
     assert recovered["catalog"] == document
 
-    (directory / "catalog.v2.previous.json").unlink()
-    v1_document = dict(document)
-    v1_document.pop("assignment_groups")
-    v1_document["version"] = 1
-    v1_path = directory / "catalog.v1.json"
-    v1_path.write_text(json.dumps(v1_document), encoding="utf-8")
+    (directory / "catalog.v3.previous.json").unlink()
+    old_document = dict(document)
+    old_document["version"] = 2
+    old_path = directory / "catalog.legacy.json"
+    old_path.write_text(json.dumps(old_document), encoding="utf-8")
     fallback = course_catalog.read_catalog("course-1", root=str(tmp_path))
-    assert fallback["source"] == "canonical"
-    assert fallback["catalog"] == v1_document
-    assert not (directory / "catalog.v2.json").exists()
-    assert v1_path.read_text(encoding="utf-8") == json.dumps(v1_document)
+    assert fallback["source"] == "none"
+    assert fallback["catalog"] is None
+    assert old_path.read_text(encoding="utf-8") == json.dumps(old_document)
     projection = course_catalog.public_projection(fallback, course_id="course-1")
     assert projection["scopes"]["assignment_groups"]["state"] == "unavailable"
     assert projection["assignment_groups"] == []
@@ -481,7 +486,7 @@ def test_proven_empty_scope_replaces_last_good_records(tmp_path, assignments, mo
         ]},
     ])
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    assert json.loads((directory / "catalog.v2.previous.json").read_text(encoding="utf-8")) == first
+    assert json.loads((directory / "catalog.v3.previous.json").read_text(encoding="utf-8")) == first
     assert course_catalog.public_projection(result, course_id="course-1")["available"] is available
 
 
@@ -667,8 +672,8 @@ def test_atomic_update_preserves_previous_and_leaves_no_temp_files(tmp_path):
         root=str(tmp_path), attempted_at=STAMP_2,
     )["catalog"]
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    assert json.loads((directory / "catalog.v2.previous.json").read_text(encoding="utf-8")) == first
-    assert json.loads((directory / "catalog.v2.json").read_text(encoding="utf-8")) == second
+    assert json.loads((directory / "catalog.v3.previous.json").read_text(encoding="utf-8")) == first
+    assert json.loads((directory / "catalog.v3.json").read_text(encoding="utf-8")) == second
     assert not list(directory.glob("*.tmp"))
 
 
@@ -684,27 +689,27 @@ def test_corrupt_canonical_falls_back_to_previous_and_quarantines_bad_file(tmp_p
         root=str(tmp_path), attempted_at=STAMP_2,
     )
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    (directory / "catalog.v2.json").write_text("{broken", encoding="utf-8")
+    (directory / "catalog.v3.json").write_text("{broken", encoding="utf-8")
 
     result = course_catalog.read_catalog("course-1", root=str(tmp_path))
 
     assert result["source"] == "previous"
     assert result["catalog"]["updated_at"] == STAMP_1
     assert "using_previous_catalog" in result["warnings"]
-    assert not (directory / "catalog.v2.json").exists()
-    assert len(list((directory / "quarantine").glob("catalog.v2.json.*.corrupt"))) == 1
+    assert not (directory / "catalog.v3.json").exists()
+    assert len(list((directory / "quarantine").glob("catalog.v3.json.*.corrupt"))) == 1
 
 
 def test_corrupt_previous_without_canonical_is_unavailable(tmp_path):
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
     directory.mkdir(parents=True)
-    (directory / "catalog.v1.previous.json").write_text("not-json", encoding="utf-8")
+    (directory / "catalog.legacy.previous.json").write_text("not-json", encoding="utf-8")
 
     result = course_catalog.read_catalog("course-1", root=str(tmp_path))
 
     assert result == {"catalog": None, "source": "none", "warnings": []}
-    assert not (directory / "catalog.v1.previous.json").exists()
-    assert len(list((directory / "quarantine").glob("catalog.v1.previous.json.*.corrupt"))) == 1
+    assert (directory / "catalog.legacy.previous.json").exists()
+    assert len(list((directory / "quarantine").glob("catalog.legacy.previous.json.*.corrupt"))) == 0
 
 
 def test_onedrive_conflict_warns_but_is_never_modified_or_deleted(tmp_path):
@@ -714,7 +719,7 @@ def test_onedrive_conflict_warns_but_is_never_modified_or_deleted(tmp_path):
         root=str(tmp_path), attempted_at=STAMP_1,
     )
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    conflict = directory / "catalog.v1-LAPTOP.json"
+    conflict = directory / "catalog.v3-LAPTOP.json"
     conflict.write_text('{"leave": "untouched"}', encoding="utf-8")
 
     read_result = course_catalog.read_catalog("course-1", root=str(tmp_path))
@@ -937,6 +942,6 @@ def test_invalidate_scope_is_atomic_and_preserves_previous(tmp_path):
     )
 
     directory = Path(tmp_path) / "_System" / "Canvas Catalog" / "course-1"
-    assert json.loads((directory / "catalog.v2.previous.json").read_text(encoding="utf-8")) == first
-    assert json.loads((directory / "catalog.v2.json").read_text(encoding="utf-8")) == second
+    assert json.loads((directory / "catalog.v3.previous.json").read_text(encoding="utf-8")) == first
+    assert json.loads((directory / "catalog.v3.json").read_text(encoding="utf-8")) == second
     assert not list(directory.glob("*.tmp"))

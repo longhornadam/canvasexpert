@@ -97,6 +97,12 @@ PANEL_CATALOG = {
         "default_days": panel_data_service.DEFAULT_BIRTHDAY_DAYS,
         "max_days": panel_data_service.MAX_BIRTHDAY_DAYS,
     },
+    "learning-objective": {
+        "title": "Learning objective",
+        "blurb": "Today's reviewed objective from the current course.",
+        "template": "panel_learning_objective.html",
+        "needs_course": True,
+    },
 }
 
 DEFAULT_THEME = "ce"
@@ -351,6 +357,21 @@ def panel_data(kind: str, block: str = "", days: int | None = None):
         payload["relation"] = scope["relation"]
         payload["block"] = scope["block"]
         payload["next_change"] = scope["next_change"]
+        return JSONResponse(payload)
+    if kind == "learning-objective":
+        scope = resolve_panel_course(block)
+        if scope["state"]:
+            return JSONResponse({
+                "ok": True, "state": scope["state"], "objective": "",
+                "message": scope["message"], "block": scope["block"],
+                "relation": "", "next_change": "",
+            })
+        payload = panel_data_service.learning_objective_payload(scope["course_id"])
+        payload["relation"] = scope["relation"]
+        payload["block"] = scope["block"]
+        payload["next_change"] = scope["next_change"]
+        if not payload.get("course_name"):
+            payload["course_name"] = scope["block"]
         return JSONResponse(payload)
     if kind == "upcoming-events":
         return JSONResponse(panel_data_service.upcoming_events_payload(

@@ -1,6 +1,7 @@
 """Canvas MCP server for CanvasExpert.
 
-Exposes 13 tools (list_courses, list_sections, get_course_assignments,
+Exposes the current read/authoring tool set (including list_courses, list_sections,
+get_course_assignments,
 get_modules, get_roster, get_seating_context, get_submissions,
 get_writing_history, get_gradebook_snapshot, get_authoring_contract,
 get_product_guide, list_staged_content, refresh_mirror) over stdio so any

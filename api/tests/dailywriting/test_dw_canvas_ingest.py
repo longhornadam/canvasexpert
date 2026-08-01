@@ -77,6 +77,7 @@ def _write_catalog(root, *, description="Write one paragraph.", due_at="2026-09-
         "assignments": scope({assignment_id: assignment}),
         "modules": scope([]),
         "assignment_groups": scope([]),
+        "pages": scope([]),
     }
     course_catalog.write_catalog(document, root=root)
     return assignment

@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 27 MCP tools.
+"""Plain, testable implementations of the 30 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -35,7 +35,7 @@ import os
 from contextlib import contextmanager
 from datetime import date, timedelta
 
-from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, roster_context, roster_service
+from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, roster_context, roster_service
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
@@ -104,6 +104,7 @@ _GRADEBOOK_STUDENT_COLUMNS = ("pseudonym", "missing", "late", "ungraded", "pct")
 _MODULE_COLUMNS = ("id", "name", "position", "item_count")
 _MODULE_COLUMNS_WITH_PUBLISHED = ("id", "name", "position", "published", "item_count")
 _MODULE_ITEM_COLUMNS = ("id", "type", "title", "position")
+_PAGE_COLUMNS = ("id", "title", "body_text", "published", "front_page", "updated_at")
 _STAGED_CONTENT_COLUMNS = ("kind", "label")
 
 
@@ -463,6 +464,92 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
         "state": scope["state"],
         "modules_state_detail": modules_state_detail,
     }
+
+
+def get_course_pages(course_id: str, full_text: bool = False) -> dict:
+    """Published page projection from the local v3 Catalog for the Current course.
+
+    The refresh route is the only Canvas acquisition path. This read never
+    refreshes, falls back to Canvas, or exposes the workspace path.
+    """
+    gate_error = _course_gate_check(course_id)
+    if gate_error:
+        return {"ok": False, "error": gate_error}
+    read_result = read_catalog(course_id)
+    scope = read_service.catalog_pages(
+        course_id, catalog_reader=lambda _course_id: read_result,
+    )
+    if scope["source"] == "none":
+        return {
+            "ok": False,
+            "error": ("No local course catalog found for this course. Refresh "
+                      "the catalog from the CanvasExpert web UI, then try again."),
+        }
+    body_chars = 0 if full_text else _DESCRIPTION_PREVIEW_CHARS
+    pages = [{
+        "id": page.get("id"),
+        "title": page.get("title", ""),
+        "body_text": _truncate_text(page.get("body_text", ""), body_chars),
+        "published": page.get("published") is True,
+        "front_page": page.get("front_page") is True,
+        "updated_at": page.get("updated_at", ""),
+    } for page in scope["records"] if page.get("published") is True]
+    return {
+        "ok": True,
+        "course_id": str((read_result.get("catalog") or {}).get("course_id") or course_id),
+        "course_name": str((read_result.get("catalog") or {}).get("course_name") or ""),
+        "pages": _tabulate(pages, _PAGE_COLUMNS),
+        "source": scope["source"],
+        "synced_at": scope["last_success_at"],
+        "state": scope["state"],
+    }
+
+
+def preview_learning_objective(course_id: str, objective: str,
+                               effective_start: str, effective_end: str,
+                               source_refs: list) -> dict:
+    """Build the exact reviewed objective preview; never writes or calls Canvas."""
+    gate_error = _course_gate_check(course_id)
+    if gate_error:
+        return {"ok": False, "error": gate_error}
+    try:
+        read_result = read_catalog(course_id)
+        catalog = read_result.get("catalog") if isinstance(read_result, dict) else None
+        if not isinstance(catalog, dict):
+            raise ValueError("No local course catalog found for this course. Refresh the catalog first.")
+        document = learning_objectives.read_document()
+        result = learning_objectives.build_preview(
+            course_id=str(course_id), catalog=catalog, document=document,
+            objective=objective, effective_start=effective_start,
+            effective_end=effective_end, source_refs=source_refs,
+        )
+        return {"ok": True, **result}
+    except (OSError, TypeError, ValueError) as error:
+        return {"ok": False, "error": str(error)}
+
+
+def apply_learning_objective(course_id: str, preview: dict,
+                             preview_digest: str, expected_revision: int) -> dict:
+    """Apply only the exact current preview after all concurrency checks."""
+    gate_error = _course_gate_check(course_id)
+    if gate_error:
+        return {"ok": False, "error": gate_error}
+    try:
+        read_result = read_catalog(course_id)
+        catalog = read_result.get("catalog") if isinstance(read_result, dict) else None
+        if not isinstance(catalog, dict):
+            raise ValueError("No local course catalog found for this course. Refresh the catalog first.")
+        document = learning_objectives.read_document()
+        written = learning_objectives.apply_preview(
+            course_id=str(course_id), preview=preview,
+            preview_digest_value=preview_digest,
+            expected_revision=expected_revision, catalog=catalog,
+            document=document,
+        )
+        return {"ok": True, "revision": written["revision"],
+                "course_id": str(course_id)}
+    except (OSError, TypeError, ValueError) as error:
+        return {"ok": False, "error": str(error)}
 
 
 _CONTRACT_FILES = {

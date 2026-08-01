@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Twenty-five thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Thirty thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -87,6 +87,30 @@ def get_modules(course_id: str, include_items: bool = False) -> str:
     (id, name, position, published, item_count). include_items=true adds each
     module's items (id, type, title, position). No student data."""
     return _compact(tools.get_modules(course_id, include_items))
+
+
+@mcp.tool()
+def get_course_pages(course_id: str, full_text: bool = False) -> str:
+    """Published pages from the local v3 catalog as a bounded {columns, rows}
+    table; full_text=true requests the complete normalized body. Current course only."""
+    return _compact(tools.get_course_pages(course_id, full_text))
+
+
+@mcp.tool()
+def preview_learning_objective(course_id: str, objective: str,
+                               effective_start: str, effective_end: str,
+                               source_refs: list) -> str:
+    """Preview one objective grounded in current local module, assignment, or page evidence."""
+    return _compact(tools.preview_learning_objective(
+        course_id, objective, effective_start, effective_end, source_refs))
+
+
+@mcp.tool()
+def apply_learning_objective(course_id: str, preview: dict,
+                             preview_digest: str, expected_revision: int) -> str:
+    """Apply an exact reviewed objective preview after revision and source checks."""
+    return _compact(tools.apply_learning_objective(
+        course_id, preview, preview_digest, expected_revision))
 
 
 @mcp.tool()
