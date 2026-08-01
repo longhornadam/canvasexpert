@@ -1612,6 +1612,7 @@ def test_server_registers_the_expected_tool_set():
         "get_school_calendar",
         "preview_school_calendar_replacement", "apply_school_calendar_replacement",
         "preview_school_calendar_change", "apply_school_calendar_change",
+        "preview_school_calendar_event_change", "apply_school_calendar_event_change",
         "list_active_decks", "archive_deck",
     }
 
@@ -1850,4 +1851,20 @@ def test_server_registers_apply_school_calendar_change_wrapper(monkeypatch):
         "ok": True, "revision": expected_revision + 1,
     })
     wire = server.apply_school_calendar_change({"base_revision": 1}, 1)
+    assert json.loads(wire) == {"ok": True, "revision": 2}
+
+
+def test_server_registers_event_calendar_wrappers(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "preview_school_calendar_event_change", lambda *args: {
+        "ok": True, "operation": "event_change", "base_revision": 1,
+        "before": None, "after": {"id": "game-1"},
+    })
+    wire = server.preview_school_calendar_event_change("upsert", {"id": "game-1"})
+    assert json.loads(wire)["operation"] == "event_change"
+    monkeypatch.setattr(tools, "apply_school_calendar_event_change", lambda preview, expected_revision: {
+        "ok": True, "revision": expected_revision + 1,
+    })
+    wire = server.apply_school_calendar_event_change({"base_revision": 1}, 1)
     assert json.loads(wire) == {"ok": True, "revision": 2}

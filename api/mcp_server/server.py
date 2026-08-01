@@ -288,6 +288,23 @@ def apply_school_calendar_change(preview: dict, expected_revision: int) -> str:
 
 
 @mcp.tool()
+def preview_school_calendar_event_change(action: str, event: dict = None,
+                                         event_id: str = "") -> str:
+    """Preview one structured public Calendar event upsert or delete.
+    Summarize its before/after values and get teacher confirmation before
+    applying. No course ID or student data."""
+    return _compact(tools.preview_school_calendar_event_change(action, event, event_id))
+
+
+@mcp.tool()
+def apply_school_calendar_event_change(preview: dict, expected_revision: int) -> str:
+    """Apply a preview returned by preview_school_calendar_event_change.
+    Stale revisions, altered digests, or altered projections are refused.
+    No course ID or student data."""
+    return _compact(tools.apply_school_calendar_event_change(preview, expected_revision))
+
+
+@mcp.tool()
 def list_active_decks() -> str:
     """All active SmartDecks in the workspace as a list with {deck_id, date,
     title, revision, path}. No student data."""

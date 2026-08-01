@@ -82,7 +82,8 @@ It is a closed, versioned JSON document:
       "date": "2026-10-22",
       "detail": "6:30 PM",
       "from": "18:30",
-      "to": "20:00"
+      "to": "20:00",
+      "result": ""
     }
   ]
 }
@@ -127,9 +128,11 @@ consumer must never choose one by list order.
 Public event kinds remain the closed classroom-safe set: `game`, `dance`, `assembly`,
 `performance`, `spirit`, `tutorial`, `club`, `library`, and `other`. Event IDs are unique and
 stable. An event has exactly one shape: one `date`, an inclusive `start`/`end` span, or a
-`weekdays` recurrence with an optional effective range. Events can inform a display but never
-silently change a day's kind or schedule. A pep-rally event and a pep-rally Bell Schedule are
-two explicit facts.
+`weekdays` recurrence with an optional effective range. Shared optional fields are `detail`,
+`from`, and `to`. Only `game` events may carry an optional plain-text `result` of at most 160
+characters; an empty result is allowed. Events can inform a display but never silently change
+a day's kind or schedule. A pep-rally event and a pep-rally Bell Schedule are two explicit
+facts.
 
 ## 4. Resolution and failure semantics
 
@@ -187,6 +190,14 @@ after values, conflicts, and validation problems. Apply requires that `expected_
 stale preview is refused. A no-op is successful without incrementing the revision. The UI shows
 the preview before Apply. MCP exposes separate read, preview, and apply tools, and its authoring
 contract instructs the assistant to summarize the preview before applying it.
+
+Public events use the same preview/apply boundary. An event change is either an `upsert` of one
+complete event by its stable `id`, or a `delete` by `event_id`. Its preview returns
+`operation: "event_change"`, the base revision, normalized mutation, before/after event values,
+conflicts, and a deterministic `preview_digest`. Apply requires the expected revision and exact
+digest, re-derives the candidate `events` array from the normalized mutation, validates the
+complete next document, and refuses altered before/after projections. Replacing an equivalent
+event or deleting a missing event is a no-op and does not increment revision.
 
 Apply never trusts client-supplied `before`, `after`, or affected-date projections as write
 authority. It re-derives and validates the proposed result from the normalized mutation carried

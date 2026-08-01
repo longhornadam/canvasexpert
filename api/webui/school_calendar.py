@@ -49,7 +49,7 @@ _DAY_KEYS = {"kind", "schedule_id", "label"}
 _GRADING_PERIOD_KEYS = {"code", "name", "start", "end", "report_issue_date"}
 _EVENT_KEYS = {"id", "kind", "label", "shape", "date", "start", "end",
                "weekdays", "effective_start", "effective_end", "detail",
-               "from", "to"}
+               "from", "to", "result"}
 
 
 # ----------------------------------------------------------------------------
@@ -211,6 +211,13 @@ def _validate_events(events) -> list[str]:
         kind = event.get("kind")
         if kind not in EVENT_KINDS:
             problems.append(f"{tag}: kind must be one of {sorted(EVENT_KINDS)}")
+        if "result" in event:
+            if kind != "game":
+                problems.append(f"{tag}: result is only valid for game events")
+            elif not isinstance(event["result"], str):
+                problems.append(f"{tag}: result must be a string")
+            elif len(event["result"]) > 160:
+                problems.append(f"{tag}: result must be 160 characters or fewer")
         label = event.get("label")
         if not isinstance(label, str) or not label.strip():
             problems.append(f"{tag}: label must be a non-empty string")
@@ -218,6 +225,16 @@ def _validate_events(events) -> list[str]:
         if shape not in EVENT_SHAPES:
             problems.append(f"{tag}: shape must be one of {sorted(EVENT_SHAPES)}")
             continue
+        shape_keys = {
+            "date": {"date"},
+            "span": {"start", "end"},
+            "weekdays": {"weekdays", "effective_start", "effective_end"},
+        }[shape]
+        shape_fields = {"date", "start", "end", "weekdays", "effective_start", "effective_end"}
+        unexpected_shape_fields = (set(event) & shape_fields) - shape_keys
+        if unexpected_shape_fields:
+            problems.append(f"{tag}: shape '{shape}' cannot include "
+                            f"{', '.join(sorted(unexpected_shape_fields))}")
         if shape == "date":
             if not _parse_date(event.get("date")):
                 problems.append(f"{tag}: date must be an exact ISO date")
@@ -1052,6 +1069,134 @@ def apply_change(preview: dict, *, expected_revision: int, root=None) -> tuple[d
         next_days[date_key] = dict(entry)
 
     next_doc = {**doc, "days": next_days, "revision": doc["revision"] + 1}
+    parsed, problems = parse_document(next_doc)
+    if problems:
+        return None, problems
+    return _write_document(parsed, root)
+
+
+# ----------------------------------------------------------------------------
+# Public event mutation (preview/apply)
+# ----------------------------------------------------------------------------
+
+def _normalize_event(event) -> tuple[dict | None, list[str]]:
+    """Validate one public event and return its stable JSON shape."""
+    problems = _validate_events([event])
+    if problems:
+        return None, problems
+    normalized = {key: event[key] for key in _EVENT_KEYS if key in event}
+    if normalized.get("shape") == "weekdays":
+        normalized["weekdays"] = sorted(set(normalized["weekdays"]))
+    return normalized, []
+
+
+def _normalize_event_mutation(*, action, event=None, event_id=None) -> tuple[dict | None, list[str]]:
+    """Normalize the small event mutation grammar shared by UI and MCP."""
+    if action not in ("upsert", "delete"):
+        return None, ["action must be 'upsert' or 'delete'"]
+    if action == "upsert":
+        if event_id not in (None, ""):
+            return None, ["event_id is only used for delete; use event.id for upsert"]
+        normalized, problems = _normalize_event(event)
+        if problems:
+            return None, problems
+        return {"action": "upsert", "event": normalized}, []
+    if event is not None:
+        return None, ["delete does not accept an event object"]
+    if not isinstance(event_id, str) or not event_id.strip():
+        return None, ["delete requires a non-empty event_id"]
+    return {"action": "delete", "event_id": event_id}, []
+
+
+def _event_after_mutation(events: list, mutation: dict) -> tuple[dict | None, list]:
+    """Return the event list after applying a normalized mutation in memory."""
+    next_events = [dict(event) for event in events]
+    if mutation["action"] == "delete":
+        next_events = [event for event in next_events if event.get("id") != mutation["event_id"]]
+        return next_events, []
+
+    replacement = mutation["event"]
+    found = False
+    for index, event in enumerate(next_events):
+        if event.get("id") == replacement["id"]:
+            next_events[index] = dict(replacement)
+            found = True
+            break
+    if not found:
+        next_events.append(dict(replacement))
+    return next_events, []
+
+
+def preview_event_change(*, action, event=None, event_id=None, root=None) -> tuple[dict | None, list[str]]:
+    """Preview an upsert or delete in the canonical public ``events`` array.
+
+    The before/after values are display projections. Apply verifies them again
+    against the current document, while deriving its write from ``mutation``.
+    """
+    mutation, problems = _normalize_event_mutation(
+        action=action, event=event, event_id=event_id)
+    if problems:
+        return None, problems
+    doc, read_problems = read(root)
+    if doc is None:
+        return None, read_problems
+
+    target_id = mutation.get("event_id") or mutation["event"].get("id")
+    before = next((dict(item) for item in doc["events"] if item.get("id") == target_id), None)
+    after = dict(mutation["event"]) if mutation["action"] == "upsert" else None
+    preview = {
+        "operation": "event_change",
+        "base_revision": doc["revision"],
+        "mutation": mutation,
+        "before": before,
+        "after": after,
+        "conflicts": [],
+        "is_noop": before == after,
+    }
+    preview["preview_digest"] = _digest_for_mutation(
+        "event_change", doc["revision"], mutation)
+    return preview, []
+
+
+def apply_event_change(preview: dict, *, expected_revision: int, root=None) -> tuple[dict | None, list[str]]:
+    """Apply a checked event preview through whole-document validation/write."""
+    if not isinstance(preview, dict) or preview.get("operation") != "event_change":
+        return None, ["a valid event preview is required"]
+    raw_mutation = preview.get("mutation")
+    if not isinstance(raw_mutation, dict):
+        return None, ["a valid event preview is required"]
+    action = raw_mutation.get("action")
+    if action == "upsert":
+        mutation, problems = _normalize_event_mutation(
+            action=action, event=raw_mutation.get("event"))
+    elif action == "delete":
+        mutation, problems = _normalize_event_mutation(
+            action=action, event_id=raw_mutation.get("event_id"))
+    else:
+        return None, ["a valid event preview is required"]
+    if problems or mutation != raw_mutation:
+        return None, problems or ["event preview mutation is not normalized"]
+
+    doc, read_problems = read(root)
+    if doc is None:
+        return None, read_problems
+    if doc["revision"] != expected_revision or preview.get("base_revision") != expected_revision:
+        return None, [f"stale revision: expected {expected_revision}, "
+                      f"calendar is at revision {doc['revision']}"]
+    expected_digest = _digest_for_mutation("event_change", expected_revision, mutation)
+    if preview.get("preview_digest") != expected_digest:
+        return None, ["stale or altered preview: digest mismatch"]
+
+    target_id = mutation.get("event_id") or mutation["event"].get("id")
+    before = next((dict(item) for item in doc["events"] if item.get("id") == target_id), None)
+    after = dict(mutation["event"]) if action == "upsert" else None
+    if preview.get("before") != before or preview.get("after") != after:
+        return None, ["stale or altered preview: before/after projection mismatch"]
+
+    next_events, _ = _event_after_mutation(doc["events"], mutation)
+    if next_events == doc["events"]:
+        return doc, []
+    next_doc = {**doc, "events": next_events, "revision": doc["revision"] + 1}
     parsed, problems = parse_document(next_doc)
     if problems:
         return None, problems

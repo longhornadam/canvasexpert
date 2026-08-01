@@ -12,6 +12,7 @@
       <p class="ce-rail-nav__kicker">This year</p>
       <div class="ce-rail-nav__links">
         <a href="#calendar-readiness-card" data-rail-link>Readiness &amp; upcoming</a>
+        <a href="#calendar-events-card" data-rail-link>Public events</a>
         <a href="#calendar-change-card" data-rail-link>Change a date</a>
         <a href="#calendar-create-card" data-rail-link>Create / replace school year</a>
       </div>
@@ -36,6 +37,66 @@
   <h2>Readiness &amp; upcoming</h2>
   <div id="calendar-readiness" class="ce-calendar-readiness" aria-live="polite"></div>
   <div id="calendar-upcoming" class="ce-calendar-upcoming"></div>
+</section>
+
+<section class="ce-panel ce-calendar-panel" id="calendar-events-card">
+  <h2>Public events</h2>
+  <div id="calendar-event-list" class="ce-calendar-event-list"></div>
+  <div class="ce-actions">
+    <button type="button" id="cal-event-new" class="small">New event</button>
+  </div>
+  <div id="calendar-event-editor" class="ce-calendar-event-editor" hidden>
+    <div class="ce-calendar-grid ce-calendar-grid--change">
+      <label>Action
+        <select id="cal-event-action"><option value="upsert">Add / replace</option><option value="delete">Delete</option></select>
+      </label>
+      <label>Event ID <input type="text" id="cal-event-id" placeholder="fall-concert"></label>
+      <label>Kind
+        <select id="cal-event-kind">
+          <option value="game">Game</option><option value="dance">Dance</option><option value="assembly">Assembly</option>
+          <option value="performance">Performance</option><option value="spirit">Spirit</option><option value="tutorial">Tutorial</option>
+          <option value="club">Club</option><option value="library">Library</option><option value="other">Other</option>
+        </select>
+      </label>
+      <label>Label <input type="text" id="cal-event-label" placeholder="Fall concert"></label>
+      <label>Shape
+        <select id="cal-event-shape"><option value="date">One date</option><option value="span">Date span</option><option value="weekdays">Weekday recurrence</option></select>
+      </label>
+    </div>
+    <div class="ce-calendar-grid ce-calendar-grid--change" data-event-shape="date">
+      <label>Date <input type="date" id="cal-event-date"></label>
+    </div>
+    <div class="ce-calendar-grid ce-calendar-grid--change" data-event-shape="span" hidden>
+      <label>Start date <input type="date" id="cal-event-start"></label>
+      <label>End date <input type="date" id="cal-event-end"></label>
+    </div>
+    <div class="ce-calendar-event-recurrence" data-event-shape="weekdays" hidden>
+      <span class="ce-field-label">Weekdays</span>
+      <div class="ce-calendar-weekdays" id="cal-event-weekdays">
+        <label><input type="checkbox" value="0">Mon</label><label><input type="checkbox" value="1">Tue</label>
+        <label><input type="checkbox" value="2">Wed</label><label><input type="checkbox" value="3">Thu</label>
+        <label><input type="checkbox" value="4">Fri</label><label><input type="checkbox" value="5">Sat</label>
+        <label><input type="checkbox" value="6">Sun</label>
+      </div>
+      <div class="ce-calendar-grid ce-calendar-grid--change">
+        <label>Effective from <input type="date" id="cal-event-effective-start"></label>
+        <label>Effective through <input type="date" id="cal-event-effective-end"></label>
+      </div>
+    </div>
+    <div class="ce-calendar-grid ce-calendar-grid--change" data-event-upsert-only>
+      <label>Detail <input type="text" id="cal-event-detail" placeholder="Room or note"></label>
+      <label>From <input type="time" id="cal-event-from"></label>
+      <label>To <input type="time" id="cal-event-to"></label>
+      <label id="cal-event-result-field">Game result <small class="lbl-hint">(optional, 160 characters)</small>
+        <input type="text" id="cal-event-result" maxlength="160" placeholder="e.g. Won 2–1"></label>
+    </div>
+    <div class="ce-actions">
+      <button type="button" id="cal-event-preview">Preview</button>
+      <button type="button" id="cal-event-apply" class="primary" hidden>Apply</button>
+    </div>
+    <div id="cal-event-preview-result" class="ce-calendar-preview" hidden></div>
+    <p id="cal-event-status" class="status ce-calendar-status"></p>
+  </div>
 </section>
 
 <section class="ce-panel ce-calendar-panel" id="calendar-change-card">

@@ -31,6 +31,8 @@ EXPECTED = [
     ('/api/calendar/import/template', ('GET',)),
     ('/api/calendar/change/preview', ('POST',)),
     ('/api/calendar/change/apply', ('POST',)),
+    ('/api/calendar/event/preview', ('POST',)),
+    ('/api/calendar/event/apply', ('POST',)),
     ('/api/calendar/open-folder', ('POST',)),
     ('/api/calendar/year/preview', ('POST',)),
     ('/api/calendar/year/apply', ('POST',)),

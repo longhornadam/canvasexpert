@@ -25,7 +25,7 @@
     return esc(d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }));
   }
 
-  var state = { bellSchedules: [], teacherBlocks: [], courses: [] };
+  var state = { bellSchedules: [], teacherBlocks: [], courses: [], events: [] };
 
   /** The teacher-facing Bell Schedule name for a schedule_id, so a preview or
       upcoming row never shows only the raw id. */
@@ -265,6 +265,193 @@
     await loadState();
   });
 
+  // ── Public events (structured preview/apply) ─────────────────────────────
+
+  var lastEventPreview = null;
+
+  function eventDateText(event) {
+    if (!event) return "";
+    if (event.shape === "date") return friendlyDate(event.date);
+    if (event.shape === "span") return friendlyDate(event.start) + " to " + friendlyDate(event.end);
+    var days = (event.weekdays || []).map(function (day) {
+      return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][day] || String(day);
+    });
+    var bounds = [event.effective_start, event.effective_end].filter(Boolean);
+    return days.join(", ") + (bounds.length ? " (" + bounds.map(friendlyDate).join(" to ") + ")" : "");
+  }
+
+  function eventText(event) {
+    if (!event) return "No event";
+    var text = event.label + " — " + eventDateText(event);
+    if (event.detail) text += " — " + event.detail;
+    if (event.from || event.to) text += " (" + (event.from || "") + "–" + (event.to || "") + ")";
+    if (event.result) text += " — Result: " + event.result;
+    return text;
+  }
+
+  function renderEvents(events) {
+    state.events = Array.isArray(events) ? events : [];
+    var list = document.getElementById("calendar-event-list");
+    if (!state.events.length) {
+      list.innerHTML = '<p class="ce-empty">No public events in the canonical calendar.</p>';
+      return;
+    }
+    list.innerHTML = state.events.map(function (event) {
+      return '<div class="ce-calendar-event-row"><div><strong>' + esc(event.label) + '</strong>' +
+        ' <span class="muted">(' + esc(event.kind) + ', ' + esc(event.shape) + ')</span><br>' +
+        '<span>' + esc(eventDateText(event)) + '</span>' +
+        (event.detail ? ' — ' + esc(event.detail) : "") +
+        (event.result ? ' — <span>Result: ' + esc(event.result) + '</span>' : "") +
+        '</div><div class="ce-calendar-event-actions"><button type="button" class="small" data-event-action="edit" data-event-id="' +
+        esc(event.id) + '">Edit</button><button type="button" class="small danger" data-event-action="delete" data-event-id="' +
+        esc(event.id) + '">Delete</button></div></div>';
+    }).join("");
+  }
+
+  function eventField(id) { return document.getElementById(id); }
+
+  function setEventEditor(event, action) {
+    var editor = document.getElementById("calendar-event-editor");
+    editor.hidden = false;
+    event = event || {};
+    eventField("cal-event-action").value = action || "upsert";
+    eventField("cal-event-id").value = event.id || "";
+    eventField("cal-event-kind").value = event.kind || "game";
+    eventField("cal-event-label").value = event.label || "";
+    eventField("cal-event-shape").value = event.shape || "date";
+    eventField("cal-event-date").value = event.date || "";
+    eventField("cal-event-start").value = event.start || "";
+    eventField("cal-event-end").value = event.end || "";
+    eventField("cal-event-effective-start").value = event.effective_start || "";
+    eventField("cal-event-effective-end").value = event.effective_end || "";
+    eventField("cal-event-detail").value = event.detail || "";
+    eventField("cal-event-from").value = event.from || "";
+    eventField("cal-event-to").value = event.to || "";
+    eventField("cal-event-result").value = event.result || "";
+    document.querySelectorAll("#cal-event-weekdays input").forEach(function (box) {
+      box.checked = (event.weekdays || []).indexOf(Number(box.value)) !== -1;
+    });
+    updateEventEditorMode();
+  }
+
+  function updateEventEditorMode() {
+    var action = eventField("cal-event-action").value;
+    var kind = eventField("cal-event-kind").value;
+    var shape = eventField("cal-event-shape").value;
+    document.querySelectorAll("[data-event-shape]").forEach(function (section) {
+      section.hidden = section.getAttribute("data-event-shape") !== shape;
+    });
+    document.querySelectorAll("[data-event-upsert-only]").forEach(function (section) {
+      section.hidden = action === "delete";
+    });
+    ["cal-event-kind", "cal-event-label", "cal-event-shape", "cal-event-date", "cal-event-start",
+      "cal-event-end", "cal-event-effective-start", "cal-event-effective-end", "cal-event-detail",
+      "cal-event-from", "cal-event-to", "cal-event-result"].forEach(function (id) {
+      var input = eventField(id);
+      if (input) input.disabled = action === "delete";
+    });
+    document.querySelectorAll("#cal-event-weekdays input").forEach(function (box) {
+      box.disabled = action === "delete";
+    });
+    document.getElementById("cal-event-result-field").hidden = kind !== "game" || action === "delete";
+  }
+
+  function readEventMutation() {
+    var action = eventField("cal-event-action").value;
+    var eventId = eventField("cal-event-id").value.trim();
+    if (action === "delete") return { action: "delete", event_id: eventId };
+    var shape = eventField("cal-event-shape").value;
+    var event = {
+      id: eventId,
+      kind: eventField("cal-event-kind").value,
+      label: eventField("cal-event-label").value.trim(),
+      shape: shape,
+    };
+    if (shape === "date") event.date = eventField("cal-event-date").value;
+    if (shape === "span") {
+      event.start = eventField("cal-event-start").value;
+      event.end = eventField("cal-event-end").value;
+    }
+    if (shape === "weekdays") {
+      event.weekdays = Array.prototype.map.call(document.querySelectorAll("#cal-event-weekdays input:checked"), function (box) {
+        return Number(box.value);
+      });
+      event.effective_start = eventField("cal-event-effective-start").value || null;
+      event.effective_end = eventField("cal-event-effective-end").value || null;
+    }
+    [["detail", "cal-event-detail"], ["from", "cal-event-from"], ["to", "cal-event-to"]].forEach(function (pair) {
+      var value = eventField(pair[1]).value.trim();
+      if (value) event[pair[0]] = value;
+    });
+    if (event.kind === "game" && eventField("cal-event-result").value) {
+      event.result = eventField("cal-event-result").value;
+    }
+    return { action: "upsert", event: event };
+  }
+
+  function renderEventPreview(data) {
+    var result = document.getElementById("cal-event-preview-result");
+    result.hidden = false;
+    result.innerHTML = '<div><strong>Before:</strong> ' + esc(eventText(data.before)) + '</div>' +
+      '<div><strong>After:</strong> ' + esc(eventText(data.after)) + '</div>';
+  }
+
+  document.getElementById("cal-event-new").addEventListener("click", function () {
+    setEventEditor(null, "upsert");
+    document.getElementById("cal-event-status").textContent = "";
+    document.getElementById("cal-event-preview-result").hidden = true;
+    document.getElementById("cal-event-apply").hidden = true;
+  });
+  document.getElementById("calendar-event-list").addEventListener("click", function (event) {
+    var button = event.target.closest("[data-event-action]");
+    if (!button) return;
+    var selected = state.events.find(function (item) { return item.id === button.dataset.eventId; });
+    setEventEditor(selected, button.dataset.eventAction === "delete" ? "delete" : "upsert");
+  });
+  document.getElementById("cal-event-action").addEventListener("change", updateEventEditorMode);
+  document.getElementById("cal-event-kind").addEventListener("change", updateEventEditorMode);
+  document.getElementById("cal-event-shape").addEventListener("change", updateEventEditorMode);
+  document.getElementById("cal-event-preview").addEventListener("click", async function () {
+    var status = document.getElementById("cal-event-status");
+    var mutation = readEventMutation();
+    var body = { action: mutation.action, event_id: mutation.event_id || "" };
+    if (mutation.event) body.event = JSON.stringify(mutation.event);
+    var response = await fetch("/api/calendar/event/preview", {
+      method: "POST", body: new URLSearchParams(body),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Preview failed: " + (data.problems || []).join(" "), "error");
+      document.getElementById("cal-event-preview-result").hidden = true;
+      document.getElementById("cal-event-apply").hidden = true;
+      return;
+    }
+    lastEventPreview = data;
+    renderEventPreview(data);
+    document.getElementById("cal-event-apply").hidden = false;
+    setStatus(status, data.is_noop ? "No change — this event already matches." : "Review the before/after event, then Apply.", "");
+  });
+  document.getElementById("cal-event-apply").addEventListener("click", async function () {
+    var status = document.getElementById("cal-event-status");
+    if (!lastEventPreview) return;
+    var response = await fetch("/api/calendar/event/apply", {
+      method: "POST", body: new URLSearchParams({
+        expected_revision: String(lastEventPreview.base_revision),
+        preview: JSON.stringify(lastEventPreview),
+      }),
+    });
+    var data = await response.json();
+    if (!data.ok) {
+      setStatus(status, "Apply failed: " + (data.problems || []).join(" "), "error");
+      return;
+    }
+    setStatus(status, "Applied. Calendar is now at revision " + data.revision + ".", "ok");
+    document.getElementById("cal-event-apply").hidden = true;
+    document.getElementById("cal-event-preview-result").hidden = true;
+    lastEventPreview = null;
+    await loadState();
+  });
+
   // ── Change a date (preview/apply) ────────────────────────────────────────
 
   var lastPreview = null;
@@ -480,6 +667,7 @@
     renderBellSchedules(data);
     renderReadiness(data);
     renderUpcoming(data);
+    renderEvents(data.events || []);
     renderTeacherBlocks((data.teacher_schedule || {}).blocks || []);
   }
 

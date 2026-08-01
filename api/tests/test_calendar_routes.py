@@ -85,6 +85,35 @@ def test_year_preview_then_apply_writes_revision_1(isolated_workspace):
     assert apply_response["revision"] == 1
 
 
+def test_event_preview_apply_round_trips_game_result_without_real_workspace_write(isolated_workspace):
+    calendars = isolated_workspace / "Library" / "Calendars"
+    schedule_id = _bell_schedule(calendars)
+    year_preview = client.post("/api/calendar/year/preview", data={
+        "school_year": "2026-27", "coverage_start": "2026-08-17",
+        "coverage_end": "2026-08-18", "default_schedule_id": schedule_id,
+    }).json()
+    client.post("/api/calendar/year/apply", data={
+        "expected_revision": 0,
+        "preview": json.dumps({k: v for k, v in year_preview.items() if k != "ok"}),
+    })
+    event = {"id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",
+             "date": "2026-08-18", "result": "Won 2-1"}
+    preview = client.post("/api/calendar/event/preview", data={
+        "action": "upsert", "event": json.dumps(event),
+    }).json()
+    assert preview["ok"] is True
+    assert preview["operation"] == "event_change"
+    assert preview["after"]["result"] == "Won 2-1"
+    applied = client.post("/api/calendar/event/apply", data={
+        "expected_revision": preview["base_revision"],
+        "preview": json.dumps({k: v for k, v in preview.items() if k != "ok"}),
+    }).json()
+    assert applied["ok"] is True and applied["revision"] == 2
+    assert "events" not in applied
+    assert client.get("/api/calendar").json()["events"] == [event]
+    assert not (isolated_workspace / "School Calendar.json").exists()
+
+
 def test_year_apply_refuses_a_stale_preview(isolated_workspace):
     calendars = isolated_workspace / "Library" / "Calendars"
     schedule_id = _bell_schedule(calendars)

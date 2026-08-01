@@ -6,6 +6,13 @@
 .ce-calendar-readiness { display: grid; gap: var(--ce-space-2); }
 .ce-calendar-upcoming { margin-top: var(--ce-space-3); display: grid; gap: var(--ce-space-1); }
 .ce-calendar-upcoming-row { padding: var(--ce-space-1) 0; border-bottom: 1px solid var(--ce-rule); font-size: 13px; }
+.ce-calendar-event-list { display: grid; gap: var(--ce-space-2); margin-bottom: var(--ce-space-2); }
+.ce-calendar-event-row { display: flex; justify-content: space-between; align-items: center; gap: var(--ce-space-2); padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); font-size: 13px; min-width: 0; }
+.ce-calendar-event-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.ce-calendar-event-actions { display: flex; gap: var(--ce-space-1); flex: 0 0 auto; }
+.ce-calendar-event-editor { margin-top: var(--ce-space-3); padding-top: var(--ce-space-3); border-top: 1px solid var(--ce-rule); }
+.ce-calendar-event-recurrence { display: grid; gap: var(--ce-space-2); margin: var(--ce-space-2) 0; }
+.ce-field-label { font-size: 12px; font-weight: 700; }
 .ce-calendar-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ce-space-2); margin: var(--ce-space-2) 0; }
 .ce-calendar-grid--single { grid-template-columns: minmax(0, 1fr); }
 .ce-calendar-grid label { min-width: 0; }
@@ -30,4 +37,5 @@
 @media (max-width: 760px) {
   .ce-calendar-grid { grid-template-columns: minmax(0, 1fr); }
   .ce-schedule-block-row { grid-template-columns: minmax(0, 1fr); }
+  .ce-calendar-event-row { align-items: flex-start; flex-direction: column; }
 }

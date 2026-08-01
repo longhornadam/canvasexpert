@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 25 MCP tools.
+"""Plain, testable implementations of the 27 MCP tools.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -1209,6 +1209,29 @@ def apply_school_calendar_change(preview: dict, expected_revision: int) -> dict:
     No course_id, no student data -- no course gate, no safety gate. Never raises.
     """
     doc, problems = school_calendar.apply_change(preview, expected_revision=expected_revision)
+    if doc is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, "revision": doc["revision"]}
+
+
+def preview_school_calendar_event_change(action: str, event: dict = None,
+                                        event_id: str = "") -> dict:
+    """Preview a public-event upsert or delete in the canonical Calendar.
+
+    ``action`` is ``upsert`` with one complete structured event, or ``delete``
+    with its stable ``event_id``. No course ID, student data, or direct write.
+    """
+    preview, problems = school_calendar.preview_event_change(
+        action=action, event=event, event_id=(event_id or None))
+    if preview is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, **preview}
+
+
+def apply_school_calendar_event_change(preview: dict, expected_revision: int) -> dict:
+    """Apply a previewed public-event change after the teacher accepts it."""
+    doc, problems = school_calendar.apply_event_change(
+        preview, expected_revision=expected_revision)
     if doc is None:
         return {"ok": False, "problems": problems}
     return {"ok": True, "revision": doc["revision"]}

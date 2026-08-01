@@ -13,6 +13,8 @@ Routes: GET  /calendar
         GET  /api/calendar/import/template
         POST /api/calendar/change/preview
         POST /api/calendar/change/apply
+        POST /api/calendar/event/preview
+        POST /api/calendar/event/apply
         POST /api/calendar/open-folder
 
 There is no direct-write create route: initial creation and complete-year
@@ -63,6 +65,7 @@ def get_calendar():
     bell_schedules, _bell_problems = deps.load_bell_schedules()
     calendar_readiness = school_calendar.readiness(bell_schedule_ids=bell_schedules)
     teacher_blocks, teacher_problems = schedule_setup.load_blocks()
+    calendar_doc, _calendar_problems = school_calendar.read()
 
     upcoming = {}
     if calendar_readiness.get("status") != "unconfigured":
@@ -85,6 +88,7 @@ def get_calendar():
             for course in config.active_courses()
         ],
         "upcoming": upcoming,
+        "events": calendar_doc["events"] if calendar_doc else [],
     })
 
 
@@ -275,6 +279,40 @@ def apply_calendar_change(expected_revision: int = Form(...), preview: str = For
         return JSONResponse({"ok": False, "problems": [f"bad request: {exc}"]})
 
     doc, problems = school_calendar.apply_change(
+        preview_payload, expected_revision=expected_revision)
+    if problems or doc is None:
+        return JSONResponse({"ok": False, "problems": problems})
+    return JSONResponse({"ok": True, "revision": doc["revision"]})
+
+
+@router.post("/api/calendar/event/preview")
+def preview_calendar_event(
+    action: str = Form(...),
+    event: str = Form(default=""),
+    event_id: str = Form(default=""),
+):
+    """Stage one generic public-event upsert or delete. Never writes."""
+    event_payload = None
+    if event:
+        try:
+            event_payload = json.loads(event)
+        except json.JSONDecodeError as exc:
+            return JSONResponse({"ok": False, "problems": [f"bad request: {exc}"]})
+    preview, problems = school_calendar.preview_event_change(
+        action=action, event=event_payload, event_id=(event_id or None))
+    if problems or preview is None:
+        return JSONResponse({"ok": False, "problems": problems})
+    return JSONResponse({"ok": True, **preview})
+
+
+@router.post("/api/calendar/event/apply")
+def apply_calendar_event(expected_revision: int = Form(...), preview: str = Form(...)):
+    try:
+        preview_payload = json.loads(preview)
+    except json.JSONDecodeError as exc:
+        return JSONResponse({"ok": False, "problems": [f"bad request: {exc}"]})
+
+    doc, problems = school_calendar.apply_event_change(
         preview_payload, expected_revision=expected_revision)
     if problems or doc is None:
         return JSONResponse({"ok": False, "problems": problems})

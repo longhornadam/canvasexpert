@@ -448,6 +448,64 @@ def test_apply_change_requires_a_valid_preview_object(tmp_path):
     assert "valid preview is required" in problems[0]
 
 
+def test_game_result_is_valid_and_restricted_to_games():
+    base = {
+        "version": sc.FORMAT_VERSION, "type": sc.DOCUMENT_TYPE, "revision": 1,
+        "school_year": "2026-27", "coverage": {"start": "2026-08-17", "end": "2026-08-17"},
+        "days": {"2026-08-17": {"kind": "instructional", "schedule_id": "ordinary"}},
+        "grading_periods": [],
+    }
+    valid, problems = sc.parse_document({**base, "events": [{
+        "id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",
+        "date": "2026-08-17", "result": "Won 2-1",
+    }]})
+    assert problems == []
+    assert valid["events"][0]["result"] == "Won 2-1"
+    for event in [
+        {"id": "other", "kind": "other", "label": "No", "shape": "date",
+         "date": "2026-08-17", "result": ""},
+        {"id": "game-2", "kind": "game", "label": "No", "shape": "date",
+         "date": "2026-08-17", "result": 2},
+        {"id": "game-3", "kind": "game", "label": "No", "shape": "date",
+         "date": "2026-08-17", "result": "x" * 161},
+    ]:
+        parsed, problems = sc.parse_document({**base, "events": [event]})
+        assert parsed is None
+        assert problems
+
+
+def test_event_change_add_replace_delete_noop_and_projection_tamper(tmp_path):
+    _seeded(tmp_path)
+    event = {"id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",
+             "date": "2026-08-18", "result": "Won 2-1"}
+    preview, problems = sc.preview_event_change(
+        action="upsert", event=event, root=_root(tmp_path))
+    assert problems == []
+    assert preview["operation"] == "event_change"
+    assert preview["before"] is None and preview["after"] == event
+    doc, problems = sc.apply_event_change(preview, expected_revision=1, root=_root(tmp_path))
+    assert problems == [] and doc["revision"] == 2
+
+    replacement = {**event, "result": "Lost 1-2"}
+    preview, problems = sc.preview_event_change(
+        action="upsert", event=replacement, root=_root(tmp_path))
+    assert problems == []
+    tampered = {**preview, "before": {"id": "wrong"}}
+    doc, problems = sc.apply_event_change(tampered, expected_revision=2, root=_root(tmp_path))
+    assert doc is None and "projection mismatch" in problems[0]
+    doc, problems = sc.apply_event_change(preview, expected_revision=2, root=_root(tmp_path))
+    assert problems == [] and doc["revision"] == 3
+
+    preview, problems = sc.preview_event_change(
+        action="delete", event_id="game-1", root=_root(tmp_path))
+    doc, problems = sc.apply_event_change(preview, expected_revision=3, root=_root(tmp_path))
+    assert problems == [] and doc["revision"] == 4 and doc["events"] == []
+    preview, problems = sc.preview_event_change(
+        action="delete", event_id="missing", root=_root(tmp_path))
+    doc, problems = sc.apply_event_change(preview, expected_revision=4, root=_root(tmp_path))
+    assert problems == [] and doc["revision"] == 4
+
+
 # ── preview_replacement / apply_replacement ─────────────────────────────────
 
 def test_preview_replacement_is_create_at_base_revision_zero_when_unconfigured(tmp_path):

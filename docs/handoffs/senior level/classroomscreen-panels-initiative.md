@@ -1,11 +1,22 @@
 # Classroomscreen Panel library initiative
 
-**Status:** queued for senior evaluation and later promotion; not an active executor handoff
+**Status:** Batch A accepted GREEN and retired; Batch B is the next queued batch
 
 **Last senior review:** 2026-08-01
 
-**Active prerequisite:** `docs/handoffs/canonical-calendar-correction.md` must close GREEN and be
-retired before any batch below is promoted.
+**Active prerequisite:** the canonical Calendar correction closed GREEN and was retired in commit
+`a91182e`. Batch A is now accepted GREEN after the focused gate (179 passed), full API suite
+(1844 passed), responsive Calendar render checks, and `git diff --check`; its integration commit
+is the current senior checkout. There is no active direct brief.
+
+**Next batch pointer:** promote **Batch B - Public Calendar Panels** from §7 only when execution
+is requested. The next senior/executor needs §§2, 3, 4.2–4.5, 7 (Batch B), 8, 9, and 10, plus
+the current `api/webui/README.md` rendered-verification section and the exact Panel route cards
+named by the promoted brief. Outstanding decisions: none carried from Batch A.
+
+**Batch A timing decision:** the teacher confirmed the 2026-27 Bobcat Hour split as
+`bobcat_a` 12:11–12:41 and `bobcat_b` 12:43–13:13. This is the locked seed timing for the
+promoted Batch A handoff.
 
 This document is persistent senior context. It does not occupy the single active-handoff slot,
 and an executor must not implement directly from it. A senior promotes one batch at a time into

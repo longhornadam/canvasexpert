@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 17.
+Tool schema version 18.
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -55,6 +55,8 @@ Tool schema version 17.
 | `apply_school_calendar_replacement(preview, expected_revision)` | Applies a previewed create/replace; refuses a stale `expected_revision` | No |
 | `preview_school_calendar_change(kind, ...)` | Previews a day-kind/schedule/label change against the live calendar; returns the base revision and affected dates | No |
 | `apply_school_calendar_change(preview, expected_revision)` | Applies a previewed change; refuses a stale `expected_revision` | No |
+| `preview_school_calendar_event_change(action, event=None, event_id="")` | Previews an upsert or delete of one canonical public event and returns before/after projections | No |
+| `apply_school_calendar_event_change(preview, expected_revision)` | Applies a previewed public-event change; refuses stale or altered previews | No |
 | `list_active_decks()` | Lists active decks | No |
 | `archive_deck(deck_id)` | Moves a deck to archived | No |
 
@@ -78,9 +80,10 @@ and no safety scan. `save_teacher_schedule` has no `course_id` parameter and mak
 Canvas call; a teacher-set block `course_id` passes through untouched after string
 validation, so an assistant can read, edit, and write the binding safely.
 
-The five canonical Calendar tools (`get_school_calendar`,
+The seven canonical Calendar tools (`get_school_calendar`,
 `preview_school_calendar_replacement`, `apply_school_calendar_replacement`,
-`preview_school_calendar_change`, `apply_school_calendar_change`) share the same
+`preview_school_calendar_change`, `apply_school_calendar_change`,
+`preview_school_calendar_event_change`, `apply_school_calendar_event_change`) share the same
 exemption: no `course_id`, no student data, no course gate, no safety scan. Both writes
 are staged preview/apply pairs, never a one-click overwrite: base revision is 0 only
 before any calendar exists, and every successful write after that — including a complete
@@ -88,7 +91,9 @@ replacement — advances the revision by exactly one, never resetting it. The au
 contract instructs the assistant to translate pasted public schedule facts into a
 preview, summarize affected dates/years and conflicts, and apply only after the teacher
 accepts that summary — never inside an email/inbox integration or a free-text parser
-built into CanvasExpert itself.
+built into CanvasExpert itself. The event pair uses `action="upsert"` with one complete
+structured event or `action="delete"` with its stable `event_id`; it mutates only the
+canonical `events` array and supports the same revision/digest/atomic-write boundary.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
 the app actually does — an assistant that sees only the read tools cannot tell that
