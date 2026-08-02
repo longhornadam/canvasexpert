@@ -60,6 +60,25 @@ def update_student(
     if unknown:
         return {"ok": False, "error": f"Unknown patch keys: {sorted(unknown)}"}
 
+    # Validate every value before opening the vault transaction or touching any
+    # external/local setting store.  MCP uses this same callable path and must
+    # never leave an earlier field applied when a later field is malformed.
+    nickname_values = {}
+    for key in ("nicknames", "add_nicknames"):
+        if key in data:
+            if not isinstance(data[key], list) or any(not isinstance(value, str) for value in data[key]):
+                return {"ok": False, "error": f"{key} must be a list of strings."}
+            nickname_values[key] = data[key]
+
+    if "pseudonym" in data:
+        p = data["pseudonym"]
+        if (not isinstance(p, dict) or set(p) != {"first", "last"}
+                or not isinstance(p["first"], str) or not isinstance(p["last"], str)
+                or not p["first"].strip() or not p["last"].strip()):
+            return {"ok": False, "error": "pseudonym must be {first, last}."}
+    if "regenerate_pseudonym" in data and not isinstance(data["regenerate_pseudonym"], bool):
+        return {"ok": False, "error": "regenerate_pseudonym must be a boolean."}
+
     seating_context = None
     if "seating_context" in data:
         seating_context, err = validate_seating_context(data["seating_context"])
@@ -73,34 +92,58 @@ def update_student(
         except ValueError as error:
             return {"ok": False, "error": str(error)}
 
+    extra_time = None
+    if "extra_time" in data:
+        extra_time = data["extra_time"]
+        if not isinstance(extra_time, dict):
+            return {"ok": False, "error": "extra_time must be an object."}
+        if extra_time.get("enabled"):
+            _, err = as_int(extra_time.get("days", 0), "extra_time.days")
+            if err:
+                return {"ok": False, "error": err}
+
+    monitored = None
+    if "monitored" in data:
+        monitored = data["monitored"]
+        if not isinstance(monitored, dict):
+            return {"ok": False, "error": "monitored must be an object."}
+
+    canvas_group = None
+    if "canvas_group" in data:
+        canvas_group = data["canvas_group"]
+        if not isinstance(canvas_group, dict):
+            return {"ok": False, "error": "canvas_group must be an object."}
+        category_id = canvas_group.get("category_id")
+        if not category_id:
+            return {"ok": False, "error": "canvas_group.category_id required."}
+        target_group_id = None if not canvas_group.get("group_id") else str(canvas_group["group_id"])
+        categories, _, validation_err = validate_canvas_group_target(
+            course_id, category_id, target_group_id
+        )
+        if validation_err:
+            return {"ok": False, "error": validation_err}
+
     vault = vault_factory()
 
     with vault.transaction():
-        if "nicknames" in data:
-            nns = data["nicknames"]
-            if not isinstance(nns, list):
-                return {"ok": False, "error": "nicknames must be a list."}
-            vault.set_nicknames(user_id, nns)
+        if "nicknames" in nickname_values:
+            vault.set_nicknames(user_id, nickname_values["nicknames"])
+        if "add_nicknames" in nickname_values:
+            vault.add_nicknames(user_id, nickname_values["add_nicknames"])
 
         if "pseudonym" in data:
             p = data["pseudonym"]
-            if not isinstance(p, dict) or "first" not in p or "last" not in p:
-                return {"ok": False, "error": "pseudonym must be {first, last}."}
             vault.set_pseudonym(user_id, p["first"], p["last"])
 
         if data.get("regenerate_pseudonym"):
             vault.regenerate_pseudonym(user_id)
 
-    if "extra_time" in data:
-        et = data["extra_time"]
-        if not isinstance(et, dict):
-            return {"ok": False, "error": "extra_time must be an object."}
+    if extra_time is not None:
+        et = extra_time
         et_list = get_extra_time(course_id)
         et_list = [e for e in et_list if e.get("id") != user_id]
         if et.get("enabled"):
-            days, err = as_int(et.get("days", 0), "extra_time.days")
-            if err:
-                return {"ok": False, "error": err}
+            days, _ = as_int(et.get("days", 0), "extra_time.days")
             et_list.append({
                 "id": user_id,
                 "name": et.get("name", ""),
@@ -108,10 +151,8 @@ def update_student(
             })
         set_extra_time(course_id, et_list)
 
-    if "monitored" in data:
-        m = data["monitored"]
-        if not isinstance(m, dict):
-            return {"ok": False, "error": "monitored must be an object."}
+    if monitored is not None:
+        m = monitored
         if m.get("enabled"):
             set_monitored_student(
                 user_id,
@@ -121,16 +162,10 @@ def update_student(
         else:
             remove_monitored_student(user_id)
 
-    if "canvas_group" in data:
-        cg = data["canvas_group"]
-        if not isinstance(cg, dict):
-            return {"ok": False, "error": "canvas_group must be an object."}
-
+    if canvas_group is not None:
+        cg = canvas_group
         category_id = cg.get("category_id")
         group_id = cg.get("group_id")
-        if not category_id:
-            return {"ok": False, "error": "canvas_group.category_id required."}
-
         target_group_id = None if not group_id else str(group_id)
         categories, _, validation_err = validate_canvas_group_target(
             course_id, category_id, target_group_id

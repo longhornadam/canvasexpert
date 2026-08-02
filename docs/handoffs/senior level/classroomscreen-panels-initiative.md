@@ -247,10 +247,9 @@ allowed, including consecutive repeats. It does not pretend to track participati
 - each current display name appears once per cycle;
 - state is stored only in browser `localStorage` at the localhost origin;
 - the state contains display names, never Canvas IDs;
-- the server supplies a deterministic roster fingerprint derived from the sorted display-name
-  set, not student IDs;
-- when the fingerprint changes, remove departed names and add new names without replaying names
-  already used in the current cycle;
+- the storage key uses the resolved Teacher Schedule block, with the URL block and then
+  `follow` as fallbacks, so separate follow-mode blocks have separate cycles;
+- a roster refresh keeps only names still present in the current display-name set;
 - after the final name, show **Everyone has been selected** and require an explicit **Reset**;
   do not silently start another cycle;
 - ordinary reloads and Classroomscreen iframe remounts preserve the cycle.
@@ -268,7 +267,9 @@ missing from a blank score, `workflow_state`, lateness, or the current clock.
 Return one classroom-safe row per student with display name, missing count, and assignment titles
 ordered by due date then title. Sort students by missing count descending then display name. Wide
 Panels may show titles; narrow tiers drop titles before shrinking the name/count below the
-legibility floor. The zero state says **No missing work** and makes no integrity judgment.
+legibility floor. Zero-count students are omitted; an empty roster remains **No students in the
+current roster**, while an otherwise complete roster with no rows says **No missing work** and
+makes no integrity judgment.
 
 ### 5.5 Birthdays and celebrations source
 
@@ -292,11 +293,17 @@ Extend the existing course-scoped `roster_student_settings` record with one vali
 `birthday` is empty or a real month/day; never store birth year or age. A celebration is plain
 text with a stable ID and an ordered inclusive date span. Reject unknown keys, HTML, invalid
 dates, duplicate IDs, and overlong labels. Use the existing Roster one-student update path and
-local Roster UI; do not add a second student-profile store or MCP mutation surface.
+local Roster UI; do not add a second student-profile store.
 
 The Panel repeats birthdays annually, shows the friendly date, and combines them with active or
 upcoming celebrations in the configured window. It never displays a birthday year or computes
 an age. Default display remains first name plus last initial, with the collision rule above.
+
+**Section 5.5 amendment (Batch 3):** the roster profile now has a narrow, pseudonym-first MCP
+mutation surface for teacher-directed local settings. This reverses the original prohibition on
+an MCP mutation surface, while preserving the classroom-facing privacy rules above. MCP exposes
+additive nickname writes only; it cannot read or replace the stored nickname list, and all writes
+reuse the existing Roster update path with preview/apply or digest-protected clear semantics.
 
 ## 6. Learning objective
 

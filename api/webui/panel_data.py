@@ -9,8 +9,6 @@ is unavailable or malformed.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-import hashlib
-import json
 
 from api import audience, learning_objectives
 from api.mirror import read_service
@@ -461,14 +459,19 @@ def learning_objective_payload(course_id: str, *, now=None, catalog_reader=None,
         read_result = reader(course_id)
         catalog = read_result.get("catalog") if isinstance(read_result, dict) else None
         if not isinstance(catalog, dict) or catalog.get("version") != 3:
-            return {"ok": True, "state": "catalog_needs_attention", "objective": "",
-                    "message": "Catalog needs attention. Refresh it in Canvas Expert."}
+            raise learning_objectives.CatalogNeedsAttentionError("catalog unavailable")
         entry = learning_objectives.normalize_entry(covering[0])
         if learning_objectives.source_digest(catalog, entry["source_refs"]) != entry["source_digest"]:
-            raise ValueError("source changed")
-    except Exception:
+            raise learning_objectives.ChangedSourceError("source changed")
+    except learning_objectives.ChangedSourceError:
         return {"ok": True, "state": "changed_source", "objective": "",
                 "message": "Objective needs review."}
+    except learning_objectives.CatalogNeedsAttentionError:
+        return {"ok": True, "state": "catalog_needs_attention", "objective": "",
+                "message": "Catalog needs attention. Refresh it in Canvas Expert."}
+    except Exception:
+        return {"ok": True, "state": "catalog_needs_attention", "objective": "",
+                "message": "Catalog needs attention. Refresh it in Canvas Expert."}
     fact = audience.tag({"kind": "learning_objective", "text": entry["objective"]})
     safe = audience.classroom_only([fact])
     if not safe:
@@ -584,11 +587,8 @@ def _names_payload(course_id: str, *, mirror_root=None, scope_reader=None) -> di
     names, mapping = _classroom_names(roster["records"])
     if mapping is None:
         return _attention("names")
-    fingerprint = hashlib.sha256(
-        json.dumps(names, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
     return {"ok": True, "state": "ready" if names else "no_students",
-            "names": names, "fingerprint": fingerprint,
+            "names": names,
             "message": "" if names else "No students in the current roster."}
 
 
@@ -669,7 +669,8 @@ def missing_work_payload(course_id: str, *, mirror_root=None,
                "assignment_titles": [str(item.get("name") or "Untitled assignment")
                                      for item in items]}
         safe = audience.classroom_only([audience.tag(raw)])
-        rows.extend(_untagged(item) for item in safe)
+        if raw["missing_count"] > 0:
+            rows.extend(_untagged(item) for item in safe)
     rows.sort(key=lambda row: (-row["missing_count"], row["student_name"].casefold()))
     return {"ok": True, "state": "ready" if any(row["missing_count"] for row in rows)
             else "no_missing_work", "students": rows,
@@ -684,6 +685,11 @@ def _friendly_month_day(value: date) -> str:
 def _birthday_occurrence(month_day: str, year: int) -> date | None:
     try:
         month, day = (int(value) for value in month_day.split("-", 1))
+        if month == 2 and day == 29:
+            try:
+                return date(year, month, day)
+            except ValueError:
+                return date(year, 2, 28)
         return date(year, month, day)
     except (AttributeError, TypeError, ValueError):
         return None
@@ -726,7 +732,8 @@ def birthdays_celebrations_payload(course_id: str, days=DEFAULT_BIRTHDAY_DAYS,
                                    if candidate and start <= candidate <= end]
         for birthday in birthday_candidates:
             items.append({"kind": "birthday", "student_name": display,
-                          "date": _friendly_month_day(birthday), "label": "Birthday"})
+                          "date": _friendly_month_day(birthday), "label": "Birthday",
+                          "_sort_date": birthday})
         for celebration in profile["celebrations"]:
             c_start = _parse_iso(celebration["start"])
             c_end = _parse_iso(celebration["end"])
@@ -736,12 +743,16 @@ def birthdays_celebrations_payload(course_id: str, days=DEFAULT_BIRTHDAY_DAYS,
             display_end = min(c_end, end)
             span = _friendly_month_day(display_start)
             if display_end != display_start:
-                span += "–" + _friendly_month_day(display_end)
+                span += " to " + _friendly_month_day(display_end)
             items.append({"kind": "achievement", "student_name": display,
-                          "date": span, "label": celebration["label"]})
+                          "date": span, "label": celebration["label"],
+                          "_sort_date": display_start})
     safe = audience.classroom_only([audience.tag(item) for item in items])
     items = [_untagged(item) for item in safe]
-    items.sort(key=lambda item: (item["date"], item["student_name"].casefold(), item["label"].casefold()))
+    items.sort(key=lambda item: (item["_sort_date"], item["student_name"].casefold(),
+                                 item["label"].casefold()))
+    for item in items:
+        del item["_sort_date"]
     return {"ok": True, "state": "ready" if items else "nothing_to_celebrate",
             "days": days, "items": items,
             "message": "" if items else f"Nothing to celebrate in the next {days} days."}

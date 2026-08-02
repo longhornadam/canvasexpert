@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Thirty thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Thirty-six thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -97,12 +97,18 @@ def get_course_pages(course_id: str, full_text: bool = False) -> str:
 
 
 @mcp.tool()
+def list_learning_objectives(course_id: str) -> str:
+    """Reviewed objectives for the Current course as a {columns, rows} table."""
+    return _compact(tools.list_learning_objectives(course_id))
+
+
+@mcp.tool()
 def preview_learning_objective(course_id: str, objective: str,
                                effective_start: str, effective_end: str,
-                               source_refs: list) -> str:
+                               source_refs: list, replaces: str = None) -> str:
     """Preview one objective grounded in current local module, assignment, or page evidence."""
     return _compact(tools.preview_learning_objective(
-        course_id, objective, effective_start, effective_end, source_refs))
+        course_id, objective, effective_start, effective_end, source_refs, replaces))
 
 
 @mcp.tool()
@@ -114,10 +120,49 @@ def apply_learning_objective(course_id: str, preview: dict,
 
 
 @mcp.tool()
+def delete_learning_objective(course_id: str, entry_id: str,
+                              expected_revision: int) -> str:
+    """Delete one reviewed objective using an expected document revision."""
+    return _compact(tools.delete_learning_objective(course_id, entry_id, expected_revision))
+
+
+@mcp.tool()
 def get_roster(course_id: str) -> str:
     """Course roster as a {columns, rows} table of (pseudonym, section_names),
     sorted by pseudonym."""
     return _compact(tools.get_roster(course_id))
+
+
+@mcp.tool()
+def get_roster_student_settings(course_id: str, pseudonym: str) -> str:
+    """Read one current roster student's safe local settings by pseudonym;
+    excludes stored nicknames and all identity IDs."""
+    return _compact(tools.get_roster_student_settings(course_id, pseudonym))
+
+
+@mcp.tool()
+def preview_roster_student_change(course_id: str, pseudonym: str, patch: dict) -> str:
+    """Preview a validated pseudonym-first roster settings change; apply the
+    exact digest-protected preview only after teacher confirmation."""
+    return _compact(tools.preview_roster_student_change(course_id, pseudonym, patch))
+
+
+@mcp.tool()
+def apply_roster_student_change(course_id: str, preview: dict,
+                                preview_digest: str, expected_settings_digest: str) -> str:
+    """Apply an unchanged roster preview after current-course, pseudonym, and
+    hidden settings-digest checks."""
+    return _compact(tools.apply_roster_student_change(
+        course_id, preview, preview_digest, expected_settings_digest))
+
+
+@mcp.tool()
+def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
+                               expected_settings_digest: str) -> str:
+    """Directly clear one supported local setting with a fresh hidden digest;
+    nickname fields are never clearable through MCP."""
+    return _compact(tools.clear_roster_student_field(
+        course_id, pseudonym, field, expected_settings_digest))
 
 
 @mcp.tool()

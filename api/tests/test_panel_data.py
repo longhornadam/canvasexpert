@@ -160,7 +160,7 @@ def test_roster_panels_gate_non_current_scopes_and_strip_identifiers():
     assert "student-1" not in str(out)
 
 
-def test_random_names_expand_only_collisions_and_fingerprint_the_safe_set():
+def test_random_names_expand_only_collisions_and_emit_only_display_names():
     def reader(scope, course_id, **kwargs):
         return _private_scope(scope, [
             {"id": "student-1", "name": "Alpha One", "sis_user_id": "hidden"},
@@ -171,7 +171,6 @@ def test_random_names_expand_only_collisions_and_fingerprint_the_safe_set():
     out = random_student_payload("course-c", scope_reader=reader)
 
     assert out["names"] == ["Alpha Oak", "Alpha One", "Beta T."]
-    assert len(out["fingerprint"]) == 64
     assert "student-" not in str(out)
     assert "sis_user_id" not in str(out)
 
@@ -200,10 +199,12 @@ def test_missing_work_uses_published_missing_and_excused_flags_and_orders_rows()
     assert out["students"] == [
         {"kind": "missing_work", "student_name": "Alpha O.", "missing_count": 1,
          "assignment_titles": ["Later"]},
-        {"kind": "missing_work", "student_name": "Beta T.", "missing_count": 0,
-         "assignment_titles": []},
     ]
     assert all("student-" not in str(row) for row in out["students"])
+    scopes[read_service.PRIVATE_SUBMISSIONS]["records"] = []
+    empty = missing_work_payload("course-c", scope_reader=lambda scope, course_id, **kwargs: scopes[scope])
+    assert empty["state"] == "no_missing_work"
+    assert empty["students"] == []
 
 
 def test_birthdays_are_annual_and_celebrations_are_window_intersections():
@@ -226,7 +227,36 @@ def test_birthdays_are_annual_and_celebrations_are_window_intersections():
 
     assert out["state"] == "ready"
     assert out["items"] == [
-        {"kind": "achievement", "student_name": "Beta T.", "date": "Dec 30–Jan 3", "label": "Helpful teammate"},
+        {"kind": "achievement", "student_name": "Beta T.", "date": "Dec 30 to Jan 3", "label": "Helpful teammate"},
         {"kind": "birthday", "student_name": "Alpha O.", "date": "Jan 2", "label": "Birthday"},
     ]
     assert "celebration-1" not in str(out)
+
+
+def test_birthday_sorting_uses_resolved_dates_and_non_leap_feb_29_clamps():
+    scopes = {read_service.PRIVATE_ROSTER: _private_scope(read_service.PRIVATE_ROSTER, [
+        {"id": "one", "name": "One Student"},
+        {"id": "two", "name": "Two Student"},
+        {"id": "three", "name": "Three Student"},
+    ])}
+    profiles = {
+        "one": {"classroom_profile": {"birthday": "02-29", "celebrations": []}},
+        "two": {"classroom_profile": {"birthday": "01-02", "celebrations": []}},
+        "three": {"classroom_profile": {"birthday": "01-10", "celebrations": []}},
+    }
+    out = birthdays_celebrations_payload(
+        "course-c", days=31, now=datetime(2027, 1, 1),
+        scope_reader=lambda scope, course_id, **kwargs: scopes[scope],
+        profile_reader=lambda course_id: profiles,
+    )
+    assert [(item["date"], item["student_name"]) for item in out["items"]] == [
+        ("Jan 2", "Two S."), ("Jan 10", "Three S."),
+    ]
+    feb = birthdays_celebrations_payload(
+        "course-c", days=31, now=datetime(2027, 2, 1),
+        scope_reader=lambda scope, course_id, **kwargs: scopes[scope],
+        profile_reader=lambda course_id: profiles,
+    )
+    assert [(item["date"], item["student_name"]) for item in feb["items"]] == [
+        ("Feb 28", "One S."),
+    ]

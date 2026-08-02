@@ -1,0 +1,36 @@
+# Author a Learning Objective
+
+Write one reviewed, TEKS-aligned learning objective for the teacher's current local
+course catalog. Name the TEKS student expectation the objective serves. Let that
+expectation's verb drive the objective verb, but do not restate the TEKS verbatim.
+State what students will do, using an active verb and concrete evidence of learning.
+No fixed district format is required.
+
+## Observable active verbs
+
+Organize observable active verbs by cognitive demand:
+
+- Identify, describe, or summarize for foundational recall and comprehension.
+- Analyze, compare, or explain for examining relationships and meaning.
+- Evaluate, justify, synthesize, or create for reasoning, judgment, and production.
+
+Other precise active verbs may fit the expectation. Avoid vague verbs such as know,
+understand, learn, or be familiar with unless the observable performance is also stated.
+
+## Mechanical limits
+
+- Plain text only: no HTML or control characters.
+- Whitespace is collapsed before validation.
+- The normalized objective is 1 through 500 characters inclusive.
+- Include an ISO start and end date and at least one current local catalog source:
+  module, assignment, or published page.
+
+## Teacher-confirmed write loop
+
+Use the current local Catalog only. First read the existing objectives and source
+records. Then show the teacher an exact preview containing the objective, dates, source
+titles, document revision, and any outgoing text for a replacement. Apply only after
+the teacher confirms that exact preview and its digest. To revise an existing entry,
+use its stable id and replace it in place. To remove one, show the selected objective
+and ask for confirmation, then delete it with the expected document revision. Never
+write directly, call Canvas, infer student data, or invent a district format.

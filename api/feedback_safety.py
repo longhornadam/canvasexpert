@@ -42,7 +42,13 @@ _TEXT_FIELDS = {"prompt", "response", "feedback", "text", "assignment_descriptio
                 "raw_text", "evidence_span", "claim_text", "next_focus",
                 "student_facing_text", "prompt_text", "strong_text",
                 "near_miss_text", "one_thing", "acknowledgment",
-                "flag_detail"}
+                "flag_detail",
+                # Roster seating notes. ai_context_note is scrubbed before it
+                # goes out; private_note is never emitted at all. Both are
+                # listed anyway so that if either ever reaches a payload
+                # unscrubbed, it registers as a scrub miss instead of passing
+                # unscanned, which is what this set exists to prevent.
+                "private_note", "ai_context_note"}
 
 # A real id found as a `\b`-bounded token inside free text is only a HARD
 # block at this length or longer. Below it, a coincidental short number (a

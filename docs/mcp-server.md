@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 19.
+Tool schema version 21 (36 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -38,12 +38,18 @@ Tool schema version 19.
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
 | `get_course_pages(course_id, full_text=false)` | Published normalized pages from the Current course's local v3 catalog; body text is bounded unless explicitly requested | No |
-| `preview_learning_objective(course_id, objective, effective_start, effective_end, source_refs)` | Exact reviewed preview grounded in current local module, assignment, or page records | No |
-| `apply_learning_objective(course_id, preview, preview_digest, expected_revision)` | Applies only the exact reviewed preview after catalog/source/revision checks | No |
+| `list_learning_objectives(course_id)` | Current reviewed learning objectives as a compact table; Current-course and local-document gated | No |
+| `preview_learning_objective(course_id, objective, effective_start, effective_end, source_refs, replaces?)` | Exact reviewed create or replacement preview grounded in current local module, assignment, or page records | No |
+| `apply_learning_objective(course_id, preview, preview_digest, expected_revision)` | Applies only the exact reviewed create or replacement preview after catalog/source/revision checks; replacement identity comes from the digest-protected preview | No |
+| `delete_learning_objective(course_id, entry_id, expected_revision)` | Directly deletes one selected reviewed objective with revision protection | No |
 | `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/`, or SmartDeck (`deck`) with no staging/review appendix (unlike other Forge kinds) | No |
 | `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
+| `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes — pseudonymized |
+| `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected preview of a pseudonym-first settings change; use before apply | Yes — pseudonymized |
+| `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the exact reviewed preview through the existing Roster mutation path | Yes — pseudonymized |
+| `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes — pseudonymized |
 | `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |

@@ -77,19 +77,34 @@ changing them.
 three fixed layouts: a closed set is what keeps this from sprawling into a hundred
 one-off pages nobody sweeps for responsiveness.
 
-```python
-PANEL_CATALOG = {
-    "whats-due": {
-        "title": "What's due",
-        "blurb": "Upcoming assignment due dates for one course. No student data.",
-        "template": "panel_whats_due.html",
-        "needs_course": True,
-    },
-    "upcoming-events": {"template": "panel_upcoming_events.html"},
-    "sports-results": {"template": "panel_sports_results.html"},
-    "bobcat-hour": {"template": "panel_bobcat_hour.html"},
-}
-```
+`PANEL_CATALOG` currently contains exactly these nine kinds. The `days`,
+`default_days`, and `max_days` fields are consumed by the console for the four
+windowed kinds; the remaining options are selected from the block and theme controls.
+
+| Kind | Payload | Main states |
+| --- | --- | --- |
+| `whats-due` | `whats_due_payload` assignments | `no_course`, `no_catalog`, `nothing_due`, `ready`, schedule states |
+| `random-student` | `random_student_payload` names | `mirror_needs_attention`, `no_students`, `ready` |
+| `random-student-no-repeats` | `random_student_no_repeats_payload` names | `mirror_needs_attention`, `no_students`, `ready` |
+| `upcoming-events` | `upcoming_events_payload` events | `calendar_needs_attention`, `no_school`, `nothing_upcoming`, `ready` |
+| `sports-results` | `sports_results_payload` games | `calendar_needs_attention`, `no_games`, `ready` |
+| `bobcat-hour` | `bobcat_hour_payload` groups and activities | `not_bobcat_hour_day`, `no_school`, `nothing_scheduled`, `ready` |
+| `missing-work` | `missing_work_payload` student rows | `mirror_needs_attention`, `no_students`, `no_missing_work`, `ready` |
+| `birthdays-celebrations` | `birthdays_celebrations_payload` items | `mirror_needs_attention`, `no_students`, `nothing_to_celebrate`, `ready` |
+| `learning-objective` | `learning_objective_payload` one reviewed objective | `catalog_needs_attention`, `no_objective`, `expired`, `changed_source`, `ready` |
+
+The Panel data functions are wall-safe and return named states with empty collections;
+they do not raise into a projected page. Missing-work excludes zero-count students,
+and birthday/celebration rows carry a private resolved date for deterministic ordering
+before it is removed from the payload. Cross-date celebration spans use ` to `, and a
+Feb 29 birthday resolves to Feb 28 in non-leap years.
+
+The no-repeat panel stores only display names and used names in localStorage. Its key is
+the resolved `payload.block`, falling back to the URL block and then `follow`, so
+follow-mode blocks retain independent explicit-reset cycles. No server fingerprint is
+part of the payload or browser state. A stale or unavailable Catalog reports
+`catalog_needs_attention` with refresh wording; `changed_source` is reserved for a
+missing or digest-mismatched referenced record.
 
 ### whats-due
 

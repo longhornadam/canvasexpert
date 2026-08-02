@@ -13,21 +13,30 @@ import os
 import re
 import tempfile
 import threading
+import uuid
 from datetime import date, datetime, timezone
 
 from api.webui import workspace
 
 
-VERSION = 1
+VERSION = 2
 ROOT_KEYS = {"version", "revision", "objectives"}
 ENTRY_KEYS = {
-    "objective", "effective_start", "effective_end", "source_refs",
+    "id", "objective", "effective_start", "effective_end", "source_refs",
     "source_digest", "catalog_updated_at", "authored_at",
 }
 SOURCE_REF_KEYS = {"kind", "id", "title"}
 SOURCE_KINDS = frozenset({"module", "assignment", "page"})
 HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _STORE_LOCK = threading.RLock()
+
+
+class CatalogNeedsAttentionError(ValueError):
+    """The local Catalog is stale, unavailable, or structurally unusable."""
+
+
+class ChangedSourceError(ValueError):
+    """A referenced Catalog record is missing or no longer matches its digest."""
 
 
 def _now() -> str:
@@ -72,10 +81,8 @@ def _iso_timestamp(value, label: str) -> str:
 
 def normalize_objective(value) -> str:
     text = _normalize_text(value)
-    if not 1 <= len(text) <= 240:
-        raise ValueError("objective must be 1-240 characters")
-    if sum(text.count(mark) for mark in ".?!") > 1:
-        raise ValueError("objective must be one sentence")
+    if not 1 <= len(text) <= 500:
+        raise ValueError("objective must be 1-500 characters after whitespace normalization")
     return text
 
 
@@ -103,6 +110,9 @@ def normalize_source_refs(value) -> list[dict]:
 def normalize_entry(entry: dict) -> dict:
     if not isinstance(entry, dict) or set(entry) != ENTRY_KEYS:
         raise ValueError("objective entry schema is invalid")
+    ident = entry["id"]
+    if not isinstance(ident, str) or not ident.strip() or len(ident) > 128:
+        raise ValueError("objective id is invalid")
     objective = normalize_objective(entry["objective"])
     start = _iso_date(entry["effective_start"], "effective_start")
     end = _iso_date(entry["effective_end"], "effective_end")
@@ -113,6 +123,7 @@ def normalize_entry(entry: dict) -> dict:
     if not isinstance(digest, str) or not HEX_DIGEST.fullmatch(digest):
         raise ValueError("source_digest must be a sha256 hex digest")
     return {
+        "id": ident.strip(),
         "objective": objective,
         "effective_start": start,
         "effective_end": end,
@@ -139,6 +150,9 @@ def validate_document(document: dict) -> dict:
         if not isinstance(course_id, str) or not course_id.strip() or not isinstance(entries, list):
             raise ValueError("objective course bucket is invalid")
         normalized = [normalize_entry(entry) for entry in entries]
+        ids = [entry["id"] for entry in normalized]
+        if len(ids) != len(set(ids)):
+            raise ValueError("objective ids must be unique within a course")
         for index, entry in enumerate(normalized):
             if any(_ranges_overlap(entry, other) for other in normalized[index + 1:]):
                 raise ValueError("objective date ranges overlap")
@@ -193,7 +207,7 @@ def _atomic_write(document: dict, *, root=None) -> dict:
 
 def source_records(catalog: dict, source_refs: list[dict]) -> list[dict]:
     if not isinstance(catalog, dict) or catalog.get("version") != 3:
-        raise ValueError("catalog_v3_required")
+        raise CatalogNeedsAttentionError("catalog_v3_required")
     collections = {
         "module": catalog.get("modules", {}).get("records", []),
         "assignment": catalog.get("assignments", {}).get("records", {}),
@@ -204,17 +218,17 @@ def source_records(catalog: dict, source_refs: list[dict]) -> list[dict]:
         scope_key = {"module": "modules", "assignment": "assignments", "page": "pages"}[ref["kind"]]
         scope = catalog.get(scope_key)
         if not isinstance(scope, dict) or scope.get("state") != "current":
-            raise ValueError("catalog source scope is not current")
+            raise CatalogNeedsAttentionError("catalog source scope is not current")
         collection = collections[ref["kind"]]
         record = collection.get(ref["id"]) if isinstance(collection, dict) else next(
             (item for item in collection if isinstance(item, dict) and str(item.get("id")) == ref["id"]), None)
         if not isinstance(record, dict):
-            raise ValueError("source ref does not resolve")
+            raise ChangedSourceError("source ref does not resolve")
         if ref["kind"] == "page" and record.get("published") is not True:
-            raise ValueError("source ref page is not published")
+            raise ChangedSourceError("source ref page is not published")
         title_key = "name" if ref["kind"] in {"module", "assignment"} else "title"
         if _normalize_text(record.get(title_key)) != ref["title"]:
-            raise ValueError("source ref title does not match catalog")
+            raise ChangedSourceError("source ref title does not match catalog")
         records.append(copy.deepcopy(record))
     return records
 
@@ -228,7 +242,7 @@ def preview_digest(preview: dict) -> str:
 
 
 def build_preview(*, course_id: str, catalog: dict, document: dict, objective,
-                  effective_start, effective_end, source_refs) -> dict:
+                  effective_start, effective_end, source_refs, replaces=None) -> dict:
     normalized_refs = normalize_source_refs(source_refs)
     normalized_objective = normalize_objective(objective)
     start = _iso_date(effective_start, "effective_start")
@@ -248,7 +262,17 @@ def build_preview(*, course_id: str, catalog: dict, document: dict, objective,
     normalized_document = copy.deepcopy(document)
     validate_document(normalized_document)
     entries = normalized_document["objectives"].setdefault(str(course_id), [])
+    outgoing = None
+    if replaces is not None:
+        if not isinstance(replaces, str) or not replaces.strip():
+            raise ValueError("replaces must be an objective id")
+        outgoing = next((entry for entry in entries if entry["id"] == replaces), None)
+        if outgoing is None:
+            raise ValueError("objective id not found")
+    proposed["id"] = outgoing["id"] if outgoing else uuid.uuid4().hex
     for existing in entries:
+        if outgoing is not None and existing["id"] == outgoing["id"]:
+            continue
         if _ranges_overlap(proposed, existing):
             raise ValueError("objective date ranges overlap")
     preview = {
@@ -258,6 +282,9 @@ def build_preview(*, course_id: str, catalog: dict, document: dict, objective,
         "document_revision": normalized_document["revision"],
         "source_digest": digest,
         "source_titles": [ref["title"] for ref in normalized_refs],
+        "replaces": outgoing["id"] if outgoing else None,
+        "outgoing": outgoing["objective"] if outgoing else None,
+        "incoming": proposed["objective"],
         "proposed": proposed,
     }
     return {"preview": preview, "preview_digest": preview_digest(preview),
@@ -289,8 +316,34 @@ def apply_preview(*, course_id: str, preview: dict, preview_digest_value: str,
             raise ValueError("source_changed")
         validate_document(current)
         entries = current["objectives"].setdefault(str(course_id), [])
-        if any(_ranges_overlap(proposed, existing) for existing in entries):
-            raise ValueError("objective date ranges overlap")
-        entries.append(proposed)
+        replaces = preview.get("replaces")
+        if replaces is not None:
+            if proposed["id"] != replaces:
+                raise ValueError("objective replacement id mismatch")
+            index = next((i for i, entry in enumerate(entries) if entry["id"] == replaces), None)
+            if index is None:
+                raise ValueError("objective id not found")
+            if any(_ranges_overlap(proposed, existing) for i, existing in enumerate(entries) if i != index):
+                raise ValueError("objective date ranges overlap")
+            entries[index] = proposed
+        else:
+            if any(_ranges_overlap(proposed, existing) for existing in entries):
+                raise ValueError("objective date ranges overlap")
+            if any(existing["id"] == proposed["id"] for existing in entries):
+                raise ValueError("objective id already exists")
+            entries.append(proposed)
+        current["revision"] += 1
+        return _atomic_write(current, root=root)
+
+
+def delete_entry(*, course_id: str, entry_id: str, expected_revision: int, root=None) -> dict:
+    with _STORE_LOCK:
+        current = read_document(root=root)
+        if current.get("revision") != expected_revision:
+            raise ValueError("objective_revision_mismatch")
+        entries = current["objectives"].get(str(course_id))
+        if entries is None or not any(entry.get("id") == entry_id for entry in entries):
+            raise ValueError("objective id not found")
+        current["objectives"][str(course_id)] = [entry for entry in entries if entry.get("id") != entry_id]
         current["revision"] += 1
         return _atomic_write(current, root=root)

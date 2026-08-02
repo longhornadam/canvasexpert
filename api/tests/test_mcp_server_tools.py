@@ -512,7 +512,7 @@ def test_get_authoring_contract_unknown_kind_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown kind 'essay'; expected one of: "
-                  "quiz, assignment, page, rubric, deck, schedule"),
+                  "quiz, assignment, page, rubric, deck, schedule, learning_objective"),
     }
 
 
@@ -1613,9 +1613,12 @@ def test_server_registers_the_expected_tool_set():
         "preview_school_calendar_replacement", "apply_school_calendar_replacement",
         "preview_school_calendar_change", "apply_school_calendar_change",
         "preview_school_calendar_event_change", "apply_school_calendar_event_change",
-        "get_course_pages", "preview_learning_objective", "apply_learning_objective",
-        "list_active_decks", "archive_deck",
-    }
+        "get_course_pages", "list_learning_objectives", "preview_learning_objective",
+            "apply_learning_objective", "delete_learning_objective",
+            "list_active_decks", "archive_deck",
+            "get_roster_student_settings", "preview_roster_student_change",
+            "apply_roster_student_change", "clear_roster_student_field",
+        }
 
 
 def test_server_wrappers_return_compact_json(monkeypatch):

@@ -249,6 +249,7 @@ def roster_get(course_id: str = Query("")):
     # Build rows
     students_out = []
     name_order_map = {}
+    profile_warnings = []
     for u in (users or []):
         uid = str(u["id"])
         sortable = u.get("sortable_name") or u.get("name", "")
@@ -299,6 +300,7 @@ def roster_get(course_id: str = Query("")):
         seating_context = roster_updates.normalize_seating_context(
             local_settings.get("seating_context") if isinstance(local_settings, dict) else None
         )
+        profile_invalid = False
         try:
             classroom_profile = config.validate_classroom_profile(
                 local_settings.get("classroom_profile", config.empty_classroom_profile())
@@ -306,6 +308,8 @@ def roster_get(course_id: str = Query("")):
             )
         except ValueError:
             classroom_profile = config.empty_classroom_profile()
+            profile_invalid = True
+            profile_warnings.append(f"Classroom profile for {display} is invalid; showing an empty profile.")
 
         row = {
             "id": uid,
@@ -328,6 +332,8 @@ def roster_get(course_id: str = Query("")):
         }
         row["warnings"] = _compute_warnings(
             row, vault_by_id, protected_names, collisions, selected_category_id)
+        if profile_invalid:
+            row["warnings"].append("classroom_profile_invalid")
         students_out.append(row)
         name_order_map[uid] = (sortable or display).lower()
 
@@ -343,11 +349,17 @@ def roster_get(course_id: str = Query("")):
     )
     warning_count = sum(1 for s in students_out if s["warnings"])
 
-    note = ""
+    # Independent problems accumulate rather than shadowing each other: an
+    # invalid classroom profile and a groups failure are unrelated, and an
+    # if/elif chain here silently hid whichever came second.
+    notes = []
+    if profile_warnings:
+        notes.append(" ".join(profile_warnings))
     if group_err:
-        note = f"Groups: {group_err}"
+        notes.append(f"Groups: {group_err}")
     elif group_msg:
-        note = group_msg
+        notes.append(group_msg)
+    note = " ".join(notes)
 
     # Check for legacy tier assignments
     legacy_tier_count = 0

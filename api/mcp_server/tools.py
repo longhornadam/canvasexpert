@@ -32,6 +32,8 @@ no staleness refusal applies to it."""
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from contextlib import contextmanager
 from datetime import date, timedelta
 
@@ -276,6 +278,277 @@ def _course_gate_check(course_id: str) -> str | None:
     return course_scope.current_course_error(course_id, config.active_courses())
 
 
+# ---------------------------------------------------------------------------
+# Pseudonym-first local Roster settings tools (schema v21)
+# ---------------------------------------------------------------------------
+
+_MCP_ROSTER_PATCH_KEYS = {
+    "pseudonym", "regenerate_pseudonym", "extra_time", "monitored",
+    "canvas_group", "seating_context", "classroom_profile", "add_nicknames",
+}
+_MCP_ROSTER_CLEAR_KEYS = {"extra_time", "monitored", "seating_context", "classroom_profile"}
+# The seating fields an MCP caller may see and set. private_note is absent on
+# purpose: it is teacher-only, so it is neither returned nor writable here.
+_MCP_SEATING_KEYS = {"front_row", "near_teacher", "ai_context_note"}
+
+
+def _canonical_digest(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _roster_group_for_user(course_id: str, user_id: str) -> dict | None:
+    document = mirror_store.read_groups(course_id) or {}
+    scheme = config.get_roster_group_scheme(course_id)
+    selected = str(scheme.get("selected_group_category_id") or "")
+    for category in document.get("categories") or document.get("groups") or []:
+        category_id = str(category.get("category_id") or category.get("id") or "")
+        if selected and category_id != selected:
+            continue
+        for group in category.get("groups") or []:
+            members = group.get("student_ids") or []
+            if str(user_id) in {str(member) for member in members}:
+                return {"category_id": category_id, "group_id": str(group.get("id") or ""),
+                        "group_name": group.get("name") or ""}
+            for membership in group.get("memberships") or []:
+                if str(membership.get("user_id") or "") == str(user_id):
+                    return {"category_id": category_id, "group_id": str(group.get("id") or ""),
+                            "group_name": group.get("name") or ""}
+    return None
+
+
+def _roster_full_record(course_id: str, user_id: str, vault) -> dict:
+    vault_entry = next((entry for entry in vault.entries()
+                        if str(entry.get("canvas_id")) == str(user_id)), {})
+    local = config.get_roster_student_settings(course_id) or {}
+    local_entry = local.get(str(user_id), {}) if isinstance(local, dict) else {}
+    extra = next((entry for entry in config.get_extra_time(course_id) or []
+                  if str(entry.get("id")) == str(user_id)), None)
+    monitored = (config.get_monitored_students() or {}).get(str(user_id))
+    return {
+        "vault": vault_entry,
+        "local": local_entry if isinstance(local_entry, dict) else {},
+        "extra_time": extra,
+        "monitored": monitored,
+        "canvas_group": _roster_group_for_user(course_id, user_id),
+    }
+
+
+def _roster_safe_projection(course_id: str, user_id: str, vault) -> dict:
+    record = _roster_full_record(course_id, user_id, vault)
+    local = record["local"]
+    extra = record["extra_time"] or {}
+    monitored = record["monitored"] or {}
+    group = record["canvas_group"]
+    seating = roster_context.normalize_seating_context(local.get("seating_context"))
+    profile = local.get("classroom_profile", config.empty_classroom_profile())
+    try:
+        profile = config.validate_classroom_profile(profile)
+    except ValueError:
+        profile = config.empty_classroom_profile()
+    # private_note is teacher-only and never leaves the machine, matching
+    # get_seating_context, which emits front_row/near_teacher plus a scrubbed
+    # ai_context_note and no private note at all. ai_context_note is free text
+    # a teacher typed, so it is scrubbed here rather than trusted: pseudonym.gate
+    # only soft-flags a roster name in free text, and a soft flag does not block.
+    replacement_map = feedback_scrub.build_replacement_map(
+        vault.entries(), set(config.active_protected_names())
+    )
+    return {
+        "pseudonym": record["vault"].get("pseudonym", ""),
+        "extra_time": {"enabled": bool(extra), "days": extra.get("days", 0) if extra else 0},
+        "monitored": {"enabled": bool(monitored)},
+        "canvas_group": group,
+        "seating_context": {
+            "front_row": seating["front_row"], "near_teacher": seating["near_teacher"],
+            "ai_context_note": feedback_scrub.scrub_text(
+                seating["ai_context_note"], replacement_map),
+        },
+        "classroom_profile": profile,
+    }
+
+
+def _open_roster_student(course_id: str, requested: str):
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return None, vault_err
+    mirror_doc = _mirror_roster_doc(course_id)
+    if mirror_doc is None:
+        return None, _MIRROR_UNAVAILABLE_ROSTER_ERROR
+    with _vault_transaction(vault):
+        roster_service.upsert_roster(vault, mirror_doc["students"])
+        user_id = pseudonym.resolve_pseudonym(vault, mirror_doc["students"], requested)
+        if not user_id:
+            return None, "No current local roster student matches that pseudonym."
+        return {"vault": vault, "students": mirror_doc["students"], "user_id": user_id}, None
+
+
+def _gate_roster_result(payload: dict, vault) -> dict:
+    return pseudonym.gate(payload, vault)
+
+
+def _validate_mcp_roster_patch(patch: object) -> tuple[dict | None, str | None]:
+    if not isinstance(patch, dict):
+        return None, "patch must be an object."
+    if "nicknames" in patch:
+        return None, "nicknames is not available through MCP; use add_nicknames."
+    unknown = set(patch) - _MCP_ROSTER_PATCH_KEYS
+    if unknown:
+        return None, f"Unknown patch keys: {sorted(unknown)}"
+    if "add_nicknames" in patch and (
+        not isinstance(patch["add_nicknames"], list)
+        or any(not isinstance(value, str) for value in patch["add_nicknames"])
+    ):
+        return None, "add_nicknames must be a list of strings."
+    if "seating_context" in patch:
+        seating = patch["seating_context"]
+        if not isinstance(seating, dict):
+            return None, "seating_context must be an object."
+        if "private_note" in seating:
+            return None, ("seating_context.private_note is not available through MCP; "
+                          "edit it in the Roster page.")
+        unknown = set(seating) - _MCP_SEATING_KEYS
+        if unknown:
+            return None, f"Unknown seating_context keys: {sorted(unknown)}"
+    return patch, None
+
+
+def _merge_stored_private_note(course_id: str, user_id: str, patch: dict) -> dict:
+    """Fill the fields an MCP caller cannot see back in before storage.
+
+    validate_seating_context requires the exact full field set, and MCP can
+    neither read nor write private_note. Without this, every seating write from
+    an assistant would have to send a blank private note and would silently
+    erase whatever the teacher typed there.
+    """
+    if "seating_context" not in patch:
+        return patch
+    local = config.get_roster_student_settings(course_id) or {}
+    entry = local.get(str(user_id), {}) if isinstance(local, dict) else {}
+    stored = roster_context.normalize_seating_context(
+        entry.get("seating_context") if isinstance(entry, dict) else None)
+    merged = dict(patch)
+    supplied = dict(patch["seating_context"])
+    merged["seating_context"] = {
+        "front_row": supplied.get("front_row", stored["front_row"]),
+        "near_teacher": supplied.get("near_teacher", stored["near_teacher"]),
+        "ai_context_note": supplied.get("ai_context_note", stored["ai_context_note"]),
+        "private_note": stored["private_note"],
+    }
+    return merged
+
+
+def get_roster_student_settings(course_id: str, pseudonym: str) -> dict:
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+    target, error = _open_roster_student(course_id, pseudonym)
+    if error:
+        return {"ok": False, "error": error}
+    vault, user_id = target["vault"], target["user_id"]
+    result = _gate_roster_result({
+        "pseudonym": vault.get_or_assign(user_id),
+        "settings": _roster_safe_projection(course_id, user_id, vault),
+        "settings_digest": _canonical_digest(_roster_full_record(course_id, user_id, vault)),
+    }, vault)
+    return result
+
+
+def preview_roster_student_change(course_id: str, pseudonym: str, patch: dict) -> dict:
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+    patch, error = _validate_mcp_roster_patch(patch)
+    if error:
+        return {"ok": False, "error": error}
+    target, error = _open_roster_student(course_id, pseudonym)
+    if error:
+        return {"ok": False, "error": error}
+    vault, user_id = target["vault"], target["user_id"]
+    before = _roster_safe_projection(course_id, user_id, vault)
+    after = dict(before)
+    for key, value in patch.items():
+        if key == "add_nicknames":
+            after[key] = list(value)
+        elif key == "regenerate_pseudonym":
+            after[key] = bool(value)
+        else:
+            after[key] = value
+    preview = {"pseudonym": before["pseudonym"], "patch": patch,
+               "before": {key: before.get(key) for key in patch},
+               "after": {key: after.get(key) for key in patch},
+               "settings_digest": _canonical_digest(_roster_full_record(course_id, user_id, vault))}
+    return _gate_roster_result({
+        "pseudonym": before["pseudonym"],
+        "settings_digest": preview["settings_digest"],
+        "preview": preview,
+        "preview_digest": _canonical_digest(preview),
+    }, vault)
+
+
+def _apply_roster_update(course_id: str, vault, user_id: str, patch: dict) -> dict:
+    from api.webui import roster_mcp
+    return roster_mcp.update_student(
+        course_id, user_id, _merge_stored_private_note(course_id, user_id, patch), vault)
+
+
+def apply_roster_student_change(course_id: str, preview: dict,
+                                preview_digest: str, expected_settings_digest: str) -> dict:
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+    if not isinstance(preview, dict) or _canonical_digest(preview) != preview_digest:
+        return {"ok": False, "error": "Preview digest mismatch; nothing was written."}
+    if preview.get("settings_digest") != expected_settings_digest:
+        return {"ok": False, "error": "Expected settings digest does not match the preview; nothing was written."}
+    requested = preview.get("pseudonym")
+    patch, error = _validate_mcp_roster_patch(preview.get("patch"))
+    if error:
+        return {"ok": False, "error": error}
+    target, error = _open_roster_student(course_id, requested)
+    if error:
+        return {"ok": False, "error": error}
+    vault, user_id = target["vault"], target["user_id"]
+    current_digest = _canonical_digest(_roster_full_record(course_id, user_id, vault))
+    if current_digest != expected_settings_digest:
+        return {"ok": False, "error": "Settings changed since preview; nothing was written."}
+    result = _apply_roster_update(course_id, vault, user_id, patch)
+    if not result.get("ok"):
+        return result
+    fresh = _roster_full_record(course_id, user_id, vault)
+    return _gate_roster_result({"pseudonym": vault.get_or_assign(user_id),
+                                "settings_digest": _canonical_digest(fresh)}, vault)
+
+
+def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
+                               expected_settings_digest: str) -> dict:
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+    if field in {"nicknames", "add_nicknames"}:
+        return {"ok": False, "error": f"{field} cannot be cleared through MCP."}
+    if field not in _MCP_ROSTER_CLEAR_KEYS:
+        return {"ok": False, "error": "That roster field has no supported direct clear operation."}
+    target, error = _open_roster_student(course_id, pseudonym)
+    if error:
+        return {"ok": False, "error": error}
+    vault, user_id = target["vault"], target["user_id"]
+    if _canonical_digest(_roster_full_record(course_id, user_id, vault)) != expected_settings_digest:
+        return {"ok": False, "error": "Settings changed since read; nothing was written."}
+    patch = {
+        "extra_time": {"enabled": False} if field == "extra_time" else None,
+        "monitored": {"enabled": False} if field == "monitored" else None,
+        "seating_context": {"front_row": "none", "near_teacher": "none",
+                             "private_note": "", "ai_context_note": ""} if field == "seating_context" else None,
+        "classroom_profile": config.empty_classroom_profile() if field == "classroom_profile" else None,
+    }
+    result = _apply_roster_update(course_id, vault, user_id, {field: patch[field]})
+    if not result.get("ok"):
+        return result
+    return _gate_roster_result({"pseudonym": vault.get_or_assign(user_id),
+                                "settings_digest": _canonical_digest(_roster_full_record(course_id, user_id, vault))}, vault)
+
+
 _VAULT_CONFLICT_ERROR = (
     "identity vault conflict detected — resolve in the CanvasExpert web UI "
     "before pseudonymized reads continue"
@@ -507,7 +780,7 @@ def get_course_pages(course_id: str, full_text: bool = False) -> dict:
 
 def preview_learning_objective(course_id: str, objective: str,
                                effective_start: str, effective_end: str,
-                               source_refs: list) -> dict:
+                               source_refs: list, replaces: str = None) -> dict:
     """Build the exact reviewed objective preview; never writes or calls Canvas."""
     gate_error = _course_gate_check(course_id)
     if gate_error:
@@ -521,7 +794,7 @@ def preview_learning_objective(course_id: str, objective: str,
         result = learning_objectives.build_preview(
             course_id=str(course_id), catalog=catalog, document=document,
             objective=objective, effective_start=effective_start,
-            effective_end=effective_end, source_refs=source_refs,
+            effective_end=effective_end, source_refs=source_refs, replaces=replaces,
         )
         return {"ok": True, **result}
     except (OSError, TypeError, ValueError) as error:
@@ -552,6 +825,45 @@ def apply_learning_objective(course_id: str, preview: dict,
         return {"ok": False, "error": str(error)}
 
 
+def list_learning_objectives(course_id: str) -> dict:
+    """List the reviewed objectives for a Current course without student data."""
+    gate_error = _course_gate_check(course_id)
+    if gate_error:
+        return {"ok": False, "error": gate_error}
+    try:
+        document = learning_objectives.read_document()
+        rows = []
+        for entry in document["objectives"].get(str(course_id), []):
+            rows.append([
+                entry["id"], entry["objective"], entry["effective_start"],
+                entry["effective_end"], [ref["title"] for ref in entry["source_refs"]],
+                entry["authored_at"],
+            ])
+        return {"ok": True, "course_id": str(course_id),
+                "revision": document["revision"],
+                "objectives": {"columns": [
+                    "id", "objective", "effective_start", "effective_end",
+                    "source_titles", "authored_at",
+                ], "rows": rows}}
+    except (OSError, TypeError, ValueError) as error:
+        return {"ok": False, "error": str(error)}
+
+
+def delete_learning_objective(course_id: str, entry_id: str, expected_revision: int) -> dict:
+    """Delete one reviewed objective with an explicit revision guard."""
+    gate_error = _course_gate_check(course_id)
+    if gate_error:
+        return {"ok": False, "error": gate_error}
+    try:
+        written = learning_objectives.delete_entry(
+            course_id=str(course_id), entry_id=entry_id,
+            expected_revision=expected_revision,
+        )
+        return {"ok": True, "course_id": str(course_id), "revision": written["revision"]}
+    except (OSError, TypeError, ValueError) as error:
+        return {"ok": False, "error": str(error)}
+
+
 _CONTRACT_FILES = {
     "quiz": "Author a Quiz (QuizForge).txt",
     "assignment": "Author an Assignment (AssignmentForge).txt",
@@ -559,8 +871,9 @@ _CONTRACT_FILES = {
     "rubric": "Author a Rubric (RubricForge).txt",
     "deck": "Author a SmartDeck (SlideForge).txt",
     "schedule": "Author a Class Schedule.txt",
+    "learning_objective": "Author a Learning Objective.txt",
 }
-_DIRECT_WRITE_CONTRACT_KINDS = frozenset({"deck", "schedule"})
+_DIRECT_WRITE_CONTRACT_KINDS = frozenset({"deck", "schedule", "learning_objective"})
 _STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric", "deck")
 
 # Product knowledge the tool surface does not imply. An assistant that only

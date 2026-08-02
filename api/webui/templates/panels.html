@@ -1,6 +1,6 @@
 {% extends "layouts/workspace.html" %}
 {% from "ui/_macros.html" import rail, page_header, page_section, notice %}
-{% block title %}Panels — Canvas Expert{% endblock %}
+{% block title %}Panels - Canvas Expert{% endblock %}
 {% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}panels-page{% endblock %}
 {% block head_extra %}
@@ -55,11 +55,7 @@
             {% for b in blocks %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
           </select>
         </label>
-        {% if p.kind == 'whats-due' %}
-        <label>Days ahead
-          <input type="number" class="pn-days" data-days value="{{ default_days }}" min="1" max="{{ max_days }}">
-        </label>
-        {% elif p.days %}
+        {% if p.days %}
         <label>Days ahead
           <input type="number" class="pn-days" data-days value="{{ p.default_days }}" min="1" max="{{ p.max_days }}">
         </label>
@@ -189,7 +185,7 @@
         var fallbackEl = isLink ? address : embed;
         copyText(text, fallbackEl, !isLink).then(function (ok) {
           copied.hidden = false;
-          copied.textContent = ok ? "Copied" : "Could not copy — select and copy the address below.";
+          copied.textContent = ok ? "Copied" : "Could not copy; select and copy the address below.";
         });
       });
     });

@@ -47,6 +47,27 @@ def pseudonymize_roster(vault, users: list[dict], section_map: dict) -> list[dic
     return rows
 
 
+def resolve_pseudonym(vault, users: list[dict], requested: str) -> str | None:
+    """Resolve a pseudonym only within the current local roster.
+
+    The returned value is an internal Canvas user id for the caller's mutation
+    path; callers must never place it in an MCP payload.  Requiring membership
+    in ``users`` prevents an old vault entry from addressing a withdrawn
+    student and keeps identity resolution mirror-only.
+    """
+    if not isinstance(requested, str) or not requested.strip():
+        return None
+    reverse = getattr(vault, "reverse", None)
+    if reverse is None:
+        return None
+    entry = reverse(requested.strip())
+    if not entry:
+        return None
+    local_id = str(entry.get("canvas_id") or "")
+    current_ids = {str(user.get("id")) for user in users or [] if user.get("id") is not None}
+    return local_id if local_id and local_id in current_ids else None
+
+
 def pseudonymize_submission_rows(vault, subs: list[dict]) -> list[dict]:
     """Per-submission rows with the body scrubbed of every roster real name
     and nickname, and the author identified only by pseudonym. Attachments

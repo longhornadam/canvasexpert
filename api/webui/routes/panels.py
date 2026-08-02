@@ -43,6 +43,9 @@ PANEL_CATALOG = {
         "blurb": "Upcoming assignment due dates for one course. No student data.",
         "template": "panel_whats_due.html",
         "needs_course": True,
+        "days": True,
+        "default_days": panel_data_service.DEFAULT_DUE_DAYS,
+        "max_days": panel_data_service.MAX_DUE_DAYS,
     },
     "random-student": {
         "title": "Random student",
@@ -52,7 +55,7 @@ PANEL_CATALOG = {
         "interactive": True,
     },
     "random-student-no-repeats": {
-        "title": "Random student — no repeats",
+        "title": "Random student (no repeats)",
         "blurb": "Choose each current student once, then reset the cycle.",
         "template": "panel_random_student_no_repeats.html",
         "needs_course": True,
@@ -288,8 +291,6 @@ def panels_page(request: Request):
         "panels": panels,
         "courses": courses,
         "blocks": blocks,
-        "default_days": DEFAULT_LOOKAHEAD_DAYS,
-        "max_days": MAX_LOOKAHEAD_DAYS,
         "themes": [{"key": key, "label": label} for key, label in PANEL_THEMES],
         "default_theme": DEFAULT_THEME,
     })

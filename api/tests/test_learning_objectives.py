@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 
 from api import course_catalog, learning_objectives
 from api.mcp_server import tools
@@ -115,9 +116,61 @@ def test_preview_rejects_unknown_source_and_overlapping_ranges(tmp_path, monkeyp
     assert "overlap" in overlap["error"]
 
 
+def test_v2_objective_limits_ids_and_replace_delete_loop(tmp_path, monkeypatch):
+    _seed(tmp_path, monkeypatch)
+    punctuation = "A" * 480 + " U.S. Dr. e.g."
+    preview = tools.preview_learning_objective(
+        "course-1", punctuation, "2026-09-01", "2026-09-12",
+        [{"kind": "module", "id": "m1", "title": "Unit 1"}],
+    )
+    assert preview["ok"] is True
+    assert preview["preview"]["replaces"] is None
+    ident = preview["preview"]["proposed"]["id"]
+    assert ident and len(ident) <= 128
+    assert tools.apply_learning_objective(
+        "course-1", preview["preview"], preview["preview_digest"], 0,
+    )["ok"]
+    listed = tools.list_learning_objectives("course-1")
+    assert listed["objectives"]["columns"] == [
+        "id", "objective", "effective_start", "effective_end",
+        "source_titles", "authored_at",
+    ]
+    replacement = tools.preview_learning_objective(
+        "course-1", "Explain U.S. evidence, Dr. King, e.g. a source.",
+        "2026-09-01", "2026-09-12",
+        [{"kind": "module", "id": "m1", "title": "Unit 1"}],
+        replaces=ident,
+    )
+    assert replacement["preview"]["outgoing"] == punctuation
+    assert replacement["preview"]["incoming"].startswith("Explain")
+    assert tools.apply_learning_objective(
+        "course-1", replacement["preview"], replacement["preview_digest"],
+        1,
+    )["revision"] == 2
+    assert tools.delete_learning_objective("course-1", ident, 2) == {
+        "ok": True, "course_id": "course-1", "revision": 3,
+    }
+    assert json.loads(open(workspace.learning_objectives_path(), encoding="utf-8").read())["objectives"]["course-1"] == []
+
+
+def test_v1_document_is_rejected_without_migration(tmp_path, monkeypatch):
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    path = workspace.learning_objectives_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"version": 1, "revision": 0, "objectives": {}}, handle)
+    try:
+        learning_objectives.read_document()
+    except ValueError as error:
+        assert str(error) == "objective_document_invalid"
+    else:
+        raise AssertionError("v1 document was accepted")
+
+
 def test_panel_only_invalidates_when_a_referenced_source_changes():
     catalog = _catalog()
     entry = {
+        "id": "obj-1",
         "objective": "Read the welcome page.",
         "effective_start": "2026-09-01",
         "effective_end": "2026-09-12",
@@ -126,7 +179,7 @@ def test_panel_only_invalidates_when_a_referenced_source_changes():
         "catalog_updated_at": STAMP,
         "authored_at": STAMP,
     }
-    document = {"version": 1, "revision": 1, "objectives": {"course-1": [entry]}}
+    document = {"version": 2, "revision": 1, "objectives": {"course-1": [entry]}}
     changed_catalog = copy.deepcopy(catalog)
     changed_catalog["updated_at"] = "2026-08-30T13:00:00+00:00"
     assert learning_objective_payload(
@@ -148,3 +201,24 @@ def test_panel_reports_invalid_objective_document_as_attention():
         catalog_reader=lambda _cid: {"catalog": _catalog()},
     )
     assert out["state"] == "catalog_needs_attention"
+
+
+def test_panel_distinguishes_stale_catalog_from_changed_source():
+    catalog = _catalog()
+    refs = [{"kind": "page", "id": "p1", "title": "Welcome"}]
+    entry = {
+        "id": "obj-1",
+        "objective": "Read the welcome page.", "effective_start": "2026-09-01",
+        "effective_end": "2026-09-12", "source_refs": refs,
+        "source_digest": learning_objectives.source_digest(catalog, refs),
+        "catalog_updated_at": STAMP, "authored_at": STAMP,
+    }
+    document = {"version": 2, "revision": 1, "objectives": {"course-1": [entry]}}
+    stale = copy.deepcopy(catalog)
+    stale["pages"]["state"] = "stale"
+    out = learning_objective_payload(
+        "course-1", now=__import__("datetime").datetime(2026, 9, 5),
+        document_reader=lambda: document, catalog_reader=lambda _cid: {"catalog": stale},
+    )
+    assert out["state"] == "catalog_needs_attention"
+    assert "Refresh" in out["message"]

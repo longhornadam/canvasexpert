@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import pytest
 
 from api.webui.server import app
+from api.webui import config
 import api.webui.routes.roster as roster_routes
 from api.mirror import store as mirror_store
 from api.webui import workspace
@@ -997,6 +998,18 @@ def test_roster_student_rejects_invalid_classroom_profile_without_write(isolated
     assert isolated_roster["settings"]["1"]["101"] == original
 
 
+def test_roster_get_warns_with_affected_student_when_profile_is_corrupt(monkeypatch, isolated_roster):
+    users = [{"id": 101, "name": "Test Student", "sortable_name": "Student, Test",
+              "short_name": "Test", "enrollments": []}]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
+    isolated_roster["settings"]["1"] = {"101": {"classroom_profile": {"bad": True}}}
+    data = client.get("/api/roster?course_id=1").json()
+    assert "classroom_profile_invalid" in data["students"][0]["warnings"]
+    assert "Test Student" in data["note"]
+    assert data["students"][0]["classroom_profile"] == config.empty_classroom_profile()
+
+
 @pytest.mark.parametrize("context", [
     {
         "front_row": "unsupported",
@@ -1468,3 +1481,23 @@ def test_reconcile_group_category_skips_merge_without_previous_document(
     # merge_group_category no-ops (no previous document); falling back to
     # invalidate_groups is itself a no-op here too — unchanged from today.
     assert mirror_store.read_groups("1") is None
+
+
+def test_roster_get_note_reports_profile_and_group_problems_together(monkeypatch, isolated_roster):
+    """Two unrelated problems must both surface.
+
+    The note was an if/elif chain, so a corrupt classroom profile silently hid
+    a groups failure and the teacher only ever saw whichever came first.
+    """
+    users = [{"id": 101, "name": "Test Student", "sortable_name": "Student, Test",
+              "short_name": "Test", "enrollments": []}]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
+    monkeypatch.setattr(roster_routes, "_group_categories_for_roster",
+                        lambda course_id: ([], "mirror unavailable", ""))
+    isolated_roster["settings"]["1"] = {"101": {"classroom_profile": {"bad": True}}}
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert "Test Student" in data["note"]
+    assert "Groups: mirror unavailable" in data["note"]
