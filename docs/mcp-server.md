@@ -69,7 +69,7 @@ Tool schema version 22 (39 tools).
 | `list_active_decks()` | Lists active decks | No |
 | `archive_deck(deck_id)` | Moves a deck to archived | No |
 | `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved}` | No |
-| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true, include_writing_timeline=false)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged, text-only (no media), with paging and budget guards | Yes — pseudonymized |
+| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard | Yes — pseudonymized |
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
 
 `get_course_assignments` and `get_modules` only read the local course catalog written by
@@ -125,13 +125,27 @@ returns only each draft's label, never its absolute path. Pass `kind` to narrow 
 `quiz`, `assignment`, `page`, or `rubric`; omit it to see everything staged across all four.
 
 **Scoring Packet Workflow (v22).** `list_scoring_sessions()` discovers PowerGrader sessions
-with AI-ready SAFE bundles in Current courses. `get_scoring_packet()` retrieves one session's
-pseudonymized student responses with paging (offset/limit, default 10), full text (no truncation,
-no media), and a digest for concurrency protection. The response includes a contract (scoring
-instructions) when `include_context=true`, saving tokens on later pages. `stage_scores()` takes
-the scored results and stages them into the session for teacher review in PowerGrader; it never
-posts to Canvas (the teacher pushes manually). The digest guard (`expected_packet_digest`)
-prevents stale scores from landing if the session has been re-run between retrieval and staging.
+with AI-ready SAFE bundles in Current courses; a session whose bundle is no longer on disk is
+left out rather than offered and then refused. `get_scoring_packet()` retrieves one session's
+pseudonymized student responses with full text (no truncation, no media) and a digest for
+concurrency protection. The response includes a contract (scoring instructions) when
+`include_context=true`, so later pages can set it false and save the tokens. `stage_scores()`
+takes the scored results and stages them into the session for teacher review in PowerGrader;
+it never posts to Canvas (the teacher pushes manually), and it takes the same session lock and
+clears the same pending push review as the web UI's own import path. The digest guard
+(`expected_packet_digest`) prevents stale scores from landing if the session has been re-run
+between retrieval and staging.
+
+Paging counts *responses*, not students. A multi-item quiz gives one row per student per item,
+so `offset`, `limit`, `total` and `next_offset` are all measured in rows, and `students_total`
+carries the distinct-student count separately. Walk pages by following `next_offset` until it
+is absent rather than comparing an offset against `total`. Over the 25,000-token budget the
+page is refused rather than trimmed, and the refusal names a smaller `limit` that fits, scaled
+to how far over the page landed.
+
+The safety scan walks dict keys, so it cannot see into `{columns, rows}` tables. Every tool
+that returns student text therefore gates the dict-row payload first and tabulates only after
+the gate has passed it, `get_scoring_packet` included.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
 CanvasMirror. `get_seating_context` uses the current mirror for identity and section

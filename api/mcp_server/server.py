@@ -402,16 +402,17 @@ def list_scoring_sessions() -> str:
 
 @mcp.tool()
 def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
-                       include_context: bool = True,
-                       include_writing_timeline: bool = False) -> str:
+                       include_context: bool = True) -> str:
     """Retrieve pseudonymized student responses from a PowerGrader session's
     SAFE bundle for AI scoring. Returns items (prompts, deduplicated) and
-    students (responses, text-only, no media). Set include_context=false on
-    later pages to save tokens (context included once per session). Projected
-    payload is returned as estimated_tokens; refuses if > 25,000 tokens.
-    Course-gated. Never raises."""
+    students (responses, text-only, no media). Paging counts responses, not
+    students: on a multi-item quiz one student fills several rows, and total
+    counts rows while students_total counts people. Set include_context=false
+    on later pages to save tokens (context included once per session).
+    Projected payload is returned as estimated_tokens; refuses over 25,000
+    tokens with a workable smaller limit. Course-gated. Never raises."""
     return _compact(tools.get_scoring_packet(
-        session_id, offset, limit, include_context, include_writing_timeline))
+        session_id, offset, limit, include_context))
 
 
 @mcp.tool()

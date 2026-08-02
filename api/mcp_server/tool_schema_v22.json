@@ -38,7 +38,7 @@
     {"name":"save_deck","required":["date","title","slides"],"properties":{"date":"string","slides":"array","title":"string","widgets":"array"}},
     {"name":"save_teacher_schedule","required":["blocks"],"properties":{"blocks":"array"}},
     {"name":"list_scoring_sessions","required":[],"properties":{}},
-    {"name":"get_scoring_packet","required":["session_id"],"properties":{"session_id":"string","offset":"integer","limit":"integer","include_context":"boolean","include_writing_timeline":"boolean"}},
+    {"name":"get_scoring_packet","required":["session_id"],"properties":{"session_id":"string","offset":"integer","limit":"integer","include_context":"boolean"}},
     {"name":"stage_scores","required":["session_id","results","expected_packet_digest"],"properties":{"session_id":"string","results":"array","expected_packet_digest":"string"}}
   ]
 }

@@ -66,6 +66,8 @@ RETIRED_FILES = {
         "66fb445401ff147e03b727d01d70e08f8337563f94d954ef6ac6fae9dfa0706b",
         # Procedure-first rewrite, before Appendix A on installing and running.
         "e5e4023c419e14de58339f32c3b6da5bafd81528aae91d41477640c5f27b21b6",
+        # Before the scoring packet MCP tools were described.
+        "94788ae4a8c063cd2e60f234e51a3f902e8fed8282b10caba80121135c8fb80b",
     }),
 }
 
