@@ -1,4 +1,7 @@
-"""Plain, testable implementations of the 39 MCP tools (schema v22).
+"""Plain, testable implementations of the MCP tools.
+
+The authoritative tool count and shape live in ``contract.TOOL_SCHEMA_VERSION``
+and its snapshot file, never in prose here.
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.

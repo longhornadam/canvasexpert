@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 23 (44 tools).
+Tool schema version 24 (45 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -52,6 +52,7 @@ Tool schema version 23 (44 tools).
 | `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes — pseudonymized |
 | `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
+| `get_writing_history(pseudonym, since="", until="", include_text=false, max_text_chars=2000)` | One student's Writing Record across time: dated submissions, assignment context, word counts, segment attribution, structural flags. No `course_id`; this reads a private per-student store, not a course, and it does not score or judge work | Yes — pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
 | `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
 | `get_bell_schedule(schedule_id="")` | Bell schedule CSV(s) from the workspace | No |
@@ -73,7 +74,8 @@ Tool schema version 23 (44 tools).
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
 | `get_theme_contract()` | The Panel theme format: the three or four colours and two names you set, the sixteen variables derived for you, and the closed font/ornament sets | No |
 | `list_panel_themes()` | Built-in Panel themes plus the teacher's own as `(key, label, origin, authored_at)`, with any theme file that could not be read | No |
-| `preview_panel_theme(key, label, colors, font="sans", ornament="grid")` | Digest-protected preview of a theme: the derived palette, every measured contrast pairing, and any colour corrected to clear 4.5:1 | No |
+| `list_theme_art()` | Art files present in `Library/Panels/Themes/art/`, with each one's kind, dimensions or viewBox, and any diagnostic; call it so a theme references a filename that exists instead of an invented one | No |
+| `preview_panel_theme(key, label, colors, font="sans", ornament="grid", art=None)` | Digest-protected preview of a theme: the derived palette, every measured contrast pairing, and any colour corrected to clear 4.5:1; `art` places named files from the art folder | No |
 | `apply_panel_theme(preview, preview_digest)` | Writes exactly the previewed theme to `Library/Panels/Themes/<key>.json`; refuses a stale or altered preview | No |
 | `delete_panel_theme(key)` | Deletes one of the teacher's own themes; built-in keys are refused | No |
 
@@ -91,7 +93,7 @@ then receive the Forge-only staging appendix. SmartDeck (`deck`) reads its canon
 from the same source but has no staging/review appendix — unlike other Forge kinds, SmartDeck
 writes live to the workspace immediately with no teacher review queue.
 
-The five Panel theme tools take no `course_id` and carry no student data, so they need
+The six Panel theme tools take no `course_id` and carry no student data, so they need
 no course gate, no identity vault, and no safety scan. They are the one write surface here
 that hands an assistant a file-writing path with no teacher review queue in front of it,
 which is deliberate and rests on the format doing the safety work rather than the
@@ -101,8 +103,15 @@ the generated CSS can only ever produce `html[data-panel-theme="<key>"]` (a them
 change layout or what a Panel shows), and every text-on-background pairing is measured and
 corrected to at least 4.5:1 (an assistant cannot produce an illegible projector). A
 built-in key is refused rather than shadowed, at most 24 custom themes are kept, and a
-malformed file is skipped with a reason instead of taking a saved board down. Call
-`get_theme_contract` first; `preview_panel_theme` reports what it corrected, which is
+malformed file is skipped with a reason instead of taking a saved board down.
+
+Theme art keeps the same shape. An `art` entry names a file the teacher already put in
+`Library/Panels/Themes/art/`; the assistant cannot supply an image, a path, or a URL, only
+a filename that is already there, which is why `list_theme_art` exists and why inventing a
+name is the one thing to avoid. Placement, recolour, size, and opacity are closed sets and
+bounded numbers, so art can decorate a board but cannot resize its type or fetch anything.
+
+Call `get_theme_contract` first; `preview_panel_theme` reports what it corrected, which is
 worth telling the teacher. See `docs/reference/panels-route-card.md` for the full model.
 
 `save_deck`, `list_active_decks`, and `archive_deck` take no `course_id` and carry no

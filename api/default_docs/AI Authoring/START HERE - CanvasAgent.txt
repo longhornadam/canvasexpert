@@ -123,11 +123,19 @@ modes, and the names matter because the teacher will see them:
   Auto-score with AI   CanvasExpert calls a model directly, if the teacher has
                        set that up and turned it on
 
-Panels. One URL that renders one thing, full bleed, for a projector or a
-classroom screen. What is due, a random student, missing work, birthdays,
-upcoming events, today's objective. Each one reads local data only, never live
-Canvas, because it runs unattended on a wall for a whole period. A teacher
-pastes the URL into whatever display surface they already use.
+When you are connected to CanvasExpert over MCP, you can work a session
+directly instead of going through packet files: call list_scoring_sessions()
+to see what is available, get_scoring_packet() to retrieve pseudonymized
+student responses along with the scoring contract, then stage_scores() to land
+your scores back in the queue. Scores arrive exactly where they would if the
+teacher had pasted them by hand: in the session, awaiting review. Canvas sees
+nothing until the teacher pushes from the queue.
+
+Panels. A Panel is one URL that renders one thing, full bleed. A teacher drops
+it into whatever display surface they already use, including Classroomscreen,
+and it runs unattended for a whole period reading local data only. What is due,
+a random student, missing work, birthdays, upcoming events, and today's
+objective are all available as individual Panels.
 
 Panel themes. Eight themes ship, plus two in the teacher's colours they can
 edit or delete. A teacher can also keep their own, as small JSON files in
@@ -135,16 +143,24 @@ Library/Panels/Themes, which follow their sync between machines. A theme is a
 palette, a typeface, and one decorative layer: it can never change what a Panel
 shows or how many rows fit. The teacher picks a background, an ink, an accent,
 and optionally a highlight colour; CanvasExpert derives the rest and corrects
-any pairing that would not stay readable from the back of a room.
+any pairing that would not stay readable from the back of a room. A teacher who
+drops a picture into Library/Panels/Themes/art can use it as the decoration,
+and CanvasExpert handles size, format, and resolution for them.
 
-When you have access to this tool over MCP, you can also discover sessions
-directly: call list_scoring_sessions() to see available PowerGrader sessions,
-get_scoring_packet() to retrieve pseudonymized student responses with the
-scoring contract, then stage_scores() to land your AI-generated scores back
-in the queue for the teacher to review. No need for packet files or manual
-pasting. Scores land exactly where they would if pasted by hand: in the session,
-awaiting teacher review. Canvas sees nothing until the teacher pushes from the
-queue.
+Learning Objectives. Reviewed, revision-protected per-course objectives that a
+Panel can display. Each one is grounded in current modules, assignments, and
+pages, and a changed source marks it for review rather than silently rewriting
+the objective.
+
+SmartDeck. SmartDeck drives the whole screen itself, as a sequence of Slides
+with widgets. It stays fully supported for teachers who want CanvasExpert to
+own the display, with Decks and a projector display view that can follow the
+Teacher Schedule.
+
+School Calendar. The canonical School Calendar holds school dates, day kinds,
+grading periods, bell schedules, and the Teacher Schedule. The Calendar page
+and its tools keep those records in the teacher's workspace for date math and
+classroom displays.
 
 Writing Timeline. On a tracked assignment, PowerGrader reads the submitted Word
 document's own revision history on the teacher's computer and shows how the
@@ -207,35 +223,76 @@ inventing a plausible replacement.
 
 Appendix D. When CanvasExpert is connected as a tool provider
 
-If the teacher has connected CanvasExpert over MCP, you get read tools plus a
-way to stage drafts. Sequence matters:
+If the teacher has connected CanvasExpert over MCP, your reach is of three
+kinds: you can read the teacher's local copy of their courses, you can write
+certain things to their own computer, and you can stage drafts for review. You
+cannot write to Canvas at all. Nothing you do here reaches students until the
+teacher pushes it themselves.
+
+The full tool list is in docs/mcp-server.md. What matters while you work:
+
+Reading
 
   * Call list_courses first, and use a course_id it returns.
   * get_authoring_contract(kind) before authoring anything.
   * get_product_guide before you say what CanvasExpert can or cannot do, and
     before planning writing work. Omit the topic for this briefing;
-    topic="writing_timeline" for tracked and not-tracked assignments.
-  * get_modules and get_course_assignments read a local catalog on disk, never
-    live Canvas. If the catalog looks empty, the teacher refreshes it from the
-    web UI.
+    topic="writing_timeline" for tracked and not-tracked assignments,
+    topic="writing_record" for the longitudinal writing history.
+  * get_modules, get_course_assignments, and get_course_pages read a local
+    catalog on disk, never live Canvas. If the catalog looks empty, the teacher
+    refreshes it from the web UI.
   * list_sections(course_id) lists the section names, and is how you find the
     exact name get_seating_context needs.
   * get_roster, get_seating_context, get_submissions, and get_gradebook_snapshot
     read only the local mirror and will refuse when it is stale. When one
     refuses, call refresh_mirror(course_id), then retry that read once.
+  * get_writing_history(pseudonym) reads a separate private per-student writing
+    record some teachers keep. It takes no course_id, and it exists to coach a
+    writer over time rather than to grade one assignment.
   * list_staged_content(kind) confirms a draft actually landed. Use it instead
     of staging a second copy when you are unsure.
-  * get_theme_contract() before offering to build a Panel theme. Then
-    preview_panel_theme(key, label, colors), read back what it corrected and
-    tell the teacher, and apply_panel_theme(preview, digest) to save it.
+  * Prefer narrow reads. Ask for specific pseudonyms, or pass
+    include_text=false, before pulling everything.
+
+Writing to the teacher's computer
+
+Most of these come in pairs: a preview tool that changes nothing and returns a
+digest, and an apply tool that takes that exact preview back. Always read the
+preview to the teacher in plain words and apply only what they accepted. If a
+tool refuses because a revision or digest is stale, something changed under
+you: read again rather than forcing it.
+
+  * Panel themes. get_theme_contract() first. list_theme_art() if the teacher
+    wants a picture in it, so you name a file that actually exists rather than
+    inventing one. Then preview_panel_theme(...), read back what it corrected
+    and tell the teacher, and apply_panel_theme(preview, digest) to save it.
     list_panel_themes() shows what they already have, delete_panel_theme(key)
     removes one of theirs. Built-in themes are not yours to change. Colours are
     hex only, and the font and ornament names come from the contract, so do not
     invent either.
-  * Prefer narrow reads. Ask for specific pseudonyms, or pass
-    include_text=false, before pulling everything.
+  * The school calendar. get_school_calendar() reads it. Day kinds and labels,
+    single events, and a whole-year replacement each have their own
+    preview/apply pair. Summarize the affected dates and any conflict before
+    applying. Do not parse a calendar out of a forwarded email or free text and
+    apply it unattended.
+  * Learning objectives. list_learning_objectives(course_id) reads them;
+    preview_learning_objective and apply_learning_objective add or replace one,
+    grounded in real module, assignment, or page records; delete_learning_objective
+    removes one.
+  * Roster settings. get_roster_student_settings, then
+    preview_roster_student_change and apply_roster_student_change, or
+    clear_roster_student_field to clear one. These are the teacher's own local
+    settings, pseudonym-first, never Canvas membership. Nicknames are not
+    yours to set.
+  * SmartDecks and the teacher's blocks. save_deck, list_active_decks,
+    archive_deck, get_teacher_schedule, save_teacher_schedule, plus
+    get_bell_schedule and get_day_schedule to read. These write live, with no
+    review queue in front of them, so confirm with the teacher first.
+  * Scoring. list_scoring_sessions, get_scoring_packet, stage_scores, as
+    described under PowerGrader above. Staged scores wait for teacher review.
 
-Staging a draft, which is how work reaches the teacher:
+Staging a draft, which is how authored content reaches the teacher:
 
   1. Write the finished envelope as a .txt file into that kind's To Review
      folder. The contract response tells you the exact path.
@@ -249,7 +306,8 @@ Staging a draft, which is how work reaches the teacher:
      (pending review)" on the matching Create tab, where they validate and
      push it.
 
-You never write to Canvas. Staging is the whole of your reach.
+You never write to Canvas. That line does not move: everything above writes to
+the teacher's own computer, and the teacher is the one who pushes.
 
 
 Appendix E. Privacy, and what this does not promise

@@ -4,6 +4,10 @@ Routing scope: open this card only when the active handoff touches PowerGrader, 
 the relevant section. It is not global executor context and does not replace a handoff's
 exact file/symbol list.
 
+This map owns routes, scripts, templates, browser load order, and backend package routing.
+For scoring and privacy engines, pipelines, artifact routing, and every scoring entry point,
+see `docs/reference/powergrader-scoring-map.md`.
+
 ## Entry points
 
 - Route orchestration: `api/webui/routes/powergrader.py`
@@ -28,6 +32,7 @@ namespace shims.
 | Teacher save/push | `session_actions.py`, `queue_review.js` |
 | AI workflow and SAFE artifacts | `ai_workflow.py`, `ai_workflow_support.py`, `queue_privacy.js` |
 | Copilot packets/import | `copilot_packet.py`, `copilot_packet_support.py`, `import_results.py`, `queue_import.js` |
+| MCP scoring packet/staging | `scoring_packet.py`, `api/mcp_server/tools.py` (`list_scoring_sessions`, `get_scoring_packet`, `stage_scores`), reusing `import_results.py` |
 | Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `new_quiz_fetch.py`, `student_attachments.py` |
 | Writing Timeline | `writing_timeline.py`, `student_attachments.py::attach_writing_timelines`, `queue_writing_timeline.js` |
 | Late catch-up | `late_catchup.py`, `routes/powergrader_late.py`, `queue_late_catchup.js` |

@@ -17,6 +17,7 @@ separate datasets.
 | Pure normalization/warnings | `api/webui/routes/roster_helpers.py` |
 | Group-set preferences, creation, labels | `api/webui/routes/roster_groups.py` |
 | One-student and bulk validation/update | `api/webui/routes/roster_updates.py` |
+| MCP adapter onto that same updater | `api/webui/roster_mcp.py` |
 | Template/layout | `api/webui/templates/roster.html`, `api/webui/static/roster_workbench.css` |
 | Shared browser state/bootstrap | `api/webui/static/roster.js` |
 | Row markup and selection name map | `api/webui/static/roster/table.js` |
@@ -38,6 +39,17 @@ table rendering, and filtered/selected student access.
   pseudonyms, monitoring state, and private notes never enter the repo, fixtures, generic
   logs, or support output.
 - Browser lenses/filter state do not create a second persistence or mutation path.
+- An assistant can read and change local student settings over MCP
+  (`get_roster`, `get_roster_student_settings`, `preview_roster_student_change`,
+  `apply_roster_student_change`, `clear_roster_student_field`). This is a second entry
+  point, not a second mutation path: `roster_mcp.update_student` calls
+  `roster_updates.update_student` with the route's own injected dependencies, so route
+  validation, extra-time/monitored handling, and group reconciliation all still apply.
+  Changes are pseudonym-first and digest-protected; a write refuses when settings moved
+  since the read. The reads are a deliberately narrow projection, omitting stored
+  nicknames and seating private notes and scrubbing the AI-context note. Nicknames are
+  unreachable through this path, blocked in the adapter as well as the tool layer,
+  because `set_nicknames` would overwrite the teacher's scrub-coverage list.
 - Canvas group membership changes remain explicit live Canvas mutations owned by
   `roster_canvas.py` and orchestrated through the existing route/update validation.
 - Protected-name packs, identity exports, and vault backups remain private workspace

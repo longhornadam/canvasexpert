@@ -1,7 +1,9 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Thirty-nine thin ``@mcp.tool()`` wrappers delegate to the plain functions in
-``tools.py`` so the tool layer stays testable without an MCP client. Run via
+Thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+``tools.py`` so the tool layer stays testable without an MCP client. The
+authoritative count and shape live in ``contract.TOOL_SCHEMA_VERSION`` and its
+snapshot, not in prose here, so this docstring cannot drift. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
 

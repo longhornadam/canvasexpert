@@ -11,13 +11,22 @@ pushes content to live courses via the REST and New Quizzes APIs:
 - **Gradebook tools** — late policy sweep, student extensions, curves
 - **PowerGrader** — keyboard grading queue, Safe AI Packet export, Copilot batch
   import, optional API scoring
+- **Panels:** disk-only classroom display URLs for due work, roster-safe views, events,
+  and learning objectives
+- **SmartDeck:** teacher-authored Slides and widgets for a full-screen projector display
+- **School Calendar:** school dates, day kinds, grading periods, bell schedules, and Teacher Schedule
+- **MCP server:** local pseudonymized reads and preview/apply tools for teacher-owned writes
+- **Daily Writing:** longitudinal Writing Record and tracked-assignment Writing Timeline
 - **Download** — submission bundles by assignment or by student
 
 Local-only, never served. See `AGENTS.md` Guardrails.
 
-The current version is `1.0.0-beta.2` (see `api/__init__.py`). The supported launcher is
+The current version is `1.0.0-beta.3` (see `api/__init__.py`). The supported launcher is
 `py qf_ui.py` from `api/` or `py api/qf_ui.py` from the repository root; it binds
 only to `127.0.0.1` and preserves the `--port` and `--no-browser` options.
+`api/README.md` owns the backend, CLI, packaging, setup, credentials, workspace, and the
+`api/` files table. `api/webui/README.md` owns routes, pages, templates, static assets, and
+per-route script load order.
 The `/connections` page leads with **CanvasAgent**, the single paste-into-your-AI
 instruction file (download it, or copy the full/short text). Connecting Claude
 Desktop or the ChatGPT desktop app is optional and one click; it writes only that
@@ -76,7 +85,7 @@ py qf_ui.py            # opens http://127.0.0.1:8765
 
 **Token storage:** the Web UI stores the token in the **OS credential store** via
 `keyring` (Windows Credential Manager) — never on disk. `api/.env` is for CLI use
-only. Non-secret config (base URL, bookmarks, download root, academic calendars)
+only. Non-secret config (base URL, bookmarks, download root)
 lives in `api/webui/config.json` (gitignored).
 
 ## Workspace & multi-PC
@@ -159,6 +168,17 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `qf_ui.py` | Launches the local web UI (see "Web UI" above) |
 | `../engine/rendering/physical/` | Local printable DOCX/PDF render stack (Edge via Playwright for PDF, Pandoc for DOCX) |
 | `powergrader/` | PowerGrader backend helpers: Canvas fetch, privacy artifacts, Safe AI Packet ZIP, Copilot batch folders, import validation, session mutations, start-workflow assembly, autoscore claim/queue helpers, auto-push policy helpers |
+| `mcp_server/` | Local MCP tool registry, contracts, pseudonymized reads, and teacher-owned write tools |
+| `mirror/` | CanvasMirror storage, freshness envelopes, sync coordinator, and disk-only query services |
+| `operation_ledger/` | High-risk operation checkpoints, claims, receipts, and recovery coordination |
+| `work_registry/` | Local work items and the Home surface's progress projections |
+| `dailywriting/` | Writing Record and Writing Timeline extraction and storage helpers |
+| `rubrics/` | Default rubric library consumed by authoring and scoring skill generation |
+| `custom_routines/` | Teacher-authored local automation jobs and the routine authoring contract |
+| `panel_themes.py` | Built-in and teacher-owned Panel theme validation, palette derivation, and generated CSS |
+| `learning_objectives.py` | Reviewed, revision-protected per-course Learning Objectives storage and validation |
+| `smartdeck_feeds.py` | SmartDeck feed projections sourced from local calendar and course data |
+| `course_catalog.py` | Student-free local course, module, assignment, and page catalog reads |
 | `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, split feature scripts, subprocess/SSE runner |
 | `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `default_docs/AI Authoring/Author a Quiz (QuizForge).txt`) |
 

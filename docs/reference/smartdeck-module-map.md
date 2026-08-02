@@ -1,5 +1,10 @@
 # SmartDeck Route Card
 
+Panels are the classroom-display surface CanvasExpert leads with. A Panel is one URL that
+renders one thing, full bleed, and a teacher can drop it into a display surface they already
+use, including Classroomscreen, where it runs unattended reading local data only. SmartDeck
+remains fully supported for teachers who want CanvasExpert to own the display.
+
 SmartDeck is a local, student-free projector surface: a teacher-authored **Deck** of
 **Slides** bound to their own Teacher Schedule block names (never clock times), displayed
 full-screen on a classroom projector. An MCP-connected assistant authors a Deck and calls
@@ -92,7 +97,10 @@ instead of overwriting it.
   they reference it) or `"slide"` (fresh mount/unmount with every Slide's own showing, no
   preserved state).
 
-## MCP tools (schema v17, 25 tools total; SmartDeck's own 8)
+## MCP tools (SmartDeck's own 8)
+
+The server-wide tool count and schema version are not tracked here; they live in
+`api/mcp_server/contract.py` and `docs/mcp-server.md`.
 
 | Tool | Reads/writes |
 |---|---|
@@ -107,9 +115,10 @@ instead of overwriting it.
 
 All eight skip the course gate and the outbound safety gate (no `course_id`, no student data)
 -- same class of exception as `get_product_guide`/`list_staged_content`. The canonical Calendar
-domain's five tools (`get_school_calendar`, `preview_school_calendar_replacement`,
+domain's seven tools (`get_school_calendar`, `preview_school_calendar_replacement`,
 `apply_school_calendar_replacement`, `preview_school_calendar_change`,
-`apply_school_calendar_change`) share the same exemption but are documented in
+`apply_school_calendar_change`, `preview_school_calendar_event_change`,
+`apply_school_calendar_event_change`) share the same exemption but are documented in
 `docs/contracts/canonical-school-calendar-contract.md`, not here -- they own day kinds/schedule
 resolution, not SmartDeck's deck/slide content.
 

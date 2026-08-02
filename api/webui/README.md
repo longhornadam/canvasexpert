@@ -1,7 +1,6 @@
 # Canvas Expert Web UI — Feature Reference
 
 **Audience:** teachers using the local web UI; developers building or extending UI features.
-**Entry point:** `cd api && py qf_ui.py` → opens `http://127.0.0.1:8765`.
 **Implementation:** `api/webui/server.py` (FastAPI), `api/webui/templates/` (Jinja2),
 `api/webui/static/` (`push.js` + `push/*.js`, `course_expert/*.js`,
 `gradebook.js` + `gradebook/*.js`, `roster.js` + `roster/*.js`,
@@ -12,6 +11,10 @@
 For backend overview, setup, files table, and confirmed Canvas API facts, see `api/README.md`.
 For the shared layout/template API and presentation ownership, see
 `docs/reference/webui-presentation-system.md`.
+
+`api/README.md` owns the backend, CLI, packaging, setup, credentials, workspace, and the
+`api/` files table. This document owns routes, pages, templates, static assets, per-route
+script load order, and the per-page feature behavior described in each page's section below.
 
 ---
 
@@ -56,12 +59,26 @@ Source tests never substitute for rendered verification.
 | `/calendar` | **Calendar** — school dates, Bell Schedules, Teacher Schedule (see `docs/reference/panels-route-card.md`) | `pages/calendar.js` |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
+| `/panels` | **Panels** console: pick a Panel, copy its URL, optionally fix it to one Teacher Schedule block | `pages/panels_clipboard.js` |
+| `/panels/{kind}` | One Panel, chrome-free, sized to whatever box it is dropped into | `panels/panel.js` |
+| `/panels/{kind}/data` | The Panel's single data fetch. Disk-only; never calls Canvas | route-driven |
+| `/panels/themes.css` | The teacher's own Panel themes, generated from their theme files | route-driven |
+| `/panels/theme-art/{key}/{index}.{ext}` | Processed bytes for one art entry, cached and immutable | route-driven |
 | `/smartdeck` | **SmartDeck** — manage Decks: Active, Templates, Archived, Widgets | `smartdeck/smartdeck.js` |
 | `/smartdeck/display/{deck_id}` | **SmartDeck display** — headerless projector view for displaying Slides | `smartdeck/display.js` |
 | `/about` | What-is-Canvas-Expert explainer | — |
 
 Home's Canvas sync action queues local read-only coordinator work and polls its opaque
 plan status before refreshing Work cards. It does not keep a Canvas request open.
+
+Panel route registration order is load-bearing. `/panels/themes.css` and
+`/panels/theme-art/...` are registered before `/panels/{kind}`, whose catch-all shape would
+otherwise treat those paths as Panel kinds and return 404.
+
+There are two different things called `themes.css`. The static file
+`static/panels/themes.css` contains hand-written rules for the eight built-in themes. The
+`/panels/themes.css` route serves generated CSS for the teacher's own themes. Every Panel
+links the static file first, then the route.
 
 ### Create module routing
 
@@ -461,17 +478,11 @@ The setup page uses a wide responsive workspace with:
 - **Course-wide search** that scans all assignments regardless of the selected
   module view, and module filtering that defaults to the last three modules.
 
-New Quizzes are selectable for written-response review in all three modes. Each
-session is a local Student Analysis JSON snapshot: file-upload entries are filename-only,
-and active/current instructor enrollments can use the separate teacher-reviewed
-item-finalization lane for manual item scores and per-item grader feedback through Canvas's
-short-lived signed grader transport. The lane has preflight freeze, result-version drift,
-idempotency, post-write verification, receipt, and fail-closed safeguards; closed,
-concluded, past-enrollment, or otherwise restricted courses may return `403` and require
-the SpeedGrader fallback. Assignment-level comment posting is also available. New Quiz
-late catch-up, scheduled scoring, and interactive automatic posting remain unavailable. The
-implementation details and capability boundaries are documented in
-`docs/reference/new-quizzes-grading-transport.md`. Classic Quizzes remain unavailable.
+New Quizzes are selectable for written-response review in all three modes.
+Classic Quizzes remain unavailable. For session mechanics, the item-finalization
+lane, and current write-safety guarantees, see
+`docs/reference/new-quizzes-grading-transport.md` and
+`docs/reference/powergrader-module-map.md`.
 
 After a course is selected, the assignment picker groups work by Canvas course
 module and immediately shows the final three modules in course order. The Modules

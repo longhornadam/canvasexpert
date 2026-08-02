@@ -9,6 +9,9 @@ For canonical AI-agent guidance and safety rules, read `../AGENTS.md` first.
 - `docs/guides/` - durable usage, authoring, and workflow guidance.
 - `docs/handoffs/` - active execution briefs.
 - `docs/reference/` - stable reference notes and extracted facts.
+- `docs/mcp-server.md` - the MCP tool surface, its gating posture, and client setup. Its
+  tool table is pinned to the live registry by a test.
+- `docs/mirror.md` - CanvasMirror's current behavior, its laws, and freshness and staleness rules.
 
 Useful starting references for new debugging and refactor sessions:
 

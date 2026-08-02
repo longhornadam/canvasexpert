@@ -8,12 +8,17 @@ File categories:
 - START HERE - CanvasAgent: what CanvasExpert is and how an assistant should
   work with it. Paste the whole file into a chat, or just its CORE block into a
   custom-instructions box if yours has a length limit. Read this one first.
-- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, and RubricForge.
+- Authoring skills: one file each for QuizForge, AssignmentForge, PageForge, RubricForge,
+  and SlideForge, plus files for a Class Schedule and a Learning Objective.
 - Scoring skills: one file per valid rubric in the default rubric library.
 - Reference: supporting material some authoring skills point to.
+- Writing Record and Writing Timeline: longitudinal history and tracked-assignment guidance.
 - MagicSchool Toolkit: setup recipes for building these as reusable custom tools in MagicSchool.ai.
 
 Canvas Expert seeds missing files in this folder, then leaves existing files
 alone so you can refine them by hand. When one file is replaced by a newer one,
 the old file is removed only if you never edited it. If you did edit it, your
 version stays and the new file arrives alongside it.
+The app never overwrites a file you edited, so your version stays and the new one arrives
+beside it. An assistant connected over MCP reads the current shipped text from the app's own
+files rather than your workspace copy.

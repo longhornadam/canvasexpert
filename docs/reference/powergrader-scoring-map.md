@@ -3,6 +3,12 @@
 Routing scope: open this map only when the active handoff touches PowerGrader scoring,
 result imports, or the shared scoring/privacy engines. It is not global executor context.
 
+This map owns the scoring and privacy engines, pipelines, artifact routing, and every
+scoring entry point, whatever route delivers it, including the web UI import, Copilot batch,
+and MCP `stage_scores` path. A new way for scores to enter a session gets documented here,
+not in the module map. For routes, scripts, templates, browser load order, and backend
+package routing, see `docs/reference/powergrader-module-map.md`.
+
 PowerGrader is the single teacher-facing owner of scoring student work and AI feedback.
 The legacy grading page is retired: `/feedback-expert` returns a 307 redirect to
 `/powergrader?advanced=import`. The legacy compatibility layer for the historical
@@ -24,6 +30,16 @@ anymore.
   review-only session. `new_quiz_grader.py` resolves current authoritative identity;
   missing, stale, ambiguous, or mismatched identity leaves the full student in
   SpeedGrader.
+- **MCP scoring surface:** `api/powergrader/scoring_packet.py` plus the three tools in
+  `api/mcp_server/tools.py`. An assistant connected over MCP can call
+  `list_scoring_sessions`, pull a paged SAFE bundle with `get_scoring_packet`, and return
+  scores with `stage_scores`. This is a third import route onto the existing one, not a
+  parallel one: staging runs `import_results` under the same `session_store.session_lock`
+  the web UI's import route takes, so a teacher working the queue and an assistant staging
+  cannot interleave a read-modify-write on one session file. It is course-gated on the
+  session's own `course_id`, refuses on a `packet_digest` mismatch after a session re-run,
+  and stages partially rather than all-or-nothing. Staged scores are suggestions awaiting
+  teacher review; nothing reaches Canvas on this path even when auto-post is enabled.
 - **Persona/pattern library:** `api/webui/routes/feedback_library.py` and
   `api/webui/config/feedback.py`. PowerGrader's advanced controls use these routes;
   no second registry or config format exists. (These modules keep the `feedback_`

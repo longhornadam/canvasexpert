@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -38,7 +39,8 @@ def test_live_mcp_schema_matches_versioned_contract():
     # v19 adds the disk-only Course Catalog pages read and reviewed objective pair.
     # v20 makes reviewed objectives fully mutable with list/replace/delete tools;
     # v21 adds the narrow pseudonym-first roster settings write surface;
-    # v22 adds the scoring packet surface; v23 adds teacher-owned Panel themes.
+    # v22 adds the scoring packet surface; v23 adds teacher-owned Panel themes;
+    # v24 adds list_theme_art.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -79,6 +81,159 @@ def test_live_mcp_schema_matches_versioned_contract():
     assert v22["schema_version"] == 22
     assert len(v22["tools"]) == 39
     assert all("canvas" not in tool["name"].lower() for tool in live["tools"])
+
+
+def test_mcp_server_doc_matches_the_live_registry():
+    """`docs/mcp-server.md` is the tool reference, so drift there is silent.
+
+    It read "Tool schema version 23 (44 tools)." above a 43-row table while the
+    registry held 45 tools at v24: every number in that sentence was wrong, they
+    disagreed with each other, and two shipped tools (`get_writing_history`,
+    `list_theme_art`) had no row at all. Nothing failed, because no test read the
+    doc. Pin the stated version, the stated count, and the table itself to the
+    live registry, so adding a tool stays red until the doc gains its row.
+    """
+    from api.mcp_server import server
+
+    doc_path = Path(__file__).resolve().parents[2] / "docs" / "mcp-server.md"
+    doc = doc_path.read_text(encoding="utf-8")
+    live_names = sorted(tool["name"] for tool in contract.live_contract(server.mcp)["tools"])
+
+    declared = re.search(r"Tool schema version (\d+) \((\d+) tools\)\.", doc)
+    assert declared, "docs/mcp-server.md must state its schema version and tool count"
+    assert int(declared.group(1)) == contract.TOOL_SCHEMA_VERSION
+    assert int(declared.group(2)) == len(live_names)
+
+    # Each tool row's first cell opens with the name, optionally as a signature:
+    # "| `get_submissions(course_id, ...)` | ... |". The header and the |---| rule
+    # do not start with a backtick, so they fall out on their own.
+    documented = sorted(
+        re.match(r"[A-Za-z_][A-Za-z0-9_]*", cell).group(0)
+        for cell in re.findall(r"^\| `([^`]+)`", doc, re.MULTILINE)
+    )
+    missing = sorted(set(live_names) - set(documented))
+    stale = sorted(set(documented) - set(live_names))
+    assert not missing, f"registered but undocumented: {missing}"
+    assert not stale, f"documented but not registered: {stale}"
+    assert documented == live_names
+
+
+def _live_tool_names():
+    from api.mcp_server import server
+
+    return {tool["name"] for tool in contract.live_contract(server.mcp)["tools"]}
+
+
+def _toolish_mentions(text):
+    prefixes = (
+        "get_", "list_", "preview_", "apply_", "save_", "delete_", "clear_",
+        "archive_", "stage_", "refresh_",
+    )
+    return {
+        name
+        for name in re.findall(r"\b[a-z][a-z0-9_]+", text)
+        if name.startswith(prefixes)
+    }
+
+
+def test_panels_route_card_theme_tools_match_the_live_registry():
+    """The Panels card's six-theme-tool enumeration must fail on tool drift.
+
+    The group is derived from the live registry (every tool name containing
+    "theme") rather than hardcoded, so a newly registered theme tool makes
+    this fail until the doc's enumeration grows to match -- a hardcoded
+    expected set would keep passing right through that drift.
+    """
+    path = Path(__file__).resolve().parents[2] / "docs" / "reference" / "panels-route-card.md"
+    doc = path.read_text(encoding="utf-8")
+    match = re.search(r"the six MCP tools\s*\(([^)]+)\)", doc)
+    assert match, "the Panels card must state its complete six-tool group"
+    documented = set(re.findall(r"[a-z][a-z0-9_]+", match.group(1)))
+    derived = {name for name in _live_tool_names() if "theme" in name}
+    assert derived, "derivation is broken: it must not pass vacuously on an empty group"
+    assert documented == derived
+
+
+def test_smartdeck_route_card_tool_groups_match_the_live_registry():
+    """SmartDeck and Calendar group counts must stay aligned with the registry.
+
+    Calendar is cleanly derivable by name pattern ("school_calendar"), so it
+    is compared straight against the derived group -- a newly registered
+    calendar tool fails this until the doc catches up.
+
+    SmartDeck's 8 mixes deck, schedule, and get_authoring_contract tools and
+    is not cleanly derivable by a single name pattern, so it stays an
+    explicit hardcoded set. To keep registry growth from going unnoticed
+    anyway, a guard asserts every live tool that looks deck/schedule-ish
+    (name contains "deck", "bell_schedule", "teacher_schedule", or
+    "day_schedule") is accounted for in that documented set -- a new deck or
+    schedule tool trips the guard even though it can't drive the set itself.
+    """
+    path = Path(__file__).resolve().parents[2] / "docs" / "reference" / "smartdeck-module-map.md"
+    doc = path.read_text(encoding="utf-8")
+    smartdeck_section = doc.split("## MCP tools", 1)[1].split("All eight", 1)[0]
+    smartdeck = set(re.findall(r"^\| `([a-z][a-z0-9_]+)", smartdeck_section, re.MULTILINE))
+    expected_smartdeck = {
+        "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
+        "save_teacher_schedule", "get_authoring_contract", "save_deck",
+        "list_active_decks", "archive_deck",
+    }
+    assert "SmartDeck's own 8" in doc
+    assert smartdeck == expected_smartdeck
+    deckish_patterns = ("deck", "bell_schedule", "teacher_schedule", "day_schedule")
+    deckish_live = {
+        name for name in _live_tool_names()
+        if any(pattern in name for pattern in deckish_patterns)
+    }
+    assert deckish_live, "derivation is broken: it must not pass vacuously on an empty group"
+    assert deckish_live <= expected_smartdeck, (
+        f"registry has deck/schedule-ish tools missing from the documented 8: "
+        f"{sorted(deckish_live - expected_smartdeck)}"
+    )
+
+    calendar_match = re.search(r"domain's seven tools \(([^)]+)\)", doc)
+    assert calendar_match, "the SmartDeck card must state its complete Calendar group"
+    calendar = set(re.findall(r"[a-z][a-z0-9_]+", calendar_match.group(1)))
+    derived_calendar = {name for name in _live_tool_names() if "school_calendar" in name}
+    assert derived_calendar, "derivation is broken: it must not pass vacuously on an empty group"
+    assert calendar == derived_calendar
+    assert smartdeck | calendar <= _live_tool_names()
+
+
+def test_mirror_doc_bound_tools_match_the_live_registry():
+    """The four mirror-bound MCP readers must remain registered and named here.
+
+    Unlike the theme and calendar groups above, this group has no shared name
+    substring or other structural marker that picks out exactly "the readers
+    that are mirror-bound (strict mirror-only, no live-Canvas fallback)" from
+    the other 41 registry tools -- e.g. get_course_assignments and
+    get_course_pages also read local state but are not mirror-bound in this
+    sense, while these four are. That membership lives in each tool's
+    implementation, not its name, so it cannot be derived from the registry
+    by pattern-matching. The set below is therefore an explicit hardcode:
+    this test CANNOT catch a newly added mirror-bound tool that isn't listed
+    here -- it only guards the four already named against being renamed or
+    deregistered without the doc being updated.
+    """
+    path = Path(__file__).resolve().parents[2] / "docs" / "mirror.md"
+    doc = path.read_text(encoding="utf-8")
+    section = doc.split("## MCP reads and the refresh tool", 1)[1].split("## v1 non-goals", 1)[0]
+    expected = {"get_roster", "get_submissions", "get_gradebook_snapshot", "get_seating_context"}
+    named = set(re.findall(r"\b(?:get|list|preview|apply|save|delete|clear|archive|stage|refresh)_[a-z0-9_]+", section))
+    assert expected <= named
+    assert named - {"refresh_mirror"} == expected
+    assert expected <= _live_tool_names()
+
+
+def test_canvasagent_appendix_d_tools_match_the_live_registry():
+    """Appendix D names tools informally, so an added or removed registry name must be visible."""
+    path = Path(__file__).resolve().parents[2] / "api" / "default_docs" / "AI Authoring" / "START HERE - CanvasAgent.txt"
+    doc = path.read_text(encoding="utf-8")
+    appendix = doc.split("Appendix D.", 1)[1].split("Appendix E.", 1)[0]
+    mentioned = _toolish_mentions(appendix)
+    assert mentioned
+    stale = sorted(mentioned - _live_tool_names())
+    assert not stale, f"Appendix D names tools absent from the registry: {stale}"
 
 
 def test_v11_glass_pane_assets_property_is_an_array():

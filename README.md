@@ -8,8 +8,13 @@ Free. Private. Open source. Uses your secure Canvas "Personal Access Token". Run
 - Download PDF or Word versions of the work
 - Assign differentiated work to different groups
 - Curve grades, sweep late work, grant extensions (automated for "extended time" students)
-- Powerful, but optional, AI integrations with security-first design
+- Optional AI integrations that keep the Canvas connection on your computer
 - "Pseudonymization" (names/IDs changed) built in for protecting student information
+- Display classroom information with Panels, one full-bleed URL per view, in Classroomscreen or another display surface
+- Run a teacher-authored SmartDeck of Slides and widgets on a full-screen projector display
+- Keep school dates, grading periods, bell schedules, and Teacher Schedule in one local School Calendar
+- Review AI-assisted scores in PowerGrader before anything reaches Canvas
+- Connect an assistant over the local MCP server for pseudonymized reads and reviewed local writes
 
 ## Getting started
 

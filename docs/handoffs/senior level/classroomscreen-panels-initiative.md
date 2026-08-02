@@ -4,6 +4,11 @@
 
 **Last senior review:** 2026-08-01
 
+**Positioning decision, 2026-08-02:** Panels leads the classroom-display story. A Panel is
+one full-bleed URL for one thing that runs unattended from local data in a display surface the
+teacher already uses, including Classroomscreen. SmartDeck remains fully supported for
+teachers who want CanvasExpert to own the display.
+
 **Active prerequisite:** the canonical Calendar correction closed GREEN and was retired in commit
 `a91182e`. Batches A, B, and C are accepted GREEN. Batch D passed its focused gate (211 passed),
 full API suite (1872 passed), v3/MCP closure searches, local browser route/theme checks, and

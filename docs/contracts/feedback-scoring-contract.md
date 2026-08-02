@@ -160,7 +160,11 @@ through the local vault, and uses its frozen review/current-state/idempotency/re
 for any Canvas write.
 
 1. Teacher starts a packet-mode PowerGrader session, then pastes or locally selects a
-   compatible result JSON file in that session.
+   compatible result JSON file in that session. An assistant connected over MCP can reach
+   the same session without a file: `get_scoring_packet` returns the SAFE bundle paged by
+   response, and `stage_scores` hands results back under the same session lock and the same
+   `import_results` validation, refusing on a `packet_digest` mismatch if the session was
+   re-run. Every step below applies unchanged; the route in is what differs.
 2. `validate_results(results, bundle, vault)` must be `ok` (hard errors block; warnings shown).
    A named Copilot batch is validated against that batch's required SAFE bundle. Late
    Copilot batches own their own SAFE-bundle path; an explicitly named path that is missing

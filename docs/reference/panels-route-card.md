@@ -268,9 +268,9 @@ without importing a web route, which `test_beta075_mcp` enforces.
 synced, no PII, next to `Learning Objectives.json`. `api/panel_themes.py` validates it,
 derives the full variable set, and generates CSS served at `GET /panels/themes.css`,
 which every Panel links after the built-in stylesheet. The authored file carries only
-`key`, `label`, `font`, `ornament`, and three or four colours (`bg`, `ink`, `accent`,
-optional `highlight`); the other sixteen variables are derived, because the derivation
-is where the legibility rules live.
+`key`, `label`, `font`, `ornament`, three or four colours (`bg`, `ink`, `accent`,
+optional `highlight`), and an optional `art` list; the other sixteen variables are
+derived, because the derivation is where the legibility rules live.
 
 Two Bobcats themes (`bobcats` and `bobcats-night`) seed into `Library/Panels/Themes` on
 first run from `api/default_docs/Panels/Themes`, and are the teacher's to edit or delete
@@ -286,14 +286,26 @@ Three properties make it safe to let an assistant write that file:
   `test_no_ornament_can_reach_the_network` hold that line.
 - **Fonts and ornaments are closed sets.** Four faces, eight ornament recipes built from
   the theme's own colours as gradients. Neither is free text.
+- **Art is referenced, never supplied.** An `art` entry names a file the teacher already
+  dropped in `Library/Panels/Themes/art/` (`.svg`, `.png`, `.jpg`, `.jpeg`, `.webp`); an
+  author cannot hand over image bytes, a path, or a URL, only a filename that is already
+  there. `place`, `recolor`, `size`, and `opacity` are closed sets and bounded numbers
+  (`ART_PLACES`, `ART_RECOLORS`, 4-80, 0.05-1.0), so art decorates a board without being
+  able to resize its type or make the machine fetch anything. Oversized rasters are
+  downscaled to `ART_MAX_DIMENSION` into `panel-art-cache`, and a `cover` photo gets the
+  `ART_COVER_SCRIM_ALPHA` scrim so the title and footer stay readable over it. The teacher
+  is never asked about format, size, or resolution; the module absorbs those limits.
 - **Contrast is corrected, not trusted.** Every text-on-background pairing is measured
   and pushed to at least 4.5:1, and the preview reports what moved. An assistant picking
   pretty hex codes cannot produce an illegible wall.
 
-Authoring paths, all landing on the same file: the MCP tools
-(`get_theme_contract`, `list_panel_themes`, `preview_panel_theme`, `apply_panel_theme`,
-`delete_panel_theme`), hand-editing the JSON, or designing in a claude.ai/design project
-via `tools/design_theme_studio.py` (see `tools/manifests/design-theme-studio.json`).
+Authoring paths, all landing on the same file: the six MCP tools
+(`get_theme_contract`, `list_panel_themes`, `list_theme_art`, `preview_panel_theme`,
+`apply_panel_theme`, `delete_panel_theme`), hand-editing the JSON, or designing in a
+claude.ai/design project via `tools/design_theme_studio.py` (see
+`tools/manifests/design-theme-studio.json`). `list_theme_art` reports each art file's
+kind, dimensions or viewBox, and any diagnostic, so an author references a filename that
+exists rather than inventing one.
 
 Two failure modes are handled on purpose rather than left to chance. A malformed,
 half-written, or built-in-shadowing theme file is **skipped with a reason** and the rest
