@@ -32,10 +32,8 @@ def isolated_workspace(tmp_path, monkeypatch):
 
 def _folders(root):
     calendars = root / "Library" / "Calendars"
-    smartdecks = root / "Library" / "SmartDecks"
     calendars.mkdir(parents=True, exist_ok=True)
-    smartdecks.mkdir(parents=True, exist_ok=True)
-    return calendars, smartdecks
+    return calendars
 
 
 def _bell_schedule(calendars):
@@ -67,8 +65,8 @@ def test_get_api_schedule_on_empty_workspace_reports_both_missing(isolated_works
 
 
 def test_get_api_schedule_reports_missing_bell_schedules_explicitly(isolated_workspace):
-    calendars, smartdecks = _folders(isolated_workspace)
-    (smartdecks / "Teacher Schedule.json").write_text(
+    calendars = _folders(isolated_workspace)
+    (calendars / "Teacher Schedule.json").write_text(
         json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1]}]}),
         encoding="utf-8",
     )
@@ -79,9 +77,9 @@ def test_get_api_schedule_reports_missing_bell_schedules_explicitly(isolated_wor
 
 
 def test_get_api_schedule_returns_blocks_verbatim_including_unknown_keys(isolated_workspace):
-    _calendars, smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     blocks = [{"name": "Algebra", "raw_periods": [1], "weekdays": [0], "custom": {"x": 1}}]
-    (smartdecks / "Teacher Schedule.json").write_text(
+    (calendars / "Teacher Schedule.json").write_text(
         json.dumps({"_comment": "keep", "version": "1.0-json", "blocks": blocks}),
         encoding="utf-8",
     )
@@ -89,7 +87,7 @@ def test_get_api_schedule_returns_blocks_verbatim_including_unknown_keys(isolate
 
 
 def test_schedule_course_binding_lists_saved_courses(isolated_workspace, monkeypatch):
-    calendars, _smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     _bell_schedule(calendars)
     courses = [
         {"id": "9000001", "name": "Course A", "nickname": "A", "active": True},
@@ -121,7 +119,7 @@ def test_schedule_course_binding_lists_saved_courses(isolated_workspace, monkeyp
 
 
 def test_schedule_course_binding_rejects_a_non_current_course_id(isolated_workspace, monkeypatch):
-    calendars, _smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     _bell_schedule(calendars)
     courses = [{"id": "9000001", "name": "Course A", "nickname": "A", "active": True}]
     monkeypatch.setattr(config, "saved_courses", lambda: courses)
@@ -137,11 +135,11 @@ def test_schedule_course_binding_rejects_a_non_current_course_id(isolated_worksp
 def test_schedule_reports_unknown_course_id_already_on_disk_without_blocking_the_read(
     isolated_workspace, monkeypatch
 ):
-    _calendars, smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     courses = [{"id": "9000001", "name": "Course A", "nickname": "A", "active": True}]
     monkeypatch.setattr(config, "saved_courses", lambda: courses)
     monkeypatch.setattr(config, "active_courses", lambda: courses)
-    (smartdecks / "Teacher Schedule.json").write_text(
+    (calendars / "Teacher Schedule.json").write_text(
         json.dumps({"blocks": [{"name": "Algebra", "raw_periods": [1],
                                 "course_id": "missing-course"}]}),
         encoding="utf-8",
@@ -151,24 +149,24 @@ def test_schedule_reports_unknown_course_id_already_on_disk_without_blocking_the
 
 
 def test_post_schedule_teacher_writes_blocks(isolated_workspace):
-    calendars, _smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     _bell_schedule(calendars)
     blocks = [{"name": "Algebra", "raw_periods": [1]}]
     response = client.post("/api/schedule/teacher", data={"blocks": json.dumps(blocks)})
     assert response.json()["ok"] is True
-    path = isolated_workspace / "Library" / "SmartDecks" / "Teacher Schedule.json"
+    path = isolated_workspace / "Library" / "Calendars" / "Teacher Schedule.json"
     assert json.loads(path.read_text(encoding="utf-8"))["blocks"] == blocks
 
 
 def test_post_schedule_teacher_creates_the_file_when_absent(isolated_workspace):
-    calendars, _smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     _bell_schedule(calendars)
     response = client.post(
         "/api/schedule/teacher",
         data={"blocks": json.dumps([{"name": "Algebra", "raw_periods": [1]}])},
     )
     saved = json.loads(
-        (isolated_workspace / "Library" / "SmartDecks" / "Teacher Schedule.json").read_text(
+        (isolated_workspace / "Library" / "Calendars" / "Teacher Schedule.json").read_text(
             encoding="utf-8"
         )
     )
@@ -177,9 +175,9 @@ def test_post_schedule_teacher_creates_the_file_when_absent(isolated_workspace):
 
 
 def test_post_schedule_teacher_preserves_unknown_top_level_keys(isolated_workspace):
-    _calendars, smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     original = {"_comment": "keep this", "custom": {"source": "hand"}, "blocks": []}
-    path = smartdecks / "Teacher Schedule.json"
+    path = calendars / "Teacher Schedule.json"
     path.write_text(json.dumps(original), encoding="utf-8")
     client.post(
         "/api/schedule/teacher",
@@ -191,8 +189,8 @@ def test_post_schedule_teacher_preserves_unknown_top_level_keys(isolated_workspa
 
 
 def test_post_schedule_teacher_sets_version_only_when_absent(isolated_workspace):
-    _calendars, smartdecks = _folders(isolated_workspace)
-    path = smartdecks / "Teacher Schedule.json"
+    calendars = _folders(isolated_workspace)
+    path = calendars / "Teacher Schedule.json"
     path.write_text(json.dumps({"version": "custom", "blocks": []}), encoding="utf-8")
     client.post(
         "/api/schedule/teacher",
@@ -202,7 +200,7 @@ def test_post_schedule_teacher_sets_version_only_when_absent(isolated_workspace)
 
 
 def test_post_schedule_teacher_keeps_block_order(isolated_workspace):
-    calendars, _smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     _bell_schedule(calendars)
     blocks = [
         {"name": "Later", "raw_periods": [2]},
@@ -210,7 +208,7 @@ def test_post_schedule_teacher_keeps_block_order(isolated_workspace):
     ]
     client.post("/api/schedule/teacher", data={"blocks": json.dumps(blocks)})
     saved = json.loads(
-        (isolated_workspace / "Library" / "SmartDecks" / "Teacher Schedule.json").read_text(
+        (isolated_workspace / "Library" / "Calendars" / "Teacher Schedule.json").read_text(
             encoding="utf-8"
         )
     )
@@ -224,9 +222,9 @@ def test_saving_the_fixture_schedule_back_unchanged_keeps_every_block(isolated_w
     block per course period. The full fixture must survive being read and written
     straight back.
     """
-    calendars, smartdecks = _folders(isolated_workspace)
+    calendars = _folders(isolated_workspace)
     _bell_schedule(calendars)
-    shutil.copy2(FIXTURE / "Teacher Schedule.json", smartdecks / "Teacher Schedule.json")
+    shutil.copy2(FIXTURE / "Teacher Schedule.json", calendars / "Teacher Schedule.json")
 
     blocks = client.get("/api/schedule").json()["blocks"]
     assert len(blocks) > 1
@@ -238,8 +236,8 @@ def test_saving_the_fixture_schedule_back_unchanged_keeps_every_block(isolated_w
 
 
 def test_post_schedule_teacher_refuses_invalid_blocks_and_leaves_the_file_unchanged(isolated_workspace):
-    _calendars, smartdecks = _folders(isolated_workspace)
-    path = smartdecks / "Teacher Schedule.json"
+    calendars = _folders(isolated_workspace)
+    path = calendars / "Teacher Schedule.json"
     original = '{"_comment":"keep","blocks":[{"name":"Old","raw_periods":[1]}]}'
     path.write_text(original, encoding="utf-8")
     response = client.post(

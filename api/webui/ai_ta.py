@@ -58,8 +58,14 @@ RETIRED_FILES = {
     "About This Folder.txt": frozenset({
         "c3d90d2d29fd36ac9b3fecbc8982b9681d967a409fcda69c3d4d65d9e70e63b6",
         "00a7c1d978e5d02effde0f4b6d0a96d7d131ca324372eea641be2ee1cd247115",
-        # Before the folder index named SlideForge, schedule, objectives, and writing guides.
+        # Before the folder index named the retired display contract, schedule,
+        # objectives, and writing guides.
         "b31f29b5a32c1c4efa23ed9c9a3e53f408cdc029cee8aa1b503c6f981205a409",
+    }),
+    # Retired classroom-display authoring contract; remove only unchanged copies.
+    "Author a SmartDeck (SlideForge).txt": frozenset({
+        "1ddbd8451ec340171c1c2194bb45e18f71cea16c1640bd3458d8eabe5d46753f",
+        "e6fa8e82ce0132c400a91f754962d63ef0cf7b50f7d8284a94317e5d14dcfeab",
     }),
     # Same-name updates. Teachers are told to hand this file to an AI, so a
     # stale copy answers setup questions wrongly rather than harmlessly.
@@ -73,7 +79,7 @@ RETIRED_FILES = {
         # Before Panels and the Panel theme tools were described.
         "52f9755e202e51072cb687df1a0d1fa6b85d468dd371d7f8c30bd73e4c3656fe",
         # Before Appendix D described the local write tools and Appendix B added
-        # School Calendar, Learning Objectives, and SmartDeck coverage.
+        # School Calendar and Learning Objectives coverage.
         "2cb1a3c99d4d01f0158fe61ce4995a0d5bcdab360430f62ee8363d8a75aa5798",
     }),
 }

@@ -23,32 +23,11 @@ from api.webui.routes.panels import (
 # comparisons in whats_due_payload/resolve_panel_course hold under any
 # reasonable local offset from UTC used in this repo's dev/CI environment.
 NOW = datetime(2026, 8, 17, 15, 0, tzinfo=timezone.utc)
-THEMES_CSS = (Path(__file__).resolve().parents[2]
+THEMES_CSS = (Path(__file__).resolve().parents[4]
               / "api" / "webui" / "static" / "panels" / "themes.css")
 
 
-def _catalog(records, *, state="current"):
-    """A reader returning one course catalog holding ``records``."""
-    return lambda _course_id: {
-        "catalog": {
-            "course_id": "123",
-            "course_name": "ELA 7",
-            "version": 1,
-            "assignments": {
-                "state": state,
-                "last_success_at": "2026-08-17T08:00:00+00:00",
-                "records": records,
-            },
-        }
-    }
-
-
-def _assignment(name, due, *, published=True, points=10):
-    return {"id": name, "name": name, "due_at": due,
-            "published": published, "points_possible": points}
-
-
-def test_selects_only_assignments_inside_the_window():
+def test_selects_only_assignments_inside_the_window(_catalog, _assignment):
     reader = _catalog([
         _assignment("yesterday", "2026-08-16T12:00:00Z"),
         _assignment("today",     "2026-08-17T20:00:00Z"),
@@ -61,7 +40,7 @@ def test_selects_only_assignments_inside_the_window():
     assert [a["title"] for a in out["assignments"]] == ["today", "in 3 days"]
 
 
-def test_earlier_today_stays_visible_all_day_after_its_due_time():
+def test_earlier_today_stays_visible_all_day_after_its_due_time(_catalog, _assignment):
     """A due-today item does not vanish once its due time passes."""
     reader = _catalog([_assignment("already due", "2026-08-17T13:00:00Z")])
     out = whats_due_payload("123", 7, now=NOW, catalog_reader=reader)
@@ -69,7 +48,7 @@ def test_earlier_today_stays_visible_all_day_after_its_due_time():
     assert [a["title"] for a in out["assignments"]] == ["already due"]
 
 
-def test_future_items_sort_before_earlier_today_items():
+def test_future_items_sort_before_earlier_today_items(_catalog, _assignment):
     reader = _catalog([
         _assignment("earlier today", "2026-08-17T13:00:00Z"),
         _assignment("later today",   "2026-08-17T21:00:00Z"),
@@ -82,7 +61,7 @@ def test_future_items_sort_before_earlier_today_items():
     ]
 
 
-def test_sorted_soonest_first_regardless_of_catalog_order():
+def test_sorted_soonest_first_regardless_of_catalog_order(_catalog, _assignment):
     reader = _catalog([
         _assignment("later",   "2026-08-21T18:00:00Z"),
         _assignment("sooner",  "2026-08-18T18:00:00Z"),
@@ -93,7 +72,7 @@ def test_sorted_soonest_first_regardless_of_catalog_order():
     assert [a["title"] for a in out["assignments"]] == ["soonest", "sooner", "later"]
 
 
-def test_unpublished_and_undated_assignments_are_not_due():
+def test_unpublished_and_undated_assignments_are_not_due(_catalog, _assignment):
     reader = _catalog([
         _assignment("draft", "2026-08-18T18:00:00Z", published=False),
         _assignment("no due date", ""),
@@ -105,14 +84,14 @@ def test_unpublished_and_undated_assignments_are_not_due():
     assert [a["title"] for a in out["assignments"]] == ["real"]
 
 
-def test_naive_due_dates_are_read_as_utc_rather_than_dropped():
+def test_naive_due_dates_are_read_as_utc_rather_than_dropped(_catalog, _assignment):
     reader = _catalog([_assignment("naive", "2026-08-18T18:00:00")])
     out = whats_due_payload("123", 7, now=NOW, catalog_reader=reader)
 
     assert [a["title"] for a in out["assignments"]] == ["naive"]
 
 
-def test_no_course_selected_is_a_calm_state_not_an_error():
+def test_no_course_selected_is_a_calm_state_not_an_error(_catalog):
     out = whats_due_payload("", 7, now=NOW, catalog_reader=_catalog([]))
 
     assert out["ok"] is True
@@ -130,7 +109,7 @@ def test_missing_catalog_tells_the_teacher_what_to_do():
     assert "efresh" in out["message"]
 
 
-def test_empty_window_is_nothing_due_not_no_catalog():
+def test_empty_window_is_nothing_due_not_no_catalog(_catalog, _assignment):
     reader = _catalog([_assignment("far off", "2026-12-01T18:00:00Z")])
     out = whats_due_payload("123", 7, now=NOW, catalog_reader=reader)
 
@@ -138,7 +117,7 @@ def test_empty_window_is_nothing_due_not_no_catalog():
     assert "next 7 days" in out["message"]
 
 
-def test_stale_catalog_still_serves_but_is_flagged():
+def test_stale_catalog_still_serves_but_is_flagged(_catalog, _assignment):
     reader = _catalog([_assignment("today", "2026-08-17T20:00:00Z")],
                       state="stale")
     out = whats_due_payload("123", 7, now=NOW, catalog_reader=reader)
@@ -147,7 +126,7 @@ def test_stale_catalog_still_serves_but_is_flagged():
     assert out["stale"] is True
 
 
-def test_an_item_on_the_last_covered_day_is_included_the_next_day_is_not():
+def test_an_item_on_the_last_covered_day_is_included_the_next_day_is_not(_catalog, _assignment):
     """today + 7 calendar days is included; today + 8 is excluded."""
     reader = _catalog([
         _assignment("day 7", "2026-08-24T18:00:00Z"),
@@ -158,7 +137,7 @@ def test_an_item_on_the_last_covered_day_is_included_the_next_day_is_not():
     assert [a["title"] for a in out["assignments"]] == ["day 7"]
 
 
-def test_lookahead_is_clamped_so_a_hand_edited_url_cannot_ask_for_a_year():
+def test_lookahead_is_clamped_so_a_hand_edited_url_cannot_ask_for_a_year(_catalog, _assignment):
     reader = _catalog([_assignment("way out", "2027-01-01T18:00:00Z")])
     out = whats_due_payload("123", 9999, now=NOW, catalog_reader=reader)
 
@@ -166,7 +145,7 @@ def test_lookahead_is_clamped_so_a_hand_edited_url_cannot_ask_for_a_year():
     assert out["assignments"] == []
 
 
-def test_never_reaches_canvas():
+def test_never_reaches_canvas(_catalog):
     """A Panel that phoned home would put network failures on a projector."""
     called = []
 
@@ -183,18 +162,6 @@ def _block(name, start, end, course_id="9000001", label=""):
             "course_id": course_id}
 
 
-def _schedule(blocks, problems=(), state="ready"):
-    return lambda _date: {"state": state, "blocks": list(blocks), "problems": list(problems)}
-
-
-def _teacher(blocks):
-    return lambda: ({"blocks": list(blocks)}, [])
-
-
-def _active(*course_ids):
-    return lambda: [{"id": cid} for cid in course_ids]
-
-
 DAY = [
     _block("1st", "08:15", "09:05", "111", label="ELA 7 A"),
     _block("Conference", "09:10", "10:00", ""),
@@ -202,22 +169,7 @@ DAY = [
 ]
 
 
-def _at(hour, minute):
-    return datetime(2026, 8, 17, hour, minute)
-
-
-def _resolve(block="", *, now, schedule_reader=None, teacher_blocks=DAY,
-            active_course_ids=("111", "333"), calendar_state="ready"):
-    return resolve_panel_course(
-        block, now=now,
-        schedule_reader=schedule_reader or _schedule(DAY),
-        teacher_schedule_reader=_teacher(teacher_blocks),
-        active_courses_reader=_active(*active_course_ids),
-        calendar_state=calendar_state,
-    )
-
-
-def test_a_stable_block_still_pins_the_panel():
+def test_a_stable_block_still_pins_the_panel(_at, _resolve):
     """A second monitor dedicated to one section must keep working."""
     out = _resolve("3rd", now=_at(9, 30))
 
@@ -226,14 +178,14 @@ def test_a_stable_block_still_pins_the_panel():
     assert out["state"] == ""
 
 
-def test_an_unknown_block_name_says_so():
+def test_an_unknown_block_name_says_so(_at, _resolve):
     out = _resolve("Nonexistent", now=_at(9, 30))
 
     assert out["state"] == "no_schedule"
     assert out["block"] == "Nonexistent"
 
 
-def test_a_pinned_block_still_enforces_the_current_course_boundary():
+def test_a_pinned_block_still_enforces_the_current_course_boundary(_at, _resolve):
     out = _resolve("3rd", now=_at(9, 30), active_course_ids=("111",))
 
     assert out["state"] == "previous_course"
@@ -241,7 +193,7 @@ def test_a_pinned_block_still_enforces_the_current_course_boundary():
     assert "no longer current" in out["message"]
 
 
-def test_follows_the_block_meeting_right_now():
+def test_follows_the_block_meeting_right_now(_at, _resolve):
     out = _resolve("", now=_at(8, 30))
 
     assert out["course_id"] == "111"
@@ -250,7 +202,7 @@ def test_follows_the_block_meeting_right_now():
     assert out["next_change"] == "09:05"   # re-reads at the bell, not on drift
 
 
-def test_between_blocks_looks_ahead_to_the_next_one():
+def test_between_blocks_looks_ahead_to_the_next_one(_at, _resolve):
     """Passing period. A blank board helps nobody walking in."""
     out = _resolve("", now=_at(10, 2))
 
@@ -259,14 +211,14 @@ def test_between_blocks_looks_ahead_to_the_next_one():
     assert out["next_change"] == "10:05"
 
 
-def test_before_the_first_bell_shows_the_first_block():
+def test_before_the_first_bell_shows_the_first_block(_at, _resolve):
     out = _resolve("", now=_at(7, 5))
 
     assert out["course_id"] == "111"
     assert out["relation"] == "next"
 
 
-def test_a_block_with_no_canvas_course_is_named_not_errored():
+def test_a_block_with_no_canvas_course_is_named_not_errored(_at, _resolve):
     out = _resolve("", now=_at(9, 30))
 
     assert out["course_id"] == ""
@@ -274,7 +226,7 @@ def test_a_block_with_no_canvas_course_is_named_not_errored():
     assert "Conference" in out["message"]
 
 
-def test_a_block_mapped_to_a_previous_course_shows_the_repair_state():
+def test_a_block_mapped_to_a_previous_course_shows_the_repair_state(_at, _resolve):
     """A block whose course_id is no longer Current must never read its
     catalog -- it shows the exact repair state instead."""
     out = _resolve("", now=_at(8, 30), active_course_ids=("333",))
@@ -284,35 +236,35 @@ def test_a_block_mapped_to_a_previous_course_shows_the_repair_state():
     assert "no longer current" in out["message"]
 
 
-def test_after_the_last_block_the_day_is_over():
+def test_after_the_last_block_the_day_is_over(_at, _resolve):
     out = _resolve("", now=_at(16, 0))
 
     assert out["state"] == "day_over"
     assert out["course_id"] == ""
 
 
-def test_no_teacher_schedule_says_so():
+def test_no_teacher_schedule_says_so(_schedule, _at, _resolve):
     out = _resolve("", now=_at(9, 0), schedule_reader=_schedule([]))
 
     assert out["state"] == "no_schedule"
     assert "schedule" in out["message"].lower()
 
 
-def test_a_non_school_day_is_not_a_setup_problem():
+def test_a_non_school_day_is_not_a_setup_problem(_at, _resolve):
     """Summer and holidays must not nag a teacher to configure what is fine."""
     out = _resolve("", now=_at(9, 0), calendar_state="no_school")
 
     assert out["state"] == "not_school_day"
 
 
-def test_a_broken_calendar_shows_the_repair_state():
+def test_a_broken_calendar_shows_the_repair_state(_at, _resolve):
     for state in ("unconfigured", "invalid_calendar", "outside_coverage", "unknown_schedule"):
         out = _resolve("", now=_at(9, 0), calendar_state=state)
         assert out["state"] == "calendar_needs_attention"
         assert "Calendar" in out["message"]
 
 
-def test_schedule_failure_never_takes_the_panel_down():
+def test_schedule_failure_never_takes_the_panel_down(_at, _resolve):
     def explode(_date):
         raise RuntimeError("workspace unavailable")
 
@@ -322,7 +274,7 @@ def test_schedule_failure_never_takes_the_panel_down():
     assert out["course_id"] == ""
 
 
-def test_the_data_route_carries_the_schedule_context(monkeypatch):
+def test_the_data_route_carries_the_schedule_context(monkeypatch, _schedule):
     """The panel needs block and next_change to label itself and to re-read at
     the bell, so they have to survive the route, not just the resolver."""
     from fastapi.testclient import TestClient

@@ -56,7 +56,6 @@ Use only the row relevant to the active handoff.
 | Course Catalog | `docs/contracts/course-catalog-contract.md` | Student-free navigation/search projection only; no PII, raw HTML, URLs, credentials, private paths, evidence, or write preflight. |
 | Calendar | `docs/contracts/canonical-school-calendar-contract.md` | One public, student-free date authority; Calendar UI and MCP share validation and writes; no parallel academic/day calendar. |
 | Panels | `docs/reference/panels-route-card.md` | Disk-only reads, never live Canvas, because a Panel runs unattended on a wall for a whole period. A theme sets palette, typeface, and one decorative layer; it can never change what a Panel shows or how many rows fit. |
-| SmartDeck | `docs/reference/smartdeck-module-map.md` | Decks write live with no review queue. Anything a Slide or Panel can display must satisfy `docs/contracts/classroom-facing-data-contract.md`. |
 | MCP server | `docs/mcp-server.md` | Pseudonymized reads plus local writes behind preview/apply pairs. Never a Canvas write, and never a live Canvas response handed to the assistant. |
 | Learning Objectives | `api/learning_objectives.py`, with `api/default_docs/AI Authoring/Author a Learning Objective.txt` for the authoring grammar | Reviewed objectives are teacher-confirmed and revision-protected; a write applies only the exact reviewed preview. |
 | Operation Ledger | `docs/reference/operation-ledger-module-map.md` | High-risk Canvas write boundary; preserve checkpoints, idempotency, verification, and receipts. |
@@ -162,6 +161,38 @@ out-of-scope regression appears.
 - Let real use, defects, or measured friction pull future integration.
 - Batch related work when context and verification carry over; process-only acceptance,
   repair, or archive slices are not product work.
+
+## Test taxonomy and addressing
+
+Every test is exactly one of these three kinds. If a proposed test is none of them, do not
+write it.
+
+- **Law.** An invariant that must never break. Test it directly, at the law, once. Laws are
+  few and load-bearing; a law tested only through its consumers is not tested.
+- **Contract.** A shape agreement at a boundary, parametrized over the boundary's members
+  and driven from the registry or list that defines them, so a new member is covered without
+  a new test.
+- **Example.** One happy path per feature, for documentation value. One, by rule.
+
+A test path mirrors its module path. Shared setup lives in the nearest `conftest.py` as a
+named fixture. This makes finding and placing a test derivable from the source tree and keeps
+shared setup out of each test file's module preamble.
+
+Two measurements justify this discipline:
+
+- A mutation that made `data_freshness` always return `"current"`, removing mirror
+  staleness entirely, failed only 2 tests out of 1,917. Fifty tests mention `fresh`, `stale`,
+  or `zero_live_calls` in their names, but only 2 pin the law.
+- The MCP server registers 43 tools. Only 9 have wrapper-layer tests, while 7 tests
+  redundantly cover the same wrapper mechanism.
+
+Two house-style decisions remain open and must be answered explicitly rather than inferred:
+
+- Whether test classes are house style. Exactly one of the 136 test files uses them, and it is
+  brand-new uncommitted work.
+- Whether `pytest-randomly` should remain enabled by default. Runs currently need
+  `-p no:randomly` to be reproducible, and nondeterministic failure order increases diagnosis
+  cost.
 
 ## Risk and verification
 

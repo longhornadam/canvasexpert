@@ -1,8 +1,8 @@
 > **Historical origin document.** This is the teacher's own early brainstorm for what became
-> SmartDeck (called "Glass," and before that "Scenes," at the time this was written). It is
+> The former classroom-display concept (called "Glass," and before that "Scenes," at the time this was written). It is
 > preserved here for context, not as a design authority: the terminology below ("Scenes,"
 > "panes") and specific numbers (an 84% score floor) are both superseded. The current,
-> authoritative design is `docs/reference/smartdeck-module-map.md`; the shipped score floor is
+> historical only; the shipped score floor is
 > `SCORE_FLOOR_PERCENT = 90` in `api/audience.py`.
 
 CanvasExpert: Scenes (formerly Glass)

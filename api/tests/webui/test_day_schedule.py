@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from api.webui import deck_schedule
+from api.webui import day_schedule
 from api.webui.deps import _file_key
 
 
@@ -14,7 +14,7 @@ def _meeting(period_id, start, end, segment=""):
 class TestParseBellSchedule:
     def test_valid_schedule(self):
         content = "period_id,start,end\n1,08:35,09:25\n2,09:29,10:21"
-        meetings, problems = deck_schedule.parse_bell_schedule(content)
+        meetings, problems = day_schedule.parse_bell_schedule(content)
         assert meetings == [
             {"seq": 0, "period_id": "1", "start": "08:35", "end": "09:25", "segment": ""},
             {"seq": 1, "period_id": "2", "start": "09:29", "end": "10:21", "segment": ""},
@@ -23,7 +23,7 @@ class TestParseBellSchedule:
 
     def test_optional_label_becomes_segment(self):
         content = "period_id,start,end,label\n1,08:35,09:25,Review"
-        meetings, problems = deck_schedule.parse_bell_schedule(content)
+        meetings, problems = day_schedule.parse_bell_schedule(content)
         assert meetings[0]["segment"] == "Review"
         assert problems == []
 
@@ -34,7 +34,7 @@ class TestParseBellSchedule:
             "6,08:35,09:30,Review\n"
             "4,12:35,12:40,Study Hall\n"
         )
-        meetings, problems = deck_schedule.parse_bell_schedule(content)
+        meetings, problems = day_schedule.parse_bell_schedule(content)
         assert meetings == [
             {"seq": 0, "period_id": "6", "start": "08:35", "end": "09:30", "segment": "Review"},
             {"seq": 1, "period_id": "4", "start": "12:35", "end": "12:40", "segment": "Study Hall"},
@@ -43,19 +43,19 @@ class TestParseBellSchedule:
         assert problems == []
 
     def test_empty_csv(self):
-        meetings, problems = deck_schedule.parse_bell_schedule("period_id,start,end")
+        meetings, problems = day_schedule.parse_bell_schedule("period_id,start,end")
         assert meetings == []
         assert problems == []
 
     def test_invalid_time_format(self):
-        meetings, problems = deck_schedule.parse_bell_schedule(
+        meetings, problems = day_schedule.parse_bell_schedule(
             "period_id,start,end\n1,8:35,09:25"
         )
         assert len(meetings) == 1
         assert "Invalid time format" in problems[0]
 
     def test_end_before_start_is_reported_and_kept(self):
-        meetings, problems = deck_schedule.parse_bell_schedule(
+        meetings, problems = day_schedule.parse_bell_schedule(
             "period_id,start,end\n1,15:00,09:25"
         )
         assert meetings[0]["start"] == "15:00"
@@ -63,7 +63,7 @@ class TestParseBellSchedule:
         assert "end time" in problems[0].lower()
 
     def test_named_periods_are_allowed(self):
-        meetings, problems = deck_schedule.parse_bell_schedule(
+        meetings, problems = day_schedule.parse_bell_schedule(
             "period_id,start,end\nbobcat,12:11,13:13"
         )
         assert meetings[0]["period_id"] == "bobcat"
@@ -73,26 +73,26 @@ class TestParseBellSchedule:
 
 class TestParseTeacherSchedule:
     def test_valid_teacher_schedule(self):
-        data, problems = deck_schedule.parse_teacher_schedule(
+        data, problems = day_schedule.parse_teacher_schedule(
             '{"version":"1.0-json","blocks":[{"name":"1st","raw_periods":[1],"label":"ELA"}]}'
         )
         assert data["blocks"][0]["name"] == "1st"
         assert problems == []
 
     def test_legacy_weekdays_are_ignored(self):
-        data, problems = deck_schedule.parse_teacher_schedule(
+        data, problems = day_schedule.parse_teacher_schedule(
             '{"blocks":[{"name":"1st","raw_periods":[1],"weekdays":[0]}]}'
         )
         assert data["blocks"][0]["weekdays"] == [0]
         assert problems == []
 
     def test_malformed_json(self):
-        data, problems = deck_schedule.parse_teacher_schedule("{invalid json")
+        data, problems = day_schedule.parse_teacher_schedule("{invalid json")
         assert data == {}
         assert "invalid JSON" in problems[0]
 
     def test_empty_blocks(self):
-        data, problems = deck_schedule.parse_teacher_schedule('{"version":"1.0-json","blocks":[]}')
+        data, problems = day_schedule.parse_teacher_schedule('{"version":"1.0-json","blocks":[]}')
         assert data["blocks"] == []
         assert problems == []
 
@@ -100,7 +100,7 @@ class TestParseTeacherSchedule:
 class TestResolveDay:
     @staticmethod
     def resolve(periods, blocks):
-        return deck_schedule.resolve_day(
+        return day_schedule.resolve_day(
             "schedule",
             {"schedule": periods},
             {"blocks": blocks},
@@ -198,12 +198,12 @@ class TestResolveDay:
         assert problems == []
 
     def test_no_schedule_id_is_reported(self):
-        blocks, problems = deck_schedule.resolve_day(None, {}, {})
+        blocks, problems = day_schedule.resolve_day(None, {}, {})
         assert blocks == []
         assert "no schedule" in problems[0]
 
     def test_schedule_id_not_found_is_reported(self):
-        blocks, problems = deck_schedule.resolve_day(
+        blocks, problems = day_schedule.resolve_day(
             "missing", {"other": []}, {"blocks": []}
         )
         assert blocks == []
@@ -230,7 +230,7 @@ class TestResolveDay:
 
 class TestValidateTeacherSchedule:
     def test_valid_schedule_has_no_problems(self):
-        assert deck_schedule.validate_teacher_schedule({
+        assert day_schedule.validate_teacher_schedule({
             "version": "1.0-json",
             "blocks": [
                 {"name": "Algebra", "raw_periods": [1], "course_id": "9000001"},
@@ -239,7 +239,7 @@ class TestValidateTeacherSchedule:
         }) == []
 
     def test_duplicate_names_are_rejected(self):
-        problems = deck_schedule.validate_teacher_schedule({
+        problems = day_schedule.validate_teacher_schedule({
             "blocks": [
                 {"name": "Shared", "raw_periods": [1]},
                 {"name": "Shared", "raw_periods": [2]},
@@ -248,7 +248,7 @@ class TestValidateTeacherSchedule:
         assert problems == ["block 'Shared' must be unique"]
 
     def test_duplicate_periods_across_blocks_are_rejected(self):
-        problems = deck_schedule.validate_teacher_schedule({
+        problems = day_schedule.validate_teacher_schedule({
             "blocks": [
                 {"name": "Algebra", "raw_periods": [1]},
                 {"name": "Geometry", "raw_periods": [1]},
@@ -257,30 +257,30 @@ class TestValidateTeacherSchedule:
         assert problems == ["period '1' is claimed by both blocks 'Algebra' and 'Geometry'"]
 
     def test_weekdays_are_not_validated(self):
-        assert deck_schedule.validate_teacher_schedule({
+        assert day_schedule.validate_teacher_schedule({
             "blocks": [{"name": "Algebra", "raw_periods": [1], "weekdays": "legacy"}]
         }) == []
 
     def test_course_id_must_be_a_string(self):
-        assert deck_schedule.validate_teacher_schedule({
+        assert day_schedule.validate_teacher_schedule({
             "blocks": [{"name": "Algebra", "raw_periods": [1], "course_id": 9000001}]
         }) == ["block 'Algebra' course_id must be a string"]
 
     def test_blocks_must_be_a_list(self):
-        assert deck_schedule.validate_teacher_schedule({"blocks": {}}) == [
+        assert day_schedule.validate_teacher_schedule({"blocks": {}}) == [
             "blocks must be a list"
         ]
 
     def test_block_needs_a_name(self):
-        problems = deck_schedule.validate_teacher_schedule({"blocks": [{"raw_periods": [1]}]})
+        problems = day_schedule.validate_teacher_schedule({"blocks": [{"raw_periods": [1]}]})
         assert any("non-empty string name" in problem for problem in problems)
 
     def test_block_needs_raw_periods(self):
-        problems = deck_schedule.validate_teacher_schedule({"blocks": [{"name": "Algebra"}]})
+        problems = day_schedule.validate_teacher_schedule({"blocks": [{"name": "Algebra"}]})
         assert any("raw_periods" in problem for problem in problems)
 
     def test_unknown_keys_and_version_are_allowed(self):
-        assert deck_schedule.validate_teacher_schedule({
+        assert day_schedule.validate_teacher_schedule({
             "version": "future-format",
             "custom": {"source": "hand"},
             "blocks": [{"name": "Algebra", "raw_periods": [1], "custom": True}],
@@ -288,18 +288,19 @@ class TestValidateTeacherSchedule:
 
 
 def test_default_resolved_runs_never_invert():
-    root = Path(__file__).resolve().parents[1] / "default_docs" / "Calendars"
+    root = Path(__file__).resolve().parents[3] / "api" / "default_docs" / "Calendars"
     teacher = json.loads(
-        (root.parent / "SmartDecks" / "Teacher Schedule.template.json").read_text(
+        (root.parent / "Calendars" / "Teacher Schedule.template.json").read_text(
             encoding="utf-8"
         )
     )
     for path in sorted(root.glob("Bell Schedule*.csv")):
-        meetings, problems = deck_schedule.parse_bell_schedule(path.read_text(encoding="utf-8"))
+        meetings, problems = day_schedule.parse_bell_schedule(path.read_text(encoding="utf-8"))
         assert not problems, f"{path.name}: {problems}"
         schedule_id = _file_key(path.name)
-        blocks, resolve_problems = deck_schedule.resolve_day(
+        blocks, resolve_problems = day_schedule.resolve_day(
             schedule_id, {schedule_id: meetings}, teacher
         )
         assert resolve_problems == [], (path.name, resolve_problems)
         assert all(block["end"] >= block["start"] for block in blocks), path.name
+

@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 24
+    assert contract.TOOL_SCHEMA_VERSION == 25
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -29,7 +29,7 @@ def test_live_mcp_schema_matches_versioned_contract():
     # list_sections (v8), get_product_guide (v9), get_writing_history (v10),
     # local-only Glass draft tools (v11), v12 removes those Glass tools,
     # v13 adds schedule-read tools get_bell_schedule, get_day_schedule, get_teacher_schedule,
-    # v14 adds save_deck, list_active_decks, archive_deck, v15 adds the
+    # v14 added retired classroom-display tools, v15 adds the
     # teacher schedule write tools, v16 replaces save_day_calendar with the
     # canonical School Calendar tools (get/create/preview/apply_school_calendar_change),
     # and v17 removes the live-write create_school_calendar in favor of a staged
@@ -40,7 +40,8 @@ def test_live_mcp_schema_matches_versioned_contract():
     # v20 makes reviewed objectives fully mutable with list/replace/delete tools;
     # v21 adds the narrow pseudonym-first roster settings write surface;
     # v22 adds the scoring packet surface; v23 adds teacher-owned Panel themes;
-    # v24 adds list_theme_art.
+    # v24 is the frozen 45-tool snapshot; v25 removes the retired deck tools
+    # while retaining the live registry's 42-tool shape.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -74,7 +75,13 @@ def test_live_mcp_schema_matches_versioned_contract():
     v17 = contract.load_contract(17)
     assert v17["schema_version"] == 17
     assert len(v17["tools"]) == 25
-    assert len(live["tools"]) == 45  # v24 adds list_theme_art to the five
+    v24 = contract.load_contract(24)
+    assert v24["schema_version"] == 24
+    assert len(v24["tools"]) == 45
+    v25 = contract.load_contract(25)
+    assert v25["schema_version"] == 25
+    assert len(v25["tools"]) == 42
+    assert len(live["tools"]) == 42
     # Panel theme tools: get_theme_contract, list_panel_themes,
     # preview/apply/delete_panel_theme
     v22 = contract.load_contract(22)
@@ -86,8 +93,8 @@ def test_live_mcp_schema_matches_versioned_contract():
 def test_mcp_server_doc_matches_the_live_registry():
     """`docs/mcp-server.md` is the tool reference, so drift there is silent.
 
-    It read "Tool schema version 23 (44 tools)." above a 43-row table while the
-    registry held 45 tools at v24: every number in that sentence was wrong, they
+    It read a stale tool count above a mismatched table while the
+    registry held more tools than the document: every number in that sentence was wrong, they
     disagreed with each other, and two shipped tools (`get_writing_history`,
     `list_theme_art`) had no row at all. Nothing failed, because no test read the
     doc. Pin the stated version, the stated count, and the table itself to the
@@ -152,52 +159,6 @@ def test_panels_route_card_theme_tools_match_the_live_registry():
     derived = {name for name in _live_tool_names() if "theme" in name}
     assert derived, "derivation is broken: it must not pass vacuously on an empty group"
     assert documented == derived
-
-
-def test_smartdeck_route_card_tool_groups_match_the_live_registry():
-    """SmartDeck and Calendar group counts must stay aligned with the registry.
-
-    Calendar is cleanly derivable by name pattern ("school_calendar"), so it
-    is compared straight against the derived group -- a newly registered
-    calendar tool fails this until the doc catches up.
-
-    SmartDeck's 8 mixes deck, schedule, and get_authoring_contract tools and
-    is not cleanly derivable by a single name pattern, so it stays an
-    explicit hardcoded set. To keep registry growth from going unnoticed
-    anyway, a guard asserts every live tool that looks deck/schedule-ish
-    (name contains "deck", "bell_schedule", "teacher_schedule", or
-    "day_schedule") is accounted for in that documented set -- a new deck or
-    schedule tool trips the guard even though it can't drive the set itself.
-    """
-    path = Path(__file__).resolve().parents[2] / "docs" / "reference" / "smartdeck-module-map.md"
-    doc = path.read_text(encoding="utf-8")
-    smartdeck_section = doc.split("## MCP tools", 1)[1].split("All eight", 1)[0]
-    smartdeck = set(re.findall(r"^\| `([a-z][a-z0-9_]+)", smartdeck_section, re.MULTILINE))
-    expected_smartdeck = {
-        "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
-        "save_teacher_schedule", "get_authoring_contract", "save_deck",
-        "list_active_decks", "archive_deck",
-    }
-    assert "SmartDeck's own 8" in doc
-    assert smartdeck == expected_smartdeck
-    deckish_patterns = ("deck", "bell_schedule", "teacher_schedule", "day_schedule")
-    deckish_live = {
-        name for name in _live_tool_names()
-        if any(pattern in name for pattern in deckish_patterns)
-    }
-    assert deckish_live, "derivation is broken: it must not pass vacuously on an empty group"
-    assert deckish_live <= expected_smartdeck, (
-        f"registry has deck/schedule-ish tools missing from the documented 8: "
-        f"{sorted(deckish_live - expected_smartdeck)}"
-    )
-
-    calendar_match = re.search(r"domain's seven tools \(([^)]+)\)", doc)
-    assert calendar_match, "the SmartDeck card must state its complete Calendar group"
-    calendar = set(re.findall(r"[a-z][a-z0-9_]+", calendar_match.group(1)))
-    derived_calendar = {name for name in _live_tool_names() if "school_calendar" in name}
-    assert derived_calendar, "derivation is broken: it must not pass vacuously on an empty group"
-    assert calendar == derived_calendar
-    assert smartdeck | calendar <= _live_tool_names()
 
 
 def test_mirror_doc_bound_tools_match_the_live_registry():

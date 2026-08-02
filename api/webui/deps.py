@@ -39,10 +39,10 @@ def _calendar_label(filename: str) -> str:
     return stem.replace("_", " ").replace("-", " ").strip()
 
 
-def _smartdecks_dir():
-    """Resolve SmartDecks folder in the workspace Library."""
+def _calendars_dir():
+    """Resolve Calendars folder in the workspace Library."""
     from . import workspace as _ws
-    return _ws.library_folder("SmartDecks")
+    return _ws.library_folder("Calendars")
 
 
 def _file_key(filename: str) -> str:
@@ -81,7 +81,7 @@ def load_bell_schedules() -> tuple:
       parse_bell_schedule
     - Second element is list of problem strings (prefixed with filename/schedule_id)
     """
-    from . import deck_schedule
+    from . import day_schedule
 
     schedules = {}
     all_problems = []
@@ -97,7 +97,7 @@ def load_bell_schedules() -> tuple:
             all_problems.append(f"{schedule_id}: could not read file: {e}")
             continue
 
-        meetings, problems = deck_schedule.parse_bell_schedule(content)
+        meetings, problems = day_schedule.parse_bell_schedule(content)
         schedules[schedule_id] = meetings
 
         for problem in problems:
@@ -107,19 +107,19 @@ def load_bell_schedules() -> tuple:
 
 
 def load_teacher_schedule() -> tuple:
-    """Load teacher schedule from SmartDecks folder.
+    """Load teacher schedule from Calendars folder.
 
-    Reads 'Teacher Schedule.json' (exact filename) from the SmartDecks folder.
+    Reads 'Teacher Schedule.json' (exact filename) from the Calendars folder.
     Returns (data_dict, problems_list).
     Missing file -> ({}, ["no teacher schedule found"]).
     """
-    from . import deck_schedule
+    from . import day_schedule
 
-    smartdecks = _smartdecks_dir()
-    if not smartdecks or not os.path.isdir(smartdecks):
-        return {}, ["no workspace SmartDecks folder found"]
+    calendars = _calendars_dir()
+    if not calendars or not os.path.isdir(calendars):
+        return {}, ["no workspace Calendars folder found"]
 
-    path = os.path.join(smartdecks, "Teacher Schedule.json")
+    path = os.path.join(calendars, "Teacher Schedule.json")
     if not os.path.exists(path):
         return {}, ["no teacher schedule found"]
 
@@ -129,14 +129,14 @@ def load_teacher_schedule() -> tuple:
     except OSError as e:
         return {}, [f"could not read teacher schedule: {e}"]
 
-    return deck_schedule.parse_teacher_schedule(content)
+    return day_schedule.parse_teacher_schedule(content)
 
 
 def resolve_schedule_for(date: str) -> dict:
     """Resolve blocks for a specific date.
 
     Gets the date's schedule_id from the canonical calendar service, loads
-    Bell Schedules and the Teacher Schedule, then deck_schedule.resolve_day().
+    Bell Schedules and the Teacher Schedule, then day_schedule.resolve_day().
     Merges problems from all stages.
 
     date: "YYYY-MM-DD" string
@@ -149,7 +149,7 @@ def resolve_schedule_for(date: str) -> dict:
     segments, and seq; a non-contiguous block produces one entry per
     consecutive run.
     """
-    from . import deck_schedule, school_calendar
+    from . import day_schedule, school_calendar
 
     bell_schedules, bell_problems = load_bell_schedules()
     teacher_schedule, teacher_problems = load_teacher_schedule()
@@ -159,7 +159,7 @@ def resolve_schedule_for(date: str) -> dict:
     state = resolution["state"]
     schedule_id = resolution.get("schedule_id") if state == "ready" else None
 
-    blocks, resolve_problems = deck_schedule.resolve_day(
+    blocks, resolve_problems = day_schedule.resolve_day(
         schedule_id, bell_schedules, teacher_schedule
     )
 

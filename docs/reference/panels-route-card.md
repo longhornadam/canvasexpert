@@ -32,7 +32,7 @@ costs nothing.
 | `GET /panels/{kind}/data` | The Panel's single data fetch, JSON |
 
 Owner: `api/webui/routes/panels.py`, registered in `api/webui/server.py` next to
-`_smartdeck_router`. Unknown kinds 404 from both the page and the data route.
+the other route modules. Unknown kinds 404 from both the page and the data route.
 
 ## Current ownership
 
@@ -73,8 +73,8 @@ changing them.
 
 ## Panel catalog
 
-`PANEL_CATALOG` in `panels.py` is an allowlist, for the same reason SmartDeck has
-three fixed layouts: a closed set is what keeps this from sprawling into a hundred
+`PANEL_CATALOG` in `panels.py` is an allowlist: a closed set is what keeps this
+from sprawling into a hundred
 one-off pages nobody sweeps for responsiveness.
 
 `PANEL_CATALOG` currently contains exactly these nine kinds. The `days`,
@@ -208,21 +208,20 @@ rather than fill.
 `resolve_panel_course` in `panels.py` is the single resolver every kind calls, so a
 timer Panel and a what's-due Panel can never disagree about what period it is.
 
-The chain reuses SmartDeck's own resolution, now via the canonical calendar:
+The chain uses the canonical schedule resolution:
 
 ```
 today  -> school_calendar.resolve_date()   day kind + schedule_id, or a named repair state
        -> deps.load_bell_schedules()       periods with start/end
        -> deps.load_teacher_schedule()     blocks with raw_periods and course_id
-       -> deck_schedule.resolve_day()      today's blocks, sorted by start
+       -> day_schedule.resolve_day()       today's blocks, sorted by start
        -> now "HH:MM"                      the block meeting now, else the next one
 ```
 
 `course_id` is an optional field on every schedule block, which is what makes this
 work at all; the resolver also enforces the Current-course boundary before returning
 one (`config.active_courses()`), so a block mapped to a Previous course reports
-`previous_course` rather than reading that course's catalog. `_bell_schedule_feed` in
-`smartdeck_feeds.py` does the same last step for SmartDeck's own display.
+`previous_course` rather than reading that course's catalog.
 
 **Why a stable block name is a durability fix, not a convenience.** A course ID can
 expire at the year rollover, leaving a saved board unable to distinguish "nothing due"
@@ -387,8 +386,7 @@ enforces this repo-wide.
 
 ## The console
 
-`/panels` is a builder, not a brochure. It sits in the top nav where SmartDeck used to,
-and SmartDeck moved into More.
+`/panels` is a builder, not a brochure. It sits in the primary navigation.
 
 The rail lists the panel kinds first and a Reference group (Embedding, Limits) second.
 The stage opens on one builder per kind. Explanation lives in those two reference
@@ -422,8 +420,6 @@ Two things on the page are deliberate:
 
 ## Related
 
-- `docs/reference/smartdeck-module-map.md` - SmartDeck's own route card. SmartDeck is
-  CanvasExpert's in-house projector surface; Panels target surfaces the teacher
-  already uses. Panels now share SmartDeck's schedule resolution (see Following the
-  schedule above); its deck store and feed system remain unused by Panels.
+- `docs/contracts/canonical-school-calendar-contract.md` - the schedule source that
+  Panels resolve through.
 - `api/webui/README.md` - rendered-verification recipe.

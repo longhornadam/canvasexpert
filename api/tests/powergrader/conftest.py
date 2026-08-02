@@ -1,0 +1,162 @@
+from __future__ import annotations
+
+import io
+import zipfile
+
+import pytest
+from docx import Document
+
+
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+@pytest.fixture
+def _base_docx():
+    def base_docx(body_text: str = "A fictional visible response.") -> bytes:
+        document = Document()
+        document.add_paragraph(body_text)
+        output = io.BytesIO()
+        document.save(output)
+        return output.getvalue()
+
+    return base_docx
+
+
+@pytest.fixture
+def _revision_xml():
+    def revision_xml(
+        kind: str,
+        text: str,
+        *,
+        author: str,
+        timestamp: str = "2026-07-27T10:00:00-05:00",
+    ) -> str:
+        tag = "ins" if kind == "insertion" else "del"
+        text_tag = "t" if kind == "insertion" else "delText"
+        return (
+            f'<w:{tag} w:author="{author}" w:date="{timestamp}">'
+            f"<w:r><w:{text_tag}>{text}</w:{text_tag}></w:r>"
+            f"</w:{tag}>"
+        )
+
+    return revision_xml
+
+
+@pytest.fixture
+def _rewrite_docx():
+    def rewrite_docx(base: bytes, replacements: dict[str, bytes], additions: dict[str, bytes] | None = None) -> bytes:
+        output = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(base)) as source, zipfile.ZipFile(
+            output, "w", zipfile.ZIP_DEFLATED
+        ) as target:
+            for info in source.infolist():
+                if info.filename in replacements:
+                    target.writestr(info, replacements[info.filename])
+                else:
+                    target.writestr(info, source.read(info.filename))
+            existing = set(source.namelist())
+            for name, payload in (additions or {}).items():
+                if name not in existing:
+                    target.writestr(name, payload)
+        return output.getvalue()
+
+    return rewrite_docx
+
+
+@pytest.fixture
+def _timeline_docx(_base_docx, _revision_xml, _rewrite_docx):
+
+    def timeline_docx(
+        *,
+        blocks: list[tuple[str, str, str]] | None = None,
+        track_revisions: bool = True,
+        protection: str = "none",
+        creator: str = "Fictional Learner",
+        last_modified: str = "Fictional Learner",
+        total_time: str = "37",
+        revision: str = "8",
+        stories: dict[str, str] | None = None,
+        body_text: str = "A fictional visible response.",
+        timestamp: str = "2026-07-27T10:00:00-05:00",
+    ) -> bytes:
+        base = _base_docx(body_text)
+        with zipfile.ZipFile(io.BytesIO(base)) as archive:
+            document_xml = archive.read("word/document.xml").decode("utf-8")
+        revision_nodes = "".join(
+            _revision_xml(kind, text, author=author, timestamp=timestamp)
+            for kind, text, author in (blocks or [])
+        )
+        document_xml = document_xml.replace("</w:body>", f"<w:p>{revision_nodes}</w:p></w:body>")
+        protection_xml = ""
+        if protection == "unlocked":
+            protection_xml = '<w:documentProtection w:edit="trackedChanges" w:enforcement="0"/>'
+        elif protection == "locked":
+            protection_xml = '<w:documentProtection w:edit="trackedChanges" w:enforcement="1"/>'
+        settings_xml = (
+            f'<w:settings xmlns:w="{W_NS}">'
+            + ("<w:trackRevisions/>" if track_revisions else "")
+            + protection_xml
+            + "</w:settings>"
+        )
+        core_xml = (
+            '<cp:coreProperties '
+            'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+            'xmlns:dc="http://purl.org/dc/elements/1.1/">'
+            f"<dc:creator>{creator}</dc:creator>"
+            f"<cp:lastModifiedBy>{last_modified}</cp:lastModifiedBy>"
+            "</cp:coreProperties>"
+        )
+        app_xml = (
+            '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
+            f"<TotalTime>{total_time}</TotalTime><Revision>{revision}</Revision>"
+            "</Properties>"
+        )
+        story_parts = {}
+        for name, inner in (stories or {}).items():
+            story_parts[name] = (
+                f'<w:hdr xmlns:w="{W_NS}"><w:p>{inner}</w:p></w:hdr>'
+            ).encode("utf-8")
+        return _rewrite_docx(
+            base,
+            {
+                "word/document.xml": document_xml.encode("utf-8"),
+                "word/settings.xml": settings_xml.encode("utf-8"),
+                "docProps/core.xml": core_xml.encode("utf-8"),
+                "docProps/app.xml": app_xml.encode("utf-8"),
+            },
+            story_parts,
+        )
+
+    return timeline_docx
+
+
+@pytest.fixture
+def _tracked_docx_submission(_timeline_docx):
+    def tracked_docx_submission(user_id: str, name: str, local_file):
+        payload = _timeline_docx(blocks=[("insertion", "fictional work", name)])
+        local_file.write_bytes(payload)
+        return {
+            "user_id": user_id,
+            "submission_type": "online_upload",
+            "workflow_state": "submitted",
+            "submitted_at": "2026-09-11T15:20:00Z",
+            "cached_due_date": "2026-09-10T23:59:00Z",
+            "attempt": 1,
+            "body": "",
+            "user": {"name": name, "sortable_name": name},
+            "assignment": {"id": "assignment-1", "name": "Essay"},
+            "attachments": [{
+                "filename": "answer.docx",
+                "local_path": str(local_file),
+                "declared_size": len(payload),
+                "actual_size": len(payload),
+                "download_status": "downloaded",
+                "extraction_status": "extracted",
+                "ai_eligible": True,
+                "local_only": False,
+                "item_id": "assignment-1",
+            }],
+            "expected_attachment_count": 1,
+        }
+
+    return tracked_docx_submission

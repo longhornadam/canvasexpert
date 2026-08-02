@@ -1,4 +1,4 @@
-"""SmartDeck class schedule setup.
+"""Teacher class schedule setup.
 
 This module owns the local schedule setup surface: readiness composition and the
 Teacher Schedule JSON write path. It is kept separate from the cached network
@@ -10,15 +10,14 @@ import json
 import os
 import tempfile
 
-from . import config, deck_schedule, deps, workspace
+from . import config, day_schedule, deps, workspace
 
 
 # The loaders report a missing file or folder as a problem string. Each piece
-# already carries `present`, and `missing` still lists these for SmartDeck, so
+# already carries `present`, and `missing` still lists these for the schedule, so
 # repeating them per piece only duplicates whatever the panel says about absence.
 _ABSENCE_PROBLEMS = frozenset({
     "no teacher schedule found",
-    "no workspace SmartDecks folder found",
     "no workspace Calendars folder found",
     "no bell schedules found",
 })
@@ -33,13 +32,13 @@ def _calendars_dir():
     return workspace.library_folder("Calendars")
 
 
-def _smartdecks_dir():
-    return workspace.library_folder("SmartDecks")
+def _calendars_dir():
+    return workspace.library_folder("Calendars")
 
 
 def teacher_schedule_path() -> str | None:
-    smartdecks = _smartdecks_dir()
-    return os.path.join(smartdecks, "Teacher Schedule.json") if smartdecks else None
+    calendars = _calendars_dir()
+    return os.path.join(calendars, "Teacher Schedule.json") if calendars else None
 
 
 def _compose_readiness(teacher_schedule, teacher_problems, bell_schedules, bell_problems):
@@ -171,13 +170,13 @@ def _validate_block_courses(blocks: list) -> list:
 
 def save_blocks(blocks: list) -> tuple[dict | None, list]:
     """Validate and atomically replace only ``blocks`` in Teacher Schedule.json."""
-    validation_problems = deck_schedule.validate_teacher_schedule({"blocks": blocks})
+    validation_problems = day_schedule.validate_teacher_schedule({"blocks": blocks})
     if validation_problems:
         return None, validation_problems
 
     path = teacher_schedule_path()
-    smartdecks = _smartdecks_dir()
-    if not path or not smartdecks:
+    calendars = _calendars_dir()
+    if not path or not calendars:
         return None, ["no workspace available"]
 
     period_problems = _validate_block_periods_against_bell_schedules(blocks)
@@ -202,12 +201,12 @@ def save_blocks(blocks: list) -> tuple[dict | None, list]:
         data["version"] = "1.0-json"
     data["blocks"] = blocks
 
-    os.makedirs(smartdecks, exist_ok=True)
+    os.makedirs(calendars, exist_ok=True)
     fd = None
     temporary = None
     try:
         fd, temporary = tempfile.mkstemp(
-            prefix=".teacher_schedule_", suffix=".partial", dir=smartdecks, text=True
+            prefix=".teacher_schedule_", suffix=".partial", dir=calendars, text=True
         )
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(data, handle, indent=2)

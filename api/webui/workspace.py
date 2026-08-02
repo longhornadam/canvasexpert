@@ -42,7 +42,7 @@ LIBRARY_NAME = "Library"
 AI_AUTHORING_SUBFOLDER = "AI Authoring"
 LIBRARY_SUBFOLDERS = [
     AI_AUTHORING_SUBFOLDER, "Rubrics", "Quizzes", "Assignments", "Pages",
-    "Calendars", "SmartDecks", "Source Materials", "Panels",
+    "Calendars", "Source Materials", "Panels",
 ]
 
 # Assistant-staged drafts waiting for the teacher to push to Canvas.
@@ -742,9 +742,6 @@ def ensure_workspace():
         target_dir = os.path.join(root, LIBRARY_NAME, subfolder)
         os.makedirs(target_dir, exist_ok=True)
         _seed_folder_if_missing(os.path.join(DEFAULT_DOCS_DIR, subfolder), target_dir)
-    # SmartDecks library structure.
-    for subfolder in ("Decks", "Decks/Archived", "Deck Templates", "Slide Templates"):
-        os.makedirs(os.path.join(root, LIBRARY_NAME, "SmartDecks", subfolder), exist_ok=True)
     # The teacher's own Panel themes, one JSON file each.
     os.makedirs(os.path.join(root, LIBRARY_NAME, "Panels", "Themes"), exist_ok=True)
 
@@ -776,8 +773,8 @@ def ensure_workspace():
 def migrate_legacy_glass_folders(root=None):
     """One-time cleanup: move any pre-existing Library/Glass and To Review/Glass
     folders (left over from before the Glass feature was removed) to
-    _System/Archive/SmartDecks-legacy/. No-ops when both are absent. Move only,
-    never unlink -- same convention as deck_store.delete_deck. Idempotent: once
+    _System/Archive/Legacy/. No-ops when both are absent. Move only,
+    never unlink. Idempotent: once
     moved, the source is gone, so this becomes a permanent no-op; the
     destination-exists check also guards against clobbering on a re-run before
     the source is fully gone (e.g. a partial prior move)."""
@@ -793,7 +790,7 @@ def migrate_legacy_glass_folders(root=None):
         return
     dest_root = system_folder("Archive", base)
     if dest_root:
-        dest_root = os.path.join(dest_root, "SmartDecks-legacy")
+        dest_root = os.path.join(dest_root, "Legacy")
     if not dest_root:
         return
     try:

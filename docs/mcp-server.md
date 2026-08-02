@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 24 (45 tools).
+Tool schema version 25 (42 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -42,7 +42,7 @@ Tool schema version 24 (45 tools).
 | `preview_learning_objective(course_id, objective, effective_start, effective_end, source_refs, replaces?)` | Exact reviewed create or replacement preview grounded in current local module, assignment, or page records | No |
 | `apply_learning_objective(course_id, preview, preview_digest, expected_revision)` | Applies only the exact reviewed create or replacement preview after catalog/source/revision checks; replacement identity comes from the digest-protected preview | No |
 | `delete_learning_objective(course_id, entry_id, expected_revision)` | Directly deletes one selected reviewed objective with revision protection | No |
-| `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/`, or SmartDeck (`deck`) with no staging/review appendix (unlike other Forge kinds) | No |
+| `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/` | No |
 | `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
@@ -58,8 +58,7 @@ Tool schema version 24 (45 tools).
 | `get_bell_schedule(schedule_id="")` | Bell schedule CSV(s) from the workspace | No |
 | `get_day_schedule(date)` | Resolved schedule blocks for one date | No |
 | `get_teacher_schedule()` | The teacher's own block-name mapping | No |
-| `save_deck(date, title, slides, widgets=None)` | Validates and writes a SmartDeck deck live (no review queue) | No |
-| `save_teacher_schedule(blocks)` | Replaces the teacher's SmartDeck blocks live | No |
+| `save_teacher_schedule(blocks)` | Replaces the teacher's schedule blocks live | No |
 | `get_school_calendar(date_from="", date_to="")` | Canonical School Calendar readiness, plus a bounded range of days/grading-periods/events when both dates are given | No |
 | `preview_school_calendar_replacement(school_year, coverage_start, coverage_end, default_schedule_id, ...)` | Previews creating/replacing the complete canonical School Calendar for one year; returns the base revision (0 for a first-ever calendar) and material change counts | No |
 | `apply_school_calendar_replacement(preview, expected_revision)` | Applies a previewed create/replace; refuses a stale `expected_revision` | No |
@@ -67,8 +66,6 @@ Tool schema version 24 (45 tools).
 | `apply_school_calendar_change(preview, expected_revision)` | Applies a previewed change; refuses a stale `expected_revision` | No |
 | `preview_school_calendar_event_change(action, event=None, event_id="")` | Previews an upsert or delete of one canonical public event and returns before/after projections | No |
 | `apply_school_calendar_event_change(preview, expected_revision)` | Applies a previewed public-event change; refuses stale or altered previews | No |
-| `list_active_decks()` | Lists active decks | No |
-| `archive_deck(deck_id)` | Moves a deck to archived | No |
 | `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved}` | No |
 | `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard | Yes — pseudonymized |
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
@@ -89,9 +86,8 @@ is far lower-risk than student data.
 `get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
 needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`, `assignment`, `page`, `rubric`) read the same
 `api/default_docs/AI Authoring/` file the web UI's `/api/download-contract` route serves,
-then receive the Forge-only staging appendix. SmartDeck (`deck`) reads its canonical contract
-from the same source but has no staging/review appendix — unlike other Forge kinds, SmartDeck
-writes live to the workspace immediately with no teacher review queue.
+then receive the Forge-only staging appendix. The schedule writer is the only direct local
+write in this group and has no staging/review appendix.
 
 The six Panel theme tools take no `course_id` and carry no student data, so they need
 no course gate, no identity vault, and no safety scan. They are the one write surface here
@@ -114,9 +110,7 @@ bounded numbers, so art can decorate a board but cannot resize its type or fetch
 Call `get_theme_contract` first; `preview_panel_theme` reports what it corrected, which is
 worth telling the teacher. See `docs/reference/panels-route-card.md` for the full model.
 
-`save_deck`, `list_active_decks`, and `archive_deck` take no `course_id` and carry no
-student data. They use the same local-only exemption: no course gate, no identity vault,
-and no safety scan. `save_teacher_schedule` has no `course_id` parameter and makes no
+`save_teacher_schedule` has no `course_id` parameter and makes no
 Canvas call; a teacher-set block `course_id` passes through untouched after string
 validation, so an assistant can read, edit, and write the binding safely.
 

@@ -70,10 +70,10 @@ and `schedule_setup.py`, rendered on the Calendar page, not Settings:
 - The MCP `save_teacher_schedule` tool calls the same function, so the page and assistant share
   validation and atomic file behavior.
 
-A block's `name` is the key a Slide binds to (`routes/smartdeck.py` `_resolve_slides` keys
+A block's `name` is the stable key a classroom display binds to; the route
 blocks by name); `label` is display text only. Block names and claimed period IDs are unique,
 and save-time validation checks each period against the workspace Bell Schedule CSVs. The editor
-keeps name and label in separate fields so changing display text does not rename a slide binding.
+keeps name and label in separate fields so changing display text does not rename a display binding.
 
 `schedule_setup.readiness()` composes only the Teacher Schedule + Bell Schedule pieces; whole-
 calendar readiness (coverage, today's resolution, low-coverage warning) is

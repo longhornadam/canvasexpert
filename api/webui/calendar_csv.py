@@ -20,7 +20,7 @@ def _parse_calendar_csv(content: str) -> tuple:
       - Category "Academic Period" → grading period preset
 
     Returns (sorted_dates, grading_periods, events).  Events are public
-    calendar facts for SmartDeck; they contain no source path or district config.
+    calendar facts for classroom displays; they contain no source path or district config.
       - sorted_dates:    [YYYY-MM-DD]
       - grading_periods: [{name, code, start, end}]
     Accepts YYYY-MM-DD or MM/DD/YYYY date formats.

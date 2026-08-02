@@ -2,12 +2,12 @@
 
 The authority for which facts a classroom screen may show and which stay with the teacher.
 `api/audience.py` is the enforcement; this document is the decision. When the two disagree,
-this document is wrong or the code is — fix them together, never one alone.
+this document is wrong or the code is -- fix them together, never one alone.
 
 ## The split is not "student data versus not"
 
 Schools put birthdays and full names on signage outside the building. They announce
-outstanding achievements — a 5 on an AP exam, the all-A list, STAAR Masters — over the
+outstanding achievements -- a 5 on an AP exam, the all-A list, STAAR Masters -- over the
 intercom and in newsletters. Treating every student-linked fact as restricted would describe
 a school that does not exist, and would make a classroom screen useless for the things it is
 actually for.
@@ -57,51 +57,36 @@ Four rules that decide the cases the lists do not name.
    teacher's responsibility to say otherwise, and the app's responsibility to make that easy.
 4. **Fail closed on the unclassified.** An unrecognised kind is not a classroom-facing kind
    missing from the list; it is a fact nobody has classified. `classroom_safe()` returns
-   False for it. This is not in tension with rule 2 — rule 2 governs known facts, this
+  False for it. This is not in tension with rule 2 -- rule 2 governs known facts, this
    governs unknown ones.
 
-## The assistant receives availability, never values
-
-An MCP-connected assistant authoring a SmartDeck Slide is told *that* a Feed category exists
-and how it is shaped -- never a value. It would write generically: "if birthdays are
-available, show them here." Only the local display page, at render time, would ever resolve
-a Feed name to a real value.
-
-This is what would make classroom-facing student data safe to display without making it safe
-to send -- but as of this writing, no Slide can reference a Feed at all: `api/webui/sf.py`
-rejects a `feed` key outright, on every Slide and at the top level, unconditionally. Feed
-*resolution* exists (`api/smartdeck_feeds.py`, reusing this document's enforcement rules
-as-is), but nothing in the app calls it from an authoring or display path yet. This is
-deliberate, not an oversight: wiring a Feed into what an assistant can author, and into what
-the display page renders, needs its own design, and inventing one without a spec would be
-scope creep. Until that lands, the asymmetry below describes what must hold once it does, not
-what exists today:
+## The assistant gets the contract, not the roster
 
 - An assistant is off the machine by definition. So it gets the contract, not the roster --
   regardless of surface, this can never change.
-- A Slide is structured data (a fixed layout: heading, body text, or a bulleted list) rendered
-  by a small set of built-in templates, not arbitrary HTML/CSS/JS. There is no user-authored
-  code execution surface for a Slide to have in the first place -- a stronger property than
-  sandboxing it. (An earlier, deleted feature took the opposite approach: an AI authored
-  arbitrary HTML/CSS/JS, run in an iframe with `sandbox="allow-scripts"`, an opaque origin,
-  `no-referrer`, and an inline CSP blocking every outbound route. That mechanism no longer
-  exists in this codebase and must not be resurrected as a shortcut to letting a Slide run
-  authored code again -- if a future Feed design ever needs to render something more dynamic
-  than the fixed layouts above, it should get there without arbitrary script, not by rebuilding
-  that sandbox.)
+- A classroom-facing surface is structured data (a fixed layout: heading, body text, or a
+  bulleted list) rendered by a small set of built-in templates, not arbitrary HTML/CSS/JS.
+  There is no user-authored code execution surface for a classroom-facing surface to have in
+  the first place -- a stronger property than sandboxing it. (An earlier, deleted feature took
+  the opposite approach: an AI authored arbitrary HTML/CSS/JS, run in an iframe with
+  `sandbox="allow-scripts"`, an opaque origin, `no-referrer`, and an inline CSP blocking every
+  outbound route. That mechanism no longer exists in this codebase and must not be resurrected
+  as a shortcut to letting a classroom-facing surface run authored code again -- if a future
+  design ever needs to render something more dynamic than the fixed layouts above, it should
+  get there without arbitrary script, not by rebuilding that sandbox.)
 
 ## Enforcement
 
 - Every item a day context emits carries an `audience`, stamped from the kind by
-  `api.audience.tag()` — not copied from whatever the source claimed, so a source cannot
+  `api.audience.tag()` -- not copied from whatever the source claimed, so a source cannot
   promote its own fact to the wall.
 - Classroom-facing surfaces filter with `api.audience.classroom_only()` rather than trusting
   their input.
 - `SCORE_FLOOR_PERCENT = 90` lives in `api/audience.py` and is stated here. A score below it
-  can never be tagged classroom-facing, whatever a Slide or Widget asks for.
+  can never be tagged classroom-facing, whatever a classroom-facing surface asks for.
 - Per `docs/reference/project-state.md`, a model instruction is not an enforcement boundary.
-  None of the above may be relocated into prompt text, a Slide's source, or an authoring
-  contract.
+  None of the above may be relocated into prompt text, a classroom-facing surface's source,
+  or an authoring contract.
 
 ## Open teacher decisions
 

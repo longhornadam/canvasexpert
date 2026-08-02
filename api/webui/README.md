@@ -64,8 +64,6 @@ Source tests never substitute for rendered verification.
 | `/panels/{kind}/data` | The Panel's single data fetch. Disk-only; never calls Canvas | route-driven |
 | `/panels/themes.css` | The teacher's own Panel themes, generated from their theme files | route-driven |
 | `/panels/theme-art/{key}/{index}.{ext}` | Processed bytes for one art entry, cached and immutable | route-driven |
-| `/smartdeck` | **SmartDeck** — manage Decks: Active, Templates, Archived, Widgets | `smartdeck/smartdeck.js` |
-| `/smartdeck/display/{deck_id}` | **SmartDeck display** — headerless projector view for displaying Slides | `smartdeck/display.js` |
 | `/about` | What-is-Canvas-Expert explainer | — |
 
 Home's Canvas sync action queues local read-only coordinator work and polls its opaque
@@ -130,7 +128,7 @@ primary-nav page, not in Settings.
 - Teacher Schedule/Bell Schedule read-write: `api/webui/routes/schedule.py`, `api/webui/schedule_setup.py`
 
 For the full contract, see `docs/contracts/canonical-school-calendar-contract.md`; for the
-Panels/SmartDeck consumer relationship, see `docs/reference/panels-route-card.md`.
+Panels consumer relationship, see `docs/reference/panels-route-card.md`.
 
 ### PowerGrader module routing
 
@@ -164,19 +162,6 @@ Roster has backend helper splits and browser feature files.
 - Helper modules: `api/webui/routes/roster_canvas.py`, `api/webui/routes/roster_helpers.py`, `api/webui/routes/roster_groups.py`
 
 For the full ownership map and current hotspot snapshot, see `docs/reference/roster-module-map.md`.
-
-### SmartDeck module routing
-
-SmartDeck is a teacher-authored Deck of Slides bound to Teacher Schedule block names,
-displayed full-screen on a classroom projector. Slides are structured data rendered by
-fixed templates (heading, body, bulleted list), never arbitrary code — no sandboxed
-iframe required.
-
-- Routes owner: `api/webui/routes/smartdeck.py`
-- Management page: `smartdeck.html`, `smartdeck/smartdeck.js`, `smartdeck/smartdeck.css`
-- Display page: `smartdeck_display.html`, `smartdeck/display.js`, `smartdeck/display.css`
-- Storage and validation: `api/webui/deck_store.py`, `api/webui/sf.py`
-- Schedule resolution: `api/webui/deck_schedule.py`, `api/webui/deps.py`
 
 ### Feedback tools module routing — PowerGrader advanced import
 

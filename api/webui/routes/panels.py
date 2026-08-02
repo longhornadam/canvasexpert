@@ -20,7 +20,7 @@ Two properties hold this together and are easy to break by accident:
   Panels onto generated ids: both silently kill every saved board weeks later.
 
 Panel kinds live in PANEL_CATALOG, which is an allowlist. Unknown kinds 404
-rather than rendering something improvised, for the same reason SmartDeck has
+rather than rendering something improvised, for the same reason other classroom
 three fixed layouts: a closed set is what keeps this from sprawling.
 """
 from __future__ import annotations

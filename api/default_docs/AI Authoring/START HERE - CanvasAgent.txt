@@ -152,11 +152,6 @@ Panel can display. Each one is grounded in current modules, assignments, and
 pages, and a changed source marks it for review rather than silently rewriting
 the objective.
 
-SmartDeck. SmartDeck drives the whole screen itself, as a sequence of Slides
-with widgets. It stays fully supported for teachers who want CanvasExpert to
-own the display, with Decks and a projector display view that can follow the
-Teacher Schedule.
-
 School Calendar. The canonical School Calendar holds school dates, day kinds,
 grading periods, bell schedules, and the Teacher Schedule. The Calendar page
 and its tools keep those records in the teacher's workspace for date math and
@@ -285,10 +280,9 @@ you: read again rather than forcing it.
     clear_roster_student_field to clear one. These are the teacher's own local
     settings, pseudonym-first, never Canvas membership. Nicknames are not
     yours to set.
-  * SmartDecks and the teacher's blocks. save_deck, list_active_decks,
-    archive_deck, get_teacher_schedule, save_teacher_schedule, plus
-    get_bell_schedule and get_day_schedule to read. These write live, with no
-    review queue in front of them, so confirm with the teacher first.
+  * Teacher-owned schedules. get_teacher_schedule and save_teacher_schedule,
+    plus get_bell_schedule and get_day_schedule to read. These write live, with
+    no review queue in front of them, so confirm with the teacher first.
   * Scoring. list_scoring_sessions, get_scoring_packet, stage_scores, as
     described under PowerGrader above. Staged scores wait for teacher review.
 

@@ -1,4 +1,4 @@
-"""Class schedule setup APIs used by Settings and SmartDeck."""
+"""Class schedule setup APIs used by Settings and Panels."""
 
 import json
 

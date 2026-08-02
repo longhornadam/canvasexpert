@@ -4,7 +4,7 @@ from pathlib import Path
 from api.webui import rf
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 RUBRIC_DIR = ROOT / "api" / "rubrics"
 
 

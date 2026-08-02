@@ -323,17 +323,8 @@ def get_teacher_schedule() -> str:
 
 
 @mcp.tool()
-def save_deck(date: str, title: str, slides: list, widgets: list = None) -> str:
-    """Author and save a SmartDeck for classroom display on a given date.
-    Call get_teacher_schedule first to discover valid block names.
-    Writes the deck live immediately on validation success -- there is no
-    review queue. No student data."""
-    return _compact(tools.save_deck(date, title, slides, widgets))
-
-
-@mcp.tool()
 def save_teacher_schedule(blocks: list) -> str:
-    """Save the teacher's SmartDeck blocks live to the workspace.
+    """Save the teacher's schedule blocks live to the workspace.
     No course ID or student data. No review queue."""
     return _compact(tools.save_teacher_schedule(blocks))
 
@@ -416,20 +407,6 @@ def apply_school_calendar_event_change(preview: dict, expected_revision: int) ->
     Stale revisions, altered digests, or altered projections are refused.
     No course ID or student data."""
     return _compact(tools.apply_school_calendar_event_change(preview, expected_revision))
-
-
-@mcp.tool()
-def list_active_decks() -> str:
-    """All active SmartDecks in the workspace as a list with {deck_id, date,
-    title, revision, path}. No student data."""
-    return _compact(tools.list_active_decks())
-
-
-@mcp.tool()
-def archive_deck(deck_id: str) -> str:
-    """Move a SmartDeck from active to archived status. Does not delete it.
-    No student data."""
-    return _compact(tools.archive_deck(deck_id))
 
 
 @mcp.tool()

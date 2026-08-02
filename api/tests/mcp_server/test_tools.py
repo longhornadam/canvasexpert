@@ -80,32 +80,6 @@ def _assert_no_leaks(payload: dict):
         assert leak not in dumped, f"{leak!r} leaked into payload: {dumped}"
 
 
-def _rows(table: dict) -> list[dict]:
-    """Re-expand a token-lean {columns, rows} table into per-row dicts."""
-    return [dict(zip(table["columns"], row)) for row in table["rows"]]
-
-
-def _use_vault(monkeypatch, tmp_path) -> str:
-    vault_path = str(tmp_path / "vault.json")
-    monkeypatch.setattr(tools, "_vault_factory", lambda: Vault(vault_path))
-    return vault_path
-
-
-def _set_active_courses(monkeypatch, course_ids):
-    monkeypatch.setattr(
-        tools.config, "active_courses",
-        lambda: [{"id": cid, "name": f"Course {cid}"} for cid in course_ids],
-    )
-
-
-def _set_previous_course(monkeypatch, course_id="111"):
-    _set_active_courses(monkeypatch, ["222"])
-    monkeypatch.setattr(
-        tools.config, "saved_courses",
-        lambda: [{"id": course_id, "name": f"Course {course_id}", "active": False}],
-    )
-
-
 # --- list_courses (no course_id, no student data -> no gates) --------------
 
 def test_list_courses_happy(monkeypatch):
@@ -139,19 +113,18 @@ def test_course_gate_check_rejects_non_current_course(monkeypatch):
     assert tools._course_gate_check("111") is None
 
 
-def test_get_roster_rejects_non_current_course(monkeypatch, tmp_path):
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["222"])
+def test_get_roster_rejects_non_current_course(monkeypatch, tmp_path, _use_vault, _set_active_courses):
+    _set_active_courses(["222"])
     result = tools.get_roster("111")
     assert result["ok"] is False
     assert "not a Current course" in result["error"]
 
 
-def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch):
+def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch, _set_active_courses):
     """When the workspace (and thus the identity vault) can't be resolved, the
     student-data tools must refuse rather than scatter the vault to a stray path.
     No _vault_factory override here: this exercises the real _default_vault."""
-    _set_active_courses(monkeypatch, ["111"])
+    _set_active_courses(["111"])
     monkeypatch.setattr(workspace, "identity_vault_dir", lambda *a, **k: None)
     for result in (
         tools.get_roster("111"),
@@ -165,20 +138,8 @@ def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch):
 
 # --- get_course_assignments (disk-only catalog, no student data) -----------
 
-def _catalog_document(assignment_records, module_records):
-    scope = {"state": "current", "last_success_at": "2026-07-01T00:00:00Z",
-             "last_attempt_at": "2026-07-01T00:00:00Z", "error_code": ""}
-    return {
-        "course_id": "111",
-        "course_name": "Test Course",
-        "updated_at": "2026-07-01T00:00:00Z",
-        "assignments": {**scope, "records": assignment_records},
-        "modules": {**scope, "records": module_records},
-    }
-
-
-def test_get_course_assignments_happy(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_course_assignments_happy(monkeypatch, _rows, _set_active_courses, _catalog_document):
+    _set_active_courses(["111"])
     document = _catalog_document(
         {"700010": {"id": 700010, "name": "Quiz 1", "description_text": "desc",
                     "points_possible": 10, "due_at": "2026-07-01T23:59:00Z",
@@ -197,8 +158,8 @@ def test_get_course_assignments_happy(monkeypatch):
     }]
 
 
-def test_get_course_assignments_uses_catalog_read_scope(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_course_assignments_uses_catalog_read_scope(monkeypatch, _set_active_courses, _catalog_document):
+    _set_active_courses(["111"])
     document = _catalog_document(
         {"700010": {"id": 700010, "name": "Quiz 1", "description_text": "desc",
                     "points_possible": 10, "due_at": "", "published": True}},
@@ -221,8 +182,8 @@ def test_get_course_assignments_uses_catalog_read_scope(monkeypatch):
     assert calls == ["111"]
 
 
-def test_get_course_assignments_trims_long_descriptions(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_course_assignments_trims_long_descriptions(monkeypatch, _rows, _set_active_courses, _catalog_document):
+    _set_active_courses(["111"])
     long_description = "word " * 200  # 1000 chars, well past the preview cut
     document = _catalog_document(
         {"700010": {"id": 700010, "name": "Quiz 1",
@@ -244,8 +205,8 @@ def test_get_course_assignments_trims_long_descriptions(monkeypatch):
     assert full == long_description
 
 
-def test_get_course_assignments_empty(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_course_assignments_empty(monkeypatch, _set_active_courses, _catalog_document):
+    _set_active_courses(["111"])
     document = _catalog_document({}, [{"id": 1, "name": "Module 1", "position": 1, "items": []}])
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -257,8 +218,8 @@ def test_get_course_assignments_empty(monkeypatch):
     assert result["assignments"]["rows"] == []
 
 
-def test_get_course_assignments_catalog_missing(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_course_assignments_catalog_missing(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": None, "source": "none", "warnings": []})
 
@@ -267,8 +228,8 @@ def test_get_course_assignments_catalog_missing(monkeypatch):
     assert "refresh" in result["error"].lower()
 
 
-def test_get_course_assignments_accepts_previous_course(monkeypatch):
-    _set_previous_course(monkeypatch)
+def test_get_course_assignments_accepts_previous_course(monkeypatch, _set_previous_course, _catalog_document):
+    _set_previous_course()
     document = _catalog_document(
         {"700010": {"id": 700010, "name": "Quiz 1", "description_text": "desc"}},
         [],
@@ -290,22 +251,8 @@ MODULE_FIXTURE = [
 ]
 
 
-def _module_catalog_document(module_records, *, state="current"):
-    module_scope = {"state": state, "last_success_at": "2026-07-01T00:00:00Z",
-                    "last_attempt_at": "2026-07-01T00:00:00Z", "error_code": ""}
-    assignment_scope = {"state": "current", "last_success_at": "2026-07-01T00:00:00Z",
-                        "last_attempt_at": "2026-07-01T00:00:00Z", "error_code": ""}
-    return {
-        "course_id": "111",
-        "course_name": "Test Course",
-        "updated_at": "2026-07-01T00:00:00Z",
-        "assignments": {**assignment_scope, "records": {}},
-        "modules": {**module_scope, "records": module_records},
-    }
-
-
-def test_get_modules_happy_returns_table(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_modules_happy_returns_table(monkeypatch, _rows, _set_active_courses, _module_catalog_document):
+    _set_active_courses(["111"])
     document = _module_catalog_document(MODULE_FIXTURE)
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -329,8 +276,8 @@ def test_get_modules_happy_returns_table(monkeypatch):
     ]
 
 
-def test_get_modules_include_items_true_nests_item_tables(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_modules_include_items_true_nests_item_tables(monkeypatch, _rows, _set_active_courses, _module_catalog_document):
+    _set_active_courses(["111"])
     document = _module_catalog_document(MODULE_FIXTURE)
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -347,8 +294,8 @@ def test_get_modules_include_items_true_nests_item_tables(monkeypatch):
     assert rows[1]["items"]["rows"] == []
 
 
-def test_get_modules_include_items_false_omits_items_column(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_modules_include_items_false_omits_items_column(monkeypatch, _rows, _set_active_courses, _module_catalog_document):
+    _set_active_courses(["111"])
     document = _module_catalog_document(MODULE_FIXTURE)
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -358,8 +305,8 @@ def test_get_modules_include_items_false_omits_items_column(monkeypatch):
     assert all("items" not in row for row in _rows(result["modules"]))
 
 
-def test_get_modules_accepts_previous_course(monkeypatch):
-    _set_previous_course(monkeypatch)
+def test_get_modules_accepts_previous_course(monkeypatch, _set_previous_course, _module_catalog_document):
+    _set_previous_course()
     document = _module_catalog_document([])
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -368,8 +315,8 @@ def test_get_modules_accepts_previous_course(monkeypatch):
     assert result["ok"] is True
 
 
-def test_get_modules_catalog_missing(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_modules_catalog_missing(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": None, "source": "none", "warnings": []})
 
@@ -378,8 +325,8 @@ def test_get_modules_catalog_missing(monkeypatch):
     assert "refresh" in result["error"].lower()
 
 
-def test_get_modules_stale_returns_labeled_records_not_refusal(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_modules_stale_returns_labeled_records_not_refusal(monkeypatch, _rows, _set_active_courses, _module_catalog_document):
+    _set_active_courses(["111"])
     document = _module_catalog_document(MODULE_FIXTURE, state="stale")
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -391,8 +338,8 @@ def test_get_modules_stale_returns_labeled_records_not_refusal(monkeypatch):
     assert len(_rows(result["modules"])) == 2
 
 
-def test_get_modules_marks_state_stale_past_serve_window(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_modules_marks_state_stale_past_serve_window(monkeypatch, _rows, _set_active_courses, _module_catalog_document):
+    _set_active_courses(["111"])
     document = _module_catalog_document(MODULE_FIXTURE)  # state="current", synced weeks ago
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -404,8 +351,8 @@ def test_get_modules_marks_state_stale_past_serve_window(monkeypatch):
     assert len(_rows(result["modules"])) == 2
 
 
-def test_get_modules_state_current_when_within_serve_window(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_modules_state_current_when_within_serve_window(monkeypatch, _set_active_courses, _module_catalog_document):
+    _set_active_courses(["111"])
     document = _module_catalog_document(MODULE_FIXTURE)  # state="current", synced weeks ago
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -416,10 +363,10 @@ def test_get_modules_state_current_when_within_serve_window(monkeypatch):
     assert result["state"] == "current"
 
 
-def test_get_modules_never_cataloged_detail(monkeypatch):
+def test_get_modules_never_cataloged_detail(monkeypatch, _set_active_courses, _module_catalog_document):
     """When modules scope has never been successfully cataloged (state=unavailable,
     no last_success_at), modules_state_detail says never_cataloged."""
-    _set_active_courses(monkeypatch, ["111"])
+    _set_active_courses(["111"])
     document = _module_catalog_document([])
     document["modules"]["state"] = "unavailable"
     document["modules"]["last_success_at"] = ""
@@ -433,11 +380,11 @@ def test_get_modules_never_cataloged_detail(monkeypatch):
     assert result["modules"]["rows"] == []
 
 
-def test_get_modules_empty_but_cataloged_detail(monkeypatch):
+def test_get_modules_empty_but_cataloged_detail(monkeypatch, _set_active_courses, _module_catalog_document):
     """When modules scope has been cataloged (has last_success_at) but has zero
     records, modules_state_detail says cataloged — the course genuinely has no
     modules."""
-    _set_active_courses(monkeypatch, ["111"])
+    _set_active_courses(["111"])
     document = _module_catalog_document([])  # state="current" with last_success_at
     monkeypatch.setattr(tools, "read_catalog",
                         lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
@@ -451,8 +398,8 @@ def test_get_modules_empty_but_cataloged_detail(monkeypatch):
 
 # --- list_sections (no student data -> no vault, no safety gate) ------------
 
-def test_list_sections_happy(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_list_sections_happy(monkeypatch, _rows, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(
         tools.mirror_store, "read_roster",
         lambda cid: {"sections": {"800001": "Period 1", "800002": "Period 2"}},
@@ -467,8 +414,8 @@ def test_list_sections_happy(monkeypatch):
     ]
 
 
-def test_list_sections_empty(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_list_sections_empty(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(
         tools.mirror_store, "read_roster",
         lambda cid: {"sections": {}},
@@ -478,16 +425,16 @@ def test_list_sections_empty(monkeypatch):
     assert result["sections"]["rows"] == []
 
 
-def test_list_sections_roster_missing(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_list_sections_roster_missing(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(tools.mirror_store, "read_roster", lambda cid: None)
     result = tools.list_sections("111")
     assert result["ok"] is False
     assert "mirror" in result["error"].lower()
 
 
-def test_list_sections_accepts_previous_course(monkeypatch):
-    _set_previous_course(monkeypatch)
+def test_list_sections_accepts_previous_course(monkeypatch, _set_previous_course):
+    _set_previous_course()
     monkeypatch.setattr(
         tools.mirror_store, "read_roster",
         lambda cid: {"sections": {"800001": "Period 1"}},
@@ -512,7 +459,7 @@ def test_get_authoring_contract_unknown_kind_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown kind 'essay'; expected one of: "
-                  "quiz, assignment, page, rubric, deck, schedule, learning_objective"),
+                  "quiz, assignment, page, rubric, schedule, learning_objective"),
     }
 
 
@@ -526,7 +473,7 @@ def test_get_authoring_contract_missing_file_returns_structured_error(monkeypatc
 def test_get_authoring_contract_matches_the_one_canonical_repo_file():
     """Each kind has exactly one repository file under api/default_docs/AI
     Authoring/; the MCP tool must return that file's bytes exactly (plus the
-    staging appendix for non-deck kinds), never a regenerated or forked copy."""
+    staging appendix for staged kinds), never a regenerated or forked copy."""
     for kind, filename in tools._CONTRACT_FILES.items():
         canonical_path = os.path.join(
             tools.REPO_ROOT, "api", "default_docs", "AI Authoring", filename)
@@ -534,8 +481,7 @@ def test_get_authoring_contract_matches_the_one_canonical_repo_file():
             canonical_text = f.read()
         result = tools.get_authoring_contract(kind)
         assert result["ok"] is True
-        # Deck has no staging appendix; others do
-        if kind == "deck":
+        if kind == "schedule":
             assert result["contract"] == canonical_text
         else:
             assert result["contract"].startswith(canonical_text)
@@ -682,7 +628,7 @@ def test_download_contract_route_serves_the_same_guides_as_the_mcp_tool():
 
 # --- list_staged_content (no course_id, no student data -> no gates) -------
 
-def test_list_staged_content_one_kind_lists_label_only(monkeypatch):
+def test_list_staged_content_one_kind_lists_label_only(monkeypatch, _rows):
     monkeypatch.setattr(
         tools.deps, "list_inbox_files",
         lambda kind: [{"label": "Inbox/Quizzes/draft1.txt",
@@ -706,7 +652,7 @@ def test_list_staged_content_empty_inbox_returns_empty_table(monkeypatch):
     assert result["staged"] == {"columns": ["kind", "label"], "rows": []}
 
 
-def test_list_staged_content_omitting_kind_aggregates_across_kinds(monkeypatch):
+def test_list_staged_content_omitting_kind_aggregates_across_kinds(monkeypatch, _rows):
     def _fake_list(kind):
         return [{"label": f"{kind}-draft.txt", "path": f"/abs/{kind}", "source": "inbox"}]
 
@@ -718,7 +664,6 @@ def test_list_staged_content_omitting_kind_aggregates_across_kinds(monkeypatch):
         {"kind": "assignment", "label": "assignment-draft.txt"},
         {"kind": "page", "label": "page-draft.txt"},
         {"kind": "rubric", "label": "rubric-draft.txt"},
-        {"kind": "deck", "label": "deck-draft.txt"},
     ]
 
 
@@ -727,11 +672,11 @@ def test_list_staged_content_unknown_kind_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown kind 'essay'; expected one of: "
-                  "quiz, assignment, page, rubric, deck (or omit for all)"),
+                  "quiz, assignment, page, rubric (or omit for all)"),
     }
 
 
-def test_list_staged_content_uses_real_inbox_via_workspace(monkeypatch, tmp_path):
+def test_list_staged_content_uses_real_inbox_via_workspace(monkeypatch, tmp_path, _rows):
     """End-to-end through the real deps.list_inbox_files/runtime_paths.inbox_folder
     seam, same fixture style as api/tests/test_inbox_files.py."""
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
@@ -753,10 +698,9 @@ def test_list_staged_content_uses_real_inbox_via_workspace(monkeypatch, tmp_path
 
 # --- get_roster --------------------------------------------------------------
 
-def test_get_roster_happy(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_roster_happy(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
 
     result = tools.get_roster("111")
@@ -773,10 +717,9 @@ def test_get_roster_happy(monkeypatch, tmp_path):
     _assert_no_leaks(result)
 
 
-def test_get_roster_empty(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_roster_empty(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     mirror_store.write_roster("111", [], {}, root=str(tmp_path))
 
     result = tools.get_roster("111")
@@ -784,10 +727,9 @@ def test_get_roster_empty(monkeypatch, tmp_path):
     assert result["roster"]["rows"] == []
 
 
-def test_get_roster_failure(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_roster_failure(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     # No mirror seeded at all: refused rather than fetched live.
 
     assert tools.get_roster("111") == {"ok": False, "error": tools._MIRROR_UNAVAILABLE_ROSTER_ERROR}
@@ -795,10 +737,9 @@ def test_get_roster_failure(monkeypatch, tmp_path):
 
 # --- get_submissions ----------------------------------------------------------
 
-def test_get_submissions_happy_scrubs_real_name_and_short_name(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_submissions_happy_scrubs_real_name_and_short_name(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     root = str(tmp_path)
     mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
     mirror_store.write_assignments("111", [MIRROR_ASSIGNMENT], root=root)
@@ -827,29 +768,8 @@ def test_get_submissions_happy_scrubs_real_name_and_short_name(monkeypatch, tmp_
     _assert_no_leaks(result)
 
 
-def _submissions_fixture(monkeypatch, tmp_path, bodies_by_user=None):
-    bodies_by_user = bodies_by_user or {
-        900001: "<p>First essay body.</p>",
-        900002: "<p>Second essay body.</p>",
-    }
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
-    root = str(tmp_path)
-    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
-    mirror_store.write_assignments("111", [
-        {"id": 700010, "name": "Essay 1", "points_possible": 10, "due_at": ""},
-    ], root=root)
-    mirror_store.merge_submissions("111", "700010", [
-        {"assignment_id": 700010, "user_id": uid, "workflow_state": "submitted",
-         "submitted_at": "2026-07-01T20:00:00Z", "body": body}
-        for uid, body in bodies_by_user.items()
-    ], root=root, replace=True)
-    mirror_store.record_pass("111", "full", ok=True, root=root)
-
-
-def test_get_submissions_include_text_false_drops_text_column(monkeypatch, tmp_path):
-    _submissions_fixture(monkeypatch, tmp_path)
+def test_get_submissions_include_text_false_drops_text_column(monkeypatch, tmp_path, _submissions_fixture):
+    _submissions_fixture()
     result = tools.get_submissions("111", "700010", include_text=False)
     assert result["ok"] is True
     assert "text" not in result["submissions"]["columns"]
@@ -858,8 +778,8 @@ def test_get_submissions_include_text_false_drops_text_column(monkeypatch, tmp_p
     assert "essay body" not in dumped
 
 
-def test_get_submissions_pseudonyms_filter_narrows_rows(monkeypatch, tmp_path):
-    _submissions_fixture(monkeypatch, tmp_path)
+def test_get_submissions_pseudonyms_filter_narrows_rows(monkeypatch, tmp_path, _rows, _submissions_fixture):
+    _submissions_fixture()
     everyone = _rows(tools.get_submissions("111", "700010")["submissions"])
     assert len(everyone) == 2
     target = everyone[0]["pseudonym"]
@@ -870,9 +790,9 @@ def test_get_submissions_pseudonyms_filter_narrows_rows(monkeypatch, tmp_path):
     assert [row["pseudonym"] for row in rows] == [target]
 
 
-def test_get_submissions_max_text_chars_truncates_with_marker(monkeypatch, tmp_path):
+def test_get_submissions_max_text_chars_truncates_with_marker(monkeypatch, tmp_path, _rows, _submissions_fixture):
     long_body = "<p>" + ("sentence " * 100) + "</p>"  # ~900 chars of text
-    _submissions_fixture(monkeypatch, tmp_path, {900001: long_body})
+    _submissions_fixture( {900001: long_body})
 
     result = tools.get_submissions("111", "700010", max_text_chars=100)
     row = _rows(result["submissions"])[0]
@@ -885,10 +805,9 @@ def test_get_submissions_max_text_chars_truncates_with_marker(monkeypatch, tmp_p
     assert len(full_row["text"]) > 800
 
 
-def test_get_submissions_empty(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_submissions_empty(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     root = str(tmp_path)
     mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
     mirror_store.write_assignments("111", [
@@ -902,10 +821,9 @@ def test_get_submissions_empty(monkeypatch, tmp_path):
     assert result["submissions"]["rows"] == []
 
 
-def test_get_submissions_failure(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_submissions_failure(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     root = str(tmp_path)
     # Fresh mirror (roster + a DIFFERENT assignment) -- "700010" just isn't in
     # it, a distinct non-staleness error from the mirror-unavailable refusal.
@@ -919,9 +837,8 @@ def test_get_submissions_failure(monkeypatch, tmp_path):
         "ok": False, "error": "No such assignment in this course's local catalog."}
 
 
-def test_get_submissions_rejects_non_current_course(monkeypatch, tmp_path):
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["222"])
+def test_get_submissions_rejects_non_current_course(monkeypatch, tmp_path, _use_vault, _set_active_courses):
+    _set_active_courses(["222"])
     result = tools.get_submissions("111", "700010")
     assert result["ok"] is False
     assert "not a Current course" in result["error"]
@@ -1115,10 +1032,6 @@ MIRROR_SUBMISSIONS = [
 _STALE_STAMP = "2000-01-01T00:00:00Z"
 
 
-def _mount_mirror(monkeypatch, tmp_path):
-    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
-
-
 def _populate_mirror(root, *, roster_at=None, assignments_at=None, submissions_at=None):
     fresh = mirror_store.now_iso()
     roster_at = roster_at or fresh
@@ -1153,10 +1066,9 @@ def _forbid_live_reads(monkeypatch):
     monkeypatch.setattr(canvas_client, "_physical_get", _explode_live)
 
 
-def test_get_roster_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_roster_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
     _populate_mirror(str(tmp_path))
     _forbid_live_reads(monkeypatch)
 
@@ -1180,10 +1092,10 @@ def _set_seating_context(monkeypatch, *, settings=None, matrix=None, relationshi
     monkeypatch.setattr(tools.config, "active_protected_names", lambda: set())
 
 
-def test_get_seating_context_is_mirror_only_pseudonymized_and_scrubbed(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    vault_path = _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_seating_context_is_mirror_only_pseudonymized_and_scrubbed(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    vault_path = _use_vault
+    _set_active_courses([MIRROR_COURSE])
     users = [dict(FIXTURE_USERS[0]), dict(FIXTURE_USERS[1])]
     users[1]["enrollments"] = [{"course_section_id": 800001}]
     mirror_store.write_roster(MIRROR_COURSE, users, {"800001": "Period 1"}, root=str(tmp_path))
@@ -1230,10 +1142,9 @@ def test_get_seating_context_is_mirror_only_pseudonymized_and_scrubbed(monkeypat
     assert feedback_safety.scan_payload(result, Vault(vault_path))["green"] is True
 
 
-def test_get_seating_context_withholds_missing_or_ambiguous_section(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_seating_context_withholds_missing_or_ambiguous_section(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
     mirror_store.write_roster(
         MIRROR_COURSE, FIXTURE_USERS,
         {"800001": "Period", "800002": "Period"}, root=str(tmp_path),
@@ -1247,10 +1158,9 @@ def test_get_seating_context_withholds_missing_or_ambiguous_section(monkeypatch,
         assert "800001" not in result["error"] and "800002" not in result["error"]
 
 
-def test_get_seating_context_refuses_stale_mirror_and_vault_conflict(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_seating_context_refuses_stale_mirror_and_vault_conflict(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
     mirror_store.write_roster(
         MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP,
         root=str(tmp_path), attempted_at=_STALE_STAMP,
@@ -1271,10 +1181,9 @@ def test_get_seating_context_refuses_stale_mirror_and_vault_conflict(monkeypatch
     assert "conflict" in result["error"].lower()
 
 
-def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
     _populate_mirror(str(tmp_path))
     _forbid_live_reads(monkeypatch)
 
@@ -1288,10 +1197,9 @@ def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypa
     _assert_no_leaks(result)
 
 
-def test_get_submissions_refuses_when_roster_stale(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_submissions_refuses_when_roster_stale(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
     _populate_mirror(str(tmp_path), roster_at=_STALE_STAMP)
     monkeypatch.setattr(gradebook_queries, "assignment", _explode_live)
     monkeypatch.setattr(gradebook_queries, "assignment_submissions", _explode_live)
@@ -1302,10 +1210,9 @@ def test_get_submissions_refuses_when_roster_stale(monkeypatch, tmp_path):
     assert result == {"ok": False, "error": tools._MIRROR_UNAVAILABLE_SUBMISSIONS_ERROR}
 
 
-def test_get_submissions_refuses_when_assignments_stale(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_submissions_refuses_when_assignments_stale(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
     _populate_mirror(str(tmp_path), assignments_at=_STALE_STAMP)
     monkeypatch.setattr(gradebook_queries, "assignment", _explode_live)
     monkeypatch.setattr(gradebook_queries, "assignment_submissions", _explode_live)
@@ -1316,10 +1223,9 @@ def test_get_submissions_refuses_when_assignments_stale(monkeypatch, tmp_path):
     assert result == {"ok": False, "error": tools._MIRROR_UNAVAILABLE_SUBMISSIONS_ERROR}
 
 
-def test_get_submissions_refuses_when_submissions_stale(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, [MIRROR_COURSE])
+def test_get_submissions_refuses_when_submissions_stale(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
     _populate_mirror(str(tmp_path), submissions_at=_STALE_STAMP)
     monkeypatch.setattr(gradebook_queries, "assignment", _explode_live)
     monkeypatch.setattr(gradebook_queries, "assignment_submissions", _explode_live)
@@ -1332,10 +1238,9 @@ def test_get_submissions_refuses_when_submissions_stale(monkeypatch, tmp_path):
 
 # --- get_gradebook_snapshot ---------------------------------------------------
 
-def test_get_gradebook_snapshot_happy(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_gradebook_snapshot_happy(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     root = str(tmp_path)
     mirror_store.write_roster("111", GRADEBOOK_STUDENTS, {}, root=root)
     mirror_store.write_assignments("111", GRADEBOOK_ASSIGNMENTS, root=root)
@@ -1356,10 +1261,9 @@ def test_get_gradebook_snapshot_happy(monkeypatch, tmp_path):
     _assert_no_leaks(result)
 
 
-def test_get_gradebook_snapshot_empty(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_gradebook_snapshot_empty(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     root = str(tmp_path)
     mirror_store.write_roster("111", [], {}, root=root)
     mirror_store.write_assignments("111", [], root=root)
@@ -1375,19 +1279,17 @@ def test_get_gradebook_snapshot_empty(monkeypatch, tmp_path):
     assert result["students"]["rows"] == []
 
 
-def test_get_gradebook_snapshot_failure(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_get_gradebook_snapshot_failure(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
     # No mirror seeded at all: a whole-course snapshot is refused, never live.
 
     assert tools.get_gradebook_snapshot("111") == {
         "ok": False, "error": tools._MIRROR_UNAVAILABLE_SNAPSHOT_ERROR}
 
 
-def test_get_gradebook_snapshot_rejects_non_current_course(monkeypatch, tmp_path):
-    _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["222"])
+def test_get_gradebook_snapshot_rejects_non_current_course(monkeypatch, tmp_path, _use_vault, _set_active_courses):
+    _set_active_courses(["222"])
     result = tools.get_gradebook_snapshot("111")
     assert result["ok"] is False
     assert "not a Current course" in result["error"]
@@ -1395,10 +1297,10 @@ def test_get_gradebook_snapshot_rejects_non_current_course(monkeypatch, tmp_path
 
 # --- pseudonym round trip -----------------------------------------------------
 
-def test_pseudonym_reverse_round_trip(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    vault_path = _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_pseudonym_reverse_round_trip(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    vault_path = _use_vault
+    _set_active_courses(["111"])
     mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
 
     result = tools.get_roster("111")
@@ -1414,10 +1316,10 @@ def test_pseudonym_reverse_round_trip(monkeypatch, tmp_path):
 
 # --- no-PII sweep + scan_payload green ---------------------------------------
 
-def test_no_pii_sweep_and_scan_payload_green(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    vault_path = _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_no_pii_sweep_and_scan_payload_green(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    vault_path = _use_vault
+    _set_active_courses(["111"])
     root = str(tmp_path)
     mirror_store.write_roster("111", GRADEBOOK_STUDENTS, {}, root=root)
     mirror_store.write_assignments("111", GRADEBOOK_ASSIGNMENTS, root=root)
@@ -1435,10 +1337,10 @@ def test_no_pii_sweep_and_scan_payload_green(monkeypatch, tmp_path):
     assert verdict["hard"] == []
 
 
-def test_no_pii_sweep_scan_payload_green_for_submissions(monkeypatch, tmp_path):
-    _mount_mirror(monkeypatch, tmp_path)
-    vault_path = _use_vault(monkeypatch, tmp_path)
-    _set_active_courses(monkeypatch, ["111"])
+def test_no_pii_sweep_scan_payload_green_for_submissions(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    vault_path = _use_vault
+    _set_active_courses(["111"])
     root = str(tmp_path)
     mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=root)
     mirror_store.write_assignments("111", [MIRROR_ASSIGNMENT], root=root)
@@ -1520,8 +1422,8 @@ def test_gate_hard_blocks_unscrubbed_id_in_text_field_and_sanitizes_violation(tm
 
 # --- refresh_mirror -------------------------------------------------------------
 
-def test_refresh_mirror_accepts_previous_course(monkeypatch):
-    _set_previous_course(monkeypatch)
+def test_refresh_mirror_accepts_previous_course(monkeypatch, _set_previous_course):
+    _set_previous_course()
     monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
     monkeypatch.setattr(tools, "_wait_for_plan",
                         lambda plan_id, **kwargs: {"state": "succeeded"})
@@ -1533,8 +1435,8 @@ def test_refresh_mirror_accepts_previous_course(monkeypatch):
     }
 
 
-def test_refresh_mirror_reports_synced_on_success(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_refresh_mirror_reports_synced_on_success(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
     monkeypatch.setattr(tools, "_wait_for_plan",
                         lambda plan_id, **kwargs: {"state": "succeeded"})
@@ -1544,11 +1446,11 @@ def test_refresh_mirror_reports_synced_on_success(monkeypatch):
     assert result["status"] == "synced"
 
 
-def test_refresh_mirror_enqueues_roster_pass(monkeypatch):
+def test_refresh_mirror_enqueues_roster_pass(monkeypatch, _set_active_courses):
     """refresh_mirror must drive a roster pass, not a delta alone — otherwise a
     roster aged past the serve window is unrecoverable through this tool (the
     delta never rewrites the roster file, so get_roster keeps refusing)."""
-    _set_active_courses(monkeypatch, ["111"])
+    _set_active_courses(["111"])
     captured = {}
     monkeypatch.setattr(tools, "_enqueue_sync",
                         lambda course_id, scopes=None: captured.update(
@@ -1563,8 +1465,8 @@ def test_refresh_mirror_enqueues_roster_pass(monkeypatch):
     assert "course.refresh" in captured["scopes"]
 
 
-def test_refresh_mirror_reports_syncing_while_running(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_refresh_mirror_reports_syncing_while_running(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
     monkeypatch.setattr(tools, "_wait_for_plan",
                         lambda plan_id, **kwargs: {"state": "running"})
@@ -1574,8 +1476,8 @@ def test_refresh_mirror_reports_syncing_while_running(monkeypatch):
     assert result["status"] == "syncing"
 
 
-def test_refresh_mirror_reports_failure(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_refresh_mirror_reports_failure(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
     monkeypatch.setattr(tools, "_enqueue_sync", lambda course_id, scopes=None: "plan-1")
     monkeypatch.setattr(tools, "_wait_for_plan",
                         lambda plan_id, **kwargs: {"state": "failed"})
@@ -1585,8 +1487,8 @@ def test_refresh_mirror_reports_failure(monkeypatch):
     assert result["status"] == "failed"
 
 
-def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch):
-    _set_active_courses(monkeypatch, ["111"])
+def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
 
     def _raise(course_id, scopes=None):
         raise ValueError("Not a Current course.")
@@ -1608,14 +1510,13 @@ def test_server_registers_the_expected_tool_set():
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "list_staged_content",
         "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
-        "save_deck", "save_teacher_schedule",
+        "save_teacher_schedule",
         "get_school_calendar",
         "preview_school_calendar_replacement", "apply_school_calendar_replacement",
         "preview_school_calendar_change", "apply_school_calendar_change",
         "preview_school_calendar_event_change", "apply_school_calendar_event_change",
         "get_course_pages", "list_learning_objectives", "preview_learning_objective",
             "apply_learning_objective", "delete_learning_objective",
-            "list_active_decks", "archive_deck",
             "get_roster_student_settings", "preview_roster_student_change",
             "apply_roster_student_change", "clear_roster_student_field",
         "list_scoring_sessions", "get_scoring_packet", "stage_scores",
@@ -1648,9 +1549,7 @@ def _teacher_schedule_workspace(monkeypatch, tmp_path):
     monkeypatch.setattr(
         workspace, "library_folder", lambda name: str(workspace_root / "Library" / name)
     )
-    smartdecks = workspace_root / "Library" / "SmartDecks"
     calendars = workspace_root / "Library" / "Calendars"
-    smartdecks.mkdir(parents=True)
     calendars.mkdir(parents=True)
     (calendars / "Bell Schedule - Example.csv").write_text(
         "period_id,start,end\n"
@@ -1664,7 +1563,7 @@ def _teacher_schedule_workspace(monkeypatch, tmp_path):
         "8,13:50,14:35\n",
         encoding="utf-8",
     )
-    return smartdecks / "Teacher Schedule.json"
+    return calendars / "Teacher Schedule.json"
 
 
 def test_save_teacher_schedule_writes_blocks_and_returns_path(monkeypatch, tmp_path):

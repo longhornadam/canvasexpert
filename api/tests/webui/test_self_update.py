@@ -17,7 +17,7 @@ from api.webui import self_update
 from api.webui.routes import updates as updates_routes
 from api.webui.server import app
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 # --------------------------------------------------------------------------
@@ -58,31 +58,6 @@ def _queue_gets(monkeypatch, responses):
     return calls
 
 
-def _isolate_local_app_dir(monkeypatch, tmp_path):
-    monkeypatch.setattr(runtime_paths, "local_app_dir", lambda: tmp_path / "CanvasExpert")
-
-
-def _release_json(tag="v1.0.0", zip_url="https://github.com/x/releases/download/v1.0.0/CanvasExpert.zip",
-                   sums_url="https://github.com/x/releases/download/v1.0.0/SHA256SUMS.txt",
-                   zip_name="CanvasExpert.zip"):
-    return {
-        "tag_name": tag,
-        "published_at": "2026-07-20T00:00:00Z",
-        "html_url": "https://github.com/x/releases/tag/" + tag,
-        "assets": [
-            {"name": zip_name, "browser_download_url": zip_url},
-            {"name": "SHA256SUMS.txt", "browser_download_url": sums_url},
-        ],
-    }
-
-
-def _make_zip(path: Path, files: dict) -> bytes:
-    with zipfile.ZipFile(path, "w") as archive:
-        for arcname, data in files.items():
-            archive.writestr(arcname, data)
-    return path.read_bytes()
-
-
 def _sums_text(zip_name: str, zip_bytes: bytes) -> str:
     digest = hashlib.sha256(zip_bytes).hexdigest()
     return f"{digest}  {zip_name}\n"
@@ -120,8 +95,7 @@ def test_never_offers_a_downgrade():
 # status()
 # --------------------------------------------------------------------------
 
-def test_status_reports_available_update(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_status_reports_available_update(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json):
     monkeypatch.setattr(self_update, "__version__", "0.75.0-beta.0")
     _queue_gets(monkeypatch, [FakeResponse(json_data=_release_json(tag="v1.0.0"))])
 
@@ -133,8 +107,7 @@ def test_status_reports_available_update(monkeypatch, tmp_path):
     assert result["error"] is None
 
 
-def test_status_reports_up_to_date_without_downgrade(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_status_reports_up_to_date_without_downgrade(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json):
     monkeypatch.setattr(self_update, "__version__", "1.0.0")
     _queue_gets(monkeypatch, [FakeResponse(json_data=_release_json(tag="v0.9.0"))])
 
@@ -143,8 +116,7 @@ def test_status_reports_up_to_date_without_downgrade(monkeypatch, tmp_path):
     assert result["available"] is False
 
 
-def test_status_never_raises_on_network_failure(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_status_never_raises_on_network_failure(monkeypatch, tmp_path, _isolate_local_app_dir):
 
     def boom(*a, **k):
         raise self_update.requests.ConnectionError("no route to host")
@@ -158,16 +130,14 @@ def test_status_never_raises_on_network_failure(monkeypatch, tmp_path):
     }
 
 
-def test_status_never_raises_on_malformed_json(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_status_never_raises_on_malformed_json(monkeypatch, tmp_path, _isolate_local_app_dir):
     _queue_gets(monkeypatch, [FakeResponse(status_code=200, json_data=None)])
     result = self_update.status()
     assert result["ok"] is False
     assert "did not return valid data" in result["error"]
 
 
-def test_status_handles_unparseable_version(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_status_handles_unparseable_version(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json):
     _queue_gets(monkeypatch, [FakeResponse(json_data=_release_json(tag="garbage"))])
     result = self_update.status()
     assert result["available"] is False
@@ -175,8 +145,7 @@ def test_status_handles_unparseable_version(monkeypatch, tmp_path):
     assert result["error"]
 
 
-def test_status_surfaces_staged_marker(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_status_surfaces_staged_marker(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json):
     pending = self_update._pending_path()
     pending.parent.mkdir(parents=True, exist_ok=True)
     pending.write_text(json.dumps({"version": "1.0.0", "bytes": 42}), encoding="utf-8")
@@ -210,8 +179,7 @@ def test_localhost_feed_override_is_honored(monkeypatch):
     assert loopback is True
 
 
-def test_redirect_to_non_allowlisted_host_aborts(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_redirect_to_non_allowlisted_host_aborts(monkeypatch, tmp_path, _isolate_local_app_dir):
     _queue_gets(monkeypatch, [
         FakeResponse(status_code=302, headers={"Location": "https://not-github.example.com/x"}),
     ])
@@ -219,8 +187,7 @@ def test_redirect_to_non_allowlisted_host_aborts(monkeypatch, tmp_path):
         self_update.fetch_latest_release()
 
 
-def test_redirect_hop_through_allowlisted_hosts_is_followed(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_redirect_hop_through_allowlisted_hosts_is_followed(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json):
     _queue_gets(monkeypatch, [
         FakeResponse(status_code=302, headers={"Location": "https://objects.githubusercontent.com/x"}),
         FakeResponse(json_data=_release_json()),
@@ -229,8 +196,7 @@ def test_redirect_hop_through_allowlisted_hosts_is_followed(monkeypatch, tmp_pat
     assert data["tag_name"] == "v1.0.0"
 
 
-def test_too_many_redirects_aborts(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_too_many_redirects_aborts(monkeypatch, tmp_path, _isolate_local_app_dir):
     hop = FakeResponse(status_code=302, headers={"Location": "https://github.com/next"})
     _queue_gets(monkeypatch, [hop] * (self_update._MAX_REDIRECTS + 1))
     with pytest.raises(self_update.UpdateError, match="Too many redirects"):
@@ -241,8 +207,7 @@ def test_too_many_redirects_aborts(monkeypatch, tmp_path):
 # download_update(): hash check, extraction safety, atomic staging
 # --------------------------------------------------------------------------
 
-def test_download_update_stages_a_valid_release(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_stages_a_valid_release(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json, _make_zip):
     zip_path = tmp_path / "src.zip"
     zip_bytes = _make_zip(zip_path, {
         "Open Canvas Expert.bat": b"@echo off\r\n",
@@ -266,8 +231,7 @@ def test_download_update_stages_a_valid_release(monkeypatch, tmp_path):
     assert pending["bytes"] == len(zip_bytes)
 
 
-def test_download_update_rejects_hash_mismatch(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_rejects_hash_mismatch(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json, _make_zip):
     zip_path = tmp_path / "src.zip"
     zip_bytes = _make_zip(zip_path, {"Open Canvas Expert.bat": b"ok"})
     wrong_sums = "0" * 64 + "  CanvasExpert.zip\n"
@@ -284,8 +248,7 @@ def test_download_update_rejects_hash_mismatch(monkeypatch, tmp_path):
     assert not self_update._staged_dir().exists()
 
 
-def test_download_update_rejects_missing_sums_entry(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_rejects_missing_sums_entry(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json, _make_zip):
     zip_path = tmp_path / "src.zip"
     zip_bytes = _make_zip(zip_path, {"Open Canvas Expert.bat": b"ok"})
     sums = "deadbeef" * 8 + "  SomeOtherFile.zip\n"
@@ -301,8 +264,7 @@ def test_download_update_rejects_missing_sums_entry(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("bad_name", ["../evil.txt", "/etc/passwd", "C:/Windows/evil.txt", "sub/../../evil.txt"])
-def test_download_update_rejects_unsafe_zip_entries(monkeypatch, tmp_path, bad_name):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_rejects_unsafe_zip_entries(monkeypatch, tmp_path, bad_name, _isolate_local_app_dir, _release_json, _make_zip):
     zip_path = tmp_path / "src.zip"
     zip_bytes = _make_zip(zip_path, {
         "Open Canvas Expert.bat": b"ok",
@@ -322,8 +284,7 @@ def test_download_update_rejects_unsafe_zip_entries(monkeypatch, tmp_path, bad_n
     assert not self_update._staged_dir().exists()
 
 
-def test_download_update_rejects_symlink_entry(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_rejects_symlink_entry(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json):
     zip_path = tmp_path / "src.zip"
     with zipfile.ZipFile(zip_path, "w") as archive:
         archive.writestr("Open Canvas Expert.bat", b"ok")
@@ -345,8 +306,7 @@ def test_download_update_rejects_symlink_entry(monkeypatch, tmp_path):
     assert not self_update._staged_dir().exists()
 
 
-def test_download_update_rejects_oversized_download(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_rejects_oversized_download(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json, _make_zip):
     monkeypatch.setattr(self_update, "_MAX_DOWNLOAD_BYTES", 10)
     zip_path = tmp_path / "src.zip"
     zip_bytes = _make_zip(zip_path, {"Open Canvas Expert.bat": b"much longer than ten bytes"})
@@ -364,8 +324,7 @@ def test_download_update_rejects_oversized_download(monkeypatch, tmp_path):
     assert not self_update._staged_dir().exists()
 
 
-def test_download_update_never_raises_on_network_failure(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_never_raises_on_network_failure(monkeypatch, tmp_path, _isolate_local_app_dir):
 
     def boom(*a, **k):
         raise self_update.requests.Timeout("timed out")
@@ -376,8 +335,7 @@ def test_download_update_never_raises_on_network_failure(monkeypatch, tmp_path):
     assert "internet connection" in result["error"]
 
 
-def test_download_update_is_missing_a_release_asset(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_download_update_is_missing_a_release_asset(monkeypatch, tmp_path, _isolate_local_app_dir, _release_json):
     payload = _release_json()
     payload["assets"] = [payload["assets"][0]]  # drop SHA256SUMS.txt
     _queue_gets(monkeypatch, [FakeResponse(json_data=payload)])
@@ -390,16 +348,14 @@ def test_download_update_is_missing_a_release_asset(monkeypatch, tmp_path):
 # Staged-payload resolution (depth 0 / depth 1 wrapper) and cancel
 # --------------------------------------------------------------------------
 
-def test_is_staged_true_at_depth_zero(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_is_staged_true_at_depth_zero(monkeypatch, tmp_path, _isolate_local_app_dir):
     staged = self_update._staged_dir()
     staged.mkdir(parents=True)
     (staged / "Open Canvas Expert.bat").write_text("ok", encoding="utf-8")
     assert self_update.is_staged() is True
 
 
-def test_is_staged_true_at_depth_one_wrapper_folder(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_is_staged_true_at_depth_one_wrapper_folder(monkeypatch, tmp_path, _isolate_local_app_dir):
     staged = self_update._staged_dir()
     wrapper = staged / "CanvasExpert"
     wrapper.mkdir(parents=True)
@@ -407,13 +363,11 @@ def test_is_staged_true_at_depth_one_wrapper_folder(monkeypatch, tmp_path):
     assert self_update.is_staged() is True
 
 
-def test_is_staged_false_when_nothing_staged(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_is_staged_false_when_nothing_staged(monkeypatch, tmp_path, _isolate_local_app_dir):
     assert self_update.is_staged() is False
 
 
-def test_cancel_staged_clears_staging(monkeypatch, tmp_path):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_cancel_staged_clears_staging(monkeypatch, tmp_path, _isolate_local_app_dir):
     staged = self_update._staged_dir()
     staged.mkdir(parents=True)
     (staged / "Open Canvas Expert.bat").write_text("ok", encoding="utf-8")
@@ -434,8 +388,7 @@ def client():
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
-def test_status_route_returns_json(monkeypatch, tmp_path, client):
-    _isolate_local_app_dir(monkeypatch, tmp_path)
+def test_status_route_returns_json(monkeypatch, tmp_path, client, _isolate_local_app_dir):
     monkeypatch.setattr(self_update, "status", lambda: {"ok": True, "current": "0.75.0-beta.0",
                                                           "latest": None, "available": False,
                                                           "published_at": None, "notes_url": None,

@@ -2,7 +2,7 @@
 
 panels_clipboard.js is a plain browser script: no build step, no bundler, and
 no JS test runner in this repo. Its tests run on node's built-in runner
-instead, matching api/tests/smartdeck/test_display_js.py's bridge so
+instead, matching the display test bridge so
 `py -m pytest api/tests` stays the single verification gate.
 
 Node is not a declared dependency of this project, so a machine without it

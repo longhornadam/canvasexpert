@@ -6,7 +6,7 @@ the app and MCP server goes through this module; no consumer parses the file
 or retains a second calendar projection.
 
 Pure parsing/validation has no IO and no app imports at module level, matching
-the posture of `deck_schedule.py`. IO (path resolution, atomic write) is kept
+the posture of `day_schedule.py`. IO (path resolution, atomic write) is kept
 in the handful of functions that need it, with `workspace` imported lazily so
 this module stays importable before a workspace exists.
 """

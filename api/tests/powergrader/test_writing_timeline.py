@@ -21,109 +21,6 @@ from api.webui.routes import routines as routines_routes
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
-def _base_docx(body_text: str = "A fictional visible response.") -> bytes:
-    document = Document()
-    document.add_paragraph(body_text)
-    output = io.BytesIO()
-    document.save(output)
-    return output.getvalue()
-
-
-def _rewrite_docx(base: bytes, replacements: dict[str, bytes], additions: dict[str, bytes] | None = None) -> bytes:
-    output = io.BytesIO()
-    with zipfile.ZipFile(io.BytesIO(base)) as source, zipfile.ZipFile(
-        output, "w", zipfile.ZIP_DEFLATED
-    ) as target:
-        for info in source.infolist():
-            if info.filename in replacements:
-                target.writestr(info, replacements[info.filename])
-            else:
-                target.writestr(info, source.read(info.filename))
-        existing = set(source.namelist())
-        for name, payload in (additions or {}).items():
-            if name not in existing:
-                target.writestr(name, payload)
-    return output.getvalue()
-
-
-def _revision_xml(
-    kind: str,
-    text: str,
-    *,
-    author: str,
-    timestamp: str = "2026-07-27T10:00:00-05:00",
-) -> str:
-    tag = "ins" if kind == "insertion" else "del"
-    text_tag = "t" if kind == "insertion" else "delText"
-    return (
-        f'<w:{tag} w:author="{author}" w:date="{timestamp}">'
-        f"<w:r><w:{text_tag}>{text}</w:{text_tag}></w:r>"
-        f"</w:{tag}>"
-    )
-
-
-def _timeline_docx(
-    *,
-    blocks: list[tuple[str, str, str]] | None = None,
-    track_revisions: bool = True,
-    protection: str = "none",
-    creator: str = "Fictional Learner",
-    last_modified: str = "Fictional Learner",
-    total_time: str = "37",
-    revision: str = "8",
-    stories: dict[str, str] | None = None,
-    body_text: str = "A fictional visible response.",
-    timestamp: str = "2026-07-27T10:00:00-05:00",
-) -> bytes:
-    base = _base_docx(body_text)
-    with zipfile.ZipFile(io.BytesIO(base)) as archive:
-        document_xml = archive.read("word/document.xml").decode("utf-8")
-    revision_nodes = "".join(
-        _revision_xml(kind, text, author=author, timestamp=timestamp)
-        for kind, text, author in (blocks or [])
-    )
-    document_xml = document_xml.replace("</w:body>", f"<w:p>{revision_nodes}</w:p></w:body>")
-    protection_xml = ""
-    if protection == "unlocked":
-        protection_xml = '<w:documentProtection w:edit="trackedChanges" w:enforcement="0"/>'
-    elif protection == "locked":
-        protection_xml = '<w:documentProtection w:edit="trackedChanges" w:enforcement="1"/>'
-    settings_xml = (
-        f'<w:settings xmlns:w="{W_NS}">'
-        + ("<w:trackRevisions/>" if track_revisions else "")
-        + protection_xml
-        + "</w:settings>"
-    )
-    core_xml = (
-        '<cp:coreProperties '
-        'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
-        'xmlns:dc="http://purl.org/dc/elements/1.1/">'
-        f"<dc:creator>{creator}</dc:creator>"
-        f"<cp:lastModifiedBy>{last_modified}</cp:lastModifiedBy>"
-        "</cp:coreProperties>"
-    )
-    app_xml = (
-        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
-        f"<TotalTime>{total_time}</TotalTime><Revision>{revision}</Revision>"
-        "</Properties>"
-    )
-    story_parts = {}
-    for name, inner in (stories or {}).items():
-        story_parts[name] = (
-            f'<w:hdr xmlns:w="{W_NS}"><w:p>{inner}</w:p></w:hdr>'
-        ).encode("utf-8")
-    return _rewrite_docx(
-        base,
-        {
-            "word/document.xml": document_xml.encode("utf-8"),
-            "word/settings.xml": settings_xml.encode("utf-8"),
-            "docProps/core.xml": core_xml.encode("utf-8"),
-            "docProps/app.xml": app_xml.encode("utf-8"),
-        },
-        story_parts,
-    )
-
-
 @pytest.mark.parametrize(
     ("submission_types", "allowed_extensions", "expected"),
     [
@@ -145,7 +42,7 @@ def test_exact_assignment_classification(submission_types, allowed_extensions, e
     ) is expected
 
 
-def test_parser_captures_blocks_story_parts_and_stable_largest_three():
+def test_parser_captures_blocks_story_parts_and_stable_largest_three(_revision_xml, _timeline_docx):
     header_revision = _revision_xml(
         "insertion",
         "header words",
@@ -198,7 +95,7 @@ def test_parser_captures_blocks_story_parts_and_stable_largest_three():
         (True, "locked", True),
     ],
 )
-def test_parser_distinguishes_tracking_setting_and_lock(track_revisions, protection, expected_lock):
+def test_parser_distinguishes_tracking_setting_and_lock(track_revisions, protection, expected_lock, _timeline_docx):
     report = writing_timeline.parse_docx(
         _timeline_docx(
             blocks=[],
@@ -212,7 +109,7 @@ def test_parser_distinguishes_tracking_setting_and_lock(track_revisions, protect
     assert report["tracking_lock_present"] is expected_lock
 
 
-def test_parser_reports_missing_and_malformed_parts_without_crashing():
+def test_parser_reports_missing_and_malformed_parts_without_crashing(_base_docx, _rewrite_docx, _timeline_docx):
     malformed_zip = writing_timeline.parse_docx(b"not a zip")
     assert malformed_zip["status"] == "invalid"
     assert malformed_zip["observations"][0]["reason"] == "malformed_zip"
@@ -249,7 +146,7 @@ def test_parser_reports_missing_and_malformed_parts_without_crashing():
     assert any(item["status"] == "invalid" for item in partial["observations"])
 
 
-def test_author_categories_require_exact_unique_multiword_roster_match():
+def test_author_categories_require_exact_unique_multiword_roster_match(_timeline_docx):
     report = writing_timeline.parse_docx(
         _timeline_docx(
             blocks=[
@@ -286,7 +183,7 @@ def test_author_categories_require_exact_unique_multiword_roster_match():
     ]
 
 
-def test_safe_artifact_strips_raw_office_metadata_and_preserves_only_projection(tmp_path):
+def test_safe_artifact_strips_raw_office_metadata_and_preserves_only_projection(tmp_path, _revision_xml, _timeline_docx):
     raw_values = {
         "learner": "Fictional Learner",
         "peer": "Fictional Peer",
@@ -504,7 +401,7 @@ def test_optional_teacher_observation_round_trips_but_never_enters_write_fields(
     assert "penalty recommendation" in prompt
 
 
-def test_session_builder_keeps_private_timeline_and_teacher_observation():
+def test_session_builder_keeps_private_timeline_and_teacher_observation(_timeline_docx):
     report = writing_timeline.categorize_authors(
         writing_timeline.parse_docx(
             _timeline_docx(
@@ -546,8 +443,7 @@ def test_session_builder_keeps_private_timeline_and_teacher_observation():
 
 @pytest.mark.parametrize("mode", ["fast", "packet", "assisted"])
 def test_pg_start_persists_tracked_classification_and_timeline_in_every_mode(
-    mode, monkeypatch, tmp_path
-):
+    mode, monkeypatch, tmp_path, _timeline_docx):
     payload = _timeline_docx(
         blocks=[("insertion", "fictional work", "Fictional Learner")],
     )
@@ -633,7 +529,7 @@ def test_pg_start_persists_tracked_classification_and_timeline_in_every_mode(
     assert timeline["largest_insertions"][0]["author_category"] == "submission_author"
 
 
-def test_non_tracked_session_skips_timeline_parsing(monkeypatch, tmp_path):
+def test_non_tracked_session_skips_timeline_parsing(monkeypatch, tmp_path, _timeline_docx):
     payload = _timeline_docx(
         blocks=[("insertion", "fictional work", "Fictional Learner")],
     )
@@ -784,7 +680,7 @@ def _offset_text(delta) -> str:
     return f"{sign}{total // 3600:02d}:{(total % 3600) // 60:02d}"
 
 
-def test_safe_projection_timestamps_are_central(tmp_path):
+def test_safe_projection_timestamps_are_central(tmp_path, _timeline_docx):
     payload = _timeline_docx(
         blocks=[("insertion", "x" * 120, "Fictional Learner")],
         timestamp="2026-07-26T23:04:00Z",
@@ -873,34 +769,6 @@ def test_reidentify_replaces_integrity_conclusion_with_notice(tmp_path):
 # Coverage parity: every path that builds students must attach timelines
 # ---------------------------------------------------------------------------
 
-def _tracked_docx_submission(user_id: str, name: str, local_file: Path) -> dict:
-    payload = _timeline_docx(blocks=[("insertion", "fictional work", name)])
-    local_file.write_bytes(payload)
-    return {
-        "user_id": user_id,
-        "submission_type": "online_upload",
-        "workflow_state": "submitted",
-        "submitted_at": "2026-09-11T15:20:00Z",
-        "cached_due_date": "2026-09-10T23:59:00Z",
-        "attempt": 1,
-        "body": "",
-        "user": {"name": name, "sortable_name": name},
-        "assignment": {"id": "assignment-1", "name": "Essay"},
-        "attachments": [{
-            "filename": "answer.docx",
-            "local_path": str(local_file),
-            "declared_size": len(payload),
-            "actual_size": len(payload),
-            "download_status": "downloaded",
-            "extraction_status": "extracted",
-            "ai_eligible": True,
-            "local_only": False,
-            "item_id": "assignment-1",
-        }],
-        "expected_attachment_count": 1,
-    }
-
-
 _TRACKED_ASSIGNMENT = {
     "id": "assignment-1",
     "name": "Essay",
@@ -913,7 +781,7 @@ _TRACKED_ASSIGNMENT = {
 }
 
 
-def test_late_catchup_attaches_timelines_for_tracked_assignment(monkeypatch, tmp_path):
+def test_late_catchup_attaches_timelines_for_tracked_assignment(monkeypatch, tmp_path, _tracked_docx_submission):
     """A late submitter must get the same timeline pass as an on-time one."""
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path / "ws"))
     existing = _tracked_docx_submission("1", "Existing Student", tmp_path / "one.docx")
@@ -1010,7 +878,7 @@ def test_tracked_assignment_is_autoscore_eligible_like_any_readable_upload():
     assert eligibility == "eligible", reason
 
 
-def test_autoscore_gate_matches_what_the_attachment_router_can_read():
+def test_autoscore_gate_matches_what_the_attachment_router_can_read(_base_docx):
     """The gate must never promise auto-score for work PowerGrader cannot read.
 
     These were two independent hand-maintained lists and drifted in both
@@ -1039,7 +907,7 @@ def test_routine_deps_expose_timeline_modules():
     assert deps.student_attachments is student_attachments
 
 
-def test_scheduled_routine_attaches_timelines_for_tracked_assignment(monkeypatch, tmp_path):
+def test_scheduled_routine_attaches_timelines_for_tracked_assignment(monkeypatch, tmp_path, _tracked_docx_submission):
     """Scheduled autoscore must not produce timeline-free sessions.
 
     Now reachable end to end: a tracked DOCX assignment is autoscore-eligible.

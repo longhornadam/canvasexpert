@@ -135,7 +135,7 @@ def _sort_key(event: dict) -> tuple:
 def _academic_events(projection: dict) -> list[dict]:
     """Synthesize the structural facts for the public Panel union.
 
-    This deliberately supersedes the older SmartDeck helper because
+    This deliberately supersedes the older display helper because
     ``no_regular_classes`` is a classroom ``day_type`` rather than a holiday.
     The source kind is stamped below, so stored audience claims are ignored.
     """

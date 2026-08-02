@@ -1,7 +1,7 @@
 CLASS SCHEDULE & CALENDAR AUTHORING
 Version 2.0
 
-Use this guide when helping a teacher finish SmartDeck/Panels/Calendar schedule setup. There
+Use this guide when helping a teacher finish Panels/Calendar schedule setup. There
 are three parts, all stored in the teacher's local workspace:
 
 1. Teacher Schedule.json maps unique stable block names to the bell periods for each class.
@@ -14,7 +14,7 @@ are three parts, all stored in the teacher's local workspace:
 TEACHER SCHEDULE AND BELL SCHEDULES
 
 Use get_teacher_schedule to read the existing blocks before changing them. A block's name is the
-binding key that a SmartDeck slide points to. Keep it steady once slides use it. The block label
+ binding key that a classroom display points to. Keep it steady once displays use it. The block label
 is display text only and may repeat. Do not derive a name from a course title or from the label.
 
 raw_periods names the bell meeting IDs claimed by a block. The School Calendar chooses the bell

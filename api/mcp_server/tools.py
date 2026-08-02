@@ -13,11 +13,10 @@ Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses``,
 ``get_authoring_contract``, ``get_product_guide``, ``list_staged_content``,
 ``get_bell_schedule``, ``get_day_schedule``, ``get_teacher_schedule``,
-``save_deck``, ``save_teacher_schedule``,
+``save_teacher_schedule``,
 ``get_school_calendar``, ``preview_school_calendar_replacement``,
 ``apply_school_calendar_replacement``,
 ``preview_school_calendar_change``, ``apply_school_calendar_change``,
-``list_active_decks``, and ``archive_deck`` are
 the only tools with no ``course_id`` and no student data, so they skip both the
 course gate and the outbound safety gate. ``get_writing_history`` breaks that
 pairing on purpose: it has no ``course_id`` either (the daily-writing store has
@@ -44,7 +43,7 @@ from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snaps
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
-from api.webui import config, mirror_service, workspace, deck_store, sf, schedule_setup, school_calendar
+from api.webui import config, mirror_service, workspace, schedule_setup, school_calendar
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_vault
@@ -874,7 +873,7 @@ def delete_learning_objective(course_id: str, entry_id: str, expected_revision: 
 # ── Panel themes ─────────────────────────────────────────────────────────
 # A theme is a skin for a Panel: a palette, a face, and one decorative layer,
 # kept as a JSON file in the teacher's synced Library. No course_id, no student
-# data, so no course gate and no outbound safety gate, same as save_deck.
+# data, so no course gate and no outbound safety gate.
 #
 # The assistant's job here is taste, not safety. It proposes colours; the
 # generator derives the twenty variables a Panel actually consumes, corrects
@@ -1035,12 +1034,11 @@ _CONTRACT_FILES = {
     "assignment": "Author an Assignment (AssignmentForge).txt",
     "page": "Author a Page (PageForge).txt",
     "rubric": "Author a Rubric (RubricForge).txt",
-    "deck": "Author a SmartDeck (SlideForge).txt",
     "schedule": "Author a Class Schedule.txt",
     "learning_objective": "Author a Learning Objective.txt",
 }
-_DIRECT_WRITE_CONTRACT_KINDS = frozenset({"deck", "schedule", "learning_objective"})
-_STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric", "deck")
+_DIRECT_WRITE_CONTRACT_KINDS = frozenset({"schedule", "learning_objective"})
+_STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric")
 
 # Product knowledge the tool surface does not imply. An assistant that only
 # sees the tool list cannot tell that Writing Timeline exists, or that every
@@ -1103,8 +1101,8 @@ def get_authoring_contract(kind: str) -> dict:
     """Return one canonical Forge authoring contract.
 
     Contracts come from ``api/default_docs/AI Authoring/``. Most receive
-    the Forge-only staging appendix; deck and schedule are exceptions (direct
-    writes with no review queue). No course_id, student data, vault,
+    the Forge-only staging appendix; schedule is the direct-write exception
+    with no review queue. No course_id, student data, vault,
     or safety gate applies.
     """
     filename = _CONTRACT_FILES.get(kind)
@@ -1119,8 +1117,8 @@ def get_authoring_contract(kind: str) -> dict:
     if error:
         return {"ok": False, "error": error}
 
-    # Deck and schedule have no staging/review queue. They write directly to
-    # the teacher's local workspace.
+    # Schedule has no staging/review queue. It writes directly to the
+    # teacher's local workspace.
     if kind in _DIRECT_WRITE_CONTRACT_KINDS:
         return {"ok": True, "kind": kind, "contract": contract_text}
 
@@ -1624,7 +1622,7 @@ def get_day_schedule(date: str) -> dict:
 
 
 def get_teacher_schedule() -> dict:
-    """Read teacher schedule from workspace SmartDecks folder.
+    """Read teacher schedule from workspace Calendars folder.
 
     No course gate, no student data — no safety gate.
     """
@@ -1634,32 +1632,6 @@ def get_teacher_schedule() -> dict:
         "schedule": teacher_schedule,
         "problems": problems,
     }
-
-
-def save_deck(date: str, title: str, slides: list, widgets: list = None) -> dict:
-    """Build and validate a SmartDeck, then write it live to the workspace.
-
-    Constructs the deck dict from the parameters, validates via sf.validate(),
-    and calls deck_store.save_deck() to write it atomically. Returns
-    {"ok": True, "deck_id": ..., "path": ..., "revision": ...} on success,
-    or {"ok": False, "problems": [...]} on any validation or storage error.
-
-    No course_id, no student data — no course gate, no safety gate.
-    Never raises.
-    """
-    data = {
-        "version": "1.0-json",
-        "type": "DECK",
-        "date": date,
-        "title": title,
-        "widgets": widgets or [],
-        "slides": slides,
-    }
-
-    result, problems = deck_store.save_deck(data)
-    if result:
-        return {"ok": True, **result}
-    return {"ok": False, "problems": problems}
 
 
 def save_teacher_schedule(blocks: list) -> dict:
@@ -1801,34 +1773,6 @@ def apply_school_calendar_event_change(preview: dict, expected_revision: int) ->
     if doc is None:
         return {"ok": False, "problems": problems}
     return {"ok": True, "revision": doc["revision"]}
-
-
-def list_active_decks() -> dict:
-    """List all active SmartDecks in the workspace.
-
-    Returns {"ok": True, "decks": [...]}, where each deck has
-    {deck_id, date, title, revision, path}.
-
-    No course_id, no student data — no course gate, no safety gate.
-    Never raises.
-    """
-    decks = deck_store.list_decks("active")
-    return {"ok": True, "decks": decks}
-
-
-def archive_deck(deck_id: str) -> dict:
-    """Move a SmartDeck from active to archived status.
-
-    Returns {"ok": True} on success, or {"ok": False, "problems": [...]}
-    if the deck is not found or the move fails.
-
-    No course_id, no student data — no course gate, no safety gate.
-    Never raises.
-    """
-    success, problems = deck_store.archive_deck(deck_id)
-    if success:
-        return {"ok": True}
-    return {"ok": False, "problems": problems}
 
 
 # --- Scoring Packet MCP Tools (v22) ----------------------------------------

@@ -6,7 +6,7 @@
 
 **Positioning decision, 2026-08-02:** Panels leads the classroom-display story. A Panel is
 one full-bleed URL for one thing that runs unattended from local data in a display surface the
-teacher already uses, including Classroomscreen. SmartDeck remains fully supported for
+teacher already uses, including Classroomscreen. Panels are the supported classroom-facing
 teachers who want CanvasExpert to own the display.
 
 **Active prerequisite:** the canonical Calendar correction closed GREEN and was retired in commit
@@ -56,7 +56,7 @@ it or create a second implementation.
 
 ## 2. Surface and boundary decisions
 
-These are **Panels**, not new SmartDeck Widget kinds. Each kind remains one allowlisted,
+These are **Panels**, not new display widget kinds. Each kind remains one allowlisted,
 chrome-free `/panels/{kind}` URL rendered inside Classroomscreen, a browser tab, OBS, or another
 iframe host. No Classroomscreen API, account connection, automation, or vendor-specific runtime
 code is required.
@@ -495,7 +495,7 @@ The initiative is complete only when all of the following hold:
 
 - No timer, stopwatch, groups, seating, poll, noise meter, or other unrequested Panel in this
   initiative.
-- No SmartDeck feed binding or new SmartDeck Widget kind.
+- No feed binding or new display widget kind.
 - No Classroomscreen API integration, account automation, or cloud hosting.
 - No live Canvas fallback from any Panel.
 - No AI call during refresh/render and no unattended AI overwrite of an objective.

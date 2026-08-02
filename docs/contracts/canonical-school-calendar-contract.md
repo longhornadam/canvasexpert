@@ -259,7 +259,7 @@ copies. Failure leaves the full address visible and says to select and copy it.
 
 ## 8. Consumer rule
 
-All current consumers must use the canonical service in the cutover batch: SmartDeck and its
+All current consumers must use the canonical service in the cutover batch: Panels and its
 feeds, Panels, Late Work Sweep, Gradebook date arithmetic, Extensions, PowerGrader late work,
 built-in and custom routines, operation-ledger sweep planning, and MCP schedule/calendar reads.
 No consumer may import `config.calendars`, parse an academic/day-calendar file, or silently

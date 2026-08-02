@@ -46,19 +46,6 @@ class FakeCanvas:
         return rows, error, error is None
 
 
-def _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course"},)):
-    courses = list(courses)
-    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
-    monkeypatch.setattr(mirror_service.config, "token_is_set", lambda: True)
-    monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: True)
-    monkeypatch.setattr(mirror_service.config, "saved_courses", lambda: courses)
-    monkeypatch.setattr(
-        mirror_service.config, "active_courses",
-        lambda: [course for course in courses if course.get("active", True)],
-    )
-    monkeypatch.setattr(mirror_service, "load_group_categories", lambda _course_id: ([], None, ""))
-
-
 # --- due_passes cadence -----------------------------------------------------
 
 def test_due_passes_full_when_never_synced():
@@ -106,8 +93,8 @@ def test_due_passes_roster_cadence_capped_at_daily_floor():
 
 # --- heartbeat pass -----------------------------------------------------------
 
-def test_heartbeat_first_tick_backfills_active_courses(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_first_tick_backfills_active_courses(monkeypatch, tmp_path, _configure):
+    _configure()
     canvas = FakeCanvas()
     summaries = mirror_service.run_heartbeat_pass(
         canvas_get=canvas, canvas_get_all=canvas, canvas_get_all_complete=canvas.complete, now=NOW)
@@ -115,8 +102,8 @@ def test_heartbeat_first_tick_backfills_active_courses(monkeypatch, tmp_path):
     assert store.read_sync("111")["passes"]["full"]["state"] == "current"
 
 
-def test_heartbeat_full_maintains_private_groups_with_its_timestamp(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_full_maintains_private_groups_with_its_timestamp(monkeypatch, tmp_path, _configure):
+    _configure()
     calls = []
     categories = [{
         "category_id": "500001", "category_name": "Teams",
@@ -137,8 +124,8 @@ def test_heartbeat_full_maintains_private_groups_with_its_timestamp(monkeypatch,
     assert document["categories"] == categories
 
 
-def test_heartbeat_group_failure_preserves_last_good_snapshot_and_pass_success(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_group_failure_preserves_last_good_snapshot_and_pass_success(monkeypatch, tmp_path, _configure):
+    _configure()
     categories = [{"category_id": "500001", "category_name": "Teams", "groups": []}]
     store.write_groups("111", categories, attempted_at="2026-07-16T11:00:00Z")
 
@@ -158,8 +145,8 @@ def test_heartbeat_group_failure_preserves_last_good_snapshot_and_pass_success(m
     assert "private detail" not in str(result[0]["groups"])
 
 
-def test_heartbeat_roster_maintenance_refreshes_groups(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_roster_maintenance_refreshes_groups(monkeypatch, tmp_path, _configure):
+    _configure()
     store.record_pass("111", "full", ok=True, attempted_at=NOW)
     store.record_pass("111", "roster", ok=True, attempted_at="2026-07-15T11:00:00Z")
     calls = []
@@ -174,8 +161,8 @@ def test_heartbeat_roster_maintenance_refreshes_groups(monkeypatch, tmp_path):
     assert calls == ["111"]
 
 
-def test_heartbeat_group_snapshot_write_failure_keeps_core_pass_success(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_group_snapshot_write_failure_keeps_core_pass_success(monkeypatch, tmp_path, _configure):
+    _configure()
     categories = [{"category_id": "500001", "category_name": "Teams", "groups": []}]
     store.write_groups("111", categories, attempted_at="2026-07-16T11:00:00Z")
     monkeypatch.setattr(mirror_service.store, "write_groups",
@@ -194,8 +181,8 @@ def test_heartbeat_group_snapshot_write_failure_keeps_core_pass_success(monkeypa
     assert document["state"] == "stale"
 
 
-def test_heartbeat_skips_group_refresh_when_core_pass_fails_or_only_delta_is_due(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_skips_group_refresh_when_core_pass_fails_or_only_delta_is_due(monkeypatch, tmp_path, _configure):
+    _configure()
     called = []
     monkeypatch.setitem(mirror_service._PASS_RUNNERS, "full", lambda *_a, **_k: {"ok": False})
     first = mirror_service.run_heartbeat_pass(
@@ -216,8 +203,8 @@ def test_heartbeat_skips_group_refresh_when_core_pass_fails_or_only_delta_is_due
     assert called == []
 
 
-def test_heartbeat_steady_state_runs_delta_only(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_steady_state_runs_delta_only(monkeypatch, tmp_path, _configure):
+    _configure()
     first = FakeCanvas()
     mirror_service.run_heartbeat_pass(
         canvas_get=first, canvas_get_all=first, canvas_get_all_complete=first.complete, now=NOW)
@@ -228,8 +215,8 @@ def test_heartbeat_steady_state_runs_delta_only(monkeypatch, tmp_path):
     assert [s["pass"] for s in summaries] == ["delta"]
 
 
-def test_heartbeat_refreshes_context_first_and_then_daily_only(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_refreshes_context_first_and_then_daily_only(monkeypatch, tmp_path, _configure):
+    _configure()
     first = FakeCanvas()
     mirror_service.run_heartbeat_pass(
         canvas_get=first, canvas_get_all=first, canvas_get_all_complete=first.complete, now=NOW)
@@ -249,8 +236,8 @@ def test_heartbeat_refreshes_context_first_and_then_daily_only(monkeypatch, tmp_
     assert daily.calls[:2] == ["/api/v1/courses/111", "/api/v1/courses/111/enrollments"]
 
 
-def test_concluded_warm_heartbeat_suppresses_delta_roster_and_new_quiz(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_concluded_warm_heartbeat_suppresses_delta_roster_and_new_quiz(monkeypatch, tmp_path, _configure):
+    _configure()
     store.record_course_context(
         "111", ok=True, attempted_at=NOW, lifecycle="concluded",
         course_workflow_state="completed", course_concluded=True,
@@ -266,8 +253,8 @@ def test_concluded_warm_heartbeat_suppresses_delta_roster_and_new_quiz(monkeypat
         canvas_get_all_complete=no_canvas_call, now=NOW) == []
 
 
-def test_concluded_daily_full_keeps_core_reconcile_and_skips_new_quiz(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_concluded_daily_full_keeps_core_reconcile_and_skips_new_quiz(monkeypatch, tmp_path, _configure):
+    _configure()
     store.record_course_context(
         "111", ok=True, attempted_at=NOW, lifecycle="concluded",
         course_workflow_state="completed", course_concluded=True,
@@ -301,8 +288,8 @@ def test_concluded_daily_full_keeps_core_reconcile_and_skips_new_quiz(monkeypatc
     assert all("/api/quiz/v1/" not in path for path in calls)
 
 
-def test_unknown_context_keeps_current_heartbeat_cadence(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_unknown_context_keeps_current_heartbeat_cadence(monkeypatch, tmp_path, _configure):
+    _configure()
 
     class UnknownLifecycleCanvas(FakeCanvas):
         def __call__(self, path, params=None, timeout=30):
@@ -323,28 +310,28 @@ def test_unknown_context_keeps_current_heartbeat_cadence(monkeypatch, tmp_path):
     assert [entry["pass"] for entry in warm_result] == ["delta"]
 
 
-def test_heartbeat_gates_on_token_flag_and_workspace(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_gates_on_token_flag_and_workspace(monkeypatch, tmp_path, _configure):
+    _configure()
     monkeypatch.setattr(mirror_service.config, "token_is_set", lambda: False)
     first = FakeCanvas()
     assert mirror_service.run_heartbeat_pass(
         canvas_get=first, canvas_get_all=first, canvas_get_all_complete=first.complete, now=NOW) == []
 
-    _configure(monkeypatch, tmp_path)
+    _configure()
     monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: False)
     second = FakeCanvas()
     assert mirror_service.run_heartbeat_pass(
         canvas_get=second, canvas_get_all=second, canvas_get_all_complete=second.complete, now=NOW) == []
 
-    _configure(monkeypatch, tmp_path)
+    _configure()
     monkeypatch.setattr(workspace, "workspace_root", lambda: None)
     third = FakeCanvas()
     assert mirror_service.run_heartbeat_pass(
         canvas_get=third, canvas_get_all=third, canvas_get_all_complete=third.complete, now=NOW) == []
 
 
-def test_heartbeat_survives_a_course_that_raises(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path,
+def test_heartbeat_survives_a_course_that_raises(monkeypatch, tmp_path, _configure):
+    _configure(
                courses=({"id": "111"}, {"id": "222"}))
 
     def exploding(path, params=None, timeout=30):
@@ -364,8 +351,8 @@ def test_heartbeat_survives_a_course_that_raises(monkeypatch, tmp_path):
     assert by_course["222"]["ok"] is False
 
 
-def test_heartbeat_and_manual_sync_thread_the_complete_assignment_seam(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_heartbeat_and_manual_sync_thread_the_complete_assignment_seam(monkeypatch, tmp_path, _configure):
+    _configure()
     canvas = FakeCanvas()
     receipt = lambda *args, **kwargs: ([], None, True)
     heartbeat_calls = []
@@ -392,8 +379,8 @@ def test_heartbeat_and_manual_sync_thread_the_complete_assignment_seam(monkeypat
 
 # --- course_name threading to Course Catalog (1.0beta 02c) ------------------------
 
-def test_heartbeat_never_threads_course_name_into_roster_pass_kwargs(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course One"},))
+def test_heartbeat_never_threads_course_name_into_roster_pass_kwargs(monkeypatch, tmp_path, _configure):
+    _configure(courses=({"id": "111", "name": "Course One"},))
     store.record_pass("111", "full", ok=True, attempted_at=NOW)
     store.record_pass("111", "roster", ok=True, attempted_at="2026-07-15T11:00:00Z")  # >24h -> due
     delta_calls, roster_calls = [], []
@@ -414,8 +401,8 @@ def test_heartbeat_never_threads_course_name_into_roster_pass_kwargs(monkeypatch
     assert roster_calls and "course_name" not in roster_calls[0]
 
 
-def test_heartbeat_forwards_course_name_to_catalog(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course One"},))
+def test_heartbeat_forwards_course_name_to_catalog(monkeypatch, tmp_path, _configure):
+    _configure(courses=({"id": "111", "name": "Course One"},))
     canvas = FakeCanvas()
 
     mirror_service.run_heartbeat_pass(
@@ -425,8 +412,8 @@ def test_heartbeat_forwards_course_name_to_catalog(monkeypatch, tmp_path):
     assert catalog["course_name"] == "Course One"
 
 
-def test_heartbeat_course_name_omission_falls_back_to_course_id(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, courses=({"id": "111"},))  # no "name" key at all
+def test_heartbeat_course_name_omission_falls_back_to_course_id(monkeypatch, tmp_path, _configure):
+    _configure(courses=({"id": "111"},))  # no "name" key at all
     canvas = FakeCanvas()
 
     mirror_service.run_heartbeat_pass(
@@ -436,8 +423,8 @@ def test_heartbeat_course_name_omission_falls_back_to_course_id(monkeypatch, tmp
     assert catalog["course_name"] == "111"
 
 
-def test_sync_now_forwards_course_name_to_catalog(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, courses=({"id": "111", "name": "Course One"},))
+def test_sync_now_forwards_course_name_to_catalog(monkeypatch, tmp_path, _configure):
+    _configure(courses=({"id": "111", "name": "Course One"},))
     canvas = FakeCanvas()
 
     mirror_service.sync_now(
@@ -450,8 +437,8 @@ def test_sync_now_forwards_course_name_to_catalog(monkeypatch, tmp_path):
 
 # --- sync_now -------------------------------------------------------------------
 
-def test_sync_now_scopes_to_saved_courses(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, courses=(
+def test_sync_now_scopes_to_saved_courses(monkeypatch, tmp_path, _configure):
+    _configure(courses=(
         {"id": "111", "name": "Current", "active": True},
         {"id": "222", "name": "Previous", "active": False},
     ))
@@ -468,8 +455,8 @@ def test_sync_now_scopes_to_saved_courses(monkeypatch, tmp_path):
     assert results[0]["course_id"] == "111"
 
 
-def test_enqueue_sync_accepts_previous_but_heartbeat_stays_current_only(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, courses=(
+def test_enqueue_sync_accepts_previous_but_heartbeat_stays_current_only(monkeypatch, tmp_path, _configure):
+    _configure(courses=(
         {"id": "111", "name": "Current", "active": True},
         {"id": "222", "name": "Previous", "active": False},
     ))
@@ -494,8 +481,8 @@ def test_enqueue_sync_accepts_previous_but_heartbeat_stays_current_only(monkeypa
     assert submitted == [(('111',), ("course.refresh",), "background")]
 
 
-def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does(monkeypatch, tmp_path, _configure):
+    _configure()
     quiz_calls = []
 
     class NewQuizCanvas:
@@ -548,8 +535,8 @@ def test_sync_now_bypasses_new_quiz_capability_cooldown_the_heartbeat_never_does
     assert store.read_new_quiz_capability("111")["capability"] == "supported"
 
 
-def test_manual_sync_probes_new_quiz_even_when_lifecycle_is_concluded(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_manual_sync_probes_new_quiz_even_when_lifecycle_is_concluded(monkeypatch, tmp_path, _configure):
+    _configure()
     quiz_calls = []
 
     class ConcludedCanvas:
@@ -587,8 +574,8 @@ def test_manual_sync_probes_new_quiz_even_when_lifecycle_is_concluded(monkeypatc
 
 # --- routes ------------------------------------------------------------------------
 
-def test_mirror_status_route(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_mirror_status_route(monkeypatch, tmp_path, _configure):
+    _configure()
     canvas = FakeCanvas()
     mirror_service.run_heartbeat_pass(
         canvas_get=canvas, canvas_get_all=canvas, canvas_get_all_complete=canvas.complete, now=NOW)
@@ -607,8 +594,8 @@ def test_mirror_status_route(monkeypatch, tmp_path):
     }
 
 
-def test_mirror_sync_now_route(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_mirror_sync_now_route(monkeypatch, tmp_path, _configure):
+    _configure()
     canvas = FakeCanvas()
     monkeypatch.setattr(mirror_service, "_canvas_get_all", canvas)
     monkeypatch.setattr(mirror_service, "_canvas_get_all_complete", canvas.complete)
@@ -626,8 +613,8 @@ def test_mirror_sync_now_route(monkeypatch, tmp_path):
     assert status["plan"]["plans"][0]["plan_id"] == payload["plan_id"]
 
 
-def test_coordinated_heartbeat_uses_background_and_concluded_plans_before_findings(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path, courses=(
+def test_coordinated_heartbeat_uses_background_and_concluded_plans_before_findings(monkeypatch, tmp_path, _configure):
+    _configure(courses=(
         {"id": "111", "name": "Current"}, {"id": "222", "name": "Concluded"},
     ))
     monkeypatch.setattr(mirror_service.store, "read_course_context", lambda course_id: {
@@ -652,8 +639,8 @@ def test_coordinated_heartbeat_uses_background_and_concluded_plans_before_findin
     ]
 
 
-def test_named_scope_runners_do_not_call_legacy_full_or_delta(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_named_scope_runners_do_not_call_legacy_full_or_delta(monkeypatch, tmp_path, _configure):
+    _configure()
     assignment_map = {"700": {"id": "700", "is_quiz_lti_assignment": True}}
     monkeypatch.setattr(mirror_service.store, "read_assignments", lambda _course: {"assignments": assignment_map})
     seen = []
@@ -663,8 +650,8 @@ def test_named_scope_runners_do_not_call_legacy_full_or_delta(monkeypatch, tmp_p
     assert seen == [[{"id": "700", "is_quiz_lti_assignment": True}]]
 
 
-def test_context_and_group_runner_failures_are_explicit_and_fail_plans(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_context_and_group_runner_failures_are_explicit_and_fail_plans(monkeypatch, tmp_path, _configure):
+    _configure()
     monkeypatch.setattr(mirror_service.course_context, "refresh_course_context",
                         lambda *args, **kwargs: {"state": "stale"})
     monkeypatch.setattr(mirror_service, "_refresh_groups_on_maintenance",
@@ -688,8 +675,8 @@ def test_context_and_group_runner_failures_are_explicit_and_fail_plans(monkeypat
 
 # --- background findings refresh ------------------------------------------------------
 
-def test_refresh_work_findings_merges_when_configured(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_refresh_work_findings_merges_when_configured(monkeypatch, tmp_path, _configure):
+    _configure()
     from api.work_registry import discovery
     merged = []
     monkeypatch.setattr(discovery, "scan_active_courses", lambda: {"ok": True, "courses": {}})
@@ -698,8 +685,8 @@ def test_refresh_work_findings_merges_when_configured(monkeypatch, tmp_path):
     assert merged == [{"ok": True, "courses": {}}]
 
 
-def test_refresh_work_findings_skips_partial_scan(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_refresh_work_findings_skips_partial_scan(monkeypatch, tmp_path, _configure):
+    _configure()
     from api.work_registry import discovery
     merged = []
     monkeypatch.setattr(discovery, "scan_active_courses", lambda: {"ok": False})
@@ -708,8 +695,8 @@ def test_refresh_work_findings_skips_partial_scan(monkeypatch, tmp_path):
     assert merged == []
 
 
-def test_refresh_work_findings_gated_off_when_disabled(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_refresh_work_findings_gated_off_when_disabled(monkeypatch, tmp_path, _configure):
+    _configure()
     monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: False)
     from api.work_registry import discovery
     called = []
@@ -719,14 +706,6 @@ def test_refresh_work_findings_gated_off_when_disabled(monkeypatch, tmp_path):
 
 
 # --- write-through notify -------------------------------------------------------------
-
-def _seed_delta_watermarks():
-    store.record_pass(
-        "111", "delta", ok=True, attempted_at="2026-07-16T11:00:00Z",
-        watermarks={"submitted_since": "2026-07-16T10:50:00Z",
-                    "graded_since": "2026-07-16T10:50:00Z"},
-    )
-
 
 def _submission_row(*, assignment_id=700010, user_id=900001):
     return {
@@ -739,9 +718,8 @@ def _submission_row(*, assignment_id=700010, user_id=900001):
     }
 
 
-def test_notify_course_changed_runs_targeted_submission_delta_after_delay(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
-    _seed_delta_watermarks()
+def test_notify_course_changed_runs_targeted_submission_delta_after_delay(monkeypatch, tmp_path, _configure, _seed_delta_watermarks):
+    _configure()
     before = store.read_sync("111")
     canvas = FakeCanvas()
     receipt = lambda *args, **kwargs: ([], None, True)
@@ -756,8 +734,8 @@ def test_notify_course_changed_runs_targeted_submission_delta_after_delay(monkey
     assert store.read_sync("111") == before
 
 
-def test_notify_course_changed_submits_post_write_scope(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_notify_course_changed_submits_post_write_scope(monkeypatch, tmp_path, _configure):
+    _configure()
     submitted = []
 
     class FakeCoordinator:
@@ -772,9 +750,8 @@ def test_notify_course_changed_submits_post_write_scope(monkeypatch, tmp_path):
     assert submitted == [(('111',), ("submissions.course_delta",), "post_write")]
 
 
-def test_targeted_submission_delta_returns_sanitized_summary_without_advancing_pass(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
-    _seed_delta_watermarks()
+def test_targeted_submission_delta_returns_sanitized_summary_without_advancing_pass(monkeypatch, tmp_path, _configure, _seed_delta_watermarks):
+    _configure()
     before = store.read_sync("111")
     calls = []
 
@@ -814,8 +791,8 @@ def test_targeted_submission_delta_returns_sanitized_summary_without_advancing_p
     assert store.read_sync("111") == before
 
 
-def test_targeted_submission_delta_requires_full_without_canvas_requests(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_targeted_submission_delta_requires_full_without_canvas_requests(monkeypatch, tmp_path, _configure):
+    _configure()
     called = []
     result = mirror_service.sync.refresh_submissions_course_delta(
         "111", canvas_get_all=lambda *args, **kwargs: called.append(1))
@@ -830,9 +807,8 @@ def test_targeted_submission_delta_requires_full_without_canvas_requests(monkeyp
     assert called == []
 
 
-def test_targeted_submission_delta_second_request_failure_does_not_merge_or_advance(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
-    _seed_delta_watermarks()
+def test_targeted_submission_delta_second_request_failure_does_not_merge_or_advance(monkeypatch, tmp_path, _configure, _seed_delta_watermarks):
+    _configure()
     before = store.read_sync("111")
     calls = []
 
@@ -856,8 +832,8 @@ def test_targeted_submission_delta_second_request_failure_does_not_merge_or_adva
     ]
 
 
-def test_notify_is_a_no_op_when_disabled(monkeypatch, tmp_path):
-    _configure(monkeypatch, tmp_path)
+def test_notify_is_a_no_op_when_disabled(monkeypatch, tmp_path, _configure):
+    _configure()
     monkeypatch.setattr(mirror_service.config, "mirror_enabled", lambda: False)
     ran = []
     monkeypatch.setattr(mirror_service.sync, "refresh_submissions_course_delta",

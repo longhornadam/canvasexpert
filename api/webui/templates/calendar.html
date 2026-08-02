@@ -28,7 +28,7 @@
 {% endcall %}
 {% endblock %}
 
-{% block workspace_header %}{{ page_header('Calendar', 'School dates, bell schedules, and the teacher schedule that SmartDeck and Panels read.') }}{% endblock %}
+{% block workspace_header %}{{ page_header('Calendar', 'School dates, bell schedules, and the teacher schedule that Panels read.') }}{% endblock %}
 
 {% block primary %}
 <div class="ce-calendar-stack">
@@ -204,7 +204,7 @@
 
 <section class="ce-panel ce-calendar-panel" id="calendar-teacher-card">
   <h2>Teacher Schedule</h2>
-  <p class="ce-hint">One row per class. <strong>Block</strong> is the name your slides point to, so keep it steady once slides use it. <strong>Periods</strong> are the bell periods it covers, in order. <strong>Course</strong> is a teacher-facing label. <strong>Canvas course</strong> is optional and links the block to a saved Canvas course.</p>
+  <p class="ce-hint">One row per class. <strong>Block</strong> is the stable name Panels point to, so keep it steady once displays use it. <strong>Periods</strong> are the bell periods it covers, in order. <strong>Course</strong> is a teacher-facing label. <strong>Canvas course</strong> is optional and links the block to a saved Canvas course.</p>
   <div id="calendar-teacher-block-list" class="ce-schedule-block-list"></div>
   <div class="ce-actions">
     <button type="button" id="calendar-teacher-add-block" class="small">Add a block</button>

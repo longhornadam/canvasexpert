@@ -17,22 +17,8 @@ class FakeResponse:
         return self._payload
 
 
-def _client_with(monkeypatch, responses):
-    calls = []
-    queue = iter(responses)
-    monkeypatch.setattr(canvas_client, "_canvas_headers",
-                        lambda: ({"Authorization": "Bearer test"}, "https://canvas.test"))
-
-    def get(url, *, headers, params, timeout):
-        calls.append((url, params, timeout))
-        return next(queue)
-
-    monkeypatch.setattr(canvas_client.requests, "get", get)
-    return calls
-
-
-def test_complete_collection_accepts_an_empty_single_page(monkeypatch):
-    calls = _client_with(monkeypatch, [FakeResponse([])])
+def test_complete_collection_accepts_an_empty_single_page(monkeypatch, _client_with):
+    calls = _client_with([FakeResponse([])])
 
     assert canvas_client._canvas_get_all_complete("/api/v1/courses/111/assignments",
                                                    {"per_page": 100}) == ([], None, True)
@@ -40,9 +26,9 @@ def test_complete_collection_accepts_an_empty_single_page(monkeypatch):
                       {"per_page": 100}, 30)]
 
 
-def test_complete_collection_follows_opaque_next_pages_without_reusing_params(monkeypatch):
+def test_complete_collection_follows_opaque_next_pages_without_reusing_params(monkeypatch, _client_with):
     next_url = "https://canvas.test/api/v1/courses/111/assignments?opaque=two"
-    calls = _client_with(monkeypatch, [
+    calls = _client_with([
         FakeResponse([{"id": 1}], link=f'<{next_url}>; rel="next"'),
         FakeResponse([{"id": 2}]),
     ])
@@ -58,9 +44,9 @@ def test_complete_collection_follows_opaque_next_pages_without_reusing_params(mo
     ]
 
 
-def test_complete_collection_rejects_a_later_page_failure_without_raw_body(monkeypatch):
+def test_complete_collection_rejects_a_later_page_failure_without_raw_body(monkeypatch, _client_with):
     next_url = "https://canvas.test/api/v1/courses/111/assignments?opaque=two"
-    _client_with(monkeypatch, [
+    _client_with([
         FakeResponse([{"id": 1}], link=f'<{next_url}>; rel="next"'),
         FakeResponse([], status_code=503, text="private response body https://secret.example"),
     ])
@@ -72,16 +58,16 @@ def test_complete_collection_rejects_a_later_page_failure_without_raw_body(monke
     assert "private" not in error and "https://" not in error
 
 
-def test_complete_collection_rejects_non_list_roots(monkeypatch):
-    _client_with(monkeypatch, [FakeResponse({"id": 1})])
+def test_complete_collection_rejects_non_list_roots(monkeypatch, _client_with):
+    _client_with([FakeResponse({"id": 1})])
 
     assert canvas_client._canvas_get_all_complete("/api/v1/courses/111/assignments") == (
         None, "invalid_response", False)
 
 
-def test_complete_collection_rejects_a_repeated_next_link(monkeypatch):
+def test_complete_collection_rejects_a_repeated_next_link(monkeypatch, _client_with):
     next_url = "https://canvas.test/api/v1/courses/111/assignments?opaque=two"
-    calls = _client_with(monkeypatch, [
+    calls = _client_with([
         FakeResponse([{"id": 1}], link=f'<{next_url}>; rel="next"'),
         FakeResponse([{"id": 2}], link=f'<{next_url}>; rel="next"'),
     ])
@@ -92,9 +78,9 @@ def test_complete_collection_rejects_a_repeated_next_link(monkeypatch):
         "https://canvas.test/api/v1/courses/111/assignments", next_url]
 
 
-def test_legacy_collection_client_keeps_its_two_value_contract(monkeypatch):
+def test_legacy_collection_client_keeps_its_two_value_contract(monkeypatch, _client_with):
     next_url = "https://canvas.test/api/v1/courses/111/assignments?opaque=two"
-    _client_with(monkeypatch, [
+    _client_with([
         FakeResponse([{"id": 1}], link=f'<{next_url}>; rel="next"'),
         FakeResponse([{"id": 2}]),
     ])
@@ -104,10 +90,10 @@ def test_legacy_collection_client_keeps_its_two_value_contract(monkeypatch):
     assert result == ([{"id": 1}, {"id": 2}], None)
 
 
-def test_get_retries_only_429_with_capped_numeric_retry_after(monkeypatch):
+def test_get_retries_only_429_with_capped_numeric_retry_after(monkeypatch, _client_with):
     throttled = FakeResponse([], status_code=429)
     throttled.headers["Retry-After"] = "99"
-    _client_with(monkeypatch, [throttled, FakeResponse({"id": 1})])
+    _client_with([throttled, FakeResponse({"id": 1})])
     sleeps = []
     monkeypatch.setattr(canvas_client.time, "sleep", lambda seconds: sleeps.append(seconds))
     # The synthetic first response asks for a long pause; it is capped.
@@ -115,8 +101,8 @@ def test_get_retries_only_429_with_capped_numeric_retry_after(monkeypatch):
     assert sleeps == [30.0]
 
 
-def test_get_telemetry_keeps_scope_priority_and_actual_queue_wait_identifier_free(monkeypatch):
-    _client_with(monkeypatch, [FakeResponse({"id": 1})])
+def test_get_telemetry_keeps_scope_priority_and_actual_queue_wait_identifier_free(monkeypatch, _client_with):
+    _client_with([FakeResponse({"id": 1})])
     records = []
     monkeypatch.setattr(canvas_client.operational_log, "emit", lambda *args, **kwargs: records.append(kwargs))
     with canvas_client.canvas_get_telemetry("course.refresh", "post_write", queue_wait_ms=17):

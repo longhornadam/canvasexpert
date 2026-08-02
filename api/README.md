@@ -13,7 +13,6 @@ pushes content to live courses via the REST and New Quizzes APIs:
   import, optional API scoring
 - **Panels:** disk-only classroom display URLs for due work, roster-safe views, events,
   and learning objectives
-- **SmartDeck:** teacher-authored Slides and widgets for a full-screen projector display
 - **School Calendar:** school dates, day kinds, grading periods, bell schedules, and Teacher Schedule
 - **MCP server:** local pseudonymized reads and preview/apply tools for teacher-owned writes
 - **Daily Writing:** longitudinal Writing Record and tracked-assignment Writing Timeline
@@ -177,7 +176,6 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `custom_routines/` | Teacher-authored local automation jobs and the routine authoring contract |
 | `panel_themes.py` | Built-in and teacher-owned Panel theme validation, palette derivation, and generated CSS |
 | `learning_objectives.py` | Reviewed, revision-protected per-course Learning Objectives storage and validation |
-| `smartdeck_feeds.py` | SmartDeck feed projections sourced from local calendar and course data |
 | `course_catalog.py` | Student-free local course, module, assignment, and page catalog reads |
 | `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, split feature scripts, subprocess/SSE runner |
 | `qf_materials/qf quiz examples/` | QuizForge fixtures (contract lives at `default_docs/AI Authoring/Author a Quiz (QuizForge).txt`) |
