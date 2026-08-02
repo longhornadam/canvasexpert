@@ -255,19 +255,65 @@ preview/apply on the Calendar page -- not a Panels-local shortcut.
 
 ## Themes
 
-`?theme=` skins a Panel. `PANEL_THEMES` in `panels.py` is the allowlist and the
-dropdown order; `static/panels/themes.css` holds one rule block per key. Eight ship:
-`ce` (default, the app's own palette), `natural`, `ocean`, `cottage`, `console`,
-`wizardtrain`, `bauhaus`, `lisa`.
+`?theme=` skins a Panel. There are two tiers and they meet at one attribute selector.
+
+**Built in.** `panel_themes.BUILTIN_THEMES` is the allowlist and the dropdown order,
+re-exported as `PANEL_THEMES` by `panels.py`; `static/panels/themes.css` holds one
+hand-written rule block per key. Eight ship: `ce` (default, the app's own palette),
+`natural`, `ocean`, `cottage`, `console`, `wizardtrain`, `bauhaus`, `lisa`. The list
+lives in `api/panel_themes.py` rather than the route so the MCP tools can read it
+without importing a web route, which `test_beta075_mcp` enforces.
+
+**The teacher's own.** One JSON file per theme in `Library/Panels/Themes/<key>.json`,
+synced, no PII, next to `Learning Objectives.json`. `api/panel_themes.py` validates it,
+derives the full variable set, and generates CSS served at `GET /panels/themes.css`,
+which every Panel links after the built-in stylesheet. The authored file carries only
+`key`, `label`, `font`, `ornament`, and three or four colours (`bg`, `ink`, `accent`,
+optional `highlight`); the other sixteen variables are derived, because the derivation
+is where the legibility rules live.
+
+Two Bobcats themes (`bobcats` and `bobcats-night`) seed into `Library/Panels/Themes` on
+first run from `api/default_docs/Panels/Themes`, and are the teacher's to edit or delete
+like any other custom theme. The built-in count stays eight.
+
+Three properties make it safe to let an assistant write that file:
+
+- **The generator emits, it never forwards.** Every value is re-serialized from integers
+  the module parsed itself, and the only selector it can produce is
+  `html[data-panel-theme="<key>"]`. A theme file cannot set a box property, cannot
+  smuggle CSS through a colour, and cannot name a font or image the machine would fetch.
+  `test_generated_css_declares_custom_properties_and_nothing_else` and
+  `test_no_ornament_can_reach_the_network` hold that line.
+- **Fonts and ornaments are closed sets.** Four faces, eight ornament recipes built from
+  the theme's own colours as gradients. Neither is free text.
+- **Contrast is corrected, not trusted.** Every text-on-background pairing is measured
+  and pushed to at least 4.5:1, and the preview reports what moved. An assistant picking
+  pretty hex codes cannot produce an illegible wall.
+
+Authoring paths, all landing on the same file: the MCP tools
+(`get_theme_contract`, `list_panel_themes`, `preview_panel_theme`, `apply_panel_theme`,
+`delete_panel_theme`), hand-editing the JSON, or designing in a claude.ai/design project
+via `tools/design_theme_studio.py` (see `tools/manifests/design-theme-studio.json`).
+
+Two failure modes are handled on purpose rather than left to chance. A malformed,
+half-written, or built-in-shadowing theme file is **skipped with a reason** and the rest
+still render; the console lists what it could not read. And `/panels/themes.css` is
+registered **ahead of** `/panels/{kind}`, which is a catch-all that would otherwise read
+that path as a Panel kind and 404 the stylesheet.
+
+At most 24 custom themes, so a runaway folder cannot bloat the generated stylesheet.
+A theme edit lands on the next Panel load: the stylesheet is sent `no-store`, but a board
+already open on a projector keeps the CSS it fetched until something reloads it.
 
 **A theme is a palette, a font, and one decorative layer. Nothing else.** It sets
 custom properties on `html[data-panel-theme="…"]` and draws ornament on `body::before`.
 It must never set a box property on `.p-row`, `.p-body`, `.p-head`, `.p-foot`,
 `.p-stack` or `.p-title`, because `panel.js` measures the body box to decide the row
 count: a theme that moved that box would change *what a panel shows*, not just how it
-looks. `test_themes_never_restyle_the_sizing_model` enforces the selector boundary, and
-the sweep below confirms the row count is identical across all eight themes at every
-shape.
+looks. `test_themes_never_restyle_the_sizing_model` enforces the selector boundary for the
+built-in stylesheet, the generator cannot emit a kit selector at all, and the sweep below
+confirms the body box is identical across all eight built-ins, a custom theme, and the
+unknown-key fallback at the same shape.
 
 Three details worth keeping:
 
@@ -280,9 +326,10 @@ Three details worth keeping:
   onto theme variables (`--row`, `--pill-bg`, `--today-ink`, `--when-ink`, `--warn-ink`)
   and hardcodes nothing. A literal left in a panel survives theme switching and looks
   broken in the other seven skins.
-- **`resolve_theme` never rejects.** An unknown, retired, or hand-edited theme falls back
-  to `ce` with a 200. 404-ing here would take a saved board down weeks later over a
-  decoration.
+- **`resolve_theme` never rejects.** An unknown, retired, deleted-from-the-workspace, or
+  hand-edited theme falls back to `ce` with a 200. 404-ing here would take a saved board
+  down weeks later over a decoration. It consults the custom themes too, so a teacher's
+  own key resolves to itself and a deleted one quietly returns to the default.
 
 Fonts come from `/static/fonts/fonts.css`, which is self-hosted. A theme must not
 reference a webfont the machine would have to fetch; `cottage`'s serif is Georgia
@@ -290,7 +337,9 @@ precisely because it is already on every machine this ships to.
 
 Contrast is a correctness property, not taste: a panel is read from the back of a room.
 Every text-on-background pairing in every theme measures at least 4.5:1, verified rather
-than eyeballed. When adding a theme, measure it.
+than eyeballed. When adding a **built-in**, measure it by hand. A **custom** theme is
+measured and corrected for you by `panel_themes.derive`, which is the only reason
+handing that file to an assistant is safe.
 
 ## Adding a Panel
 

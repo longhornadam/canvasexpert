@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 22 (39 tools).
+Tool schema version 23 (44 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -71,6 +71,11 @@ Tool schema version 22 (39 tools).
 | `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved}` | No |
 | `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard | Yes — pseudonymized |
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
+| `get_theme_contract()` | The Panel theme format: the three or four colours and two names you set, the sixteen variables derived for you, and the closed font/ornament sets | No |
+| `list_panel_themes()` | Built-in Panel themes plus the teacher's own as `(key, label, origin, authored_at)`, with any theme file that could not be read | No |
+| `preview_panel_theme(key, label, colors, font="sans", ornament="grid")` | Digest-protected preview of a theme: the derived palette, every measured contrast pairing, and any colour corrected to clear 4.5:1 | No |
+| `apply_panel_theme(preview, preview_digest)` | Writes exactly the previewed theme to `Library/Panels/Themes/<key>.json`; refuses a stale or altered preview | No |
+| `delete_panel_theme(key)` | Deletes one of the teacher's own themes; built-in keys are refused | No |
 
 `get_course_assignments` and `get_modules` only read the local course catalog written by
 the CanvasExpert web UI — neither ever falls back to a live Canvas call. If the catalog
@@ -85,6 +90,20 @@ needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`
 then receive the Forge-only staging appendix. SmartDeck (`deck`) reads its canonical contract
 from the same source but has no staging/review appendix — unlike other Forge kinds, SmartDeck
 writes live to the workspace immediately with no teacher review queue.
+
+The five Panel theme tools take no `course_id` and carry no student data, so they need
+no course gate, no identity vault, and no safety scan. They are the one write surface here
+that hands an assistant a file-writing path with no teacher review queue in front of it,
+which is deliberate and rests on the format doing the safety work rather than the
+assistant: colours are parsed to integers and re-serialized (a colour cannot be a CSS
+fragment), fonts and ornaments come from closed sets (a theme cannot reach the network),
+the generated CSS can only ever produce `html[data-panel-theme="<key>"]` (a theme cannot
+change layout or what a Panel shows), and every text-on-background pairing is measured and
+corrected to at least 4.5:1 (an assistant cannot produce an illegible projector). A
+built-in key is refused rather than shadowed, at most 24 custom themes are kept, and a
+malformed file is skipped with a reason instead of taking a saved board down. Call
+`get_theme_contract` first; `preview_panel_theme` reports what it corrected, which is
+worth telling the teacher. See `docs/reference/panels-route-card.md` for the full model.
 
 `save_deck`, `list_active_decks`, and `archive_deck` take no `course_id` and carry no
 student data. They use the same local-only exemption: no course gate, no identity vault,

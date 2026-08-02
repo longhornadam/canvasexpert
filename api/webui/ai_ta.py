@@ -68,6 +68,8 @@ RETIRED_FILES = {
         "e5e4023c419e14de58339f32c3b6da5bafd81528aae91d41477640c5f27b21b6",
         # Before the scoring packet MCP tools were described.
         "94788ae4a8c063cd2e60f234e51a3f902e8fed8282b10caba80121135c8fb80b",
+        # Before Panels and the Panel theme tools were described.
+        "52f9755e202e51072cb687df1a0d1fa6b85d468dd371d7f8c30bd73e4c3656fe",
     }),
 }
 

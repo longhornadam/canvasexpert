@@ -50,3 +50,11 @@
 @media (max-width: 1180px) {
   .pn-build { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Custom themes: where they came from, and which files did not load. */
+.pn-theme-note { color: var(--ce-ink-muted); font-size: 13px; }
+.pn-theme-note summary { cursor: pointer; font-weight: 700; }
+.pn-theme-note .ce-hint { margin: var(--ce-space-2) 0 0; }
+.pn-theme-note code { font-family: var(--ce-font-mono); word-break: break-all; }
+.pn-theme-problems { margin: var(--ce-space-2) 0 0; padding-left: 20px; line-height: 1.6; }
+.pn-theme-problems code { font-family: var(--ce-font-mono); }

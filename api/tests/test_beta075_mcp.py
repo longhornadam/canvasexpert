@@ -18,7 +18,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 22
+    assert contract.TOOL_SCHEMA_VERSION == 24
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -37,7 +37,8 @@ def test_live_mcp_schema_matches_versioned_contract():
     # v18 adds the revision-safe public-event preview/apply pair; v17 stays inert history.
     # v19 adds the disk-only Course Catalog pages read and reviewed objective pair.
     # v20 makes reviewed objectives fully mutable with list/replace/delete tools;
-    # v21 adds the narrow pseudonym-first roster settings write surface.
+    # v21 adds the narrow pseudonym-first roster settings write surface;
+    # v22 adds the scoring packet surface; v23 adds teacher-owned Panel themes.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -71,7 +72,12 @@ def test_live_mcp_schema_matches_versioned_contract():
     v17 = contract.load_contract(17)
     assert v17["schema_version"] == 17
     assert len(v17["tools"]) == 25
-    assert len(live["tools"]) == 39  # v22 adds three tools: list_scoring_sessions, get_scoring_packet, stage_scores
+    assert len(live["tools"]) == 45  # v24 adds list_theme_art to the five
+    # Panel theme tools: get_theme_contract, list_panel_themes,
+    # preview/apply/delete_panel_theme
+    v22 = contract.load_contract(22)
+    assert v22["schema_version"] == 22
+    assert len(v22["tools"]) == 39
     assert all("canvas" not in tool["name"].lower() for tool in live["tools"])
 
 

@@ -131,6 +131,45 @@ def delete_learning_objective(course_id: str, entry_id: str,
 
 
 @mcp.tool()
+def get_theme_contract() -> str:
+    """Panel theme format: the colours and names you set, what is derived, the rules."""
+    return _compact(tools.get_theme_contract())
+
+
+@mcp.tool()
+def list_panel_themes() -> str:
+    """Built-in Panel themes plus the teacher's own, as a {columns, rows} table."""
+    return _compact(tools.list_panel_themes())
+
+
+@mcp.tool()
+def list_theme_art() -> str:
+    """The art files in the theme art folder, their kind, dimensions or viewBox,
+    and any diagnostic. Reference filenames that exist; do not invent one."""
+    return _compact(tools.list_theme_art())
+
+
+@mcp.tool()
+def preview_panel_theme(key: str, label: str, colors: dict,
+                        font: str = "sans", ornament: str = "grid",
+                        art: list = None) -> str:
+    """Preview a Panel theme with its measured contrast and any correction made."""
+    return _compact(tools.preview_panel_theme(key, label, colors, font, ornament, art))
+
+
+@mcp.tool()
+def apply_panel_theme(preview: dict, preview_digest: str) -> str:
+    """Save an exact previewed theme into the teacher's synced Library."""
+    return _compact(tools.apply_panel_theme(preview, preview_digest))
+
+
+@mcp.tool()
+def delete_panel_theme(key: str) -> str:
+    """Delete one of the teacher's own Panel themes. Built-ins are not reachable."""
+    return _compact(tools.delete_panel_theme(key))
+
+
+@mcp.tool()
 def get_roster(course_id: str) -> str:
     """Course roster as a {columns, rows} table of (pseudonym, section_names),
     sorted by pseudonym."""

@@ -25,12 +25,15 @@ three fixed layouts: a closed set is what keeps this from sprawling.
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from api.webui import config, deps, panel_data as panel_data_service, school_calendar
+from api import panel_themes
+from api.webui import (config, deps, panel_data as panel_data_service,
+                       school_calendar, workspace)
 
 router = APIRouter()
 
@@ -110,30 +113,39 @@ PANEL_CATALOG = {
 
 DEFAULT_THEME = "ce"
 
-# Themes are a skin, not a layout: each one is a set of custom properties in
-# static/panels/themes.css, so a theme can never change what a panel shows or
-# how many rows fit. Ordered for the console's dropdown.
-PANEL_THEMES = (
-    ("ce", "Canvas Expert"),
-    ("natural", "Natural"),
-    ("ocean", "Ocean"),
-    ("cottage", "Cottage"),
-    ("console", "Console"),
-    ("wizardtrain", "Wizard train"),
-    ("bauhaus", "Bauhaus"),
-    ("lisa", "Lisa"),
-)
-_THEME_KEYS = frozenset(key for key, _label in PANEL_THEMES)
+# Themes are a skin, not a layout: each one is a set of custom properties, so a
+# theme can never change what a panel shows or how many rows fit. Built-ins are
+# hand-written blocks in static/panels/themes.css and their keys are the list in
+# api/panel_themes.py, which the MCP tools read too. The teacher's own themes
+# are JSON files in the synced Library, generated into CSS at request time by
+# /panels/themes.css. Built-in order here is the console's dropdown order.
+PANEL_THEMES = panel_themes.BUILTIN_THEMES
+_THEME_KEYS = panel_themes.BUILTIN_KEYS
+
+
+def custom_themes() -> dict:
+    """The teacher's own themes from the synced workspace, plus any problems.
+
+    Read fresh on each call rather than cached: a teacher who just asked their
+    assistant for a theme expects it in the dropdown on the next load, and the
+    cost is a listdir over at most a couple of dozen small files.
+    """
+    return panel_themes.load_custom_themes()
 
 
 def resolve_theme(value) -> str:
-    """A known theme key, or the default.
+    """A known theme key, built-in or the teacher's own, or the default.
 
-    Never rejects. A theme retired between releases, or a hand-edited one,
-    would otherwise take a saved board down weeks later over a decoration.
+    Never rejects. A theme retired between releases, deleted from the
+    workspace, or hand-edited into something unparseable would otherwise take
+    a saved board down weeks later over a decoration.
     """
     key = str(value or "").strip().lower()
-    return key if key in _THEME_KEYS else DEFAULT_THEME
+    if key in _THEME_KEYS:
+        return key
+    if key and any(theme["key"] == key for theme in custom_themes()["themes"]):
+        return key
+    return DEFAULT_THEME
 
 
 # Calendar resolution states that mean "the calendar itself needs a teacher
@@ -286,14 +298,99 @@ def panels_page(request: Request):
         if isinstance(b, dict) and b.get("name")
     ]
     panels = [dict(spec, kind=kind) for kind, spec in sorted(PANEL_CATALOG.items())]
+    mine = custom_themes()
+    art = panel_themes.list_theme_art()
+    # Per-entry placement diagnostics (tiny watermark, JPG rectangle, missing
+    # file) come from derive(); surface them beside the art list.
+    art_diagnostics = []
+    for theme in mine["themes"]:
+        derived = panel_themes.derive(theme)
+        art_diagnostics.extend(derived.get("art_diagnostics") or [])
     return deps.templates.TemplateResponse(request, "panels.html", {
         "nav_section": "panels",
         "panels": panels,
         "courses": courses,
         "blocks": blocks,
         "themes": [{"key": key, "label": label} for key, label in PANEL_THEMES],
+        "custom_themes": [{"key": theme["key"], "label": theme["label"]}
+                          for theme in mine["themes"]],
+        "theme_problems": mine["problems"],
+        "art_files": art["files"],
+        "art_problems": art["problems"],
+        "art_diagnostics": art_diagnostics,
+        "themes_dir": workspace.panel_themes_dir() or "",
         "default_theme": DEFAULT_THEME,
     })
+
+
+@router.get("/panels/themes.css")
+def panel_custom_themes_css(theme: str = ""):
+    """The teacher's own themes as CSS, generated from their theme files.
+
+    Registered ahead of ``/panels/{kind}`` because that route is a catch-all:
+    below it, this path would resolve as a Panel kind and 404.
+
+    Every Panel links this after the built-in stylesheet. It is generated from
+    parsed values, never from file text, so nothing a theme file contains can
+    become a selector or a property name here. Sent no-store so a theme edit
+    lands on the next load of a board that has been open all period.
+
+    ``?theme=<key>`` scopes the response to one theme's block, which is what a
+    Panel links so a board with nine panels does not re-download every theme.
+    Absent the parameter, all themes are returned so nothing existing breaks.
+    """
+    themes = custom_themes()["themes"]
+    key = str(theme or "").strip().lower()
+    if key:
+        themes = [entry for entry in themes if entry["key"] == key]
+    css = panel_themes.custom_css(themes)
+    return Response(css, media_type="text/css",
+                    headers={"Cache-Control": "no-store"})
+
+
+@router.get("/panels/theme-art/{key}/{index}.{ext}")
+def panel_theme_art(key: str, index: int, ext: str):
+    """The processed bytes for one art entry, cached and immutable.
+
+    Registered next to ``/panels/themes.css`` so the ordering rule (these
+    specific routes before the ``/panels/{kind}`` catch-all) stays in one
+    place. The generated CSS references this with a content hash, so the
+    response is safe to cache forever: a change to the source or the entry
+    changes the hash and therefore the URL.
+    """
+    if ("." + ext) not in panel_themes.ART_EXTENSIONS:
+        return Response("not found", status_code=404)
+    theme = next((entry for entry in custom_themes()["themes"]
+                  if entry["key"] == key), None)
+    if theme is None:
+        return Response("not found", status_code=404)
+    entries = theme.get("art") or []
+    if index < 0 or index >= len(entries):
+        return Response("not found", status_code=404)
+    entry = entries[index]
+    source = panel_themes._art_source_path(entry["file"])
+    if not source or not os.path.isfile(workspace.extended_path(source)):
+        return Response("not found", status_code=404)
+    derived = panel_themes.derive(theme)
+    derived_colors = {
+        "bg": derived["variables"]["--bg"],
+        "ink": derived["variables"]["--ink"],
+        "accent": derived["variables"]["--accent"],
+        "highlight": derived["variables"]["--today-accent"],
+    }
+    data, out_ext, _diagnostic = panel_themes._process_art(
+        source, entry, derived_colors)
+    if not data:
+        return Response("not found", status_code=404)
+    media = {
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }.get(out_ext, "application/octet-stream")
+    return Response(data, media_type=media,
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @router.get("/panels/{kind}", response_class=HTMLResponse)

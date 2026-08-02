@@ -448,6 +448,17 @@ def learning_objectives_path(root=None):
     return os.path.join(directory, "Learning Objectives.json") if directory else None
 
 
+def panel_themes_dir(root=None):
+    """Where the teacher's own Panel themes live, one JSON file each.
+
+    Synced rather than machine-local: a theme is something a teacher keeps,
+    shares with a colleague, and expects to still have on the other machine.
+    No student data ever goes here.
+    """
+    directory = library_folder("Panels", root)
+    return os.path.join(directory, "Themes") if directory else None
+
+
 def canvas_mirror_root(root=None):
     """Return the CanvasMirror root — the disposable local mirror of Canvas
     course facts. Everything under it is rebuildable by re-sync."""
@@ -734,6 +745,8 @@ def ensure_workspace():
     # SmartDecks library structure.
     for subfolder in ("Decks", "Decks/Archived", "Deck Templates", "Slide Templates"):
         os.makedirs(os.path.join(root, LIBRARY_NAME, "SmartDecks", subfolder), exist_ok=True)
+    # The teacher's own Panel themes, one JSON file each.
+    os.makedirs(os.path.join(root, LIBRARY_NAME, "Panels", "Themes"), exist_ok=True)
 
     os.makedirs(os.path.join(root, TO_REVIEW_NAME), exist_ok=True)
     for subfolder in TO_REVIEW_SUBFOLDERS:

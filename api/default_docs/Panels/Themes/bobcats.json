@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "key": "bobcats",
+  "label": "Bobcats",
+  "font": "sans",
+  "ornament": "grid",
+  "colors": {
+    "bg": "#f8fafc",
+    "ink": "#101c30",
+    "accent": "#123a70",
+    "highlight": "#c8102e"
+  },
+  "authored_at": "2026-08-02T00:00:00+00:00",
+  "authored_by": "canvasexpert"
+}

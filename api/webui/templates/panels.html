@@ -40,6 +40,65 @@
 {% endcall %}
 {% endif %}
 
+{% if theme_problems %}
+{% call notice('attention') %}
+  {{ theme_problems|length }} theme file{% if theme_problems|length != 1 %}s{% endif %}
+  could not be read, so {% if theme_problems|length == 1 %}it is{% else %}they are{% endif %}
+  not in the Theme list:
+  <ul class="pn-theme-problems">
+    {% for problem in theme_problems %}
+    <li><code>{{ problem.file }}</code>: {{ problem.error }}</li>
+    {% endfor %}
+  </ul>
+{% endcall %}
+{% endif %}
+
+{% if art_files or art_problems or art_diagnostics %}
+<details class="pn-theme-note">
+  <summary>Theme art</summary>
+  <p class="ce-hint">Drop a picture into <code>Library/Panels/Themes/art/</code> and
+  it becomes a theme's decoration. Name it after a theme (like <code>bobcats.png</code>)
+  and it attaches by itself.</p>
+  {% if art_files %}
+  <ul class="pn-theme-problems">
+    {% for file in art_files %}
+    <li><code>{{ file.file }}</code>
+      {% if file.width %}({{ file.width }}x{{ file.height }}){% endif %}
+      {% if file.viewBox %}(viewBox {{ file.viewBox }}){% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if art_problems %}
+  <ul class="pn-theme-problems">
+    {% for problem in art_problems %}
+    <li><code>{{ problem.file }}</code>: {{ problem.error }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if art_diagnostics %}
+  <ul class="pn-theme-problems">
+    {% for problem in art_diagnostics %}
+    <li><code>{{ problem.file }}</code>: {{ problem.error }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</details>
+{% endif %}
+
+{% if themes_dir %}
+<details class="pn-theme-note">
+  <summary>Where do themes come from?</summary>
+  <p class="ce-hint">The eight built-in themes ship with the app, and two Bobcats
+  themes come with it too, ready to edit or delete. Your own themes are
+  JSON files in <code>{{ themes_dir }}</code>, so they follow your sync to your other
+  machines. Ask your assistant for one ("a green and cream theme with a quiet grid")
+  and it writes the file; it shows up under Yours in the Theme list on the next load.
+  Colours get checked for contrast on the way in, because a Panel is read from the
+  back of a room.</p>
+</details>
+{% endif %}
+
 {% for p in panels %}
 {% call page_section(p.title, 'panel-' + p.kind) %}
 <div class="pn-card" data-kind="{{ p.kind }}">
@@ -67,7 +126,16 @@
         {% endif %}
         <label>Theme
           <select data-theme>
+            {% if custom_themes %}
+            <optgroup label="Built in">
+              {% for t in themes %}<option value="{{ t.key }}">{{ t.label }}</option>{% endfor %}
+            </optgroup>
+            <optgroup label="Yours">
+              {% for t in custom_themes %}<option value="{{ t.key }}">{{ t.label }}</option>{% endfor %}
+            </optgroup>
+            {% else %}
             {% for t in themes %}<option value="{{ t.key }}">{{ t.label }}</option>{% endfor %}
+            {% endif %}
           </select>
         </label>
       </div>
