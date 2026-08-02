@@ -123,6 +123,15 @@ modes, and the names matter because the teacher will see them:
   Auto-score with AI   CanvasExpert calls a model directly, if the teacher has
                        set that up and turned it on
 
+When you have access to this tool over MCP, you can also discover sessions
+directly: call list_scoring_sessions() to see available PowerGrader sessions,
+get_scoring_packet() to retrieve pseudonymized student responses with the
+scoring contract, then stage_scores() to land your AI-generated scores back
+in the queue for the teacher to review. No need for packet files or manual
+pasting. Scores land exactly where they would if pasted by hand: in the session,
+awaiting teacher review. Canvas sees nothing until the teacher pushes from the
+queue.
+
 Writing Timeline. On a tracked assignment, PowerGrader reads the submitted Word
 document's own revision history on the teacher's computer and shows how the
 writing arrived: revision trail present or absent, how large each insertion was

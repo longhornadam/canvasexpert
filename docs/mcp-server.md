@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 21 (36 tools).
+Tool schema version 22 (39 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -68,6 +68,9 @@ Tool schema version 21 (36 tools).
 | `apply_school_calendar_event_change(preview, expected_revision)` | Applies a previewed public-event change; refuses stale or altered previews | No |
 | `list_active_decks()` | Lists active decks | No |
 | `archive_deck(deck_id)` | Moves a deck to archived | No |
+| `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved}` | No |
+| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true, include_writing_timeline=false)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged, text-only (no media), with paging and budget guards | Yes — pseudonymized |
+| `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
 
 `get_course_assignments` and `get_modules` only read the local course catalog written by
 the CanvasExpert web UI — neither ever falls back to a live Canvas call. If the catalog
@@ -120,6 +123,15 @@ it likewise needs no course gate, no identity vault, and no safety scan. It reus
 `webui.deps.list_inbox_files` (the same marker-gated To Review listing the push tabs use) and
 returns only each draft's label, never its absolute path. Pass `kind` to narrow to one of
 `quiz`, `assignment`, `page`, or `rubric`; omit it to see everything staged across all four.
+
+**Scoring Packet Workflow (v22).** `list_scoring_sessions()` discovers PowerGrader sessions
+with AI-ready SAFE bundles in Current courses. `get_scoring_packet()` retrieves one session's
+pseudonymized student responses with paging (offset/limit, default 10), full text (no truncation,
+no media), and a digest for concurrency protection. The response includes a contract (scoring
+instructions) when `include_context=true`, saving tokens on later pages. `stage_scores()` takes
+the scored results and stages them into the session for teacher review in PowerGrader; it never
+posts to Canvas (the teacher pushes manually). The digest guard (`expected_packet_digest`)
+prevents stale scores from landing if the session has been re-run between retrieval and staging.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
 CanvasMirror. `get_seating_context` uses the current mirror for identity and section
