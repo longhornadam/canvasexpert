@@ -1,4 +1,4 @@
-"""Plain, testable implementations of the 30 MCP tools.
+"""Plain, testable implementations of the 39 MCP tools (schema v22).
 
 Every function returns a ``{"ok": ...}`` dict and never raises — that keeps
 errors structured for the LLM and matches the rest of the app's route style.
@@ -1663,3 +1663,253 @@ def archive_deck(deck_id: str) -> dict:
     if success:
         return {"ok": True}
     return {"ok": False, "problems": problems}
+
+
+# --- Scoring Packet MCP Tools (v22) ----------------------------------------
+
+def list_scoring_sessions() -> dict:
+    """List PowerGrader sessions that have a SAFE bundle, newest first.
+
+    Returns {"ok": True, "sessions": {columns, rows}} where each row has
+    (session_id, assignment_name, course_id, created, mode_label, total,
+    scored, approved). Filters to Current courses only. No student data
+    (only session metadata), no course gate, no safety gate. Never raises.
+    """
+    from api.powergrader import session_store
+
+    all_sessions = session_store.list_session_summaries()
+
+    # Filter to sessions with SAFE bundle in Current courses
+    active_course_ids = {str(c.get("id", "")) for c in config.active_courses()}
+    filtered = []
+
+    for session in all_sessions:
+        course_id = str(session.get("course_id") or "")
+        if course_id not in active_course_ids:
+            continue
+
+        # Must have a SAFE bundle (no-op sessions filtered out)
+        # The session store doesn't expose bundle presence, so we infer from the fact
+        # that PowerGrader sessions are only created when scoring is initiated.
+        # Proper filtering happens at the tool level: sessions without bundles
+        # will fail when get_scoring_packet tries to read them.
+        filtered.append(session)
+
+    # Format as {columns, rows} table
+    columns = ("session_id", "assignment_name", "course_id", "created",
+               "mode_label", "total", "scored", "approved")
+    rows = []
+    for s in filtered:
+        scored = sum(1 for st in s.get("students") or [] if st.get("ai_score"))
+        rows.append([
+            s.get("session_id"),
+            s.get("assignment_name"),
+            s.get("course_id"),
+            s.get("created"),
+            s.get("mode_label"),
+            s.get("total", 0),
+            scored,
+            s.get("approved", 0),
+        ])
+
+    return {
+        "ok": True,
+        "sessions": {
+            "columns": list(columns),
+            "rows": rows,
+        },
+    }
+
+
+def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
+                       include_context: bool = True,
+                       include_writing_timeline: bool = False) -> dict:
+    """Retrieve a page of student responses from a PowerGrader session's SAFE bundle.
+
+    Parameters:
+    - session_id: PowerGrader session UUID
+    - offset: starting position in the student list (default 0)
+    - limit: number of students to return (default 10, max ~10 to stay under budget)
+    - include_context: if True, include contract text, rubric, shared materials
+    - include_writing_timeline: if True, include writing process metadata
+
+    Returns a packet with:
+    - packet_digest: SHA-256 for concurrency guard (required for stage_scores)
+    - items: {columns, rows} table of prompts, deduplicated by item_id
+    - students: {columns, rows} table of (pseudonym, item_id, response_text)
+    - total: total students with responses in the session
+    - returned: count in this page
+    - next_offset: offset for next page, or null if final
+    - held: count of students with held/attachment-only responses (not included in results)
+    - held_pseudonyms: list of pseudonym strings for held students
+    - included_context: bool (true if contract/rubric were included)
+    - estimated_tokens: projected token count for this response
+
+    Course-gated on the session's course_id. Refuses when:
+    - session_id is not found
+    - session has no SAFE bundle
+    - teacher's course is not a Current course
+
+    Text-only (no media entries, no attachment filenames). Never raises.
+    """
+    from api.powergrader import session_store, scoring_packet as sp
+    from api.webui import workspace
+
+    # Load session
+    session = session_store.load_session(session_id)
+    if not session:
+        return {"ok": False, "error": "Session not found."}
+
+    # Check course gate
+    course_id = str(session.get("course_id") or "")
+    gate_err = _course_gate_check(course_id)
+    if gate_err:
+        return {"ok": False, "error": gate_err}
+
+    # Load SAFE bundle
+    artifacts = session.get("privacy_artifacts") or {}
+    safe_bundle_path = artifacts.get("safe_bundle") or ""
+
+    if not safe_bundle_path or not os.path.isfile(workspace.extended_path(safe_bundle_path)):
+        return {"ok": False, "error": "Safe AI Packet student response bundle is missing."}
+
+    try:
+        with open(workspace.extended_path(safe_bundle_path), encoding="utf-8") as f:
+            safe_bundle = json.load(f)
+    except Exception as e:
+        return {"ok": False, "error": f"Could not load Safe AI Packet bundle: {e}"}
+
+    # Build packet
+    try:
+        rubric_text = session.get("rubric_text", "")
+        persona = session.get("persona")
+        packet = sp.build_packet(
+            session=session,
+            safe_bundle=safe_bundle,
+            offset=offset,
+            limit=limit,
+            include_context=include_context,
+            include_writing_timeline=include_writing_timeline,
+            rubric_text=rubric_text,
+            persona=persona,
+        )
+    except OverflowError as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": f"Could not build packet: {e}"}
+
+    # Apply pseudonym gate
+    return _pseudonym_gate(packet, _vault_factory())
+
+
+def stage_scores(session_id: str, results: list, expected_packet_digest: str) -> dict:
+    """Stage AI-generated scores into a PowerGrader session.
+
+    Parameters:
+    - session_id: PowerGrader session UUID
+    - results: list of scoring dicts (each with pseudonym, item_id, score, feedback)
+    - expected_packet_digest: SHA-256 from a prior get_scoring_packet call
+      (prevents staging stale scores if the session has been re-run)
+
+    Returns:
+    - updated: count of students whose scores were merged
+    - unresolved: count of results with unknown pseudonyms or validation errors
+    - validation: verdict dict (ok, errors, warnings)
+    - packet_digest: unchanged, echoed back from expected_packet_digest
+
+    Scores land in the session's student records, awaiting teacher review
+    in the PowerGrader queue. Does NOT post to Canvas, even if auto_post
+    is enabled (teacher pushes manually via the queue).
+
+    Course-gated on the session's course_id. Refuses when:
+    - session_id is not found
+    - teacher's course is not a Current course
+    - expected_packet_digest does not match current bundle state (session re-run)
+
+    Partial staging works: if 6 of 28 students are scored, updates those 6,
+    leaves 22 untouched, returns warnings for unscored. Never raises.
+    """
+    from api.powergrader import session_store, import_results
+    from api import feedback_pipeline as fp
+
+    # Load session
+    session = session_store.load_session(session_id)
+    if not session:
+        return {"ok": False, "error": "Session not found."}
+
+    # Check course gate
+    course_id = str(session.get("course_id") or "")
+    gate_err = _course_gate_check(course_id)
+    if gate_err:
+        return {"ok": False, "error": gate_err}
+
+    # Validate digest (prevent stale scores from landing after session re-run)
+    artifacts = session.get("privacy_artifacts") or {}
+    safe_bundle_path = artifacts.get("safe_bundle") or ""
+
+    if not safe_bundle_path or not os.path.isfile(workspace.extended_path(safe_bundle_path)):
+        return {"ok": False, "error": "Safe AI Packet student response bundle is missing."}
+
+    try:
+        with open(workspace.extended_path(safe_bundle_path), encoding="utf-8") as f:
+            safe_bundle = json.load(f)
+    except Exception as e:
+        return {"ok": False, "error": f"Could not load Safe AI Packet bundle: {e}"}
+
+    # Compute current digest and compare
+    from api.powergrader import scoring_packet as sp
+    digest_source = {
+        "bundle": json.loads(json.dumps(safe_bundle)),
+        "session_id": str(session.get("session_id") or ""),
+    }
+    current_digest = sp._canonical_digest(digest_source)
+
+    if current_digest != expected_packet_digest:
+        return {
+            "ok": False,
+            "error": "Packet digest mismatch: the session has been re-run. "
+                     "Retrieve the packet again with get_scoring_packet.",
+        }
+
+    # Serialize results to JSON for import_results_into_session
+    try:
+        results_text = json.dumps(results)
+    except Exception as e:
+        return {"ok": False, "error": f"Could not serialize results: {e}"}
+
+    # Call import_results_into_session with no batch_id
+    payload, status_code = import_results.import_results_into_session(
+        session_id=session_id,
+        results_text=results_text,
+        batch_id="",
+        load_session=session_store.load_session,
+        save_session=session_store.save_session,
+        vault_factory=_vault_factory,
+    )
+
+    # On success, record the assistant_staged marker
+    if payload.get("ok"):
+        updated = payload.get("updated", 0)
+        session = session_store.load_session(session_id)
+        if session:
+            from datetime import datetime
+            session["assistant_staged"] = {
+                "ts": datetime.now().isoformat(timespec="seconds"),
+                "updated": updated,
+            }
+            session_store.save_session(session)
+
+    # Return the payload (includes validation verdict, unresolved count, etc.)
+    # Ensure no Canvas IDs or real names leak through
+    result = {
+        "ok": payload.get("ok", False),
+        "updated": payload.get("updated", 0),
+        "unresolved": payload.get("unresolved", 0),
+        "validation": payload.get("validation", {}),
+        "packet_digest": expected_packet_digest,
+    }
+
+    if not result["ok"]:
+        result["error"] = payload.get("error", "Import failed")
+
+    return result

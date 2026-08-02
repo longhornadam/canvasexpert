@@ -1618,6 +1618,7 @@ def test_server_registers_the_expected_tool_set():
             "list_active_decks", "archive_deck",
             "get_roster_student_settings", "preview_roster_student_change",
             "apply_roster_student_change", "clear_roster_student_field",
+        "list_scoring_sessions", "get_scoring_packet", "stage_scores",
         }
 
 

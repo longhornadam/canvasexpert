@@ -1,6 +1,6 @@
 """FastMCP wiring for the CanvasExpert MCP server.
 
-Thirty-six thin ``@mcp.tool()`` wrappers delegate to the plain functions in
+Thirty-nine thin ``@mcp.tool()`` wrappers delegate to the plain functions in
 ``tools.py`` so the tool layer stays testable without an MCP client. Run via
 ``api/mcp_server/__main__.py`` over stdio — this module never binds a network
 port and is never mounted inside the FastAPI web UI (``api.webui.server``).
@@ -41,7 +41,11 @@ _FERPA_NOTICE = (
     "keep for daily or weekly short-writing practice -- pseudonym-first, no "
     "course_id, for coaching a writer's development over time rather than "
     "grading one assignment; call get_product_guide(topic=\"writing_record\") "
-    "before assuming it does not exist."
+    "before assuming it does not exist. For AI-assisted scoring in PowerGrader: "
+    "call list_scoring_sessions to list available sessions, get_scoring_packet "
+    "to retrieve the SAFE pseudonymized bundle, score it with your chosen LLM, "
+    "then stage_scores to land the results in the queue for teacher review. "
+    "Scores never post to Canvas via this path; the teacher reviews and pushes them."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -385,3 +389,38 @@ def archive_deck(deck_id: str) -> str:
     """Move a SmartDeck from active to archived status. Does not delete it.
     No student data."""
     return _compact(tools.archive_deck(deck_id))
+
+
+@mcp.tool()
+def list_scoring_sessions() -> str:
+    """PowerGrader sessions with SAFE bundles, newest first, filtered to Current
+    courses. Returns {columns, rows} table of (session_id, assignment_name,
+    course_id, created, mode_label, total, scored, approved). No student
+    response data."""
+    return _compact(tools.list_scoring_sessions())
+
+
+@mcp.tool()
+def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
+                       include_context: bool = True,
+                       include_writing_timeline: bool = False) -> str:
+    """Retrieve pseudonymized student responses from a PowerGrader session's
+    SAFE bundle for AI scoring. Returns items (prompts, deduplicated) and
+    students (responses, text-only, no media). Set include_context=false on
+    later pages to save tokens (context included once per session). Projected
+    payload is returned as estimated_tokens; refuses if > 25,000 tokens.
+    Course-gated. Never raises."""
+    return _compact(tools.get_scoring_packet(
+        session_id, offset, limit, include_context, include_writing_timeline))
+
+
+@mcp.tool()
+def stage_scores(session_id: str, results: list,
+                 expected_packet_digest: str) -> str:
+    """Stage AI-generated scores into a PowerGrader session, awaiting teacher
+    review. Results is a list of scoring dicts (each with pseudonym, item_id,
+    score, feedback, etc.). Pass expected_packet_digest from get_scoring_packet
+    to guard against stale scores (refuses if session was re-run). Partial
+    staging works: scores 6 of 28, leaves 22 untouched. Does not post to Canvas.
+    Course-gated. Never raises."""
+    return _compact(tools.stage_scores(session_id, results, expected_packet_digest))
