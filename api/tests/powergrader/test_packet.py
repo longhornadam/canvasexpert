@@ -336,7 +336,7 @@ def test_packet_workflow_budget_exception_stops_before_writes(tmp_path, monkeypa
     # machine (username length varies the base considerably).
     padding = max(60, (workspace.TEACHER_VISIBLE_BUDGET + 50) - len(str(tmp_path)))
     very_deep = tmp_path / ("X" * padding)
-    very_deep.mkdir(parents=True, exist_ok=True)
+    os.makedirs(workspace.extended_path(str(very_deep)), exist_ok=True)
     safe_dir = str(very_deep / "SAFE")
     os.makedirs(workspace.extended_path(safe_dir), exist_ok=True)
 

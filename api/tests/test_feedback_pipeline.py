@@ -13,6 +13,7 @@ from api import feedback_pipeline as fp
 from api import feedback_safety as safety
 from api import openrouter_client as orc
 from api.nq_report import parse_student_analysis_file
+from api.webui import workspace
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures",
                        "student_analysis_sample.csv")
@@ -376,7 +377,7 @@ def test_write_safe_and_private_auto_detects_compact_on_deep_path(tmp_path):
     priv_dir = deep_base / "PRIVATE"
     result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(priv_dir))
 
-    assert (safe_dir / "bundle.json").is_file()
+    assert os.path.isfile(workspace.extended_path(str(safe_dir / "bundle.json")))
     assert result["safe_bundle"] == str(safe_dir / "bundle.json")
 
 

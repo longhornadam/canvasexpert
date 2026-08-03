@@ -118,7 +118,7 @@ Worth stating up front, because it is the argument for doing this at all.
 | `dataforge/templates/base.html` | CanvasExpert supplies the layout |
 | `dataforge/templates/settings.html` | No second settings page |
 | `dataforge/batch_processor.py` | Standalone `python -m` CLI that duplicates what the Assessments page does. Nothing imports it. |
-| `anonymize_map.csv` and `NameAnonymizer` | The Identity Vault replaces both. As landed, the map is gone and no live path instantiates the class, but the class itself is still in `eduphoria_parser.py`. See the verification note in section 9. |
+| `anonymize_map.csv` and `NameAnonymizer` | The Identity Vault replaces both. No live path instantiates the retired class, and the class is no longer present in `eduphoria_parser.py`. See the verification note in section 9. |
 | `_build_dashboard` alias in `webui.py` | Re-export for one test's historical import path |
 | `Launch Dataforge.bat`, `.venv/`, `requirements*.txt` | Standalone launcher and environment |
 
@@ -311,13 +311,12 @@ differentiation prep with the unrecognizable error section 2.2 describes. Both g
 `api/webui/static/roster/assessment_groups.js`: apply still posts only to the pre-existing
 `/api/roster/bulk`, so this is a client-side binding, not a server-enforced one.
 
-Criterion 2 was narrowed to what slice 5 actually delivered. The runtime claim holds, but the
-`NameAnonymizer` class is still present at `api/dataforge/eduphoria_parser.py:190`, kept alive
-only by `api/tests/dataforge/test_anonymizer_guardrails.py`, `test_canvas_join.py`, and
-`test_shared_publish.py`. The `Optional[NameAnonymizer]` hints on the live parser functions now
-name a type those paths no longer receive, since slice 5 injects `VaultIdentity` instead.
-Deleting the class and re-pointing those tests is an open follow-up rather than a slice 5 gap:
-slice 5's own acceptance criterion 1 asked only that live paths stop instantiating it.
+Criterion 2 was narrowed to what slice 5 actually delivered. The runtime claim holds, and
+the previous note that the `NameAnonymizer` class remained in
+`api/dataforge/eduphoria_parser.py` was stale by the 2026-08-03 pseudonym-rename commit.
+The parser and live tests use `VaultIdentity`; no executable source contains the retired
+class or an `Optional[NameAnonymizer]` annotation. The remaining references are historical
+handoff wording, migration-fixture names, or comments that identify the retired implementation.
 
 ---
 
