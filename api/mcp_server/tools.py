@@ -40,13 +40,14 @@ from contextlib import contextmanager
 from datetime import date, timedelta
 
 from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, panel_themes, roster_context, roster_service
+from api.dataforge import profile_export
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
 from api.webui import config, mirror_service, workspace, schedule_setup, school_calendar
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
-from api import feedback_vault
+from api import feedback_safety, feedback_vault
 from api.course_catalog import read_catalog
 from api import runtime_paths
 from api.dailywriting import projection as dailywriting_projection
@@ -1154,6 +1155,44 @@ def get_product_guide(topic: str = "") -> dict:
 
     return {"ok": True, "topic": requested,
             "topics": list(_GUIDE_FILES), "guide": guide_text}
+
+
+def get_standards_profile() -> dict:
+    """Return the published local DataForge profile after the safety gate.
+
+    This is deliberately not course-scoped: the profile is an offline artifact
+    assembled from the teacher's local history. It remains student data, so it
+    still needs the identity vault and outbound safety scan before it leaves the
+    process. Errors are intentionally generic so a private path or leak value
+    cannot be reflected to an MCP client.
+    """
+    root = workspace.for_ai_root()
+    if not root:
+        return {"ok": False, "error":
+                "DataForge standards profile unavailable: workspace is not configured."}
+    path = os.path.join(root, "DataForge", profile_export.PROFILE_FILENAME)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            profile = json.load(handle)
+    except FileNotFoundError:
+        return {"ok": False, "error":
+                "DataForge standards profile unavailable: generate it locally first."}
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return {"ok": False, "error":
+                "DataForge standards profile unavailable: the published artifact is malformed."}
+
+    if not isinstance(profile, dict) or profile.get("format") != profile_export.FORMAT:
+        return {"ok": False, "error":
+                "DataForge standards profile unavailable: unsupported artifact format."}
+
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
+    verdict = feedback_safety.scan_payload(profile, vault)
+    if not verdict.get("green"):
+        return {"ok": False, "error":
+                "DataForge standards profile withheld: the outbound safety gate is not green."}
+    return {"ok": True, "profile": profile}
 
 
 def list_staged_content(kind: str = "") -> dict:

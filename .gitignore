@@ -31,6 +31,26 @@ api/webui/profiles.json
 api/teks_outcomes.json
 api/.experiment_state.json
 
+# Assessment and student data (never commit)
+*.xlsx
+*.xls
+*.csv
+anonymize_map.csv
+**/anonymize_map.csv
+
+# Re-identification maps. The vault normally lives in the synced workspace
+# outside this repo, but a workspace created inside the tree would otherwise be
+# committable, and it is the one file that links a pseudonym to a real student.
+vault.json
+**/vault.json
+**/Identity Vault/
+workspace/
+
+# Non-PII calendar and test fixtures that are intentionally tracked
+!api/default_docs/Calendars/*.csv
+!api/tests/fixtures/class_schedule/*.csv
+!api/tests/fixtures/student_analysis_sample.csv
+
 # OS
 .DS_Store
 Thumbs.db

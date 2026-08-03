@@ -57,6 +57,7 @@ from .routes.push import router as _push_router
 from .routes.reports import router as _reports_router
 from .routes.routines import router as _routines_router, _load_custom_routines, _routines_heartbeat
 from .routes.roster import router as _roster_router
+from .routes.roster_assessment_groups import router as _roster_assessment_groups_router
 from .routes.seating import router as _seating_router
 from .routes.panels import router as _panels_router
 from .routes.settings import router as _settings_router
@@ -64,6 +65,7 @@ from .routes.powergrader import router as _powergrader_router
 from .routes.readiness import router as _readiness_router
 from .routes.receipts import router as _receipts_router
 from .routes.connections import router as _connections_router
+from .routes.assessments import router as _assessments_router
 from .routes.support import router as _support_router
 from .routes.work import router as _work_router
 from .routes.operations import router as _operations_router
@@ -124,7 +126,7 @@ app.mount("/static", _StaticFiles(directory=os.path.join(WEBUI_DIR, "static")), 
 # If Canvas URL or token is not yet configured, redirect HTML page requests
 # to the /welcome wizard. Never gate API/static endpoints or the wizard itself.
 
-_ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/connections", "/static", "/api", "/openapi.json", "/docs", "/redoc")
+_ALLOWLIST_PREFIXES = ("/welcome", "/settings", "/connections", "/assessments", "/static", "/api", "/openapi.json", "/docs", "/redoc")
 
 
 @app.middleware("http")
@@ -184,6 +186,7 @@ app.include_router(_push_router)
 app.include_router(_reports_router)
 app.include_router(_routines_router)
 app.include_router(_roster_router)
+app.include_router(_roster_assessment_groups_router)
 app.include_router(_seating_router)
 app.include_router(_panels_router)
 app.include_router(_settings_router)
@@ -191,6 +194,7 @@ app.include_router(_powergrader_router)
 app.include_router(_readiness_router)
 app.include_router(_receipts_router)
 app.include_router(_connections_router)
+app.include_router(_assessments_router)
 app.include_router(_support_router)
 app.include_router(_work_router)
 app.include_router(_operations_router)

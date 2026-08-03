@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 25 (42 tools).
+Tool schema version 26 (43 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -44,6 +44,7 @@ Tool schema version 25 (42 tools).
 | `delete_learning_objective(course_id, entry_id, expected_revision)` | Directly deletes one selected reviewed objective with revision protection | No |
 | `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/` | No |
 | `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
+| `get_standards_profile()` | Published local DataForge standards profile, safety-scanned before return; no `course_id` and no Canvas call | Yes — pseudonymized |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes — pseudonymized |
@@ -139,6 +140,15 @@ a pasted one work from one text rather than two that drift. Same gate posture as
 `get_authoring_contract`: no `course_id`, no vault, no safety scan. Every response also
 lists the available topics. The always-on server instructions point here rather than
 restating any of it.
+
+`get_standards_profile()` reads the one published local
+`For AI/DataForge/standards-profile.json` artifact. It is offline and has no
+`course_id`, but it is still student data: the Identity Vault and the same
+outbound safety scan are required before the pseudonymized profile leaves the
+process. A missing, malformed, unsupported, or unsafe artifact is withheld with
+a structured error. It does not generate a profile, call Canvas, or apply a
+grouping; the teacher reviews the profile and uses the Assessments coverage and
+Students grouping surfaces for any later local review/apply step.
 
 `list_staged_content(kind="")` also takes no `course_id` and carries no student data, so
 it likewise needs no course gate, no identity vault, and no safety scan. It reuses

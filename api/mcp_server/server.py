@@ -280,6 +280,14 @@ def get_product_guide(topic: str = "") -> str:
 
 
 @mcp.tool()
+def get_standards_profile() -> str:
+    """Published offline DataForge standards profile, safety-scanned and
+    pseudonymized. No course_id and no Canvas call; Identity Vault access is
+    still required because this is student data."""
+    return _compact(tools.get_standards_profile())
+
+
+@mcp.tool()
 def list_staged_content(kind: str = "") -> str:
     """Drafts currently staged in the Inbox for the teacher to review, as a
     {columns, rows} table (kind, label). Pass kind to filter; omit for all.

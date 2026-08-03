@@ -59,6 +59,7 @@ Source tests never substitute for rendered verification.
 | `/calendar` | **Calendar** — school dates, Bell Schedules, Teacher Schedule (see `docs/reference/panels-route-card.md`) | `pages/calendar.js` |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
+| `/assessments` | **Assessments** — local Eduphoria import, reports, dashboard, history, and read-only roster coverage | route-driven |
 | `/panels` | **Panels** console: pick a Panel, copy its URL, optionally fix it to one Teacher Schedule block | `pages/panels_clipboard.js` |
 | `/panels/{kind}` | One Panel, chrome-free, sized to whatever box it is dropped into | `panels/panel.js` |
 | `/panels/{kind}/data` | The Panel's single data fetch. Disk-only; never calls Canvas | route-driven |
@@ -129,6 +130,13 @@ primary-nav page, not in Settings.
 
 For the full contract, see `docs/contracts/canonical-school-calendar-contract.md`; for the
 Panels consumer relationship, see `docs/reference/panels-route-card.md`.
+
+### Assessments module routing
+
+Assessments is a local-only DataForge surface. The route adapter owns HTTP responses and
+upload staging; `api/dataforge/` owns parsing, report generation, dashboard aggregation,
+history, downloads, and the read-only local-ID-to-CanvasMirror coverage report. It never
+refreshes Canvas, writes groups, or calls the AI provider.
 
 ### PowerGrader module routing
 

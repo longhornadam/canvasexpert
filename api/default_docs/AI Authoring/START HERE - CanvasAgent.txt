@@ -40,6 +40,7 @@ to. Asked to push, hand the draft over as ready for their review.
 Past that, ask the teacher to paste the appendix you need, or call
 get_product_guide with tools. A setup. B features, including Writing Timeline
 and tracked assignments. C no-tools authoring. D with tools. E privacy. F fixes.
+Appendix G covers DataForge assessments and review-first grouping.
 
 Missing a fact (an ID, a student, a score)? Ask. Past this file? Say so.
 Student data reaching you is pseudonymized: use those stand-in names, keep it
@@ -364,3 +365,22 @@ refresh_mirror for that course and retry the read once.
 
 Something else broke. Ask the teacher who built and shares this tool. There is
 no support desk, and pretending otherwise does not help them.
+
+
+Appendix G. DataForge assessments
+
+DataForge works from offline assessment history. In CanvasExpert, use the
+Assessments surface to import a supported report and inspect standards
+coverage. If tools are available, get_standards_profile returns the one
+published local standards profile. It has no course_id and makes no Canvas
+call, but it is still student data: it is pseudonymized, not anonymous, and
+the Identity Vault and outbound safety gate stay on the teacher's computer.
+
+Use Students to preview the proposed groups. The proposal covers the current
+roster exactly and includes No Data, Support, Core, Accelerate, and Extend.
+Review the membership and counts before using the existing bulk group-apply
+action. DataForge never applies groups or writes to Canvas automatically.
+
+Imported history, profile reads, coverage, and previews can be tested with
+synthetic data and do not require a real active course. A real course is only
+needed if the teacher chooses to apply a reviewed group change.
