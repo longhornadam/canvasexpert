@@ -4,7 +4,7 @@
 
 **Last senior review:** 2026-08-03
 
-**Next batch pointer:** Batch A - pseudonym-first assessment context over MCP
+**Next batch pointer:** None — Batch A complete; future work requires a new senior decision
 
 This document is persistent senior context. It does not authorize implementation directly.
 The senior promotes Batch A into the single direct brief in `docs/handoffs/` after locking

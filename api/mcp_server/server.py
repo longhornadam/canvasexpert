@@ -288,6 +288,35 @@ def get_standards_profile() -> str:
 
 
 @mcp.tool()
+def get_assessment_context(course_id: str, pseudonyms: str = "") -> str:
+    """Current-roster assessment context by exact pseudonym filter, joined
+    with bounded local longitudinal DataForge evidence; mirror-only and
+    observational, never a placement or judgment."""
+    return _compact(tools.get_assessment_context(course_id, pseudonyms))
+
+
+@mcp.tool()
+def get_assessment_grouping_proposal(
+    course_id: str,
+    snapshot_id: str,
+    method: str = "overall_pct",
+    cutoffs: str = "",
+    no_data_group: str = "",
+    group_set_label: str = "",
+) -> str:
+    """Read-only Students-page grouping proposal by exact teacher-safe group-set label;
+    pseudonymized placements only, with no Canvas apply path."""
+    return _compact(tools.get_assessment_grouping_proposal(
+        course_id,
+        snapshot_id,
+        method=method,
+        cutoffs=cutoffs,
+        no_data_group=no_data_group,
+        group_set_label=group_set_label,
+    ))
+
+
+@mcp.tool()
 def list_staged_content(kind: str = "") -> str:
     """Drafts currently staged in the Inbox for the teacher to review, as a
     {columns, rows} table (kind, label). Pass kind to filter; omit for all.

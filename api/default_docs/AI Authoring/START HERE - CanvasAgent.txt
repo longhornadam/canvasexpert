@@ -371,15 +371,59 @@ Appendix G. DataForge assessments
 
 DataForge works from offline assessment history. In CanvasExpert, use the
 Assessments surface to import a supported report and inspect standards
-coverage. If tools are available, get_standards_profile returns the one
-published local standards profile. It has no course_id and makes no Canvas
-call, but it is still student data: it is pseudonymized, not anonymous, and
-the Identity Vault and outbound safety gate stay on the teacher's computer.
+coverage. If tools are available, establish the current course first, then call
+get_assessment_context(course_id, pseudonyms="") for a bounded current-roster
+join. Pass only the exact pseudonyms the teacher names, comma-separated; matching
+trims and case-folds tokens and never uses fuzzy or real-name matching. Omit the
+filter to request the current roster, subject to the 25-student limit.
+
+The result labels current roster data as source local_mirror and assessment data
+as scope local_longitudinal_history. It reports profile generated, grain, and
+snapshots_used metadata plus four coverage counts: current-roster students with
+history, current-roster students without history, requested pseudonyms not in the
+current roster, and published-profile students not in the current roster. Each
+student has at most 32 standard entries and each assessed_in list has at most 8
+labels. A limit refusal is explicit and never silently truncates students or
+evidence. Profile history is not automatically attributable to the current
+Canvas course.
+
+The result is pseudonymized, not anonymous. The Identity Vault and outbound
+safety gate stay on the teacher's computer. Percentages, standards, attempts,
+and weak-standard flags are observations only; do not turn missing history into
+a statement about ability or add capability, placement, integrity, or remediation
+labels.
+
+If the assessment context refuses because the current mirror is missing, stale,
+malformed, or inconsistent, return to the teacher: call refresh_mirror(course_id)
+and retry the same read once it reports success. The context tool never makes a
+live Canvas fallback. get_standards_profile remains the separate, unscoped
+published-profile read and makes no Canvas call.
 
 Use Students to preview the proposed groups. The proposal covers the current
 roster exactly and includes No Data, Support, Core, Accelerate, and Extend.
 Review the membership and counts before using the existing bulk group-apply
 action. DataForge never applies groups or writes to Canvas automatically.
+
+If the teacher asks conversationally about tier placement, call
+get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct",
+cutoffs="", no_data_group="", group_set_label="..."). Use the exact trimmed
+local history snapshot ID and the teacher-facing Canvas group-category label;
+labels match case-insensitively after trimming, while raw category/group IDs are
+never accepted from or returned to the assistant. The supported methods are
+overall_pct, staar_bands, and quartiles. Report the selected method, cutoffs,
+No Data placement, current-roster/matched/no-data coverage, group names/counts,
+pseudonym membership, and the existing proposal_digest for review. The result
+is read-only and bounded to 25 current-roster placements (or a 20,000-character
+serialized result); a refusal is explicit rather than silently truncated.
+
+After reporting the proposal, direct the teacher to Students to inspect and
+apply the existing digest-protected group change. Never say or imply that the
+assistant applied a Canvas group change. Missing, stale, malformed, ambiguous,
+or otherwise unsafe local roster/group/snapshot/identity state means no proposal
+rows: report the blocking error and, for mirror state, call refresh_mirror before
+retrying. The proposal is pseudonymized, not anonymous; its local longitudinal
+assessment source and coverage facts are observations, not ability, integrity,
+capability, remediation, or placement judgments.
 
 Imported history, profile reads, coverage, and previews can be tested with
 synthetic data and do not require a real active course. A real course is only

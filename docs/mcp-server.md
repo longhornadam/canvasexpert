@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 26 (43 tools).
+Tool schema version 28 (45 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -45,6 +45,8 @@ Tool schema version 26 (43 tools).
 | `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/` | No |
 | `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
 | `get_standards_profile()` | Published local DataForge standards profile, safety-scanned before return; no `course_id` and no Canvas call | Yes — pseudonymized |
+| `get_assessment_context(course_id, pseudonyms="")` | Bounded current-roster join with local longitudinal DataForge assessment evidence; exact trimmed/case-folded pseudonym filters, observational only, no Canvas fallback | Yes — pseudonymized |
+| `get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct", cutoffs="", no_data_group="", group_set_label="")` | Read-only Students-page grouping proposal over a local snapshot; exact teacher-safe group-set label, bounded pseudonym placements, no Canvas apply path | Yes — pseudonymized |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes — pseudonymized |
@@ -150,6 +152,33 @@ a structured error. It does not generate a profile, call Canvas, or apply a
 grouping; the teacher reviews the profile and uses the Assessments coverage and
 Students grouping surfaces for any later local review/apply step.
 
+`get_assessment_context(course_id, pseudonyms="")` first requires a current local
+mirror roster, then joins only its canonical pseudonyms to the published profile.
+The roster source is labeled `local_mirror`; the assessment source is labeled
+`local_longitudinal_history` with the profile's `generated`, `grain`, and
+`snapshots_used` metadata. The result reports four coverage counts: current-roster
+students with and without history, requested pseudonyms outside the current roster,
+and published-profile students outside the current roster. It returns at most 25
+students, at most 32 standards per student, and at most 8 `assessed_in` labels per
+standard; a limit refusal never truncates evidence. Missing, stale, malformed, or
+inconsistent roster state returns no rows with `action: "refresh_mirror"`. The tool
+reports percentages and standards as source facts; it does not encode placement,
+capability, integrity, remediation, or other judgment labels.
+
+`get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct", cutoffs="", no_data_group="", group_set_label="")`
+requires a Current course, a current local roster mirror, and a current local group mirror.
+The snapshot identifier is the exact trimmed local history ID. `group_set_label` is matched
+after trim and case-folding against the teacher-facing Canvas group-category label; missing
+or duplicate labels are blocking errors, and raw category/group IDs are never accepted from
+or returned to the assistant. The proposal reuses the Students page's
+`api.dataforge.canvas_join.build_coverage_report` and
+`api.dataforge.grouping.build_grouping_proposal` seams, so method, cutoffs, No Data placement,
+counts, tier membership, and the existing `proposal_digest` remain the UI proposal's facts.
+The returned groups and placements contain pseudonyms only. Missing, stale, malformed, or
+ambiguous local sources return no proposal rows and no live Canvas fallback. The tool is
+read-only: the teacher reviews and applies a digest-protected change in Students; the
+assistant must never imply that a Canvas group change was applied.
+
 `list_staged_content(kind="")` also takes no `course_id` and carries no student data, so
 it likewise needs no course gate, no identity vault, and no safety scan. It reuses
 `webui.deps.list_inbox_files` (the same marker-gated To Review listing the push tabs use) and
@@ -210,6 +239,15 @@ turn of the conversation, so the wire format is deliberately compact:
   students; `max_text_chars` (default 2000, `0` = full) trims each submission's text with
   an explicit `…[truncated N more chars]` marker. The cheap pattern is status first, then
   full text for only the students that matter.
+- `get_assessment_context` accepts the same comma-separated, trimmed, case-insensitive
+  pseudonym filter and returns compact student rows with bounded standards evidence;
+  omit the filter for the current roster (up to 25 students), or name only the students
+  needed for the question. It refuses rather than silently truncating students or
+  standards, and a missing/stale mirror requires `refresh_mirror` before retrying.
+- `get_assessment_grouping_proposal` returns at most 25 current-roster placements and
+  refuses rather than truncating when the compact result exceeds 20,000 serialized
+  characters. It reports the method, cutoffs, group-set label, No Data group, coverage,
+  group counts/membership, and proposal digest. Use the Students UI for review and apply.
 - The outbound safety scan always runs on the full row payload **before** tabulation and
   truncation happens **before** the scan — the gate inspects exactly the bytes that leave
   the machine.

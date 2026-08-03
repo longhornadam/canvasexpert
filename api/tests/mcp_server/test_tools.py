@@ -74,6 +74,47 @@ _LEAKS = [
 ]
 
 
+def _write_assessment_profile(root, students):
+    target = Path(root) / "For AI" / "DataForge" / "standards-profile.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    profile = {
+        "format": "dataforge.standards_profile.v1",
+        "generated": "2026-08-03",
+        "grain": "learning_standard",
+        "weak_below": 70.0,
+        "snapshots_used": 2,
+        "snapshots_without_standard_list": 0,
+        "student_count": len(students),
+        "note": "Synthetic profile; pseudonyms only.",
+        "students": students,
+    }
+    target.write_text(json.dumps(profile), encoding="utf-8")
+    return profile
+
+
+def _assessment_summary(*, assessments=1, latest_pct=68.0,
+                        latest_date="2026-08-01", standards=None,
+                        weak_standards=None):
+    return {
+        "assessments": assessments,
+        "latest_pct": latest_pct,
+        "latest_date": latest_date,
+        "standards": standards or {},
+        "weak_standards": weak_standards or [],
+    }
+
+
+def _assessment_standard(*, assessed_in=None, weak=True):
+    return {
+        "attempts": 1,
+        "mean": 68.0,
+        "latest": 68.0,
+        "latest_date": "2026-08-01",
+        "assessed_in": assessed_in or ["Synthetic Assessment"],
+        "weak": weak,
+    }
+
+
 def _assert_no_leaks(payload: dict):
     dumped = json.dumps(payload)
     for leak in _LEAKS:
@@ -448,7 +489,7 @@ def test_list_sections_accepts_previous_course(monkeypatch, _set_previous_course
 def test_get_authoring_contract_each_kind_returns_nonempty_contract_text():
     for kind in ("quiz", "assignment", "page", "rubric"):
         result = tools.get_authoring_contract(kind)
-        assert result["ok"] is True
+        assert result["ok"] is True, json.dumps(result)
         assert result["kind"] == kind
         assert isinstance(result["contract"], str)
         assert len(result["contract"]) > 0
@@ -521,7 +562,7 @@ def test_download_contract_route_returns_the_same_bytes_as_the_mcp_tool():
 
 def test_get_product_guide_defaults_to_the_overview_briefing():
     result = tools.get_product_guide()
-    assert result["ok"] is True
+    assert result["ok"] is True, json.dumps(result)
     assert result["topic"] == "overview"
     # Every response advertises the other topics, so an assistant learns the
     # writing-timeline / writing-record guides exist without having to guess
@@ -1498,6 +1539,479 @@ def test_refresh_mirror_enqueue_value_error_maps_to_ok_false(monkeypatch, _set_a
     assert tools.refresh_mirror("111") == {"ok": False, "error": "Not a Current course."}
 
 
+# --- get_assessment_context ----------------------------------------------------
+
+def _seed_assessment_roster(monkeypatch, tmp_path, _use_vault, _set_active_courses,
+                            _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
+    roster = tools.get_roster("111")
+    assert roster["ok"] is True
+    return [dict(zip(roster["roster"]["columns"], row)) for row in roster["roster"]["rows"]]
+
+
+def test_get_assessment_context_joins_current_roster_and_profile_by_pseudonym(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    roster = _seed_assessment_roster(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    target = roster[0]["pseudonym"]
+    _write_assessment_profile(str(tmp_path), {
+        target: _assessment_summary(
+            standards={"7.9(D)": _assessment_standard()},
+            weak_standards=["7.9(D)"],
+        ),
+        "Former Synthetic": _assessment_summary(),
+    })
+
+    result = tools.get_assessment_context("111", f" {target.upper()} , Unknown, unknown ")
+
+    assert result["ok"] is True
+    assert result["students"]["columns"] == [
+        "pseudonym", "assessment_count", "latest_assessment_date",
+        "latest_percentage", "weak_standard_codes", "standards",
+    ]
+    rows = [dict(zip(result["students"]["columns"], row)) for row in result["students"]["rows"]]
+    assert rows == [{
+        "pseudonym": target,
+        "assessment_count": 1,
+        "latest_assessment_date": "2026-08-01",
+        "latest_percentage": 68.0,
+        "weak_standard_codes": ["7.9(D)"],
+        "standards": [{
+            "code": "7.9(D)", "attempts": 1, "mean": 68.0,
+            "latest": 68.0, "latest_date": "2026-08-01",
+            "assessed_in": ["Synthetic Assessment"], "weak": True,
+        }],
+    }]
+    assert result["coverage"] == {
+        "current_roster_students_with_history": 1,
+        "current_roster_students_without_history": 0,
+        "requested_pseudonyms_not_in_current_roster": 1,
+        "published_profile_students_not_in_current_roster": 1,
+    }
+    assert result["source"]["current_roster"]["source"] == "local_mirror"
+    assert result["source"]["assessment_history"]["scope"] == "local_longitudinal_history"
+    _assert_no_leaks(result)
+
+
+def test_get_assessment_context_unfiltered_rows_include_current_students_without_history(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    roster = _seed_assessment_roster(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    _write_assessment_profile(str(tmp_path), {})
+
+    result = tools.get_assessment_context("111")
+
+    assert result["ok"] is True
+    assert len(result["students"]["rows"]) == 2
+    assert result["coverage"]["current_roster_students_with_history"] == 0
+    assert result["coverage"]["current_roster_students_without_history"] == 2
+    rows = [dict(zip(result["students"]["columns"], row)) for row in result["students"]["rows"]]
+    assert all(row["assessment_count"] == 0 for row in rows)
+
+
+def test_get_assessment_context_stale_roster_withholds_rows_without_live_fallback(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _mount_mirror()
+    _set_active_courses(["111"])
+    mirror_store.write_roster("111", FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
+    calls = []
+    monkeypatch.setattr(tools, "_cache_safe", lambda: True)
+    monkeypatch.setattr(tools.mirror_queries, "_serve_max_age_hours", lambda: 0.0)
+    monkeypatch.setattr(
+        tools.roster_service, "fetch_students",
+        lambda *_args, **_kwargs: calls.append("live") or (_ for _ in ()).throw(
+            AssertionError("live Canvas read attempted")
+        ),
+    )
+
+    result = tools.get_assessment_context("111")
+
+    assert result["ok"] is False
+    assert result["attention"]["action"] == "refresh_mirror"
+    assert result["students"]["rows"] == []
+    assert calls == []
+
+
+def test_get_assessment_context_missing_profile_is_distinct_from_no_history(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _seed_assessment_roster(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+
+    result = tools.get_assessment_context("111")
+
+    assert result["ok"] is False
+    assert result["profile_state"] == "missing"
+    assert result["students"]["rows"] == []
+    assert "refresh_mirror" not in result
+
+
+def test_get_assessment_context_rejects_profile_pseudonym_collision(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _seed_assessment_roster(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    _write_assessment_profile(str(tmp_path), {
+        "Synthetic Alpha": _assessment_summary(),
+        "synthetic alpha": _assessment_summary(),
+    })
+
+    result = tools.get_assessment_context("111")
+
+    assert result["ok"] is False
+    assert result["profile_state"] == "malformed"
+    assert result["students"]["rows"] == []
+
+
+def test_get_assessment_context_rejects_nonfinite_and_out_of_range_numeric_evidence(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    roster = _seed_assessment_roster(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    target = roster[0]["pseudonym"]
+    cases = [
+        _assessment_summary(latest_pct=float("nan")),
+        _assessment_summary(
+            standards={"S01": {**_assessment_standard(), "mean": float("inf")}}
+        ),
+        _assessment_summary(
+            standards={"S01": {**_assessment_standard(), "latest": -0.1}}
+        ),
+        _assessment_summary(
+            standards={"S01": {**_assessment_standard(), "latest": 100.1}}
+        ),
+    ]
+    for summary in cases:
+        _write_assessment_profile(str(tmp_path), {target: summary})
+        result = tools.get_assessment_context("111", target)
+        assert result["ok"] is False
+        assert result["profile_state"] == "malformed"
+        assert result["students"]["rows"] == []
+
+
+def test_get_assessment_context_rejects_duplicate_and_oversized_weak_codes(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    roster = _seed_assessment_roster(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    target = roster[0]["pseudonym"]
+    _write_assessment_profile(str(tmp_path), {
+        target: _assessment_summary(
+            standards={"S01": _assessment_standard()}, weak_standards=["S01", "s01"]
+        ),
+    })
+    duplicate = tools.get_assessment_context("111", target)
+    assert duplicate["profile_state"] == "malformed"
+
+    _write_assessment_profile(str(tmp_path), {
+        target: _assessment_summary(
+            weak_standards=[f"S{index:02d}" for index in range(33)]
+        ),
+    })
+    oversized = tools.get_assessment_context("111", target)
+    assert oversized["profile_state"] == "malformed"
+
+
+def test_get_assessment_context_rejects_malformed_roster_shapes_before_projection(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _mount_mirror()
+    _set_active_courses(["111"])
+    scope = {
+        "course_id": "111", "state": "current", "last_success_at": "2026-08-03T00:00:00Z",
+        "records": [{"id": "900001"}],
+    }
+    base_document = {
+        "course_id": "111", "state": "current", "last_success_at": "2026-08-03T00:00:00Z",
+        "students": {"900001": {}}, "sections": {},
+    }
+    monkeypatch.setattr(tools.read_service, "private_roster", lambda *args, **kwargs: scope)
+    monkeypatch.setattr(tools.mirror_store, "read_roster", lambda *_args, **_kwargs: base_document)
+
+    for malformed_document in (
+        {**base_document, "students": {"900001": "not-a-student"}},
+        {**base_document, "sections": []},
+    ):
+        monkeypatch.setattr(
+            tools.mirror_store, "read_roster",
+            lambda *_args, document=malformed_document, **_kwargs: document,
+        )
+        result = tools.get_assessment_context("111")
+        assert result["ok"] is False
+        assert result["attention"]["action"] == "refresh_mirror"
+        assert result["students"]["rows"] == []
+
+    monkeypatch.setattr(
+        tools.mirror_store, "read_roster", lambda *_args, **_kwargs: base_document
+    )
+    for projected in (None, ["not-a-row"]):
+        monkeypatch.setattr(
+            tools.pseudonym, "pseudonymize_roster", lambda *_args, value=projected: value
+        )
+        result = tools.get_assessment_context("111")
+        assert result["ok"] is False
+        assert result["attention"]["action"] == "refresh_mirror"
+        assert result["students"]["rows"] == []
+
+
+def test_get_assessment_context_rejects_unsupported_and_unsafe_profile_states(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    roster = _seed_assessment_roster(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    profile = _write_assessment_profile(str(tmp_path), {})
+    profile["grain"] = "reporting_category"
+    profile_path = tmp_path / "For AI" / "DataForge" / "standards-profile.json"
+    profile_path.write_text(json.dumps(profile), encoding="utf-8")
+    unsupported = tools.get_assessment_context("111")
+    assert unsupported["profile_state"] == "unsupported"
+    assert unsupported["students"]["rows"] == []
+
+    profile = _write_assessment_profile(str(tmp_path), {})
+    profile["canvas_id"] = "900001"
+    profile_path.write_text(json.dumps(profile), encoding="utf-8")
+    unsafe = tools.get_assessment_context("111")
+    assert unsafe["profile_state"] == "unsafe"
+    assert "900001" not in json.dumps(unsafe)
+
+
+def test_get_assessment_context_returns_explicit_student_and_evidence_limits(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _mount_mirror()
+    _set_active_courses(["111"])
+    users = [
+        {"id": 910000 + index, "name": f"Synthetic Learner {index}",
+         "sortable_name": f"Learner {index}, Synthetic"}
+        for index in range(26)
+    ]
+    mirror_store.write_roster("111", users, {}, root=str(tmp_path))
+    _write_assessment_profile(str(tmp_path), {})
+
+    student_limit = tools.get_assessment_context("111")
+    assert student_limit["limit"] == {
+        "kind": "students", "maximum": 25, "actual": 26,
+    }
+
+    roster = tools.get_roster("111")
+    target = dict(zip(roster["roster"]["columns"], roster["roster"]["rows"][0]))["pseudonym"]
+    standards = {f"S{index:02d}": _assessment_standard() for index in range(33)}
+    _write_assessment_profile(str(tmp_path), {
+        target: _assessment_summary(standards=standards, weak_standards=[]),
+    })
+    evidence_limit = tools.get_assessment_context("111", target)
+    assert evidence_limit["limit"] == {
+        "kind": "standards", "maximum": 32, "actual": 33,
+    }
+
+    too_many_assessments = _assessment_standard(
+        assessed_in=[f"Synthetic Assessment {index}" for index in range(9)]
+    )
+    _write_assessment_profile(str(tmp_path), {
+        target: _assessment_summary(
+            standards={"S01": too_many_assessments}, weak_standards=[]
+        ),
+    })
+    assessed_in_limit = tools.get_assessment_context("111", target)
+    assert assessed_in_limit["limit"] == {
+        "kind": "assessed_in", "maximum": 8, "actual": 9,
+    }
+
+
+# --- get_assessment_grouping_proposal ----------------------------------------
+
+def _seed_assessment_grouping(monkeypatch, tmp_path, _use_vault, _set_active_courses,
+                              _mount_mirror):
+    _mount_mirror()
+    _set_active_courses(["111"])
+    users = [
+        {
+            "id": 910000 + index,
+            "name": f"Synthetic Learner {index}",
+            "sortable_name": f"Learner {index}, Synthetic",
+            "sis_user_id": f"SIS-91000{index}",
+            "enrollments": [{"course_section_id": "810001"}],
+        }
+        for index in range(1, 6)
+    ]
+    mirror_store.write_roster("111", users, {"810001": "Synthetic Period"}, root=str(tmp_path))
+    categories = [{
+        "category_id": "category-synthetic",
+        "category_name": "Synthetic Tiers",
+        "groups": [
+            {"id": "group-support", "name": "Support", "memberships": []},
+            {"id": "group-core", "name": "Core", "memberships": []},
+            {"id": "group-accelerate", "name": "Accelerate", "memberships": []},
+            {"id": "group-extend", "name": "Extend", "memberships": []},
+        ],
+    }]
+    mirror_store.write_groups("111", categories, root=str(tmp_path))
+    roster_result = tools.get_roster("111")
+    assert roster_result["ok"] is True
+    roster_rows = [
+        dict(zip(roster_result["roster"]["columns"], row))
+        for row in roster_result["roster"]["rows"]
+    ]
+    scores = [42, 66, 82, 96, None]
+    bands = [("n", "n", "n"), ("n", "n", "y"), ("n", "y", "y"), ("y", "y", "y"), ("", "", "")]
+    snapshot = {
+        "id": "synthetic-grouping",
+        "label": "Synthetic Grouping Snapshot",
+        "date": "2026-08-03",
+        "breakdown_type": "learning_standard",
+        "students": [
+            {
+                "n": row["pseudonym"],
+                "pct": score,
+                "app": band[2],
+                "met": band[1],
+                "mas": band[0],
+            }
+            for row, score, band in zip(roster_rows, scores, bands)
+        ],
+    }
+    paths = tools.dataforge_paths.get_paths()
+    paths.history_dir.mkdir(parents=True, exist_ok=True)
+    (paths.history_dir / "synthetic-grouping.json").write_text(
+        json.dumps(snapshot), encoding="utf-8"
+    )
+    return roster_rows, snapshot, categories[0]
+
+
+def test_get_assessment_grouping_proposal_matches_private_engine_for_all_methods(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    roster_rows, snapshot, category = _seed_assessment_grouping(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    for method in ("overall_pct", "staar_bands", "quartiles"):
+        result = tools.get_assessment_grouping_proposal(
+            "111", " synthetic-grouping ", method, "", "Core", " synthetic tiers "
+        )
+        assert result["ok"] is True, json.dumps(result)
+        proposal = result["proposal"]
+        assert proposal["method"] == method
+        assert proposal["no_data_group"] == "Core"
+        assert proposal["coverage"]["current_roster_count"] == 5
+        assert proposal["coverage"]["matched_count"] == 4
+        assert proposal["coverage"]["no_data_count"] == 1
+        assert [group["count"] for group in proposal["groups"]] == [1, 2, 1, 1]
+        assert [group["group_name"] for group in proposal["groups"]] == [
+            "Support", "Core", "Accelerate", "Extend"
+        ]
+        assert len(proposal["placements"]["rows"]) == 5
+        assert all(len(row) == 4 for row in proposal["placements"]["rows"])
+
+        linked_students = tools.VaultIdentity(tools._vault_factory()).linked_students()
+        private_roster = list(mirror_store.read_roster("111")["students"].values())
+        report = tools.canvas_join.build_coverage_report(
+            {student["n"]: {"latest_pct": student.get("pct")} for student in snapshot["students"]},
+            linked_students,
+            private_roster,
+        )
+        expected = tools.grouping.build_grouping_proposal(
+            snapshot, report,
+            private_roster,
+            category, method=method, no_data_group="Core",
+        )
+        assert proposal["proposal_digest"] == expected["proposal_digest"]
+
+
+def test_get_assessment_grouping_proposal_is_pseudonym_only_and_read_only(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _seed_assessment_grouping(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    monkeypatch.setattr(
+        tools.roster_service, "fetch_students",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("live Canvas read attempted")
+        ),
+    )
+    monkeypatch.setattr(tools, "_cache_safe", lambda: True)
+    result = tools.get_assessment_grouping_proposal(
+        "111", "synthetic-grouping", "overall_pct",
+        '{"support": 60, "core": 75, "accelerate": 90}', "Core", "Synthetic Tiers",
+    )
+    assert result["ok"] is True, json.dumps(result)
+    dumped = json.dumps(result)
+    for leak in ("Synthetic Learner", "910001", "SIS-910001", "category-synthetic", "group-support"):
+        assert leak not in dumped
+    assert tools.feedback_safety.scan_payload(result, tools._vault_factory())["green"] is True
+
+
+def test_get_assessment_grouping_proposal_rejects_unknown_duplicate_and_raw_id_group_sets(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _seed_assessment_grouping(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    for label in ("missing", "category-synthetic"):
+        result = tools.get_assessment_grouping_proposal(
+            "111", "synthetic-grouping", group_set_label=label, no_data_group="Core"
+        )
+        assert result["ok"] is False
+        assert result["proposal"]["placements"]["rows"] == []
+
+    original = tools.mirror_store.read_groups
+    duplicate = original("111")
+    duplicate["categories"].append(dict(duplicate["categories"][0]))
+    monkeypatch.setattr(tools.mirror_store, "read_groups", lambda *_args, **_kwargs: duplicate)
+    result = tools.get_assessment_grouping_proposal(
+        "111", "synthetic-grouping", group_set_label="SYNTHETIC TIERS", no_data_group="Core"
+    )
+    assert result["ok"] is False
+    assert "more than one" in result["error"]
+
+
+def test_get_assessment_grouping_proposal_blocks_stale_group_mirror_and_bad_inputs(
+    monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+):
+    _seed_assessment_grouping(
+        monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror
+    )
+    bad_cutoffs = tools.get_assessment_grouping_proposal(
+        "111", "synthetic-grouping", cutoffs="{bad json",
+        no_data_group="Core", group_set_label="Synthetic Tiers",
+    )
+    assert bad_cutoffs["ok"] is False
+    assert bad_cutoffs["proposal"]["placements"]["rows"] == []
+    missing_snapshot = tools.get_assessment_grouping_proposal(
+        "111", "missing-snapshot", no_data_group="Core",
+        group_set_label="Synthetic Tiers",
+    )
+    assert missing_snapshot["ok"] is False
+    assert missing_snapshot["proposal"]["placements"]["rows"] == []
+    monkeypatch.setattr(tools.mirror_store, "read_groups", lambda *_args, **_kwargs: {"state": "stale"})
+    stale = tools.get_assessment_grouping_proposal(
+        "111", "synthetic-grouping", group_set_label="Synthetic Tiers", no_data_group="Core"
+    )
+    assert stale["ok"] is False
+    assert stale["attention"]["action"] == "refresh_mirror"
+    assert stale["proposal"]["placements"]["rows"] == []
+
+    monkeypatch.setattr(tools.mirror_store, "read_groups", lambda *_args, **_kwargs: {
+        "state": "current", "categories": []
+    })
+    bad_method = tools.get_assessment_grouping_proposal(
+        "111", "synthetic-grouping", method="unknown", group_set_label="Synthetic Tiers",
+        no_data_group="Core"
+    )
+    assert bad_method["ok"] is False
+    assert bad_method["proposal"]["placements"]["rows"] == []
 # --- server wiring -------------------------------------------------------------
 
 def test_server_registers_the_expected_tool_set():
@@ -1509,6 +2023,7 @@ def test_server_registers_the_expected_tool_set():
         "get_roster", "get_seating_context", "get_submissions",
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "get_standards_profile",
+        "get_assessment_context", "get_assessment_grouping_proposal",
         "list_staged_content",
         "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
         "save_teacher_schedule",
@@ -1524,6 +2039,27 @@ def test_server_registers_the_expected_tool_set():
         "get_theme_contract", "list_panel_themes", "list_theme_art",
         "preview_panel_theme", "apply_panel_theme", "delete_panel_theme",
         }
+
+
+def test_assessment_grouping_server_wrapper_is_compact(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(
+        tools, "get_assessment_grouping_proposal",
+        lambda course_id, snapshot_id, **kwargs: {
+            "ok": True, "course_id_seen": course_id, "snapshot_id_seen": snapshot_id,
+            "kwargs": kwargs,
+        },
+    )
+    wire = server.get_assessment_grouping_proposal(
+        "synthetic-course", "synthetic-snapshot", "quartiles", "", "Core", "Synthetic Tiers"
+    )
+    assert wire == (
+        '{"ok":true,"course_id_seen":"synthetic-course",'
+        '"snapshot_id_seen":"synthetic-snapshot","kwargs":{'
+        '"method":"quartiles","cutoffs":"","no_data_group":"Core",'
+        '"group_set_label":"Synthetic Tiers"}}'
+    )
 
 
 def test_server_wrappers_return_compact_json(monkeypatch):

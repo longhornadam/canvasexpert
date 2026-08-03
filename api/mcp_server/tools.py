@@ -36,11 +36,13 @@ from __future__ import annotations
 import os
 import hashlib
 import json
+import math
 from contextlib import contextmanager
 from datetime import date, timedelta
 
 from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, panel_themes, roster_context, roster_service
-from api.dataforge import profile_export
+from api.dataforge import canvas_join, grouping, history_store, paths as dataforge_paths, profile_export
+from api.dataforge.identity import IdentityMigrationError, VaultIdentity
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
@@ -115,6 +117,18 @@ _SCORING_SESSION_COLUMNS = ("session_id", "assignment_name", "course_id", "creat
                             "mode_label", "total", "scored", "approved")
 _PACKET_ITEM_COLUMNS = ("item_id", "prompt", "possible")
 _PACKET_STUDENT_COLUMNS = ("pseudonym", "item_id", "text")
+_ASSESSMENT_CONTEXT_COLUMNS = (
+    "pseudonym", "assessment_count", "latest_assessment_date",
+    "latest_percentage", "weak_standard_codes", "standards",
+)
+
+_ASSESSMENT_GROUPING_PLACEMENT_COLUMNS = ("pseudonym", "score", "status", "group")
+
+MAX_ASSESSMENT_CONTEXT_STUDENTS = 25
+MAX_ASSESSMENT_CONTEXT_STANDARDS = 32
+MAX_ASSESSMENT_CONTEXT_ASSESSED_IN = 8
+MAX_ASSESSMENT_GROUPING_STUDENTS = 25
+MAX_ASSESSMENT_GROUPING_RESULT_CHARS = 20000
 
 
 def _tabulate(rows: list[dict], columns: tuple[str, ...]) -> dict:
@@ -1157,6 +1171,32 @@ def get_product_guide(topic: str = "") -> dict:
             "topics": list(_GUIDE_FILES), "guide": guide_text}
 
 
+def _read_published_profile() -> tuple[dict | None, str, str]:
+    """Read the published profile without returning any private path."""
+    root = workspace.for_ai_root()
+    if not root:
+        return None, "missing", (
+            "DataForge standards profile unavailable: workspace is not configured."
+        )
+    path = os.path.join(root, "DataForge", profile_export.PROFILE_FILENAME)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            profile = json.load(handle)
+    except FileNotFoundError:
+        return None, "missing", (
+            "DataForge standards profile unavailable: generate it locally first."
+        )
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None, "malformed", (
+            "DataForge standards profile unavailable: the published artifact is malformed."
+        )
+    if not isinstance(profile, dict) or profile.get("format") != profile_export.FORMAT:
+        return None, "unsupported", (
+            "DataForge standards profile unavailable: unsupported artifact format."
+        )
+    return profile, "valid", ""
+
+
 def get_standards_profile() -> dict:
     """Return the published local DataForge profile after the safety gate.
 
@@ -1166,24 +1206,9 @@ def get_standards_profile() -> dict:
     process. Errors are intentionally generic so a private path or leak value
     cannot be reflected to an MCP client.
     """
-    root = workspace.for_ai_root()
-    if not root:
-        return {"ok": False, "error":
-                "DataForge standards profile unavailable: workspace is not configured."}
-    path = os.path.join(root, "DataForge", profile_export.PROFILE_FILENAME)
-    try:
-        with open(path, encoding="utf-8") as handle:
-            profile = json.load(handle)
-    except FileNotFoundError:
-        return {"ok": False, "error":
-                "DataForge standards profile unavailable: generate it locally first."}
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return {"ok": False, "error":
-                "DataForge standards profile unavailable: the published artifact is malformed."}
-
-    if not isinstance(profile, dict) or profile.get("format") != profile_export.FORMAT:
-        return {"ok": False, "error":
-                "DataForge standards profile unavailable: unsupported artifact format."}
+    profile, _, error = _read_published_profile()
+    if error:
+        return {"ok": False, "error": error}
 
     vault, vault_err = _open_vault()
     if vault_err:
@@ -1193,6 +1218,624 @@ def get_standards_profile() -> dict:
         return {"ok": False, "error":
                 "DataForge standards profile withheld: the outbound safety gate is not green."}
     return {"ok": True, "profile": profile}
+
+
+def _assessment_context_empty_students() -> dict:
+    return _tabulate([], _ASSESSMENT_CONTEXT_COLUMNS)
+
+
+def _assessment_context_attention(course_id: str, state: str, reason: str) -> dict:
+    return {
+        "ok": False,
+        "course_id": str(course_id),
+        "error": "Current roster data is unavailable or inconsistent; student data is withheld.",
+        "attention": {"action": "refresh_mirror", "reason": reason},
+        "source": {"current_roster": {
+            "source": "local_mirror", "scope": "current_course", "state": state,
+        }},
+        "students": _assessment_context_empty_students(),
+    }
+
+
+def _assessment_context_profile_error(state: str, error: str) -> dict:
+    return {
+        "ok": False,
+        "error": error,
+        "profile_state": state,
+        "students": _assessment_context_empty_students(),
+    }
+
+
+def _assessment_context_roster(course_id: str, vault):
+    """Return a current, structurally consistent pseudonymized roster."""
+    if not _cache_safe():
+        return None, _assessment_context_attention(
+            course_id, "unavailable", "the local mirror read seam is unavailable"
+        )
+    try:
+        scope = read_service.private_roster(
+            course_id, max_age_hours=mirror_queries._serve_max_age_hours()
+        )
+        document = mirror_store.read_roster(course_id)
+    except (OSError, TypeError, ValueError, KeyError, AttributeError):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the local mirror roster is malformed"
+        )
+
+    if not isinstance(scope, dict) or scope.get("state") != "current":
+        state = scope.get("state", "unavailable") if isinstance(scope, dict) else "malformed"
+        return None, _assessment_context_attention(
+            course_id, str(state), "refresh the current course mirror before retrying"
+        )
+    if not isinstance(document, dict) or document.get("state") != "current":
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the local mirror roster is internally inconsistent"
+        )
+
+    records = scope.get("records")
+    raw_students = document.get("students")
+    sections = document.get("sections")
+    record_ids = {
+        str(record.get("id")) for record in records or [] if isinstance(record, dict)
+    }
+    if (not isinstance(records, list) or not isinstance(raw_students, dict)
+            or any(not isinstance(value, dict) for value in raw_students.values())
+            or not isinstance(sections, dict)
+            or any(not isinstance(section_id, str) or not isinstance(name, str)
+                   for section_id, name in sections.items())
+            or str(scope.get("course_id")) != str(course_id)
+            or str(document.get("course_id")) != str(course_id)
+            or scope.get("last_success_at") != document.get("last_success_at")
+            or record_ids != {str(key) for key in raw_students}):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the local mirror roster is internally inconsistent"
+        )
+    if any(not isinstance(record, dict) or record.get("id") in (None, "") for record in records):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the local mirror roster is malformed"
+        )
+    ids = [str(record["id"]) for record in records]
+    if len(ids) != len(set(ids)):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the local mirror roster contains duplicate students"
+        )
+
+    try:
+        with _vault_transaction(vault):
+            roster_service.upsert_roster(vault, records)
+            projected = pseudonym.pseudonymize_roster(
+                vault, records, sections
+            )
+    except (OSError, TypeError, ValueError, KeyError, AttributeError):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the current roster could not be projected safely"
+        )
+
+    if (not isinstance(projected, list)
+            or any(not isinstance(row, dict) for row in projected)):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the current roster projection is malformed"
+        )
+
+    folded = {}
+    for row in projected:
+        key = str(row.get("pseudonym") or "").strip()
+        if not key or key.casefold() in folded:
+            return None, _assessment_context_attention(
+                course_id, "malformed", "the current roster has a pseudonym collision"
+            )
+        folded[key.casefold()] = key
+    try:
+        pseudonym_by_id = {
+            str(entry.get("canvas_id")): str(entry.get("pseudonym"))
+            for entry in vault.entries()
+            if isinstance(entry, dict)
+            and str(entry.get("canvas_id") or "").strip()
+            and str(entry.get("pseudonym") or "").strip()
+        }
+    except (AttributeError, TypeError, ValueError):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the current roster identity projection is malformed"
+        )
+    if any(str(record["id"]) not in pseudonym_by_id for record in records):
+        return None, _assessment_context_attention(
+            course_id, "malformed", "the current roster identity projection is incomplete"
+        )
+    return {
+        "rows": sorted(projected, key=lambda row: row["pseudonym"]),
+        "by_folded": folded,
+        "synced_at": str(scope.get("last_success_at") or ""),
+        # Internal-only values reused by the grouping projection. They never
+        # cross the MCP boundary and keep the mirror/pseudonym join in one
+        # source rather than reconstructing it in the wrapper.
+        "records": records,
+        "pseudonym_by_id": pseudonym_by_id,
+    }, None
+
+
+def _assessment_profile_shape(profile: dict):
+    """Validate the bounded shape consumed by assessment context."""
+    def _finite_percentage(value) -> bool:
+        return (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and 0 <= value <= 100)
+
+    if profile.get("grain") != "learning_standard":
+        return None, "unsupported", "DataForge standards profile has an unsupported grain."
+    if (not isinstance(profile.get("generated"), str)
+            or not profile.get("generated")
+            or not isinstance(profile.get("snapshots_used"), int)
+            or isinstance(profile.get("snapshots_used"), bool)
+            or profile["snapshots_used"] < 0
+            or not isinstance(profile.get("snapshots_without_standard_list"), int)
+            or isinstance(profile.get("snapshots_without_standard_list"), bool)
+            or not isinstance(profile.get("student_count"), int)
+            or isinstance(profile.get("student_count"), bool)
+            or profile["student_count"] < 0
+            or not isinstance(profile.get("students"), dict)
+            or profile["student_count"] != len(profile["students"])
+    ):
+        return None, "malformed", "DataForge standards profile is malformed."
+
+    students = {}
+    for pseudonym_value, summary in profile["students"].items():
+        if (not isinstance(pseudonym_value, str) or not pseudonym_value.strip()
+                or pseudonym_value != pseudonym_value.strip()
+                or pseudonym_value.casefold() in students):
+            return None, "malformed", "DataForge standards profile has a pseudonym collision."
+        if not isinstance(summary, dict):
+            return None, "malformed", "DataForge standards profile is malformed."
+        assessments = summary.get("assessments")
+        latest_pct = summary.get("latest_pct")
+        if (not isinstance(assessments, int) or isinstance(assessments, bool)
+                or assessments < 0
+                or (latest_pct is not None and not _finite_percentage(latest_pct))
+                or not isinstance(summary.get("latest_date"), str)
+                or not isinstance(summary.get("weak_standards"), list)
+                or any(not isinstance(code, str) or not code for code in summary["weak_standards"])
+                or len(summary["weak_standards"]) > MAX_ASSESSMENT_CONTEXT_STANDARDS
+                or len({code.casefold() for code in summary["weak_standards"]})
+                   != len(summary["weak_standards"])
+                or not isinstance(summary.get("standards"), dict)):
+            return None, "malformed", "DataForge standards profile is malformed."
+        standards = {}
+        for code, entry in summary["standards"].items():
+            if not isinstance(code, str) or not code or not isinstance(entry, dict):
+                return None, "malformed", "DataForge standards profile is malformed."
+            attempts = entry.get("attempts")
+            assessed_in = entry.get("assessed_in")
+            if (not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 0
+                    or not _finite_percentage(entry.get("mean"))
+                    or (entry.get("latest") is not None
+                        and not _finite_percentage(entry.get("latest")))
+                    or not isinstance(entry.get("latest_date"), str)
+                    or not isinstance(assessed_in, list)
+                    or any(not isinstance(label, str) for label in assessed_in)
+                    or not isinstance(entry.get("weak"), bool)):
+                return None, "malformed", "DataForge standards profile is malformed."
+            standards[code] = entry
+        if any(code not in standards for code in summary["weak_standards"]):
+            return None, "malformed", "DataForge standards profile is malformed."
+        students[pseudonym_value.casefold()] = {
+            "pseudonym": pseudonym_value, "summary": summary, "standards": standards,
+        }
+    return students, None, None
+
+
+def _assessment_context_profile(vault):
+    profile, state, error = _read_published_profile()
+    if error:
+        return None, _assessment_context_profile_error(state, error)
+    verdict = feedback_safety.scan_payload(profile, vault)
+    if not verdict.get("green"):
+        return None, _assessment_context_profile_error(
+            "unsafe", "DataForge standards profile withheld: the outbound safety gate is not green."
+        )
+    students, shape_state, shape_error = _assessment_profile_shape(profile)
+    if shape_error:
+        return None, _assessment_context_profile_error(shape_state, shape_error)
+    return {"profile": profile, "students": students}, None
+
+
+def _assessment_context_limit(kind: str, maximum: int, actual: int) -> dict:
+    return {
+        "ok": False,
+        "error": "Assessment context exceeds a deterministic evidence limit; no rows were returned.",
+        "limit": {"kind": kind, "maximum": maximum, "actual": actual},
+        "students": _assessment_context_empty_students(),
+    }
+
+
+def get_assessment_context(course_id: str, pseudonyms: str = "") -> dict:
+    """Bounded, read-only current-roster join with local longitudinal history."""
+    err = _course_gate_check(course_id)
+    if err:
+        return {"ok": False, "error": err}
+    if not isinstance(pseudonyms, str):
+        return {"ok": False, "error": "pseudonyms must be a comma-separated string."}
+
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
+    roster, roster_error = _assessment_context_roster(course_id, vault)
+    if roster_error:
+        return roster_error
+    profile_data, profile_error = _assessment_context_profile(vault)
+    if profile_error:
+        return profile_error
+
+    requested = {token.strip().casefold() for token in pseudonyms.split(",") if token.strip()}
+    current_rows = roster["rows"]
+    current_by_folded = roster["by_folded"]
+    unknown_requested = requested - set(current_by_folded)
+    selected = [
+        row for row in current_rows
+        if not requested or row["pseudonym"].casefold() in requested
+    ]
+    if len(selected) > MAX_ASSESSMENT_CONTEXT_STUDENTS:
+        return _assessment_context_limit(
+            "students", MAX_ASSESSMENT_CONTEXT_STUDENTS, len(selected)
+        )
+    profile_students = profile_data["students"]
+    profile_only_count = sum(
+        1 for key in profile_students if key not in current_by_folded
+    )
+
+    rows = []
+    with_history = 0
+    for roster_row in selected:
+        matched = profile_students.get(roster_row["pseudonym"].casefold())
+        summary = matched["summary"] if matched else None
+        if summary and summary["assessments"] > 0:
+            with_history += 1
+        standards = []
+        if matched:
+            if len(matched["standards"]) > MAX_ASSESSMENT_CONTEXT_STANDARDS:
+                return _assessment_context_limit(
+                    "standards", MAX_ASSESSMENT_CONTEXT_STANDARDS,
+                    len(matched["standards"]),
+                )
+            for code in sorted(matched["standards"]):
+                entry = matched["standards"][code]
+                if len(entry["assessed_in"]) > MAX_ASSESSMENT_CONTEXT_ASSESSED_IN:
+                    return _assessment_context_limit(
+                        "assessed_in", MAX_ASSESSMENT_CONTEXT_ASSESSED_IN,
+                        len(entry["assessed_in"]),
+                    )
+                standards.append({
+                    "code": code,
+                    "attempts": entry["attempts"],
+                    "mean": entry["mean"],
+                    "latest": entry["latest"],
+                    "latest_date": entry["latest_date"],
+                    "assessed_in": list(entry["assessed_in"]),
+                    "weak": entry["weak"],
+                })
+        rows.append({
+            "pseudonym": roster_row["pseudonym"],
+            "assessment_count": summary["assessments"] if summary else 0,
+            "latest_assessment_date": summary["latest_date"] if summary else "",
+            "latest_percentage": summary["latest_pct"] if summary else None,
+            "weak_standard_codes": list(summary["weak_standards"]) if summary else [],
+            "standards": standards,
+        })
+
+    payload = {
+        "course_id": str(course_id),
+        "source": {
+            "current_roster": {
+                "source": "local_mirror", "scope": "current_course", "state": "current",
+                "synced_at": roster["synced_at"],
+            },
+            "assessment_history": {
+                "source": "local_longitudinal_history",
+                "scope": "local_longitudinal_history",
+                "generated": profile_data["profile"]["generated"],
+                "grain": profile_data["profile"]["grain"],
+                "snapshots_used": profile_data["profile"]["snapshots_used"],
+            },
+        },
+        "coverage": {
+            "current_roster_students_with_history": with_history,
+            "current_roster_students_without_history": len(selected) - with_history,
+            "requested_pseudonyms_not_in_current_roster": len(unknown_requested),
+            "published_profile_students_not_in_current_roster": profile_only_count,
+        },
+        "students": rows,
+    }
+    result = pseudonym.gate(payload, vault)
+    if result.get("ok"):
+        result["students"] = _tabulate(result["students"], _ASSESSMENT_CONTEXT_COLUMNS)
+    return result
+
+
+def _assessment_grouping_empty_proposal() -> dict:
+    return {
+        "groups": [],
+        "placements": _tabulate([], _ASSESSMENT_GROUPING_PLACEMENT_COLUMNS),
+    }
+
+
+def _assessment_grouping_error(message: str, *, attention: dict | None = None) -> dict:
+    result = {
+        "ok": False,
+        "error": message,
+        "proposal": _assessment_grouping_empty_proposal(),
+    }
+    if attention is not None:
+        result["attention"] = attention
+    return result
+
+
+def _assessment_grouping_group_set(document: dict, label: str):
+    """Resolve the assistant-facing group-set label without exposing its ID."""
+    requested = label.strip().casefold()
+    matches = [
+        category for category in document.get("categories", [])
+        if isinstance(category, dict)
+        and isinstance(category.get("category_name"), str)
+        and category["category_name"].strip().casefold() == requested
+    ]
+    if not matches:
+        return None, _assessment_grouping_error(
+            "No current local Canvas group set matches group_set_label."
+        )
+    if len(matches) > 1:
+        return None, _assessment_grouping_error(
+            "group_set_label matches more than one current local Canvas group set."
+        )
+    return matches[0], None
+
+
+def _assessment_grouping_snapshot(paths, snapshot_id: str):
+    try:
+        snapshots = history_store.list_snapshots(paths)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return None, _assessment_grouping_error(
+            "The local assessment snapshot is unavailable."
+        )
+    snapshot = next(
+        (
+            candidate for candidate in snapshots
+            if isinstance(candidate, dict)
+            and str(candidate.get("id") or "").strip() == snapshot_id
+        ),
+        None,
+    )
+    if snapshot is None:
+        return None, _assessment_grouping_error(
+            "No local assessment snapshot matches snapshot_id."
+        )
+    students = snapshot.get("students")
+    if not isinstance(students, list):
+        return None, _assessment_grouping_error(
+            "The selected local assessment snapshot is malformed."
+        )
+    seen = set()
+    for student in students:
+        if not isinstance(student, dict):
+            return None, _assessment_grouping_error(
+                "The selected local assessment snapshot is malformed."
+            )
+        pseudonym_value = str(student.get("n") or "").strip()
+        if not pseudonym_value or pseudonym_value.casefold() in seen:
+            return None, _assessment_grouping_error(
+                "The selected local assessment snapshot has a pseudonym collision."
+            )
+        seen.add(pseudonym_value.casefold())
+    return snapshot, None
+
+
+def _assessment_grouping_source_error(message: str, state: str = "unavailable") -> dict:
+    return _assessment_grouping_error(
+        message,
+        attention={"action": "refresh_mirror", "reason": message},
+    )
+
+
+def get_assessment_grouping_proposal(
+    course_id: str,
+    snapshot_id: str,
+    method: str = "overall_pct",
+    cutoffs: str = "",
+    no_data_group: str = "",
+    group_set_label: str = "",
+) -> dict:
+    """Return the Students-page grouping proposal as a safe read projection."""
+    err = _course_gate_check(course_id)
+    if err:
+        return _assessment_grouping_error(err)
+    if not all(isinstance(value, str) for value in (
+        course_id, snapshot_id, method, cutoffs, no_data_group, group_set_label
+    )):
+        return _assessment_grouping_error(
+            "Assessment grouping arguments must be strings."
+        )
+    snapshot_id = snapshot_id.strip()
+    group_set_label = group_set_label.strip()
+    if not snapshot_id:
+        return _assessment_grouping_error("snapshot_id is required.")
+    if not group_set_label:
+        return _assessment_grouping_error("group_set_label is required.")
+
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return _assessment_grouping_error(vault_err)
+    roster, roster_error = _assessment_context_roster(course_id, vault)
+    if roster_error:
+        return _assessment_grouping_error(
+            roster_error.get(
+                "error",
+                "Current roster data is unavailable or inconsistent; student data is withheld.",
+            ),
+            attention=roster_error.get("attention"),
+        )
+    if len(roster["records"]) > MAX_ASSESSMENT_GROUPING_STUDENTS:
+        return _assessment_grouping_error(
+            "Assessment grouping exceeds the deterministic student limit; no proposal rows were returned.",
+        ) | {"limit": {
+            "kind": "students",
+            "maximum": MAX_ASSESSMENT_GROUPING_STUDENTS,
+            "actual": len(roster["records"]),
+        }}
+
+    try:
+        groups_document = mirror_store.read_groups(course_id)
+    except (OSError, TypeError, ValueError, KeyError, AttributeError):
+        groups_document = None
+    if not isinstance(groups_document, dict) or groups_document.get("state") != "current":
+        state = groups_document.get("state", "unavailable") if isinstance(groups_document, dict) else "malformed"
+        return _assessment_grouping_source_error(
+            "A current local group mirror is required for assessment grouping.", state
+        )
+    category, category_error = _assessment_grouping_group_set(
+        groups_document, group_set_label
+    )
+    if category_error:
+        return category_error
+
+    try:
+        paths = dataforge_paths.get_paths()
+        snapshot, snapshot_error = _assessment_grouping_snapshot(paths, snapshot_id)
+        if snapshot_error:
+            return snapshot_error
+        identity = VaultIdentity(vault)
+        linked_students = identity.linked_students()
+        if not isinstance(linked_students, dict):
+            return _assessment_grouping_error(
+                "The local assessment identity map is unavailable."
+            )
+        profile_students = {
+            str(student["n"]).strip(): {"latest_pct": student.get("pct")}
+            for student in snapshot["students"]
+        }
+        coverage_report = canvas_join.build_coverage_report(
+            profile_students,
+            linked_students,
+            roster["records"],
+        )
+        if coverage_report.get("ambiguous_roster_count", 0):
+            return _assessment_grouping_error(
+                "The local roster has an ambiguous identity join; grouping is withheld."
+            )
+        private_proposal = grouping.build_grouping_proposal(
+            snapshot,
+            coverage_report,
+            roster["records"],
+            category,
+            method=method,
+            cutoffs=cutoffs or None,
+            no_data_group=no_data_group,
+        )
+    except IdentityMigrationError:
+        return _assessment_grouping_error(
+            "The local assessment identity map is unavailable."
+        )
+    except grouping.GroupingValidationError as exc:
+        return _assessment_grouping_error(str(exc))
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError, AttributeError):
+        return _assessment_grouping_error(
+            "The local assessment grouping sources are malformed or unavailable."
+        )
+
+    pseudonym_by_id = roster["pseudonym_by_id"]
+    safe_placements = []
+    for placement in private_proposal["placements"]:
+        pseudonym_value = pseudonym_by_id.get(str(placement.get("canvas_id") or ""))
+        if not pseudonym_value:
+            return _assessment_grouping_error(
+                "The current roster identity projection is incomplete."
+            )
+        safe_placements.append({
+            "pseudonym": pseudonym_value,
+            "score": placement.get("score"),
+            "status": placement.get("status"),
+            "group": placement.get("group"),
+        })
+
+    safe_groups = []
+    for tier in private_proposal["tiers"]:
+        pseudonyms = [
+            pseudonym_by_id.get(str(student_id))
+            for student_id in tier.get("student_ids", [])
+        ]
+        if any(not value for value in pseudonyms):
+            return _assessment_grouping_error(
+                "The current roster identity projection is incomplete."
+            )
+        safe_groups.append({
+            "group_name": tier["name"],
+            "count": tier["student_count"],
+            "pseudonyms": pseudonyms,
+        })
+
+    safe_payload = {
+        "proposal": {
+            "source": {
+                "assessment_snapshot": {
+                    "source": "local_longitudinal_history",
+                    "scope": "local_longitudinal_history",
+                    "snapshot_id": str(private_proposal["snapshot_id"]),
+                    "label": str(private_proposal["snapshot_label"]),
+                    "date": str(snapshot.get("date") or ""),
+                    "grain": str(snapshot.get("breakdown_type") or ""),
+                },
+                "current_roster": {
+                    "source": "local_mirror",
+                    "scope": "current_course",
+                    "state": "current",
+                    "synced_at": roster["synced_at"],
+                },
+                "group_mirror": {
+                    "source": "local_mirror",
+                    "scope": "current_course_group_sets",
+                    "state": "current",
+                    "synced_at": str(groups_document.get("last_success_at") or ""),
+                },
+            },
+            "method": private_proposal["method"],
+            "cutoffs": private_proposal["cutoffs"],
+            "group_set_label": str(category.get("category_name") or "").strip(),
+            "no_data_group": private_proposal["no_data_group"],
+            "coverage": {
+                "status": "ready",
+                "current_roster_count": private_proposal["roster_count"],
+                "matched_count": private_proposal["matched_count"],
+                "no_data_count": private_proposal["no_data_count"],
+                "profile_student_count": coverage_report["profile_student_count"],
+                "linked_student_count": coverage_report["linked_student_count"],
+                "missing_local_id_count": coverage_report["missing_local_id_count"],
+                "not_in_roster_count": coverage_report["not_in_roster_count"],
+                "ambiguous_roster_count": coverage_report["ambiguous_roster_count"],
+                "roster_student_count": coverage_report["roster_student_count"],
+                "roster_only_count": coverage_report["roster_only_count"],
+                "coverage_percent": coverage_report["coverage_percent"],
+            },
+            "proposal_digest": private_proposal["proposal_digest"],
+            "groups": safe_groups,
+            "placements": safe_placements,
+        },
+    }
+    encoded = json.dumps(safe_payload, separators=(",", ":"), ensure_ascii=False)
+    if len(encoded) > MAX_ASSESSMENT_GROUPING_RESULT_CHARS:
+        return _assessment_grouping_error(
+            "Assessment grouping result exceeds the deterministic result limit; no proposal rows were returned."
+        ) | {"limit": {
+            "kind": "serialized_chars",
+            "maximum": MAX_ASSESSMENT_GROUPING_RESULT_CHARS,
+            "actual": len(encoded),
+        }}
+    result = pseudonym.gate(safe_payload, vault)
+    if not result.get("ok"):
+        blocked = _assessment_grouping_error(
+            result.get("error", "Safety scan blocked this result before it left the machine.")
+        )
+        if result.get("violations"):
+            blocked["violations"] = result["violations"]
+        return blocked
+    result["proposal"]["placements"] = _tabulate(
+        result["proposal"]["placements"], _ASSESSMENT_GROUPING_PLACEMENT_COLUMNS
+    )
+    return result
 
 
 def list_staged_content(kind: str = "") -> dict:

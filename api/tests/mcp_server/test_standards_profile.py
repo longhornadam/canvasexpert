@@ -109,6 +109,23 @@ def test_get_standards_profile_server_wrapper_is_compact(monkeypatch):
     assert wire == '{"ok":true,"profile":{}}'
 
 
+def test_get_assessment_context_server_wrapper_is_compact(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(
+        tools, "get_assessment_context",
+        lambda course_id, pseudonyms="": {
+            "ok": True, "course_id": course_id, "pseudonyms": pseudonyms,
+        },
+    )
+    wire = server.get_assessment_context("synthetic-course", " Alpha, alpha ")
+
+    assert wire == (
+        '{"ok":true,"course_id":"synthetic-course",'
+        '"pseudonyms":" Alpha, alpha "}'
+    )
+
+
 def test_product_guide_names_dataforge_review_and_privacy_boundary():
     guide = tools.get_product_guide()["guide"]
 
