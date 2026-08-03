@@ -88,6 +88,47 @@ def build_rekey_plan(legacy_links: dict[str, str], vault_entries: list[dict]) ->
     return {"rekey": rekey, "unmatched": unmatched}
 
 
+def _stage_and_replace(paths, transform) -> dict:
+    """Apply `transform(snapshot) -> (updated, stats)` to every snapshot file.
+
+    Shared atomicity core for every history-rewriting migration: each snapshot
+    is staged to a temp sibling first, and files are only replaced once every
+    transform has succeeded, so a mid-run failure leaves every original file
+    untouched. `stats` dicts from each transform are summed and returned
+    alongside the snapshot count.
+    """
+    staged: list[tuple[Path, Path]] = []
+    totals: dict = {}
+    for source in sorted(Path(paths.history_dir).glob("*.json")):
+        try:
+            snapshot = json.loads(source.read_text(encoding="utf-8"))
+            if not isinstance(snapshot, dict):
+                raise IdentityMigrationError(f"History snapshot {source.name} is not an object.")
+            updated, stats = transform(snapshot)
+            temporary = source.with_name(source.name + ".vault-migration.tmp")
+            temporary.write_text(json.dumps(updated, ensure_ascii=False, indent=0), encoding="utf-8")
+            staged.append((source, temporary))
+            for key, value in stats.items():
+                totals[key] = totals.get(key, 0) + value
+        except IdentityMigrationError:
+            for _, temporary in staged:
+                temporary.unlink(missing_ok=True)
+            raise
+        except (OSError, json.JSONDecodeError) as exc:
+            for _, temporary in staged:
+                temporary.unlink(missing_ok=True)
+            raise IdentityMigrationError(f"Could not stage {source.name}: {exc}") from exc
+    try:
+        for source, temporary in staged:
+            os.replace(temporary, source)
+    except OSError as exc:
+        for _, temporary in staged:
+            temporary.unlink(missing_ok=True)
+        raise IdentityMigrationError(f"Could not complete history migration: {exc}") from exc
+    totals["snapshots"] = len(staged)
+    return totals
+
+
 def _migrate_snapshot(snapshot: dict, rekey: dict[str, str]) -> tuple[dict, int, int]:
     updated = json.loads(json.dumps(snapshot))
     migrated = 0
@@ -117,36 +158,58 @@ def _migrate_snapshot(snapshot: dict, rekey: dict[str, str]) -> tuple[dict, int,
 
 def migrate_snapshots(paths, rekey: dict[str, str]) -> dict:
     """Validate and atomically stage every snapshot before replacing any file."""
-    staged = []
-    migrated = 0
-    anonymous = 0
-    for source in sorted(Path(paths.history_dir).glob("*.json")):
-        try:
-            snapshot = json.loads(source.read_text(encoding="utf-8"))
-            if not isinstance(snapshot, dict):
-                raise IdentityMigrationError(f"History snapshot {source.name} is not an object.")
-            updated, changed, aggregate = _migrate_snapshot(snapshot, rekey)
-            temporary = source.with_name(source.name + ".vault-migration.tmp")
-            temporary.write_text(json.dumps(updated, ensure_ascii=False, indent=0), encoding="utf-8")
-            staged.append((source, temporary))
-            migrated += changed
-            anonymous += aggregate
-        except IdentityMigrationError:
-            for _, temporary in staged:
-                temporary.unlink(missing_ok=True)
-            raise
-        except (OSError, json.JSONDecodeError) as exc:
-            for _, temporary in staged:
-                temporary.unlink(missing_ok=True)
-            raise IdentityMigrationError(f"Could not stage {source.name}: {exc}") from exc
-    try:
-        for source, temporary in staged:
-            os.replace(temporary, source)
-    except OSError as exc:
-        for _, temporary in staged:
-            temporary.unlink(missing_ok=True)
-        raise IdentityMigrationError(f"Could not complete history migration: {exc}") from exc
-    return {"snapshots": len(staged), "migrated_students": migrated, "anonymous_students": anonymous}
+    def transform(snapshot):
+        updated, migrated, anonymous = _migrate_snapshot(snapshot, rekey)
+        return updated, {"migrated_students": migrated, "anonymous_students": anonymous}
+
+    return _stage_and_replace(paths, transform)
+
+
+def _backfill_canvas_id(snapshot: dict, canvas_id_map: dict[str, str]) -> tuple[dict, dict]:
+    """Add a stable canvas_id to rows resolvable through the current vault.
+
+    A row that already carries a canvas_id is left untouched, which is what
+    makes repeated runs (and running this after `save_snapshot` has already
+    started writing canvas_id on new rows) a no-op. A row whose stored
+    pseudonym is not a key in `canvas_id_map` -- a prior-year student the
+    vault never linked, or a student renamed since the row was written, so the
+    old pseudonym is gone from the vault entirely -- is left with no
+    canvas_id. It is not guessed at, and it stays as good as it already was.
+    """
+    updated = json.loads(json.dumps(snapshot))
+    linked = 0
+    unresolved = 0
+    students = updated.get("students") or []
+    if not isinstance(students, list):
+        raise IdentityMigrationError("A history snapshot has an invalid students list.")
+    for student in students:
+        if not isinstance(student, dict):
+            raise IdentityMigrationError("A history snapshot contains an invalid student row.")
+        if str(student.get("canvas_id") or "").strip():
+            continue
+        pseudonym = str(student.get("n") or "").strip()
+        canvas_id = canvas_id_map.get(pseudonym) if pseudonym else None
+        if canvas_id:
+            student["canvas_id"] = canvas_id
+            linked += 1
+        else:
+            unresolved += 1
+    return updated, {"linked_students": linked, "unresolved_students": unresolved}
+
+
+def backfill_canvas_ids(paths, canvas_id_map: dict[str, str]) -> dict:
+    """Add canvas_id to existing snapshot rows by resolving each stored
+    pseudonym through the current vault (see `VaultIdentity.canvas_id_map`).
+
+    Reuses the same atomic stage-then-replace core as `migrate_snapshots`: a
+    failure partway through leaves every original snapshot file untouched.
+    Idempotent, so it is safe to call on every anonymized processing run
+    rather than requiring a one-time manual trigger.
+    """
+    def transform(snapshot):
+        return _backfill_canvas_id(snapshot, canvas_id_map)
+
+    return _stage_and_replace(paths, transform)
 
 
 def migrate_legacy_state(paths, *, vault: Vault | None = None) -> dict:
@@ -171,6 +234,8 @@ class VaultIdentity:
         self._entries = vault.entries()
         self._by_sis = {}
         self._by_name = {}
+        self._by_canvas_id = {}
+        self._by_pseudonym = {}
         for entry in self._entries:
             sis_id = str(entry.get("sis_id") or "").strip()
             pseudonym = str(entry.get("pseudonym") or "").strip()
@@ -179,6 +244,14 @@ class VaultIdentity:
             real_name = str(entry.get("real_name") or "").strip().casefold()
             if real_name and pseudonym:
                 self._by_name.setdefault(real_name, []).append(entry)
+            # The vault's own key is the canvas_id, so it is unique by
+            # construction -- unlike sis_id/real_name, no ambiguity check
+            # is needed here.
+            canvas_id = str(entry.get("canvas_id") or "").strip()
+            if canvas_id:
+                self._by_canvas_id[canvas_id] = entry
+            if pseudonym:
+                self._by_pseudonym[pseudonym] = entry
 
     @classmethod
     def from_paths(cls, paths):
@@ -206,6 +279,32 @@ class VaultIdentity:
             if len(entries) == 1:
                 out[str(entries[0].get("pseudonym") or "")] = sis_id
         return {key: value for key, value in out.items() if key}
+
+    def canvas_id_for_student(self, real_name: str, local_id: str) -> str:
+        """Stable canvas_id for a student resolvable the same way as
+        `map_student` (matched on `local_id` against the vault's sis_id
+        index), so a caller that already has this student's pseudonym gets a
+        canvas_id for that identical vault entry."""
+        entry = self._entry_for_student(real_name, local_id)
+        return str(entry.get("canvas_id") or "") if entry else ""
+
+    def pseudonym_for_canvas_id(self, canvas_id: str) -> str:
+        """Current pseudonym for a stable canvas_id, or "" if the vault has
+        no entry for it (for example, the student left before this vault
+        existed, or -- vanishingly unlikely -- the entry itself was removed).
+        """
+        entry = self._by_canvas_id.get(str(canvas_id or "").strip())
+        return str(entry.get("pseudonym") or "") if entry else ""
+
+    def canvas_id_map(self) -> dict[str, str]:
+        """Every current pseudonym -> canvas_id, for backfilling stored
+        history rows (see `backfill_canvas_ids`). Pseudonyms are unique within
+        the vault by construction, so this is a straight 1:1 map."""
+        return {
+            pseudonym: str(entry.get("canvas_id") or "")
+            for pseudonym, entry in self._by_pseudonym.items()
+            if str(entry.get("canvas_id") or "").strip()
+        }
 
     # Real IDs shorter than this are not treated as leaks. A 2-3 digit local ID
     # collides with ordinary report content (a raw score of 53, a scale score, a

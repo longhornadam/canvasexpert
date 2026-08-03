@@ -23,7 +23,13 @@ import zipfile
 from pathlib import Path
 
 from . import canvas_join, history_store, paths as path_config, profile_export
-from .identity import IdentityMigrationError, VaultIdentity, migrate_legacy_state, vault_path
+from .identity import (
+    IdentityMigrationError,
+    VaultIdentity,
+    backfill_canvas_ids,
+    migrate_legacy_state,
+    vault_path,
+)
 from .eduphoria_parser import (
     convert_to_json,
     create_teacher_report,
@@ -161,7 +167,10 @@ def _process_file(path: Path, identity, output_dir: Path, strip_demographics: bo
     standards.sort(key=lambda x: x["proficiency"])
 
     # Minimal per-student list (using the same anonymized names as the JSON)
-    # for the interactive differentiation-grouping screen.
+    # for the interactive differentiation-grouping screen. Snapshots saved
+    # from a run carry each student's stable canvas_id too (never the compact
+    # JSON itself -- that artifact travels further, so it stays pseudonym-only)
+    # so a later mid-year rename cannot orphan their history.
     compact = json.loads(json_str)
     tier_students = [
         {
@@ -171,8 +180,9 @@ def _process_file(path: Path, identity, output_dir: Path, strip_demographics: bo
             "met": s.get("met"),
             "mas": s.get("mas"),
             "missed": s.get("missed", {}),
+            "canvas_id": identity.canvas_id_for_student(orig.student_name, orig.local_id) if identity else "",
         }
-        for s in compact["students"]
+        for s, orig in zip(compact["students"], data.students)
     ]
 
     return {
@@ -353,8 +363,8 @@ def coverage(course_id: str, roster_document: dict | None) -> Render:
 
     try:
         resolved = path_config.get_paths()
-        profile = profile_export.build_profile(resolved)
         identity = VaultIdentity.from_paths(resolved)
+        profile = profile_export.build_profile(resolved, identity=identity)
         linked_students = identity.linked_students()
     except (IdentityMigrationError, OSError):
         context["map_error"] = True
@@ -383,6 +393,11 @@ def process(anonymize: bool, use_existing: bool, upload_paths: list) -> Redirect
         if anonymize:
             migrate_legacy_state(paths)
             vault_identity = VaultIdentity.from_paths(paths)
+            # Catch up any history saved before canvas_id existed. Idempotent
+            # and cheap at this scale, so it runs on every anonymized
+            # processing pass rather than needing its own manual trigger --
+            # the same bootstrap pattern migrate_legacy_state already uses.
+            backfill_canvas_ids(paths, vault_identity.canvas_id_map())
         else:
             vault_identity = None
     except (IdentityMigrationError, OSError) as e:
@@ -516,11 +531,15 @@ def export_standards_profile() -> BytesDownload:
     """Pseudonym-keyed standards profile, for grouping and differentiation.
 
     SAFE to hand to another tool: pseudonyms, standard codes, and scores only.
-    Resolving a pseudonym to a real student happens locally against
-    anonymize_map.csv and never through this file.
+    Resolving a pseudonym to a real student happens locally against the
+    Identity Vault and never through this file.
     """
     paths = path_config.get_paths()
-    profile = profile_export.build_profile(paths)
+    try:
+        identity = VaultIdentity.from_paths(paths)
+    except IdentityMigrationError:
+        identity = None
+    profile = profile_export.build_profile(paths, identity=identity)
     profile["grouping"] = profile_export.group_by_standard(profile)
     data = json.dumps(profile, indent=2, ensure_ascii=False).encode("utf-8")
     return BytesDownload(

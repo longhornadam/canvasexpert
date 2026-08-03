@@ -14,11 +14,13 @@ later without untangling it from Flask. These tests check three things:
 """
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
 
-from api.dataforge import paths as path_config, views
+from api.dataforge import history_store, paths as path_config, views
+from api.dataforge.views import _process_file
 
 VIEWS_PATH = Path(__file__).resolve().parents[2] / "dataforge" / "views.py"
 
@@ -141,3 +143,57 @@ def test_history_delete_view_redirects_to_history():
     result = views.history_delete("some-snapshot-id")
     assert isinstance(result, views.Redirect)
     assert result.endpoint == "history"
+
+
+# --- 5. _process_file resolves canvas_id for the snapshot only -------------
+#
+# canvas_id must reach tier_students (and so the snapshot saved from it), but
+# the compact JSON -- the artifact that travels further, to an LLM -- must
+# stay pseudonym-only. That second half is also guarded independently:
+# eduphoria_parser.convert_to_json scans its own output for every real
+# identifier the vault knows, canvas_id included, and raises if one is found
+# (see test_identity_guardrails.py), so a regression here would fail loudly
+# there too.
+
+
+class _HistoryPaths:
+    """Minimal stand-in for paths.Paths; only history_dir is needed here."""
+
+    def __init__(self, tmp_path):
+        self.history_dir = tmp_path / "history"
+
+
+def test_process_file_resolves_canvas_id_but_keeps_the_traveling_json_pseudonym_only(
+    tmp_path, learning_standard_path, vault_identity
+):
+    provider = vault_identity(("Test Student 1", "1001", "Sparky McGee"))
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    result = _process_file(
+        learning_standard_path, provider, output_dir, strip_demographics=True
+    )
+
+    tier_students = result["tier_students"]
+    assert len(tier_students) == 1
+    assert tier_students[0]["n"] == "Sparky McGee"
+    assert tier_students[0]["canvas_id"] == "canvas-1"
+
+    compact_students = json.loads(result["json_str"])["students"]
+    assert "canvas_id" not in compact_students[0]
+
+    history_store.save_snapshot(_HistoryPaths(tmp_path), result)
+    saved = history_store.list_snapshots(_HistoryPaths(tmp_path))
+    assert saved[0]["students"][0]["canvas_id"] == "canvas-1"
+
+
+def test_process_file_leaves_canvas_id_empty_when_identity_is_off(
+    tmp_path, learning_standard_path
+):
+    """No anonymizer means no vault to resolve against; canvas_id must
+    default to empty rather than erroring."""
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    result = _process_file(
+        learning_standard_path, None, output_dir, strip_demographics=False
+    )
+    assert result["tier_students"][0]["canvas_id"] == ""

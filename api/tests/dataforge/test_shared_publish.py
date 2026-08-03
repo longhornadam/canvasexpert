@@ -60,6 +60,33 @@ def test_publish_writes_under_the_canvasexpert_ai_zone(tmp_path, vault_identity)
     assert "696969" not in written.read_text(encoding="utf-8")
 
 
+def test_publish_never_includes_a_canvas_id_even_when_snapshots_carry_one(tmp_path, vault_identity):
+    """A snapshot row carries a canvas_id for internal joining across a
+    rename. This proves it never reaches the published (SAFE) profile,
+    alongside the existing real-name/sis-id checks -- the invariant is no
+    canvas_id, no sis_id, no real name, not just "no real name"."""
+    paths = _Paths(tmp_path)
+    paths.history_dir.mkdir(parents=True, exist_ok=True)
+    (paths.history_dir / "s1.json").write_text(json.dumps({
+        "id": "s1", "label": "s1", "grade": "7", "type": "STAAR",
+        "breakdown_type": "learning_standard", "standards": ["7.9(D)"],
+        "date": "2026-09-01", "saved_at": "2026-09-01T00:00:00",
+        "students": [{"n": "Sparky McGee", "canvas_id": "canvas-1", "pct": 50.0, "missed": {"7.9(D)": 20.0}}],
+    }), encoding="utf-8")
+    provider = vault_identity(("Clauderino, Claude", "696969", "Sparky McGee"))
+
+    written = profile_export.publish_profile(paths, anonymizer=provider)
+    blob = written.read_text(encoding="utf-8")
+
+    assert "canvas-1" not in blob
+    assert "canvas_id" not in blob
+    assert "sis_id" not in blob
+    assert "696969" not in blob
+    assert "Clauderino" not in blob
+    payload = json.loads(blob)
+    assert payload["students"]["Sparky McGee"]["assessments"] == 1
+
+
 def test_publish_is_idempotent_and_leaves_no_temp_file(tmp_path):
     paths = _Paths(tmp_path)
     _snapshot(paths)

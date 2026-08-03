@@ -129,6 +129,41 @@ def test_group_by_standard_is_the_grouping_shape(tmp_path):
     assert list(groups) == ["7.9(D)", "7.2(B)"], "largest need first"
 
 
+def test_history_read_survives_a_mid_year_rename(tmp_path, vault_identity):
+    """A rename must not orphan a student's older snapshot rows or split their
+    growth record across an old and a new pseudonym. build_profile groups
+    snapshot rows by the stable canvas_id each one carries; only the label
+    shown for that group is resolved fresh from the vault at read time, so a
+    rename is reflected immediately even though every existing row on disk
+    still has the old pseudonym string.
+    """
+    paths = _Paths(tmp_path)
+    _snapshot(paths, "fall", ["7.9(D)"], [
+        {"n": "Sparky McGee", "canvas_id": "canvas-1", "pct": 50.0, "missed": {"7.9(D)": 20.0}},
+    ], "2026-09-01")
+    _snapshot(paths, "spring", ["7.9(D)"], [
+        {"n": "Sparky McGee", "canvas_id": "canvas-1", "pct": 90.0, "missed": {}},
+    ], "2027-03-01")
+
+    before = vault_identity(("Synthetic Student", "SIS-1", "Sparky McGee"))
+    pre_rename = profile_export.build_profile(paths, identity=before)
+    assert set(pre_rename["students"]) == {"Sparky McGee"}
+    assert pre_rename["students"]["Sparky McGee"]["standards"]["7.9(D)"]["attempts"] == 2
+
+    # The student is renamed in the vault. No new snapshot is written: the
+    # stored "n" on both existing rows is still "Sparky McGee".
+    after = vault_identity(("Synthetic Student", "SIS-1", "Newname Renamed"))
+    post_rename = profile_export.build_profile(paths, identity=after)
+
+    assert set(post_rename["students"]) == {"Newname Renamed"}, (
+        "the rename must be reflected immediately, not just on the next processed file"
+    )
+    assert post_rename["students"]["Newname Renamed"] == pre_rename["students"]["Sparky McGee"], (
+        "the growth record itself (attempts, means, latest scores) must be "
+        "identical across the rename; only the label changes"
+    )
+
+
 def test_profile_contains_no_real_identities(tmp_path, learning_standard_path, vault_identity):
     """The whole point of the split: this artifact can travel, the vault cannot.
 

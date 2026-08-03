@@ -14,7 +14,7 @@ import shutil
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
-from api import feedback_scrub, feedback_vault
+from api import feedback_scrub, feedback_vault, pseudonym_rename
 from api import roster_service
 from .. import config, workspace
 from ..canvas_client import _canvas_get_all
@@ -66,8 +66,24 @@ def set_nickname(canvas_id: str = Form(""), nicknames: str = Form("")):
 def set_pseudonym(canvas_id: str = Form(""), first: str = Form(""), last: str = Form("")):
     """Manual pseudonym override."""
     vault = _vault()
-    with vault.transaction():
-        vault.set_pseudonym(canvas_id, first, last)
+    old_pseudonym = pseudonym_rename.current_pseudonym(vault, canvas_id)
+
+    blocked = pseudonym_rename.backfill_assessment_history()
+    if blocked:
+        return JSONResponse({"ok": False, "error": blocked}, status_code=409)
+
+    try:
+        with vault.transaction():
+            vault.set_pseudonym(canvas_id, first, last)
+    except feedback_vault.PseudonymCollisionError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
+
+    incomplete = pseudonym_rename.rewrite_writing_spans(
+        old_pseudonym, pseudonym_rename.current_pseudonym(vault, canvas_id))
+    stale = pseudonym_rename.refresh_published_profile()
+    if incomplete or stale:
+        return JSONResponse(
+            {"ok": False, "error": incomplete or stale}, status_code=409)
     return JSONResponse({"ok": True})
 
 
@@ -75,9 +91,22 @@ def set_pseudonym(canvas_id: str = Form(""), first: str = Form(""), last: str = 
 def regenerate_pseudonym(canvas_id: str = Form("")):
     """Regenerate a random non-colliding fake name."""
     vault = _vault()
+    old_pseudonym = pseudonym_rename.current_pseudonym(vault, canvas_id)
+
+    blocked = pseudonym_rename.backfill_assessment_history()
+    if blocked:
+        return JSONResponse({"ok": False, "error": blocked}, status_code=409)
+
     with vault.transaction():
         vault.regenerate_pseudonym(canvas_id)
         pseudonym = vault.get_or_assign(canvas_id)
+
+    incomplete = pseudonym_rename.rewrite_writing_spans(old_pseudonym, pseudonym)
+    stale = pseudonym_rename.refresh_published_profile()
+    if incomplete or stale:
+        return JSONResponse(
+            {"ok": False, "error": incomplete or stale, "pseudonym": pseudonym},
+            status_code=409)
     return JSONResponse({"ok": True, "pseudonym": pseudonym})
 
 

@@ -3,11 +3,17 @@
 Longitudinal snapshot store for tier-movement tracking.
 
 Each processed assessment is saved as one compact JSON snapshot under the
-CanvasExpert `_System/DataForge/history/` zone. Students are identified ONLY by
-their stable pseudonym (e.g. Student_001), which the local anonymize map keeps
-consistent across assessments — so a student can be followed Fall → Spring
-without storing any real name. Snapshots therefore only make sense for
-anonymized (de-identified) runs, and we refuse to save anything else.
+CanvasExpert `_System/DataForge/history/` zone -- the same private zone that
+already holds the Identity Vault. Students are identified by a stable
+canvas_id, resolved through the Identity Vault at run time. A pseudonym string
+is also stored on each row (`n`), but it is a point-in-time label, not the key:
+a mid-year rename changes what a pseudonym-only key would mean for every
+earlier row, so anything that needs a student's identity across snapshots
+resolves the *current* pseudonym from the vault via canvas_id rather than
+trusting the stored string. A row with no canvas_id (a prior-year student the
+vault never linked, or a snapshot not yet backfilled) has only the stored
+pseudonym to go on. Snapshots only make sense for anonymized (de-identified)
+runs, and we refuse to save anything else.
 
 Chronology is driven by an editable `date` field (defaults to processing day),
 so a teacher can batch-process old + new files and still order them correctly.
@@ -80,12 +86,38 @@ def save_snapshot(paths, result: dict) -> str:
                 "met": s.get("met"),
                 "mas": s.get("mas"),
                 "missed": s.get("missed", {}),
+                # Stable identity key, resolved from the Identity Vault at
+                # processing time. Empty for a student the vault has no entry
+                # for (see `VaultIdentity.canvas_id_for_student`) rather than
+                # invented.
+                "canvas_id": s.get("canvas_id") or "",
             }
             for s in result.get("tier_students", [])
         ],
     }
     path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=0), encoding="utf-8")
     return snap_id
+
+
+def resolve_student_pseudonym(student: dict, identity=None) -> str:
+    """The pseudonym to show for one snapshot student row, resolved fresh.
+
+    A row that carries a canvas_id is looked up against the Identity Vault
+    every time, so a mid-year rename is reflected immediately and every
+    earlier snapshot keeps pointing at the same student under their new name.
+    A row with no canvas_id (not yet backfilled, or a prior-year student the
+    vault never linked) falls back to whatever pseudonym was stored when the
+    row was written -- the best available label, not a guess.
+
+    `identity` is a `VaultIdentity` or `None`; this function does not import
+    that module, so history_store stays free of a hard dependency on it.
+    """
+    canvas_id = str(student.get("canvas_id") or "").strip()
+    if canvas_id and identity is not None:
+        resolved = identity.pseudonym_for_canvas_id(canvas_id)
+        if resolved:
+            return resolved
+    return str(student.get("n") or "")
 
 
 def list_snapshots(paths) -> list:

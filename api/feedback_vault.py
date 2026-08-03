@@ -26,6 +26,10 @@ from api.storage_support import atomic_write_json, interprocess_lock
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+class PseudonymCollisionError(ValueError):
+    """A pseudonym is already held by a different student."""
+
+
 def _load_name_pool(filename: str) -> list[str]:
     path = os.path.join(_MODULE_DIR, "data", filename)
     if not os.path.exists(path):
@@ -268,17 +272,47 @@ class Vault:
         entry["nicknames"] = sorted(merged)
 
     def set_pseudonym(self, canvas_id, first: str, last: str):
-        """Manual override from the UI. Caller must call save()."""
+        """Manual override from the UI. Caller must call save().
+
+        Raises PseudonymCollisionError if a different student already holds the
+        name. `regenerate_pseudonym` has always been collision-checked; without
+        the same check here, two entries could share one pseudonym and the
+        reverse index would resolve to whichever was written last, quietly
+        attaching one student's work to another.
+        """
         cid = str(canvas_id)
         entry = self._by_id.get(cid)
         if entry is None:
             return
+        new_pseudonym = f"{first.strip()} {last.strip()}"
+        # Checked before any mutation, so a refused rename leaves the vault
+        # untouched without depending on the transaction to roll back.
+        holder = self._canvas_id_holding(new_pseudonym)
+        if holder is not None and holder != cid:
+            raise PseudonymCollisionError(
+                f"The pseudonym '{new_pseudonym}' already belongs to another "
+                "student. Choose a different one."
+            )
         old_pseudo = entry.get("pseudonym", "")
         entry["pseudo_first"] = first.strip()
         entry["pseudo_last"] = last.strip()
-        entry["pseudonym"] = f"{first.strip()} {last.strip()}"
+        entry["pseudonym"] = new_pseudonym
         self._by_pseudo.pop(old_pseudo, None)
         self._by_pseudo[entry["pseudonym"]] = cid
+
+    def _canvas_id_holding(self, pseudonym: str):
+        """The canvas_id already using this pseudonym, or None.
+
+        Case-insensitive, so a rename that only changes capitalization is
+        recognized as the same student rather than read as a collision.
+        """
+        wanted = str(pseudonym or "").strip().lower()
+        if not wanted:
+            return None
+        for existing, cid in self._by_pseudo.items():
+            if str(existing).strip().lower() == wanted:
+                return cid
+        return None
 
     def regenerate_pseudonym(self, canvas_id, roster_names: set | None = None):
         """Assign a new fake name, collision-checked. Caller must call save()."""

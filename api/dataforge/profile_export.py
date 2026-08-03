@@ -6,12 +6,19 @@ zone into one per-student view of which standards are weak, so another tool can
 decide tiers from it.
 
 This artifact is SAFE. It contains pseudonyms, standard codes, and scores, and
-no real name or local ID. It is the half of the CanvasExpert handshake that can
-travel: an assistant can reason over it, and it can sit in a synced folder.
+no real name, canvas_id, or local ID. It is the half of the CanvasExpert
+handshake that can travel: an assistant can reason over it, and it can sit in
+a synced folder.
 
-The other half, which student a pseudonym refers to, stays in the private Identity
-Vault on this machine and is never written here. Nothing in this module needs or
-produces real identities.
+The other half, which student a pseudonym refers to, stays in the private
+Identity Vault on this machine and is never written here. Building the profile
+does read the vault, but only to resolve each student's *current* pseudonym
+from the stable canvas_id their snapshot rows carry -- so a mid-year rename
+cannot orphan a student's older rows or split their growth record across two
+pseudonyms. The output never contains a real identity or a canvas_id; an
+optional `identity` (a `VaultIdentity`) is the only thing that changes, and
+its absence just means a rename since the affected rows were written won't be
+reflected in the label.
 
 Grain: reporting-category snapshots are excluded. An RC average and a TEKS
 average are different measurements and tiering on a mix of them is meaningless.
@@ -53,12 +60,21 @@ def _usable_snapshots(paths, reporting_categories: bool = False) -> List[dict]:
 
 
 def build_profile(paths, weak_below: float = DEFAULT_WEAK_BELOW,
-                  reporting_categories: bool = False) -> dict:
+                  reporting_categories: bool = False, identity=None) -> dict:
     """Per-pseudonym standard mastery across every snapshot.
 
     Set reporting_categories=True to profile the RC grain instead. The two are
     never combined, because an RC average and a TEKS average are different
     measurements.
+
+    Snapshot rows are grouped by canvas_id when a row carries one, so a
+    student's growth record cannot be split across an old and a new pseudonym
+    after a rename. Rows with no canvas_id (not yet backfilled, or a
+    prior-year student the vault never linked) fall back to grouping by the
+    stored pseudonym, exactly as before canvas_id existed. `identity` (a
+    `VaultIdentity`) resolves each canvas_id group's *current* pseudonym for
+    the output; without it, the most recently stored pseudonym for that group
+    is used instead. Either way the returned dict is keyed by pseudonym only.
     """
     snapshots = _usable_snapshots(paths, reporting_categories)
 
@@ -75,19 +91,30 @@ def build_profile(paths, weak_below: float = DEFAULT_WEAK_BELOW,
         when = snap.get("date") or ""
 
         for s in snap.get("students", []):
-            pseudonym = s.get("n")
-            if not pseudonym:
+            stored_pseudonym = str(s.get("n") or "").strip()
+            canvas_id = str(s.get("canvas_id") or "").strip()
+            # The stable grouping key: canvas_id when present, otherwise the
+            # pseudonym itself (pre-canvas_id snapshots, or a student with no
+            # vault entry at all).
+            key = canvas_id or stored_pseudonym
+            if not key:
                 continue
-            rec = students.setdefault(pseudonym, {
+            rec = students.setdefault(key, {
                 "assessments": 0,
                 "latest_pct": None,
                 "latest_date": "",
                 "standards": {},
+                "_canvas_id": "",
+                "_latest_pseudonym": "",
             })
             rec["assessments"] += 1
+            if canvas_id:
+                rec["_canvas_id"] = canvas_id
             if when >= rec["latest_date"]:
                 rec["latest_date"] = when
                 rec["latest_pct"] = s.get("pct")
+                if stored_pseudonym:
+                    rec["_latest_pseudonym"] = stored_pseudonym
 
             missed = s.get("missed") or {}
             for code in covered or missed.keys():
@@ -115,6 +142,19 @@ def build_profile(paths, weak_below: float = DEFAULT_WEAK_BELOW,
             key=lambda c: rec["standards"][c]["latest"],
         )
 
+    # Re-key by the current pseudonym for the published (SAFE) shape: a
+    # canvas_id never leaves this function. A group with a canvas_id resolves
+    # fresh against the vault every call; one without falls back to the
+    # pseudonym it was already keyed by.
+    resolved: Dict[str, dict] = {}
+    for key, rec in students.items():
+        canvas_id = rec.pop("_canvas_id")
+        latest_pseudonym = rec.pop("_latest_pseudonym") or key
+        label = history_store.resolve_student_pseudonym(
+            {"n": latest_pseudonym, "canvas_id": canvas_id}, identity
+        )
+        resolved[label] = rec
+
     return {
         "format": FORMAT,
         "generated": date.today().isoformat(),
@@ -122,14 +162,14 @@ def build_profile(paths, weak_below: float = DEFAULT_WEAK_BELOW,
         "weak_below": weak_below,
         "snapshots_used": len(snapshots),
         "snapshots_without_standard_list": legacy_snapshots,
-        "student_count": len(students),
+        "student_count": len(resolved),
         "note": (
             "Pseudonyms only, no real names or IDs. Scores are percent correct "
             "(0-100). A standard is listed for a student only if the assessment "
             "covered it. Resolve a pseudonym to a Canvas student locally via "
             "the Identity Vault; that mapping is never included here."
         ),
-        "students": students,
+        "students": resolved,
     }
 
 
@@ -140,14 +180,17 @@ class SharedPublishError(RuntimeError):
 def publish_profile(paths, anonymizer=None, weak_below: float = DEFAULT_WEAK_BELOW) -> Path:
     """Write the standards profile into CanvasExpert's AI workspace zone.
 
-    The profile is re-scanned against the anonymizer immediately before it is
-    written. It is built from pseudonym-only snapshots and should never contain
-    a real identity, so a hit here means a bug on this side, never something
-    for the teacher to clean up by hand. Refuse rather than publish.
+    `anonymizer` (a `VaultIdentity`) does double duty: it resolves each
+    student's current pseudonym for the profile (see `build_profile`), and it
+    re-scans the finished profile for a real identity immediately before
+    writing. The profile is built from pseudonym-only snapshots and should
+    never contain a real identity or a canvas_id, so a hit here means a bug on
+    this side, never something for the teacher to clean up by hand. Refuse
+    rather than publish.
     """
     target_dir = Path(workspace.for_ai_root()) / "DataForge"
 
-    profile = build_profile(paths, weak_below=weak_below)
+    profile = build_profile(paths, weak_below=weak_below, identity=anonymizer)
     profile["grouping"] = group_by_standard(profile)
     blob = json.dumps(profile, indent=2, ensure_ascii=False)
 

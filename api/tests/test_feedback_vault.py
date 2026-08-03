@@ -4,7 +4,9 @@ collision avoidance, entries() shape, regenerate.
 import json
 import os
 
-from api.feedback_vault import Vault
+import pytest
+
+from api.feedback_vault import PseudonymCollisionError, Vault
 
 
 def test_v2_pseudonym_is_fake_name_not_sequential(tmp_path):
@@ -135,3 +137,71 @@ def test_empty_vault_is_usable(tmp_path):
     names, ids = v.all_real_identifiers()
     assert names == set()
     assert ids == set()
+
+
+def _two_students(path):
+    vault = Vault(str(path))
+    vault.get_or_assign("9001", "Synthetic One", "SIS-1")
+    vault.set_pseudonym("9001", "Alpha", "Oneton")
+    vault.get_or_assign("9002", "Synthetic Two", "SIS-2")
+    vault.set_pseudonym("9002", "Beta", "Twoton")
+    vault.save()
+    return vault
+
+
+def test_set_pseudonym_refuses_a_name_another_student_holds(tmp_path):
+    """Without this, two entries share a pseudonym and the reverse index
+    resolves to whichever was written last, attaching one student's work to
+    another."""
+    vault = _two_students(tmp_path / "vault.json")
+    with pytest.raises(PseudonymCollisionError):
+        vault.set_pseudonym("9002", "Alpha", "Oneton")
+
+
+def test_set_pseudonym_allows_a_student_to_keep_their_own_name(tmp_path):
+    """Re-setting a student to the name they already hold, or changing only its
+    capitalization or spacing, is not a collision."""
+    vault = _two_students(tmp_path / "vault.json")
+    vault.set_pseudonym("9001", "Alpha", "Oneton")
+    assert vault.reverse("Alpha Oneton")["canvas_id"] == "9001"
+    vault.set_pseudonym("9001", " alpha ", "ONETON")
+    assert vault.reverse("alpha ONETON")["canvas_id"] == "9001"
+
+
+def test_a_refused_rename_leaves_the_vault_untouched(tmp_path):
+    """The check runs before any mutation, so this holds without relying on the
+    transaction to roll back."""
+    path = tmp_path / "vault.json"
+    vault = _two_students(path)
+    before = json.loads(path.read_text(encoding="utf-8"))
+
+    with pytest.raises(PseudonymCollisionError):
+        vault.set_pseudonym("9002", "Alpha", "Oneton")
+
+    assert vault.reverse("Alpha Oneton")["canvas_id"] == "9001"
+    assert vault.reverse("Beta Twoton")["canvas_id"] == "9002"
+    assert json.loads(path.read_text(encoding="utf-8")) == before
+
+    reloaded = Vault(str(path))
+    assert reloaded.reverse("Alpha Oneton")["canvas_id"] == "9001"
+    assert reloaded.reverse("Beta Twoton")["canvas_id"] == "9002"
+
+
+def test_a_refused_rename_also_discards_a_nickname_edit_in_the_same_patch(tmp_path):
+    """`update_student` applies nicknames and the pseudonym in one transaction,
+    and transaction() only saves on the success path. A patch that is refused
+    must therefore land nothing at all."""
+    path = tmp_path / "vault.json"
+    vault = _two_students(path)
+
+    try:
+        with vault.transaction():
+            vault.set_nicknames("9002", ["Bee"])
+            vault.set_pseudonym("9002", "Alpha", "Oneton")
+    except PseudonymCollisionError:
+        pass
+
+    reloaded = Vault(str(path))
+    entry = next(e for e in reloaded.entries() if str(e.get("canvas_id")) == "9002")
+    assert entry.get("nicknames") == []
+    assert reloaded.reverse("Beta Twoton")["canvas_id"] == "9002"

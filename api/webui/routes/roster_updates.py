@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
+from api import feedback_vault, pseudonym_rename
+
 from api.roster_context import (
     SEATING_CONTEXT_DEFAULT,
     SEATING_CONTEXT_SUPPORTS,
@@ -125,18 +127,39 @@ def update_student(
 
     vault = vault_factory()
 
-    with vault.transaction():
-        if "nicknames" in nickname_values:
-            vault.set_nicknames(user_id, nickname_values["nicknames"])
-        if "add_nicknames" in nickname_values:
-            vault.add_nicknames(user_id, nickname_values["add_nicknames"])
+    renaming = "pseudonym" in data or bool(data.get("regenerate_pseudonym"))
+    old_pseudonym = pseudonym_rename.current_pseudonym(vault, user_id) if renaming else ""
+    if renaming:
+        # Before the rename, while the old pseudonym still resolves through the
+        # vault. See api/pseudonym_rename.py for why the order matters.
+        blocked = pseudonym_rename.backfill_assessment_history()
+        if blocked:
+            return {"ok": False, "error": blocked}
 
-        if "pseudonym" in data:
-            p = data["pseudonym"]
-            vault.set_pseudonym(user_id, p["first"], p["last"])
+    try:
+        with vault.transaction():
+            if "nicknames" in nickname_values:
+                vault.set_nicknames(user_id, nickname_values["nicknames"])
+            if "add_nicknames" in nickname_values:
+                vault.add_nicknames(user_id, nickname_values["add_nicknames"])
 
-        if data.get("regenerate_pseudonym"):
-            vault.regenerate_pseudonym(user_id)
+            if "pseudonym" in data:
+                p = data["pseudonym"]
+                vault.set_pseudonym(user_id, p["first"], p["last"])
+
+            if data.get("regenerate_pseudonym"):
+                vault.regenerate_pseudonym(user_id)
+    except feedback_vault.PseudonymCollisionError as exc:
+        # transaction() only saves on the success path, so a refused rename
+        # persists nothing, including any nickname change in the same patch.
+        return {"ok": False, "error": str(exc)}
+
+    if renaming:
+        incomplete = pseudonym_rename.rewrite_writing_spans(
+            old_pseudonym, pseudonym_rename.current_pseudonym(vault, user_id))
+        stale = pseudonym_rename.refresh_published_profile()
+        if incomplete or stale:
+            return {"ok": False, "error": incomplete or stale}
 
     if extra_time is not None:
         et = extra_time
