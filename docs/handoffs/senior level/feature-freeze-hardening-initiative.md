@@ -4,11 +4,17 @@
 
 **Last senior review:** 2026-08-03
 
-**Baseline:** `dev` @ `b8bb5e7`, `v1.0.0-beta.3`, working tree clean, `api/tests` 2132 passed in 71s
+**Baseline:** `dev` @ `287fe6e`, `v1.0.0-beta.3`, working tree clean except an
+unrelated pre-existing `README.md` edit (out of scope for this initiative,
+left untouched), `api/tests` 2140 passed.
 
-**Next batch pointer:** None. Batches A-D below are drafted but not promoted. The senior
-promotes one batch at a time into the single direct brief in `docs/handoffs/` after
-re-confirming the baseline against the then-current repository.
+**Next batch pointer:** Batch 1 (§9 row 1: A1, A2, A4, A6) is GREEN and
+committed at `287fe6e`; its brief is retired at
+`docs/handoffs/feature-freeze-batch1-pii-hardening.md`. Next up is §9 row 2:
+**Batch 2 (A3)**, which must follow A1 (already landed). Read §3 A3, §7
+non-goal 1, and §8 for the next brief. No senior decisions from other
+batches are outstanding for A3 specifically; A5, D1.4, D4, and 2.3 remain
+open per §10 and are not required to promote A3.
 
 This document is persistent senior context. It does not authorize implementation directly.
 
