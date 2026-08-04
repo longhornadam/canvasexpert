@@ -4,17 +4,6 @@ Created by a teacher for teachers.
 
 Free. Private. Open source. Uses your secure Canvas "Personal Access Token". Runs entirely on your computer.
 
-- Create and push quizzes, assignments, and pages to your Canvas courses
-- Download PDF or Word versions of the work
-- Assign differentiated work to different groups
-- Curve grades, sweep late work, grant extensions (automated for "extended time" students)
-- Optional AI integrations that keep the Canvas connection on your computer
-- "Pseudonymization" (names/IDs changed) built in for protecting student information
-- Display classroom information with Panels, one full-bleed URL per view, in Classroomscreen or another display surface
-- Keep school dates, grading periods, bell schedules, and Teacher Schedule in one local School Calendar
-- Review AI-assisted scores in PowerGrader before anything reaches Canvas
-- Connect an assistant over the local MCP server for pseudonymized reads and reviewed local writes
-
 ## Getting started
 
 Step 1 - Click the green **Code** button near the top of this page, then **Download ZIP** and unzip it.
@@ -22,6 +11,49 @@ Step 2 - Put the unzipped folder anywhere in your own files.
 Step 3 - Double-click `Open Canvas Expert.bat`. The first run installs what it needs into your own user account, no admin needed, then opens the app in your browser.
 
 One prerequisite it cannot install for you: **Python 3.13 or newer**. If the window says Python is not installed, get it from [python.org](https://www.python.org/downloads/), tick **Install for me only** (still no admin), then double-click `Open Canvas Expert.bat` again. If it ever stops starting, double-click `Repair.bat`.
+
+## What it does
+
+**Create** quizzes, assignments, pages, rubrics, and quick gradebook columns, then push them to Canvas.
+Draft in the app or bring a draft back from an AI chat, validate it, dry-run the push, then send it live.
+Set due, unlock, and lock dates, grading category, module placement, shuffle, time limit, attempts, and
+access code on the way out. Classic Quizzes and New Quizzes are both supported. Save a printable PDF and
+Word version of anything you build.
+
+**Differentiate** the same work four ways (Support, Core, Accelerate, Extend) and push each tier to its own
+group. The tier names stay private to you; students see only a neutral tag you choose, or nothing at all.
+
+**PowerGrader** turns an assignment into a keyboard-driven scoring queue. Three ways to work it: score it
+yourself with nothing leaving the computer, generate a pseudonymized file to paste into the AI chat you
+already use, or have CanvasExpert send that same file and bring back draft scores. Every score and comment
+waits for your review before it posts, and you are the one who posts it.
+
+**Gradebook tools** for one course at a time: set Canvas's own late policy, sweep late work by counting real
+school days instead of calendar days, honor per-student extra time, grant extensions, apply curves, and take
+snapshots.
+
+**Students** is your class list plus the things Canvas will not hold: accommodations, extra time, small
+groups, monitoring flags, and private notes. Student reports pull it together per kid. Seating charts and
+grouping live next door.
+
+**Assessments** imports Eduphoria exports, matches them to your roster, and turns them into a standards
+profile, coverage reports, longitudinal history, and grouping suggestions.
+
+**Panels** puts classroom information on the board. Nine of them (what's due, missing work, learning
+objective, random student, birthdays, upcoming events, sports results, and more), each one a full-bleed URL
+you drop into Classroomscreen or any other display surface, with themes to match your room.
+
+**Calendar** holds your school year, bell schedules, no-school days, public events, and your own teaching
+schedule in one place. Panels and the late-work sweep both read from it.
+
+**Routines** run the recurring chores so you stop remembering them.
+
+**CanvasAgent** connects the AI you already use. Download one instruction file and paste it into any chat,
+or connect Claude Desktop or the ChatGPT desktop app so the assistant can read your course data itself,
+pseudonymized, over a local connection that never leaves your machine.
+
+Everything works from a local copy of your Canvas data, so the app stays fast and keeps working when the
+network does not. It refreshes in the background and updates itself when you say so.
 
 ## Learn more
 
@@ -34,12 +66,20 @@ For developers: see `AGENTS.md` and `docs/README.md`.
 
 ## License
 
-MIT — see `LICENSE`.
+MIT, see `LICENSE`.
 
 ## AI Disclosures
 
-CanvasExpert was built by a teacher working with AI coding tools. 
+CanvasExpert was built by a teacher working with AI coding tools.
 
-CanvasExpert's optional AI features pseudonymize names and IDs before anything leaves your computer, but that's not a 100% guarantee. Review anything you're going to send to AI services.
+The AI features are optional and off until you turn them on. When you use one, CanvasExpert replaces real
+names and Canvas/SIS ID numbers with stable fake ones before anything leaves your computer, and checks the
+result again before it sends. The real-to-fake map stays on your machine and is never transmitted.
 
-Never send anyone's personally identifiable information (PII) to an AI service. Not only is that uncool, it's illegal.
+That is not a guarantee. The check knows the students on your synced rosters and nothing else, so a name it
+has never seen, a name spelled differently than Canvas spells it, or a phone number, address, or email a
+student typed into their own essay can pass through. Read what you are about to send. The app shows it to
+you first for exactly that reason.
+
+Never send anyone's personally identifiable information (PII) to an AI service. Not only is that uncool,
+it's illegal.
