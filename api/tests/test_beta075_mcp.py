@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 28
+    assert contract.TOOL_SCHEMA_VERSION == 29
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -43,7 +43,8 @@ def test_live_mcp_schema_matches_versioned_contract():
         # v24 is the frozen 45-tool snapshot; v25 removes the retired deck tools
         # while retaining the pre-DataForge 42-tool shape. v26 adds the offline
         # standards-profile read; v27 adds bounded assessment context; v28 adds
-        # the read-only assessment grouping proposal.
+        # the read-only assessment grouping proposal; v29 adds the narrow
+        # existing-game score preview/apply pair.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -83,7 +84,7 @@ def test_live_mcp_schema_matches_versioned_contract():
     v25 = contract.load_contract(25)
     assert v25["schema_version"] == 25
     assert len(v25["tools"]) == 42
-    assert len(live["tools"]) == 45
+    assert len(live["tools"]) == 47
     # Panel theme tools: get_theme_contract, list_panel_themes,
     # preview/apply/delete_panel_theme
     v22 = contract.load_contract(22)

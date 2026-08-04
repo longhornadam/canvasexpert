@@ -16,7 +16,7 @@ import sys
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import config, school_calendar, workspace
+from .. import config, deps, school_calendar, workspace
 from api import operational_log, runtime_paths
 from ..local_request_guard import csrf_token
 from api.operation_ledger import operations as operation_store
@@ -55,10 +55,80 @@ def _routines_template_context() -> dict:
     }
 
 
+def _calendar_home_warnings(readiness: dict) -> list[dict]:
+    """Return only concrete Calendar repairs that belong on Home."""
+    status = readiness.get("status")
+    create_href = "/calendar#calendar-create-card"
+    if status == "ready":
+        return []
+    if status == "unconfigured":
+        return [{
+            "message": "The Calendar school year and dates need to be set up.",
+            "actions": [{"label": "Set up Calendar", "href": create_href}],
+        }]
+    if status == "invalid_calendar":
+        return [{
+            "message": "Calendar could not read the saved school year.",
+            "actions": [{"label": "Review and replace it", "href": create_href}],
+        }]
+    if status != "needs_attention":
+        return []
+
+    warnings = []
+    today = readiness.get("today") or {}
+    if today.get("state") == "outside_coverage":
+        warnings.append({
+            "message": "Calendar does not cover today.",
+            "actions": [{
+                "label": "Extend or replace the school year",
+                "href": create_href,
+            }],
+        })
+
+    unknown_schedule_count = len(readiness.get("unknown_schedule_dates") or [])
+    if unknown_schedule_count:
+        date_label = "date" if unknown_schedule_count == 1 else "dates"
+        warnings.append({
+            "message": (
+                f"Calendar references {unknown_schedule_count} {date_label} "
+                "with an unavailable Bell Schedule."
+            ),
+            "actions": [
+                {
+                    "label": "Restore or add the schedule",
+                    "href": "/calendar#calendar-bell-card",
+                },
+                {
+                    "label": "Update the affected dates",
+                    "href": "/calendar#calendar-change-card",
+                },
+            ],
+        })
+
+    remaining_coverage_days = readiness.get("remaining_coverage_days")
+    coverage_end = (readiness.get("coverage") or {}).get("end")
+    if (
+        today.get("state") != "outside_coverage"
+        and remaining_coverage_days is not None
+        and remaining_coverage_days < 30
+        and coverage_end
+    ):
+        warnings.append({
+            "message": f"Calendar coverage ends on {coverage_end}.",
+            "actions": [{
+                "label": "Extend or replace the school year",
+                "href": create_href,
+            }],
+        })
+    return warnings
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     courses = config.active_courses()
-    calendar_status = school_calendar.readiness()["status"]
+    bell_schedules, _bell_problems = deps.load_bell_schedules()
+    calendar_readiness = school_calendar.readiness(bell_schedule_ids=bell_schedules)
+    calendar_warnings = _calendar_home_warnings(calendar_readiness)
     initial_jobs, initial_presentations = work_routes.visible_work("all") or ([], {})
     initial_operations = [
         {
@@ -80,7 +150,7 @@ def dashboard(request: Request):
         "canvas_base":    config.get_canvas_base(),
         "saved_courses":  courses,
         "active_count":   len(courses),
-        "calendar_status": calendar_status,
+        "calendar_warnings": calendar_warnings,
         "workspace_status": workspace_status,
         "csrf_token": csrf_token(),
         "initial_jobs": initial_jobs,

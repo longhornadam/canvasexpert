@@ -2032,6 +2032,7 @@ def test_server_registers_the_expected_tool_set():
         "preview_school_calendar_replacement", "apply_school_calendar_replacement",
         "preview_school_calendar_change", "apply_school_calendar_change",
         "preview_school_calendar_event_change", "apply_school_calendar_event_change",
+        "preview_school_calendar_game_score", "apply_school_calendar_game_score",
         "get_course_pages", "list_learning_objectives", "preview_learning_objective",
             "apply_learning_objective", "delete_learning_objective",
             "get_roster_student_settings", "preview_roster_student_change",
@@ -2311,4 +2312,84 @@ def test_server_registers_event_calendar_wrappers(monkeypatch):
         "ok": True, "revision": expected_revision + 1,
     })
     wire = server.apply_school_calendar_event_change({"base_revision": 1}, 1)
+    assert json.loads(wire) == {"ok": True, "revision": 2}
+
+
+def _game_score_workspace(monkeypatch, tmp_path):
+    workspace_root = tmp_path / "workspace"
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(workspace_root))
+    monkeypatch.setattr(
+        workspace, "library_folder", lambda name: str(workspace_root / "Library" / name)
+    )
+    calendars = workspace_root / "Library" / "Calendars"
+    calendars.mkdir(parents=True)
+    calendar = {
+        "version": "1.0-json", "type": "SCHOOL_CALENDAR", "revision": 1,
+        "school_year": "2026-27", "coverage": {"start": "2026-08-17", "end": "2026-08-18"},
+        "days": {
+            "2026-08-17": {"kind": "instructional", "schedule_id": "ordinary"},
+            "2026-08-18": {"kind": "instructional", "schedule_id": "ordinary"},
+        },
+        "grading_periods": [],
+        "events": [
+            {"id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",
+             "date": "2026-08-18", "detail": "Away", "result": "Scheduled"},
+            {"id": "dance-1", "kind": "dance", "label": "Fall Dance", "shape": "date",
+             "date": "2026-08-17"},
+        ],
+    }
+    path = calendars / "School Calendar.json"
+    path.write_text(json.dumps(calendar), encoding="utf-8")
+    return path
+
+
+def test_game_score_preview_and_apply_preserves_existing_game_event(monkeypatch, tmp_path):
+    path = _game_score_workspace(monkeypatch, tmp_path)
+
+    preview = tools.preview_school_calendar_game_score("game-1", "Won 2-1")
+
+    assert preview["ok"] is True
+    assert preview["game_score"] == {"event_id": "game-1", "score": "Won 2-1"}
+    assert preview["before"]["result"] == "Scheduled"
+    assert preview["after"] == {
+        "id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",
+        "date": "2026-08-18", "detail": "Away", "result": "Won 2-1",
+    }
+    assert json.loads(path.read_text(encoding="utf-8"))["revision"] == 1
+
+    applied = tools.apply_school_calendar_game_score(preview, preview["base_revision"])
+
+    assert applied == {"ok": True, "revision": 2}
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["events"][0]["result"] == "Won 2-1"
+    assert saved["events"][0]["detail"] == "Away"
+    assert saved["events"][1]["label"] == "Fall Dance"
+
+
+def test_game_score_preview_requires_an_existing_game(monkeypatch, tmp_path):
+    _game_score_workspace(monkeypatch, tmp_path)
+
+    missing = tools.preview_school_calendar_game_score("missing", "Won 2-1")
+    non_game = tools.preview_school_calendar_game_score("dance-1", "Won 2-1")
+
+    assert missing["ok"] is False
+    assert "was not found" in missing["problems"][0]
+    assert non_game["ok"] is False
+    assert "not a game event" in non_game["problems"][0]
+
+
+def test_server_registers_game_score_wrappers(monkeypatch):
+    from api.mcp_server import server
+
+    monkeypatch.setattr(tools, "preview_school_calendar_game_score", lambda event_id, score: {
+        "ok": True, "operation": "event_change", "event_id": event_id, "score": score,
+    })
+    wire = server.preview_school_calendar_game_score("game-1", "Won 2-1")
+    assert json.loads(wire) == {
+        "ok": True, "operation": "event_change", "event_id": "game-1", "score": "Won 2-1",
+    }
+    monkeypatch.setattr(tools, "apply_school_calendar_game_score", lambda preview, expected_revision: {
+        "ok": True, "revision": expected_revision + 1,
+    })
+    wire = server.apply_school_calendar_game_score({"base_revision": 1}, 1)
     assert json.loads(wire) == {"ok": True, "revision": 2}

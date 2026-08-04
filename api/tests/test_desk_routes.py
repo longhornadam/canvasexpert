@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
+import pytest
 
 from api.webui.server import app
 from api.webui.routes import pages
@@ -80,11 +81,19 @@ def test_desk_empty_render_is_local_and_honest(monkeypatch):
 
 
 def test_desk_readiness_card_names_missing_courses_and_calendar(monkeypatch):
-    """D4: with no active courses and no calendar configured (the app's
-    blind spot -- token set, nothing else), Home must name both unmet
-    preconditions and link to the page that fixes each."""
+    """Home keeps the concrete active-course and Calendar repairs together."""
     _configure(monkeypatch)
     monkeypatch.setattr(pages.config, "active_courses", lambda: [])
+    monkeypatch.setattr(
+        pages.deps,
+        "load_bell_schedules",
+        lambda: ({"bell-a": []}, []),
+    )
+    monkeypatch.setattr(
+        pages.school_calendar,
+        "readiness",
+        lambda **kwargs: {"status": "unconfigured"},
+    )
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
     monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
@@ -95,13 +104,32 @@ def test_desk_readiness_card_names_missing_courses_and_calendar(monkeypatch):
     assert "No active courses yet" in response.text
     assert 'href="/settings#current-courses-card"' in response.text
     assert "Calendar and Create" in response.text
-    assert "No school calendar configured" in response.text
-    assert 'href="/calendar"' in response.text
+    assert "The Calendar school year and dates need to be set up." in response.text
+    assert 'href="/calendar#calendar-create-card"' in response.text
+    assert "No school calendar configured" not in response.text
+    assert "every day counts as instructional" not in response.text
 
 
-def test_desk_readiness_card_is_absent_once_both_preconditions_are_met(monkeypatch):
+def test_desk_ready_calendar_has_no_warning_and_uses_loaded_bell_schedule_ids(monkeypatch):
     _configure(monkeypatch)
-    monkeypatch.setattr(pages.school_calendar, "readiness", lambda **kwargs: {"status": "ready", "problems": []})
+    loaded_ids = {"bell-a": [], "bell-b": []}
+    loader_problem = r"C:\private\calendar\bell-schedule.json: unreadable"
+    monkeypatch.setattr(
+        pages.deps,
+        "load_bell_schedules",
+        lambda: (loaded_ids, [loader_problem]),
+    )
+    readiness_calls = []
+
+    def fake_readiness(**kwargs):
+        readiness_calls.append(kwargs)
+        return {
+            "status": "ready",
+            "today": {"state": "no_school"},
+            "unknown_schedule_dates": [],
+        }
+
+    monkeypatch.setattr(pages.school_calendar, "readiness", fake_readiness)
     monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
     monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
     monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
@@ -109,8 +137,130 @@ def test_desk_readiness_card_is_absent_once_both_preconditions_are_met(monkeypat
     response = _client().get("/")
 
     assert response.status_code == 200
+    assert readiness_calls == [{"bell_schedule_ids": loaded_ids}]
     assert "No active courses yet" not in response.text
     assert "No school calendar configured" not in response.text
+    assert "every day counts as instructional" not in response.text
+    assert loader_problem not in response.text
+
+
+@pytest.mark.parametrize(
+    ("readiness", "expected_copy", "expected_links"),
+    [
+        (
+            {"status": "unconfigured"},
+            ["The Calendar school year and dates need to be set up."],
+            ["/calendar#calendar-create-card"],
+        ),
+        (
+            {"status": "invalid_calendar"},
+            ["Calendar could not read the saved school year."],
+            ["/calendar#calendar-create-card"],
+        ),
+        (
+            {
+                "status": "needs_attention",
+                "today": {"state": "outside_coverage"},
+                "unknown_schedule_dates": [],
+                "remaining_coverage_days": 0,
+                "coverage": {"end": "2026-07-31"},
+            },
+            ["Calendar does not cover today.", "Extend or replace the school year"],
+            ["/calendar#calendar-create-card"],
+        ),
+        (
+            {
+                "status": "needs_attention",
+                "today": {"state": "no_school"},
+                "unknown_schedule_dates": ["2026-09-02", "2026-09-03"],
+                "remaining_coverage_days": 120,
+                "coverage": {"end": "2027-06-01"},
+            },
+            [
+                "Calendar references 2 dates with an unavailable Bell Schedule.",
+                "Restore or add the schedule",
+                "Update the affected dates",
+            ],
+            ["/calendar#calendar-bell-card", "/calendar#calendar-change-card"],
+        ),
+        (
+            {
+                "status": "needs_attention",
+                "today": {"state": "no_school"},
+                "unknown_schedule_dates": [],
+                "remaining_coverage_days": 12,
+                "coverage": {"end": "2026-08-20"},
+            },
+            [
+                "Calendar coverage ends on 2026-08-20.",
+                "Extend or replace the school year",
+            ],
+            ["/calendar#calendar-create-card"],
+        ),
+        (
+            {
+                "status": "needs_attention",
+                "today": {"state": "no_school"},
+                "unknown_schedule_dates": ["2026-09-02"],
+                "remaining_coverage_days": 12,
+                "coverage": {"end": "2026-08-20"},
+            },
+            [
+                "Calendar references 1 date with an unavailable Bell Schedule.",
+                "Calendar coverage ends on 2026-08-20.",
+            ],
+            [
+                "/calendar#calendar-bell-card",
+                "/calendar#calendar-change-card",
+                "/calendar#calendar-create-card",
+            ],
+        ),
+    ],
+)
+def test_desk_calendar_warning_mapping(monkeypatch, readiness, expected_copy, expected_links):
+    _configure(monkeypatch)
+    monkeypatch.setattr(
+        pages.deps,
+        "load_bell_schedules",
+        lambda: ({"bell-a": []}, [r"C:\private\calendar\bell.json"]),
+    )
+    monkeypatch.setattr(pages.school_calendar, "readiness", lambda **kwargs: readiness)
+    monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
+    monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
+    monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
+
+    response = _client().get("/")
+
+    assert response.status_code == 200
+    for copy in expected_copy:
+        assert copy in response.text
+    for link in expected_links:
+        assert f'href="{link}"' in response.text
+    assert "No school calendar configured" not in response.text
+    assert "every day counts as instructional" not in response.text
+    assert "School Schedule" not in response.text
+
+
+def test_desk_outside_coverage_does_not_duplicate_low_coverage_warning(monkeypatch):
+    _configure(monkeypatch)
+    readiness = {
+        "status": "needs_attention",
+        "today": {"state": "outside_coverage"},
+        "unknown_schedule_dates": [],
+        "remaining_coverage_days": 12,
+        "coverage": {"end": "2026-08-20"},
+    }
+    monkeypatch.setattr(pages.deps, "load_bell_schedules", lambda: ({"bell-a": []}, []))
+    monkeypatch.setattr(pages.school_calendar, "readiness", lambda **kwargs: readiness)
+    monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
+    monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
+    monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
+
+    response = _client().get("/")
+
+    assert response.status_code == 200
+    assert "Calendar does not cover today." in response.text
+    assert "Calendar coverage ends on 2026-08-20." not in response.text
 
 
 def test_desk_active_courses_use_teacher_names_saved_order_and_empty_state(monkeypatch):

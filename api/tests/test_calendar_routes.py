@@ -41,6 +41,36 @@ def test_get_api_calendar_exposes_no_absolute_paths(isolated_workspace):
     assert str(isolated_workspace) not in blob
 
 
+def test_calendar_page_prioritizes_teacher_schedule_and_collapses_secondary_surfaces(
+    isolated_workspace,
+):
+    html = client.get("/calendar").text
+
+    assert html.index('id="calendar-teacher-card"') < html.index('id="calendar-readiness-card"')
+    assert html.index('id="calendar-readiness-card"') < html.index('id="calendar-change-card"')
+    assert html.index('id="calendar-change-card"') < html.index('id="calendar-events-card"')
+    assert html.index('id="calendar-events-card"') < html.index('id="calendar-create-card"')
+    assert html.index('id="calendar-create-card"') < html.index('id="calendar-bell-card"')
+    assert html.index('id="calendar-teacher-card"') < html.index('id="calendar-bell-card"')
+    assert "Daily work" in html
+    assert html.index("Teacher Schedule") < html.index("Today &amp; upcoming")
+    for section_id in ("calendar-events-card", "calendar-create-card", "calendar-bell-card"):
+        assert (
+            f'<details class="ce-panel ce-calendar-panel ce-calendar-secondary" '
+            f'id="{section_id}">'
+        ) in html
+        assert f'id="{section_id}" open' not in html
+
+
+def test_calendar_page_disclosure_links_are_wired_to_open_secondary_surfaces():
+    js = (pathlib.Path(__file__).resolve().parents[1]
+          / "webui" / "static" / "pages" / "calendar.js").read_text(encoding="utf-8")
+
+    assert 'a[href^="#calendar-"]' in js
+    assert 'target.open = true' in js
+    assert "openHashTarget" in js
+
+
 def test_year_preview_is_create_at_base_revision_zero(isolated_workspace):
     calendars = isolated_workspace / "Library" / "Calendars"
     schedule_id = _bell_schedule(calendars)
@@ -113,6 +143,43 @@ def test_event_preview_apply_round_trips_game_result_without_real_workspace_writ
     assert "events" not in applied
     assert client.get("/api/calendar").json()["events"] == [event]
     assert not (isolated_workspace / "School Calendar.json").exists()
+
+
+def test_event_delete_preview_apply_round_trips_through_calendar_routes(isolated_workspace):
+    calendars = isolated_workspace / "Library" / "Calendars"
+    schedule_id = _bell_schedule(calendars)
+    year_preview = client.post("/api/calendar/year/preview", data={
+        "school_year": "2026-27", "coverage_start": "2026-08-17",
+        "coverage_end": "2026-08-18", "default_schedule_id": schedule_id,
+    }).json()
+    client.post("/api/calendar/year/apply", data={
+        "expected_revision": 0,
+        "preview": json.dumps({k: v for k, v in year_preview.items() if k != "ok"}),
+    })
+    event_preview = client.post("/api/calendar/event/preview", data={
+        "action": "upsert", "event": json.dumps({
+            "id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",
+            "date": "2026-08-18", "result": "Scheduled",
+        }),
+    }).json()
+    client.post("/api/calendar/event/apply", data={
+        "expected_revision": event_preview["base_revision"],
+        "preview": json.dumps({k: v for k, v in event_preview.items() if k != "ok"}),
+    })
+
+    preview = client.post("/api/calendar/event/preview", data={
+        "action": "delete", "event_id": "game-1",
+    }).json()
+    assert preview["ok"] is True
+    assert preview["mutation"] == {"action": "delete", "event_id": "game-1"}
+    assert preview["after"] is None
+
+    applied = client.post("/api/calendar/event/apply", data={
+        "expected_revision": preview["base_revision"],
+        "preview": json.dumps({k: v for k, v in preview.items() if k != "ok"}),
+    }).json()
+    assert applied == {"ok": True, "revision": 3}
+    assert client.get("/api/calendar").json()["events"] == []
 
 
 def test_year_apply_refuses_a_stale_preview(isolated_workspace):

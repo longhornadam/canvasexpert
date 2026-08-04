@@ -29,7 +29,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
 
 ## Tools
 
-Tool schema version 28 (45 tools).
+Tool schema version 29 (47 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -69,6 +69,8 @@ Tool schema version 28 (45 tools).
 | `apply_school_calendar_change(preview, expected_revision)` | Applies a previewed change; refuses a stale `expected_revision` | No |
 | `preview_school_calendar_event_change(action, event=None, event_id="")` | Previews an upsert or delete of one canonical public event and returns before/after projections | No |
 | `apply_school_calendar_event_change(preview, expected_revision)` | Applies a previewed public-event change; refuses stale or altered previews | No |
+| `preview_school_calendar_game_score(event_id, score)` | Previews changing the result of one existing `game` event while carrying every other field forward unchanged | No |
+| `apply_school_calendar_game_score(preview, expected_revision)` | Applies the exact reviewed game-score preview; refuses stale, altered, or non-game previews | No |
 | `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved}` | No |
 | `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard | Yes — pseudonymized |
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
@@ -117,11 +119,12 @@ worth telling the teacher. See `docs/reference/panels-route-card.md` for the ful
 Canvas call; a teacher-set block `course_id` passes through untouched after string
 validation, so an assistant can read, edit, and write the binding safely.
 
-The seven canonical Calendar tools (`get_school_calendar`,
+The nine canonical Calendar tools (`get_school_calendar`,
 `preview_school_calendar_replacement`, `apply_school_calendar_replacement`,
 `preview_school_calendar_change`, `apply_school_calendar_change`,
-`preview_school_calendar_event_change`, `apply_school_calendar_event_change`) share the same
-exemption: no `course_id`, no student data, no course gate, no safety scan. Both writes
+`preview_school_calendar_event_change`, `apply_school_calendar_event_change`,
+`preview_school_calendar_game_score`, `apply_school_calendar_game_score`) share the same
+exemption: no `course_id`, no student data, no course gate, no safety scan. All writes
 are staged preview/apply pairs, never a one-click overwrite: base revision is 0 only
 before any calendar exists, and every successful write after that — including a complete
 replacement — advances the revision by exactly one, never resetting it. The authoring
@@ -131,6 +134,10 @@ accepts that summary — never inside an email/inbox integration or a free-text 
 built into CanvasExpert itself. The event pair uses `action="upsert"` with one complete
 structured event or `action="delete"` with its stable `event_id`; it mutates only the
 canonical `events` array and supports the same revision/digest/atomic-write boundary.
+The game-score pair is intentionally narrower: it requires an existing stable event ID whose
+kind is `game`, changes only its `result`, and preserves the event's label, date, shape, and
+other fields. It is the preferred tool for recording a result on a game that is already on the
+calendar; it does not create or retarget events.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
 the app actually does — an assistant that sees only the read tools cannot tell that

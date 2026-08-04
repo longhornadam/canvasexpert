@@ -214,6 +214,12 @@ digest, re-derives the candidate `events` array from the normalized mutation, va
 complete next document, and refuses altered before/after projections. Replacing an equivalent
 event or deleting a missing event is a no-op and does not increment revision.
 
+MCP also exposes a narrow game-score convenience pair. It accepts an existing stable `event_id`
+and a plain-text `score`, requires that the event's kind is `game`, carries every other event
+field forward unchanged, and returns the same event preview/apply boundary. It cannot create a
+game or retarget a score to another event; use the general event upsert when authoring a new
+event.
+
 Apply never trusts client-supplied `before`, `after`, or affected-date projections as write
 authority. It re-derives and validates the proposed result from the normalized mutation carried
 by the preview and refuses a preview whose revision or canonical preview digest no longer
@@ -225,11 +231,11 @@ payloads, not an authentication mechanism.
 `/calendar` is a primary-nav working surface, not a Settings subsection. Its title and nav label
 are both **Calendar**. Panels remains in primary navigation.
 
-The first screenful contains:
-
-- a compact readiness line for the active school year and coverage;
-- today and the upcoming dates, with the resolved day kind and Bell Schedule visibly named;
-- the date/range change control.
+The primary view begins with the Teacher Schedule because Panels consume those blocks. It keeps
+the compact Calendar readiness line, a short upcoming-date list, and the date/range change
+control immediately below it. Bell Schedule reference, school-year setup, and public events
+remain on this page as collapsed secondary surfaces; direct Calendar-section links open the
+target surface.
 
 The same page owns the Teacher Schedule editor, Bell Schedule definitions, academic-calendar
 import, grading periods, and public events. Settings removes its Class schedule and Academic
@@ -282,6 +288,9 @@ no permanent onboarding tour. Readiness is calm but unmissable. It becomes
 `needs_attention` when no valid calendar exists, today is outside coverage, an instructional
 date references an unknown Bell Schedule, or fewer than 30 calendar days remain in coverage.
 Warnings name the concrete repair and take the teacher to its control.
+
+Home surfaces Calendar only for a concrete repair, using reason-specific copy and an exact
+Calendar-section link; it does not expose a “School Schedule” umbrella.
 
 ## 7. Panels contract carried by Calendar
 

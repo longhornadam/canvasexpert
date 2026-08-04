@@ -272,6 +272,11 @@ you: read again rather than forcing it.
     preview/apply pair. Summarize the affected dates and any conflict before
     applying. Do not parse a calendar out of a forwarded email or free text and
     apply it unattended.
+  * Game scores. After get_school_calendar() identifies the stable event_id,
+    use preview_school_calendar_game_score(event_id, score) for an existing
+    game. It changes only that event's result and returns before/after values;
+    summarize them and apply only after the teacher confirms. It cannot create
+    a game or change a non-game event.
   * Learning objectives. list_learning_objectives(course_id) reads them;
     preview_learning_objective and apply_learning_objective add or replace one,
     grounded in real module, assignment, or page records; delete_learning_objective

@@ -9,38 +9,59 @@
 {% call rail('left', 'Calendar sections') %}
   <nav class="ce-rail-nav" aria-label="Calendar sections">
     <div class="ce-rail-nav__group">
-      <p class="ce-rail-nav__kicker">This year</p>
+      <p class="ce-rail-nav__kicker">Daily work</p>
       <div class="ce-rail-nav__links">
-        <a href="#calendar-readiness-card" data-rail-link>Readiness &amp; upcoming</a>
-        <a href="#calendar-events-card" data-rail-link>Public events</a>
+        <a href="#calendar-teacher-card" data-rail-link>Teacher Schedule</a>
+        <a href="#calendar-readiness-card" data-rail-link>Today &amp; upcoming</a>
         <a href="#calendar-change-card" data-rail-link>Change a date</a>
-        <a href="#calendar-create-card" data-rail-link>Create / replace school year</a>
       </div>
     </div>
     <div class="ce-rail-nav__group">
-      <p class="ce-rail-nav__kicker">Definitions</p>
+      <p class="ce-rail-nav__kicker">Reference &amp; setup</p>
       <div class="ce-rail-nav__links">
         <a href="#calendar-bell-card" data-rail-link>Bell Schedules</a>
-        <a href="#calendar-teacher-card" data-rail-link>Teacher Schedule</a>
+        <a href="#calendar-create-card" data-rail-link>School year setup</a>
+        <a href="#calendar-events-card" data-rail-link>Public events</a>
       </div>
     </div>
   </nav>
 {% endcall %}
 {% endblock %}
 
-{% block workspace_header %}{{ page_header('Calendar', 'School dates, bell schedules, and the teacher schedule that Panels read.') }}{% endblock %}
+{% block workspace_header %}{{ page_header('Calendar', 'Set the Teacher Schedule that Panels read, then maintain school dates and Bell Schedules.') }}{% endblock %}
 
 {% block primary %}
 <div class="ce-calendar-stack">
 
+<section class="ce-panel ce-calendar-panel ce-calendar-primary-panel" id="calendar-teacher-card">
+  <div class="ce-calendar-section-head">
+    <div>
+      <h2>Teacher Schedule</h2>
+      <p class="ce-hint">Set the blocks Panels should show for each class. Keep block names steady once displays use them; periods use the IDs listed in Bell Schedules.</p>
+    </div>
+    <a href="#calendar-bell-card" class="ce-calendar-inline-link">View Bell Schedules</a>
+  </div>
+  <div id="calendar-teacher-block-list" class="ce-schedule-block-list"></div>
+  <div class="ce-actions">
+    <button type="button" id="calendar-teacher-add-block" class="small">Add a block</button>
+    <button type="button" id="calendar-teacher-save-blocks" class="primary small">Save Teacher Schedule</button>
+    <span id="calendar-teacher-status" class="status ce-settings-inline-status"></span>
+  </div>
+</section>
+
 <section class="ce-panel ce-calendar-panel" id="calendar-readiness-card">
-  <h2>Readiness &amp; upcoming</h2>
+  <h2>Today &amp; upcoming</h2>
   <div id="calendar-readiness" class="ce-calendar-readiness" aria-live="polite"></div>
   <div id="calendar-upcoming" class="ce-calendar-upcoming"></div>
 </section>
 
-<section class="ce-panel ce-calendar-panel" id="calendar-events-card">
-  <h2>Public events</h2>
+{% macro public_events() %}
+<details class="ce-panel ce-calendar-panel ce-calendar-secondary" id="calendar-events-card">
+  <summary class="ce-calendar-summary">
+    <span class="ce-calendar-summary-title">Public events</span>
+    <span class="ce-calendar-summary-note">Assemblies, games, performances, and other events</span>
+  </summary>
+  <div class="ce-calendar-secondary-body">
   <div id="calendar-event-list" class="ce-calendar-event-list"></div>
   <div class="ce-actions">
     <button type="button" id="cal-event-new" class="small">New event</button>
@@ -97,7 +118,9 @@
     <div id="cal-event-preview-result" class="ce-calendar-preview" hidden></div>
     <p id="cal-event-status" class="status ce-calendar-status"></p>
   </div>
-</section>
+</div>
+</details>
+{% endmacro %}
 
 <section class="ce-panel ce-calendar-panel" id="calendar-change-card">
   <h2>Change a date</h2>
@@ -148,8 +171,14 @@
   <p id="cal-change-status" class="status ce-calendar-status"></p>
 </section>
 
-<section class="ce-panel ce-calendar-panel" id="calendar-create-card">
-  <h2>Create / replace school year</h2>
+{{ public_events() }}
+
+<details class="ce-panel ce-calendar-panel ce-calendar-secondary" id="calendar-create-card">
+  <summary class="ce-calendar-summary">
+    <span class="ce-calendar-summary-title">School year setup</span>
+    <span class="ce-calendar-summary-note">Create or replace the active school year</span>
+  </summary>
+  <div class="ce-calendar-secondary-body">
   <p class="ce-hint">
     Builds a complete, validated calendar for one coverage range: every day becomes
     instructional (on your default Bell Schedule, or a per-weekday override), a weekend, or an
@@ -235,27 +264,22 @@
   </div>
   <div id="cal-create-preview-result" class="ce-calendar-preview" hidden></div>
   <p id="cal-create-status" class="status ce-calendar-status"></p>
-</section>
+</div>
+</details>
 
-<section class="ce-panel ce-calendar-panel" id="calendar-bell-card">
-  <h2>Bell Schedules</h2>
+<details class="ce-panel ce-calendar-panel ce-calendar-secondary" id="calendar-bell-card">
+  <summary class="ce-calendar-summary">
+    <span class="ce-calendar-summary-title">Bell Schedules</span>
+    <span class="ce-calendar-summary-note">Reference the schedules available to Calendar</span>
+  </summary>
+  <div class="ce-calendar-secondary-body">
   <p class="ce-hint">CSV files in your Calendars folder. Edit them there; this lists what Calendar can see.</p>
   <div id="calendar-bell-list" class="ce-calendar-bell-list"></div>
   <div class="ce-actions">
     <button type="button" id="calendar-open-folder" class="small">Open the Calendars folder</button>
   </div>
-</section>
-
-<section class="ce-panel ce-calendar-panel" id="calendar-teacher-card">
-  <h2>Teacher Schedule</h2>
-  <p class="ce-hint">One row per class. <strong>Block</strong> is the stable name Panels point to, so keep it steady once displays use it. <strong>Periods</strong> are the bell periods it covers, in order. <strong>Course</strong> is a teacher-facing label. <strong>Canvas course</strong> is optional and links the block to a saved Canvas course.</p>
-  <div id="calendar-teacher-block-list" class="ce-schedule-block-list"></div>
-  <div class="ce-actions">
-    <button type="button" id="calendar-teacher-add-block" class="small">Add a block</button>
-    <button type="button" id="calendar-teacher-save-blocks" class="primary small">Save blocks</button>
-    <span id="calendar-teacher-status" class="status ce-settings-inline-status"></span>
-  </div>
-</section>
+</div>
+</details>
 
 </div>
 {% endblock %}

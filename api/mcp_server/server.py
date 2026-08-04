@@ -447,6 +447,24 @@ def apply_school_calendar_event_change(preview: dict, expected_revision: int) ->
 
 
 @mcp.tool()
+def preview_school_calendar_game_score(event_id: str, score: str) -> str:
+    """Preview recording a score on one existing public Calendar game event.
+    The event_id must identify an existing event whose kind is game. The
+    preview carries every other event field forward unchanged; summarize the
+    before/after result and get teacher confirmation before applying it. No
+    course ID or student data."""
+    return _compact(tools.preview_school_calendar_game_score(event_id, score))
+
+
+@mcp.tool()
+def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> str:
+    """Apply a preview returned by preview_school_calendar_game_score.
+    Stale revisions, altered digests, altered projections, and non-game event
+    previews are refused. No course ID or student data."""
+    return _compact(tools.apply_school_calendar_game_score(preview, expected_revision))
+
+
+@mcp.tool()
 def list_scoring_sessions() -> str:
     """PowerGrader sessions with SAFE bundles, newest first, filtered to Current
     courses. Returns {columns, rows} table of (session_id, assignment_name,

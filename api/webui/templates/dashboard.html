@@ -23,17 +23,17 @@
     <a href="/api/download-contract?name=CanvasAgent" download>Download CanvasAgent instructions</a>
   </p>
 
-  {% if active_count == 0 or calendar_status != "ready" %}
+  {% if active_count == 0 or calendar_warnings %}
   {% call notice("attention") %}
     {% if active_count == 0 %}
     <p>No active courses yet — most of Canvas Expert needs one to work with.
       <a href="/settings#current-courses-card">Add a course in Settings</a>.
       Calendar and Create (draft and validate) both work without one — start there this week.</p>
     {% endif %}
-    {% if calendar_status != "ready" %}
-    <p>No school calendar configured — every day counts as instructional until one is set up.
-      <a href="/calendar">Set up Calendar</a> to skip weekends and no-school days automatically.</p>
-    {% endif %}
+    {% for warning in calendar_warnings %}
+    <p>{{ warning.message }}
+      {% for action in warning.actions %}<a href="{{ action.href }}">{{ action.label }}</a>{% if not loop.last %} or {% endif %}{% endfor %}</p>
+    {% endfor %}
   {% endcall %}
   {% endif %}
 

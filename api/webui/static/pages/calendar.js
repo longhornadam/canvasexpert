@@ -109,7 +109,7 @@
       el.innerHTML = '<p class="ce-hint">No upcoming dates to show.</p>';
       return;
     }
-    var rows = keys.map(function (dateKey) {
+    function rowHtml(dateKey) {
       var entry = days[dateKey] || {};
       var kindLabel = entry.kind === "instructional" ? "Instructional"
         : entry.kind === "no_regular_classes" ? "No regular classes"
@@ -126,9 +126,33 @@
       }
       return '<div class="ce-calendar-upcoming-row"><strong>' + friendlyDate(dateKey) + '</strong> — ' +
         kindLabel + (detail ? ": " + detail : "") + '</div>';
-    });
-    el.innerHTML = rows.join("");
+    }
+    var visibleCount = 5;
+    var visibleRows = keys.slice(0, visibleCount).map(rowHtml).join("");
+    var remaining = keys.slice(visibleCount);
+    if (!remaining.length) {
+      el.innerHTML = visibleRows;
+      return;
+    }
+    el.innerHTML = visibleRows +
+      '<details id="calendar-upcoming-more" class="ce-calendar-upcoming-more"><summary>Show ' + remaining.length +
+      ' more dates</summary>' + remaining.map(rowHtml).join("") + '</details>';
   }
+
+  function openHashTarget() {
+    if (!window.location.hash) return;
+    var target = document.querySelector(window.location.hash);
+    if (target && target.tagName === "DETAILS") target.open = true;
+  }
+
+  document.querySelectorAll('a[href^="#calendar-"]').forEach(function (link) {
+    link.addEventListener("click", function () {
+      var target = document.querySelector(link.getAttribute("href"));
+      if (target && target.tagName === "DETAILS") target.open = true;
+    });
+  });
+  openHashTarget();
+  window.addEventListener("hashchange", openHashTarget);
 
   // ── Bell Schedules ───────────────────────────────────────────────────────
 
@@ -233,7 +257,7 @@
       row.innerHTML =
         '<label>Block<input type="text" data-field="name" value="' + esc(block.name || "") + '" placeholder="1st/2nd"></label>' +
         '<label>Periods<input type="text" data-field="periods" value="' + esc(periods) + '" placeholder="1, 2"></label>' +
-        '<label>Course<input type="text" data-field="label" value="' + esc(block.label || "") + '" placeholder="Intensive Reading"></label>' +
+        '<label>Class label<input type="text" data-field="label" value="' + esc(block.label || "") + '" placeholder="Intensive Reading"></label>' +
         '<label>Canvas course<select data-field="course_id"' + (state.courses.length ? "" : " disabled") + '>' +
         courseSelectHtml(block) + '</select>' +
         (state.courses.length ? "" : '<span class="ce-field-hint">Bookmark a course under Settings &rarr; Current courses.</span>') +
@@ -293,7 +317,7 @@
       setStatus(status, "Nothing was saved. Fix these first: " + (data.problems || []).join(" "), "error");
       return;
     }
-    setStatus(status, "Saved " + data.count + " block(s) to Teacher Schedule.json.", "ok");
+    setStatus(status, "Saved " + data.count + " block(s).", "ok");
     await loadState();
   });
 
@@ -428,22 +452,22 @@
       '<div><strong>After:</strong> ' + esc(eventText(data.after)) + '</div>';
   }
 
-  document.getElementById("cal-event-new").addEventListener("click", function () {
-    setEventEditor(null, "upsert");
-    document.getElementById("cal-event-status").textContent = "";
+  function resetDeleteButtons() {
+    document.querySelectorAll('[data-event-action="delete"][data-event-confirm="true"]').forEach(function (button) {
+      button.removeAttribute("data-event-confirm");
+      button.removeAttribute("aria-label");
+      button.textContent = "Delete";
+    });
+  }
+
+  function clearEventPreview() {
+    lastEventPreview = null;
+    resetDeleteButtons();
     document.getElementById("cal-event-preview-result").hidden = true;
     document.getElementById("cal-event-apply").hidden = true;
-  });
-  document.getElementById("calendar-event-list").addEventListener("click", function (event) {
-    var button = event.target.closest("[data-event-action]");
-    if (!button) return;
-    var selected = state.events.find(function (item) { return item.id === button.dataset.eventId; });
-    setEventEditor(selected, button.dataset.eventAction === "delete" ? "delete" : "upsert");
-  });
-  document.getElementById("cal-event-action").addEventListener("change", updateEventEditorMode);
-  document.getElementById("cal-event-kind").addEventListener("change", updateEventEditorMode);
-  document.getElementById("cal-event-shape").addEventListener("change", updateEventEditorMode);
-  document.getElementById("cal-event-preview").addEventListener("click", async function () {
+  }
+
+  async function previewEventChange() {
     var status = document.getElementById("cal-event-status");
     var mutation = readEventMutation();
     var body = { action: mutation.action, event_id: mutation.event_id || "" };
@@ -454,18 +478,50 @@
     var data = await response.json();
     if (!data.ok) {
       setStatus(status, "Preview failed: " + (data.problems || []).join(" "), "error");
-      document.getElementById("cal-event-preview-result").hidden = true;
-      document.getElementById("cal-event-apply").hidden = true;
-      return;
+      clearEventPreview();
+      return false;
     }
     lastEventPreview = data;
     renderEventPreview(data);
     document.getElementById("cal-event-apply").hidden = false;
-    setStatus(status, data.is_noop ? "No change — this event already matches." : "Review the before/after event, then Apply.", "");
+    setStatus(status, data.is_noop ? "No change — this event already matches." :
+      (mutation.action === "delete" ? "Review the deletion, then Apply." :
+        "Review the before/after event, then Apply."), "");
+    return true;
+  }
+
+  document.getElementById("cal-event-new").addEventListener("click", function () {
+    setEventEditor(null, "upsert");
+    clearEventPreview();
+    document.getElementById("cal-event-status").textContent = "";
   });
-  document.getElementById("cal-event-apply").addEventListener("click", async function () {
+  document.getElementById("calendar-event-list").addEventListener("click", async function (event) {
+    var button = event.target.closest("[data-event-action]");
+    if (!button) return;
+    if (button.dataset.eventConfirm === "true") {
+      await applyEventChange();
+      return;
+    }
+    var selected = state.events.find(function (item) { return item.id === button.dataset.eventId; });
+    var action = button.dataset.eventAction === "delete" ? "delete" : "upsert";
+    setEventEditor(selected, action);
+    clearEventPreview();
+    document.getElementById("cal-event-status").textContent = "";
+    if (action === "delete" && await previewEventChange()) {
+      button.dataset.eventConfirm = "true";
+      button.setAttribute("aria-label", "Confirm deletion of " + (selected.label || "this event"));
+      button.textContent = "Confirm?";
+    }
+  });
+  document.getElementById("calendar-event-editor").addEventListener("input", clearEventPreview);
+  document.getElementById("calendar-event-editor").addEventListener("change", function () {
+    clearEventPreview();
+    updateEventEditorMode();
+  });
+  document.getElementById("cal-event-preview").addEventListener("click", previewEventChange);
+  async function applyEventChange() {
     var status = document.getElementById("cal-event-status");
-    if (!lastEventPreview) return;
+    if (!lastEventPreview) return false;
     var response = await fetch("/api/calendar/event/apply", {
       method: "POST", body: new URLSearchParams({
         expected_revision: String(lastEventPreview.base_revision),
@@ -475,13 +531,18 @@
     var data = await response.json();
     if (!data.ok) {
       setStatus(status, "Apply failed: " + (data.problems || []).join(" "), "error");
-      return;
+      clearEventPreview();
+      return false;
     }
-    setStatus(status, "Applied. Calendar is now at revision " + data.revision + ".", "ok");
-    document.getElementById("cal-event-apply").hidden = true;
-    document.getElementById("cal-event-preview-result").hidden = true;
-    lastEventPreview = null;
+    var wasDelete = lastEventPreview.mutation && lastEventPreview.mutation.action === "delete";
+    setStatus(status, wasDelete ? "Deleted." : "Applied.", "ok");
+    clearEventPreview();
     await loadState();
+    return true;
+  }
+
+  document.getElementById("cal-event-apply").addEventListener("click", function () {
+    applyEventChange();
   });
 
   // ── Change a date (preview/apply) ────────────────────────────────────────

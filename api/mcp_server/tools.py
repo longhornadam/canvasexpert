@@ -2459,6 +2459,62 @@ def apply_school_calendar_event_change(preview: dict, expected_revision: int) ->
     return {"ok": True, "revision": doc["revision"]}
 
 
+def preview_school_calendar_game_score(event_id: str, score: str) -> dict:
+    """Preview changing the result of one existing game event.
+
+    This is intentionally narrower than the general event upsert: the stable
+    event ID must already exist and identify a ``game`` event, and every other
+    event field is carried forward unchanged.  The canonical event preview
+    remains the write boundary; this helper only makes the safe operation
+    discoverable to an assistant recording a game score.
+    """
+    if not isinstance(event_id, str) or not event_id.strip():
+        return {"ok": False, "problems": ["event_id must be a non-empty string"]}
+    if not isinstance(score, str):
+        return {"ok": False, "problems": ["score must be a string"]}
+
+    doc, problems = school_calendar.read()
+    if doc is None:
+        return {"ok": False, "problems": problems}
+    current = next((event for event in doc["events"] if event.get("id") == event_id), None)
+    if current is None:
+        return {"ok": False, "problems": [f"event_id '{event_id}' was not found"]}
+    if current.get("kind") != "game":
+        return {"ok": False, "problems": [f"event_id '{event_id}' is not a game event"]}
+
+    updated = {**current, "result": score}
+    preview, problems = school_calendar.preview_event_change(
+        action="upsert", event=updated)
+    if preview is None:
+        return {"ok": False, "problems": problems}
+    return {
+        "ok": True,
+        "game_score": {"event_id": event_id, "score": score},
+        **preview,
+    }
+
+
+def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> dict:
+    """Apply an exact preview returned by preview_school_calendar_game_score."""
+    marker = preview.get("game_score") if isinstance(preview, dict) else None
+    mutation = preview.get("mutation") if isinstance(preview, dict) else None
+    event = mutation.get("event") if isinstance(mutation, dict) else None
+    if (
+        not isinstance(marker, dict)
+        or not isinstance(event, dict)
+        or mutation.get("action") != "upsert"
+        or event.get("kind") != "game"
+        or marker.get("event_id") != event.get("id")
+        or marker.get("score") != event.get("result")
+    ):
+        return {"ok": False, "problems": ["a game-score preview is required"]}
+    doc, problems = school_calendar.apply_event_change(
+        preview, expected_revision=expected_revision)
+    if doc is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, "revision": doc["revision"]}
+
+
 # --- Scoring Packet MCP Tools (v22) ----------------------------------------
 
 def _safe_bundle_path(session: dict) -> str:
