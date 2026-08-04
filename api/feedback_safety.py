@@ -37,27 +37,36 @@ _FORBIDDEN_KEYS = {"name", "real_name", "canvas_id", "sis_id", "sisid",
                    "section", "sectionnames", "sectionids", "sectionsisids",
                    "user_id", "userid", "student_id", "sortable_name",
                    "short_name", "login_id", "email", "section_id"}
-# Free-text fields where a name is a soft flag, not a hard block.
+# Keys exempt from free-text scanning: known-structural, high-churn values
+# (identifiers, digests, timestamps, small controlled vocabularies, and the
+# vault-assigned fake name itself) with no free-text content to review.
 #
-# This set is field-name-keyed, so a payload carrying student writing under a
-# name that is not listed here is not scanned at all -- it comes back green
-# whatever is inside it. Any subsystem that adds a new free-text field must add
-# it here too, or the gate silently stops covering it. The dailywriting entries
-# below are the daily writing substrate's stored text and quoted evidence
-# spans: names appear inside student writing, so a span quoted out of a
-# submission is exactly as identity-bearing as a response body.
-_TEXT_FIELDS = {"prompt", "response", "feedback", "text", "assignment_description",
-                # daily writing substrate (api/dailywriting)
-                "raw_text", "evidence_span", "claim_text", "next_focus",
-                "student_facing_text", "prompt_text", "strong_text",
-                "near_miss_text", "one_thing", "acknowledgment",
-                "flag_detail",
-                # Roster seating notes. ai_context_note is scrubbed before it
-                # goes out; private_note is never emitted at all. Both are
-                # listed anyway so that if either ever reaches a payload
-                # unscrubbed, it registers as a scrub miss instead of passing
-                # unscanned, which is what this set exists to prevent.
-                "private_note", "ai_context_note"}
+# Every OTHER string value in the payload is scanned by default (Layer 2a/2b
+# below) -- this is a denylist, not an allowlist, so a new free-text field
+# added anywhere in the app is covered automatically instead of silently
+# unscanned until someone remembers to list it here. An exempt key still
+# gets Layer 1b (exact-value match against a known real id).
+_STRUCTURAL_EXEMPT_KEYS = {
+    # identifiers: an exact/token coincidental match against a real
+    # Canvas/SIS id must not withhold an otherwise-legitimate read.
+    "id", "course_id", "item_id",
+    # digests/hashes: opaque values with no free-text content to review.
+    "proposal_digest", "settings_digest",
+    # timestamps: no free-text content; long digit runs carry the same
+    # coincidental-id-match risk as an identifier.
+    "synced_at", "due_at", "updated_at", "generated",
+    # controlled-vocabulary/enum fields: a fixed, small set of known values
+    # (e.g. "current"/"stale", "graded"/"submitted", "ready"). Deliberately
+    # NOT including "source": the same key name is reused by
+    # api/powergrader/context.py's materials[].source for a citation string
+    # that isn't guaranteed to be equally narrow, and scanning an enum value
+    # costs nothing (no realistic value token-matches a name).
+    "state", "workflow_state", "status", "scope", "grain", "method",
+    # the vault-assigned fake name itself: scanning it cannot catch a real
+    # leak (generated specifically not to collide with a real name) and
+    # only adds review noise.
+    "pseudonym",
+}
 
 # A real id found as a `\b`-bounded token inside free text is only a HARD
 # block at this length or longer. Below it, a coincidental short number (a
@@ -67,15 +76,22 @@ _TEXT_FIELDS = {"prompt", "response", "feedback", "text", "assignment_descriptio
 _MIN_ID_HARD_BLOCK_LEN = 5
 
 
-def _walk(obj, path=""):
-    """Yield (path, key, value) for every dict key in a nested structure."""
+def _walk(obj, path="", key=None):
+    """Yield (path, key, value) for every dict key in a nested structure,
+    and for every scalar item inside a list (using the enclosing dict key,
+    since a bare list item has no key of its own -- a list of plain strings
+    would otherwise be entirely invisible to the scan: the list itself is
+    the only value ever yielded for it, and it is not a str)."""
     if isinstance(obj, dict):
         for k, v in obj.items():
             yield (path, k, v)
-            yield from _walk(v, f"{path}.{k}")
+            yield from _walk(v, f"{path}.{k}", key=k)
     elif isinstance(obj, list):
         for i, v in enumerate(obj):
-            yield from _walk(v, f"{path}[{i}]")
+            if isinstance(v, (dict, list)):
+                yield from _walk(v, f"{path}[{i}]", key=key)
+            else:
+                yield (f"{path}[{i}]", key, v)
 
 
 def scan_payload(payload, vault) -> dict:
@@ -96,19 +112,27 @@ def scan_payload(payload, vault) -> dict:
     ]
 
     for path, key, value in _walk(payload):
-        kl = key.lower()
+        kl = (key or "").lower()
         # Layer 1a: forbidden identity-bearing keys with a non-empty value.
         if kl in _FORBIDDEN_KEYS and value not in (None, "", [], {}):
             hard.append(f"identity field '{key}' present at {path or 'root'}")
             continue
         if not isinstance(value, str) or not value:
             continue
-        if kl in _TEXT_FIELDS:
+        # Layer 1b: a known real id as an exact structural value -> hard.
+        # Unconditional (runs for exempt and scanned fields alike): unlike
+        # Layer 2b below it has no length floor, so it is the only layer
+        # that still catches a SHORT real id landing as an exact value
+        # under an arbitrary key.
+        if value in ids:
+            hard.append(f"real id '{value}' present at {path}.{key}")
+        if kl not in _STRUCTURAL_EXEMPT_KEYS:
             # Layer 2a: known roster name inside free text -> soft flag.
             # Token-level (not full-name-substring): mirrors the scrub
             # engine's own granularity via the same accent-folded matcher,
             # so a single-token scrub miss is caught here too, not only a
-            # full-name miss.
+            # full-name miss. This is the default for any string value not
+            # explicitly exempted above.
             for original in feedback_scrub.find_token_matches(value, names):
                 soft.append({"where": f"{path}.{key}", "name": original})
             # Layer 2b: known real id (>= _MIN_ID_HARD_BLOCK_LEN chars) as a
@@ -119,10 +143,6 @@ def scan_payload(payload, vault) -> dict:
             for real_id, pattern in hard_id_patterns:
                 if pattern.search(value):
                     hard.append(f"real id '{real_id}' present at {path}.{key}")
-        else:
-            # Layer 1b: a known real id appearing as a structural value -> hard.
-            if value in ids:
-                hard.append(f"real id '{value}' present at {path}.{key}")
 
     return {"green": not hard, "hard": hard, "soft": soft}
 

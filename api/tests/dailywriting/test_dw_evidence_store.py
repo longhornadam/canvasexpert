@@ -77,7 +77,13 @@ def test_projection_sorts_its_own_input_order():
     late = replace(submission, submission_id="late", submitted_at=datetime(2026, 9, 20, tzinfo=timezone.utc))
     early = replace(submission, submission_id="early", submitted_at=datetime(2026, 9, 5, tzinfo=timezone.utc))
     payload = projection.build_history_payload(pseudonym_id=submission.pseudonym_id, since=date(2026, 9, 1), until=date(2026, 9, 30), submissions=[late, early], reps={context.rep_id: context}, include_text=False, max_text_chars=0)
-    assert [row["submission_id"] for row in payload["submissions"]] == ["early", "late"]
+    # submission_id is now an opaque hash of the internal store key (see
+    # projection._safe_submission_ref), so ordering is checked via
+    # submitted_at -- the field the sort is actually defined on -- rather
+    # than the no-longer-literal id strings.
+    assert [row["submitted_at"] for row in payload["submissions"]] == [
+        early.submitted_at.isoformat(), late.submitted_at.isoformat(),
+    ]
 
 
 def test_clean_include_text_payload_passes_actual_safety_gate():
@@ -95,7 +101,9 @@ def test_flag_detail_is_registered_and_scanned():
     verdict = feedback_safety.scan_payload({"flag_detail": "Marcus Bell 990001"}, type("Vault", (), {"all_real_identifiers": lambda self: ({"Marcus Bell"}, {"990001"})})())
     assert verdict["green"] is False
     assert verdict["hard"]
-    assert "flag_detail" in feedback_safety._TEXT_FIELDS
+    # Denylist model (A3): flag_detail is scanned because it is NOT in the
+    # small structural-exemption set, not because it is on an allowlist.
+    assert "flag_detail" not in feedback_safety._STRUCTURAL_EXEMPT_KEYS
 
 
 def test_projection_imports_no_canvas_transport():

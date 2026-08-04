@@ -153,6 +153,87 @@ def test_user_id_and_email_keys_are_hard_blocked(tmp_path):
     assert any("email" in h for h in verdict["hard"])
 
 
+# --- denylist inversion (A3) --------------------------------------------
+#
+# _TEXT_FIELDS used to be an allowlist: a payload string under an unlisted
+# key was never scanned at all. It is now _STRUCTURAL_EXEMPT_KEYS, a small
+# denylist -- every string is scanned by default unless its key is in the
+# exempt set.
+
+def test_previously_unlisted_field_is_now_scanned(tmp_path):
+    """A key that was never in the old _TEXT_FIELDS allowlist (e.g.
+    'description_text', 'notes', 'summary', 'body_text') must now be
+    scanned by default."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Ada Lovelace", "5001")
+    for key in ("description_text", "notes", "summary", "body_text", "comment"):
+        payload = {key: "A note about Ada Lovelace's progress."}
+        verdict = safety.scan_payload(payload, v)
+        assert verdict["green"] is True
+        assert verdict["soft"] and verdict["soft"][0]["name"] == "Ada Lovelace", key
+
+
+def test_exempt_structural_keys_are_not_scanned_for_free_text(tmp_path):
+    """Exempt keys (id, course_id, synced_at, workflow_state, state,
+    proposal_digest, pseudonym, ...) don't carry free text in practice, so
+    a coincidental name-shaped token inside one must not soft-flag."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Grace Hopper", "5001")
+    for key in ("id", "course_id", "synced_at", "due_at", "updated_at",
+                "generated", "state", "workflow_state", "status", "scope",
+                "grain", "method", "proposal_digest", "settings_digest",
+                "pseudonym"):
+        payload = {key: "Grace Hopper"}
+        verdict = safety.scan_payload(payload, v)
+        assert verdict["soft"] == [], key
+
+
+def test_exempt_key_still_hard_blocks_an_exact_real_id_value(tmp_path):
+    """Layer 1b is preserved for exempt keys: an exact real-id value still
+    hard-blocks even though the key is exempt from free-text scanning."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Grace Hopper", "5001")
+    verdict = safety.scan_payload({"course_id": "9001"}, v)
+    assert verdict["green"] is False
+    assert any("9001" in h for h in verdict["hard"])
+
+
+def test_source_key_is_not_exempted(tmp_path):
+    """Deliberate deviation from the initiative document's illustrative
+    exemption list: 'source' is reused by PowerGrader's materials[].source
+    for a citation string, so it stays scanned by default."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Ada Lovelace", "5001")
+    verdict = safety.scan_payload({"source": "Notes from Ada Lovelace"}, v)
+    assert verdict["soft"] and verdict["soft"][0]["name"] == "Ada Lovelace"
+
+
+# --- _walk bare-list-of-strings fix (A3, found while verifying the scan
+# actually reaches "every string value in the payload") -----------------
+
+def test_bare_list_of_strings_is_now_scanned(tmp_path):
+    """A plain list of strings under a key (e.g. section_names) used to be
+    entirely invisible to the scan -- _walk only ever yielded the LIST
+    itself (not a str, so skipped), never its individual string items."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Ada Lovelace", "5001")
+    payload = {"section_names": ["Period 1 with Ada Lovelace note"]}
+    verdict = safety.scan_payload(payload, v)
+    assert verdict["soft"] and verdict["soft"][0]["name"] == "Ada Lovelace"
+
+
+def test_list_of_dicts_is_unaffected_by_the_walk_fix(tmp_path):
+    """The _walk fix only changes bare scalar list items; a list of dicts
+    must keep working exactly as before (each dict's own keys yielded)."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Ada Lovelace", "5001")
+    payload = {"submissions": [{"prompt": "Reflect.",
+                                "response": "I worked with Ada Lovelace."}]}
+    verdict = safety.scan_payload(payload, v)
+    assert verdict["soft"] and verdict["soft"][0]["name"] == "Ada Lovelace"
+    assert verdict["soft"][0]["where"] == ".submissions[0].response"
+
+
 def test_id_hard_block_regression_alongside_existing_behavior(tmp_path):
     """Layer B addition doesn't change the pre-existing behaviors: a real id
     as an exact structural value is still hard; a roster name in free text

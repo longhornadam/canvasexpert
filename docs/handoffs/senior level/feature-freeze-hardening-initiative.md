@@ -4,17 +4,26 @@
 
 **Last senior review:** 2026-08-03
 
-**Baseline:** `dev` @ `287fe6e`, `v1.0.0-beta.3`, working tree clean except an
-unrelated pre-existing `README.md` edit (out of scope for this initiative,
-left untouched), `api/tests` 2140 passed.
+**Baseline:** `dev` (post Batch 2 commit), `v1.0.0-beta.3`, working tree
+clean except an unrelated pre-existing `README.md` edit (out of scope for
+this initiative, left untouched), `api/tests` 2146 passed.
 
-**Next batch pointer:** Batch 1 (§9 row 1: A1, A2, A4, A6) is GREEN and
-committed at `287fe6e`; its brief is retired at
-`docs/handoffs/feature-freeze-batch1-pii-hardening.md`. Next up is §9 row 2:
-**Batch 2 (A3)**, which must follow A1 (already landed). Read §3 A3, §7
-non-goal 1, and §8 for the next brief. No senior decisions from other
-batches are outstanding for A3 specifically; A5, D1.4, D4, and 2.3 remain
-open per §10 and are not required to promote A3.
+**Next batch pointer:** Batch 1 (§9 row 1: A1, A2, A4, A6) and Batch 2
+(§9 row 2: A3) are both GREEN and committed; their briefs are retired at
+`docs/handoffs/feature-freeze-batch1-pii-hardening.md` and
+`docs/handoffs/feature-freeze-batch2-denylist-inversion.md`. Batch 2's
+execution also found and fixed a real defect outside its literal scope: the
+daily-writing MCP tool `get_writing_history` was leaking the real Canvas
+user id embedded in `submission_id` on every call (undetected since the
+substrate landed 2026-07-27, because the old field-name allowlist never
+scanned that key). See the Batch 2 brief's execution result for the fix
+(`api/dailywriting/projection.py::_safe_submission_ref`, a one-way hash).
+
+Next up is §9 row 3: **Batch 3 (B2, B3, B4)** — observability. Read §4 B2,
+B3, B4, §7 non-goal 8, and §8 for the next brief. No senior decisions from
+other batches are outstanding for B2/B3/B4 specifically; A5, A7, D1.4, D4,
+C sequencing, and 2.3 remain open per §10 and are not required to promote
+this batch.
 
 This document is persistent senior context. It does not authorize implementation directly.
 

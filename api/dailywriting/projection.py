@@ -1,6 +1,7 @@
 """Allowlisted assistant projection of private Writing Record evidence."""
 from __future__ import annotations
 
+import hashlib
 from datetime import date
 
 from api.dailywriting.core.models import (
@@ -8,6 +9,26 @@ from api.dailywriting.core.models import (
     SegmentationFlag,
     Submission,
 )
+
+
+def _safe_submission_ref(submission_id: str) -> str:
+    """Opaque, stable reference derived from the internal store key.
+
+    The internal key (see canvas_source.submission_id_for) deliberately
+    embeds the real Canvas user id, e.g. "canvas:course:assignment:900001",
+    so a re-ingest overwrites rather than duplicates. That real id must
+    never leave the machine (api/mcp_server/pseudonym.py's module docstring
+    promises "canvas user id" never does), so the outbound projection
+    exposes a one-way hash instead: stable across repeated ingests of the
+    same submission (same input -> same hash), with the real id not
+    recoverable from it.
+
+    Found while landing feature-freeze-hardening-initiative.md's A3: the
+    old field-name allowlist never scanned "submission_id" as free text, so
+    Layer 2b's word-bounded real-id check never ran on it and this leak
+    shipped undetected.
+    """
+    return hashlib.sha256(submission_id.encode()).hexdigest()[:16]
 
 
 def _truncate(text: str, max_chars: int) -> str:
@@ -24,8 +45,8 @@ def _flag_row(
 ) -> dict:
     row = {"code": flag.code}
     if include_text:
-        # Flag detail can quote a repeated student phrase, so it must use an
-        # outbound key registered with feedback_safety._TEXT_FIELDS.
+        # Flag detail can quote a repeated student phrase, so it must not be
+        # a key in feedback_safety._STRUCTURAL_EXEMPT_KEYS (it isn't).
         row["flag_detail"] = _truncate(flag.detail, max_text_chars)
         if flag.span is not None:
             row["span"] = {
@@ -44,7 +65,7 @@ def _submission_row(
     max_text_chars: int,
 ) -> dict:
     row = {
-        "submission_id": submission.submission_id,
+        "submission_id": _safe_submission_ref(submission.submission_id),
         "rep_id": submission.rep_id,
         "submitted_at": submission.submitted_at.isoformat(),
         "student_word_count": submission.student_word_count,
