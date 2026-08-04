@@ -4,9 +4,9 @@
 
 **Last senior review:** 2026-08-03
 
-**Baseline:** `dev` (post Batch 2 commit), `v1.0.0-beta.3`, working tree
-clean except an unrelated pre-existing `README.md` edit (out of scope for
-this initiative, left untouched), `api/tests` 2146 passed.
+**Baseline:** `dev` @ `b434ccf`, `v1.0.0-beta.3`, working tree clean except
+an unrelated pre-existing `README.md` edit (out of scope for this
+initiative, left untouched), `api/tests` 2146 passed.
 
 **Next batch pointer:** Batch 1 (§9 row 1: A1, A2, A4, A6) and Batch 2
 (§9 row 2: A3) are both GREEN and committed; their briefs are retired at
