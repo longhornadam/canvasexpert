@@ -10,7 +10,7 @@
   <label class="ce-field">Assessment files
     <input type="file" name="files" accept=".xlsx,.xls,.csv" multiple>
   </label>
-  <label class="ce-check"><input type="checkbox" name="anonymize" value="true"> Keep generated artifacts pseudonymized</label>
+  <label class="ce-check"><input type="checkbox" name="anonymize" value="true" checked> Keep generated artifacts pseudonymized</label>
   <label class="ce-check"><input type="checkbox" name="use_existing" value="true"> Also process files already in the input folder</label>
   {% call action_bar() %}<button class="ce-btn ce-btn--primary" type="submit">Process assessment files</button>{% endcall %}
 </form>

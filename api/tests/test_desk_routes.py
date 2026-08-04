@@ -79,6 +79,40 @@ def test_desk_empty_render_is_local_and_honest(monkeypatch):
     assert 'name="canvasexpert-csrf-token"' in response.text
 
 
+def test_desk_readiness_card_names_missing_courses_and_calendar(monkeypatch):
+    """D4: with no active courses and no calendar configured (the app's
+    blind spot -- token set, nothing else), Home must name both unmet
+    preconditions and link to the page that fixes each."""
+    _configure(monkeypatch)
+    monkeypatch.setattr(pages.config, "active_courses", lambda: [])
+    monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
+    monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
+    monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
+
+    response = _client().get("/")
+
+    assert response.status_code == 200
+    assert "No active courses yet" in response.text
+    assert 'href="/settings#current-courses-card"' in response.text
+    assert "Calendar and Create" in response.text
+    assert "No school calendar configured" in response.text
+    assert 'href="/calendar"' in response.text
+
+
+def test_desk_readiness_card_is_absent_once_both_preconditions_are_met(monkeypatch):
+    _configure(monkeypatch)
+    monkeypatch.setattr(pages.school_calendar, "readiness", lambda **kwargs: {"status": "ready", "problems": []})
+    monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
+    monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
+    monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
+
+    response = _client().get("/")
+
+    assert response.status_code == 200
+    assert "No active courses yet" not in response.text
+    assert "No school calendar configured" not in response.text
+
+
 def test_desk_active_courses_use_teacher_names_saved_order_and_empty_state(monkeypatch):
     _configure(monkeypatch)
     monkeypatch.setattr(pages.config, "active_courses", lambda: [

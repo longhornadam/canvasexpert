@@ -55,6 +55,64 @@ def test_assessments_index_renders_native_shell_and_populated_context(monkeypatc
     assert "/static/pages/assessments.css" in response.text
 
 
+def test_pseudonymize_checkbox_defaults_checked(monkeypatch, tmp_path):
+    """A7: an un-anonymized run silently disables assessment history and
+    the standards profile, so the default must produce one, not opt in."""
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        assessments.views,
+        "index",
+        lambda: views.Render("index.html", existing=[], data_dir="", anon_exists=False),
+    )
+
+    response = _client().get("/assessments")
+
+    assert 'name="anonymize" value="true" checked' in response.text
+
+
+def test_results_page_explains_an_unanonymized_run(monkeypatch, tmp_path):
+    """A7: when a run keeps real names, the results page must say plainly
+    that no history was saved and no profile was published, and why."""
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        assessments.views,
+        "results",
+        lambda run_id: views.Render(
+            "results.html",
+            run_id=run_id,
+            results=[{
+                "descriptive": "Synthetic Assessment", "source_name": "synthetic.xlsx",
+                "total_students": 10, "avg_pct": 80,
+                "json_path": "a.json", "txt_path": "a.txt", "parent_path": "a_parents.txt",
+            }],
+            errors=[],
+            anonymized=False,
+        ),
+    )
+
+    response = _client().get("/assessments/results/run-1")
+
+    assert response.status_code == 200
+    assert "No history was saved and no standards profile was published" in response.text
+    assert "kept real names" in response.text
+
+
+def test_results_page_says_nothing_extra_when_anonymized(monkeypatch, tmp_path):
+    _configure(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        assessments.views,
+        "results",
+        lambda run_id: views.Render(
+            "results.html", run_id=run_id, results=[], errors=[], anonymized=True,
+        ),
+    )
+
+    response = _client().get("/assessments/results/run-1")
+
+    assert response.status_code == 200
+    assert "No history was saved" not in response.text
+
+
 @pytest.mark.parametrize(
     ("url", "view_name", "result", "marker"),
     [

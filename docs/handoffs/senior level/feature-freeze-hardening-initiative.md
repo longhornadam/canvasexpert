@@ -4,18 +4,20 @@
 
 **Last senior review:** 2026-08-03
 
-**Baseline:** `dev` @ `b9da17d`, `v1.0.0-beta.3`, working tree clean except
-an unrelated pre-existing `README.md` edit (out of scope for this
-initiative, left untouched), `api/tests` 2157 passed.
+**Baseline:** `dev` (post Batch 5 commit), `v1.0.0-beta.3`, working tree
+clean except an unrelated pre-existing `README.md` edit (out of scope for
+this initiative, left untouched), `api/tests` 2162 passed.
 
-**Next batch pointer:** Batches 1-4 (§9 rows 1-4: A1/A2/A4/A6, A3,
-B2/B3/B4, D1/D2/D3) are all GREEN and committed; their briefs are retired
-at `docs/handoffs/feature-freeze-batch1-pii-hardening.md`,
+**Next batch pointer:** Batches 1-5 (§9 rows 1-5: A1/A2/A4/A6, A3,
+B2/B3/B4, D1/D2/D3, A7/D4) are all GREEN and committed; their briefs are
+retired at `docs/handoffs/feature-freeze-batch1-pii-hardening.md`,
 `feature-freeze-batch2-denylist-inversion.md`,
-`feature-freeze-batch3-observability.md`, and
-`feature-freeze-batch4-ui-tightening.md`. Real defects/gaps were found and
-fixed along the way, outside each batch's literal scope but squarely
-within the initiative's purpose — see each brief's execution result:
+`feature-freeze-batch3-observability.md`,
+`feature-freeze-batch4-ui-tightening.md`, and
+`feature-freeze-batch5-defaults-readiness.md`. This closes the freeze-week
+cycle's planned sequence. Real defects/gaps were found and fixed along the
+way, outside each batch's literal scope but squarely within the
+initiative's purpose — see each brief's execution result:
 
 - Batch 2: the daily-writing MCP tool `get_writing_history` was leaking the
   real Canvas user id embedded in `submission_id` on every call (fixed with
@@ -27,6 +29,28 @@ within the initiative's purpose — see each brief's execution result:
   Batch 4 brief. D2 covered 2 more "Automations" sites than the initiative
   document listed, and its rename now actually propagates to existing
   installs via `ai_ta.RETIRED_FILES` rather than being cosmetic.
+- Batch 5: none beyond the batch's own scope.
+
+**No further batch is promoted this cycle.** Per this document's own
+sequencing (§9, "last: C") and the recurring senior recommendation
+throughout §9/§10, **Batch C (layering) is deliberately deferred past the
+start of the semester** — it is the highest-value item in the initiative
+and the wrong thing to attempt in the days before in-service week, per
+§3 C1's own risk framing (~62 files' import lines, "exactly the change
+that looks safe, passes tests, and breaks a packaged ZIP on a district
+machine in a way no test covers"). A future senior may promote C2 alone
+(the 8 cross-package private-import sites) as a smaller standalone batch
+without C1's blast radius, if layering progress is wanted before then.
+
+Open decisions carried forward for the next senior review, all previously
+recorded and untouched by Batches 1-5 (see §10 for full detail): **A5**
+(what a soft flag does on the MCP path — log-only recommended, revisit
+after the OpenRouter decision), **D1.4** (whether quiz/assignment/page get
+the same synced-library-only treatment as rubrics — ask before
+generalizing), **B1** (broader `operational_log` emit coverage on outcome
+boundaries beyond exception handlers — valuable, not urgent once B2
+landed), and **2.3** (OpenRouter's future, which determines how much A5/B1
+coverage the MCP path deserves).
 
 Next up is §9 row 5: **Batch 5 (A7, D4)** — both touch behavior a teacher
 will meet in week one. Read §3 A7, §6 D4, §7, and §8 for the next brief.

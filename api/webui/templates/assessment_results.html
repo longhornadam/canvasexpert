@@ -7,6 +7,9 @@
 {% if errors %}
 {% call notice("attention") %}<strong>Some files need attention.</strong><ul>{% for error in errors %}<li>{{ error.file }}: {{ error.error }}</li>{% endfor %}</ul>{% endcall %}
 {% endif %}
+{% if not anonymized and results %}
+{% call notice("attention") %}<strong>No history was saved and no standards profile was published.</strong><p>This run kept real names, so nothing was added to Assessment history and the standards profile was not updated — both rely on stable pseudonyms. Reports below still saved, in the private Student Work folder. Run again with "Keep generated artifacts pseudonymized" checked to build history and publish a profile.</p>{% endcall %}
+{% endif %}
 {% call page_section("Run") %}
 <div class="assessments-links">
   <a class="ce-btn" href="/assessments/dashboard/{{ run_id }}">Open dashboard</a>

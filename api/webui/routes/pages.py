@@ -58,6 +58,7 @@ def _routines_template_context() -> dict:
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     courses = config.active_courses()
+    calendar_status = school_calendar.readiness()["status"]
     initial_jobs, initial_presentations = work_routes.visible_work("all") or ([], {})
     initial_operations = [
         {
@@ -79,6 +80,7 @@ def dashboard(request: Request):
         "canvas_base":    config.get_canvas_base(),
         "saved_courses":  courses,
         "active_count":   len(courses),
+        "calendar_status": calendar_status,
         "workspace_status": workspace_status,
         "csrf_token": csrf_token(),
         "initial_jobs": initial_jobs,

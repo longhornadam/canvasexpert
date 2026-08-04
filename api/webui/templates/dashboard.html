@@ -1,4 +1,5 @@
 {% extends "layouts/workspace.html" %}
+{% from "ui/_macros.html" import notice %}
 {% block title %}Home · Canvas Expert{% endblock %}
 {% block workspace_body_class %}ce-desk-page{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/dashboard.css?v={{ asset_v }}">{% endblock %}
@@ -21,6 +22,20 @@
   <p class="ce-desk-active-courses ce-desk-agent-link">
     <a href="/api/download-contract?name=CanvasAgent" download>Download CanvasAgent instructions</a>
   </p>
+
+  {% if active_count == 0 or calendar_status != "ready" %}
+  {% call notice("attention") %}
+    {% if active_count == 0 %}
+    <p>No active courses yet — most of Canvas Expert needs one to work with.
+      <a href="/settings#current-courses-card">Add a course in Settings</a>.
+      Calendar and Create (draft and validate) both work without one — start there this week.</p>
+    {% endif %}
+    {% if calendar_status != "ready" %}
+    <p>No school calendar configured — every day counts as instructional until one is set up.
+      <a href="/calendar">Set up Calendar</a> to skip weekends and no-school days automatically.</p>
+    {% endif %}
+  {% endcall %}
+  {% endif %}
 
   <div class="ce-desk-grid">
     <section class="ce-panel ce-desk-panel ce-desk-panel--start" aria-labelledby="desk-start-title">
