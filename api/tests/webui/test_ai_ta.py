@@ -1,12 +1,21 @@
 from pathlib import Path
 
+from api import runtime_paths
 from api.webui import ai_ta
+
+# D1 (feature-freeze hardening initiative) removed the repo `api/rubrics`
+# folder from the runtime rubric PICKER's default search path (rubrics come
+# only from the synced Library folder now). This test's own point is
+# build_library's "one scoring skill per rubric on file" behavior, not that
+# fallback, so it passes the repo's example rubrics explicitly instead of
+# relying on the removed default.
+_EXAMPLE_RUBRICS = [runtime_paths.api_root() / "rubrics"]
 
 
 def test_build_library_writes_expected_files(tmp_path):
     target = tmp_path / "AI Authoring"
 
-    first = ai_ta.build_library(target)
+    first = ai_ta.build_library(target, rubric_folders=_EXAMPLE_RUBRICS)
     # Top-level names (files only)
     names = sorted(p.name for p in target.iterdir() if p.is_file())
 
@@ -43,7 +52,7 @@ def test_build_library_writes_expected_files(tmp_path):
     sentinel = target / "START HERE - CanvasAgent.txt"
     sentinel.write_text(sentinel.read_text(encoding="utf-8") + "\nSENTINEL\n", encoding="utf-8")
 
-    second = ai_ta.build_library(target)
+    second = ai_ta.build_library(target, rubric_folders=_EXAMPLE_RUBRICS)
     names2 = sorted(p.name for p in target.iterdir() if p.is_file())
 
     assert names2 == names

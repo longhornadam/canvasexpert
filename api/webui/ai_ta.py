@@ -81,6 +81,9 @@ RETIRED_FILES = {
         # Before Appendix D described the local write tools and Appendix B added
         # School Calendar and Learning Objectives coverage.
         "2cb1a3c99d4d01f0158fe61ce4995a0d5bcdab360430f62ee8363d8a75aa5798",
+        # Before "Automations" was renamed to "Routines" (feature-freeze
+        # hardening initiative, D2).
+        "a7f4d921a378a5044680db39f679cf66eba3cef7369179d5056cc99139c246e6",
     }),
 }
 

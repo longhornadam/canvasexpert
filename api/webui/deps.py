@@ -198,6 +198,13 @@ _CUSTOM_DIR = os.path.join(WEBUI_DIR, "..", "custom_routines")
 # --------------------------------------------------------------------------
 
 def _list_txt_files(folders):
+    """One entry per unique file across `folders`, labeled by its own file
+    name. A file's folder is a repo-relative path when its folder happens to
+    be inside the repo and the teacher's synced workspace otherwise, so a
+    path-based label reads as noise (or worse, a raw local folder path) for
+    the common case of an out-of-repo Library folder. Disambiguate with the
+    parent folder name only when two files share a basename (feature-freeze
+    hardening initiative, D1)."""
     found = []
     seen = set()
     for folder in folders:
@@ -208,14 +215,18 @@ def _list_txt_files(folders):
             if abspath in seen:
                 continue
             seen.add(abspath)
-            try:
-                label = os.path.relpath(path, REPO_ROOT)
-            except ValueError:
-                label = os.path.basename(path)
             found.append({
-                "label": label,
-                "path":  abspath,
+                "path": abspath,
+                "_name": os.path.basename(path),
+                "_parent": os.path.basename(os.path.dirname(abspath)),
             })
+    name_counts: dict[str, int] = {}
+    for entry in found:
+        name_counts[entry["_name"]] = name_counts.get(entry["_name"], 0) + 1
+    for entry in found:
+        name = entry.pop("_name")
+        parent = entry.pop("_parent")
+        entry["label"] = f"{name} ({parent})" if name_counts[name] > 1 else name
     return found
 
 
@@ -279,10 +290,9 @@ def list_inbox_files(kind: str):
         if expected != actual:
             continue
         abspath = os.path.abspath(path)
-        # The other list_*_files helpers read folders inside the repo, so they
-        # label entries relative to REPO_ROOT. The Inbox lives in the teacher's
-        # synced workspace instead, where that relpath climbs out through
-        # "..\..\Documents\OneDrive - ..." and shows the teacher a path instead
+        # The Inbox lives in the teacher's synced workspace, not the repo, so
+        # (like _list_txt_files) a repo-relative label would climb out through
+        # "..\..\Documents\OneDrive - ..." and show the teacher a path instead
         # of a draft name. The panel heading and the push tab already say where
         # these came from, so the file name is the whole useful label.
         found.append({

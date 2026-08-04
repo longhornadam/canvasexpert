@@ -41,6 +41,7 @@ def _powergrader_job():
         "kind": "grade.powergrader",
         "status": "attention",
         "title": "PowerGrader work",
+        "description": "PowerGrader session",
         "course_ids": ["course-1"],
         "focused_course_id": "course-1",
         "assignment_id": "assignment-1",

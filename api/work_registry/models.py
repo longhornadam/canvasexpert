@@ -53,9 +53,9 @@ _SOURCE_TYPES = {item.value for item in SourceType}
 _SUPPRESSION_MODES = {item.value for item in SuppressionMode}
 _JOB_KEYS = {
     "job_id", "fingerprint", "material_version", "origin", "kind", "status",
-    "title", "course_ids", "focused_course_id", "assignment_id", "resumable_url",
-    "source_ref", "counts", "attention_reason", "created_at", "updated_at",
-    "completed_at",
+    "title", "description", "course_ids", "focused_course_id", "assignment_id",
+    "resumable_url", "source_ref", "counts", "attention_reason", "created_at",
+    "updated_at", "completed_at",
 }
 _SOURCE_KEYS = {"type", "value"}
 _COUNTS_KEYS = {"total", "pending", "affected"}
@@ -166,6 +166,7 @@ def validate_job(job: dict) -> dict:
     validate_source_ref(job.get("source_ref"))
     _validate_counts(job.get("counts"))
     _require_text(job.get("attention_reason"), "attention_reason", allow_empty=True)
+    _require_text(job.get("description"), "description", allow_empty=True)
     for name in ("created_at", "updated_at"):
         if not _is_iso(job.get(name)):
             _fail(f"job.{name} must be ISO-8601")
@@ -279,11 +280,41 @@ def generic_title(kind: str) -> str:
     return "Work item"
 
 
+def generic_description(kind: str) -> str:
+    """Teacher-legible phrase for a job's `kind`, for a secondary/detail line.
+
+    A raw kind slug (e.g. "routine_state") is an internal machine code, not
+    display text -- work_rail.js used to render `kind` directly for exactly
+    that reason (feature-freeze-hardening-initiative.md D3). An unmapped kind
+    returns "" so the rail falls back to showing nothing rather than a slug.
+    """
+    if kind == "grade.powergrader":
+        return "PowerGrader session"
+    if kind == "grade.powergrader.scheduled":
+        return "Scheduled PowerGrader run"
+    if kind == "grade.powergrader_ready":
+        return "Ready to grade"
+    if kind == "grade.debt":
+        return "Grading debt"
+    if kind == "late.work":
+        return "Late work"
+    if kind == "roster.warning":
+        return "Roster warning"
+    if kind == "operation_receipt":
+        return "Operation receipt"
+    if kind == "routine_state":
+        return "Routine attention"
+    if kind.startswith("create."):
+        return "Draft in progress"
+    return ""
+
+
 def public_job(job: dict) -> dict:
     """Return the exact public shape with generic display text."""
     validate_job(job)
     output = deepcopy(job)
     output["title"] = generic_title(output["kind"])
+    output["description"] = generic_description(output["kind"])
     output["attention_reason"] = "Work needs attention" if output["status"] == "attention" else ""
     return output
 

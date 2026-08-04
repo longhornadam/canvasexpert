@@ -73,6 +73,49 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
     assert runtime_paths.python_executable() == Path(sys.executable).resolve()
 
 
+def test_rubric_picker_has_no_repo_fallback_and_labels_by_file_name(tmp_path, monkeypatch):
+    """D1 (feature-freeze hardening initiative): the rubric picker looks only
+    in the synced Library/Rubrics folder. No workspace configured must yield
+    an empty list, never a silent fallback to the bundled repo copies; and a
+    file's label is its own name, not a path relative to the repo root."""
+    from api import runtime_paths
+    from api.webui import deps, workspace
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: None)
+    assert deps.list_rubric_files() == []
+
+    root = tmp_path / "workspace"
+    (root / "Library" / "Rubrics").mkdir(parents=True)
+    (root / "Library" / "Rubrics" / "ELA_STAAR_ECR_Rubric.txt").write_text(
+        "rubric marker\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+
+    files = deps.list_rubric_files()
+    assert [f["label"] for f in files] == ["ELA_STAAR_ECR_Rubric.txt"]
+    assert all(
+        str(runtime_paths.api_root() / "rubrics") not in f["path"] for f in files
+    )
+
+
+def test_txt_file_labels_disambiguate_only_on_a_name_collision(tmp_path, monkeypatch):
+    """Two files sharing a basename across different folders must each show
+    their own folder in the label; a lone file just shows its name."""
+    from api.webui import deps
+
+    folder_a = tmp_path / "folder-a"
+    folder_b = tmp_path / "folder-b"
+    folder_a.mkdir()
+    folder_b.mkdir()
+    (folder_a / "shared.txt").write_text("a\n", encoding="utf-8")
+    (folder_b / "shared.txt").write_text("b\n", encoding="utf-8")
+    (folder_a / "unique.txt").write_text("u\n", encoding="utf-8")
+
+    files = deps._list_txt_files([folder_a, folder_b])
+    labels = {f["label"] for f in files}
+    assert labels == {"shared.txt (folder-a)", "shared.txt (folder-b)", "unique.txt"}
+
+
 def test_quick_fix_contract_and_version(monkeypatch, tmp_path):
     from api import __version__
     from api.webui import server, workspace

@@ -64,16 +64,19 @@
     var html = "";
     jobs.forEach(function (job) {
       var title = job.title || "Work item";
-      var kind = job.kind || "Work";
+      // Server-mapped teacher-legible phrase (work_registry.models.generic_description).
+      // Falls back to nothing, never to the raw job.kind machine slug.
+      var description = job.description || "";
       var url = job.resumable_url || "/";
       html +=
         '<a class="ce-work-rail-item ce-work-rail-' +
         (label === "Review" ? "attention" : "continue") +
         '" href="' + url + '">' +
         escapeHtml(title) +
-        '<span class="ce-work-rail-item-desc">' +
-        escapeHtml(kind) +
-        "</span></a>";
+        (description
+          ? '<span class="ce-work-rail-item-desc">' + escapeHtml(description) + "</span>"
+          : "") +
+        "</a>";
     });
     container.innerHTML = html;
   }

@@ -8,7 +8,9 @@ import pytest
 from api.work_registry import storage, suppressions
 from api.work_registry.models import (
     RegistryValidationError,
+    generic_description,
     material_version,
+    public_job,
     stable_fingerprint,
     validate_job,
     validate_registry_document,
@@ -30,6 +32,7 @@ def _job(status="attention", origin="detected"):
         "kind": "grade.debt",
         "status": status,
         "title": "Work item",
+        "description": "Grading debt",
         "course_ids": courses,
         "focused_course_id": "course-1",
         "assignment_id": assignment,
@@ -64,6 +67,23 @@ def test_strict_models_reject_unknown_values_and_private_facts():
         validate_registry_document({"version": 2, "updated_at": _registry()["updated_at"], "jobs": []})
     with pytest.raises(RegistryValidationError):
         validate_suppressions({"version": 1, "items": [{"fingerprint": "x"}]})
+
+
+def test_public_job_maps_kind_to_a_teacher_legible_description():
+    """D3: the raw `kind` machine slug (e.g. "grade.debt") must never reach
+    a client as display text -- public_job derives a teacher-legible
+    `description` from it, same pattern as the existing `title` mapping."""
+    job = _job()
+    projected = public_job(job)
+    assert projected["kind"] == "grade.debt"
+    assert projected["description"] == "Grading debt"
+    assert projected["description"] != projected["kind"]
+
+
+def test_generic_description_falls_back_to_empty_for_an_unknown_kind():
+    """An unmapped kind must fall back to "" (the rail then renders
+    nothing), never to the raw slug itself."""
+    assert generic_description("some.future.kind") == ""
 
 
 def test_fingerprints_are_stable_and_material_changes_digest():

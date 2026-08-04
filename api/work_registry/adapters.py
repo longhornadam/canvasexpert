@@ -59,6 +59,7 @@ def _project(
         "kind": kind,
         "status": status,
         "title": "Work item",
+        "description": "",
         "course_ids": list(course_ids),
         "focused_course_id": course_ids[0] if len(course_ids) == 1 else "",
         "assignment_id": assignment_id,

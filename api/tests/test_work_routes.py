@@ -40,6 +40,7 @@ def _job(origin="intentional", status="attention"):
         "kind": "grade.powergrader",
         "status": status,
         "title": "PowerGrader work",
+        "description": "PowerGrader session",
         "course_ids": ["course-1"],
         "focused_course_id": "course-1",
         "assignment_id": "assignment-1",

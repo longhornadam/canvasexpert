@@ -16,7 +16,7 @@
 
   <section class="rt-list-section">
     <div class="rt-list-head">
-      <h2>Your automations</h2>
+      <h2>Your routines</h2>
       <div class="rt-legend">
         <span class="rt-writes" title="Writes to Canvas">✎</span> writes to Canvas
         &nbsp;·&nbsp;
@@ -103,7 +103,7 @@
 
   async function load() {
     var d = await fetch("/api/routines").then(function(r){return r.json();});
-    if (!d.ok) { list.innerHTML = '<p class="hint">Could not load your automations.</p>'; return; }
+    if (!d.ok) { list.innerHTML = '<p class="hint">Could not load your routines.</p>'; return; }
     list.innerHTML = "";
     d.routines.forEach(function (r) {
       var row = document.createElement("div");

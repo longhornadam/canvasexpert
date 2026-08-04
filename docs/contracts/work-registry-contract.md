@@ -60,6 +60,7 @@ Each job has exactly this public index shape:
   "kind": "namespaced kind such as create.assignment or grade.powergrader",
   "status": "draft | ready | in_progress | attention | ignored | completed | failed",
   "title": "PII-free display title",
+  "description": "PII-free short display phrase for the kind, or empty",
   "course_ids": ["string Canvas course id"],
   "focused_course_id": "string or empty",
   "assignment_id": "string or empty",

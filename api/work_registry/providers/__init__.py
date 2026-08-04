@@ -292,6 +292,7 @@ def finding(
         "kind": kind,
         "status": status,
         "title": title,
+        "description": "",
         "course_ids": [course_id],
         "focused_course_id": course_id,
         "assignment_id": assignment_id,

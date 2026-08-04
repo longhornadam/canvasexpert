@@ -4,7 +4,7 @@
 {% block workspace_variant %}full{% endblock %}
 {% block head_extra %}<link rel="stylesheet" href="/static/pages/routines.css?v={{ asset_v }}">{% endblock %}
 {% block primary %}
-{{ page_header('Automations', 'Checks and chores that run on this computer while Canvas Expert is open, across your '
+{{ page_header('Routines', 'Checks and chores that run on this computer while Canvas Expert is open, across your '
     ~ active_count ~ ' active course' ~ ('' if active_count == 1 else 's')
     ~ '. Nothing runs in the cloud, and your Canvas token never leaves this computer.') }}
 

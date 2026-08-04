@@ -130,8 +130,11 @@ def content_folders(kind: str) -> list[Path]:
             folders.insert(0, current)
         else:
             folders.append(current)
-    if kind == "rubric":
-        folders.append(api_root() / "rubrics")
+    # Rubrics come ONLY from the synced Library folder (feature-freeze
+    # hardening initiative, D1): no repo fallback. An unconfigured
+    # workspace yields an empty rubric list rather than silently serving
+    # bundled repo copies -- the picker's existing "no workspace configured"
+    # banner is the pointer to set one up, not a second, quieter fallback.
     return folders
 
 

@@ -184,7 +184,7 @@ Seating. Section seating context and pairing preferences.
 Gradebook tools. Late policies, late-work sweeps, curves with transparent
 math, and per-student extensions. Each previews what will change first.
 
-Automations. Small jobs that run on the teacher's own computer on a schedule
+Routines. Small jobs that run on the teacher's own computer on a schedule
 or at app launch: download new submissions, flag late work, keep a running
 report of what still needs grading. Local on purpose, because school-issued
 machines usually do not permit background cloud services.

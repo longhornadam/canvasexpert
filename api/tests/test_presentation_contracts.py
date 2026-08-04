@@ -28,7 +28,7 @@ EXPECTED_PRESENTATION = {
     "/roster": ("roster.html", "workspace", "left-main", 1),
     "/settings": ("settings.html", "workspace", "left-main", 1),
     "/calendar": ("calendar.html", "workspace", "left-main", 1),
-    # Automations sits on the workspace layout so its title shares a left edge
+    # Routines sits on the workspace layout so its title shares a left edge
     # with the other primary-nav pages instead of jumping inward.
     "/routines": ("routines.html", "workspace", "full", 0),
     "/course": ("course.html", "document", "wide", 0),
