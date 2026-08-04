@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 
-from api import feedback_vault
+from api import feedback_vault, operational_log
 
 from .. import config, workspace
 from ..deps import list_rubric_files
@@ -61,5 +61,5 @@ def audit(entry: dict):
         entry = {"ts": datetime.now().isoformat(timespec="seconds"), **entry}
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("powergrader.audit_write", "failed", error_class=type(exc))

@@ -4,26 +4,35 @@
 
 **Last senior review:** 2026-08-03
 
-**Baseline:** `dev` @ `b434ccf`, `v1.0.0-beta.3`, working tree clean except
-an unrelated pre-existing `README.md` edit (out of scope for this
-initiative, left untouched), `api/tests` 2146 passed.
+**Baseline:** `dev` (post Batch 3 commit), `v1.0.0-beta.3`, working tree
+clean except an unrelated pre-existing `README.md` edit (out of scope for
+this initiative, left untouched), `api/tests` 2153 passed.
 
-**Next batch pointer:** Batch 1 (§9 row 1: A1, A2, A4, A6) and Batch 2
-(§9 row 2: A3) are both GREEN and committed; their briefs are retired at
-`docs/handoffs/feature-freeze-batch1-pii-hardening.md` and
-`docs/handoffs/feature-freeze-batch2-denylist-inversion.md`. Batch 2's
-execution also found and fixed a real defect outside its literal scope: the
-daily-writing MCP tool `get_writing_history` was leaking the real Canvas
-user id embedded in `submission_id` on every call (undetected since the
-substrate landed 2026-07-27, because the old field-name allowlist never
-scanned that key). See the Batch 2 brief's execution result for the fix
-(`api/dailywriting/projection.py::_safe_submission_ref`, a one-way hash).
+**Next batch pointer:** Batches 1-3 (§9 rows 1-3: A1/A2/A4/A6, A3,
+B2/B3/B4) are all GREEN and committed; their briefs are retired at
+`docs/handoffs/feature-freeze-batch1-pii-hardening.md`,
+`docs/handoffs/feature-freeze-batch2-denylist-inversion.md`, and
+`docs/handoffs/feature-freeze-batch3-observability.md`. Two real defects
+were found and fixed along the way, outside each batch's literal scope but
+squarely within the initiative's purpose — see each brief's execution
+result for detail:
 
-Next up is §9 row 3: **Batch 3 (B2, B3, B4)** — observability. Read §4 B2,
-B3, B4, §7 non-goal 8, and §8 for the next brief. No senior decisions from
-other batches are outstanding for B2/B3/B4 specifically; A5, A7, D1.4, D4,
-C sequencing, and 2.3 remain open per §10 and are not required to promote
-this batch.
+- Batch 2: the daily-writing MCP tool `get_writing_history` was leaking the
+  real Canvas user id embedded in `submission_id` on every call (fixed with
+  a one-way hash in `api/dailywriting/projection.py::_safe_submission_ref`).
+- Batch 3: none beyond the batch's own scope, but the AST re-sweep found 3
+  sites the mechanical B2 pattern should NOT touch (module-import-time
+  emit, a circular emit-of-an-emit-failure, and normal two-format control
+  flow) — see the Batch 3 brief for exactly which and why.
+
+Next up is §9 row 4: **Batch 4 (D1, D2, D3)** — UI tightening. Read §6 D1,
+D2, D3, §7, and §8 for the next brief. This batch is teacher-visible and
+requires rendered browser verification for every changed route. No senior
+decisions from other batches are outstanding for D1/D2/D3 specifically;
+A5, A7, D1.4, D4, C sequencing, and 2.3 remain open per §10 and are not
+required to promote this batch — D1.4 in particular is an explicit
+"ask before generalizing" question the initiative document raises for a
+*future* cycle, not a blocker for D1 itself (rubrics only, this batch).
 
 This document is persistent senior context. It does not authorize implementation directly.
 

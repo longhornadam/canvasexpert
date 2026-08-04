@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable
 
+from api import operational_log
 from api.powergrader import scheduled_autoscore_support as autoscore_support
 from api.powergrader.push_context import build_scheduled_push_context
 
@@ -321,8 +322,8 @@ def _run_routine_powergrader_scheduled_autoscore(params, deps: PowerGraderRoutin
                         try:
                             from api.webui import mirror_service
                             mirror_service.notify_course_changed(session["course_id"])
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
                     status = autoscore_support.autoscore_status_from_summary(autopush_result, job_ref.get("status") or "session_ready")
                     last_error = ""
                     errors = autopush_result.get("errors") or []

@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from api import openrouter_client as orc
 
 from .. import config, mirror_service, source_materials, workspace
-from api import course_scope
+from api import course_scope, operational_log
 from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
 from api.powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
@@ -694,8 +694,8 @@ def _notify_write_through(session, pushed) -> None:
         course_id = (session or {}).get("course_id")
         if course_id and pushed:
             mirror_service.notify_course_changed(course_id)
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
 
 
 @router.post("/api/powergrader/session/{session_id}/push")
@@ -773,8 +773,8 @@ def _converge_new_quiz_after_finalize(session, user_id) -> None:
         if course_id and assignment_id:
             from api.mirror import new_quizzes
             new_quizzes.invalidate_responses(course_id, assignment_id)
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("new_quizzes.response_invalidate", "failed", error_class=type(exc))
 
 
 @router.post("/api/powergrader/session/{session_id}/new-quiz-finalize")

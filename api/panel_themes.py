@@ -44,7 +44,7 @@ import threading
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-from api import runtime_paths
+from api import operational_log, runtime_paths
 from api.webui import workspace
 
 
@@ -1049,8 +1049,8 @@ def _process_art(source_path, entry, derived_colors) -> tuple[bytes, str, str]:
         try:
             with open(cache_path, "rb") as handle:
                 return handle.read(), ext, _art_diagnostic(source_path, entry)
-        except OSError:
-            pass
+        except OSError as exc:
+            operational_log.emit("panels.art_cache_read", "failed", error_class=type(exc))
     if ext == ".svg":
         data, out_ext, diagnostic = _process_svg(source_path, entry, derived_colors)
     else:
@@ -1064,8 +1064,8 @@ def _process_art(source_path, entry, derived_colors) -> tuple[bytes, str, str]:
             os.makedirs(art_cache_dir(), exist_ok=True)
             with open(_art_cache_path(key, out_ext), "wb") as handle:
                 handle.write(data)
-        except OSError:
-            pass
+        except OSError as exc:
+            operational_log.emit("panels.art_cache_write", "failed", error_class=type(exc))
     return data, out_ext, diagnostic
 
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 import time
 
+from api import operational_log
 from api.mirror import coordinator, course_context, new_quizzes, store, sync
 
 from . import config, workspace
@@ -294,8 +295,8 @@ def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=No
         try:
             course_context.refresh_course_context(
                 cid, canvas_get=canvas_get, canvas_get_all=canvas_get_all, now=now)
-        except Exception:
-            pass
+        except Exception as exc:
+            operational_log.emit("mirror.course_refresh", "failed", error_class=type(exc))
         result = sync.delta_pass(cid, canvas_get_all=canvas_get_all,
                                  canvas_get_all_complete=canvas_get_all_complete, now=now,
                                  bypass_new_quiz_cooldown=True,
@@ -321,8 +322,8 @@ def refresh_work_findings() -> None:
         result = discovery.scan_active_courses()
         if result.get("ok"):
             discovery.merge_into_registry(result)
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("mirror.work_findings_refresh", "failed", error_class=type(exc))
 
 
 def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECONDS,
@@ -344,8 +345,8 @@ def notify_course_changed(course_id, *, delay_seconds: float = NOTIFY_DELAY_SECO
             plan_id = coordinator_instance().submit(
                 [str(course_id)], ["submissions.course_delta"], priority="post_write")
             wait_for_plan(plan_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
 
     timer = threading.Timer(delay_seconds, _run)
     timer.daemon = True
@@ -396,6 +397,6 @@ def _mirror_heartbeat():
     while True:
         try:
             run_coordinated_heartbeat_tick()
-        except Exception:
-            pass
+        except Exception as exc:
+            operational_log.emit("mirror.heartbeat_tick", "failed", error_class=type(exc))
         time.sleep(TICK_SECONDS)

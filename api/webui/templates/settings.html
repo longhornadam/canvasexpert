@@ -45,6 +45,7 @@
       <p class="ce-rail-nav__kicker">About this app</p>
       <div class="ce-rail-nav__links">
         <a href="#update-card" data-rail-link>Updates</a>
+        <a href="#support-bundle-card" data-rail-link>Support bundle</a>
       </div>
     </div>
   </nav>
@@ -457,6 +458,20 @@
   </div>
 
   <p id="update-status" class="status ce-settings-status"></p>
+</section>
+
+<section class="ce-panel ce-settings-panel" id="support-bundle-card">
+  <h2>Support bundle</h2>
+  <p class="ce-hint">
+    A ZIP with version and health booleans, a short local activity log, and
+    recent local error text (if any occurred). It never contains tokens,
+    student data, or file paths from your workspace. Because the error text
+    can carry anything the app printed at the moment of a problem, review it
+    yourself before you send it to anyone.
+  </p>
+  <div class="ce-actions">
+    <form method="post" action="/api/support-bundle"><button type="submit" class="small">Download support bundle</button></form>
+  </div>
 </section>
 
  </div>

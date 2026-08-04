@@ -15,7 +15,7 @@ from datetime import datetime
 
 import requests
 
-from api import portfolio, report_local_reads
+from api import operational_log, portfolio, report_local_reads
 from api.submission_transport import download_binary, fetch_submission, get_all_pages
 from api.webui.workspace import safe_component
 
@@ -50,8 +50,9 @@ def _assignment_entries(subs, session, work_dir, date_from, date_to):
             try:
                 _download_binary(session, att["url"], dest)
                 local.append(dest)
-            except Exception:
-                pass  # rendering will simply omit a missing file
+            except Exception as exc:
+                # rendering will simply omit a missing file
+                operational_log.emit("portfolio.attachment_download", "failed", error_class=type(exc))
         entries.append({
             "date": date, "source": "Assignment", "title": a.get("name", "Assignment"),
             "prompt": portfolio.html_to_text(a.get("description") or ""),

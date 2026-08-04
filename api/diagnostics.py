@@ -153,6 +153,14 @@ def _operations_text() -> str:
     )
 
 
+def _errors_text() -> str:
+    # Unlike the other three members, this one is not built from an
+    # allowlisted/validated source -- it may contain arbitrary text from
+    # anywhere in the app (see operational_log._ERROR_LOGGER). Capped so one
+    # pathological loop can't balloon the bundle.
+    return operational_log.tail_traceback_text(max_bytes=200_000)
+
+
 def _zip_text_member(archive: zipfile.ZipFile, name: str, content: str) -> None:
     info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
     info.compress_type = zipfile.ZIP_DEFLATED
@@ -161,7 +169,13 @@ def _zip_text_member(archive: zipfile.ZipFile, name: str, content: str) -> None:
 
 
 def build_support_bundle(destination: Path) -> Path:
-    """Build the fixed three-member support ZIP and atomically replace destination."""
+    """Build the fixed four-member support ZIP and atomically replace destination.
+
+    errors.log (B3/B4) is the one member not built from an allowlisted or
+    validated source -- it may carry raw text from anywhere in the app and
+    is included only because sending the bundle is the teacher's own
+    explicit action, never automatic.
+    """
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     health = health_snapshot()
@@ -182,6 +196,7 @@ def build_support_bundle(destination: Path) -> Path:
                 "health.json": _json_text(health),
                 "manifest.json": _json_text(manifest),
                 "operations.jsonl": _operations_text(),
+                "errors.log": _errors_text(),
             }
             for name in sorted(members):
                 _zip_text_member(archive, name, members[name])

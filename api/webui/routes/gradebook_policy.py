@@ -5,6 +5,7 @@ from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
 from ..canvas_client import _canvas_get, _canvas_send
+from api import operational_log
 from api.mirror import store as mirror_store
 
 router = APIRouter(tags=["gradebook"])
@@ -33,8 +34,8 @@ def get_late_policy(course_id: str):
     if isinstance(raw_policy, dict):
         try:
             mirror_store.write_late_policy(course_id, raw_policy)
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as exc:
+            operational_log.emit("gradebook.late_policy_cache_write", "failed", error_class=type(exc))
     return JSONResponse({"ok": True, "policy": raw_policy,
                          "source": "canvas", "synced_at": ""})
 
@@ -72,8 +73,8 @@ def apply_late_policy(courses: str = Form(...), policy: str = Form(...)):
             # never coerced to current.
             try:
                 mirror_store.invalidate_late_policy(cid)
-            except (OSError, ValueError):
-                pass
+            except (OSError, ValueError) as exc:
+                operational_log.emit("gradebook.late_policy_cache_invalidate", "failed", error_class=type(exc))
         results.append({"course_name": cname, "ok": ok, "error": err,
                         "title": f"late policy {'updated' if method == 'PATCH' else 'created'}"})
     return JSONResponse({"ok": all(r["ok"] for r in results), "results": results})

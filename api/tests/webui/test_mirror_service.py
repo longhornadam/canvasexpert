@@ -455,6 +455,28 @@ def test_sync_now_scopes_to_saved_courses(monkeypatch, tmp_path, _configure):
     assert results[0]["course_id"] == "111"
 
 
+def test_sync_now_records_a_failed_course_context_refresh(monkeypatch, tmp_path, _configure):
+    """B2 example: a swallowed course_context.refresh_course_context failure
+    is now recorded (event=mirror.course_refresh, outcome=failed) instead of
+    vanishing with zero signal -- sync_now's own result is unaffected, since
+    B2 changes recording only, never control flow."""
+    from api import operational_log
+
+    _configure()
+    monkeypatch.setattr(
+        mirror_service.course_context, "refresh_course_context",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("canvas unreachable")))
+    canvas = FakeCanvas()
+    results = mirror_service.sync_now(
+        "111", canvas_get=canvas, canvas_get_all=canvas,
+        canvas_get_all_complete=canvas.complete, now=NOW)
+    assert results[0]["ok"] is True  # unaffected: context refresh is best-effort
+    records = [r for r in operational_log.tail() if r["event"] == "mirror.course_refresh"]
+    assert len(records) == 1
+    assert records[0]["outcome"] == "failed"
+    assert records[0]["error_class"] == "RuntimeError"
+
+
 def test_enqueue_sync_accepts_previous_but_heartbeat_stays_current_only(monkeypatch, tmp_path, _configure):
     _configure(courses=(
         {"id": "111", "name": "Current", "active": True},

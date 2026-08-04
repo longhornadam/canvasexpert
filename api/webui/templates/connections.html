@@ -110,10 +110,6 @@
     <p class="ce-hint">Copy this stdio config into a client that supports local MCP servers.</p>
     <pre id="generic-stdio-config">{{ connection.generic_stdio_config | tojson(indent=2) }}</pre>
     <button type="button" class="small ce-copy-button" data-copy-target="generic-stdio-config">Copy JSON</button>
-
-    <h3>Something not working?</h3>
-    <p class="ce-hint">The support bundle holds only version and health booleans. It contains no tokens, paths, or student data.</p>
-    <form method="post" action="/api/support-bundle"><button type="submit" class="small">Download support bundle</button></form>
   </details>
 
   <section class="ce-ai-flow">

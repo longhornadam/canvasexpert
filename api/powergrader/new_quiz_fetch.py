@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 import requests
 
+from api import operational_log
 from api.webui.canvas_client import _canvas_headers
 from api.webui import workspace
 from api.nq_report import html_to_text
@@ -982,8 +983,8 @@ def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=tim
                 normalized_attempts=all_attempts,
                 latest=subs,
             )
-        except Exception:
+        except Exception as exc:
             # A disposable local mirror must never turn a successful focused
             # Canvas acquisition into a PowerGrader failure.
-            pass
+            operational_log.emit("new_quizzes.snapshot_write", "failed", error_class=type(exc))
     return subs, None

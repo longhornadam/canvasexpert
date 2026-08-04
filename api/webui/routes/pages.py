@@ -17,7 +17,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from .. import config, school_calendar, workspace
-from api import runtime_paths
+from api import operational_log, runtime_paths
 from ..local_request_guard import csrf_token
 from api.operation_ledger import operations as operation_store
 from api.operation_ledger import receipts as receipt_store
@@ -355,8 +355,8 @@ def _allowed_open_roots():
             continue
         try:
             roots.append(os.path.realpath(r))
-        except Exception:
-            pass
+        except Exception as exc:
+            operational_log.emit("pages.allowed_roots_resolve", "failed", error_class=type(exc))
     return roots
 
 

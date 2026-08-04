@@ -40,7 +40,8 @@ def test_support_bundle_is_minimal_and_identifier_free(tmp_path, monkeypatch):
     assert result == destination
     with zipfile.ZipFile(result) as archive:
         member_names = archive.namelist()
-        assert member_names == ["health.json", "manifest.json", "operations.jsonl"]
+        # errors.log (B3/B4): present but empty here -- no traceback was written.
+        assert member_names == ["errors.log", "health.json", "manifest.json", "operations.jsonl"]
         manifest = json.loads(archive.read("manifest.json"))
         health = json.loads(archive.read("health.json"))
         operations = archive.read("operations.jsonl").decode("utf-8")
@@ -67,6 +68,25 @@ def test_support_bundle_is_minimal_and_identifier_free(tmp_path, monkeypatch):
     assert not (workspace_root / "_System").exists()
     assert not any(path.name.startswith((".diagnostic-", ".support-", ".tmp"))
                    for path in tmp_path.iterdir())
+
+
+def test_support_bundle_carries_recent_traceback_text(tmp_path, monkeypatch):
+    """B3/B4: errors.log is the one member not built from an allowlisted
+    source -- it's raw text, verified separately from the identifier-free
+    check above (which only proves the OTHER three members stay clean)."""
+    from api import diagnostics, operational_log
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
+    monkeypatch.setattr(diagnostics.config, "get_canvas_base", lambda: "")
+    monkeypatch.setattr(diagnostics.config, "token_is_set", lambda: False)
+
+    operational_log.write_traceback("Traceback (most recent call last):\nValueError: something broke\n")
+
+    destination = tmp_path / "support-bundle.zip"
+    diagnostics.build_support_bundle(destination)
+    with zipfile.ZipFile(destination) as archive:
+        errors_text = archive.read("errors.log").decode("utf-8")
+    assert "ValueError: something broke" in errors_text
 
 
 def test_connections_page_and_mcpb_use_runtime_paths_without_client_config_writes(tmp_path, monkeypatch):

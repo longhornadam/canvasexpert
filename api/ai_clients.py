@@ -28,7 +28,7 @@ import shutil
 import tomllib
 from pathlib import Path
 
-from api import runtime_paths
+from api import operational_log, runtime_paths
 from api.storage_support import utc_compact_stamp
 
 
@@ -88,8 +88,8 @@ def _pin_workspace() -> None:
         from api.webui import config
 
         config.ensure_workspace_pinned()
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("mcp.workspace_pin_write", "failed", error_class=type(exc))
 
 
 def _norm(value: str) -> str:

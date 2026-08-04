@@ -8,7 +8,7 @@ Routes: GET /api/courses
 """
 import requests
 
-from api import course_catalog
+from api import course_catalog, operational_log
 from api.mirror import read_service
 from api.mirror import store as mirror_store
 
@@ -258,8 +258,8 @@ def list_groups(course_id: str):
         return JSONResponse({"ok": False, "error": err})
     try:
         mirror_store.write_groups(course_id, categories)
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        operational_log.emit("roster.group_write", "failed", error_class=type(exc))
     return JSONResponse({"ok": True, "categories": categories, "message": message})
 
 

@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from .. import config
 from ..canvas_client import _canvas_send
+from api import operational_log
 from . import powergrader as pg_routes
 from api.powergrader import (
     ai_workflow,
@@ -239,8 +240,8 @@ def _routines_heartbeat():
         try:
             if config.token_is_set():
                 _run_routines_bg()
-        except Exception:
-            pass
+        except Exception as exc:
+            operational_log.emit("routines.heartbeat_tick", "failed", error_class=type(exc))
         _time.sleep(1800)
 
 
@@ -253,5 +254,5 @@ def _run_routines_bg():
                     res = _ROUTINE_RUNNERS[rid](state["params"])
                     config.set_routine_state(rid, {"last_run": datetime.now().isoformat(timespec="seconds"),
                                                    "last_summary": res["summary"]})
-                except Exception:
-                    pass
+                except Exception as exc:
+                    operational_log.emit("routines.scheduled_run", "failed", error_class=type(exc))

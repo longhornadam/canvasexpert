@@ -43,8 +43,9 @@ def _parse_calendar_csv(content: str) -> tuple:
         if len(parts) == 3:
             try:
                 return _date(int(parts[2]), int(parts[0]), int(parts[1]))
-            except ValueError:
-                pass
+            except ValueError as exc:
+                from api import operational_log
+                operational_log.emit("school_calendar.row_parse", "failed", error_class=type(exc))
         return None
 
     def _expand(d_start, d_end, out: set):

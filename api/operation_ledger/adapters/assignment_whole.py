@@ -20,6 +20,7 @@ from .adapter_support import (
     replace_step,
 )
 from .module_placement import attach_assignment_type_module_item
+from api import operational_log
 from api.webui import canvas_client
 from api.webui import config
 
@@ -398,14 +399,14 @@ def allowed_printable_roots():
     roots = []
     try:
         roots.append(os.path.realpath(runtime_paths.printables_dir()))
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("operation_ledger.printable_root_resolve", "failed", error_class=type(exc))
     try:
         workspace_path = config.get_workspace_path()
         if workspace_path:
             roots.append(os.path.realpath(workspace_path))
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("operation_ledger.printable_root_resolve", "failed", error_class=type(exc))
     return roots
 
 

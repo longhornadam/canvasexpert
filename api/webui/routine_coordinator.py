@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config
+from api import operational_log
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
 from api.operation_ledger import models as ledger_models
@@ -86,8 +87,8 @@ def _acquire_claim(routine_id: str, scheduled_due: str | None) -> bool:
                 expires = datetime.fromisoformat(existing["expires_at"])
                 if expires > datetime.now(timezone.utc):
                     return False  # Still active — another runner has it
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as exc:
+                operational_log.emit("routines.claim_parse", "failed", error_class=type(exc))
             # Expired — reclaim
             existing["acquired_at"] = now
             existing["expires_at"] = (

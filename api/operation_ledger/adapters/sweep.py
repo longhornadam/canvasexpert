@@ -5,6 +5,7 @@ current Canvas state, applies per-student ``seconds_late_override`` via
 Canvas Submissions API, and returns per-student results.
 """
 from .. import models
+from api import operational_log
 from api.webui import canvas_client, config, deps, school_calendar
 from api.webui.schooldays import (
     _parse_iso_local, _school_days_late_detail,
@@ -216,8 +217,8 @@ class SweepAdapter:
             try:
                 from api.webui import mirror_service
                 mirror_service.notify_course_changed(course_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
 
         state = "applied" if all_applied else "partial"
         return _build_result(state, steps=steps)

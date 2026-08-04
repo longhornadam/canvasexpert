@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from api import student_packet
+from api import operational_log, student_packet
 from api.mirror import coordinator as _mirror_coordinator
 from api.operation_ledger import recovery as _operation_ledger_recovery
 
@@ -162,7 +162,9 @@ async def _api_errors_return_json(request: Request, exc: Exception):
     exception type, message, absolute path, student detail, setting, or
     credential.  The traceback is still printed locally for debugging.
     """
-    print("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    formatted = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    print(formatted)
+    operational_log.write_traceback(formatted)
     if request.url.path.startswith("/api/"):
         return JSONResponse(
             {"ok": False, "error": "An unexpected server error occurred. Check the server console for details."},

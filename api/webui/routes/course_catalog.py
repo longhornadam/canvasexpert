@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from api import assignment_collection, course_catalog
+from api import assignment_collection, course_catalog, operational_log
 from api.mirror import sync as mirror_sync
 
 from .. import config
@@ -64,8 +64,8 @@ def refresh_course_catalog(course_id: str = Form("")):
 
     try:
         mirror_sync.apply_assignment_collection_receipt(course_id, receipt)
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        operational_log.emit("catalog.receipt_apply", "failed", error_class=type(exc))
 
     if catalog_failure:
         return JSONResponse({"ok": False, "error": "The course list could not be synchronized."})

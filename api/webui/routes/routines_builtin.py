@@ -12,7 +12,7 @@ from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
 from ..mirror_reads import students_or_live, submissions_or_live
 from ..schooldays import _school_days_late, _parse_iso_local
-from api import routine_reads, student_packet
+from api import operational_log, routine_reads, student_packet
 from api.powergrader import assignment_refresh
 
 from api.nq_report import html_to_text
@@ -264,8 +264,8 @@ def _run_routine_curve(params):
         if course_applied:
             try:
                 mirror_service.notify_course_changed(cid)
-            except Exception:
-                pass
+            except Exception as exc:
+                operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
     summary = f"{applied} assignment(s) curved" if mode == "apply" else f"{flagged} assignment(s) flagged below {floor:g}%"
     return {"ok": ok, "lines": lines or ["· all assignment averages at or above the floor"], "summary": summary}
 

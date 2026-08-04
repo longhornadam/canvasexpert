@@ -31,7 +31,7 @@ from api.assignment_collection import acquire_assignment_collection
 # read the same across both mirrors of Canvas data, and forward each pass's
 # already-acquired assignment receipt to Catalog's assignment scope only
 # (1.0beta slice 02c) — no second Canvas call is made on Catalog's behalf.
-from api import course_catalog
+from api import course_catalog, operational_log
 from api.course_catalog import _error_code
 
 from . import new_quizzes, store
@@ -347,8 +347,8 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
             course_id, assignment_receipt=(assignments, error, complete),
             course_name=course_name, root=root, attempted_at=started,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("catalog.refresh_full_pass", "failed", error_class=type(exc))
     if assignment_error:
         store.record_pass(course_id, "full", ok=False,
                           error_code=assignment_error, attempted_at=started, root=root)
@@ -427,8 +427,8 @@ def delta_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None,
             course_id, assignment_receipt=(assignments, error, complete),
             course_name=course_name, root=root, attempted_at=started,
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        operational_log.emit("catalog.refresh_delta_pass", "failed", error_class=type(exc))
     if assignment_error:
         store.record_pass(course_id, "delta", ok=False,
                           error_code=assignment_error, attempted_at=started, root=root)

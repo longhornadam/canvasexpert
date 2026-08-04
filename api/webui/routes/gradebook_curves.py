@@ -14,6 +14,8 @@ from datetime import datetime
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
+from api import operational_log
+
 from .. import mirror_service
 from ..canvas_client import _canvas_get, _canvas_send
 from ..gradebook_service import _apply_curve_model, _load_curve_events, _save_curve_events
@@ -155,8 +157,8 @@ def curve_apply(course_id: str = Form(...), assignment_id: str = Form(...),
     if any(r["ok"] for r in push_results):
         try:
             mirror_service.notify_course_changed(course_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
     return JSONResponse({"ok": all_ok, "event_id": event_id, "results": push_results})
 
 
@@ -212,6 +214,6 @@ def revert_curve(event_id: str = Form(...), course_id: str = Form(...),
     if any(r["ok"] for r in push_results):
         try:
             mirror_service.notify_course_changed(course_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
     return JSONResponse({"ok": all_ok, "results": push_results})

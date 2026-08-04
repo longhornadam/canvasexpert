@@ -6,7 +6,7 @@ from fastapi import File, Form, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .. import af, config, pf, rf, runner
-from api import runtime_paths
+from api import operational_log, runtime_paths
 from ..deps import TEMP_DIR, REPO_ROOT
 
 
@@ -82,8 +82,8 @@ def register_validation_routes(
             try:
                 quiz.questions = calculate_points(quiz.questions, total_points=DEFAULT_QUIZ_POINTS)
                 quiz.questions = balance_answers(quiz.questions)
-            except Exception:
-                pass
+            except Exception as exc:
+                operational_log.emit("quiz.points_recalculate", "failed", error_class=type(exc))
             base = printables_dir_func()
             os.makedirs(base, exist_ok=True)
             folder = create_quiz_folder(_Path(base), quiz.title)
@@ -102,8 +102,8 @@ def register_validation_routes(
                         if line.startswith("PHYSICAL RENDER WARNING")
                     ]
                 os.remove(log_path)
-            except OSError:
-                pass
+            except OSError as exc:
+                operational_log.emit("quiz.render_warnings_read", "failed", error_class=type(exc))
 
         files = [
             os.path.basename(results[k])

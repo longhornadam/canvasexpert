@@ -16,6 +16,7 @@ from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
 from api import feedback_scrub
+from api import operational_log
 from api import roster_context
 from api import roster_service
 from api.mirror import store as mirror_store
@@ -101,12 +102,12 @@ def _reconcile_group_category(course_id: str, category_id: str,
             })
             if merged is not None:
                 return
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as exc:
+            operational_log.emit("roster.group_category_merge", "failed", error_class=type(exc))
     try:
         mirror_store.invalidate_groups(course_id)
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        operational_log.emit("roster.group_category_invalidate", "failed", error_class=type(exc))
 
 
 def _group_categories_for_roster(course_id: str) -> tuple[list[dict], str | None, str]:
@@ -118,8 +119,8 @@ def _group_categories_for_roster(course_id: str) -> tuple[list[dict], str | None
     if group_err is None:
         try:
             mirror_store.write_groups(course_id, categories)
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as exc:
+            operational_log.emit("roster.group_write", "failed", error_class=type(exc))
     return categories, group_err, group_msg
 
 

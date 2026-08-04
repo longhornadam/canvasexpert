@@ -41,11 +41,31 @@ _LOGGER.propagate = False
 _HANDLER: RotatingFileHandler | None = None
 _HANDLER_PATH: Path | None = None
 
+# Separate logger/handler for errors.log (B3). Deliberately NOT the same
+# logger as _LOGGER above: this file carries raw traceback text -- it is
+# not JSON, not key-allowlisted, and must never be treated as
+# safe-by-construction the way an operations.jsonl record is. It may
+# contain arbitrary strings from anywhere in the process (exception
+# messages, repr'd values, absolute paths), so it is excluded from any
+# automatic upload path and only ever leaves the machine via the support
+# bundle, which requires the teacher's own explicit action.
+_ERROR_LOGGER = logging.getLogger("canvasexpert.errors")
+_ERROR_LOGGER.setLevel(logging.ERROR)
+_ERROR_LOGGER.propagate = False
+_ERROR_HANDLER: RotatingFileHandler | None = None
+_ERROR_HANDLER_PATH: Path | None = None
+
 
 def _log_path() -> Path:
     local_app_data = os.environ.get("LOCALAPPDATA")
     root = Path(local_app_data) if local_app_data else Path(tempfile.gettempdir())
     return root / "CanvasExpert" / "Logs" / "operations.jsonl"
+
+
+def _error_log_path() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    root = Path(local_app_data) if local_app_data else Path(tempfile.gettempdir())
+    return root / "CanvasExpert" / "Logs" / "errors.log"
 
 
 def _nonnegative_int(value, field: str) -> int:
@@ -124,6 +144,60 @@ def _handler_for(path: Path) -> RotatingFileHandler:
     _HANDLER = handler
     _HANDLER_PATH = path
     return handler
+
+
+def _error_handler_for(path: Path) -> RotatingFileHandler:
+    global _ERROR_HANDLER, _ERROR_HANDLER_PATH
+    if _ERROR_HANDLER is not None and _ERROR_HANDLER_PATH == path:
+        return _ERROR_HANDLER
+    if _ERROR_HANDLER is not None:
+        _ERROR_LOGGER.removeHandler(_ERROR_HANDLER)
+        _ERROR_HANDLER.close()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        path,
+        maxBytes=_MAX_BYTES,
+        backupCount=_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    _ERROR_LOGGER.addHandler(handler)
+    _ERROR_HANDLER = handler
+    _ERROR_HANDLER_PATH = path
+    return handler
+
+
+def write_traceback(text: str) -> None:
+    """Append a formatted traceback (or other raw diagnostic text) to the
+    rotating error log, beside operations.jsonl. Best-effort, matching
+    emit()'s own never-raise contract for its I/O -- diagnostics must never
+    break the caller. Unlike emit(), this takes an arbitrary string with no
+    key allowlist or JSON validation; see the module note on _ERROR_LOGGER."""
+    if not text:
+        return None
+    try:
+        with _LOCK:
+            handler = _error_handler_for(_error_log_path())
+            _ERROR_LOGGER.error(text.rstrip("\n"))
+            handler.flush()
+    except Exception:
+        return None
+
+
+def tail_traceback_text(max_bytes: int = 200_000) -> str:
+    """Return up to the last `max_bytes` of errors.log, or "" if it doesn't
+    exist yet. Read as raw text, not parsed -- this file is not JSON."""
+    max_bytes = _nonnegative_int(max_bytes, "max_bytes")
+    path = _error_log_path()
+    try:
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            handle.seek(max(0, size - max_bytes))
+            data = handle.read()
+        return data.decode("utf-8", errors="replace")
+    except OSError:
+        return ""
 
 
 def emit(

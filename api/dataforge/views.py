@@ -22,6 +22,8 @@ import uuid
 import zipfile
 from pathlib import Path
 
+from api import operational_log
+
 from . import canvas_join, history_store, paths as path_config, profile_export
 from .identity import (
     IdentityMigrationError,
@@ -438,8 +440,8 @@ def process(anonymize: bool, use_existing: bool, upload_paths: list) -> Redirect
             try:
                 history_store.save_snapshot(paths, r)
                 snapshots_saved += 1
-            except Exception:
-                pass
+            except Exception as exc:
+                operational_log.emit("dataforge.snapshot_save", "failed", error_class=type(exc))
 
     # Publish the pseudonym-keyed profile into CanvasExpert's AI zone so a
     # later host can group and differentiate from these results. Safe to sync:

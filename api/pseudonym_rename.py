@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from api import operational_log
 from api.webui import workspace
 
 
@@ -129,8 +130,8 @@ def refresh_published_profile() -> str:
         identity = VaultIdentity.from_paths(paths)
         profile_export.publish_profile(paths, anonymizer=identity)
         return ""
-    except (IdentityMigrationError, profile_export.SharedPublishError, OSError, RuntimeError):
-        pass
+    except (IdentityMigrationError, profile_export.SharedPublishError, OSError, RuntimeError) as exc:
+        operational_log.emit("pseudonym.profile_republish", "failed", error_class=type(exc))
 
     try:
         published.unlink()
