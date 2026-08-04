@@ -6,18 +6,18 @@ one block per student, so both carry more identity surface than the JSON.
 
 These are the vault-backed versions of the checks the retired `NameAnonymizer`
 carried. The map-file tests died with the map; the leak rules did not, because
-`assert_no_leaks` still runs on every artifact and now receives a
+`scrub_or_passthrough` still runs on every artifact and now receives a
 `VaultIdentity`.
 """
 
 import pytest
 
 from api.dataforge.eduphoria_parser import (
-    assert_no_leaks,
     convert_to_json,
     create_parent_narratives,
     create_teacher_report,
     pick_parser,
+    scrub_or_passthrough,
 )
 
 REAL_NAME = "Clauderino, Claude"
@@ -62,9 +62,9 @@ def test_detect_leaks_does_not_fire_on_a_clean_artifact(vault_identity):
 
 def test_detect_leaks_tolerates_a_short_name_fragment(vault_identity):
     """A vault name carrying a middle initial or a numeric suffix must not turn
-    every standalone letter or digit in a report into a leak. `assert_no_leaks`
-    raises rather than logs, so a false positive here stops the teacher's run
-    with an error they cannot act on."""
+    every standalone letter or digit in a report into a leak.
+    `scrub_or_passthrough` raises rather than logs, so a false positive here
+    stops the teacher's run with an error they cannot act on."""
     provider = vault_identity(("Ruiz, Ana J", "700001", "Sparky McGee"))
     assert provider.detect_leaks("Sparky McGee answered J and scored 1 point") == []
     assert provider.detect_leaks("scores for Ana J Ruiz follow")
@@ -95,8 +95,8 @@ def enrolled(vault_identity):
     )
 
 
-def test_assert_no_leaks_is_a_noop_without_a_provider():
-    assert assert_no_leaks(REAL_NAME, None, "x") == REAL_NAME
+def test_scrub_or_passthrough_is_a_noop_without_a_provider():
+    assert scrub_or_passthrough(REAL_NAME, None, "x") == REAL_NAME
 
 
 def test_teacher_report_is_leak_checked(learning_standard_path, enrolled):

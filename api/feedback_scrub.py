@@ -8,6 +8,7 @@ is fine; a leaked real name is not.
 Pure stdlib; offline-testable.
 """
 import re
+import unicodedata
 
 # Neutral placeholder for a real Canvas/SIS id found in free text. Ids carry no
 # useful signal for feedback quality (unlike a name), so there's no "fake id"
@@ -53,6 +54,52 @@ def _tokenize(name: str) -> list[str]:
     return name.strip().split()
 
 
+def _fold(s: str) -> str:
+    """NFKD-normalize and drop combining marks, for matching only ('José' ->
+    'Jose'). Never applied to output text or to a replacement string — only
+    to the pattern source and the text being scanned, so an unaccented typing
+    of an accented roster name is still caught."""
+    return "".join(c for c in unicodedata.normalize("NFKD", s)
+                   if not unicodedata.combining(c))
+
+
+def _fold_with_map(s: str) -> tuple[str, list[int]]:
+    """Fold char-by-char; `index_map[i]` is the source index in `s` of
+    `folded[i]`. Per-character (not whole-string) NFKD keeps the offset map
+    trivial: each source character maps to zero or more folded characters,
+    never interacting with its neighbors."""
+    folded_chars: list[str] = []
+    index_map: list[int] = []
+    for i, ch in enumerate(s):
+        for fc in unicodedata.normalize("NFKD", ch):
+            if not unicodedata.combining(fc):
+                folded_chars.append(fc)
+                index_map.append(i)
+    return "".join(folded_chars), index_map
+
+
+def find_token_matches(text: str, names: set[str] | list[str]) -> list[str]:
+    """Return every name in `names` with at least one token appearing as a
+    `\\b`-bounded, accent-folded, case-insensitive match in `text`.
+
+    Token-level, not full-name-level: a scrub miss on a single token (e.g. a
+    surname scrubbed by one rule while a given name typed unaccented slips
+    past another) is still caught. Shared by `verify_clean` and the outbound
+    safety scan (`feedback_safety.scan_payload`) so there is exactly one
+    matcher at this granularity, not two that can drift apart.
+    """
+    folded_text = _fold(text).lower()
+    survivors: list[str] = []
+    for name in names:
+        if not name:
+            continue
+        for token in name.split():
+            if re.search(rf'\b{re.escape(_fold(token))}\b', folded_text, re.IGNORECASE):
+                survivors.append(name)
+                break
+    return survivors
+
+
 def build_replacement_map(vault_entries: list[dict],
                           protected: set[str]) -> list[tuple]:
     """Return [(compiled_regex, replacement)] for the WHOLE roster, sorted
@@ -94,9 +141,12 @@ def build_replacement_map(vault_entries: list[dict],
         if not real_name and not nicknames:
             continue
 
-        # Full real name -> full pseudonym (e.g. "Jose Flores" -> "Sparky McGee")
+        # Full real name -> full pseudonym (e.g. "Jose Flores" -> "Sparky McGee").
+        # Folded so an unaccented typing of an accented roster name ("Jose
+        # Flores" for vault "José Flores") still matches — matching only;
+        # the replacement text is unaffected.
         if real_name and pseudo:
-            rules.append((re.escape(real_name), pseudo))
+            rules.append((re.escape(_fold(real_name)), pseudo))
 
         # Individual tokens
         tokens = _tokenize(real_name)
@@ -105,13 +155,15 @@ def build_replacement_map(vault_entries: list[dict],
                 continue
             mapped = pseudo_first if i == 0 else (pseudo_last if i == len(tokens) - 1 else pseudo_first)
             if mapped:
-                rules.append((re.escape(token), mapped))
+                rules.append((re.escape(_fold(token)), mapped))
 
         # Nicknames/aliases -> full pseudonym so every identity alias resolves
-        # consistently to the student's existing pseudonym.
+        # consistently to the student's existing pseudonym. Folded like every
+        # other name token (2.2: nicknames carry the same accent-folding
+        # guarantee as real_name).
         for nn in nicknames:
             if nn.strip():
-                rules.append((re.escape(nn.strip()), pseudo or pseudo_first))
+                rules.append((re.escape(_fold(nn.strip())), pseudo or pseudo_first))
 
     # Sort by pattern length descending (longest first) so full-name rules beat
     # single-token rules
@@ -135,10 +187,33 @@ def scrub_text(text: str, replacement_map: list[tuple]) -> str:
     """Apply the replacement map. Word-boundary, case-insensitive;
     possessives fall out naturally (\\bJose\\b matches in 'Jose's' -> 'Sparky's').
     Longest patterns first so 'Jose Flores'->'Sparky McGee' beats single-token rules.
+
+    Patterns are compiled from accent-folded name tokens (see `_fold`), so
+    matching runs against a folded copy of the text-so-far; each match's span
+    is then mapped back to the original (unfolded) coordinates before
+    splicing in the replacement. Everything outside a matched span is
+    carried over byte-for-byte — folding is for matching only, never for
+    output, so an unrelated accented word elsewhere in the text is never
+    altered.
     """
     result = text
     for regex, replacement in replacement_map:
-        result = regex.sub(replacement, result)
+        folded, index_map = _fold_with_map(result)
+        matches = list(regex.finditer(folded))
+        if not matches:
+            continue
+        pieces: list[str] = []
+        last_end = 0
+        for m in matches:
+            start = index_map[m.start()]
+            end = index_map[m.end() - 1] + 1 if m.end() > m.start() else start
+            if start < last_end:
+                continue  # defensive: overlapping match, keep the earlier one
+            pieces.append(result[last_end:start])
+            pieces.append(replacement)
+            last_end = end
+        pieces.append(result[last_end:])
+        result = "".join(pieces)
     return result
 
 
@@ -204,14 +279,4 @@ def verify_clean(text: str, vault) -> list[str]:
     With over-correction this should be empty; a non-empty result is a BUG
     to log, never a user task."""
     names, _ids = vault.all_real_identifiers()
-    survivors: list[str] = []
-    text_lower = text.lower()
-    for name in names:
-        if not name:
-            continue
-        # Check word-boundary match for each token (case-insensitive)
-        for token in name.split():
-            if re.search(rf'\b{re.escape(token)}\b', text_lower, re.IGNORECASE):
-                survivors.append(name)
-                break
-    return survivors
+    return find_token_matches(text, names)

@@ -25,9 +25,18 @@ Pure stdlib; offline-testable. Verdict is GREEN only when there are zero hard vi
 
 import re
 
-# Dict keys that must never appear in an outbound payload.
+from api import feedback_scrub
+
+# Dict keys that must never appear in an outbound payload. Real Canvas
+# identity (name, sortable_name, short_name, sis_id, canvas user id,
+# section) must never leave the MCP gate (api/mcp_server/pseudonym.py's
+# module docstring makes this promise); every alias Canvas/roster code uses
+# for those fields is listed here so the promise is enforced structurally
+# rather than by 45+ call sites' good behavior.
 _FORBIDDEN_KEYS = {"name", "real_name", "canvas_id", "sis_id", "sisid",
-                   "section", "sectionnames", "sectionids", "sectionsisids"}
+                   "section", "sectionnames", "sectionids", "sectionsisids",
+                   "user_id", "userid", "student_id", "sortable_name",
+                   "short_name", "login_id", "email", "section_id"}
 # Free-text fields where a name is a soft flag, not a hard block.
 #
 # This set is field-name-keyed, so a payload carrying student writing under a
@@ -73,7 +82,6 @@ def scan_payload(payload, vault) -> dict:
     """Scan an outbound payload against the vault.
     Returns {green: bool, hard: [str], soft: [dict]}."""
     names, ids = vault.all_real_identifiers()
-    lowered_names = {n.lower(): n for n in names if n}
     hard, soft = [], []
 
     # Precompiled once (not per field): known ids long enough to hard-block
@@ -97,10 +105,12 @@ def scan_payload(payload, vault) -> dict:
             continue
         if kl in _TEXT_FIELDS:
             # Layer 2a: known roster name inside free text -> soft flag.
-            t = value.lower()
-            for low, original in lowered_names.items():
-                if low in t:
-                    soft.append({"where": f"{path}.{key}", "name": original})
+            # Token-level (not full-name-substring): mirrors the scrub
+            # engine's own granularity via the same accent-folded matcher,
+            # so a single-token scrub miss is caught here too, not only a
+            # full-name miss.
+            for original in feedback_scrub.find_token_matches(value, names):
+                soft.append({"where": f"{path}.{key}", "name": original})
             # Layer 2b: known real id (>= _MIN_ID_HARD_BLOCK_LEN chars) as a
             # word-bounded token inside free text -> hard block. Shorter ids
             # are scrub-only (Layer A in feedback_scrub) and never land here

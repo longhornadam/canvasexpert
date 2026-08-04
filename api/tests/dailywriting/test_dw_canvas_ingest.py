@@ -56,7 +56,7 @@ def _mount(monkeypatch, tmp_path):
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
 
 
-def _write_catalog(root, *, description="Write one paragraph.", due_at="2026-09-14T23:59:00Z",
+def _write_catalog(root, *, description="Write a paragraph.", due_at="2026-09-14T23:59:00Z",
                    assignment_id=ASSIGNMENT_ID, submission_types=("online_text_entry",)):
     row = {
         "id": assignment_id, "name": "Essay 1", "description": description,

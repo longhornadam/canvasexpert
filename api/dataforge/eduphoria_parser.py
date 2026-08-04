@@ -177,8 +177,13 @@ def _clean_id(val) -> str:
     return str(val).strip()
 
 
-def assert_no_leaks(text: str, anonymizer: Optional["VaultIdentity"], artifact: str) -> str:
+def scrub_or_passthrough(text: str, anonymizer: Optional["VaultIdentity"], artifact: str) -> str:
     """Fail closed if a generated artifact still contains real identities.
+
+    A no-op passthrough when `anonymizer` is None — that mode is an
+    intentionally un-anonymized run, which is supposed to carry real names.
+    (Previously named `assert_no_leaks`, which misleadingly implied an
+    assertion always ran; renamed with no behavior change.)
 
     Applied to every artifact, not just the JSON. The teacher report lists
     student names under each missed standard and the parent narratives are one
@@ -1368,7 +1373,7 @@ def convert_to_json(assessment_data: AssessmentData, output_path: Optional[str] 
     }
 
     json_str = json.dumps(output, ensure_ascii=False)
-    assert_no_leaks(json_str, anonymizer, "the LLM-ready JSON")
+    scrub_or_passthrough(json_str, anonymizer, "the LLM-ready JSON")
 
     if output_path:
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -1439,7 +1444,7 @@ def create_teacher_report(assessment_data: AssessmentData) -> str:
     if all(len(v) == 0 for v in missed_map.values()):
         lines.append("All students mastered all listed standards.")
 
-    return assert_no_leaks("\n".join(lines), anonymizer, "the teacher report")
+    return scrub_or_passthrough("\n".join(lines), anonymizer, "the teacher report")
 
 
 def create_parent_narratives(assessment_data: AssessmentData, top_n: int = 3) -> str:
@@ -1482,7 +1487,7 @@ def create_parent_narratives(assessment_data: AssessmentData, top_n: int = 3) ->
 
         lines.append("")
 
-    return assert_no_leaks("\n".join(lines), anonymizer, "the parent narratives")
+    return scrub_or_passthrough("\n".join(lines), anonymizer, "the parent narratives")
 
 
 def main():

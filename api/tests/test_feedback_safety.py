@@ -96,6 +96,63 @@ def test_real_id_as_digit_substring_is_not_hard_blocked(tmp_path):
     assert verdict["hard"] == []
 
 
+# --- token-level scan (A2) --------------------------------------------
+#
+# The scrubber matches at token granularity (given name, surname, each
+# nickname). Before A2 the scan only matched the FULL name string, so a
+# single-token scrub miss was invisible to the layer whose job is catching
+# scrub misses. The scan must mirror the scrubber's own granularity.
+
+def test_single_token_name_in_freetext_is_soft_flagged(tmp_path):
+    """A single given name (not the full 'First Last' string) inside free
+    text must produce a soft flag -- a full-name-only scan would miss this."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Ada Lovelace", "5001")
+    bundle = {"students": [{"pseudonym": "S001", "responses": [
+        {"item_id": "1", "prompt": "Reflect.",
+         "response": "Ada helped me with my project today."}]}]}
+    verdict = safety.scan_payload(bundle, v)
+    assert verdict["green"] is True          # soft flags do not block
+    assert verdict["soft"] and verdict["soft"][0]["name"] == "Ada Lovelace"
+
+
+def test_accent_folded_name_in_freetext_is_soft_flagged(tmp_path):
+    """An unaccented typing of an accented roster name must still be caught
+    by the scan (A1 folding applies to the scan, not just the scrub)."""
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9002", "José Flores", "5002")
+    bundle = {"students": [{"pseudonym": "S002", "responses": [
+        {"item_id": "1", "prompt": "Reflect.",
+         "response": "Jose helped me revise my thesis."}]}]}
+    verdict = safety.scan_payload(bundle, v)
+    assert verdict["green"] is True
+    assert verdict["soft"] and verdict["soft"][0]["name"] == "José Flores"
+
+
+# --- forbidden-key coverage (A4) ----------------------------------------
+#
+# The MCP gate's docstring promises real Canvas identity (name,
+# sortable_name, short_name, sis_id, canvas user id, section) never leaves
+# the module. These keys must be structurally blocked, not left to each of
+# 45+ call sites' good behavior.
+
+def test_sortable_name_key_is_hard_blocked(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    payload = {"students": [{"pseudonym": "S001", "sortable_name": "Lovelace, Ada"}]}
+    verdict = safety.scan_payload(payload, v)
+    assert verdict["green"] is False
+    assert any("sortable_name" in h for h in verdict["hard"])
+
+
+def test_user_id_and_email_keys_are_hard_blocked(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    payload = {"students": [{"user_id": "9001", "email": "ada@example.org"}]}
+    verdict = safety.scan_payload(payload, v)
+    assert verdict["green"] is False
+    assert any("user_id" in h for h in verdict["hard"])
+    assert any("email" in h for h in verdict["hard"])
+
+
 def test_id_hard_block_regression_alongside_existing_behavior(tmp_path):
     """Layer B addition doesn't change the pre-existing behaviors: a real id
     as an exact structural value is still hard; a roster name in free text

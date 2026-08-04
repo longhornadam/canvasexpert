@@ -174,6 +174,60 @@ def test_id_below_floor_is_not_scrubbed(tmp_path):
     assert "room 1 is down the hall" == result
 
 
+# --- accent folding (A1) -----------------------------------------------
+#
+# The scrub compiles patterns from the vault's real names, which may carry
+# accents (e.g. "José Flores"). A student typing the unaccented form must
+# still be caught -- folding is for matching only, so text outside a match
+# ships byte-identical to the input.
+
+def test_unaccented_given_name_is_scrubbed(tmp_path):
+    """'Jose' (no accent) must be scrubbed even though the vault holds the
+    accented 'José'. This was the A1 defect: it used to ship unscrubbed."""
+    v = Vault(str(tmp_path / "vault_accent.json"))
+    v.get_or_assign("9101", "José Flores", "5101")
+    rmap = scrub.build_replacement_map(v.entries(), set())
+    text = "Jose helped me revise my thesis."
+    result = scrub.scrub_text(text, rmap)
+    assert "Jose" not in result
+
+
+def test_hybrid_name_leak_is_fixed(tmp_path):
+    """Full accented name typed unaccented must scrub to the FULL pseudonym,
+    not a hybrid where only the surname's token rule fired (e.g. a real
+    given name surviving next to a fake surname)."""
+    v = Vault(str(tmp_path / "vault_hybrid.json"))
+    v.get_or_assign("9102", "Renée Boudreaux", "5102")
+    entry = v.entries()[0]
+    rmap = scrub.build_replacement_map(v.entries(), set())
+    text = "My partner Renee Boudreaux said the essay was strong."
+    result = scrub.scrub_text(text, rmap)
+    assert "Renee" not in result
+    assert "Renée" not in result
+    assert "Boudreaux" not in result
+    assert entry["pseudonym"] in result
+
+
+def test_fold_preserves_unrelated_accented_text(tmp_path):
+    """Folding is for matching only -- an accented word elsewhere in the
+    text that isn't part of any roster name must survive byte-identical."""
+    v = _vault_with_students(tmp_path)
+    rmap = scrub.build_replacement_map(v.entries(), set())
+    text = "Jose Flores wrote about café culture in Paris."
+    result = scrub.scrub_text(text, rmap)
+    assert "café" in result
+    assert "Jose Flores" not in result
+
+
+def test_verify_clean_catches_unaccented_survivor(tmp_path):
+    """verify_clean must also fold, so an unaccented survivor of an accented
+    vault name is still reported rather than passing as clean."""
+    v = Vault(str(tmp_path / "vault_accent2.json"))
+    v.get_or_assign("9103", "José Flores", "5103")
+    survivors = scrub.verify_clean("Jose Flores forgot his chromebook.", v)
+    assert survivors
+
+
 def test_longest_pattern_wins(tmp_path):
     """Full name pattern beats single-token patterns."""
     v = Vault(str(tmp_path / "vault3.json"))
