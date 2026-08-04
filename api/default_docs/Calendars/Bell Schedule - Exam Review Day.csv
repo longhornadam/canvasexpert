@@ -1,7 +1,7 @@
 period_id,start,end,label
-7,08:35,09:30,Review
-6,09:35,10:30,Review
-homeroom,10:35,11:00,
-4,11:05,12:35,Study Hall
-6,12:40,14:15,EXAM
-7,14:20,15:55,EXAM
+7,8:35 AM,9:30 AM,Review
+6,9:35 AM,10:30 AM,Review
+homeroom,10:35 AM,11:00 AM,
+4,11:05 AM,12:35 PM,Study Hall
+6,12:40 PM,2:15 PM,EXAM
+7,2:20 PM,3:55 PM,EXAM

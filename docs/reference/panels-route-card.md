@@ -215,7 +215,7 @@ today  -> school_calendar.resolve_date()   day kind + schedule_id, or a named re
        -> deps.load_bell_schedules()       periods with start/end
        -> deps.load_teacher_schedule()     blocks with raw_periods and course_id
        -> day_schedule.resolve_day()       today's blocks, sorted by start
-       -> now "HH:MM"                      the block meeting now, else the next one
+       -> now local time in h:mm AM/PM       the block meeting now, else the next one
 ```
 
 `course_id` is an optional field on every schedule block, which is what makes this

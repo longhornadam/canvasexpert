@@ -25,7 +25,7 @@ def isolated_workspace(tmp_path, monkeypatch):
 def _bell_schedule(calendars_dir):
     calendars_dir.mkdir(parents=True, exist_ok=True)
     (calendars_dir / "Bell Schedule - Ordinary.csv").write_text(
-        "period_id,start,end\n1,08:00,08:45\n", encoding="utf-8")
+        "period_id,start,end\n1,8:00 AM,8:45 AM\n", encoding="utf-8")
 
 
 def test_combined_calendar_reports_ok_false_when_unconfigured():

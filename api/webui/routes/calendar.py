@@ -89,6 +89,10 @@ def get_calendar():
         ],
         "upcoming": upcoming,
         "events": calendar_doc["events"] if calendar_doc else [],
+        # The Calendar page prefills its grading-period editor from this, so a
+        # Create/Replace that never touches that editor carries the active
+        # periods forward instead of silently replacing them with an empty list.
+        "grading_periods": calendar_doc["grading_periods"] if calendar_doc else [],
     })
 
 
@@ -190,8 +194,12 @@ def import_academic_csv(content: str = Form(...)):
     Read-only: nothing is written here. The teacher reviews the parsed dates
     and periods on the Calendar page, then /api/calendar/year/preview and
     /api/calendar/year/apply stage and write the complete validated document.
+
+    "notes" is always present, empty when the whole file parsed. A file that
+    yields nothing is still ok: the notes are how the teacher learns which rows
+    were skipped and why, rather than reading a success with no results.
     """
-    no_school_dates, periods, events = calendar_csv._parse_calendar_csv(content)
+    no_school_dates, periods, events, notes = calendar_csv._parse_calendar_csv(content)
     date_labels = {}
     for event in events:
         if event.get("kind") != "no_school" or not event.get("start") or not event.get("label"):
@@ -217,6 +225,7 @@ def import_academic_csv(content: str = Form(...)):
         "no_school_dates": no_school_dates,
         "date_labels": date_labels,
         "grading_periods": grading_periods,
+        "notes": notes,
     })
 
 

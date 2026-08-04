@@ -12,12 +12,16 @@ schedule_id into a teacher's blocks.
 - resolve_day(schedule_id, bell_schedules, teacher_schedule) -> (blocks, problems)
 """
 
+from . import clock_time
+
 
 def parse_bell_schedule(content: str) -> tuple:
     """CSV text -> ([{seq, period_id, start, end, segment}], problems).
 
     Columns: period_id,start,end,label? (header row required).
-    start/end are 24h "HH:MM" local wall-clock strings. No timezone math.
+    start/end are local wall-clock strings in ``h:mm AM/PM`` format. No
+    timezone math. Parsed values are normalized to that format before they
+    are returned.
 
     Returns (meetings_list, problems_list):
     - meetings_list: ordered meetings with a zero-based ``seq`` and optional
@@ -52,27 +56,33 @@ def parse_bell_schedule(content: str) -> tuple:
         if not period_id or not start or not end:
             continue
 
+        start_minutes = clock_time.parse_time(start)
+        end_minutes = clock_time.parse_time(end)
+        normalized_start = (clock_time.format_time(start_minutes)
+                            if start_minutes is not None else start)
+        normalized_end = (clock_time.format_time(end_minutes)
+                          if end_minutes is not None else end)
+
         entry = {
             "period_id": period_id,
-            "start": start,
-            "end": end,
+            "start": normalized_start,
+            "end": normalized_end,
             "segment": segment,
         }
 
-        # Validate time format (HH:MM)
-        for time_val in [start, end]:
+        for time_val in [normalized_start, normalized_end]:
             if not _is_valid_time(time_val):
                 problems.append(f"Invalid time format in period {period_id}: {time_val}")
 
         # Check if end is before start (but keep the row anyway)
-        if _is_valid_time(start) and _is_valid_time(end) and start > end:
+        if start_minutes is not None and end_minutes is not None and start_minutes > end_minutes:
             problems.append(
-                f"Period {period_id}: end time {end} is before start time {start}"
+                f"Period {period_id}: end time {normalized_end} is before start time {normalized_start}"
             )
 
         periods.append(entry)
 
-    periods.sort(key=lambda meeting: meeting["start"])
+    periods.sort(key=_time_sort_key)
     periods = [
         {"seq": seq, **meeting}
         for seq, meeting in enumerate(periods)
@@ -247,8 +257,8 @@ def resolve_day(schedule_id, bell_schedules, teacher_schedule) -> tuple:
             blocks.append({
                 "name": name,
                 "label": label,
-                "start": first_meeting["start"],
-                "end": last_meeting["end"],
+                "start": clock_time.normalize_time(first_meeting.get("start")),
+                "end": clock_time.normalize_time(last_meeting.get("end")),
                 "raw_periods": raw_periods,
                 "schedule_id": schedule_id,
                 "period_ids": [str(meeting.get("period_id")) for _, meeting in run],
@@ -257,7 +267,7 @@ def resolve_day(schedule_id, bell_schedules, teacher_schedule) -> tuple:
             })
 
     # Sort by start time
-    blocks.sort(key=lambda b: (b["start"], b.get("seq", 0)))
+    blocks.sort(key=lambda b: (_time_sort_key(b), b.get("seq", 0)))
 
     return blocks, problems
 
@@ -267,18 +277,13 @@ def resolve_day(schedule_id, bell_schedules, teacher_schedule) -> tuple:
 # ============================================================================
 
 def _is_valid_time(time_str: str) -> bool:
-    """Check if time is in HH:MM format (24-hour, with leading zeros)."""
-    if not isinstance(time_str, str):
-        return False
-    parts = time_str.split(":")
-    if len(parts) != 2:
-        return False
-    # Must have exactly 2 digits for hours and 2 digits for minutes
-    if len(parts[0]) != 2 or len(parts[1]) != 2:
-        return False
-    try:
-        h = int(parts[0])
-        m = int(parts[1])
-        return 0 <= h <= 23 and 0 <= m <= 59
-    except ValueError:
-        return False
+    """Check if time is in canonical ``h:mm AM/PM`` format."""
+    return clock_time.parse_time(time_str) is not None
+
+
+def _time_sort_key(value) -> tuple[int, int, str]:
+    """Sort valid clock values chronologically and invalid values last."""
+    text = value.get("start") if isinstance(value, dict) else value
+    minutes = clock_time.parse_time(text)
+    return (0 if minutes is not None else 1, minutes if minutes is not None else 0,
+            str(text or ""))

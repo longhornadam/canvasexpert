@@ -2,6 +2,7 @@
 apply, and the no-path-input folder-open action.
 """
 import json
+import pathlib
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,7 +28,7 @@ def isolated_workspace(tmp_path, monkeypatch):
 def _bell_schedule(calendars_dir):
     calendars_dir.mkdir(parents=True, exist_ok=True)
     path = calendars_dir / "Bell Schedule - Ordinary.csv"
-    path.write_text("period_id,start,end\n1,08:00,08:45\n", encoding="utf-8")
+    path.write_text("period_id,start,end\n1,8:00 AM,8:45 AM\n", encoding="utf-8")
     return "bell_schedule_ordinary"
 
 
@@ -194,3 +195,95 @@ def test_import_academic_csv_expands_multi_day_no_school_labels(isolated_workspa
         "2027-10-12": "Fall Break",
     }
     assert data["grading_periods"][0]["code"] == "QUARTER_1"
+    assert data["notes"] == []
+
+
+def test_import_academic_csv_reports_skipped_rows_as_notes(isolated_workspace):
+    csv_text = (
+        "Category,Name,Start Date,End Date\n"
+        "Pep Rally,Homecoming,09/25/2027,09/25/2027\n"
+        "Holiday,Labor Day,09/06/2027,09/06/2027\n"
+    )
+    response = client.post("/api/calendar/import", data={"content": csv_text})
+    data = response.json()
+    assert data["ok"] is True
+    assert data["no_school_dates"] == ["2027-09-06"]
+    assert data["notes"] == ["row 2: skipped, unrecognized Category 'Pep Rally'"]
+    assert "problems" not in data
+
+
+def test_import_academic_csv_stays_ok_with_notes_when_nothing_parsed(isolated_workspace):
+    csv_text = (
+        "Category,Name,Start Date,End Date\n"
+        "Pep Rally,Homecoming,09/25/2027,09/25/2027\n"
+    )
+    data = client.post("/api/calendar/import", data={"content": csv_text}).json()
+    assert data["ok"] is True
+    assert data["no_school_dates"] == [] and data["grading_periods"] == []
+    assert isinstance(data["notes"], list) and len(data["notes"]) == 1
+
+
+def test_year_preview_accepts_the_pages_weekday_and_grading_period_payload(isolated_workspace):
+    """The Calendar page sends weekday_schedules and grading_periods as JSON
+    strings with string weekday keys. Preview must take that shape as-is."""
+    calendars = isolated_workspace / "Library" / "Calendars"
+    schedule_id = _bell_schedule(calendars)
+    friday = calendars / "Bell Schedule - Friday.csv"
+    friday.write_text("period_id,start,end\n1,8:00 AM,8:40 AM\n", encoding="utf-8")
+    preview = client.post("/api/calendar/year/preview", data={
+        "school_year": "2026-27",
+        "coverage_start": "2026-08-17",
+        "coverage_end": "2026-08-21",
+        "default_schedule_id": schedule_id,
+        "weekday_schedules": json.dumps({"4": "bell_schedule_friday"}),
+        "grading_periods": json.dumps([
+            {"code": "T1", "name": "Term 1", "start": "2026-08-17", "end": "2026-08-21"},
+        ]),
+    }).json()
+    assert preview["ok"] is True, preview
+    assert preview["grading_period_count"] == 1
+    days = preview["mutation"]["weekday_schedules"]
+    assert days == {"4": "bell_schedule_friday"}
+
+
+def test_get_api_calendar_returns_grading_periods_for_the_editor(isolated_workspace):
+    """The page prefills its grading-period editor from this key, so a
+    Create/Replace that never opens the editor cannot silently drop periods."""
+    calendars = isolated_workspace / "Library" / "Calendars"
+    schedule_id = _bell_schedule(calendars)
+    periods = [{"code": "T1", "name": "Term 1",
+                "start": "2026-08-17", "end": "2026-08-18"}]
+    preview = client.post("/api/calendar/year/preview", data={
+        "school_year": "2026-27",
+        "coverage_start": "2026-08-17",
+        "coverage_end": "2026-08-18",
+        "default_schedule_id": schedule_id,
+        "grading_periods": json.dumps(periods),
+    }).json()
+    client.post("/api/calendar/year/apply", data={
+        "expected_revision": preview["base_revision"],
+        "preview": json.dumps({k: v for k, v in preview.items() if k != "ok"}),
+    })
+    data = client.get("/api/calendar").json()
+    assert data["grading_periods"] == periods
+
+
+def test_academic_calendar_guide_is_downloadable_for_pasting_into_an_assistant():
+    """The Create/replace surface leads with this guide, so the download name it
+    links must resolve to the canonical authoring file."""
+    response = client.get("/api/download-contract", params={"name": "AcademicCalendar"})
+    assert response.status_code == 200, response.text
+    assert "attachment" in response.headers.get("content-disposition", "")
+    assert response.text.lstrip().startswith("ACADEMIC CALENDAR AUTHORING")
+
+
+def test_calendar_js_guide_url_matches_the_registered_download_name():
+    """calendar.js fetches the guide by download name to copy it. A rename in
+    the route map would break the Copy control with no error anywhere, so pin
+    the two together."""
+    from api.webui.routes import library
+
+    js = (pathlib.Path(__file__).resolve().parents[1]
+          / "webui" / "static" / "pages" / "calendar.js").read_text(encoding="utf-8")
+    assert "/api/download-contract?name=AcademicCalendar" in js
+    assert "AcademicCalendar" in library._CONTRACT_FILE_MAP

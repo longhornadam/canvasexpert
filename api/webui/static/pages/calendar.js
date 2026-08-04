@@ -13,6 +13,29 @@
     el.className = "status ce-calendar-status" + (kind ? " " + kind : "");
   }
 
+  /** Rejects when the copy did not actually happen, so a Copy control never
+      claims success it cannot verify. The selected-text fallback reports
+      execCommand's own result rather than assuming it worked. */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    var area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    var copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      area.remove();
+    }
+    return copied ? Promise.resolve() : Promise.reject(new Error("copy refused"));
+  }
+
   /** "2026-08-17" -> "Mon, Aug 17". Built from local Y/M/D components (not
       `new Date(dateStr)`, which parses as UTC midnight and can render the
       previous local day west of UTC). Falls back to the raw string if it
@@ -143,6 +166,15 @@
     var createSelect = document.getElementById("cal-create-default-schedule");
     if (changeSelect) changeSelect.innerHTML = options;
     if (createSelect) createSelect.innerHTML = options;
+
+    /* Per-weekday overrides are optional, so each one carries an empty "Default"
+       choice that is omitted from the payload entirely. Re-selecting the prior
+       value keeps a half-filled create form intact when loadState() re-renders. */
+    document.querySelectorAll("#cal-create-weekday-schedules select").forEach(function (select) {
+      var previous = select.value;
+      select.innerHTML = '<option value="">Default</option>' + options;
+      select.value = previous;
+    });
   }
 
   var openFolderButton = document.getElementById("calendar-open-folder");
@@ -550,10 +582,110 @@
   // ── Create / replace school year (staged preview/apply) ──────────────────
 
   var lastYearPreview = null;
+  var importedDateLabels = null;
+
+  /* The same bytes the Download link serves and the MCP get_authoring_contract
+     tool returns, so a pasted assistant and a connected one read one text. */
+  var GUIDE_URL = "/api/download-contract?name=AcademicCalendar";
+
+  document.getElementById("cal-guide-copy").addEventListener("click", function () {
+    var button = this;
+    var result = document.getElementById("cal-guide-result");
+    var original = button.textContent;
+    button.disabled = true;
+    setStatus(result, "");
+    fetch(GUIDE_URL)
+      .then(function (response) {
+        if (!response.ok) throw new Error("http " + response.status);
+        return response.text();
+      })
+      .then(function (text) {
+        return copyText(text).then(function () {
+          button.textContent = "Copied";
+          setStatus(result, "The guide is on your clipboard. Paste it into your assistant, " +
+            "then give it your district calendar.", "ok");
+          setTimeout(function () { button.textContent = original; }, 1600);
+        });
+      })
+      .catch(function () {
+        setStatus(result, "That could not be copied. Use Download the guide instead, " +
+          "then open the file and copy from there.", "error");
+      })
+      .then(function () { button.disabled = false; });
+  });
+
+  /** One editable grading-period row, appended rather than re-rendered from a
+      state array, so adding a row never discards typing already in the others. */
+  function appendPeriodRow(period) {
+    var list = document.getElementById("cal-create-period-list");
+    var empty = list.querySelector('[data-ce-hook="period-empty"]');
+    if (empty) empty.remove();
+    var source = period && typeof period === "object" ? period : {};
+    var row = document.createElement("div");
+    row.className = "ce-calendar-period-edit-row";
+    row.setAttribute("data-ce-hook", "period-row");
+    row.innerHTML =
+      '<label>Code<input type="text" data-field="code" value="' + esc(source.code || "") + '" placeholder="T1"></label>' +
+      '<label>Name<input type="text" data-field="name" value="' + esc(source.name || "") + '" placeholder="Term 1"></label>' +
+      '<label>Start<input type="date" data-field="start" value="' + esc(source.start || "") + '"></label>' +
+      '<label>End<input type="date" data-field="end" value="' + esc(source.end || "") + '"></label>' +
+      '<label>Report issued <small class="lbl-hint">(optional)</small>' +
+      '<input type="date" data-field="report_issue_date" value="' + esc(source.report_issue_date || "") + '"></label>' +
+      '<button type="button" class="small danger" data-period-action="remove">Remove</button>';
+    list.appendChild(row);
+  }
+
+  function renderGradingPeriods(periods) {
+    var list = document.getElementById("cal-create-period-list");
+    list.innerHTML = "";
+    var rows = Array.isArray(periods) ? periods : [];
+    if (!rows.length) {
+      list.innerHTML = '<p class="ce-empty" data-ce-hook="period-empty">' +
+        "No grading periods. Import a CSV or add them by hand.</p>";
+      return;
+    }
+    rows.forEach(appendPeriodRow);
+  }
+
+  /** Rows back to canonical grading-period objects. A blank report_issue_date is
+      omitted rather than sent as "": the validator accepts null or an exact ISO
+      date and rejects the empty string. Entirely blank rows are dropped so a
+      stray Add never fails the preview. */
+  function readGradingPeriods() {
+    var list = document.getElementById("cal-create-period-list");
+    var rows = list.querySelectorAll('[data-ce-hook="period-row"]');
+    return Array.prototype.map.call(rows, function (row) {
+      var period = {
+        code: inputValue(row, "code").trim(),
+        name: inputValue(row, "name").trim(),
+        start: inputValue(row, "start"),
+        end: inputValue(row, "end"),
+      };
+      var report = inputValue(row, "report_issue_date");
+      if (report) period.report_issue_date = report;
+      return period;
+    }).filter(function (period) {
+      return period.code || period.name || period.start || period.end;
+    });
+  }
+
+  document.getElementById("cal-create-add-period").addEventListener("click", function () {
+    appendPeriodRow({});
+  });
+
+  document.getElementById("cal-create-period-list").addEventListener("click", function (event) {
+    var button = event.target.closest('[data-period-action="remove"]');
+    if (!button) return;
+    var row = button.closest('[data-ce-hook="period-row"]');
+    if (row) row.remove();
+  });
 
   document.getElementById("cal-import-parse").addEventListener("click", async function () {
     var status = document.getElementById("cal-import-status");
+    var notesEl = document.getElementById("cal-import-notes");
     var content = document.getElementById("cal-import-csv").value;
+    notesEl.hidden = true;
+    notesEl.innerHTML = "";
     if (!content.trim()) {
       setStatus(status, "Paste a CSV first.", "error");
       return;
@@ -567,28 +699,43 @@
       setStatus(status, "Could not parse: " + (data.problems || []).join(" "), "error");
       return;
     }
-    document.getElementById("cal-create-no-school").value = (data.no_school_dates || []).join("\n");
-    setStatus(status, "Parsed " + (data.no_school_dates || []).length + " no-school date(s) and " +
-      (data.grading_periods || []).length + " grading period(s) into the form below.", "ok");
-    window._calImportGradingPeriods = data.grading_periods || [];
-    window._calImportDateLabels = data.date_labels || {};
+    var dates = data.no_school_dates || [];
+    var periods = data.grading_periods || [];
+    document.getElementById("cal-create-no-school").value = dates.join("\n");
+    renderGradingPeriods(periods);
+    importedDateLabels = data.date_labels || {};
+    setStatus(status, "Parsed " + dates.length + " no-school date(s) and " + periods.length +
+      " grading period(s) into the form below.",
+      dates.length || periods.length ? "ok" : "error");
+
+    /* The parser's own account of rows it could not read. Showing it is the only
+       way a teacher learns why a CSV that looked correct produced nothing. */
+    var notes = data.notes || [];
+    if (notes.length) {
+      notesEl.innerHTML = "<div>Rows that were skipped:</div>" +
+        notes.map(function (note) { return "<div>" + esc(note) + "</div>"; }).join("");
+      notesEl.hidden = false;
+    }
   });
 
   function yearMutationBody() {
     var noSchool = document.getElementById("cal-create-no-school").value
       .split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+    var weekdaySchedules = {};
+    document.querySelectorAll("#cal-create-weekday-schedules select").forEach(function (select) {
+      if (select.value) weekdaySchedules[select.getAttribute("data-weekday")] = select.value;
+    });
     var body = {
       school_year: document.getElementById("cal-create-year").value.trim(),
       coverage_start: document.getElementById("cal-create-start").value,
       coverage_end: document.getElementById("cal-create-end").value,
       default_schedule_id: document.getElementById("cal-create-default-schedule").value,
       no_school_dates: JSON.stringify(noSchool),
+      weekday_schedules: JSON.stringify(weekdaySchedules),
+      grading_periods: JSON.stringify(readGradingPeriods()),
     };
-    if (window._calImportGradingPeriods) {
-      body.grading_periods = JSON.stringify(window._calImportGradingPeriods);
-    }
-    if (window._calImportDateLabels) {
-      body.date_labels = JSON.stringify(window._calImportDateLabels);
+    if (importedDateLabels) {
+      body.date_labels = JSON.stringify(importedDateLabels);
     }
     return body;
   }
@@ -669,6 +816,9 @@
     renderUpcoming(data);
     renderEvents(data.events || []);
     renderTeacherBlocks((data.teacher_schedule || {}).blocks || []);
+    /* Prefilled from the active calendar so a Create/Replace that does not touch
+       this editor carries the existing periods forward instead of dropping them. */
+    renderGradingPeriods(data.grading_periods || []);
   }
 
   loadState().catch(function (error) {

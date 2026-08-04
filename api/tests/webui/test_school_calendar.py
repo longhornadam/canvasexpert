@@ -474,6 +474,31 @@ def test_game_result_is_valid_and_restricted_to_games():
         assert problems
 
 
+def test_event_clock_values_are_12_hour_and_normalized():
+    event = {
+        "id": "concert", "kind": "performance", "label": "Concert",
+        "shape": "date", "date": "2026-08-17",
+        "from": "6:30 pm", "to": "8:00 PM",
+    }
+    normalized, problems = sc._normalize_event(event)
+    assert problems == []
+    assert normalized["from"] == "6:30 PM"
+    assert normalized["to"] == "8:00 PM"
+
+    # From/To are free-text inputs, so a two-digit-hour 24-hour value is accepted
+    # and stored in the canonical 12-hour form rather than refused for spelling.
+    normalized, problems = sc._normalize_event({**event, "from": "18:30"})
+    assert problems == []
+    assert normalized["from"] == "6:30 PM"
+
+    # Tolerance stops at ambiguity: "1:15" would resolve to the middle of the
+    # night, so it stays a reported problem instead of a silent wrong time.
+    for value in ("1:15", "25:00", "half six"):
+        normalized, problems = sc._normalize_event({**event, "from": value})
+        assert normalized is None, value
+        assert "time like '6:30 PM'" in problems[0]
+
+
 def test_event_change_add_replace_delete_noop_and_projection_tamper(tmp_path):
     _seeded(tmp_path)
     event = {"id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",

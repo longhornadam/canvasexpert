@@ -32,7 +32,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from api import panel_themes
-from api.webui import (config, deps, panel_data as panel_data_service,
+from api.webui import (clock_time, config, deps, panel_data as panel_data_service,
                        school_calendar, workspace)
 
 router = APIRouter()
@@ -260,17 +260,29 @@ def resolve_panel_course(block: str, *, now=None, schedule_reader=None,
             "no_schedule",
             "Set your class schedule in Canvas Expert and this follows your day.")
 
-    now_hhmm = now.strftime("%H:%M")
-    active_block = next((b for b in blocks if b["start"] <= now_hhmm < b["end"]), None)
+    now_minutes = now.hour * 60 + now.minute
+    active_block = next(
+        (b for b in blocks
+         if (start := clock_time.parse_time(b.get("start"))) is not None
+         and (end := clock_time.parse_time(b.get("end"))) is not None
+         and start <= now_minutes < end),
+        None,
+    )
     relation = "now"
     if active_block is None:
         # resolve_day sorts by start, so the first block still ahead is next.
-        active_block = next((b for b in blocks if b["start"] > now_hhmm), None)
+        active_block = next(
+            (b for b in blocks
+             if (start := clock_time.parse_time(b.get("start"))) is not None
+             and start > now_minutes),
+            None,
+        )
         relation = "next"
     if active_block is None:
         return _no_course("day_over", "No more classes today.")
 
-    next_change = str(active_block["end"] if relation == "now" else active_block["start"])
+    boundary = active_block.get("end") if relation == "now" else active_block.get("start")
+    next_change = clock_time.format_time(clock_time.parse_time(boundary))
     return _course_for_block(active_block, relation=relation, next_change=next_change,
                              active_courses_reader=active_reader)
 

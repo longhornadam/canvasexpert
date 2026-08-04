@@ -24,11 +24,13 @@ period IDs must be unique across the saved schedule. A block absent from a day's
 is silently absent that day; save_teacher_schedule catches a period ID that exists in no Bell
 Schedule CSV.
 
-Bell Schedule CSVs require period_id,start,end and may include label. They are ordered by start
-time when read. Duplicate period_id values are legal: a review meeting and a later exam can both
-use period 6. A block spanning consecutive claimed meetings resolves to one window. If another
-meeting interrupts it, it resolves to separate windows; a slide bound to that block uses the
-first window. Call get_bell_schedule to read available schedule_ids; never invent one.
+Bell Schedule CSVs require period_id,start,end and may include label. start and end use the
+teacher-facing local clock format h:mm AM/PM (for example, 8:35 AM or 3:55 PM), never 24-hour
+military time. They are ordered by start time when read. Duplicate period_id values are legal:
+a review meeting and a later exam can both use period 6. A block spanning consecutive claimed
+meetings resolves to one window. If another meeting interrupts it, it resolves to separate
+windows; a slide bound to that block uses the first window. Call get_bell_schedule to read
+available schedule_ids; never invent one.
 
 THE SCHOOL CALENDAR
 

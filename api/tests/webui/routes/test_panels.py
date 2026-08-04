@@ -163,9 +163,9 @@ def _block(name, start, end, course_id="9000001", label=""):
 
 
 DAY = [
-    _block("1st", "08:15", "09:05", "111", label="ELA 7 A"),
-    _block("Conference", "09:10", "10:00", ""),
-    _block("3rd", "10:05", "10:55", "333", label="ELA 7 B"),
+    _block("1st", "8:15 AM", "9:05 AM", "111", label="ELA 7 A"),
+    _block("Conference", "9:10 AM", "10:00 AM", ""),
+    _block("3rd", "10:05 AM", "10:55 AM", "333", label="ELA 7 B"),
 ]
 
 
@@ -199,7 +199,7 @@ def test_follows_the_block_meeting_right_now(_at, _resolve):
     assert out["course_id"] == "111"
     assert out["relation"] == "now"
     assert out["block"] == "ELA 7 A"
-    assert out["next_change"] == "09:05"   # re-reads at the bell, not on drift
+    assert out["next_change"] == "9:05 AM"   # re-reads at the bell, not on drift
 
 
 def test_between_blocks_looks_ahead_to_the_next_one(_at, _resolve):
@@ -208,7 +208,7 @@ def test_between_blocks_looks_ahead_to_the_next_one(_at, _resolve):
 
     assert out["course_id"] == "333"
     assert out["relation"] == "next"
-    assert out["next_change"] == "10:05"
+    assert out["next_change"] == "10:05 AM"
 
 
 def test_before_the_first_bell_shows_the_first_block(_at, _resolve):
@@ -282,7 +282,7 @@ def test_the_data_route_carries_the_schedule_context(monkeypatch, _schedule):
     from api.webui.server import app
 
     monkeypatch.setattr(panels_routes.deps, "resolve_schedule_for",
-                        _schedule([_block("3rd", "00:00", "23:59", "333",
+                        _schedule([_block("3rd", "12:00 AM", "11:59 PM", "333",
                                           label="ELA 7 B")]))
     monkeypatch.setattr(panels_routes, "_resolve_calendar_state", lambda date_str: "ready")
     monkeypatch.setattr(panels_routes.config, "active_courses", lambda: [{"id": "333"}])
@@ -292,7 +292,7 @@ def test_the_data_route_carries_the_schedule_context(monkeypatch, _schedule):
     assert body["ok"] is True
     assert body["relation"] == "now"
     assert body["block"] == "ELA 7 B"
-    assert body["next_change"] == "23:59"
+    assert body["next_change"] == "11:59 PM"
     # With no catalog the panel still labels itself from the schedule rather
     # than showing a blank header.
     assert body["course_name"] == "ELA 7 B"

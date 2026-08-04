@@ -1050,9 +1050,11 @@ _CONTRACT_FILES = {
     "page": "Author a Page (PageForge).txt",
     "rubric": "Author a Rubric (RubricForge).txt",
     "schedule": "Author a Class Schedule.txt",
+    "academic_calendar": "Author an Academic Calendar.txt",
     "learning_objective": "Author a Learning Objective.txt",
 }
-_DIRECT_WRITE_CONTRACT_KINDS = frozenset({"schedule", "learning_objective"})
+_DIRECT_WRITE_CONTRACT_KINDS = frozenset(
+    {"schedule", "academic_calendar", "learning_objective"})
 _STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric")
 
 # Product knowledge the tool surface does not imply. An assistant that only
@@ -1115,10 +1117,10 @@ def _staging_appendix(kind: str) -> str:
 def get_authoring_contract(kind: str) -> dict:
     """Return one canonical Forge authoring contract.
 
-    Contracts come from ``api/default_docs/AI Authoring/``. Most receive
-    the Forge-only staging appendix; schedule is the direct-write exception
-    with no review queue. No course_id, student data, vault,
-    or safety gate applies.
+    Contracts come from ``api/default_docs/AI Authoring/``. The Forge kinds
+    receive the staging appendix; the kinds in
+    ``_DIRECT_WRITE_CONTRACT_KINDS`` have no review queue and are returned
+    verbatim. No course_id, student data, vault, or safety gate applies.
     """
     filename = _CONTRACT_FILES.get(kind)
     if filename is None:
@@ -1132,8 +1134,8 @@ def get_authoring_contract(kind: str) -> dict:
     if error:
         return {"ok": False, "error": error}
 
-    # Schedule has no staging/review queue. It writes directly to the
-    # teacher's local workspace.
+    # These kinds have no staging/review queue. They write directly to the
+    # teacher's local workspace, or through the Calendar preview/apply pair.
     if kind in _DIRECT_WRITE_CONTRACT_KINDS:
         return {"ok": True, "kind": kind, "contract": contract_text}
 

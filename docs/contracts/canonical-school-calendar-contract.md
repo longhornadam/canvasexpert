@@ -81,13 +81,28 @@ It is a closed, versioned JSON document:
       "shape": "date",
       "date": "2026-10-22",
       "detail": "6:30 PM",
-      "from": "18:30",
-      "to": "20:00",
+      "from": "6:30 PM",
+      "to": "8:00 PM",
       "result": ""
     }
   ]
 }
 ```
+
+Bell Schedule definitions are teacher-authored CSV files in the same `Calendars` folder,
+with the header `period_id,start,end,label`. `start` and `end` are local wall-clock values
+written as `h:mm AM` or `h:mm PM` (for example, `8:35 AM` and `3:55 PM`). Public event
+`from` and `to` values use the same format. Dates remain exact ISO dates; no timezone or
+date rollover is implied by a clock value.
+
+That 12-hour spelling is the authored and displayed form, and reads tolerate one alternative:
+a 24-hour value whose hour is two digits, such as `08:35` or `13:13`. It is parsed and rendered
+in the 12-hour form, so a file a teacher already had is not refused over spelling and never
+displays in two clock conventions at once. Tolerance stops where the value stops being
+unambiguous: a single-digit hour with no meridiem, such as `1:15`, is invalid rather than
+resolved, because reading it as 01:15 would move an afternoon class to the middle of the night
+without ever looking wrong. Invalid clock values are reported against their period and never
+guessed.
 
 `revision` starts at 1 on the first successful creation and increases by one for every
 successful write after that, including complete-school-year replacement. A replacement never
@@ -221,10 +236,46 @@ import, grading periods, and public events. Settings removes its Class schedule 
 calendars editors and links to Calendar only where calendar readiness is relevant. Other
 features link directly to the exact Calendar section that resolves their gate.
 
-Academic import accepts both the canonical seven-column format and the advertised Simple
-four-column format. When a Simple-format academic period has no explicit code, import derives a
-deterministic, unique, stable code from its name before canonical validation; the teacher is not
-sent from a successful import into an impossible Create/Replace operation.
+Every create/replace input the service accepts is reachable from the page, not only from MCP:
+coverage, the default Bell Schedule, a per-weekday Bell Schedule override for Monday through
+Friday, no-school dates, and grading periods. Grading periods are directly editable there and are
+not import-only. Because replacement rewrites the whole document, the page prefills that editor
+from the active calendar, so a teacher who replaces a year without opening it carries the existing
+periods forward instead of dropping them.
+
+Creating a year is an assistant-first task, and the Create/replace surface says so before it
+shows a field. Districts publish academic calendars as PDFs and web pages, so the realistic first
+step is handing that source to an assistant, not retyping it. The surface therefore leads with the
+`Author an Academic Calendar` guide — downloadable and copyable, the same bytes MCP serves — and
+names the two outcomes honestly: a connected assistant previews and writes the year through the
+MCP operations and the teacher never opens the form; a chat-only assistant returns a CSV for the
+paste box. The manual form remains complete and unhidden, because it is both the no-assistant path
+and the surface where a CSV lands for review. Nothing about this ordering lets a preview skip
+review or an apply skip its expected revision.
+
+Academic import accepts both the canonical eight-column format and the advertised Simple
+four-column format. The canonical header is
+`school_year,row_type,code,name,start_date,end_date,report_issue_date,basis`; `basis` is an
+optional source note and is not stored. The Simple header is
+`Category,Name,Start Date,End Date`. Dates accept ISO `YYYY-MM-DD` or source-calendar
+`MM/DD/YYYY` on import and are stored canonically as ISO dates. When an academic period has no
+explicit code in either format, import derives a deterministic, unique, stable code from its name
+before canonical validation; the teacher is not sent from a successful import into an impossible
+Create/Replace operation.
+
+Import expresses exactly two facts: no-school dates and grading periods. It cannot express an
+instructional day, a Bell Schedule, `no_regular_classes`, or a public event. Its accepted
+vocabulary is closed and named here so an authoring tool does not have to guess it. In the
+canonical format `row_type` matches exactly one of `Holiday`, `No School for Students`,
+`Holiday for Students/Teachers`, or `Academic Period`. In the Simple format `Category` matches by
+substring on `holiday`, `day off`, `no school`, or `academic period`. Column names are compared
+case-insensitively and with surrounding whitespace trimmed, in both formats.
+
+Import never silently discards a row. A row whose type matches no accepted value, or whose dates
+are missing or unreadable, is skipped and reported as a note naming its source row number and the
+unusable value. Import remains successful when it produces nothing, because an empty result is a
+defect in the source file rather than a fact about the school year; the notes are what tell the
+teacher which. The Calendar page shows them with the parsed counts.
 
 The page follows the WebUI presentation contract: controls before explanation, no sales copy,
 no permanent onboarding tour. Readiness is calm but unmissable. It becomes

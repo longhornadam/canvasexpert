@@ -90,20 +90,20 @@ def _calendar(schedule_id="bell_schedule_bobcat_hour", *, kind="instructional"):
 
 
 BOBCAT_SCHEDULE = {"bell_schedule_bobcat_hour": [
-    {"period_id": "bobcat_a", "start": "12:11", "end": "12:41"},
-    {"period_id": "bobcat_b", "start": "12:43", "end": "13:13"},
+    {"period_id": "bobcat_a", "start": "12:11 PM", "end": "12:41 PM"},
+    {"period_id": "bobcat_b", "start": "12:43 PM", "end": "1:13 PM"},
 ]}
 
 
 def test_bobcat_groups_matching_activities_and_exposes_current_block():
     events = [
         {"id": "club-2", "kind": "club", "label": "Z Club", "detail": "Room 2",
-         "shape": "date", "date": "2026-08-17", "from": "12:43", "to": "13:13"},
+             "shape": "date", "date": "2026-08-17", "from": "12:43 PM", "to": "1:13 PM"},
         {"id": "tutorial-2", "kind": "tutorial", "label": "B Tutorial", "detail": "Room 1",
          "shape": "weekdays", "weekdays": [0], "effective_start": "2026-08-01",
-         "effective_end": "2026-08-31", "from": "12:11", "to": "12:41"},
+         "effective_end": "2026-08-31", "from": "12:11 PM", "to": "12:41 PM"},
         {"id": "outside", "kind": "club", "label": "Outside", "shape": "date",
-         "date": "2026-08-17", "from": "12:30", "to": "12:50"},
+         "date": "2026-08-17", "from": "12:30 PM", "to": "12:50 PM"},
     ]
     out = bobcat_hour_payload(
         now=NOW,

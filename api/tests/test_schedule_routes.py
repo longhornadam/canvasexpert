@@ -40,14 +40,14 @@ def _bell_schedule(calendars):
     path = calendars / "Bell Schedule - Example.csv"
     path.write_text(
         "period_id,start,end\n"
-        "1,08:00,08:45\n"
-        "2,08:50,09:35\n"
-        "3,09:40,10:25\n"
-        "4,10:30,11:15\n"
-        "5,11:20,12:05\n"
-        "6,12:10,12:55\n"
-        "7,13:00,13:45\n"
-        "8,13:50,14:35\n",
+        "1,8:00 AM,8:45 AM\n"
+        "2,8:50 AM,9:35 AM\n"
+        "3,9:40 AM,10:25 AM\n"
+        "4,10:30 AM,11:15 AM\n"
+        "5,11:20 AM,12:05 PM\n"
+        "6,12:10 PM,12:55 PM\n"
+        "7,1:00 PM,1:45 PM\n"
+        "8,1:50 PM,2:35 PM\n",
         encoding="utf-8",
     )
 

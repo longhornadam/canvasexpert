@@ -85,8 +85,8 @@
     </div>
     <div class="ce-calendar-grid ce-calendar-grid--change" data-event-upsert-only>
       <label>Detail <input type="text" id="cal-event-detail" placeholder="Room or note"></label>
-      <label>From <input type="time" id="cal-event-from"></label>
-      <label>To <input type="time" id="cal-event-to"></label>
+      <label>From <input type="text" id="cal-event-from" placeholder="6:30 PM" inputmode="text"></label>
+      <label>To <input type="text" id="cal-event-to" placeholder="8:00 PM" inputmode="text"></label>
       <label id="cal-event-result-field">Game result <small class="lbl-hint">(optional, 160 characters)</small>
         <input type="text" id="cal-event-result" maxlength="160" placeholder="e.g. Won 2–1"></label>
     </div>
@@ -152,16 +152,34 @@
   <h2>Create / replace school year</h2>
   <p class="ce-hint">
     Builds a complete, validated calendar for one coverage range: every day becomes
-    instructional (on your default Bell Schedule), a weekend, or an explicit no-school day.
-    Replaces the active calendar entirely.
+    instructional (on your default Bell Schedule, or a per-weekday override), a weekend, or an
+    explicit no-school day. Replaces the active calendar entirely.
   </p>
+
+  <div class="ce-calendar-ai-lede">
+    <h3>Your district calendar is a PDF. Hand it to your AI.</h3>
+    <p class="ce-hint">
+      Give your assistant this guide and your district's calendar — paste the text, or the PDF
+      itself if it reads files. A connected assistant builds the year, shows you a preview, and
+      writes it after you say yes; you never open the form below. A chat-only assistant hands you
+      back a CSV to paste under &ldquo;Paste a CSV instead&rdquo;.
+    </p>
+    <div class="ce-actions">
+      <a class="button primary" href="/api/download-contract?name=AcademicCalendar" download>Download the guide</a>
+      <button type="button" class="button" id="cal-guide-copy">Copy instead</button>
+      <a class="button" href="/connections">Connect an assistant</a>
+    </div>
+    <p id="cal-guide-result" class="status ce-calendar-status" role="status" aria-live="polite"></p>
+  </div>
+
   <details class="ce-calendar-details">
-    <summary class="delivery-summary">Start from an academic-calendar CSV</summary>
+    <summary class="delivery-summary">Paste a CSV instead</summary>
     <div class="delivery-inner">
       <p class="ce-hint">
-        Paste a calendar CSV (Canonical 7-column or Simple 4-column format —
-        <a href="/api/calendar/import/template" download="calendar_template.csv">download the blank template</a>)
-        to pre-fill no-school dates and grading periods below.
+        For a CSV your assistant wrote, or one you keep yourself — Canonical 8-column or Simple
+        4-column format
+        (<a href="/api/calendar/import/template" download="calendar_template.csv">download the blank template</a>).
+        Parsing fills in the no-school dates and grading periods below; it saves nothing.
       </p>
       <label>CSV contents
         <textarea id="cal-import-csv" rows="6"></textarea>
@@ -170,8 +188,15 @@
         <button type="button" id="cal-import-parse">Parse into the form below</button>
       </div>
       <p id="cal-import-status" class="status ce-calendar-status"></p>
+      <div id="cal-import-notes" class="ce-notice ce-notice--warn" hidden></div>
     </div>
   </details>
+
+  <h3 class="ce-calendar-form-heading">Review and create</h3>
+  <p class="ce-hint">
+    Anything inside coverage that is not a weekend and not listed below becomes a school day — so
+    if coverage runs past the student year, list the out-of-session stretches as no-school dates.
+  </p>
   <div class="ce-calendar-grid ce-calendar-grid--change">
     <label>School year <input type="text" id="cal-create-year" placeholder="2026-27"></label>
     <label>Coverage start <input type="date" id="cal-create-start"></label>
@@ -181,9 +206,28 @@
     <label>Default Bell Schedule <select id="cal-create-default-schedule"></select></label>
   </div>
   <div class="ce-calendar-grid ce-calendar-grid--single">
+    <label>Per-weekday Bell Schedule <small class="lbl-hint">(optional — leave on Default unless that weekday always runs a different schedule)</small>
+      <div class="ce-calendar-weekday-schedules" id="cal-create-weekday-schedules">
+        <label>Mon <select data-weekday="0"></select></label>
+        <label>Tue <select data-weekday="1"></select></label>
+        <label>Wed <select data-weekday="2"></select></label>
+        <label>Thu <select data-weekday="3"></select></label>
+        <label>Fri <select data-weekday="4"></select></label>
+      </div>
+    </label>
+  </div>
+  <div class="ce-calendar-grid ce-calendar-grid--single">
     <label>No-school dates <small class="lbl-hint">(YYYY-MM-DD, one per line — pre-filled by CSV import)</small>
       <textarea id="cal-create-no-school" rows="4"></textarea>
     </label>
+  </div>
+  <div class="ce-calendar-grid ce-calendar-grid--single">
+    <label>Grading periods <small class="lbl-hint">(pre-filled by CSV import; codes must be unique and must not overlap)</small>
+      <div id="cal-create-period-list" class="ce-calendar-period-editor"></div>
+    </label>
+  </div>
+  <div class="ce-actions">
+    <button type="button" id="cal-create-add-period" class="small">Add a grading period</button>
   </div>
   <div class="ce-actions">
     <button type="button" id="cal-create-preview">Preview</button>

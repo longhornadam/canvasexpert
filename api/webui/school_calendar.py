@@ -18,6 +18,8 @@ import os
 import tempfile
 from datetime import date, timedelta
 
+from . import clock_time
+
 FORMAT_VERSION = "1.0-json"
 DOCUMENT_TYPE = "SCHOOL_CALENDAR"
 CALENDAR_FILENAME = "School Calendar.json"
@@ -218,6 +220,9 @@ def _validate_events(events) -> list[str]:
                 problems.append(f"{tag}: result must be a string")
             elif len(event["result"]) > 160:
                 problems.append(f"{tag}: result must be 160 characters or fewer")
+        for field in ("from", "to"):
+            if field in event and clock_time.parse_time(event.get(field)) is None:
+                problems.append(f"{tag}: {field} must be a time like '6:30 PM'")
         label = event.get("label")
         if not isinstance(label, str) or not label.strip():
             problems.append(f"{tag}: label must be a non-empty string")
@@ -687,6 +692,13 @@ def _normalize_replacement_mutation(*, school_year, coverage_start, coverage_end
         return None, ["date(s) cannot be both no_school and no_regular_classes: "
                      + ", ".join(sorted(overlap)[:3])]
 
+    normalized_events = []
+    for event in events or []:
+        normalized_event, event_problems = _normalize_event(event)
+        if event_problems:
+            return None, event_problems
+        normalized_events.append(normalized_event)
+
     return {
         "school_year": school_year,
         "coverage_start": start.isoformat(),
@@ -698,7 +710,7 @@ def _normalize_replacement_mutation(*, school_year, coverage_start, coverage_end
         "no_regular_classes_dates": no_regular,
         "date_labels": dict(sorted((date_labels or {}).items())),
         "grading_periods": grading_periods or [],
-        "events": events or [],
+        "events": normalized_events,
     }, []
 
 
@@ -1085,6 +1097,9 @@ def _normalize_event(event) -> tuple[dict | None, list[str]]:
     if problems:
         return None, problems
     normalized = {key: event[key] for key in _EVENT_KEYS if key in event}
+    for field in ("from", "to"):
+        if field in normalized:
+            normalized[field] = clock_time.format_time(clock_time.parse_time(normalized[field]))
     if normalized.get("shape") == "weekdays":
         normalized["weekdays"] = sorted(set(normalized["weekdays"]))
     return normalized, []

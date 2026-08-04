@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 from api import audience, learning_objectives
 from api.mirror import read_service
 from api.course_catalog import read_catalog
-from api.webui import config, deps, school_calendar
+from api.webui import clock_time, config, deps, school_calendar
 
 
 DEFAULT_DUE_DAYS = 7
@@ -55,12 +55,16 @@ def _local_date(now=None) -> date:
     return now.date() if isinstance(now, datetime) else date.today()
 
 
-def _local_time(now=None) -> str:
+def _local_minutes(now=None) -> int:
     if now is None:
-        return datetime.now().astimezone().strftime("%H:%M")
-    if isinstance(now, datetime) and now.tzinfo is not None:
-        return now.astimezone().strftime("%H:%M")
-    return now.strftime("%H:%M") if isinstance(now, datetime) else datetime.now().strftime("%H:%M")
+        current = datetime.now().astimezone()
+    elif isinstance(now, datetime) and now.tzinfo is not None:
+        current = now.astimezone()
+    elif isinstance(now, datetime):
+        current = now
+    else:
+        current = datetime.now().astimezone()
+    return current.hour * 60 + current.minute
 
 
 def _iso(value) -> str:
@@ -331,13 +335,14 @@ def bobcat_hour_payload(*, now=None, calendar_reader=None,
             continue
         if not _event_occurs_on(source, day):
             continue
-        start = str(source.get("from") or "")
-        end = str(source.get("to") or "")
-        if not start or not end or start >= end:
+        start = clock_time.parse_time(source.get("from"))
+        end = clock_time.parse_time(source.get("to"))
+        if start is None or end is None or start >= end:
             continue
         slot = next((name for name, meeting in slots.items()
-                     if start >= str(meeting.get("start") or "")
-                     and end <= str(meeting.get("end") or "")), None)
+                     if ((meeting_start := clock_time.parse_time(meeting.get("start"))) is not None
+                         and (meeting_end := clock_time.parse_time(meeting.get("end"))) is not None
+                         and start >= meeting_start and end <= meeting_end)), None)
         if slot is None:
             continue
         item = _untagged(audience.tag(dict(source)))
@@ -356,9 +361,11 @@ def bobcat_hour_payload(*, now=None, calendar_reader=None,
         for kind in ("tutorial", "club"):
             for item in groups[slot][kind]:
                 activities.append({**item, "slot": slot})
-    current = _local_time(now)
+    current = _local_minutes(now)
     current_block = next((slot for slot, meeting in slots.items()
-                          if str(meeting.get("start") or "") <= current < str(meeting.get("end") or "")), None)
+                          if ((meeting_start := clock_time.parse_time(meeting.get("start"))) is not None
+                              and (meeting_end := clock_time.parse_time(meeting.get("end"))) is not None
+                              and meeting_start <= current < meeting_end)), None)
     state = "ready" if activities else "nothing_scheduled"
     return {"ok": True, "state": state, "date": day.isoformat(),
             "current_block": current_block, "groups": groups,
