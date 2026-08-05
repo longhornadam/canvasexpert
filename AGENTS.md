@@ -92,13 +92,7 @@ Use only the row relevant to the active handoff.
 ## Execution model: senior design, one executor
 
 The senior/orchestrator owns architecture, scope, and acceptance. One implementation
-executor performs the bounded handoff. Do not add a planner or automatic reviewer, and do
-not implement in parallel with the executor. At most one implementation subagent may be
-active unless the user explicitly authorizes more.
-
-When model tiers are available: Sol is the senior; Luna is the default executor; Terra is
-the alternative for cross-cutting, architecture-heavy, or guardrail-adjacent work. The
-user may choose an external executor.
+executor performs the bounded handoff. The distinction is about the size/cost of the model of the agent.
 
 ### Senior responsibilities
 
