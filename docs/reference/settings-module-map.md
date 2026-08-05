@@ -15,8 +15,8 @@ changes again.
 - Feature files: `api/webui/static/settings/*.js`
 - Settings route owner: `api/webui/routes/settings.py`
 - AI Authoring file/rebuild routes: `api/webui/ai_ta.py` and `api/webui/routes/library.py`
-- Persistence facade: `api/webui/config/__init__.py`
-- Persistence modules: `api/webui/config/*.py`
+- Persistence facade: `api/platform_services/config/__init__.py`
+- Persistence modules: `api/platform_services/config/*.py`
 - Self-update download/verify/stage: `api/webui/self_update.py`
 - Update routes: `api/webui/routes/updates.py`
 
@@ -85,7 +85,7 @@ directory scan on every load and reads as covered when it is not.
 
 - `/api/update/status`, `/api/update/download`, `/api/update/apply`, `/api/update/cancel`
 
-Config persistence is already split under `api/webui/config/`. Keep the
+Config persistence is already split under `api/platform_services/config/`. Keep the
 `from .. import config` facade stable; callers should not import submodules directly
 unless there is a strong reason.
 
@@ -99,7 +99,7 @@ unless there is a strong reason.
 - calendar/schedule problems: see `docs/reference/panels-route-card.md` and
   `docs/contracts/canonical-school-calendar-contract.md` (owned by the Calendar page, not Settings)
 - workspace/AI Authoring folder issues: `settings.html`, `settings/workspace.js`, `settings.js`,
-  `api/webui/workspace.py`, `api/webui/ai_ta.py`
+  `api/platform_services/workspace.py`, `api/webui/ai_ta.py`
 
 ## Guardrails
 

@@ -4,7 +4,7 @@ This module keeps the historical `feedback_pipeline` import path stable while th
 implementation lives in smaller helper modules.
 """
 
-from api.feedback_contract import CONTRACT_VERSION, _REVIEW_NOTE, _safe, build_contract_text, persona_signoff
+from api.feedback_contract import CONTRACT_VERSION, REVIEW_NOTE, safe, build_contract_text, persona_signoff
 from api.feedback_artifacts import (
     _shared_context_blob,
     _scrub_bundle,
@@ -30,8 +30,8 @@ from api.feedback_results import (
 
 __all__ = [
     "CONTRACT_VERSION",
-    "_REVIEW_NOTE",
-    "_safe",
+    "REVIEW_NOTE",
+    "safe",
     "_shared_context_blob",
     "_scrub_bundle",
     "_AI_SIGNATURE_LINE_RE",

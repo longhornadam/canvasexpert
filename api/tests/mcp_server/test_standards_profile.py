@@ -2,7 +2,7 @@ import json
 
 from api.feedback_vault import Vault
 from api.mcp_server import tools
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def _profile_workspace(monkeypatch, tmp_path, profile):

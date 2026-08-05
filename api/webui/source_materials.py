@@ -13,12 +13,12 @@ import json
 import os
 from pathlib import Path
 
-from . import workspace
+from api.platform_services import workspace
 from .source_material_extractors import (
     MAX_EXTRACTED_CHARS,
     SUPPORTED_EXTS,
     UNSUPPORTED_LEGACY_EXTS,
-    _collapse_ws,
+    collapse_ws,
     _truncate,
     extract_text_from_bytes,
 )
@@ -151,7 +151,7 @@ def build_source_context(
 
     pasted = (pasted_text or "").strip()
     if pasted:
-        text, truncated = _truncate(_collapse_ws(pasted))
+        text, truncated = _truncate(collapse_ws(pasted))
         if truncated:
             warnings.append(
                 f"Pasted source material was truncated to {MAX_EXTRACTED_CHARS:,} characters."

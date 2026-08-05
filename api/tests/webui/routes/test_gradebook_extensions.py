@@ -7,7 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.tests.calendar_fixtures import write_school_calendar
-from api.webui import school_calendar, workspace
+from api.platform_services import workspace
+from api.webui import school_calendar
 from api.webui.routes import gradebook_extensions
 from api.webui.server import app
 
@@ -34,7 +35,7 @@ def _bell_schedule(calendars_dir):
 
 
 def test_extend_due_refuses_when_calendar_is_unconfigured(monkeypatch):
-    monkeypatch.setattr(gradebook_extensions, "_canvas_get",
+    monkeypatch.setattr(gradebook_extensions, "canvas_get",
                         lambda path: ({"due_at": "2026-08-19T23:59:00Z"}, None))
     response = client.post("/api/extend-due", data={
         "course_id": "1", "assignment_id": "2",
@@ -51,7 +52,7 @@ def test_extend_due_refuses_rather_than_walking_past_coverage(isolated_workspace
     write_school_calendar(
         calendars, {"2026-08-17": SCHEDULE_ID, "2026-08-18": SCHEDULE_ID},
         coverage_start="2026-08-17", coverage_end="2026-08-18")
-    monkeypatch.setattr(gradebook_extensions, "_canvas_get",
+    monkeypatch.setattr(gradebook_extensions, "canvas_get",
                         lambda path: ({"due_at": "2026-08-18T23:59:00Z"}, None))
     sent = {}
     monkeypatch.setattr(gradebook_extensions, "_canvas_send",
@@ -74,7 +75,7 @@ def test_extend_due_writes_the_computed_school_day_due_date(isolated_workspace, 
     write_school_calendar(
         calendars, {"2026-08-19": SCHEDULE_ID, "2026-08-21": SCHEDULE_ID, "2026-08-24": SCHEDULE_ID},
         coverage_start="2026-08-17", coverage_end="2026-08-28")
-    monkeypatch.setattr(gradebook_extensions, "_canvas_get",
+    monkeypatch.setattr(gradebook_extensions, "canvas_get",
                         lambda path: ({"due_at": "2026-08-19T23:59:00-05:00"}, None))
     sent = {}
 

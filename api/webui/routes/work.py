@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from api.work_registry import adapters, discovery, storage, suppressions
 from api.work_registry.models import public_job, validate_registry_document
-from .. import config
+from api.platform_services import config
 from ..local_request_guard import require_local_mutation
 
 

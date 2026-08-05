@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 
 from api import course_catalog
 from api.mirror import store
-from api.webui import mirror_service, workspace
+from api.platform_services import workspace
+from api.webui import mirror_service
 from api.webui.server import app
 
 NOW = "2026-07-16T12:00:00Z"
@@ -477,6 +478,25 @@ def test_sync_now_records_a_failed_course_context_refresh(monkeypatch, tmp_path,
     assert records[0]["error_class"] == "RuntimeError"
 
 
+def test_sync_now_records_privacy_minimized_refresh_outcome(monkeypatch, _configure):
+    from api import operational_log
+
+    _configure()
+    records = []
+    monkeypatch.setattr(operational_log, "emit", lambda *args, **kwargs: records.append((args, kwargs)))
+    canvas = FakeCanvas()
+
+    results = mirror_service.sync_now(
+        "111", canvas_get=canvas, canvas_get_all=canvas,
+        canvas_get_all_complete=canvas.complete, now=NOW)
+
+    assert results[0]["ok"] is True
+    refresh = [item for item in records if item[0] == ("mirror.refresh", "ok")]
+    assert len(refresh) == 1
+    assert refresh[0][1]["scope"] == "delta"
+    assert set(refresh[0][1]) == {"scope", "duration_ms"}
+
+
 def test_enqueue_sync_accepts_previous_but_heartbeat_stays_current_only(monkeypatch, tmp_path, _configure):
     _configure(courses=(
         {"id": "111", "name": "Current", "active": True},
@@ -619,9 +639,9 @@ def test_mirror_status_route(monkeypatch, tmp_path, _configure):
 def test_mirror_sync_now_route(monkeypatch, tmp_path, _configure):
     _configure()
     canvas = FakeCanvas()
-    monkeypatch.setattr(mirror_service, "_canvas_get_all", canvas)
-    monkeypatch.setattr(mirror_service, "_canvas_get_all_complete", canvas.complete)
-    monkeypatch.setattr(mirror_service, "_canvas_get", canvas)
+    monkeypatch.setattr(mirror_service, "canvas_get_all", canvas)
+    monkeypatch.setattr(mirror_service, "canvas_get_all_complete", canvas.complete)
+    monkeypatch.setattr(mirror_service, "canvas_get", canvas)
     response = TestClient(app).post("/api/mirror/sync-now", data={"course_id": "111"})
     payload = response.json()
     assert response.status_code == 202
@@ -745,7 +765,7 @@ def test_notify_course_changed_runs_targeted_submission_delta_after_delay(monkey
     before = store.read_sync("111")
     canvas = FakeCanvas()
     receipt = lambda *args, **kwargs: ([], None, True)
-    monkeypatch.setattr(mirror_service, "_canvas_get_all", canvas)
+    monkeypatch.setattr(mirror_service, "canvas_get_all", canvas)
     timer = mirror_service.notify_course_changed(
         "111", delay_seconds=0.01, canvas_get_all_complete=receipt)
     timer.join(timeout=5)

@@ -4,7 +4,7 @@ import pytest
 
 from api import ai_transmission, openrouter_client, operational_log
 from api.feedback_vault import Vault
-from api.webui import canvas_client
+from api.platform_services import canvas_client
 
 
 def _reset_operational_log():
@@ -146,7 +146,7 @@ def test_safe_send_and_canvas_failure_emit_only_allowlisted_records(tmp_path, mo
     monkeypatch.setattr(canvas_client.config, "get_token", lambda: "synthetic-token")
     monkeypatch.setattr(canvas_client.config, "get_canvas_base", lambda: "https://canvas.invalid")
     monkeypatch.setattr(canvas_client.requests, "get", lambda *args, **kwargs: CanvasResponse())
-    data, error = canvas_client._canvas_get("/synthetic", timeout=1)
+    data, error = canvas_client.canvas_get("/synthetic", timeout=1)
     assert data is None
     assert "HTTP 500" in error
     assert "Synthetic Student" in error

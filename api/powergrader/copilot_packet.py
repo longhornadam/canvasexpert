@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.source_materials import estimate_text_tokens
 
 from .packet import safe_ai_packet_name

@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 
 from api.mirror import store
-from api.webui import workspace
+from api.platform_services import workspace
 from api.work_registry.providers import WorkCourseReads
 from api.work_registry.providers import grading_debt, home_attention, late_work, roster_warnings
 

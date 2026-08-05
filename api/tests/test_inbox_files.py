@@ -14,7 +14,8 @@ import os
 import pytest
 
 from api import runtime_paths
-from api.webui import deps, workspace
+from api.platform_services import workspace
+from api.webui import deps
 
 
 @pytest.fixture(autouse=True)

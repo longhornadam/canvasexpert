@@ -39,7 +39,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from api.webui import config
+from api.platform_services import config
 
 # Statuses that prove the request got past authentication/authorization.
 _AUTHORIZED = {200, 201, 202, 400, 409}

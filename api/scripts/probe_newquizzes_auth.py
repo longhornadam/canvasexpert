@@ -22,7 +22,7 @@ import os
 import pytest
 
 from api.diagnose_newquizzes import run_diagnostics
-from api.webui import config
+from api.platform_services import config
 
 _COURSE = os.environ.get("CE_LIVE_COURSE")
 _ASSIGNMENT = os.environ.get("CE_LIVE_NQ_ASSIGNMENT")

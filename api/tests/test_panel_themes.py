@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from api import panel_themes
 from api.mcp_server import tools
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes.panels import DEFAULT_THEME, resolve_theme
 
 GOOD = {"bg": "#f8fafc", "ink": "#101c30", "accent": "#123a70",

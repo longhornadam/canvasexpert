@@ -36,7 +36,7 @@ def test_modules_uses_current_catalog_scope_without_canvas(monkeypatch):
     monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: _catalog())
     monkeypatch.setattr(
         push,
-        "_canvas_get",
+        "canvas_get",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Canvas must not be called")),
     )
 
@@ -66,7 +66,7 @@ def test_modules_falls_back_to_live_for_missing_or_noncurrent_catalog_scope(monk
         return [{"id": 7, "name": "Live module"}], None
 
     monkeypatch.setattr(push.course_catalog, "read_catalog", read_catalog)
-    monkeypatch.setattr(push, "_canvas_get", canvas_get)
+    monkeypatch.setattr(push, "canvas_get", canvas_get)
     client = TestClient(app, base_url="http://127.0.0.1:8765")
 
     for _ in range(5):
@@ -80,7 +80,7 @@ def test_modules_falls_back_to_live_for_missing_or_noncurrent_catalog_scope(monk
 
 def test_modules_preserves_live_error_when_catalog_is_not_current(monkeypatch):
     monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: _catalog(state="stale"))
-    monkeypatch.setattr(push, "_canvas_get", lambda path, params: (None, "Canvas unavailable"))
+    monkeypatch.setattr(push, "canvas_get", lambda path, params: (None, "Canvas unavailable"))
 
     response = TestClient(app, base_url="http://127.0.0.1:8765").get("/api/modules?course_id=course-1")
 
@@ -95,7 +95,7 @@ def test_assignment_groups_remains_live_when_catalog_modules_are_current(monkeyp
         calls.append((path, params))
         return [{"id": 3, "name": "Projects"}], None
 
-    monkeypatch.setattr(push, "_canvas_get", canvas_get)
+    monkeypatch.setattr(push, "canvas_get", canvas_get)
 
     response = TestClient(app, base_url="http://127.0.0.1:8765").get("/api/assignment-groups?course_id=course-1")
 
@@ -106,7 +106,7 @@ def test_assignment_groups_remains_live_when_catalog_modules_are_current(monkeyp
 def test_assignment_groups_uses_exactly_current_v3_catalog_without_canvas(monkeypatch):
     monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: _catalog_with_groups())
     monkeypatch.setattr(
-        push, "_canvas_get",
+        push, "canvas_get",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Canvas must not be called")),
     )
 
@@ -126,7 +126,7 @@ def test_assignment_groups_falls_back_live_for_noncurrent_or_malformed_v2_scope(
 
     monkeypatch.setattr(push.course_catalog, "read_catalog", lambda course_id: catalogs.pop(0))
     monkeypatch.setattr(
-        push, "_canvas_get",
+        push, "canvas_get",
         lambda path, params=None: calls.append((path, params)) or ([{"id": 3, "name": "Live group"}], None),
     )
     client = TestClient(app, base_url="http://127.0.0.1:8765")

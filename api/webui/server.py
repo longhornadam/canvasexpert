@@ -26,13 +26,14 @@ from api import operational_log, student_packet
 from api.mirror import coordinator as _mirror_coordinator
 from api.operation_ledger import recovery as _operation_ledger_recovery
 
-from . import af, ai_ta, config, pf, rf, runner
-from . import workspace
+from api.platform_services import config
+from . import af, ai_ta, pf, rf, runner
+from api.platform_services import workspace
 from api import runtime_paths
-from .canvas_client import _canvas_headers, _canvas_get, _canvas_get_all, _canvas_send
+from api.platform_services.canvas_client import canvas_headers, canvas_get, canvas_get_all, _canvas_send
 from .schooldays import (
-    _parse_iso_local, _is_school_day, _school_days_late,
-    _school_days_late_detail, _add_school_days,
+    parse_iso_local, _is_school_day, _school_days_late,
+    school_days_late_detail, _add_school_days,
 )
 
 from .deps import (

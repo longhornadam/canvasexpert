@@ -12,8 +12,9 @@ effect normally, since they run after this fixture within the same test.
 """
 import pytest
 
-from api.webui import profiles, workspace
-from api.webui.config import _io as config_io
+from api.platform_services import workspace
+from api.webui import profiles
+from api.platform_services.config import _io as config_io
 
 
 @pytest.fixture(autouse=True)

@@ -9,7 +9,8 @@ import api.webui.routes.gradebook as gradebook
 import api.webui.routes.gradebook_curves as gradebook_curves
 import api.webui.routes.gradebook_snapshot as gradebook_snapshot
 from api.mirror import store as mirror_store
-from api.webui import mirror_reads, workspace
+from api.platform_services import workspace
+from api.webui import mirror_reads
 
 client = TestClient(app)
 
@@ -123,7 +124,7 @@ def test_curve_list_and_revert_route_shapes_remain_compatible(monkeypatch):
 
     sent = []
     saved = []
-    monkeypatch.setattr(gradebook_curves, "_canvas_get", lambda *_: ({"score": 2}, None))
+    monkeypatch.setattr(gradebook_curves, "canvas_get", lambda *_: ({"score": 2}, None))
     monkeypatch.setattr(
         gradebook_curves, "_canvas_send",
         lambda method, url, payload: (sent.append((method, url, payload)) or ({}, None)),
@@ -169,7 +170,7 @@ def _explode(*_args, **_kwargs):
 def test_curve_assignments_serves_fresh_mirror_with_zero_live_calls(monkeypatch, tmp_path):
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
     _populate_curve_mirror(str(tmp_path))
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", _explode)
 
     resp = client.get(f"/api/curve/assignments?course_id={COURSE_MC}")
     assert resp.status_code == 200

@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from api.powergrader.interactive_autopush import (
     run_interactive_autopush,
 )
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 @pytest.fixture(autouse=True)
@@ -61,13 +61,13 @@ def _base_session(**extra):
     return session
 
 
-def _make_canvas_get_all(submissions, assignment_data=None):
+def _makecanvas_get_all(submissions, assignment_data=None):
     def get_all(path, params):
         return (submissions or []), None
     return get_all
 
 
-def _make_canvas_get(fresh_assignment):
+def _makecanvas_get(fresh_assignment):
     def get(path):
         return fresh_assignment, None
     return get

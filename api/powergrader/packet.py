@@ -10,7 +10,7 @@ import os
 import zipfile
 
 from api import feedback_pipeline as fp
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def _assignment_stable_id(assignment_name: str, assignment_id: str = "") -> str:
@@ -28,7 +28,7 @@ def safe_ai_packet_name(assignment_name: str, *, assignment_id: str = "", compac
     if compact:
         stable = _assignment_stable_id(assignment_name, assignment_id)
         return f"Packet-{stable}"
-    return f"Safe AI Packet - {fp._safe(assignment_name, max_len=60)}"
+    return f"Safe AI Packet - {fp.safe(assignment_name, max_len=60)}"
 
 
 def packet_paths(safe_dir: str, assignment_name: str, *, assignment_id: str = "",

@@ -12,7 +12,7 @@ from .adapter_support import (
     normalize,
     replace_step,
 )
-from api.webui import canvas_client
+from api.platform_services import canvas_client
 
 
 def _resolve_or_create_module(
@@ -41,7 +41,7 @@ def _resolve_or_create_module(
         return (module_id, None)
 
     if read_modules is None:
-        modules, error = canvas_client._canvas_get_all(
+        modules, error = canvas_client.canvas_get_all(
             f"/api/v1/courses/{course_id}/modules",
             {"per_page": 100},
         )
@@ -160,7 +160,7 @@ def _attach_module_item(
     attach_step["module_id"] = str(module_id)
     item_id = attach_step.get("returned_object_id")
     if attach_step.get("state") in ("applied", "skipped") and item_id:
-        item, error = canvas_client._canvas_get(
+        item, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}"
         )
         if not error and item:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from api import seating_grouping, seating_state
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 from api.webui.routes import roster_canvas
 
 from .. import models
@@ -132,7 +132,7 @@ class SeatingGroupSetAdapter:
 
     def capture_baseline(self, payload: dict, target: dict) -> dict:
         categories, error = roster_canvas.list_canvas_group_categories(
-            target["course_id"], canvas_get_all=canvas_client._canvas_get_all,
+            target["course_id"], canvas_get_all=canvas_client.canvas_get_all,
         )
         if error:
             return {"canvas_error": str(error)}
@@ -354,7 +354,7 @@ class SeatingGroupSetAdapter:
     @staticmethod
     def _category_matches(course_id: str, category_id: str, name: str) -> bool:
         categories, error = roster_canvas.list_canvas_group_categories(
-            course_id, canvas_get_all=canvas_client._canvas_get_all,
+            course_id, canvas_get_all=canvas_client.canvas_get_all,
         )
         return not error and any(
             item["id"] == str(category_id) and _normalize_name(item["name"]) == _normalize_name(name)
@@ -363,7 +363,7 @@ class SeatingGroupSetAdapter:
 
     @staticmethod
     def _group_matches(category_id: str, group_id: str, name: str) -> bool:
-        groups, error = canvas_client._canvas_get_all(
+        groups, error = canvas_client.canvas_get_all(
             f"/api/v1/group_categories/{category_id}/groups", {"per_page": 100},
         )
         return not error and any(
@@ -373,7 +373,7 @@ class SeatingGroupSetAdapter:
 
     @staticmethod
     def _membership_matches(group_id: str, membership_id: str, student_id: str) -> bool:
-        memberships, error = canvas_client._canvas_get_all(
+        memberships, error = canvas_client.canvas_get_all(
             f"/api/v1/groups/{group_id}/memberships", {"per_page": 200},
         )
         return not error and any(

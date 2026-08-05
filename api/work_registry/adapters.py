@@ -258,7 +258,7 @@ def collect_local_jobs() -> list[dict]:
 def collect_start_sources() -> list[dict]:
     """List workspace Forge files as relative, generic start metadata only."""
     try:
-        from api.webui import workspace
+        from api.platform_services import workspace
         root_value = workspace.workspace_root()
     except Exception:
         return []

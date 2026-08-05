@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from api.webui import config, workspace
+from api.platform_services import config, workspace
 from api.webui.server import app
 
 

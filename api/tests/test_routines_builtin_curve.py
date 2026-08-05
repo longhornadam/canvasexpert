@@ -49,7 +49,7 @@ def _wire(monkeypatch):
                     for i in range(3)], None
         return [], None
 
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", fake_get_all)
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", fake_get_all)
     # Only reached for course A (B is skipped before the curve model); return a
     # single changed row so the curve is attempted.
     monkeypatch.setattr(routines_builtin, "_apply_curve_model",

@@ -13,7 +13,7 @@ from api import feedback_artifacts, feedback_contract, feedback_results, feedbac
 from api.feedback_vault import Vault
 from api.powergrader import autopush_executor, autopush_policy, autoscore_queue
 from api.powergrader import session_builder, student_attachments, writing_timeline
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes import powergrader as powergrader_routes
 from api.webui.routes import routines as routines_routes
 

@@ -90,7 +90,7 @@ def sweep_env(tmp_path, monkeypatch):
         return {"ok": True}, None
 
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all",
+        "api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all",
         fake_get_all,
     )
     monkeypatch.setattr(

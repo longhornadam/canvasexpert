@@ -6,8 +6,8 @@ OneDrive workspace and fell back to stale machine-local state (wrong courses,
 no mirror, no identity vault). `config.ensure_workspace_pinned()` persists the
 resolved path so every process resolves the same workspace deterministically.
 """
-from api.webui import config
-from api.webui.config import canvas
+from api.platform_services import config
+from api.platform_services.config import canvas
 
 
 def test_pin_persists_resolved_path_when_unpinned(monkeypatch):

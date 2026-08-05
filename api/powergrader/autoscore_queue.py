@@ -15,7 +15,7 @@ from pathlib import Path
 
 from api.storage_support import atomic_write_json, interprocess_lock
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.powergrader import autoscore_claims, student_attachments
 
 QUEUE_FILENAME = "autoscore_queue.json"

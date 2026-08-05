@@ -17,7 +17,7 @@ import requests
 
 from api import operational_log, portfolio, report_local_reads
 from api.submission_transport import download_binary, fetch_submission, get_all_pages
-from api.webui.workspace import safe_component
+from api.platform_services.workspace import safe_component
 
 safe_name = safe_component
 _download_binary = download_binary

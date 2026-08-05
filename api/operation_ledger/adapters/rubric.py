@@ -18,7 +18,8 @@ from .adapter_support import (
     prepend_step as _step,
     replace_step as _replace_local_step,
 )
-from api.webui import rf, canvas_client, config
+from api.platform_services import canvas_client, config
+from api.webui import rf
 
 
 KIND = "content.rubric"
@@ -105,7 +106,7 @@ class RubricAdapter:
         course_id = target["course_id"]
         title = payload.get("title", "")
         baseline = {"existing_rubric": None}
-        rubrics, error = canvas_client._canvas_get(
+        rubrics, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/rubrics",
             params={"per_page": 100, "search_term": title},
         )
@@ -177,7 +178,7 @@ class RubricAdapter:
         )
 
         if rubric_step.get("state") in ("applied", "skipped") and rubric_id:
-            rubric, error = canvas_client._canvas_get(
+            rubric, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/rubrics/{rubric_id}"
             )
             if not error and rubric:
@@ -191,7 +192,7 @@ class RubricAdapter:
                     error_code="rubric_exact_id_unverified",
                 )
         elif rubric_id:
-            rubric, error = canvas_client._canvas_get(
+            rubric, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/rubrics/{rubric_id}"
             )
             if not error and rubric:
@@ -274,7 +275,7 @@ class RubricAdapter:
             page_slug = page_step.get("returned_object_id")
 
             if page_step.get("state") in ("applied", "skipped") and page_slug:
-                page, error = canvas_client._canvas_get(
+                page, error = canvas_client.canvas_get(
                     f"/api/v1/courses/{course_id}/pages/{page_slug}"
                 )
                 if not error and page:
@@ -287,7 +288,7 @@ class RubricAdapter:
                         error_code="page_exact_id_unverified",
                     )
             elif page_slug:
-                page, error = canvas_client._canvas_get(
+                page, error = canvas_client.canvas_get(
                     f"/api/v1/courses/{course_id}/pages/{page_slug}"
                 )
                 if not error and page:
@@ -376,7 +377,7 @@ class RubricAdapter:
 
         if not rubric_id:
             title = payload.get("title", "")
-            rubrics, error = canvas_client._canvas_get(
+            rubrics, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/rubrics",
                 params={"per_page": 100, "search_term": title},
             )
@@ -389,7 +390,7 @@ class RubricAdapter:
                 return {"state": "sent_unknown"}
             return {"state": "sent_unknown" if has_marker else "pending"}
 
-        rubric, error = canvas_client._canvas_get(
+        rubric, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/rubrics/{rubric_id}"
         )
         if error:

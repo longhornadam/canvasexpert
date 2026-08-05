@@ -2,64 +2,23 @@
 
 **Status:** Senior context; no active direct execution brief
 
-**Last senior review:** 2026-08-03
+**Last senior review:** 2026-08-05
 
-**Baseline:** `dev` @ `bd1ae87`, `v1.0.0-beta.3`, working tree clean except
-an unrelated pre-existing `README.md` edit (out of scope for this
-initiative, left untouched), `api/tests` 2162 passed.
+**Baseline:** `dev` @ `7ceb136`, `v1.0.0-beta.3`; the approved C1/C2,
+A5, D1.4, and high-value B1 batch is complete in the current implementation
+commit. The remaining full-suite failures are an existing mirror/catalog
+stale-state assertion and an unrelated presentation-contract CSS assertion.
 
-**Next batch pointer:** Batches 1-5 (§9 rows 1-5: A1/A2/A4/A6, A3,
-B2/B3/B4, D1/D2/D3, A7/D4) are all GREEN and committed; their briefs are
-retired at `docs/handoffs/feature-freeze-batch1-pii-hardening.md`,
-`feature-freeze-batch2-denylist-inversion.md`,
-`feature-freeze-batch3-observability.md`,
-`feature-freeze-batch4-ui-tightening.md`, and
-`feature-freeze-batch5-defaults-readiness.md`. This closes the freeze-week
-cycle's planned sequence. Real defects/gaps were found and fixed along the
-way, outside each batch's literal scope but squarely within the
-initiative's purpose — see each brief's execution result:
+**Next batch pointer:** None. The freeze-week follow-through is complete:
+MCP soft flags now emit aggregate counts only, all four material pickers use
+synced Library sources, high-value mirror and operation-ledger outcomes are
+logged, and platform services now live under `api/platform_services/` with
+the eight C2 seams public. C3 and C4 remain diagnostic-only; no new batch is
+authorized by this document.
 
-- Batch 2: the daily-writing MCP tool `get_writing_history` was leaking the
-  real Canvas user id embedded in `submission_id` on every call (fixed with
-  a one-way hash in `api/dailywriting/projection.py::_safe_submission_ref`).
-- Batch 3: none beyond the batch's own scope; 3 sites the mechanical B2
-  pattern should NOT touch were identified and excluded with reasons.
-- Batch 4: D3 turned out to be a real (if small) Work Registry contract
-  change (a new `description` field), not a template-only fix — see the
-  Batch 4 brief. D2 covered 2 more "Automations" sites than the initiative
-  document listed, and its rename now actually propagates to existing
-  installs via `ai_ta.RETIRED_FILES` rather than being cosmetic.
-- Batch 5: none beyond the batch's own scope.
-
-**No further batch is promoted this cycle.** Per this document's own
-sequencing (§9, "last: C") and the recurring senior recommendation
-throughout §9/§10, **Batch C (layering) is deliberately deferred past the
-start of the semester** — it is the highest-value item in the initiative
-and the wrong thing to attempt in the days before in-service week, per
-§3 C1's own risk framing (~62 files' import lines, "exactly the change
-that looks safe, passes tests, and breaks a packaged ZIP on a district
-machine in a way no test covers"). A future senior may promote C2 alone
-(the 8 cross-package private-import sites) as a smaller standalone batch
-without C1's blast radius, if layering progress is wanted before then.
-
-Open decisions carried forward for the next senior review, all previously
-recorded and untouched by Batches 1-5 (see §10 for full detail): **A5**
-(what a soft flag does on the MCP path — log-only recommended, revisit
-after the OpenRouter decision), **D1.4** (whether quiz/assignment/page get
-the same synced-library-only treatment as rubrics — ask before
-generalizing), **B1** (broader `operational_log` emit coverage on outcome
-boundaries beyond exception handlers — valuable, not urgent once B2
-landed), and **2.3** (OpenRouter's future, which determines how much A5/B1
-coverage the MCP path deserves).
-
-Next up is §9 row 5: **Batch 5 (A7, D4)** — both touch behavior a teacher
-will meet in week one. Read §3 A7, §6 D4, §7, and §8 for the next brief.
-No senior decisions from other batches are outstanding for A7/D4
-specifically; A5, D1.4, C sequencing, and 2.3 remain open per §10 and are
-not required to promote this batch. After Batch 5, §9's table is
-exhausted except **Batch C, which is deferred past the start of the
-semester per the initiative document's own recommendation (§9, "last:
-C") — do not promote it as part of this freeze-week cycle.**
+The completed direct briefs were retired from `docs/handoffs/`; Git history
+is the record. OpenRouter remains deliberately deferred. A future senior may
+decide whether to implement C3/C4 after the live-run deferral is resolved.
 
 This document is persistent senior context. It does not authorize implementation directly.
 
@@ -480,7 +439,7 @@ reasoned about without pulling in the web layer. The MCP server, the surface mos
 being self-contained, imports the FastAPI application's package to do its job.
 
 **Direction.** Move `workspace`, `config`, and `canvas_client` to `api/` (or a new
-`api/platform/`) and leave thin re-export shims at the old paths so the 62 call sites can
+`api/platform_services/`) and leave thin re-export shims at the old paths so the 62 call sites can
 migrate incrementally rather than in one commit. `api/runtime_paths.py` already indirects
 through `_workspace_module()`, which suggests the seam was anticipated.
 
@@ -497,21 +456,21 @@ declares these private; nothing pins their signatures; no test covers them as co
 
 | Importer | Reaches into |
 |---|---|
-| `api/gradebook_queries.py:4` | `webui.canvas_client._canvas_get, _canvas_get_all` |
-| `api/powergrader/canvas_fetch.py:18` | `webui.canvas_client._canvas_get, _canvas_get_all, _canvas_headers` |
-| `api/powergrader/new_quiz_fetch.py:23` | `webui.canvas_client._canvas_headers` |
-| `api/powergrader/late_catchup.py:6` | `webui.schooldays._parse_iso_local, _school_days_late_detail` |
-| `api/powergrader/student_attachments.py:16` | `webui.source_material_extractors._collapse_ws, _decode_bytes` |
-| `api/mirror/sync.py:35` | `course_catalog._error_code` |
-| `api/report_local_reads.py:30` | `work_registry.providers.home_attention._PROVEN_STAFF_ROLES, _author_role` |
-| `api/feedback_pipeline.py:7` | `feedback_contract._REVIEW_NOTE, _safe` |
+| `api/gradebook_queries.py:4` | `platform_services.canvas_client.canvas_get, canvas_get_all` |
+| `api/powergrader/canvas_fetch.py:18` | `platform_services.canvas_client.canvas_get, canvas_get_all, canvas_headers` |
+| `api/powergrader/new_quiz_fetch.py:23` | `platform_services.canvas_client.canvas_headers` |
+| `api/powergrader/late_catchup.py:6` | `webui.schooldays.parse_iso_local, school_days_late_detail` |
+| `api/powergrader/student_attachments.py:16` | `webui.source_material_extractors.collapse_ws, decode_bytes` |
+| `api/mirror/sync.py:35` | `course_catalog.error_code` |
+| `api/report_local_reads.py:30` | `work_registry.providers.home_attention.PROVEN_STAFF_ROLES, author_role` |
+| `api/feedback_pipeline.py:7` | `feedback_contract.REVIEW_NOTE, safe` |
 
-(Same-package `_common` / `_io` imports under `api/dailywriting/cli/` and `api/webui/config/`
+(Same-package `_common` / `_io` imports under `api/dailywriting/cli/` and `api/platform_services/config/`
 are correct and excluded.)
 
-**Direction.** Promote each to a public name on the owning module. Mechanical, independently
-landable, and it can proceed *without* C1 as a smaller standalone batch if the senior wants
-some of C's value during the freeze.
+**Delivered.** These seams now use public names on their owning modules, and the shared
+platform owners live under `api/platform_services/`. C2 is complete; C3 and C4 remain
+diagnostic only.
 
 ### C3. Fifty-four in-function imports
 
@@ -542,19 +501,20 @@ Small, teacher-visible, low-risk. The best candidate for freeze week.
 
 ### D1. PowerGrader rubrics: synced Library only
 
-**Teacher decision (2.x, confirmed this session):** the rubric picker looks in the synced
-`Library/Rubrics` folder and nowhere else.
+**Teacher decision (2.x, confirmed this session):** every material picker looks only in its
+synced Library folder: `Library/Rubrics`, `Library/Quizzes`, `Library/Assignments`, or
+`Library/Pages`.
 
-**Current behavior.** `api/runtime_paths.py:133-134` appends `api_root() / "rubrics"` to the
-rubric folder list unconditionally. `api/webui/deps.py:200` dedupes by *absolute path*, so the
-workspace copy and the bundled copy both survive; and labels via
+**Current behavior before this batch.** `api/runtime_paths.py` mixed bundled examples with
+Library sources. `api/webui/deps.py:200` deduped by *absolute path*, so the workspace copy and
+the bundled copy both survived; and labels via
 `os.path.relpath(path, REPO_ROOT)`, which for an out-of-repo file produces
 `..\..\Documents\OneDrive - Pearland ISD\CanvasExpert\Library\Rubrics\ELA_STAAR_ECR_Rubric.txt`.
 
 Observed live: four rubrics rendering as eight entries, on the first screen of the grading
 flow.
 
-**Why this is safe to remove.** `api/webui/workspace.py:764-768` seeds `Library/Rubrics` from
+**Why this is safe to remove.** `api/platform_services/workspace.py` seeds the Library from
 `default_docs/Rubrics`, falling back to `api/rubrics` (`_default_rubric_files`). The workspace
 copy *is* the seeded copy. The repo folder is a redundant fallback, not a source of anything
 unique.
@@ -568,10 +528,8 @@ unique.
    with a pointer to workspace setup. Do **not** silently fall back to repo copies. This app
    already has one bug of exactly that shape on record (the vault CWD fallback that mints
    pseudonyms into `./_System` when no workspace is configured); do not add a second.
-4. Decide whether the same treatment applies to `quiz`, `assignment`, and `page`, which also
-   mix `api/qf_materials/` examples with the Library. The teacher's instruction named rubrics
-   specifically. **Recommend rubrics only this cycle**, and ask before generalizing, because
-   the quiz/assignment example files may be doing real work as templates.
+4. The same treatment now applies to `quiz`, `assignment`, and `page`; bundled examples remain
+   authoring references, not picker sources.
 
 ### D2. Rename Automations to Routines
 
@@ -702,13 +660,7 @@ depends on a later one.
 
 ## 10. Open decisions for the next senior review
 
-1. **A5**: what a soft flag does on the MCP path. Recommendation is log-only for this freeze;
-   revisit after the OpenRouter decision.
-2. **D1.4**: whether quiz, assignment, and page pickers get the same synced-library-only
-   treatment as rubrics. Teacher named rubrics specifically. Ask before generalizing.
-3. **D4**: whether a Home readiness card is inside or outside the freeze. Recommendation is
-   inside.
-4. **C sequencing**: whether C2 is promoted standalone during the freeze, or the whole of C
-   waits for post-semester-start.
-5. **2.3**: OpenRouter's future. Not this initiative, but it determines how much A5 and B1
-   coverage the MCP path deserves.
+1. **2.3**: OpenRouter's future remains deferred. It is not an implementation blocker,
+   but it determines how much future A5/B1 coverage the MCP path deserves.
+2. **C3/C4**: whether and when to address in-function imports and module-size boundaries
+   after the live-run deferral. This initiative does not authorize that work now.

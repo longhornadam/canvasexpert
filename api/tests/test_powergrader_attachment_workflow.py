@@ -18,7 +18,7 @@ from api.powergrader import session_builder
 from api.powergrader import student_attachments
 from api.powergrader.assignment_refresh import RefreshBudget, REFRESH_BINARY_LIMIT
 from api.powergrader import assignment_refresh
-from api.webui.config import courses
+from api.platform_services.config import courses
 
 
 def _png_bytes() -> bytes:
@@ -41,7 +41,7 @@ def test_course_display_name_prefers_saved_nickname(monkeypatch):
 
 
 def test_ordinary_ingestion_preserves_all_formats_and_routes_shared_gate(tmp_path, monkeypatch):
-    monkeypatch.setattr(assignment_refresh.canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    monkeypatch.setattr(assignment_refresh.canvas_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
     monkeypatch.setattr(canvas_fetch.workspace, "workspace_root", lambda: str(tmp_path))
 
     payloads = {
@@ -103,7 +103,7 @@ def test_ordinary_ingestion_preserves_all_formats_and_routes_shared_gate(tmp_pat
 
 
 def test_ordinary_download_failure_keeps_failed_evidence_and_expected_parity(tmp_path, monkeypatch):
-    monkeypatch.setattr(canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    monkeypatch.setattr(canvas_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
     monkeypatch.setattr(canvas_fetch.workspace, "workspace_root", lambda: str(tmp_path))
 
     submissions = [{
@@ -137,7 +137,7 @@ def test_ordinary_download_failure_keeps_failed_evidence_and_expected_parity(tmp
 
 
 def test_focused_refresh_budget_reuses_exact_match_and_skips_over_limit(tmp_path, monkeypatch):
-    monkeypatch.setattr(canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    monkeypatch.setattr(canvas_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
     monkeypatch.setattr(canvas_fetch.workspace, "workspace_root", lambda: str(tmp_path))
     budget = RefreshBudget(4)
     existing = tmp_path / "managed.txt"
@@ -170,10 +170,10 @@ def test_focused_refresh_budget_has_exact_ten_mib_boundary():
 
 def test_second_focused_refresh_reuses_manifest_in_saved_course_folder(tmp_path, monkeypatch):
     """The Canvas response name must not redirect a second refresh to a new folder."""
-    from api.webui import config as refresh_config
+    from api.platform_services import config as refresh_config
     monkeypatch.setattr(assignment_refresh.workspace, "workspace_root", lambda: str(tmp_path))
     monkeypatch.setattr(refresh_config, "course_display_name", lambda _course_id: "Saved Course")
-    monkeypatch.setattr(canvas_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    monkeypatch.setattr(canvas_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
     calls = []
     def fake_fetch(*_args, **_kwargs):
         return ([{"id": "submission-1", "user_id": "user-1", "attempt": 1,

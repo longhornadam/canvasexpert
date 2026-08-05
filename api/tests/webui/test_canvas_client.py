@@ -1,7 +1,7 @@
 """Offline pagination receipts for the private-mirror assignment seam."""
 from __future__ import annotations
 
-from api.webui import canvas_client
+from api.platform_services import canvas_client
 
 
 class FakeResponse:
@@ -20,7 +20,7 @@ class FakeResponse:
 def test_complete_collection_accepts_an_empty_single_page(monkeypatch, _client_with):
     calls = _client_with([FakeResponse([])])
 
-    assert canvas_client._canvas_get_all_complete("/api/v1/courses/111/assignments",
+    assert canvas_client.canvas_get_all_complete("/api/v1/courses/111/assignments",
                                                    {"per_page": 100}) == ([], None, True)
     assert calls == [("https://canvas.test/api/v1/courses/111/assignments",
                       {"per_page": 100}, 30)]
@@ -33,7 +33,7 @@ def test_complete_collection_follows_opaque_next_pages_without_reusing_params(mo
         FakeResponse([{"id": 2}]),
     ])
 
-    rows, error, complete = canvas_client._canvas_get_all_complete(
+    rows, error, complete = canvas_client.canvas_get_all_complete(
         "/api/v1/courses/111/assignments", {"per_page": 100})
 
     assert rows == [{"id": 1}, {"id": 2}]
@@ -51,7 +51,7 @@ def test_complete_collection_rejects_a_later_page_failure_without_raw_body(monke
         FakeResponse([], status_code=503, text="private response body https://secret.example"),
     ])
 
-    rows, error, complete = canvas_client._canvas_get_all_complete(
+    rows, error, complete = canvas_client.canvas_get_all_complete(
         "/api/v1/courses/111/assignments", {"per_page": 100})
 
     assert rows is None and error == "HTTP 503" and complete is False
@@ -61,7 +61,7 @@ def test_complete_collection_rejects_a_later_page_failure_without_raw_body(monke
 def test_complete_collection_rejects_non_list_roots(monkeypatch, _client_with):
     _client_with([FakeResponse({"id": 1})])
 
-    assert canvas_client._canvas_get_all_complete("/api/v1/courses/111/assignments") == (
+    assert canvas_client.canvas_get_all_complete("/api/v1/courses/111/assignments") == (
         None, "invalid_response", False)
 
 
@@ -72,7 +72,7 @@ def test_complete_collection_rejects_a_repeated_next_link(monkeypatch, _client_w
         FakeResponse([{"id": 2}], link=f'<{next_url}>; rel="next"'),
     ])
 
-    assert canvas_client._canvas_get_all_complete("/api/v1/courses/111/assignments") == (
+    assert canvas_client.canvas_get_all_complete("/api/v1/courses/111/assignments") == (
         None, "pagination_incomplete", False)
     assert [url for url, _params, _timeout in calls] == [
         "https://canvas.test/api/v1/courses/111/assignments", next_url]
@@ -85,7 +85,7 @@ def test_legacy_collection_client_keeps_its_two_value_contract(monkeypatch, _cli
         FakeResponse([{"id": 2}]),
     ])
 
-    result = canvas_client._canvas_get_all("/api/v1/courses/111/assignments",
+    result = canvas_client.canvas_get_all("/api/v1/courses/111/assignments",
                                             {"per_page": 100})
     assert result == ([{"id": 1}, {"id": 2}], None)
 
@@ -97,7 +97,7 @@ def test_get_retries_only_429_with_capped_numeric_retry_after(monkeypatch, _clie
     sleeps = []
     monkeypatch.setattr(canvas_client.time, "sleep", lambda seconds: sleeps.append(seconds))
     # The synthetic first response asks for a long pause; it is capped.
-    assert canvas_client._canvas_get("/api/v1/courses/111") == ({"id": 1}, None)
+    assert canvas_client.canvas_get("/api/v1/courses/111") == ({"id": 1}, None)
     assert sleeps == [30.0]
 
 
@@ -106,7 +106,7 @@ def test_get_telemetry_keeps_scope_priority_and_actual_queue_wait_identifier_fre
     records = []
     monkeypatch.setattr(canvas_client.operational_log, "emit", lambda *args, **kwargs: records.append(kwargs))
     with canvas_client.canvas_get_telemetry("course.refresh", "post_write", queue_wait_ms=17):
-        assert canvas_client._canvas_get("/api/v1/courses/111") == ({"id": 1}, None)
+        assert canvas_client.canvas_get("/api/v1/courses/111") == ({"id": 1}, None)
     record = records[-1]
     assert record["scope"] == "course.refresh"
     assert record["priority"] == "post_write"
@@ -145,7 +145,7 @@ class FakeStreamResponse:
 def _stream_client_with(monkeypatch, responses, *, token=True):
     calls = []
     queue = iter(responses)
-    monkeypatch.setattr(canvas_client, "_canvas_headers", lambda: (
+    monkeypatch.setattr(canvas_client, "canvas_headers", lambda: (
         ({"Authorization": "Bearer test"}, "https://canvas.test") if token
         else (None, None)))
 

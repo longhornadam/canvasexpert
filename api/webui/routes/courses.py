@@ -15,7 +15,7 @@ from api.mirror import store as mirror_store
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
+from api.platform_services.canvas_client import canvas_get, canvas_get_all, canvas_headers
 
 router = APIRouter(tags=["courses"])
 
@@ -98,7 +98,7 @@ def _local_assignments(course_id: str):
     current, or None to signal the existing live assignments fallback.
 
     ``html_url`` is a transiently-computed display value reconstructed at
-    read time from ``_canvas_headers()`` and the catalog id — never a
+    read time from ``canvas_headers()`` and the catalog id — never a
     persisted field (precedented by the catalog's derived-but-not-persisted
     ``assignment_ids``/``quiz_ids`` HTTP projection fields).
     """
@@ -112,7 +112,7 @@ def _local_assignments(course_id: str):
     records = scope.get("records")
     if not isinstance(records, dict):
         return None
-    _, base = _canvas_headers()
+    _, base = canvas_headers()
     try:
         assignments = [
             {
@@ -159,7 +159,7 @@ def _local_modules(course_id: str):
 @router.get("/api/courses")
 def list_all_courses():
     """All courses the saved token can see (used by both settings and dashboard)."""
-    data, err = _canvas_get("/api/v1/courses", {"per_page": 100, "state[]": "available"})
+    data, err = canvas_get("/api/v1/courses", {"per_page": 100, "state[]": "available"})
     if err:
         return JSONResponse({"ok": False, "error": err})
     courses = [{"id": str(c["id"]), "name": c.get("name", f"course {c['id']}")}
@@ -181,7 +181,7 @@ def course_detail(course_id: str):
     if local_students is not None:
         students, name_by_id = local_students
     else:
-        live_students, err = _canvas_get_all(
+        live_students, err = canvas_get_all(
             f"/api/v1/courses/{course_id}/users",
             {"enrollment_type[]": "student", "per_page": 100})
         if err:
@@ -195,15 +195,15 @@ def course_detail(course_id: str):
 
     group_sets = _local_group_sets(course_id)
     if group_sets is None:
-        cats, _ = _canvas_get_all(
+        cats, _ = canvas_get_all(
             f"/api/v1/courses/{course_id}/group_categories", {"per_page": 50})
         group_sets = []
         for cat in cats or []:
-            groups, _ = _canvas_get_all(
+            groups, _ = canvas_get_all(
                 f"/api/v1/group_categories/{cat['id']}/groups", {"per_page": 100})
             out = []
             for g in groups or []:
-                members, _ = _canvas_get_all(
+                members, _ = canvas_get_all(
                     f"/api/v1/groups/{g['id']}/memberships", {"per_page": 200})
                 out.append({
                     "name":    g["name"],
@@ -214,12 +214,12 @@ def course_detail(course_id: str):
 
     modules = _local_modules(course_id)
     if modules is None:
-        modules, _ = _canvas_get_all(
+        modules, _ = canvas_get_all(
             f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
 
     assignments = _local_assignments(course_id)
     if assignments is None:
-        live_assignments, _ = _canvas_get_all(
+        live_assignments, _ = canvas_get_all(
             f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
         assignments = [{"id":        str(a["id"]),
                         "name":      a.get("name", ""),
@@ -272,7 +272,7 @@ def fetch_group_category_groups(course_id: str, category_id: str) -> tuple[list[
     group). Returns ``(groups_out, None)`` on success, ``(None, err)`` on any
     non-200/transport failure — never raises.
     """
-    hdrs, base = _canvas_headers()
+    hdrs, base = canvas_headers()
     if not hdrs:
         return None, "No token saved."
 
@@ -317,7 +317,7 @@ def load_group_categories(course_id: str) -> tuple[list[dict], str | None, str]:
 
     V3: Also returns membership IDs for Canvas write operations.
     """
-    hdrs, base = _canvas_headers()
+    hdrs, base = canvas_headers()
     if not hdrs:
         return [], "No token saved.", ""
 

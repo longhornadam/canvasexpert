@@ -5,7 +5,7 @@ no-count list paired with a hidden failure.
 import pytest
 
 from api.tests.calendar_fixtures import write_school_calendar
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes import routines_custom
 
 SCHEDULE_ID = "bell_schedule_ordinary"

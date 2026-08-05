@@ -5,7 +5,8 @@ import json
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import config, schedule_setup
+from api.platform_services import config
+from .. import schedule_setup
 
 
 router = APIRouter(tags=["schedule"])

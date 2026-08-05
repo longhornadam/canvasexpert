@@ -6,7 +6,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 @dataclass(frozen=True)

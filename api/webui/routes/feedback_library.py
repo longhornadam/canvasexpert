@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import config
+from api.platform_services import config
 
 router = APIRouter()
 

@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from api import course_catalog
 from api.mirror import read_service
 from api import runtime_paths
-from ..canvas_client import _canvas_get
+from api.platform_services.canvas_client import canvas_get
 from .push_validation import register_validation_routes
 
 router = APIRouter(tags=["push"])
@@ -42,7 +42,7 @@ def get_modules(course_id: str):
     ):
         modules = [{"id": module["id"], "name": module["name"]} for module in records]
         return JSONResponse({"ok": True, "modules": modules})
-    data, err = _canvas_get(f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
+    data, err = canvas_get(f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
     if err:
         return JSONResponse({"ok": False, "error": err})
     modules = [{"id": str(m["id"]), "name": m["name"]}
@@ -71,7 +71,7 @@ def get_assignment_groups(course_id: str):
         )
     ):
         return JSONResponse({"ok": True, "groups": [{"id": group["id"], "name": group["name"]} for group in records]})
-    data, err = _canvas_get(f"/api/v1/courses/{course_id}/assignment_groups")
+    data, err = canvas_get(f"/api/v1/courses/{course_id}/assignment_groups")
     if err:
         return JSONResponse({"ok": False, "error": err})
     groups = [{"id": str(g["id"]), "name": g["name"]}

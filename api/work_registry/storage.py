@@ -10,7 +10,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.storage_support import quarantine_corrupt_file
 
 from .models import (

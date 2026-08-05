@@ -13,7 +13,8 @@ from api.operation_ledger import (
     batches, claims, executor, models, operations, paths, registry, storage,
 )
 from api.operation_ledger.adapters import PageAdapter
-from api.webui import canvas_client, config, pf
+from api.platform_services import canvas_client, config
+from api.webui import pf
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
@@ -77,8 +78,8 @@ def _mock_canvas_send(monkeypatch, responses=None, errors=None):
     return calls
 
 
-def _mock_canvas_get(monkeypatch, responses=None):
-    """Mock _canvas_get with a queue of (data, error) tuples."""
+def _mockcanvas_get(monkeypatch, responses=None):
+    """Mock canvas_get with a queue of (data, error) tuples."""
     calls = []
     queue = list(responses or [])
 
@@ -88,12 +89,12 @@ def _mock_canvas_get(monkeypatch, responses=None):
             return queue.pop(0)
         return None, "no more mock responses"
 
-    monkeypatch.setattr(canvas_client, "_canvas_get", fake_get)
+    monkeypatch.setattr(canvas_client, "canvas_get", fake_get)
     return calls
 
 
-def _mock_canvas_get_all(monkeypatch, responses=None):
-    """Mock _canvas_get_all with a queue of (list, error) tuples."""
+def _mockcanvas_get_all(monkeypatch, responses=None):
+    """Mock canvas_get_all with a queue of (list, error) tuples."""
     queue = list(responses or [])
 
     def fake_get_all(path, params=None, timeout=30):
@@ -101,7 +102,7 @@ def _mock_canvas_get_all(monkeypatch, responses=None):
             return queue.pop(0)
         return [], None
 
-    monkeypatch.setattr(canvas_client, "_canvas_get_all", fake_get_all)
+    monkeypatch.setattr(canvas_client, "canvas_get_all", fake_get_all)
 
 
 # ── Prepare tests ───────────────────────────────────────────────────────
@@ -158,7 +159,7 @@ def test_prepare_unknown_course_rejected(tmp_path, monkeypatch):
 def test_review_freezes_per_target_summaries(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # course 101: no existing page
         ([], None),  # course 102: no existing page
     ])
@@ -184,7 +185,7 @@ def test_review_freezes_per_target_summaries(tmp_path, monkeypatch):
 def test_batch_review_digest_computed(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
-    _mock_canvas_get(monkeypatch, [([], None), ([], None)])
+    _mockcanvas_get(monkeypatch, [([], None), ([], None)])
     path = _write_pageforge(tmp_path)
 
     adapter = PageAdapter()
@@ -226,7 +227,7 @@ def test_apply_creates_pages(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     # Setup capture_baseline (2 courses) + apply-time capture_baseline (2) +
     # check_drift (2) + _get_page_html_url (2)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None), ([], None),  # setup capture_baseline for 2 courses
         ([], None), ([], None),  # apply-time capture_baseline for 2 courses
         ([], None), ([], None),  # check_drift for 2 courses (no existing page → no drift)
@@ -296,7 +297,7 @@ def test_apply_with_drift_blocks(tmp_path, monkeypatch):
     # Baseline at review time: no existing page
     baseline_no_page = {"existing_page": None}
 
-    # At apply time, drift check will call _canvas_get and find a modified page
+    # At apply time, drift check will call canvas_get and find a modified page
     target = models.new_target(
         target_key="tk-1", idempotency_key="ik-1", course_id="101",
         baseline=baseline_no_page)
@@ -316,7 +317,7 @@ def test_apply_with_drift_blocks(tmp_path, monkeypatch):
 
     # At apply time: capture_baseline finds a page, then check_drift detects it
     # capture_baseline (1 course) + check_drift (1 course)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([{"title": "Test Page", "body": "DIFFERENT", "published": False}], None),
         ([{"title": "Test Page", "body": "DIFFERENT", "published": False}], None),
     ])
@@ -333,7 +334,7 @@ def test_partial_failure(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     # Setup capture_baseline (2) + apply-time capture_baseline (2) + check_drift (2) +
     # _get_page_html_url (1 success)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None), ([], None),  # setup capture_baseline
         ([], None), ([], None),  # apply-time capture_baseline
         ([], None), ([], None),  # check_drift (no existing page → no drift)
@@ -382,7 +383,7 @@ def test_timeout_produces_sent_unknown(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     # Setup capture_baseline (1) + apply-time capture_baseline (1) + check_drift (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift (no existing page → no drift)
@@ -432,7 +433,7 @@ def test_retry_only_unresolved(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     # Setup capture_baseline (2) + first apply capture_baseline (2) + check_drift (2) +
     # _get_page_html_url (1 success)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None), ([], None),  # setup capture_baseline
         ([], None), ([], None),  # first apply capture_baseline
         ([], None), ([], None),  # check_drift
@@ -476,7 +477,7 @@ def test_retry_only_unresolved(tmp_path, monkeypatch):
 
     # Retry: only course 102 should be retried
     # capture_baseline (1) + check_drift (1) + _get_page_html_url (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # capture_baseline for course 102
         ([], None),  # check_drift (no existing page → no drift)
         ({"html_url": "http://canvas/102/pages/test-page"}, None),  # _get_page_html_url
@@ -524,7 +525,7 @@ def test_idempotent_skip_with_returned_id(tmp_path, monkeypatch):
 
     # Setup doesn't call capture_baseline (baseline is set manually).
     # Apply: capture_baseline (1) + check_drift (1) + page exists by slug (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # capture_baseline at apply time
         ([], None),  # check_drift (no existing page → no drift)
         ({"url": "existing-slug", "title": "Test Page"}, None),  # page exists by slug → skip
@@ -563,7 +564,7 @@ def test_same_title_is_not_proof(tmp_path, monkeypatch):
     operations.create_operation(op)
 
     # Reconcile: Canvas returns a page with the same title
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([{"title": "Test Page", "body": "<p>Hello world</p>"}], None),
     ])
 
@@ -580,7 +581,7 @@ def test_reconcile_no_title_match_returns_pending(tmp_path, monkeypatch):
     payload = adapter.build_payload({"path": path, "published": False})
 
     target = {"course_id": "101", "returned_object_id": None}
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([{"title": "Different Page", "body": "other"}], None),
     ])
 
@@ -592,7 +593,7 @@ def test_reconcile_with_slug_proves_applied(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     adapter = PageAdapter()
     target = {"course_id": "101", "returned_object_id": "my-slug"}
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ({"url": "my-slug", "title": "Test Page", "html_url": "http://canvas/pages/my-slug"}, None),
     ])
     result = adapter.reconcile({"title": "Test Page"}, target, {})
@@ -604,7 +605,7 @@ def test_reconcile_with_slug_404_returns_pending(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     adapter = PageAdapter()
     target = {"course_id": "101", "returned_object_id": "my-slug"}
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         (None, "HTTP 404: Not Found"),
     ])
     result = adapter.reconcile({"title": "Test Page"}, target, {})
@@ -618,7 +619,7 @@ def test_module_attachment_after_page(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     # Setup capture_baseline (1) + apply-time capture_baseline (1) + check_drift (1) +
     # _get_page_html_url (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift (no existing page → no drift)
@@ -656,7 +657,7 @@ def test_module_attachment_after_page(tmp_path, monkeypatch):
         stored = operations.get_operation(op_id)
         checkpoint_observations.append(stored["targets"][0]["steps"])
         return ([{"id": 55, "name": "Unit 1"}], None)
-    monkeypatch.setattr(canvas_client, "_canvas_get_all", fake_get_all)
+    monkeypatch.setattr(canvas_client, "canvas_get_all", fake_get_all)
     send_calls = _mock_canvas_send(monkeypatch, [
         ({"url": "test-page", "html_url": "http://canvas/101/pages/test-page"}, None),  # create page
         ({"id": 77}, None),  # add module item
@@ -706,12 +707,12 @@ def test_retry_resumes_module_attachment(tmp_path, monkeypatch):
     operations.set_operation_review(op_id, batch)
 
     # At retry: capture_baseline (1) + check_drift (1) + page exists by slug → skip create
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # capture_baseline at apply time
         ([], None),  # check_drift (no existing page → no drift)
         ({"url": "test-page", "title": "Test Page"}, None),  # page exists by slug → skip
     ])
-    _mock_canvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
+    _mockcanvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
     send_calls = _mock_canvas_send(monkeypatch, [
         ({"id": 77}, None),  # module item POST only — no page creation
     ])
@@ -736,7 +737,7 @@ def test_receipt_written_per_apply(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     # Setup capture_baseline (1) + apply-time capture_baseline (1) + check_drift (1) +
     # _get_page_html_url (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift (no existing page → no drift)
@@ -906,7 +907,7 @@ def test_attach_without_item_id_is_sent_unknown(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     # capture_baseline (1) + apply-time capture_baseline (1) + check_drift (1) +
     # _get_page_html_url (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift
@@ -939,7 +940,7 @@ def test_attach_without_item_id_is_sent_unknown(tmp_path, monkeypatch):
     operations.set_operation_review(op_id, batch)
 
     # Page creation succeeds, module found, module item POST returns no id.
-    _mock_canvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
+    _mockcanvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
     _mock_canvas_send(monkeypatch, [
         ({"url": "test-page", "html_url": "http://canvas/101/pages/test-page"}, None),
         ({}, None),  # module item POST — no id in response
@@ -994,12 +995,12 @@ def test_previously_applied_attach_without_item_id_is_sent_unknown(tmp_path, mon
     operations.set_operation_review(op_id, batch)
 
     # capture_baseline (1) + check_drift (1) + page exists by slug (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # capture_baseline
         ([], None),  # check_drift
         ({"url": "test-page", "title": "Test Page"}, None),  # page exists
     ])
-    _mock_canvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
+    _mockcanvas_get_all(monkeypatch, [([{"id": 55, "name": "Unit 1"}], None)])
     send_calls = _mock_canvas_send(monkeypatch, [])
 
     result = executor.retry_operation(op_id)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from api.webui import config, deps, school_calendar
-from api.webui.schooldays import _parse_iso_local, _school_days_late_detail
+from api.platform_services import config
+from api.webui import deps, school_calendar
+from api.webui.schooldays import parse_iso_local, school_days_late_detail
 
 from . import CalendarNeedsAttention, WorkCourseReads, check_deadline, finding, text
 
@@ -47,8 +48,8 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         workflow = text(submission.get("workflow_state")).casefold()
         if workflow != "late" and submission.get("late") is not True:
             continue
-        due = _parse_iso_local(due_at)
-        submitted = _parse_iso_local(submitted_at)
+        due = parse_iso_local(due_at)
+        submitted = parse_iso_local(submitted_at)
         if not due or not submitted:
             continue
         candidates.append((submission, assignment_id, due, submitted, due_at, submitted_at))
@@ -78,7 +79,7 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         "due_at": "",
     })
     for submission, assignment_id, due, submitted, due_at, submitted_at in candidates:
-        school_days, _ = _school_days_late_detail(due, submitted, no_count)
+        school_days, _ = school_days_late_detail(due, submitted, no_count)
         allowed_days = extra_days.get(text(submission.get("user_id")), 0)
         if school_days <= allowed_days:
             continue

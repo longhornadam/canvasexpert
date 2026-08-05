@@ -11,7 +11,7 @@ from datetime import datetime
 
 from api import feedback_pipeline as fp
 from api import openrouter_client as orc
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def privacy_step(step_id: str, label: str, status: str,
@@ -69,7 +69,7 @@ def write_privacy_audit_file(
         os.makedirs(workspace.extended_path(audit_root), exist_ok=True)
         path = os.path.join(
             audit_root,
-            f"{fp._safe(assignment_name)}__powergrader-privacy-audit-{fp._safe(session_id)}.json",
+            f"{fp.safe(assignment_name)}__powergrader-privacy-audit-{fp.safe(session_id)}.json",
         )
         with open(workspace.extended_path(path), "w", encoding="utf-8") as f:
             json.dump({
@@ -108,7 +108,7 @@ def write_openrouter_debug_file(
         os.makedirs(workspace.extended_path(debug_root), exist_ok=True)
         path = os.path.join(
             debug_root,
-            f"{fp._safe(assignment_name)}__openrouter-debug-{fp._safe(session_id)}.json",
+            f"{fp.safe(assignment_name)}__openrouter-debug-{fp.safe(session_id)}.json",
         )
         payload = {
             "created": datetime.now().isoformat(timespec="seconds"),

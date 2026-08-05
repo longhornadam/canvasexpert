@@ -12,7 +12,7 @@ from pathlib import Path
 
 from api import __version__, operational_log, runtime_paths
 from api.mcp_server.contract import TOOL_SCHEMA_VERSION
-from api.webui import config, workspace
+from api.platform_services import config, workspace
 
 
 __all__ = ["health_snapshot", "build_support_bundle"]

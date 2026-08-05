@@ -17,7 +17,7 @@ from .adapter_support import (
     prepend_step as _step,
     replace_step as _replace_local_step,
 )
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 
 
 KIND = "content.quick_assignment"
@@ -98,7 +98,7 @@ class QuickAssignmentAdapter:
         course_id = target["course_id"]
         name = payload.get("name", "")
         baseline = {"existing_assignment": None}
-        assignments, error = canvas_client._canvas_get(
+        assignments, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments",
             params={"per_page": 100, "search_term": name},
         )
@@ -174,7 +174,7 @@ class QuickAssignmentAdapter:
 
         # ── Idempotency: if already applied, verify by ID ──────────────
         if step.get("state") in ("applied", "skipped") and assignment_id:
-            assignment, error = canvas_client._canvas_get(
+            assignment, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
             )
             if not error and assignment:
@@ -195,7 +195,7 @@ class QuickAssignmentAdapter:
                     error_code="assignment_exact_id_unverified",
                 )
         elif assignment_id:
-            assignment, error = canvas_client._canvas_get(
+            assignment, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
             )
             if not error and assignment:
@@ -312,7 +312,7 @@ class QuickAssignmentAdapter:
 
         if not assignment_id:
             name = payload.get("name", "")
-            assignments, error = canvas_client._canvas_get(
+            assignments, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments",
                 params={"per_page": 100, "search_term": name},
             )
@@ -327,7 +327,7 @@ class QuickAssignmentAdapter:
                 "state": "sent_unknown" if has_marker else "pending",
             }
 
-        assignment, error = canvas_client._canvas_get(
+        assignment, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
         )
         if error:
@@ -359,7 +359,7 @@ class QuickAssignmentAdapter:
 
 def _find_assignment_group(course_id: str, name: str) -> int | None:
     """Resolve an assignment group name to its Canvas numeric ID, or None."""
-    data, err = canvas_client._canvas_get_all(
+    data, err = canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/assignment_groups",
         {"per_page": 100},
     )

@@ -46,7 +46,8 @@ from api.dataforge.identity import IdentityMigrationError, VaultIdentity
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
-from api.webui import config, mirror_service, workspace, schedule_setup, school_calendar
+from api.platform_services import config, workspace
+from api.webui import mirror_service, schedule_setup, school_calendar
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_safety, feedback_vault

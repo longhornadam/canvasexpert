@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from api.webui import config, workspace
-from api.webui.config import _io as config_io
+from api.platform_services import config, workspace
+from api.platform_services.config import _io as config_io
 
 
 def _write_json(path: Path, data: dict) -> None:

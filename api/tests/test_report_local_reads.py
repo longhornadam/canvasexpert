@@ -18,7 +18,7 @@ import pytest
 
 from api import report_local_reads
 from api.mirror import store
-from api.webui import workspace
+from api.platform_services import workspace
 
 COURSE_ID = "222"
 ASSIGNMENT_ID = "700020"

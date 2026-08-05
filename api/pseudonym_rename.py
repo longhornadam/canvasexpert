@@ -33,7 +33,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from api import operational_log
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def current_pseudonym(vault, canvas_id: str) -> str:

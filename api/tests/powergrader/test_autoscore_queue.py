@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.powergrader import autoscore_queue
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def _use_workspace(monkeypatch, root):

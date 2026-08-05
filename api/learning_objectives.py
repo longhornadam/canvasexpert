@@ -16,7 +16,7 @@ import threading
 import uuid
 from datetime import date, datetime, timezone
 
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 VERSION = 2

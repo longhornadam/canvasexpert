@@ -21,8 +21,8 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 import requests
 
 from api import operational_log
-from api.webui.canvas_client import _canvas_headers
-from api.webui import workspace
+from api.platform_services.canvas_client import canvas_headers
+from api.platform_services import workspace
 from api.nq_report import html_to_text
 from api.powergrader import student_attachments
 
@@ -890,7 +890,7 @@ def fetch(course_id, assignment_id, core_submissions, *, session=None, sleep=tim
           session_id=None, download=None, course_name="", assignment_name="", materialize_files=True,
           byte_budget=None, evidence_path=None, reusable_records=None,
           cached_snapshot=None, snapshot_callback=None):
-    headers, base = _canvas_headers()
+    headers, base = canvas_headers()
     if not headers or not base:
         return None, "No Canvas token saved — go to Settings."
     session = session or requests.Session()

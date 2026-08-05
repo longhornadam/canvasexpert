@@ -19,8 +19,16 @@ import time
 from api import operational_log
 from api.mirror import coordinator, course_context, new_quizzes, store, sync
 
-from . import config, workspace
-from .canvas_client import _canvas_get, _canvas_get_all, _canvas_get_all_complete, canvas_get_telemetry
+from api.platform_services import config, workspace
+from api.platform_services.canvas_client import (
+    canvas_get as _platform_canvas_get,
+    canvas_get_all as _platform_canvas_get_all,
+    canvas_get_all_complete as _platform_canvas_get_all_complete,
+    canvas_get_telemetry,
+)
+canvas_get = _platform_canvas_get
+canvas_get_all = _platform_canvas_get_all
+canvas_get_all_complete = _platform_canvas_get_all_complete
 from .routes.courses import load_group_categories
 from .routes.names import _vault as _identity_vault
 
@@ -87,13 +95,13 @@ def _scoped_client(scope: str, client):
 def _run_course_context(course_id: str):
     with _telemetry("course_context"):
         result = course_context.refresh_course_context(
-            course_id, canvas_get=_canvas_get, canvas_get_all=_canvas_get_all)
+            course_id, canvas_get=canvas_get, canvas_get_all=canvas_get_all)
         return {"ok": result.get("state") == "current", "state": result.get("state", "failed")}
 
 
 def _run_roster(course_id: str):
     with _telemetry("roster"):
-        return sync.roster_pass(course_id, canvas_get_all=_canvas_get_all)
+        return sync.roster_pass(course_id, canvas_get_all=canvas_get_all)
 
 
 def _run_groups(course_id: str):
@@ -105,7 +113,7 @@ def _run_groups(course_id: str):
 
 def _run_submission_delta(course_id: str):
     with _telemetry("submissions.course_delta"):
-        return sync.refresh_submissions_course_delta(course_id, canvas_get_all=_canvas_get_all)
+        return sync.refresh_submissions_course_delta(course_id, canvas_get_all=canvas_get_all)
 
 
 def _run_new_quiz_metadata(course_id: str):
@@ -115,7 +123,7 @@ def _run_new_quiz_metadata(course_id: str):
         if not isinstance(assignment_map, dict):
             return {"ok": False, "error_class": "assignment_projection_unavailable"}
         return new_quizzes.sync_metadata(
-            course_id, list(assignment_map.values()), canvas_get_all=_canvas_get_all,
+            course_id, list(assignment_map.values()), canvas_get_all=canvas_get_all,
             bypass_cooldown=coordinator.current_worker_context().get("priority") == "manual")
 
 
@@ -217,9 +225,9 @@ def _refresh_groups_on_maintenance(course_id: str, *, load_groups, now: str) -> 
 def _run_heartbeat_course(course: dict, *, canvas_get=None, canvas_get_all=None,
                           canvas_get_all_complete=None, load_groups=None, now=None) -> dict:
     """One course's legacy cadence, called inside a background coordinator job."""
-    canvas_get = canvas_get or _canvas_get
-    canvas_get_all = canvas_get_all or _canvas_get_all
-    canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
+    canvas_get = canvas_get or globals()["canvas_get"]
+    canvas_get_all = canvas_get_all or globals()["canvas_get_all"]
+    canvas_get_all_complete = canvas_get_all_complete or globals()["canvas_get_all_complete"]
     load_groups = load_groups or load_group_categories
     now_iso = now or store.now_iso()
     course_id = str((course or {}).get("id") or "")
@@ -237,6 +245,7 @@ def _run_heartbeat_course(course: dict, *, canvas_get=None, canvas_get_all=None,
         return {"ok": True, "results": []}
     summaries = []
     for pass_name in pass_names:
+        pass_started = time.monotonic()
         try:
             kwargs = {"canvas_get_all": canvas_get_all, "now": now_iso}
             if pass_name in {"full", "delta"}:
@@ -250,6 +259,10 @@ def _run_heartbeat_course(course: dict, *, canvas_get=None, canvas_get_all=None,
         if result.get("ok") and pass_name in {"full", "roster"}:
             result = {**result, "groups": _refresh_groups_on_maintenance(
                 course_id, load_groups=load_groups, now=now_iso)}
+        _emit_refresh_outcome(
+            pass_name, result,
+            duration_ms=max(0, int(round((time.monotonic() - pass_started) * 1000))),
+        )
         summaries.append({"course_id": course_id, "pass": pass_name, **result})
     return {"ok": all(item.get("ok") for item in summaries), "results": summaries}
 
@@ -279,9 +292,9 @@ def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=No
     The 15-minute heartbeat (``run_heartbeat_pass``) never does."""
     if not config.token_is_set():
         return [{"ok": False, "error": "No Canvas token saved — go to Settings."}]
-    canvas_get = canvas_get or _canvas_get
-    canvas_get_all = canvas_get_all or _canvas_get_all
-    canvas_get_all_complete = canvas_get_all_complete or _canvas_get_all_complete
+    canvas_get = canvas_get or globals()["canvas_get"]
+    canvas_get_all = canvas_get_all or globals()["canvas_get_all"]
+    canvas_get_all_complete = canvas_get_all_complete or globals()["canvas_get_all_complete"]
     courses = [c for c in config.saved_courses()
                if not course_id or str(c.get("id")) == str(course_id)]
     if not courses:
@@ -297,12 +310,25 @@ def sync_now(course_id: str | None = None, *, canvas_get=None, canvas_get_all=No
                 cid, canvas_get=canvas_get, canvas_get_all=canvas_get_all, now=now)
         except Exception as exc:
             operational_log.emit("mirror.course_refresh", "failed", error_class=type(exc))
+        started = time.monotonic()
         result = sync.delta_pass(cid, canvas_get_all=canvas_get_all,
                                  canvas_get_all_complete=canvas_get_all_complete, now=now,
                                  bypass_new_quiz_cooldown=True,
                                  course_name=course.get("name"))
+        _emit_refresh_outcome(
+            "delta", result, duration_ms=max(0, int(round((time.monotonic() - started) * 1000)))
+        )
         summaries.append({"course_id": cid, "pass": "delta", **result})
     return summaries
+
+
+def _emit_refresh_outcome(scope: str, result: dict, *, duration_ms: int = 0) -> None:
+    if duration_ms is None:
+        duration_ms = 0
+    outcome = "ok" if result.get("ok") else (
+        "unconfigured" if result.get("state") == "unconfigured" else "failed")
+    operational_log.emit("mirror.refresh", outcome, scope=scope,
+                         duration_ms=duration_ms)
 
 
 def refresh_work_findings() -> None:

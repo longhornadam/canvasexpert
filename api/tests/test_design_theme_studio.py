@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from api.webui import workspace
+from api.platform_services import workspace
 from tools import design_theme_studio
 
 

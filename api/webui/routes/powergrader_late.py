@@ -2,8 +2,9 @@
 
 from datetime import datetime
 
-from .. import config, deps, school_calendar
-from ..schooldays import _parse_iso_local
+from api.platform_services import config
+from .. import deps, school_calendar
+from ..schooldays import parse_iso_local
 from api.powergrader import (ai_workflow, canvas_fetch, late_catchup, session_builder,
                              student_attachments, writing_timeline)
 
@@ -22,8 +23,8 @@ def _resolve_late_catchup_no_count(assignment: dict, submitted: list[dict]) -> t
     """
     span_start = span_end = None
     for sub in submitted:
-        due = _parse_iso_local(sub.get("cached_due_date") or (assignment or {}).get("due_at"))
-        submitted_dt = _parse_iso_local(sub.get("submitted_at"))
+        due = parse_iso_local(sub.get("cached_due_date") or (assignment or {}).get("due_at"))
+        submitted_dt = parse_iso_local(sub.get("submitted_at"))
         if not due or not submitted_dt:
             continue
         span_start = due.date() if span_start is None else min(span_start, due.date())

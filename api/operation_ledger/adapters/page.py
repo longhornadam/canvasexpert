@@ -16,7 +16,8 @@ from .adapter_support import (
     prepend_step as _step,
     replace_step as _replace_local_step,
 )
-from api.webui import canvas_client, config, pf
+from api.platform_services import canvas_client, config
+from api.webui import pf
 
 
 KIND = "content.page"
@@ -82,7 +83,7 @@ class PageAdapter:
         course_id = target["course_id"]
         title = payload.get("title", "")
         baseline = {"existing_page": None}
-        pages, error = canvas_client._canvas_get(
+        pages, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/pages",
             params={"per_page": 100, "search_term": title},
         )
@@ -124,7 +125,7 @@ class PageAdapter:
             return True
         existing = baseline.get("existing_page")
         title = payload.get("title", "")
-        pages, error = canvas_client._canvas_get(
+        pages, error = canvas_client.canvas_get(
             f"/api/v1/courses/{target['course_id']}/pages",
             params={"per_page": 100, "search_term": title},
         )
@@ -151,7 +152,7 @@ class PageAdapter:
         page_url = target.get("returned_object_url") or page_step.get("returned_object_url")
 
         if page_step.get("state") in ("applied", "skipped") and page_slug:
-            page, error = canvas_client._canvas_get(
+            page, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/pages/{page_slug}")
             if not error and page:
                 page_step["state"] = "skipped"
@@ -162,7 +163,7 @@ class PageAdapter:
                                      returned_object_url=page_url,
                                      error_code="page_exact_id_unverified")
         elif page_slug:
-            page, error = canvas_client._canvas_get(
+            page, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/pages/{page_slug}")
             if not error and page:
                 page_step["state"] = "skipped"
@@ -288,7 +289,7 @@ class PageAdapter:
         attach_step["module_id"] = str(module_id)
         item_id = attach_step.get("returned_object_id")
         if attach_step.get("state") in ("applied", "skipped") and item_id:
-            item, error = canvas_client._canvas_get(
+            item, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}")
             if not error and item:
                 attach_step["state"] = "skipped"
@@ -369,7 +370,7 @@ class PageAdapter:
 
         if not page_slug:
             title = payload.get("title", "")
-            pages, error = canvas_client._canvas_get(
+            pages, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/pages",
                 params={"per_page": 100, "search_term": title},
             )
@@ -380,7 +381,7 @@ class PageAdapter:
                 return {"state": "sent_unknown"}
             return {"state": "sent_unknown" if has_marker else "pending"}
 
-        page, error = canvas_client._canvas_get(
+        page, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/pages/{page_slug}")
         if error:
             if "404" in str(error) and not page_step.get("outbound_started_at"):
@@ -404,7 +405,7 @@ class PageAdapter:
 
         item_id = attach_step.get("returned_object_id")
         if item_id:
-            item, item_error = canvas_client._canvas_get(
+            item, item_error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}")
             if not item_error and item:
                 # Prove the exact Page/page_url relationship before applied.
@@ -415,7 +416,7 @@ class PageAdapter:
                 # The stored item ID exists but does not identify this page;
                 # fall through to the exact-match search below.
 
-        items, item_error = canvas_client._canvas_get_all(
+        items, item_error = canvas_client.canvas_get_all(
             f"/api/v1/courses/{course_id}/modules/{module_id}/items",
             {"per_page": 100},
         )
@@ -437,7 +438,7 @@ class PageAdapter:
 
 
 def _read_modules(course_id: str):
-    return canvas_client._canvas_get_all(
+    return canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/modules", {"per_page": 100})
 
 

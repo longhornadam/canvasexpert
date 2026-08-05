@@ -60,7 +60,7 @@ _EVENT_KEYS = {"id", "kind", "label", "shape", "date", "start", "end",
 
 def calendar_path(root=None) -> str | None:
     """Where the canonical document lives, or None when there is no workspace."""
-    from . import workspace
+    from api.platform_services import workspace
     folder = workspace.library_folder("Calendars", root) if root else workspace.library_folder("Calendars")
     return os.path.join(folder, CALENDAR_FILENAME) if folder else None
 

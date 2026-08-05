@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.powergrader.copilot_packet import build_copilot_batches
 
 

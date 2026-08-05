@@ -13,7 +13,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.server import app
 
 

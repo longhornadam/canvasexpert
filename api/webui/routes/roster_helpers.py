@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re as _re
 
-from .. import config
+from api.platform_services import config
 
 
 def _enrollment_section_ids(users: list[dict]) -> dict:

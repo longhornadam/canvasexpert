@@ -29,7 +29,7 @@ def _fake_courses():
     ]
 
 
-def _fake_canvas_get(path, params=None, timeout=20):
+def _fakecanvas_get(path, params=None, timeout=20):
     if "assignments/24680" in path:
         return {"id": 24680, "name": "Exit Ticket",
                 "html_url": "https://c/42/assignments/24680"}, None
@@ -53,7 +53,7 @@ def _fake_canvas_send(method, path, payload, timeout=30):
     }, None
 
 
-def _fake_canvas_get_all(path, params=None, timeout=30):
+def _fakecanvas_get_all(path, params=None, timeout=30):
     if "assignment_groups" in path:
         return [{"id": 55, "name": "Homework"}], None
     return [], None
@@ -160,8 +160,8 @@ def test_verify_targets_rejects_missing_course_id(monkeypatch):
 
 def test_capture_baseline_no_existing(monkeypatch):
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     adapter = QuickAssignmentAdapter()
     payload = adapter.build_payload({"name": "New Assignment"})
@@ -171,8 +171,8 @@ def test_capture_baseline_no_existing(monkeypatch):
 
 def test_capture_baseline_finds_existing(monkeypatch):
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     adapter = QuickAssignmentAdapter()
     payload = adapter.build_payload({"name": "Existing Quiz"})
@@ -242,8 +242,8 @@ def test_execute_creates_assignment(tmp_path, monkeypatch):
         _fake_canvas_send,
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.quick_assignment.config.active_courses",
@@ -309,8 +309,8 @@ def test_execute_handles_canvas_error(tmp_path, monkeypatch):
         fail_send,
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
 
     adapter = QuickAssignmentAdapter()
@@ -359,8 +359,8 @@ def test_execute_handles_canvas_error(tmp_path, monkeypatch):
 
 def test_reconcile_finds_assignment(monkeypatch):
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     adapter = QuickAssignmentAdapter()
     result = adapter.reconcile(
@@ -403,16 +403,16 @@ def test_pipeline_with_mocks(tmp_path, monkeypatch):
         _fake_courses,
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_send",
         _fake_canvas_send,
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get_all",
-        _fake_canvas_get_all,
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get_all",
+        _fakecanvas_get_all,
     )
 
     adapter = registry.get_adapter("content.quick_assignment")

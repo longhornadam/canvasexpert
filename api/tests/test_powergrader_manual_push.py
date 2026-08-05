@@ -23,7 +23,7 @@ def _session():
     }
 
 
-def _canvas_get(path, params=None, timeout=0):
+def canvas_get(path, params=None, timeout=0):
     return ({
         "submission": {"score": 2, "grade": "2", "graded_at": None, "updated_at": "2026-01-01T00:00:00Z"},
         "submission_comments": [],
@@ -35,7 +35,7 @@ def test_review_selects_only_approved_rows_and_persists_frozen_state():
     saved = []
     result, status = session_actions.review_push(
         "session-1", user_ids="", load_session=lambda _: session,
-        save_session=lambda value: saved.append(value), canvas_get=_canvas_get,
+        save_session=lambda value: saved.append(value), canvas_get=canvas_get,
     )
     assert status == 200 and result["ok"] is True
     assert result["user_ids"] == ["user-1", "user-2"]
@@ -53,17 +53,17 @@ def test_direct_apply_and_mismatched_review_are_rejected_without_put():
     send = lambda *args: sent.append(args) or ({}, None)
     direct, code = session_actions.push_grades(
         "session-1", user_ids='["user-1"]', review_token="", load_session=lambda _: session,
-        save_session=lambda _: None, canvas_send=send, canvas_get=_canvas_get,
+        save_session=lambda _: None, canvas_send=send, canvas_get=canvas_get,
     )
     assert code == 409 and direct["code"] == "review_required" and sent == []
     review, _ = session_actions.review_push(
         "session-1", user_ids='["user-1"]', load_session=lambda _: session,
-        save_session=lambda _: None, canvas_get=_canvas_get,
+        save_session=lambda _: None, canvas_get=canvas_get,
     )
     mismatch, code = session_actions.push_grades(
         "session-1", user_ids='["user-2"]', review_token=review["review_token"],
         load_session=lambda _: session, save_session=lambda _: None,
-        canvas_send=send, canvas_get=_canvas_get,
+        canvas_send=send, canvas_get=canvas_get,
     )
     assert code == 409 and mismatch["code"] == "review_mismatch" and sent == []
 
@@ -72,10 +72,10 @@ def test_score_drift_blocks_before_any_put():
     session = _session()
     review, _ = session_actions.review_push(
         "session-1", user_ids='["user-1"]', load_session=lambda _: session,
-        save_session=lambda _: None, canvas_get=_canvas_get,
+        save_session=lambda _: None, canvas_get=canvas_get,
     )
     def drifted(*args, **kwargs):
-        data, _ = _canvas_get(*args, **kwargs)
+        data, _ = canvas_get(*args, **kwargs)
         data["submission"]["updated_at"] = "2026-01-02T00:00:00Z"
         return data, None
     sent = []
@@ -91,7 +91,7 @@ def test_partial_success_updates_only_confirmed_rows_and_repeat_is_idempotent():
     session = _session()
     review, _ = session_actions.review_push(
         "session-1", user_ids='["user-1", "user-2"]', load_session=lambda _: session,
-        save_session=lambda _: None, canvas_get=_canvas_get,
+        save_session=lambda _: None, canvas_get=canvas_get,
     )
     calls = []
     def send(method, path, payload):
@@ -100,7 +100,7 @@ def test_partial_success_updates_only_confirmed_rows_and_repeat_is_idempotent():
     result, code = session_actions.push_grades(
         "session-1", user_ids=json.dumps(review["user_ids"]), review_token=review["review_token"],
         load_session=lambda _: session, save_session=lambda _: None,
-        canvas_send=send, canvas_get=_canvas_get,
+        canvas_send=send, canvas_get=canvas_get,
     )
     assert code == 200 and result["ok"] is False
     assert session["students"][0]["posted"] is True
@@ -109,7 +109,7 @@ def test_partial_success_updates_only_confirmed_rows_and_repeat_is_idempotent():
     again, code = session_actions.push_grades(
         "session-1", user_ids=json.dumps(review["user_ids"]), review_token=review["review_token"],
         load_session=lambda _: session, save_session=lambda _: None,
-        canvas_send=send, canvas_get=_canvas_get,
+        canvas_send=send, canvas_get=canvas_get,
     )
     assert code == 200 and again["results"][0]["status"] == "already_applied"
     assert len(calls) == 3
@@ -128,7 +128,7 @@ def test_comment_only_push_sends_comments_and_never_scores():
     session = _new_quiz_session()
     review, _ = session_actions.review_push(
         "session-1", user_ids="", load_session=lambda _: session,
-        save_session=lambda _: None, canvas_get=_canvas_get,
+        save_session=lambda _: None, canvas_get=canvas_get,
     )
     assert review["ok"] is True
     assert review["writeback_mode"] == "comments_only"
@@ -142,7 +142,7 @@ def test_comment_only_push_sends_comments_and_never_scores():
         "session-1", user_ids=json.dumps(review["user_ids"]), review_token=review["review_token"],
         load_session=lambda _: session, save_session=lambda _: None,
         canvas_send=lambda method, path, payload: calls.append((method, path, payload)) or ({}, None),
-        canvas_get=_canvas_get,
+        canvas_get=canvas_get,
     )
     assert code == 200 and result["ok"] is True and result["pushed"] == 1
     assert len(calls) == 1
@@ -156,7 +156,7 @@ def test_comment_only_review_rejects_students_without_feedback():
     session = _new_quiz_session()
     result, code = session_actions.review_push(
         "session-1", user_ids='["user-2"]', load_session=lambda _: session,
-        save_session=lambda _: None, canvas_get=_canvas_get,
+        save_session=lambda _: None, canvas_get=canvas_get,
     )
     assert code == 200 and result["ok"] is False
     assert result["code"] == "invalid_selection"
@@ -168,7 +168,7 @@ def test_legacy_new_quiz_session_without_comment_flag_stays_blocked():
     session["canvas_writeback_supported"] = False
     result, code = session_actions.review_push(
         "session-1", user_ids="", load_session=lambda _: session,
-        save_session=lambda _: None, canvas_get=_canvas_get,
+        save_session=lambda _: None, canvas_get=canvas_get,
     )
     assert code == 200 and result["code"] == "canvas_writeback_unsupported"
 

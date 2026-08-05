@@ -31,7 +31,7 @@ UNSUPPORTED_LEGACY_EXTS = {".doc", ".ppt", ".xls", ".pages", ".key", ".numbers"}
 # ── Text decoding / normalization ─────────────────────────────────────
 
 
-def _decode_bytes(data: bytes) -> str:
+def decode_bytes(data: bytes) -> str:
     for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
         try:
             return data.decode(enc)
@@ -45,17 +45,17 @@ def _strip_html(text: str) -> str:
     text = re.sub(r"(?s)<br\s*/?>", "\n", text)
     text = re.sub(r"(?s)</p\s*>", "\n\n", text)
     text = re.sub(r"(?s)<[^>]+>", " ", text)
-    return _collapse_ws(unescape(text))
+    return collapse_ws(unescape(text))
 
 
 def _strip_rtf(text: str) -> str:
     text = re.sub(r"\\'[0-9a-fA-F]{2}", " ", text)
     text = re.sub(r"\\[a-zA-Z]+\d* ?", " ", text)
     text = text.replace("{", " ").replace("}", " ")
-    return _collapse_ws(text)
+    return collapse_ws(text)
 
 
-def _collapse_ws(text: str) -> str:
+def collapse_ws(text: str) -> str:
     lines = [re.sub(r"[ \t]+", " ", line).strip() for line in (text or "").splitlines()]
     compact: list[str] = []
     blank = False
@@ -94,7 +94,7 @@ def _extract_pdf(data: bytes) -> str:
             page_text = ""
         if page_text.strip():
             chunks.append(f"[Page {i}]\n{page_text.strip()}")
-    return _collapse_ws("\n\n".join(chunks))
+    return collapse_ws("\n\n".join(chunks))
 
 
 def _extract_docx(data: bytes) -> str:
@@ -110,7 +110,7 @@ def _extract_docx(data: bytes) -> str:
             cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
             if cells:
                 chunks.append(" | ".join(cells))
-    return _collapse_ws("\n".join(chunks))
+    return collapse_ws("\n".join(chunks))
 
 
 def _xml_text_nodes(raw: bytes) -> list[str]:
@@ -136,7 +136,7 @@ def _extract_pptx(data: bytes) -> str:
             texts = _xml_text_nodes(zf.read(name))
             if texts:
                 chunks.append(f"[Slide {i}]\n" + "\n".join(texts))
-    return _collapse_ws("\n\n".join(chunks))
+    return collapse_ws("\n\n".join(chunks))
 
 
 def _extract_xlsx(data: bytes) -> str:
@@ -186,7 +186,7 @@ def _extract_xlsx(data: bytes) -> str:
                     values.append(text_value)
             if values:
                 rows.append(f"[Sheet {sheet_idx}]\n" + "\n".join(values))
-    return _collapse_ws("\n\n".join(rows))
+    return collapse_ws("\n\n".join(rows))
 
 
 def _extract_odt(data: bytes) -> str:
@@ -194,7 +194,7 @@ def _extract_odt(data: bytes) -> str:
         if "content.xml" not in zf.namelist():
             return ""
         texts = _xml_text_nodes(zf.read("content.xml"))
-    return _collapse_ws("\n".join(texts))
+    return collapse_ws("\n".join(texts))
 
 
 # ── Public extraction entry point ──────────────────────────────────────
@@ -226,13 +226,13 @@ def extract_text_from_bytes(filename: str, data: bytes) -> tuple[str, list[str]]
     elif ext == ".odt":
         text = _extract_odt(data)
     else:
-        text = _decode_bytes(data)
+        text = decode_bytes(data)
         if ext in {".html", ".htm"}:
             text = _strip_html(text)
         elif ext == ".rtf":
             text = _strip_rtf(text)
         else:
-            text = _collapse_ws(text)
+            text = collapse_ws(text)
 
     text, truncated = _truncate(text)
     if truncated:

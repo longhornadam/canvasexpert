@@ -15,7 +15,7 @@ report. The binding constraint that comes with it: **this path must never be
 exposed as an MCP tool.** Doing so would put a live Canvas path under the
 assistant, which is exactly what the law forbids.
 
-Both calls go through `api.webui.canvas_client` rather than
+Both calls go through `api.platform_services.canvas_client` rather than
 `api.submission_transport`, which builds its own session with neither Canvas
 429 retry nor the mirror coordinator's cooperative yield. One teacher-watched
 report can afford that; an unattended sequential pass over a class of thirty
@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from api.powergrader import student_attachments
-from api.webui import canvas_client
+from api.platform_services import canvas_client
 
 # Generous for a text-bearing DOCX -- a 1500-word essay is tens of kilobytes,
 # a few megabytes once a student pastes in photographs -- while still bounding
@@ -77,7 +77,7 @@ class AcquiredText:
 
 def transport_ready() -> bool:
     """True when this machine has a Canvas token to fetch an upload with."""
-    headers, _base = canvas_client._canvas_headers()
+    headers, _base = canvas_client.canvas_headers()
     return bool(headers)
 
 
@@ -209,7 +209,7 @@ def text_for(course_id, assignment_id, canvas_user_id) -> AcquiredText:
 def _acquire(course_id, assignment_id, canvas_user_id) -> AcquiredText:
     path = (f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
             f"/submissions/{canvas_user_id}")
-    data, error = canvas_client._canvas_get(path)
+    data, error = canvas_client.canvas_get(path)
     if error or not isinstance(data, dict):
         reason = error or "Canvas returned no submission record"
         return AcquiredText(notes=(f"could not read this submission from Canvas ({reason})",),

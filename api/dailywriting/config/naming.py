@@ -7,7 +7,7 @@ the string, so the two cannot drift.
 Do not use "Forge": that word already names Canvas Expert's authoring content
 kinds (RubricForge and siblings), and a collision would corrupt the docs.
 
-Not to be confused with `api.webui.workspace.SYSTEM_NAME`, which is the name
+Not to be confused with `api.platform_services.workspace.SYSTEM_NAME`, which is the name
 of the workspace's `_System` folder and has nothing to do with this.
 """
 from __future__ import annotations

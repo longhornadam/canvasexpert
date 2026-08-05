@@ -6,8 +6,8 @@ from fastapi.responses import JSONResponse
 from api import assignment_collection, course_catalog, operational_log
 from api.mirror import sync as mirror_sync
 
-from .. import config
-from ..canvas_client import _canvas_get_all, _canvas_get_all_complete
+from api.platform_services import config
+from api.platform_services.canvas_client import canvas_get_all, canvas_get_all_complete
 
 
 router = APIRouter(tags=["course-catalog"])
@@ -46,7 +46,7 @@ def refresh_course_catalog(course_id: str = Form("")):
     course_name = str(course.get("nickname") or course.get("name") or course_id)
     try:
         receipt = assignment_collection.acquire_assignment_collection(
-            course_id, _canvas_get_all_complete)
+            course_id, canvas_get_all_complete)
     except (OSError, ValueError):
         return JSONResponse({"ok": False, "error": "The course list could not be synchronized."})
 
@@ -55,8 +55,8 @@ def refresh_course_catalog(course_id: str = Form("")):
         result = course_catalog.refresh_catalog(
             course_id,
             course_name,
-            canvas_get_all=_canvas_get_all,
-            canvas_get_all_complete=_canvas_get_all_complete,
+            canvas_get_all=canvas_get_all,
+            canvas_get_all_complete=canvas_get_all_complete,
             assignment_receipt=receipt,
         )
     except (OSError, ValueError):

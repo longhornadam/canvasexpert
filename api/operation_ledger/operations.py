@@ -1,12 +1,22 @@
 """Operation CRUD helpers — thin wrappers over the validated storage layer."""
 import copy
 
+from api import operational_log
+
 from . import models, storage
 
 
 def create_operation(operation: dict) -> dict:
     """Persist a new operation record. Returns a deep copy."""
-    return storage.upsert_operation(operation)
+    count = len(operation.get("targets") or [])
+    try:
+        result = storage.upsert_operation(operation)
+    except Exception as exc:
+        operational_log.emit("operation_ledger.write", "failed", count=count,
+                             error_class=type(exc))
+        raise
+    operational_log.emit("operation_ledger.write", "ok", count=count)
+    return result
 
 
 def get_operation(operation_id: str) -> dict | None:

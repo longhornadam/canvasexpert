@@ -441,7 +441,7 @@ def test_submission_comments_state_failure_leaves_last_good_submission_files_unt
 # --- unconfigured workspace --------------------------------------------------------
 
 def test_writers_raise_without_workspace(monkeypatch):
-    from api.webui import workspace
+    from api.platform_services import workspace
     monkeypatch.setattr(workspace, "workspace_root", lambda: None)
     try:
         store.write_roster(COURSE, USERS, SECTIONS)

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from api.storage_support import atomic_write_json
-from api.webui import workspace
+from api.platform_services import workspace
 
 from . import store
 

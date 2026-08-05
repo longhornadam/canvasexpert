@@ -13,7 +13,7 @@ from api.operation_ledger import (
 )
 from api.operation_ledger.adapters import QuizAdapter
 from api.operation_ledger.adapters import quiz as quiz_adapter_module
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 
 
 # ── Sample plan ──────────────────────────────────────────────────────────
@@ -115,8 +115,8 @@ def _mock_canvas_send(monkeypatch, responses=None):
     return calls
 
 
-def _mock_canvas_get(monkeypatch, responses=None):
-    """Mock _canvas_get with a queue of (data, error) tuples."""
+def _mockcanvas_get(monkeypatch, responses=None):
+    """Mock canvas_get with a queue of (data, error) tuples."""
     calls = []
     queue = list(responses or [])
 
@@ -126,12 +126,12 @@ def _mock_canvas_get(monkeypatch, responses=None):
             return queue.pop(0)
         return None, "no more mock responses"
 
-    monkeypatch.setattr(canvas_client, "_canvas_get", fake_get)
+    monkeypatch.setattr(canvas_client, "canvas_get", fake_get)
     return calls
 
 
-def _mock_canvas_get_all(monkeypatch, responses=None):
-    """Mock _canvas_get_all with a queue of (list, error) tuples."""
+def _mockcanvas_get_all(monkeypatch, responses=None):
+    """Mock canvas_get_all with a queue of (list, error) tuples."""
     queue = list(responses or [])
 
     def fake_get_all(path, params=None, timeout=30):
@@ -139,7 +139,7 @@ def _mock_canvas_get_all(monkeypatch, responses=None):
             return queue.pop(0)
         return [], None
 
-    monkeypatch.setattr(canvas_client, "_canvas_get_all", fake_get_all)
+    monkeypatch.setattr(canvas_client, "canvas_get_all", fake_get_all)
 
 
 # ── Protocol conformance ─────────────────────────────────────────────────
@@ -236,7 +236,7 @@ def test_capture_baseline_no_existing(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # no existing assignments
     ])
 
@@ -251,7 +251,7 @@ def test_capture_baseline_with_existing_new_quiz(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([{"id": 555, "name": "Algebra Quiz 1", "new_quizzes": True,
            "published": False, "html_url": "http://canvas/assignments/555"}], None),
     ])
@@ -311,7 +311,7 @@ def test_review_freezes_per_target_summaries(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # course 101: no existing
         ([], None),  # course 102: no existing
     ])
@@ -342,7 +342,7 @@ def test_review_with_existing_quiz(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([{"id": 555, "name": "Algebra Quiz 1", "new_quizzes": True,
            "published": False, "html_url": "http://canvas/assignments/555"}], None),
     ])
@@ -362,7 +362,7 @@ def test_batch_review_digest_computed(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None), ([], None),
     ])
 
@@ -405,13 +405,13 @@ def test_apply_creates_quiz_and_items(tmp_path, monkeypatch):
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
     # capture_baseline: setup (1) + apply-time (1) + verify after patch (1)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline (assignments search)
         ([], None),  # apply-time capture_baseline (assignments search)
         # Assignment verify after patch for course 101
         ({"id": "1001", "name": "Algebra Quiz 1", "published": True}, None),
     ])
-    _mock_canvas_get_all(monkeypatch, [
+    _mockcanvas_get_all(monkeypatch, [
         ([{"id": 10, "name": "Unit 1"}], None),  # module lookup
     ])
     # Mock Canvas POST for quiz create, 2 items, patch assignment, module attach
@@ -476,7 +476,7 @@ def test_apply_without_module(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch, plan=SAMPLE_PLAN_NO_MODULE)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ({"id": "1001", "name": "Algebra Quiz 1", "published": True}, None),  # verify after patch
@@ -522,7 +522,7 @@ def test_apply_without_assignment_settings(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch, plan=SAMPLE_PLAN_NO_SETTINGS)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift
@@ -567,7 +567,7 @@ def test_apply_quiz_create_failure(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift
@@ -610,7 +610,7 @@ def test_apply_item_create_failure(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift
@@ -653,7 +653,7 @@ def test_apply_quiz_create_sent_unknown(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ([], None),  # check_drift
@@ -696,14 +696,14 @@ def test_apply_retry_resumes_unfinished_item(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # setup capture_baseline
         ([], None),  # apply-time capture_baseline
         ({"id": 1001, "title": "Algebra Quiz 1"}, None),  # verify existing quiz
         ({"id": 2001}, None),  # verify item 1
         ({"id": "1001", "name": "Algebra Quiz 1", "published": True}, None),  # verify after patch
     ])
-    _mock_canvas_get_all(monkeypatch, [
+    _mockcanvas_get_all(monkeypatch, [
         ([{"id": 10, "name": "Unit 1"}], None),  # module lookup
     ])
     send_calls = _mock_canvas_send(monkeypatch, [
@@ -758,11 +758,11 @@ def test_reconcile_applied_quiz(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ({"id": 1001, "title": "Algebra Quiz 1"}, None),  # quiz verify
         ({"id": 2001}, None),  # item 1 verify
         ({"id": 2002}, None),  # item 2 verify
-        # Module item lookup - single item dict from _canvas_get
+        # Module item lookup - single item dict from canvas_get
         ({"id": 3001, "type": "Assignment", "content_id": 1001}, None),
     ])
 
@@ -795,7 +795,7 @@ def test_reconcile_pending_when_no_quiz_id_and_no_marker(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # no matching assignments
     ])
 
@@ -810,7 +810,7 @@ def test_reconcile_sent_unknown_when_quiz_missing_and_has_marker(tmp_path, monke
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         (None, "HTTP 404"),  # quiz not found
     ])
 
@@ -880,19 +880,19 @@ def test_plan_no_network(tmp_path, monkeypatch):
     _mock_plan_subprocess(monkeypatch)
 
     # Verify canvas_client is never called during build_payload
-    original_get = canvas_client._canvas_get
+    original_get = canvas_client.canvas_get
     original_send = canvas_client._canvas_send
     calls = []
 
     def track_get(*a, **kw):
-        calls.append("_canvas_get")
+        calls.append("canvas_get")
         return original_get(*a, **kw)
 
     def track_send(*a, **kw):
         calls.append("_canvas_send")
         return original_send(*a, **kw)
 
-    monkeypatch.setattr(canvas_client, "_canvas_get", track_get)
+    monkeypatch.setattr(canvas_client, "canvas_get", track_get)
     monkeypatch.setattr(canvas_client, "_canvas_send", track_send)
 
     adapter = QuizAdapter()
@@ -907,7 +907,7 @@ def test_review_no_full_item_bodies(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_active_courses(monkeypatch)
     _mock_plan_subprocess(monkeypatch)
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),
     ])
 

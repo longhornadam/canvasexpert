@@ -24,10 +24,10 @@ import json
 import os
 import tempfile
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
-from api.work_registry.providers.home_attention import _PROVEN_STAFF_ROLES, _author_role
+from api.work_registry.providers.home_attention import PROVEN_STAFF_ROLES, author_role
 
 # Single generic label for any of home_attention's proven staff roles (admin,
 # administrator, instructor, staff, ta, teacher, teaching_assistant) — the report
@@ -122,7 +122,7 @@ def comment_author_label(author_id, author_role, report_user_id, report_student_
 
     - The report's own student's comments show ``report_student_name``.
     - A proven-staff author (the exact role vocabulary already defined in
-      `home_attention._PROVEN_STAFF_ROLES`) shows a generic role label.
+      `home_attention.PROVEN_STAFF_ROLES`) shows a generic role label.
     - Any other author's name is not guessed at: this returns ``""`` so the
       comment still renders (via `student_packet._info_blocks`'s blank-label
       formatting) without a name, rather than being dropped — the comment's
@@ -132,7 +132,7 @@ def comment_author_label(author_id, author_role, report_user_id, report_student_
     author_id = str(author_id or "")
     if author_id and report_user_id is not None and author_id == str(report_user_id):
         return report_student_name
-    if str(author_role or "").casefold() in _PROVEN_STAFF_ROLES:
+    if str(author_role or "").casefold() in PROVEN_STAFF_ROLES:
         return STAFF_LABEL
     return ""
 
@@ -159,7 +159,7 @@ def apply_comment_display(subs, report_user_id, report_student_name):
             if not isinstance(comment, dict):
                 continue
             label = comment_author_label(
-                comment.get("author_id"), _author_role(comment),
+                comment.get("author_id"), author_role(comment),
                 report_user_id, report_student_name,
             )
             comment = dict(comment)

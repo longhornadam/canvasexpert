@@ -5,7 +5,7 @@ check, (b) the matching ``mirror_queries`` accessor, and (c) the exact live
 Canvas endpoint/params ``api/webui/mirror_reads.py`` already uses for that
 same collection. This module owns no Canvas import and no persistence: a
 live fallback is only ever made through the caller-injected ``live_reader``
-(callers pass ``_canvas_get_all``; tests inject fakes), and only for the
+(callers pass ``canvas_get_all``; tests inject fakes), and only for the
 three named scopes below. Unknown scopes are rejected with a structured
 result — never resolved to an arbitrary URL.
 

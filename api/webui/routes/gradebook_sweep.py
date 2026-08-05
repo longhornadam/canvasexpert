@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 from api.operation_ledger.adapters.sweep import _compute_sweep
 
-from .. import config
+from api.platform_services import config
 
 router = APIRouter(tags=["gradebook"])
 

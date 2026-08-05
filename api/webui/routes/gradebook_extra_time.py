@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import config
+from api.platform_services import config
 from .gradebook_common import _course_students, _roster_students_or_none
 
 router = APIRouter(tags=["gradebook"])

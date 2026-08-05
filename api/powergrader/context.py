@@ -5,7 +5,8 @@ import os
 
 from api import feedback_vault
 
-from api.webui import source_materials, workspace
+from api.platform_services import workspace
+from api.webui import source_materials
 from api.webui.deps import list_rubric_files
 
 

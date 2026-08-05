@@ -13,7 +13,7 @@ import os
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse
 
-from .. import config, workspace
+from api.platform_services import config, workspace
 from ..deps import templates
 
 router = APIRouter(tags=["onboarding"])

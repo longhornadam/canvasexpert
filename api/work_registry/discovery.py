@@ -6,8 +6,8 @@ import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 
-from api.webui import config
-from api.webui.canvas_client import _canvas_get_all
+from api.platform_services import config
+from api.platform_services.canvas_client import canvas_get_all
 
 from . import storage
 from .models import validate_job, validate_registry_document
@@ -53,7 +53,7 @@ def _scan_course(course: dict, *, now: str, deadline: float, canvas_get_all=None
     course_id = _course_id(course)
     if not course_id:
         raise ProviderFailure()
-    source_get_all = _canvas_get_all if canvas_get_all is None else canvas_get_all
+    source_get_all = canvas_get_all if canvas_get_all is None else canvas_get_all
     reads = WorkCourseReads(course_id, deadline=deadline, live_reader=source_get_all)
     findings = []
     errors = []

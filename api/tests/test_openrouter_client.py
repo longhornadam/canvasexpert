@@ -6,7 +6,7 @@ import base64
 import pytest
 
 from api import openrouter_client as orc
-from api.webui import config
+from api.platform_services import config
 
 BUNDLE = {"quiz_title": "THG", "students": [
     {"pseudonym": "S001", "responses": [

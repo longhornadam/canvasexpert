@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from api import operational_log
 
 from .. import mirror_service
-from ..canvas_client import _canvas_get, _canvas_send
+from api.platform_services.canvas_client import canvas_get, _canvas_send
 from ..gradebook_service import _apply_curve_model, _load_curve_events, _save_curve_events
 from ..mirror_reads import assignments_or_live
 from .gradebook_common import _assignment, _assignment_submissions, _course_assignments, _course_students
@@ -192,7 +192,7 @@ def revert_curve(event_id: str = Form(...), course_id: str = Form(...),
         uid = str(st["user_id"])
         if target_uids and uid not in target_uids:
             continue
-        current_sub, _ = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{aid}/submissions/{uid}")
+        current_sub, _ = canvas_get(f"/api/v1/courses/{course_id}/assignments/{aid}/submissions/{uid}")
         current_score = current_sub.get("score") if current_sub else None
         drifted = (current_score is not None and st.get("curved_score") is not None
                    and abs(float(current_score) - float(st["curved_score"])) > 0.01)

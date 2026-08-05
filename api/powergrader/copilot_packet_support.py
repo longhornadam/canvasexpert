@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from api import feedback_pipeline as fp
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def write_text(path: str, text: str) -> None:

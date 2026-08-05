@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from api import report_local_reads, storage_support
-from api.webui import workspace
+from api.platform_services import workspace
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="MAX_PATH 260-char limit is Windows-only")
 

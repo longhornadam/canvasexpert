@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from api.storage_support import atomic_write_json
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 MIRROR_VERSION = 1
@@ -436,7 +436,7 @@ def validate_submission_comments_state(document: dict, course_id) -> dict:
     if document.get("state") not in SUBMISSION_COMMENTS_STATES:
         raise ValueError("submission comments state is invalid")
     # error_code is a free-form sanitized string, not a closed set: this sidecar's
-    # only writer (full_pass) reuses the same course_catalog._error_code() value
+    # only writer (full_pass) reuses the same course_catalog.error_code() value
     # that also feeds the unrestricted-string full/delta pass envelope (record_pass /
     # _validate_envelope), so a narrower allowlist here would reject legitimate codes.
     if not isinstance(document.get("error_code"), str):
@@ -600,7 +600,7 @@ def _attempt_record(entry: dict) -> dict | None:
 
 def _comment_record(entry: dict) -> dict:
     # author_role uses the same fallback chain as the work-registry
-    # classifier (home_attention._author_role) so staff-authored comments
+    # classifier (home_attention.author_role) so staff-authored comments
     # stay provably staff when served from the mirror. Role label only —
     # still no names, avatars, or attachments.
     author = entry.get("author") if isinstance(entry.get("author"), dict) else {}

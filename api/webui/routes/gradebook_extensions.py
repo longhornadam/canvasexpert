@@ -5,8 +5,8 @@ from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
 from .. import deps, school_calendar
-from ..canvas_client import _canvas_get, _canvas_send
-from ..schooldays import _parse_iso_local
+from api.platform_services.canvas_client import canvas_get, _canvas_send
+from ..schooldays import parse_iso_local
 
 router = APIRouter(tags=["gradebook"])
 
@@ -22,10 +22,10 @@ def extend_due(course_id: str = Form(...), assignment_id: str = Form(...),
     if not sids:
         return JSONResponse({"ok": False, "error": "no students selected"})
 
-    a, err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
+    a, err = canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
     if err:
         return JSONResponse({"ok": False, "error": err})
-    due = _parse_iso_local(a.get("due_at"))
+    due = parse_iso_local(a.get("due_at"))
     if not due:
         return JSONResponse({"ok": False,
                              "error": "assignment has no due date — set one in Canvas first"})

@@ -9,9 +9,10 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from api import openrouter_client as orc
 
-from .. import config, mirror_service, source_materials, workspace
+from api.platform_services import config, workspace
+from .. import mirror_service, source_materials
 from api import course_scope, operational_log
-from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
+from api.platform_services.canvas_client import canvas_get, canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
 from api.powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
                              import_results, late_catchup, privacy,
@@ -165,7 +166,7 @@ def pg_estimate(
     if not course_id or not assignment_id:
         return JSONResponse({"ok": False, "error": "Select a course and assignment first."})
 
-    adata, err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
+    adata, err = canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
     if err:
         return JSONResponse({"ok": False, "error": err})
     adata = adata or {}
@@ -409,8 +410,8 @@ def pg_start(
                 trigger_result = run_interactive_autopush(
                     session=session,
                     trigger="assisted_start",
-                    canvas_get_all=_canvas_get_all,
-                    canvas_get=_canvas_get,
+                    canvas_get_all=canvas_get_all,
+                    canvas_get=canvas_get,
                     canvas_send=_canvas_send,
                     only_user_ids=None,
                 )
@@ -546,8 +547,8 @@ def pg_late_score(session_id: str):
             trigger_result = run_interactive_autopush(
                 session=session,
                 trigger="assisted_late",
-                canvas_get_all=_canvas_get_all,
-                canvas_get=_canvas_get,
+                canvas_get_all=canvas_get_all,
+                canvas_get=canvas_get,
                 canvas_send=_canvas_send,
                 only_user_ids=set(appended_user_ids),
             )
@@ -613,8 +614,8 @@ def pg_import_results(
                     trigger_result = run_interactive_autopush(
                         session=session,
                         trigger="packet_import",
-                        canvas_get_all=_canvas_get_all,
-                        canvas_get=_canvas_get,
+                        canvas_get_all=canvas_get_all,
+                        canvas_get=canvas_get,
                         canvas_send=_canvas_send,
                         only_user_ids=updated_user_ids,
                     )
@@ -678,7 +679,7 @@ def pg_push_review(
         user_ids=user_ids,
         load_session=_load_session,
         save_session=_save_session,
-        canvas_get=_canvas_get,
+        canvas_get=canvas_get,
     )
     return JSONResponse(payload, status_code=status_code)
 
@@ -711,7 +712,7 @@ def pg_push(
         load_session=_load_session,
         save_session=_save_session,
         canvas_send=_canvas_send,
-        canvas_get=_canvas_get,
+        canvas_get=canvas_get,
     )
     if status_code == 200 and payload.get("pushed"):
         _notify_write_through(_load_session(session_id), payload.get("pushed"))

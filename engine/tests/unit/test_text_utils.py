@@ -42,7 +42,7 @@ class TestSafeFilenameComponent(unittest.TestCase):
 
 class TestDelegatingCallers(unittest.TestCase):
     def test_workspace_safe_component_matches_shared_helper(self):
-        from api.webui.workspace import safe_component
+        from api.platform_services.workspace import safe_component
 
         self.assertEqual(safe_component("Chapter 5: Quiz"), safe_filename_component("Chapter 5: Quiz"))
 
@@ -59,7 +59,7 @@ class TestDelegatingCallers(unittest.TestCase):
         self.assertEqual(_sanitize_filename("Essay: Grading"), "Essay_ Grading")
 
     def test_feedback_contract_and_portfolio_agree(self):
-        from api.feedback_contract import _safe as feedback_safe
+        from api.feedback_contract import safe as feedback_safe
         from api.portfolio import _safe as portfolio_safe
 
         self.assertEqual(feedback_safe("O'Brien's (Group A) - Essay!"), "O'Brien's (Group A) - Essay!")

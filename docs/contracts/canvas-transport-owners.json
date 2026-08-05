@@ -455,7 +455,7 @@
       "reason": "Native-session bootstrap step used only to resolve New Quiz file-upload evidence; deliberately best-effort and never creates a Canvas write path (module docstring)."
     },
     {
-      "path": "api/webui/canvas_client.py",
+      "path": "api/platform_services/canvas_client.py",
       "symbol": "_canvas_send",
       "detector": "attr:request",
       "call_index": 1,

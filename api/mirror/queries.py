@@ -19,7 +19,7 @@ MIRROR_UNAVAILABLE = "mirror unavailable for this course"
 
 def _serve_max_age_hours() -> float:
     try:
-        from api.webui import config
+        from api.platform_services import config
         return config.mirror_serve_max_age_hours()
     except Exception:
         return 6.0

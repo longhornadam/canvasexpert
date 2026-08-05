@@ -5,7 +5,7 @@ from datetime import datetime
 
 from api import feedback_vault, operational_log
 
-from .. import config, workspace
+from api.platform_services import config, workspace
 from ..deps import list_rubric_files
 
 
