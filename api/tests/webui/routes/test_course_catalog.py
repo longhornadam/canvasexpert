@@ -65,6 +65,26 @@ def _assignment_group(group_id="44", **changes):
     return row
 
 
+def _page(page_id="500", **changes):
+    # Shaped like Canvas's real Wiki Pages API: keyed by `page_id` and `url`,
+    # not `id` like every other resource this module normalizes.
+    row = {
+        "page_id": page_id,
+        "url": "fictional-page",
+        "title": "Fictional Page",
+        "body": '<p>Read <a href="https://example.invalid/private">this</a>. Visit https://example.invalid/visible</p><script>secret()</script>',
+        "published": True,
+        "front_page": False,
+        "updated_at": "2026-07-14T05:00:00Z",
+        "created_at": "2026-07-01T05:00:00Z",
+        "hide_from_students": False,
+        "editing_roles": "teachers",
+        "html_url": "https://example.invalid/drop",
+    }
+    row.update(changes)
+    return row
+
+
 def _canvas_success(path, params):
     if path.endswith("/assignments"):
         return [_assignment()], None
@@ -172,6 +192,38 @@ def test_v3_assignment_groups_are_sorted_strict_and_public(tmp_path):
     assert projection["scopes"]["assignment_groups"]["state"] == "current"
     assert projection["assignment_groups"] == document["assignment_groups"]["records"]
     assert "html_url" not in json.dumps(document)
+
+
+def test_page_normalization_uses_canvas_page_id_not_id():
+    normalized = course_catalog.normalize_page(_page())
+
+    assert set(normalized) == course_catalog.PAGE_KEYS
+    assert normalized["id"] == "500"
+    assert normalized["body_text"] == "Read this. Visit [link]"
+    assert "https://" not in json.dumps(normalized)
+    assert "editing_roles" not in json.dumps(normalized)
+
+    with pytest.raises(ValueError, match="stable id"):
+        course_catalog.normalize_page({k: v for k, v in _page().items() if k != "page_id"})
+
+
+def test_real_canvas_page_rows_reach_the_catalog_as_current_not_incomplete(tmp_path):
+    pages = [_page("500", title="A Syllabus", front_page=True), _page("501", title="B Unit One", url="unit-1")]
+
+    def complete(path, params):
+        if path.endswith("/pages"):
+            return pages, None, True
+        return _canvas_success_complete(path, params)
+
+    result = course_catalog.refresh_catalog(
+        "course-1", "Fictional Course", canvas_get_all=_canvas_success,
+        canvas_get_all_complete=complete, root=str(tmp_path), attempted_at=STAMP_1,
+    )
+    document = result["catalog"]
+    assert document["pages"]["state"] == "current"
+    assert document["pages"]["error_code"] == ""
+    assert [page["id"] for page in document["pages"]["records"]] == ["500", "501"]
+    assert document["pages"]["records"][0]["front_page"] is True
 
 
 @pytest.mark.parametrize(

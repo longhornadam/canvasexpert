@@ -426,8 +426,14 @@ def _page_text(value) -> str:
 
 
 def normalize_page(row: dict) -> dict:
-    """Return the strict, URL-free, plain-text page allowlist."""
-    if not isinstance(row, dict) or not _id(row.get("id")):
+    """Return the strict, URL-free, plain-text page allowlist.
+
+    Canvas's Pages API keys each row by `page_id`, not `id` like every other
+    resource in this module (Assignments, Modules, Assignment Groups all use
+    `id`). Reading `row.get("id")` here would silently fail closed on every
+    real page, not just malformed ones.
+    """
+    if not isinstance(row, dict) or not _id(row.get("page_id")):
         raise ValueError("page row has no stable id")
     if row.get("title") is not None and not isinstance(row.get("title"), str):
         raise ValueError("page title cannot be normalized")
@@ -437,7 +443,7 @@ def normalize_page(row: dict) -> dict:
     if not title:
         raise ValueError("page title is empty")
     return {
-        "id": _id(row.get("id")),
+        "id": _id(row.get("page_id")),
         "title": title,
         "body_text": _page_text(row.get("body")),
         "published": row.get("published") is True,

@@ -176,7 +176,7 @@ enrollments are indistinguishable from Teacher (`api/mirror/course_context.py` k
 
 ## 4. Scenario 2: "I want to align a unit before I teach it"
 
-### 4.1 The evidence base is probably empty at the root [V code-side, X on Canvas]
+### 4.1 The evidence base is probably empty at the root [FIXED 2026-08-06, code-side]
 
 `normalize_page` (`api/course_catalog.py`) opens with:
 
@@ -209,16 +209,26 @@ assistant to judge whether objectives are "poorly supported by the course materi
 third of the materials may be structurally unreachable, and the failure presents as "this unit
 has no pages" rather than as an error.
 
-**Deferred, not settled: no live course exists to test against.** The school year has not
-started, so there is currently no way to make the one authenticated GET against
-`/api/v1/courses/{id}/pages` that would decide how much of §4 is real. Rather than block on
-that, the decided behavior (see 4.3a) is to make the assistant self-correct for staleness the
-same way it already does for the mirror: refuse, trigger a refresh, retry once. That does not
-fix the suspected `id`/`page_id` bug if it is real, but it removes the false negative where
-stale-but-present data reads as "no pages," and it turns the first real sync this fall into its
-own diagnostic — if pages are still empty immediately after a fresh refresh, that is strong
-confirmation the bug is real rather than a staleness artifact. Whoever picks this up in the fall
-should watch for exactly that signal on the first live course.
+**Fixed 2026-08-06, code-side, still not exercised against a real course.** No live course
+existed to make the one authenticated GET that would have proven this beyond code reading, so
+the fix went in on the strength of the code-side analysis above plus the two corroborating
+pieces of evidence: the sibling adapter's `url`-based identity and the fixtures that already
+admitted, in their own parameter names, what Canvas actually sends. `normalize_page` now reads
+`row.get("page_id")` instead of `row.get("id")`, both for the stable-id check and for the
+normalized record's `id` field. The two test fixtures that had encoded the bug (`_page` in
+`api/tests/mirror/test_read_service.py` assigning its `page_id` parameter into an `"id"` key,
+and every `/pages` stub in `api/tests/webui/routes/test_course_catalog.py` returning `[]`) are
+corrected: both files now build page rows shaped like real Canvas output, and
+`test_course_catalog.py` gained a regression test that reverting the fix turns red (confirmed by
+temporarily reverting it: without the fix, a course's first sync makes the pages scope
+`"unavailable"`, not merely `"incomplete"` as originally guessed, because there is no previous
+good state yet to fall back to).
+
+This closes the code-side half of this finding. The Canvas-side half — whether `page_id` is
+really the field, and whether anything else about real Pages responses differs from the
+fixtures — still wants the first live sync this fall as final confirmation. That first sync is
+now a lower-stakes check (does the fix hold) rather than a diagnostic for an open bug (is there a
+bug at all).
 
 ### 4.2 The staleness verdict exists and the assistant cannot see it [V]
 
