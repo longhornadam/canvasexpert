@@ -582,7 +582,21 @@ Test and doc references to clean up: `api/tests/webui/test_ai_ta.py`,
 `api/tests/test_beta075_runtime.py`, `api/tests/powergrader/test_packet.py`, and
 `api/webui/README.md`.
 
-### 8.4 Whether writing-timeline data belongs in a batch upload file
+### 8.4 Decided: carry an aggregate-only writing-timeline summary into the batch path
+
+**Settled 2026-08-05: option three, aggregate only.** Counts, totals, tracking-presence booleans, and
+the already-categorized author fields travel into `03-work.md`, and file 02's contract gains
+`writing_process_observations` with the guardrails `build_contract_text` already states.
+`largest_insertions` stays out: it carries no student text, but it is a list of individual edit events
+with timestamps, and per-edit timing is what most invites the integrity inference
+`sanitize_process_observation` exists to block. The counts already carry the volume signal.
+
+Implementation is specified field by field in
+[docs/handoffs/codex-file-based-ai-assist-remainder.md](../codex-file-based-ai-assist-remainder.md)
+item 5.1, which also folds in section 4.7's consolidation, since the contract text becomes
+load-bearing once it has to state these guardrails.
+
+The options as they stood before the decision, kept for the reasoning:
 
 Section 4.8, and the reason it was not just fixed. This is a privacy question wearing a bug's
 clothing, which is exactly the kind of thing not to settle inside an implementation pass.

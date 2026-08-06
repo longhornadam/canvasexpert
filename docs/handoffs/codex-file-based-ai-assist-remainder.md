@@ -73,9 +73,10 @@ need to touch them, stage at hunk level:
 
 ## 5. Remaining work
 
-### 5.1 Decision needed before code: writing-timeline data in the batch path
+### 5.1 Carry an aggregate-only writing-timeline summary into the batch path
 
-**Status: open decision. Do not implement without an answer.** Trace sections 4.8 and 8.4.
+**Status: DECIDED 2026-08-05, ready to implement.** Aggregate only: counts and totals, never
+event-level detail. Trace sections 4.8 and 8.4.
 
 **The verified facts.** The SAFE bundle carries writing-timeline data per response
 (`api/feedback_artifacts.py:305-307` sets `response["writing_timeline"]` via
@@ -101,24 +102,53 @@ Hiding it would remove a feature that works.
 What is genuinely absent in packet mode is only the AI's teacher-only `writing_process_observations`
 note. Nothing in the UI currently promises that note, so nothing is currently lying.
 
-**The three options, for the product owner to pick:**
+**Why this needed a decision rather than a straight fix:** writing-timeline data describes authorship
+and revision behavior. `safe_projection` and `sanitize_process_observation` were built to guard a
+payload going out over the API lane. Putting the same data into a `.md` file a teacher hands to a chat
+app by hand is a different exposure, and the teacher chooses the destination. Hence aggregate only,
+rather than the whole projection.
 
-1. **Leave it out, and write it down.** Treat writing-process observations as an API-lane and
-   MCP-lane capability. Change no behavior; document the difference so it stops being rediscovered.
-   Smallest, and honest.
-2. **Include it, gated.** Carry the safe projection into `03-work.md` and add
-   `writing_process_observations` to file 02's contract, behind the acknowledgement packet mode
-   already requires. Most capable, most exposure.
-3. **Include only the aggregate.** Author count and revision-span summary, never per-document
-   detail. Probably enough for the coaching use the feature was built for.
+**What to carry, precisely.** `safe_projection` in `api/powergrader/writing_timeline.py:467` already
+whitelists the outbound shape. Split it at the aggregate line:
 
-**Why this is a decision and not a fix:** writing-timeline data describes authorship and revision
-behavior. `safe_projection` and `sanitize_process_observation` were built to guard a payload going
-out over the API lane. Putting the same data into a `.md` file a teacher hands to a chat app by hand
-is a different exposure, and the teacher chooses the destination.
+**Include** (all aggregate, no event-level detail, author identity already reduced to a category):
 
-If option 2 or 3 is chosen, do item 5.3 in the same pass, because the contract text becomes
-load-bearing.
+- `available`, `valid`
+- `block_count`, `insertion_count`, `deletion_count`
+- the tracking-presence booleans when set: `trail_present`, `track_revisions_present`,
+  `tracking_protection_present`, `tracking_protection_enforced`, `tracking_lock_present`
+- `properties`, which is already narrow: `total_time_minutes`, `revision`, `creator_category`,
+  `last_modified_by_category`
+
+**Exclude:** `largest_insertions`. It carries no text (`_safe_block` at line 452 emits only type,
+`character_count`, `word_count`, `timestamp`, `author_category`), so this is not about leaking student
+writing. It is excluded because it is a list of individual edit events with timestamps, which is
+event-level rather than aggregate, and per-edit timing is the part that most invites exactly the
+integrity inference `sanitize_process_observation` exists to block ("written in one paste at 2am").
+The counts already carry the volume signal.
+
+Note the existing projection deliberately drops the full per-block array for cost reasons, with a
+comment measuring 60,000 blocks and 8.6 MB on a 75 KB upload. Excluding `largest_insertions` for the
+hand-carried lane is the same instinct applied one step further.
+
+**Where to implement:**
+
+- Add an aggregate-summary helper next to `safe_projection`, so the whitelist stays in one module and
+  the batch path cannot drift from it. Do not hand-roll the field list in `copilot_packet.py`.
+- Render it into `03-work.md` per student in `_student_blocks`
+  (`api/powergrader/copilot_packet.py:40-65`), as short labelled lines rather than raw JSON, matching
+  the readable style already used for `Possible points`. Omit the whole section when
+  `available` is false, so untracked assignments gain no noise.
+- Add `writing_process_observations` to file 02's contract in `rubric_persona_text`
+  (`api/powergrader/copilot_packet_support.py`), carrying the same guardrails
+  `build_contract_text` already states: observational and teacher-only, never an integrity
+  conclusion, probability, or penalty recommendation, and it must not change the score or the
+  student-facing feedback.
+- `sanitize_process_observation` already runs on the return path in `api/feedback_results.py:276`, so
+  the inbound guard is in place and needs no change. Confirm that with a test rather than assuming.
+
+**Do item 5.3 in the same pass**, because file 02's contract text becomes load-bearing once it has to
+state these guardrails, and 5.3 is what stops the four copies drifting again.
 
 ### 5.2 Batch packaging: one ZIP per batch, and a return lane for the whole-class ZIP
 
@@ -193,10 +223,15 @@ These are settled and non-negotiable in this repo.
 
 ## 7. Sequencing
 
-1. Ask the product owner item 5.1's question. It gates 5.3 and shapes nothing else.
-2. Run item 5.2's manual attach gate. If it fails, stop and report; that changes the plan.
-3. Implement whichever of 5.1 and 5.2 are cleared, in either order. They touch different files.
-4. Implement 5.3 last.
+1. **Item 5.1 with 5.3 folded in**, as one commit. 5.1 is decided and ready, and it makes 5.3's
+   consolidation load-bearing rather than cosmetic, so they belong together.
+2. **Item 5.2's manual attach gate.** Run it before writing any repackaging code. If a ZIP is read but
+   only partly attended to, stop and report; that changes the plan rather than just delaying it.
+3. **Item 5.2's code**, if the gate passes.
+
+5.1 and 5.2 touch different files (`writing_timeline.py` and `copilot_packet_support.py` versus
+`copilot_packet.py`'s layout code and `queue_import.js`), so if you prefer to run them in parallel,
+the only shared file is `copilot_packet.py`.
 
 Each step should land as its own commit, green against the section 3 gate, with the pre-existing
 failure still failing and nothing from section 4 swept in.
