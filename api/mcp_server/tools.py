@@ -109,12 +109,12 @@ _GRADEBOOK_ASSIGNMENT_COLUMNS = ("id", "title", "due_at", "points", "submitted",
                                  "graded", "missing", "late", "avg_pct")
 _GRADEBOOK_STUDENT_COLUMNS = ("pseudonym", "missing", "late", "ungraded", "pct")
 _MODULE_COLUMNS = ("id", "name", "position", "item_count")
-_MODULE_COLUMNS_WITH_PUBLISHED = ("id", "name", "position", "published", "item_count")
-_MODULE_ITEM_COLUMNS = ("id", "type", "title", "position")
+_MODULE_ITEM_COLUMNS = ("id", "type", "title", "position", "content_id")
 _PAGE_COLUMNS = ("id", "title", "body_text", "published", "front_page", "updated_at")
 _STAGED_CONTENT_COLUMNS = ("kind", "label")
 _SCORING_SESSION_COLUMNS = ("session_id", "assignment_name", "course_id", "created",
-                            "mode_label", "total", "scored", "approved")
+                            "mode_label", "total", "scored", "approved",
+                            "assignment_id", "newer_session_exists", "staged_at")
 _PACKET_ITEM_COLUMNS = ("item_id", "prompt", "possible")
 _PACKET_STUDENT_COLUMNS = ("pseudonym", "item_id", "text")
 _ASSESSMENT_CONTEXT_COLUMNS = (
@@ -694,8 +694,8 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
     gate. Staleness is labeled (source, synced_at, state), never refused,
     since modules are structural, not student data. Modules go out as a
     {columns, rows} table; include_items nests each module's items as their
-    own {columns, rows} table. ``published`` is included only when the catalog
-    record actually carries it."""
+    own {columns, rows} table. The v3 catalog module contract has no published
+    column; module item identity is carried as ``content_id``."""
 
     read_result = read_catalog(course_id)
     # Age-gate the stored catalog against the same mirror serve-age window
@@ -720,8 +720,7 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
         and not scope.get("last_success_at")
     )
     modules_state_detail = "never_cataloged" if never_cataloged else "cataloged"
-    has_published = any("published" in module for module in records)
-    columns = _MODULE_COLUMNS_WITH_PUBLISHED if has_published else _MODULE_COLUMNS
+    columns = _MODULE_COLUMNS
     if include_items:
         columns = columns + ("items",)
 
@@ -733,8 +732,6 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
             "position": module.get("position"),
             "item_count": len(module.get("items") or []),
         }
-        if has_published:
-            row["published"] = module.get("published")
         if include_items:
             items = [
                 {
@@ -742,13 +739,14 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
                     "type": item.get("type", ""),
                     "title": item.get("title", ""),
                     "position": item.get("position"),
+                    "content_id": item.get("content_id", ""),
                 }
                 for item in (module.get("items") or [])
             ]
             row["items"] = _tabulate(items, _MODULE_ITEM_COLUMNS)
         modules.append(row)
 
-    return {
+    result = {
         "ok": True,
         "course_id": str((read_result.get("catalog") or {}).get("course_id") or course_id),
         "course_name": str((read_result.get("catalog") or {}).get("course_name") or ""),
@@ -758,6 +756,12 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
         "state": scope["state"],
         "modules_state_detail": modules_state_detail,
     }
+    if scope["state"] == "stale":
+        result["stale_note"] = (
+            "Refresh this course's Course Catalog from the CanvasExpert web UI. "
+            "refresh_mirror only refreshes CanvasMirror roster, assignments, and submissions."
+        )
+    return result
 
 
 def get_course_pages(course_id: str, full_text: bool = False) -> dict:
@@ -788,7 +792,7 @@ def get_course_pages(course_id: str, full_text: bool = False) -> dict:
         "front_page": page.get("front_page") is True,
         "updated_at": page.get("updated_at", ""),
     } for page in scope["records"] if page.get("published") is True]
-    return {
+    result = {
         "ok": True,
         "course_id": str((read_result.get("catalog") or {}).get("course_id") or course_id),
         "course_name": str((read_result.get("catalog") or {}).get("course_name") or ""),
@@ -797,6 +801,12 @@ def get_course_pages(course_id: str, full_text: bool = False) -> dict:
         "synced_at": scope["last_success_at"],
         "state": scope["state"],
     }
+    if scope["state"] == "stale":
+        result["stale_note"] = (
+            "Refresh this course's Course Catalog from the CanvasExpert web UI. "
+            "refresh_mirror only refreshes CanvasMirror roster, assignments, and submissions."
+        )
+    return result
 
 
 def preview_learning_objective(course_id: str, objective: str,
@@ -2244,7 +2254,7 @@ def refresh_mirror(course_id: str) -> dict:
     state = plan.get("state", "failed")
     if state == "succeeded":
         return {"ok": True, "status": "synced",
-                "message": "Mirror refreshed. Re-read the data now."}
+                "message": "Mirror refreshed (roster, assignments, and submissions only). Re-read those tools now."}
     if state in ("queued", "running"):
         return {"ok": True, "status": "syncing",
                 "message": "Still syncing — wait a few seconds, then try again."}
@@ -2410,9 +2420,11 @@ def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str 
     """Preview a day-kind/schedule/label change against the live calendar.
 
     No course_id, no student data -- no course gate, no safety gate.
-    Summarize the affected dates and any conflicts for the teacher before
-    calling apply_school_calendar_change. Rejects an instructional new value
-    naming a Bell Schedule that is not currently loaded. Never raises.
+    Summarize the affected dates and advisory conflicts for the teacher before
+    calling apply_school_calendar_change. Conflicts warn about weekends and
+    day-kind changes but do not refuse an otherwise valid apply. An empty
+    instructional label preserves the existing label. Rejects an instructional
+    new value naming a Bell Schedule that is not currently loaded. Never raises.
     """
     bell_schedules, _bell_problems = deps.load_bell_schedules()
     preview, problems = school_calendar.preview_change(
@@ -2526,12 +2538,44 @@ def _safe_bundle_path(session: dict) -> str:
     return resolved if os.path.isfile(resolved) else ""
 
 
+def _newer_session_flags(summaries: list[dict]) -> dict[str, bool]:
+    """Return whether a newer same-assignment session exists for each id."""
+    flags = {}
+    for index, current in enumerate(summaries):
+        session_id = str(current.get("session_id") or "")
+        course_id = str(current.get("course_id") or "")
+        assignment_id = str(current.get("assignment_id") or "")
+        created = str(current.get("created") or "")
+        flags[session_id] = bool(assignment_id and any(
+            str(other.get("course_id") or "") == course_id
+            and str(other.get("assignment_id") or "") == assignment_id
+            and (
+                str(other.get("created") or "") > created
+                or (str(other.get("created") or "") == created and other_index < index)
+            )
+            for other_index, other in enumerate(summaries)
+            if other_index != index
+        ))
+    return flags
+
+
+def _staged_marker(session: dict) -> dict:
+    marker = session.get("assistant_staged")
+    return marker if isinstance(marker, dict) else {}
+
+
+def _scored_count(session: dict) -> int:
+    return sum(1 for student in (session.get("students") or [])
+               if student.get("ai_score") is not None)
+
+
 def list_scoring_sessions() -> dict:
     """List PowerGrader sessions that have a SAFE bundle, newest first.
 
-    Returns {"ok": True, "sessions": {columns, rows}} where each row has
+    Returns {"ok": True, "sessions": {columns, rows}} where each row appends
+    assignment_id, newer_session_exists, and staged_at after the established
     (session_id, assignment_name, course_id, created, mode_label, total,
-    scored, approved). Current courses only. Sessions whose bundle is missing
+    scored, approved) columns. Current courses only. Sessions whose bundle is missing
     from disk are left out rather than offered and then refused by
     get_scoring_packet. Session metadata only, so no safety gate is needed:
     nothing here is drawn from a student record. Never raises.
@@ -2540,16 +2584,19 @@ def list_scoring_sessions() -> dict:
 
     active_course_ids = {str(c.get("id", "")) for c in config.active_courses()}
     rows = []
+    summaries = [summary for summary in session_store.list_session_summaries()
+                 if str(summary.get("course_id") or "") in active_course_ids]
+    summaries.sort(key=lambda summary: str(summary.get("created") or ""), reverse=True)
+    newer_flags = _newer_session_flags(summaries)
 
-    for summary in session_store.list_session_summaries():
-        if str(summary.get("course_id") or "") not in active_course_ids:
-            continue
+    for summary in summaries:
         # The summary carries neither bundle presence nor a scored count, so
         # the full session is read for the Current-course candidates only.
         session = session_store.load_session(str(summary.get("session_id") or ""))
         if not session or not _safe_bundle_path(session):
             continue
         students = session.get("students") or []
+        marker = _staged_marker(session)
         rows.append([
             summary.get("session_id"),
             summary.get("assignment_name"),
@@ -2559,6 +2606,9 @@ def list_scoring_sessions() -> dict:
             summary.get("total", 0),
             sum(1 for st in students if st.get("ai_score") is not None),
             summary.get("approved", 0),
+            summary.get("assignment_id"),
+            newer_flags.get(str(summary.get("session_id") or ""), False),
+            marker.get("staged_at") or marker.get("ts"),
         ])
 
     return {
@@ -2592,6 +2642,7 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
     - held: responses with no scorable text (media-only or empty)
     - held_pseudonyms: distinct pseudonyms holding at least one held response
     - included_context: bool (true if contract/rubric were included)
+    - rubric: declared rubric name and whether its text resolved, when context is included
     - estimated_tokens: projected token count for this response
 
     Course-gated on the session's course_id. Refuses when:
@@ -2602,7 +2653,7 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
 
     Text-only (no media entries, no attachment filenames). Never raises.
     """
-    from api.powergrader import session_store, scoring_packet as sp
+    from api.powergrader import context, session_store, scoring_packet as sp
 
     session = session_store.load_session(session_id)
     if not session:
@@ -2622,6 +2673,12 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
     except Exception as e:
         return {"ok": False, "error": f"Could not load Safe AI Packet bundle: {e}"}
 
+    rubric_name = str(session.get("rubric_name") or "")
+    rubric_text = session.get("rubric_text") or context.load_rubric_text(rubric_name)
+    persona = session.get("persona") or config.get_persona(
+        str(session.get("persona_id") or "")
+    )
+
     try:
         packet = sp.build_packet(
             session=session,
@@ -2629,8 +2686,8 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
             offset=offset,
             limit=limit,
             include_context=include_context,
-            rubric_text=session.get("rubric_text", ""),
-            persona=session.get("persona"),
+            rubric_text=rubric_text,
+            persona=persona,
         )
     except sp.PacketTooLarge as e:
         return {"ok": False, "error": str(e)}
@@ -2642,6 +2699,15 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
     # scanner's key-based walk cannot reach it.
     result = _pseudonym_gate(packet, _vault_factory())
     if result.get("ok"):
+        summaries = [summary for summary in session_store.list_session_summaries()
+                     if str(summary.get("course_id") or "") == str(session.get("course_id") or "")]
+        result["newer_session_exists"] = _newer_session_flags(summaries).get(
+            str(session.get("session_id") or session_id), False)
+        if include_context:
+            result["rubric"] = {
+                "name": rubric_name,
+                "included": bool(str(rubric_text or "").strip()),
+            }
         result["items"] = _tabulate(result["items"], _PACKET_ITEM_COLUMNS)
         result["students"] = _tabulate(result["students"], _PACKET_STUDENT_COLUMNS)
     return result
@@ -2732,8 +2798,9 @@ def stage_scores(session_id: str, results: list, expected_packet_digest: str) ->
         if payload.get("ok"):
             session = session_store.load_session(session_id)
             if session:
+                staged_at = datetime.now().isoformat(timespec="seconds")
                 session["assistant_staged"] = {
-                    "ts": datetime.now().isoformat(timespec="seconds"),
+                    "staged_at": staged_at,
                     "updated": payload.get("updated", 0),
                 }
                 session_store.save_session(session)
@@ -2750,5 +2817,9 @@ def stage_scores(session_id: str, results: list, expected_packet_digest: str) ->
 
     if not result["ok"]:
         result["error"] = payload.get("error", "Import failed")
+    elif session:
+        marker = _staged_marker(session)
+        result["staged_at"] = marker.get("staged_at") or marker.get("ts")
+        result["scored"] = _scored_count(session)
 
     return result

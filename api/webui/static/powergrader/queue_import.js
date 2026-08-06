@@ -12,6 +12,10 @@
   var importFile = document.getElementById('pg-import-result-file');
   var importBtn = document.getElementById('pg-import-results');
   var importStatus = document.getElementById('pg-import-status');
+  var stagedStatus = document.getElementById('pg-staged-status');
+  var stagedStatusText = document.getElementById('pg-staged-status-text');
+  var loadStagedBtn = document.getElementById('pg-load-staged');
+  var lastStagedAt = null;
 
   function esc(s) {
     if (queue.esc) return queue.esc(s);
@@ -163,6 +167,30 @@
       });
   }
 
+  function pollStagedStatus() {
+    return fetch('/api/powergrader/session/' + encodeURIComponent(sessionId) + '/staged')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (!d.ok || !d.staged_at || d.staged_at === lastStagedAt) return false;
+        lastStagedAt = d.staged_at;
+        if (stagedStatusText) {
+          stagedStatusText.textContent = 'Your assistant staged ' + Number(d.updated || 0) + ' score(s). Load them.';
+        }
+        if (stagedStatus) stagedStatus.hidden = false;
+        return true;
+      })
+      .catch(function(){ return false; });
+  }
+
+  function loadStagedScores() {
+    if (!queue.reloadSession) return;
+    if (loadStagedBtn) loadStagedBtn.disabled = true;
+    queue.reloadSession({
+      indexOverride: getCurrentIndex(),
+      onSuccess: function(){ if (stagedStatus) stagedStatus.hidden = true; },
+    }).finally(function(){ if (loadStagedBtn) loadStagedBtn.disabled = false; });
+  }
+
   function importLegacyResults() {
     var text = importJson ? importJson.value.trim() : '';
     if (!text) {
@@ -204,6 +232,9 @@
   if (getSession()) renderPacketPanel(getSession());
 
   importBtn && importBtn.addEventListener('click', importLegacyResults);
+  loadStagedBtn && loadStagedBtn.addEventListener('click', loadStagedScores);
+  pollStagedStatus();
+  window.setInterval(pollStagedStatus, 30000);
   importFile && importFile.addEventListener('change', function () {
     var file = importFile.files && importFile.files[0];
     if (!file) return;

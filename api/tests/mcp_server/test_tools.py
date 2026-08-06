@@ -327,10 +327,10 @@ def test_get_modules_include_items_true_nests_item_tables(monkeypatch, _rows, _s
     assert result["ok"] is True
     assert result["modules"]["columns"] == ["id", "name", "position", "item_count", "items"]
     rows = _rows(result["modules"])
-    assert rows[0]["items"]["columns"] == ["id", "type", "title", "position"]
+    assert rows[0]["items"]["columns"] == ["id", "type", "title", "position", "content_id"]
     assert _rows(rows[0]["items"]) == [
-        {"id": "10", "type": "Assignment", "title": "Essay 1", "position": 1},
-        {"id": "11", "type": "Quiz", "title": "Quiz 1", "position": 2},
+        {"id": "10", "type": "Assignment", "title": "Essay 1", "position": 1, "content_id": "700010"},
+        {"id": "11", "type": "Quiz", "title": "Quiz 1", "position": 2, "content_id": "700020"},
     ]
     assert rows[1]["items"]["rows"] == []
 
@@ -376,7 +376,32 @@ def test_get_modules_stale_returns_labeled_records_not_refusal(monkeypatch, _row
     assert result["ok"] is True
     assert result["state"] == "stale"
     assert result["source"] == "catalog"
+    assert "Course Catalog" in result["stale_note"]
+    assert "refresh_mirror" in result["stale_note"]
     assert len(_rows(result["modules"])) == 2
+
+
+def test_get_course_pages_stale_names_catalog_refresh(monkeypatch, _set_active_courses, _module_catalog_document):
+    _set_active_courses(["111"])
+    document = _module_catalog_document([], state="current")
+    document["pages"] = {
+        "state": "stale",
+        "last_success_at": "2026-07-01T00:00:00Z",
+        "last_attempt_at": "2026-07-01T00:00:00Z",
+        "error_code": "",
+        "records": [{
+            "id": "page-1", "title": "Lesson", "body_text": "Notes",
+            "published": True, "front_page": False, "updated_at": "2026-07-01T00:00:00Z",
+        }],
+    }
+    monkeypatch.setattr(tools, "read_catalog",
+                        lambda course_id: {"catalog": document, "source": "canonical", "warnings": []})
+
+    result = tools.get_course_pages("111")
+    assert result["ok"] is True
+    assert result["state"] == "stale"
+    assert "Course Catalog" in result["stale_note"]
+    assert "refresh_mirror" in result["stale_note"]
 
 
 def test_get_modules_marks_state_stale_past_serve_window(monkeypatch, _rows, _set_active_courses, _module_catalog_document):
@@ -1473,7 +1498,7 @@ def test_refresh_mirror_accepts_previous_course(monkeypatch, _set_previous_cours
     assert result == {
         "ok": True,
         "status": "synced",
-        "message": "Mirror refreshed. Re-read the data now.",
+        "message": "Mirror refreshed (roster, assignments, and submissions only). Re-read those tools now.",
     }
 
 
@@ -2287,6 +2312,42 @@ def test_server_registers_preview_school_calendar_change_wrapper(monkeypatch):
     assert json.loads(wire) == {
         "ok": True, "base_revision": 1, "affected": [], "is_noop": True,
     }
+
+
+def test_preview_school_calendar_change_forwards_advisory_conflicts(monkeypatch, tmp_path):
+    workspace_root = tmp_path / "workspace"
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(workspace_root))
+    monkeypatch.setattr(
+        workspace, "library_folder", lambda name: str(workspace_root / "Library" / name)
+    )
+    calendars = workspace_root / "Library" / "Calendars"
+    calendars.mkdir(parents=True)
+    calendar = {
+        "version": "1.0-json", "type": "SCHOOL_CALENDAR", "revision": 1,
+        "school_year": "2026-27", "coverage": {"start": "2026-08-17", "end": "2026-08-19"},
+        "days": {
+            "2026-08-17": {"kind": "instructional", "schedule_id": "ordinary"},
+            "2026-08-18": {"kind": "instructional", "schedule_id": "ordinary"},
+            "2026-08-19": {"kind": "no_school", "schedule_id": None,
+                            "label": "Staff Development"},
+        },
+        "grading_periods": [], "events": [],
+    }
+    (calendars / "School Calendar.json").write_text(json.dumps(calendar), encoding="utf-8")
+    monkeypatch.setattr(tools.deps, "load_bell_schedules",
+                        lambda: ({"friday_schedule": {}}, []))
+
+    result = tools.preview_school_calendar_change(
+        "instructional", "friday_schedule", "", date_from="2026-08-17",
+        date_to="2026-08-19", weekdays=[0, 1, 2])
+
+    assert result["ok"] is True
+    assert result["conflicts"] == [{
+        "date": "2026-08-19", "reason": "kind_change",
+        "from_kind": "no_school", "from_label": "Staff Development",
+        "to_kind": "instructional",
+    }]
+    assert result["mutation"]["entries"]["2026-08-19"]["label"] == "Staff Development"
 
 
 def test_server_registers_apply_school_calendar_change_wrapper(monkeypatch):

@@ -153,7 +153,8 @@
     var st = currentStudent();
     if (!st || (!st.ai_feedback && st.ai_score === null && st.ai_score === undefined)) return;
     feedbackEl.value = queue.buildAiDraft ? queue.buildAiDraft(st) : '';
-    if (queue.showStatus) queue.showStatus("Restored the AI draft — edit if needed, then approve.", false);
+    if (queue.setAiDraftState) queue.setAiDraftState(true);
+    if (queue.showStatus) queue.showStatus("Restored AI feedback for editing — edit if needed, then approve.", false);
   }
 
   function insertAtCursor(el, text){

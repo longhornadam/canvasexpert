@@ -36,7 +36,7 @@ Tool schema version 29 (47 tools).
 | `list_courses` | Every saved course (Current + Previous) | No |
 | `list_sections(course_id)` | Section names from the local mirror roster; how to find the exact `section_name` `get_seating_context` requires | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
-| `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items | No |
+| `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items with their catalog `content_id` | No |
 | `get_course_pages(course_id, full_text=false)` | Published normalized pages from the Current course's local v3 catalog; body text is bounded unless explicitly requested | No |
 | `list_learning_objectives(course_id)` | Current reviewed learning objectives as a compact table; Current-course and local-document gated | No |
 | `preview_learning_objective(course_id, objective, effective_start, effective_end, source_refs, replaces?)` | Exact reviewed create or replacement preview grounded in current local module, assignment, or page records | No |
@@ -71,8 +71,8 @@ Tool schema version 29 (47 tools).
 | `apply_school_calendar_event_change(preview, expected_revision)` | Applies a previewed public-event change; refuses stale or altered previews | No |
 | `preview_school_calendar_game_score(event_id, score)` | Previews changing the result of one existing `game` event while carrying every other field forward unchanged | No |
 | `apply_school_calendar_game_score(preview, expected_revision)` | Applies the exact reviewed game-score preview; refuses stale, altered, or non-game previews | No |
-| `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved}` | No |
-| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard | Yes — pseudonymized |
+| `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved, assignment_id, newer_session_exists, staged_at}` | No |
+| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard; context includes the declared rubric name and whether its text resolved | Yes — pseudonymized |
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
 | `get_theme_contract()` | The Panel theme format: the three or four colours and two names you set, the sixteen variables derived for you, and the closed font/ornament sets | No |
 | `list_panel_themes()` | Built-in Panel themes plus the teacher's own as `(key, label, origin, authored_at)`, with any theme file that could not be read | No |
@@ -221,6 +221,10 @@ membership, then joins the private local Roster context for that course. None fa
 a live Canvas call. If the required mirror data is stale or missing, they return
 `{"ok": false, "error": "..."}` naming the problem; call `refresh_mirror(course_id)` and
 retry the same read once it reports `"synced"`.
+
+Stale `get_modules` and `get_course_pages` results name the Course Catalog refresh surface
+as their repair. `refresh_mirror` reports only its actual roster, assignments, and
+submissions scope; it does not refresh catalog modules or pages.
 
 Student-data tools (`get_roster`, `get_submissions`, `get_gradebook_snapshot`, and
 `get_seating_context`) are scoped to Current courses (`config.active_courses()`). The

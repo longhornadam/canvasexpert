@@ -292,13 +292,14 @@ def test_write_safe_and_private_excludes_unscrubbed_student(tmp_path):
 
 
 def test_build_contract_text_inlines_rubric():
-    """With a rubric, HOW-TO-SCORE is self-contained; without, it points elsewhere."""
+    """With a rubric, HOW-TO-SCORE is self-contained; without, it stays honest."""
     with_rubric = fp.build_contract_text("Sage", rubric_text="3 pts: uses a loop")
     assert "3 pts: uses a loop" in with_rubric
     assert "RUBRIC" in with_rubric
     assert "disclosure sentence exactly once" not in with_rubric
     without = fp.build_contract_text("Sage")
-    assert "attached as Knowledge" in without
+    assert "No scoring rubric was provided" in without
+    assert "attached as Knowledge" not in without
     assert "3 pts: uses a loop" not in without
 
 

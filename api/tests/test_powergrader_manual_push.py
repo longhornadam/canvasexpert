@@ -115,6 +115,31 @@ def test_partial_success_updates_only_confirmed_rows_and_repeat_is_idempotent():
     assert len(calls) == 3
 
 
+def test_stored_ai_banner_is_removed_from_review_apply_payload():
+    session = _session()
+    session["students"][0]["teacher_feedback"] = (
+        "---------- AI draft ----------\n"
+        "AI score: 4 / 10\n"
+        "Good."
+    )
+    review, _ = session_actions.review_push(
+        "session-1", user_ids='["user-1"]', load_session=lambda _: session,
+        save_session=lambda _: None, canvas_get=_canvas_get,
+    )
+    calls = []
+    result, code = session_actions.push_grades(
+        "session-1", user_ids='["user-1"]', review_token=review["review_token"],
+        load_session=lambda _: session, save_session=lambda _: None,
+        canvas_send=lambda method, path, payload: calls.append((method, path, payload)) or ({}, None),
+        canvas_get=_canvas_get,
+    )
+    assert code == 200 and result["ok"] is True
+    assert calls[0][2] == {
+        "submission": {"posted_grade": "4"},
+        "comment": {"text_comment": "Good."},
+    }
+
+
 def _new_quiz_session():
     session = _session()
     session["canvas_writeback_supported"] = False

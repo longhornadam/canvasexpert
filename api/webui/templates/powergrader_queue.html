@@ -20,6 +20,7 @@
     <a href="/powergrader" class="pg-back">← Sessions</a>
     <span class="pg-asn-name">{{ assignment_name }}</span>
     {% if mode != "fast" %}<span class="pg-ai-badge">{{ mode_label }}</span>{% endif %}
+    <span id="pg-ai-draft-badge" class="pg-ai-badge" hidden data-aiDraft="false">AI draft · edit before approval</span>
     <span id="pg-timeline-badge" class="pg-ai-badge" hidden>Tracked DOCX · Writing Timeline</span>
   </div>
   <div class="pg-progress-wrap">
@@ -72,6 +73,11 @@
       <span id="pg-import-status" class="hint"></span>
     </div>
   </details>
+</div>
+
+<div id="pg-staged-status" class="pg-privacy-strip" hidden>
+  <span id="pg-staged-status-text"></span>
+  <button type="button" id="pg-load-staged" class="primary small">Load them</button>
 </div>
 
 <!-- ── Auto-post status strip ────────────────────────────────────────── -->

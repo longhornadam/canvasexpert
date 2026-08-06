@@ -28,7 +28,7 @@ for _path in (_API_DIR, _REPO_ROOT):
 
 from api import feedback_vault
 from api.mcp_server import tools
-from api.powergrader import scoring_packet
+from api.powergrader import scoring_packet, session_builder
 
 _ORDINALS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven"]
 
@@ -73,11 +73,24 @@ def _fake_session(session_id: str, course_id: str, people: list[dict] | None = N
         "assignment_id": "700010",
         "created": "2026-01-01T08:00:00",
         "mode": mode,
-        "persona": {"name": "Test TA"},
-        "rubric_text": "Grade strictly by this rubric.",
+        "rubric_name": "Test Rubric",
+        "persona_id": "test-persona",
         "students": [{"user_id": p["canvas_id"], "status": "pending"} for p in people],
         "privacy_artifacts": {},
     }
+
+
+@pytest.fixture(autouse=True)
+def _stub_declared_context(monkeypatch):
+    monkeypatch.setattr(
+        tools.config,
+        "get_persona",
+        lambda _persona_id: {"name": "Test TA", "signoff_policy": "none"},
+    )
+    monkeypatch.setattr(
+        "api.powergrader.context.load_rubric_text",
+        lambda _rubric_name: "Grade strictly by this rubric.",
+    )
 
 
 def _fake_safe_bundle(people: list[dict], items: int = 2) -> dict:
@@ -337,6 +350,7 @@ def _summary(session_id, course_id, **over):
         "session_id": session_id,
         "assignment_name": "Quiz",
         "course_id": course_id,
+        "assignment_id": "700010",
         "created": "2026-01-01T00:00:00",
         "mode": "fast",
         "mode_label": "Score myself",
@@ -414,12 +428,42 @@ def test_list_scoring_sessions_counts_scored_students(monkeypatch, tmp_path):
     assert list(result["sessions"]["columns"]) == [
         "session_id", "assignment_name", "course_id", "created",
         "mode_label", "total", "scored", "approved",
+        "assignment_id", "newer_session_exists", "staged_at",
     ]
     assert row[0] == "s1"
     assert row[4] == "Score myself"
     assert row[5] == 3   # total
     assert row[6] == 2   # scored
     assert row[7] == 1   # approved
+    assert row[8] == "700010"
+    assert row[9] is False
+    assert row[10] is None
+
+
+def test_scoring_session_freshness_marks_older_runs_and_packets(monkeypatch, tmp_path):
+    people = _seed_vault(monkeypatch, tmp_path, count=1)
+    _set_active_courses(monkeypatch, ["111"])
+    old = _fake_session("old", "111", people)
+    old["created"] = "2026-01-01T08:00:00"
+    new = _fake_session("new", "111", people)
+    new["created"] = "2026-01-02T08:00:00"
+    _attach_bundle(old, tmp_path, _fake_safe_bundle(people, items=1), "old.json")
+    _attach_bundle(new, tmp_path, _fake_safe_bundle(people, items=1), "new.json")
+    _bind_session_store(monkeypatch, {"old": old, "new": new})
+    monkeypatch.setattr(
+        "api.powergrader.session_store.list_session_summaries",
+        lambda: [_summary("new", "111", created=new["created"]),
+                 _summary("old", "111", created=old["created"])],
+    )
+
+    result = tools.list_scoring_sessions()
+    rows = {row[0]: row for row in result["sessions"]["rows"]}
+    assert rows["old"][9] is True
+    assert rows["new"][9] is False
+
+    packet = tools.get_scoring_packet("old")
+    assert packet["ok"] is True
+    assert packet["newer_session_exists"] is True
 
 
 # --- get_scoring_packet -----------------------------------------------------
@@ -476,6 +520,107 @@ def test_get_scoring_packet_happy_path(monkeypatch, tmp_path):
     assert len(result["students"]["rows"]) == 6
     assert result["total"] == 6
     assert result["students_total"] == 3
+
+    without_context = tools.get_scoring_packet("s1", include_context=False)
+    assert without_context["ok"] is True
+    assert "contract" not in without_context
+    assert "rubric" not in without_context
+
+
+def test_get_scoring_packet_resolves_declared_rubric_and_persona(monkeypatch, tmp_path):
+    people = _seed_vault(monkeypatch, tmp_path, count=1)
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(
+        "api.powergrader.context.load_rubric_text",
+        lambda name: "3 pts: uses a loop" if name == "Test Rubric" else "",
+    )
+    monkeypatch.setattr(
+        tools.config,
+        "get_persona",
+        lambda persona_id: {
+            "name": "Packet TA",
+            "signoff_policy": "ai_disclosure",
+            "signoff_text": "Drafted by {name} (AI), reviewed by your teacher.",
+        },
+    )
+
+    session = _fake_session("s1", "111", people)
+    _attach_bundle(session, tmp_path, _fake_safe_bundle(people, items=1))
+    _bind_session_store(monkeypatch, {"s1": session})
+
+    result = tools.get_scoring_packet("s1")
+
+    assert result["ok"] is True
+    assert result["rubric"] == {"name": "Test Rubric", "included": True}
+    assert "3 pts: uses a loop" in result["contract"]
+    assert "Packet TA" in result["contract"]
+    assert "Drafted by Packet TA (AI), reviewed by your teacher." in result["contract"]
+
+
+def test_get_scoring_packet_reports_missing_declared_rubric(monkeypatch, tmp_path):
+    people = _seed_vault(monkeypatch, tmp_path, count=1)
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr("api.powergrader.context.load_rubric_text", lambda _name: "")
+
+    session = _fake_session("s1", "111", people)
+    _attach_bundle(session, tmp_path, _fake_safe_bundle(people, items=1))
+    _bind_session_store(monkeypatch, {"s1": session})
+
+    result = tools.get_scoring_packet("s1")
+
+    assert result["ok"] is True
+    assert result["rubric"] == {"name": "Test Rubric", "included": False}
+    assert "attached as Knowledge" not in result["contract"]
+    assert "No scoring rubric was provided" in result["contract"]
+
+
+def test_get_scoring_packet_preserves_legacy_inline_context(monkeypatch, tmp_path):
+    people = _seed_vault(monkeypatch, tmp_path, count=1)
+    _set_active_courses(monkeypatch, ["111"])
+    monkeypatch.setattr(
+        "api.powergrader.context.load_rubric_text",
+        lambda _name: pytest.fail("legacy rubric should not be resolved"),
+    )
+    monkeypatch.setattr(
+        tools.config,
+        "get_persona",
+        lambda _persona_id: pytest.fail("legacy persona should not be resolved"),
+    )
+
+    session = _fake_session("s1", "111", people)
+    session["rubric_text"] = "Legacy rubric text"
+    session["persona"] = {
+        "name": "Legacy TA",
+        "signoff_policy": "ai_disclosure",
+        "signoff_text": "Drafted by {name} (AI), reviewed by your teacher.",
+    }
+    _attach_bundle(session, tmp_path, _fake_safe_bundle(people, items=1))
+    _bind_session_store(monkeypatch, {"s1": session})
+
+    result = tools.get_scoring_packet("s1")
+
+    assert result["ok"] is True
+    assert result["rubric"] == {"name": "Test Rubric", "included": True}
+    assert "Legacy rubric text" in result["contract"]
+    assert "Legacy TA" in result["contract"]
+
+
+def test_session_builder_keeps_rubric_read_time_only():
+    session = session_builder.build_session(
+        session_id="s1",
+        course_id="c1",
+        assignment_id="a1",
+        assignment_name="Essay 1",
+        points_possible=10,
+        mode="packet",
+        rubric_name="Test Rubric",
+        persona_id="test-persona",
+        selected_model="",
+    )
+
+    assert session["rubric_name"] == "Test Rubric"
+    assert session["persona_id"] == "test-persona"
+    assert "rubric_text" not in session
 
 
 def test_get_scoring_packet_gate_sees_student_response_text(monkeypatch, tmp_path):
@@ -744,7 +889,9 @@ def test_stage_scores_records_arrival_marker(monkeypatch, tmp_path):
     marker = sessions["s1"].get("assistant_staged")
     assert marker is not None
     assert marker["updated"] == 1
-    datetime.fromisoformat(marker["ts"])  # parses, so it is a real timestamp
+    datetime.fromisoformat(marker["staged_at"])  # parses, so it is a real timestamp
+    assert result["staged_at"] == marker["staged_at"]
+    assert result["scored"] == 1
 
 
 def test_get_packet_then_stage_round_trip(monkeypatch, tmp_path):

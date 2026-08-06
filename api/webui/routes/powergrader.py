@@ -471,6 +471,23 @@ def pg_get_session(session_id: str):
     return JSONResponse({"ok": True, "session": session})
 
 
+@router.get("/api/powergrader/session/{session_id}/staged")
+def pg_get_staged(session_id: str):
+    session = _load_session(session_id)
+    if not session:
+        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
+    marker = session.get("assistant_staged")
+    marker = marker if isinstance(marker, dict) else {}
+    scored = sum(1 for student in (session.get("students") or [])
+                 if student.get("ai_score") is not None)
+    return JSONResponse({
+        "ok": True,
+        "staged_at": marker.get("staged_at") or marker.get("ts"),
+        "updated": marker.get("updated", 0),
+        "scored": scored,
+    })
+
+
 @router.post("/api/powergrader/session/{session_id}/late-watch")
 def pg_late_watch(
     session_id: str,

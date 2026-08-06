@@ -719,11 +719,34 @@ def test_powergrader_review_apply_contract():
     assert "status !== 'pushed' && result.status !== 'already_applied'" in js
 
 
+def test_powergrader_ai_draft_stays_out_of_feedback_text():
+    """AI draft disclosure belongs in chrome, while the textarea stays editable feedback."""
+    template = _slurp("api/webui/templates/powergrader_queue.html")
+    core = _slurp("api/webui/static/powergrader/queue_core.js")
+    review = _slurp("api/webui/static/powergrader/queue_review.js")
+    assert 'id="pg-ai-draft-badge"' in template
+    assert 'data-aiDraft="false"' in template
+    assert "return formatAiFeedback(st.ai_feedback);" in core
+    assert "AI draft ---" not in core
+    assert "feedbackEl.addEventListener('input'" in core
+    assert "Restored AI feedback for editing" in review
+
+
 def test_powergrader_import_uses_shared_session_id():
     """Packet links use the queue namespace session id, not an IIFE-local name."""
     js = _slurp("api/webui/static/powergrader/queue_import.js")
     assert "queue.getSessionId" in js
     assert "SESSION_ID" not in js
+
+
+def test_powergrader_queue_polls_narrow_staged_route_without_auto_reload():
+    js = _slurp("api/webui/static/powergrader/queue_import.js")
+    template = _slurp("api/webui/templates/powergrader_queue.html")
+    assert "/staged" in js
+    assert "setInterval(pollStagedStatus, 30000)" in js
+    assert "Your assistant staged " in js
+    assert 'id="pg-load-staged"' in template
+    assert "queue.reloadSession" in js
 
 
 def test_powergrader_ack_before_start_button():

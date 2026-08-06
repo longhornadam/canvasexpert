@@ -90,8 +90,8 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> s
 @mcp.tool()
 def get_modules(course_id: str, include_items: bool = False) -> str:
     """A course's modules from the local catalog as a {columns, rows} table
-    (id, name, position, published, item_count). include_items=true adds each
-    module's items (id, type, title, position). No student data."""
+    (id, name, position, item_count). include_items=true adds each module's
+    items (id, type, title, position, content_id). No student data."""
     return _compact(tools.get_modules(course_id, include_items))
 
 

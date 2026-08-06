@@ -16,6 +16,7 @@
   var ptsEl = document.getElementById('pg-pts-possible');
   var feedbackEl = document.getElementById('pg-feedback');
   var badgesEl = document.getElementById('pg-badges');
+  var aiDraftBadge = document.getElementById('pg-ai-draft-badge');
   var aiPanel = document.getElementById('pg-ai-panel');
   var aiScoreVal = document.getElementById('pg-ai-score-val');
   var aiFeedTxt = document.getElementById('pg-ai-feedback-text');
@@ -54,6 +55,7 @@
   queue.getSessionId = function(){ return SESSION_ID; };
   queue.getCanvasBase = function(){ return CANVAS_BASE; };
   queue.isAiMode = isAiMode;
+  queue.setAiDraftState = setAiDraftState;
   queue.esc = esc;
   queue.showStatus = showStatus;
   queue.updateProgress = updateProgress;
@@ -65,6 +67,17 @@
   function isAiMode() {
     return MODE === 'assisted' || MODE === 'packet';
   }
+  function setAiDraftState(active) {
+    var value = active ? 'true' : 'false';
+    if (aiDraftBadge) {
+      aiDraftBadge.hidden = !active;
+      aiDraftBadge.setAttribute('data-aiDraft', value);
+    }
+    if (feedbackEl) feedbackEl.setAttribute('data-aiDraft', value);
+  }
+  feedbackEl && feedbackEl.addEventListener('input', function(){
+    if (feedbackEl.getAttribute('data-aiDraft') === 'true') setAiDraftState(false);
+  });
   if (kbdAHint) { kbdAHint.hidden = !isAiMode(); }
 
   function loadSession() {
@@ -192,6 +205,7 @@
     }
 
     var usedAiDraft = false;
+    setAiDraftState(false);
     if (st.teacher_feedback) {
       feedbackEl.value = st.teacher_feedback;
     } else if (isAiMode() && (hasAiScore || hasAiFeed)) {
@@ -200,6 +214,7 @@
     } else {
       feedbackEl.value = '';
     }
+    setAiDraftState(usedAiDraft);
     if (usedAiDraft && feedbackEl.setSelectionRange) {
       setTimeout(function(){ try { feedbackEl.setSelectionRange(0, 0); } catch(e){} }, 0);
     }
@@ -320,15 +335,7 @@
   }
 
   function buildAiDraft(st) {
-    var parts = [];
-    var hasScore = st.ai_score !== null && st.ai_score !== undefined;
-    if (hasScore) {
-      parts.push('AI score: ' + st.ai_score + (session && session.points_possible ? ' / ' + session.points_possible : ''));
-    }
-    if (st.ai_feedback && st.ai_feedback.trim()) {
-      parts.push(formatAiFeedback(st.ai_feedback));
-    }
-    return parts.length ? '---------- AI draft ----------\n' + parts.join('\n\n') : '';
+    return formatAiFeedback(st.ai_feedback);
   }
   queue.buildAiDraft = buildAiDraft;
 

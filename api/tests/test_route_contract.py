@@ -13,7 +13,10 @@ The gradebook student-list endpoint is at `/api/students/list` (returns id+name 
 the extra-time panel). The reports endpoint is at `/api/students` (returns id+name+monitored).
 These were previously both at `/api/students` causing a shadow; the gradebook one was renamed.
 """
+import json
+
 from api.webui.server import app
+from api.webui.routes import powergrader as powergrader_routes
 
 EXPECTED = [
     ('/', ('GET',)),
@@ -187,6 +190,7 @@ EXPECTED = [
     ('/powergrader', ('GET',)),
     ('/powergrader/session/{session_id}', ('GET',)),
     ('/api/powergrader/session/{session_id}', ('GET',)),
+    ('/api/powergrader/session/{session_id}/staged', ('GET',)),
     ('/api/powergrader/session/{session_id}/grade', ('POST',)),
     ('/api/powergrader/session/{session_id}/late-preview', ('POST',)),
     ('/api/powergrader/session/{session_id}/late-score', ('POST',)),
@@ -213,6 +217,26 @@ EXPECTED = [
     ('/api/work/{job_id}/ignore', ('POST',)),
     ('/api/work/{job_id}/snooze', ('POST',)),
 ]
+
+
+def test_powergrader_staged_route_is_narrow_and_404s(monkeypatch):
+    monkeypatch.setattr(powergrader_routes, "_load_session", lambda _session_id: {
+        "students": [{"ai_score": 7}, {"ai_score": None}],
+        "assistant_staged": {"staged_at": "2026-08-04T12:00:00", "updated": 1},
+    })
+    response = powergrader_routes.pg_get_staged("session-1")
+    assert response.status_code == 200
+    assert json.loads(response.body) == {
+        "ok": True,
+        "staged_at": "2026-08-04T12:00:00",
+        "updated": 1,
+        "scored": 1,
+    }
+
+    monkeypatch.setattr(powergrader_routes, "_load_session", lambda _session_id: None)
+    missing = powergrader_routes.pg_get_staged("missing")
+    assert missing.status_code == 404
+    assert json.loads(missing.body) == {"ok": False, "error": "Session not found."}
 
 
 def _current_routes():

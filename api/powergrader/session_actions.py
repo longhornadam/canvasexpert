@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -231,13 +232,25 @@ def _writeback_mode(session: dict) -> str:
     return "none"
 
 
+_DRAFT_BANNER_RE = re.compile(
+    r"^-{4,}[ \t]+AI draft[ \t]+-{4,}[ \t]*\r?\n"
+    r"[ \t]*AI score:[^\r\n]*(?:\r?\n|$)",
+    re.IGNORECASE,
+)
+
+
+def _strip_draft_banner(feedback: str) -> str:
+    """Remove only the legacy leading AI banner from outbound feedback."""
+    return _DRAFT_BANNER_RE.sub("", feedback, count=1).strip()
+
+
 def _payload(student: dict, *, comments_only: bool = False) -> dict:
     # Single grading surface: PowerGrader is the only writer of an AI-feedback
     # submission comment (``comment[text_comment]``). Gradebook may adjust
     # ``posted_grade`` (curve/late/extension) but never writes feedback here.
     # See docs/reference/powergrader-scoring-map.md (Guardrails: single grading surface).
     score = student.get("teacher_score")
-    feedback = (student.get("teacher_feedback") or "").strip()
+    feedback = _strip_draft_banner((student.get("teacher_feedback") or "").strip())
     payload: dict = {}
     if comments_only:
         # Never touch the score or lateness of a quiz-engine-owned grade.
