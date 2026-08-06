@@ -80,23 +80,99 @@ def normalize_ai_feedback(feedback: str, disclosure: str = "") -> str:
     return f"{text}\n\n{disclosure}".strip() if text else disclosure
 
 
-def _first_json_block(text: str):
-    """Return the first JSON array/object embedded in prose or a code fence."""
+def _top_level_json_blocks(text: str):
+    """Yield (start, end, value) for each decodable JSON value in `text`, left
+    to right. A value's own nested arrays/objects are not reported again as
+    separate blocks, since their span is already consumed by the outer one.
+    """
     decoder = json.JSONDecoder()
+    consumed_to = 0
     for match in re.finditer(r"[\[{]", text):
+        start = match.start()
+        if start < consumed_to:
+            continue
         try:
-            data, _ = decoder.raw_decode(text, match.start())
+            value, end = decoder.raw_decode(text, start)
         except json.JSONDecodeError:
             continue
-        return data
-    raise ValueError("the model reply did not contain valid JSON results")
+        yield start, end, value
+        consumed_to = end
+
+
+def _first_json_block(text: str):
+    """Return the JSON results embedded in prose or one or more code fences.
+
+    A model reply is not always one clean JSON value: it may lead with a
+    sentence of prose that itself decodes as a small JSON object, or wrap
+    each student in its own fenced object instead of one shared array.
+    Collect every top-level decodable value instead of stopping at whichever
+    comes first, then choose:
+
+    - if any value is a list, the widest one wins (ties broken by the later
+      one), since a wrapping array is almost certainly the real results and
+      a short leading note must not shadow it;
+    - otherwise, if two or more values look like a single result (each
+      carries a `pseudonym`), treat the reply as one fenced object per
+      student and combine them into a list;
+    - otherwise, fall back to the widest decodable value, on the theory that
+      the biggest block is more likely to be substance than an aside.
+    """
+    blocks = list(_top_level_json_blocks(text))
+    if not blocks:
+        raise ValueError("the model reply did not contain valid JSON results")
+
+    def widest(candidates):
+        return max(candidates, key=lambda block: (block[1] - block[0], block[0]))
+
+    lists_found = [block for block in blocks if isinstance(block[2], list)]
+    if lists_found:
+        return widest(lists_found)[2]
+
+    dicts_found = [block[2] for block in blocks if isinstance(block[2], dict)]
+    result_like = [d for d in dicts_found if isinstance(d.get("pseudonym"), str) and d.get("pseudonym")]
+    if len(result_like) > 1:
+        return result_like
+    if result_like:
+        return result_like[0]
+
+    return widest(blocks)[2]
+
+
+def _unwrap_dict_results(data: dict) -> list:
+    """Pull a results list out of a wrapper object.
+
+    `results` is the documented key, but models substitute close synonyms
+    (`scores`, `students`, ...). Accept any single list-valued key; when more
+    than one qualifies, prefer whichever one's first element looks like a
+    result object rather than guessing. A bare object with no wrapper at
+    all, carrying its own `pseudonym`, is one result rather than none.
+    """
+    results = data.get("results")
+    if isinstance(results, list):
+        return results
+
+    list_valued = [v for v in data.values() if isinstance(v, list)]
+    if len(list_valued) == 1:
+        return list_valued[0]
+    if len(list_valued) > 1:
+        for value in list_valued:
+            first = value[0] if value else None
+            if isinstance(first, dict) and first.get("pseudonym"):
+                return value
+        return []  # several lists, none look like results: don't guess
+
+    if isinstance(data.get("pseudonym"), str) and data.get("pseudonym"):
+        return [data]
+    return []
 
 
 def parse_results(text: str) -> list:
-    """Parse the LLM's result JSON (an array, or an object wrapping `results`).
+    """Parse the LLM's result JSON: an array, an object wrapping the results
+    under `results` (or a close synonym), or a single bare result object.
 
-    Models routinely wrap the JSON in a markdown code fence or lead with a
-    sentence of prose; tolerate that instead of failing the scoring batch.
+    Models routinely wrap the JSON in a markdown code fence, lead with a
+    sentence of prose, or reshape the wrapper entirely; tolerate all of that
+    rather than quietly returning zero results for the batch.
     """
     raw = str(text or "").strip()
     if not raw:
@@ -106,7 +182,7 @@ def parse_results(text: str) -> list:
     except json.JSONDecodeError:
         data = _first_json_block(raw)
     if isinstance(data, dict):
-        data = data.get("results", [])
+        data = _unwrap_dict_results(data)
     return data if isinstance(data, list) else []
 
 

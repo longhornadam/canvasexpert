@@ -43,6 +43,7 @@ def import_results_into_session(
         parsed = fp.parse_results(results_text)
     except Exception as e:
         return {"ok": False, "error": f"Could not parse JSON: {e}"}, 200
+    parsed_count = len(parsed) if isinstance(parsed, list) else 0
 
     # 2. Resolve batch and its expected keys without mutating the session
     batch = None
@@ -54,11 +55,15 @@ def import_results_into_session(
                 batch = candidate
                 break
         if not batch:
-            return {"ok": False, "error": f"Copilot batch '{clean_batch_id}' was not found in this session."}, 200
+            return {"ok": False, "error": f"AI chat batch '{clean_batch_id}' was not found in this session."}, 200
         expected_keys = {
             (row.get("pseudonym"), str(row.get("item_id", "")))
             for row in batch.get("expected_results") or []
         }
+        # Fail closed: a batch that expects results but got none must not
+        # read as a success just because there is nothing left to reject.
+        if not parsed_count and expected_keys:
+            return _zero_parse_failure()
         errors = []
         for i, row in enumerate(parsed):
             key = (row.get("pseudonym") if isinstance(row, dict) else None,
@@ -68,7 +73,7 @@ def import_results_into_session(
         if errors:
             return {
                 "ok": False,
-                "error": "Validation failed. These results do not belong to this Copilot batch.",
+                "error": "Validation failed. These results do not belong to this AI chat batch.",
                 "validation": {
                     "ok": False,
                     "errors": errors,
@@ -76,6 +81,11 @@ def import_results_into_session(
                     "n": len(parsed),
                 },
             }, 200
+    elif not parsed_count and _awaiting_ai_suggestions(session):
+        # Same fail-closed rule for the whole-session (no batch_id) path: a
+        # session with students still waiting on an AI draft must not read
+        # as a success when the paste yielded nothing to apply.
+        return _zero_parse_failure()
 
     # 3. Select the SAFE bundle path
     # If a batch explicitly names a safe_bundle path, that path must exist
@@ -159,11 +169,29 @@ def import_results_into_session(
         "updated_user_ids": sorted(updated_user_ids),
         "validation": verdict,
         "unresolved": unresolved_count,
+        "parsed_count": parsed_count,
     }
     if clean_batch_id:
         payload["batch_id"] = clean_batch_id
         payload["batch_status"] = batch.get("status") if batch else ""
     return payload, 200
+
+
+def _zero_parse_failure() -> tuple[dict, int]:
+    """The paste yielded no usable results against a target that expects some."""
+    return {
+        "ok": False,
+        "error": (
+            "Read 0 results from the pasted text. Check that the reply is a "
+            "JSON array of result objects, then paste it again."
+        ),
+        "parsed_count": 0,
+    }, 200
+
+
+def _awaiting_ai_suggestions(session: dict) -> bool:
+    """True when at least one session student has no AI draft yet."""
+    return any(not st.get("ai_feedback") for st in session.get("students") or [])
 
 
 def _bundle_for_batch(full_bundle: dict, expected_keys: set[tuple[str, str]]) -> dict:

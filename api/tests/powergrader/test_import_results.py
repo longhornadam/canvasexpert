@@ -224,6 +224,7 @@ def test_batch_import_updates_only_matching_batch(tmp_path):
     assert status == 200
     assert payload["ok"] is True
     assert payload["batch_status"] == "imported"
+    assert payload["parsed_count"] == 1
     assert saved["students"][0]["ai_score"] == 2
     assert "Clear evidence" in saved["students"][0]["ai_feedback"]
     assert saved["students"][1]["ai_score"] is None
@@ -258,7 +259,7 @@ def test_wrong_batch_paste_fails_without_updates(tmp_path):
 
     assert status == 200
     assert payload["ok"] is False
-    assert "do not belong to this Copilot batch" in payload["error"]
+    assert "do not belong to this AI chat batch" in payload["error"]
     assert saved == {}
     assert session["students"][0]["ai_score"] is None
     assert session["students"][1]["ai_score"] is None
@@ -296,6 +297,7 @@ def test_partial_batch_import_marks_partial_and_warns(tmp_path):
     assert status == 200
     assert payload["ok"] is True
     assert payload["batch_status"] == "partial"
+    assert payload["parsed_count"] == 1
     assert saved["copilot_packet"]["batches"][0]["status"] == "partial"
     assert any("no result for" in warning for warning in payload["validation"]["warnings"])
 
@@ -310,6 +312,7 @@ def test_legacy_import_without_copilot_packet_still_works(tmp_path):
     assert status == 200
     assert payload["ok"] is True
     assert "batch_id" not in payload
+    assert payload["parsed_count"] == 1
     assert saved["students"][0]["ai_score"] == 2
     assert "Clear evidence" in saved["students"][0]["ai_feedback"]
     assert saved["students"][1]["ai_score"] is None
@@ -329,6 +332,46 @@ def test_batch_with_nonexistent_bundle_fails_closed(tmp_path):
     assert payload["ok"] is False
     assert "Safe AI Packet student response bundle is missing" in payload["error"]
     assert saved == {}
+
+
+def test_batch_zero_parse_fails_closed_instead_of_reporting_success(tmp_path):
+    """The core regression this unit fixes: a model reply that parses to zero
+    rows (a wrapper key parse_results can't unwrap, an empty note, ...) must
+    not sail through the batch membership check with nothing to reject and
+    come out the other side reporting success with updated: 0."""
+    vault = Vault(str(tmp_path / "vault.json"))
+    session, first, second = _session(tmp_path, vault)
+
+    payload, status, saved = _run_import(
+        session, vault, {"note": "I scored both students above"}, "batch-01"
+    )
+
+    assert status == 200
+    assert payload["ok"] is False
+    assert payload["parsed_count"] == 0
+    assert "Read 0 results" in payload["error"]
+    assert saved == {}
+    assert session["students"][0]["ai_score"] is None
+    assert session["copilot_packet"]["batches"][0]["status"] == "pending"
+
+
+def test_legacy_zero_parse_fails_closed_when_students_await_ai_suggestions(tmp_path):
+    """Same fail-closed rule for the whole-session path (no batch_id): a
+    session with students still waiting on an AI draft must not read as a
+    success when the paste yielded nothing to apply."""
+    vault = Vault(str(tmp_path / "vault.json"))
+    session, first, second = _session(tmp_path, vault)
+    session.pop("copilot_packet")
+
+    payload, status, saved = _run_import(session, vault, {"note": "done"})
+
+    assert status == 200
+    assert payload["ok"] is False
+    assert payload["parsed_count"] == 0
+    assert "Read 0 results" in payload["error"]
+    assert saved == {}
+    assert session["students"][0]["ai_score"] is None
+    assert session["students"][1]["ai_score"] is None
 
 
 def test_concurrent_route_imports_are_serialized_and_make_one_put(monkeypatch, tmp_path):
