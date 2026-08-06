@@ -93,7 +93,18 @@
     <p class="ce-hint">Canvas Expert runs from this unzipped folder. If you move the folder, reconnect above so the paths update. This page only edits your own AI app's config file and keeps a backup; it never needs administrator access.</p>
     <p><strong>Current folder</strong><br><code>{{ connection.app_root }}</code></p>
     <div class="ce-health-list" aria-label="MCP server health">
-      <span>Canvas: <strong>{{ "Configured" if connection.health.canvas.configured else "Not configured" }}</strong></span>
+      {% set canvas_ready = connection.readiness.components.canvas %}
+      <span>Canvas:
+        <strong>
+          {% if canvas_ready.status == "ready" %}Connected
+          {% elif canvas_ready.status == "degraded" and canvas_ready.code == "unauthorized" %}Token invalid or revoked
+          {% elif canvas_ready.status == "degraded" and canvas_ready.code == "timeout" %}Unreachable (timed out)
+          {% elif canvas_ready.status == "degraded" %}Unreachable
+          {% elif canvas_ready.status == "unconfigured" %}Not configured
+          {% else %}{{ "Configured" if connection.health.canvas.configured else "Not configured" }}
+          {% endif %}
+        </strong>
+      </span>
       <span>MCP: <strong>{{ "Ready" if connection.health.mcp.importable and connection.health.mcp.entrypoint_present else "Needs attention" }}</strong></span>
     </div>
 

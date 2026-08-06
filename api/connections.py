@@ -7,6 +7,7 @@ from pathlib import Path
 
 from api import __version__, ai_clients, diagnostics, runtime_paths
 from api.mcp_server.contract import TOOL_SCHEMA_VERSION
+from api.webui import readiness
 
 
 __all__ = ["connection_context", "generic_stdio_config", "build_claude_mcpb"]
@@ -93,6 +94,7 @@ def connection_context() -> dict:
         "portable_tunnel_executable": str(app_root / "tools" / "tunnel-client.exe"),
         "chatgpt_powershell": _chatgpt_powershell(),
         "health": diagnostics.health_snapshot(),
+        "readiness": readiness.snapshot(),
         "clients": ai_clients.clients_status(),
     }
 

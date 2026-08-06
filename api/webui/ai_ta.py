@@ -88,6 +88,9 @@ RETIRED_FILES = {
         # Before "Automations" was renamed to "Routines" (feature-freeze
         # hardening initiative, D2).
         "a7f4d921a378a5044680db39f679cf66eba3cef7369179d5056cc99139c246e6",
+        # Before Appendix D's "you cannot write to Canvas at all" disclosure
+        # fix (three-scenario-teacher-trace.md §9.1).
+        "c8a48dea97670303c973422218bebaf2b65f87e64691a71dc647891ab71f9978",
     }),
 }
 

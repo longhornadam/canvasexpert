@@ -15,6 +15,9 @@
   var scrubResult = document.getElementById("roster-scrub-result");
   var exportWhoBtn = document.getElementById("roster-export-who");
   var backupVaultBtn = document.getElementById("roster-backup-vault");
+  var vaultConflictSection = document.getElementById("roster-vault-conflict");
+  var vaultConflictFilesEl = document.getElementById("roster-vault-conflict-files");
+  var vaultConflictOpenBtn = document.getElementById("roster-vault-conflict-open");
 
   if (!protectedPacksEl || !customProtectedInput || !saveProtectedBtn || !scrubText || !scrubRun || !scrubResult || !exportWhoBtn || !backupVaultBtn) {
     return;
@@ -132,6 +135,34 @@
     }
   }
 
+  function renderVaultConflict(data) {
+    if (!vaultConflictSection || !vaultConflictFilesEl) return;
+    var files = (data && data.files) || [];
+    if (!files.length) {
+      vaultConflictSection.hidden = true;
+      return;
+    }
+    vaultConflictFilesEl.innerHTML = "";
+    for (var i = 0; i < files.length; i++) {
+      var item = document.createElement("li");
+      var when = new Date(files[i].modified_at);
+      item.textContent = files[i].name + " — last changed " +
+        (isNaN(when.getTime()) ? "unknown time" : when.toLocaleString());
+      vaultConflictFilesEl.appendChild(item);
+    }
+    if (vaultConflictOpenBtn && data.folder) {
+      vaultConflictOpenBtn.setAttribute("data-open-path", data.folder);
+    }
+    vaultConflictSection.hidden = false;
+  }
+
+  function loadVaultConflict() {
+    fetch("/api/names/vault-conflict")
+      .then(function (r) { return r.json(); })
+      .then(function (data) { if (data.ok) renderVaultConflict(data); })
+      .catch(function () {});
+  }
+
   saveProtectedBtn.addEventListener("click", saveProtectedNames);
   scrubRun.addEventListener("click", runScrub);
   exportWhoBtn.addEventListener("click", exportWhoIsWho);
@@ -139,6 +170,7 @@
 
   roster.onCourseLoaded(rerunScrubIfNeeded);
   loadProtected();
+  loadVaultConflict();
   if (roster.hasLoadedCourse()) {
     rerunScrubIfNeeded();
   }

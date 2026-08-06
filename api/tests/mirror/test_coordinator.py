@@ -42,7 +42,7 @@ def test_coalescing_and_priority_promotion():
     assert first_plan["jobs"][0]["job_id"] == second_plan["jobs"][0]["job_id"]
     assert calls == ["local-course"]
     assert all(set(job) <= {"job_id", "course_id", "scope", "priority", "state",
-                            "error_class", "queue_wait_ms", "yield_count"} for job in first_plan["jobs"])
+                            "error_class", "error_code", "queue_wait_ms", "yield_count"} for job in first_plan["jobs"])
 
 
 def test_independent_scopes_fail_and_succeed_independently():

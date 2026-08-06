@@ -170,8 +170,8 @@ def test_get_roster_fails_closed_on_vault_conflict(monkeypatch, tmp_path):
     result = tools.get_roster("111")
     assert result == {
         "ok": False,
-        "error": ("identity vault conflict detected — resolve in the "
-                  "CanvasExpert web UI before pseudonymized reads continue"),
+        "error": ("identity vault conflict detected — open the Students page "
+                  "in Canvas Expert to review it before pseudonymized reads continue"),
     }
     # No file basenames, and no student data, in the dumped result.
     dumped = json.dumps(result)

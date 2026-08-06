@@ -39,6 +39,7 @@ class _Job:
     started_at: float | None = None
     finished_at: float | None = None
     error_class: str = ""
+    error_code: str = ""
     yields: int = 0
     queue_wait_ms: int = 0
 
@@ -181,6 +182,7 @@ class MirrorCoordinator:
     def _job_view(job: _Job) -> dict:
         return {"job_id": job.job_id, "course_id": job.course_id, "scope": job.scope,
                 "priority": job.priority, "state": job.state, "error_class": job.error_class,
+                "error_code": job.error_code,
                 "queue_wait_ms": job.queue_wait_ms, "yield_count": job.yields}
 
     def _refresh_plan_locked(self, plan: _Plan) -> None:
@@ -214,6 +216,7 @@ class MirrorCoordinator:
                                                        outcome.get("state") == "failed"):
                         job.state = "failed"
                         job.error_class = str(outcome.get("error_class") or "acquisition_failed")
+                        job.error_code = str(outcome.get("error_code") or "")
                     else:
                         job.state = "succeeded"
             except Exception as error:

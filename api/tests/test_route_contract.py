@@ -158,6 +158,7 @@ EXPECTED = [
     ('/api/names/pseudonym/regenerate', ('POST',)),
     ('/api/names/roster', ('GET',)),
     ('/api/names/scrub-test', ('POST',)),
+    ('/api/names/vault-conflict', ('GET',)),
     ('/api/names/who-is-who', ('POST',)),
     ('/api/open-file', ('POST',)),
     ('/api/roster', ('GET',)),

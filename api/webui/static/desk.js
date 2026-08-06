@@ -281,6 +281,20 @@
     };
   }
 
+  var SYNC_ERROR_MESSAGES = {
+    auth_failed: "Canvas sync failed: your Canvas token may need to be updated in Settings.",
+    auth_unavailable: "Canvas sync failed: your Canvas token may need to be updated in Settings.",
+    forbidden: "Canvas sync failed: this Canvas account may not have access to a course.",
+    not_found: "Canvas sync failed: a course or item may have been moved or removed.",
+  };
+
+  function syncFailureMessage(plan) {
+    var jobs = Array.isArray(plan.jobs) ? plan.jobs : [];
+    var failed = jobs.filter(function (job) { return job.state === "failed"; });
+    var code = failed.length ? failed[0].error_code : "";
+    return SYNC_ERROR_MESSAGES[code] || "Canvas sync failed. Try again in a few minutes.";
+  }
+
   function renderMirror(summary) {
     if (!mirrorRoot) return;
     mirrorRoot.dataset.state = summary.state || "unknown";
@@ -338,10 +352,16 @@
       }).then(responseJson).then(function (syncResult) {
         if (!syncResult.response.ok || !syncResult.body.plan_id) throw new Error("sync_not_queued");
         return pollMirrorPlan(syncResult.body.plan_id, 160);
-      }).then(function () {
-        return fetch("/api/work/scan", { method: "POST", headers: mutationHeaders(), keepalive: true }).then(responseJson);
-      }).then(function () {
-        return Promise.all([loadMirror(), refreshLocal()]);
+      }).then(function (plan) {
+        if (plan.state === "failed") {
+          // A failed plan produced no new data: skip the work-list recompute
+          // and stop before loadMirror() can overwrite this message with the
+          // stale "synced N days ago" summary.
+          renderMirror({ state: "attention", label: syncFailureMessage(plan), sync: true });
+          return;
+        }
+        return fetch("/api/work/scan", { method: "POST", headers: mutationHeaders(), keepalive: true }).then(responseJson)
+          .then(function () { return Promise.all([loadMirror(), refreshLocal()]); });
       }).catch(function () {
         renderMirror({ state: "attention", label: "Canvas sync could not finish", sync: true });
       }).finally(function () {

@@ -2,11 +2,13 @@
 
 A local, stdio-only [Model Context Protocol](https://modelcontextprotocol.io) server that
 lets any MCP-capable assistant help plan lessons and manage rosters conversationally,
-while CanvasExpert keeps sole custody of the Canvas PAT and every write path.
+while CanvasExpert keeps sole custody of the Canvas PAT and almost every write path.
 
 - **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
-  local copy on their computer. It never holds the Canvas token, and writes nothing
-  beyond the identity vault it already shares with the rest of CanvasExpert.
+  local copy on their computer. It never holds the Canvas token. Writes nothing beyond
+  the identity vault it already shares with the rest of CanvasExpert, except one
+  explicit, digest-protected roster tool (`canvas_group`) that reassigns a student's
+  real Canvas group membership when the teacher tells the assistant to do it.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   fake name (e.g. "Sparky McGee") — never a real name, Canvas user ID, or SIS ID.
@@ -51,7 +53,7 @@ Tool schema version 29 (47 tools).
 | `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes — pseudonymized |
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected preview of a pseudonym-first settings change; use before apply | Yes — pseudonymized |
-| `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the exact reviewed preview through the existing Roster mutation path | Yes — pseudonymized |
+| `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the exact reviewed preview through the existing Roster mutation path; a `canvas_group` patch reaches Canvas | Yes — pseudonymized |
 | `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes — pseudonymized |
 | `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |

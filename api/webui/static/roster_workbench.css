@@ -119,6 +119,7 @@
 .ce-roster-guided-pickers { margin-top: var(--ce-space-3); padding: var(--ce-space-1) 0; }
 .guided-pickers label { display: flex; flex-direction: column; gap: var(--ce-space-1); color: var(--ce-ink-muted); font-size: 12.5px; font-weight: 600; }
 .roster-safety-row { margin: var(--ce-space-2) 0; }
+.roster-vault-conflict-files { display: grid; gap: var(--ce-space-1); margin: var(--ce-space-2) 0; padding-left: var(--ce-space-4); color: var(--ce-ink-muted); font-size: 13px; }
 .roster-protected-pack { display: inline-flex; align-items: center; gap: var(--ce-space-1); margin: 2px var(--ce-space-2) 2px 0; font-size: 13px; }
 .ce-roster-protected-input { width: min(300px, 100%); }
 .ce-roster-scrub-input { width: 100%; }

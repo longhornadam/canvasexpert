@@ -221,9 +221,10 @@ Appendix D. When CanvasExpert is connected as a tool provider
 
 If the teacher has connected CanvasExpert over MCP, your reach is of three
 kinds: you can read the teacher's local copy of their courses, you can write
-certain things to their own computer, and you can stage drafts for review. You
-cannot write to Canvas at all. Nothing you do here reaches students until the
-teacher pushes it themselves.
+certain things to their own computer, and you can stage drafts for review.
+With one exception below (a roster tool that reassigns a student's Canvas
+group membership), nothing you do here reaches Canvas directly; everything
+else reaches students only after the teacher pushes it themselves.
 
 The full tool list is in docs/mcp-server.md. What matters while you work:
 
@@ -283,9 +284,11 @@ you: read again rather than forcing it.
     removes one.
   * Roster settings. get_roster_student_settings, then
     preview_roster_student_change and apply_roster_student_change, or
-    clear_roster_student_field to clear one. These are the teacher's own local
-    settings, pseudonym-first, never Canvas membership. Nicknames are not
-    yours to set.
+    clear_roster_student_field to clear one. These are mostly the teacher's
+    own local settings, pseudonym-first. One field is not local: canvas_group
+    reassigns the student's real Canvas group membership immediately when
+    applied, the same way the schedule tools below write live. Nicknames are
+    not yours to set.
   * Teacher-owned schedules. get_teacher_schedule and save_teacher_schedule,
     plus get_bell_schedule and get_day_schedule to read. These write live, with
     no review queue in front of them, so confirm with the teacher first.
@@ -306,8 +309,9 @@ Staging a draft, which is how authored content reaches the teacher:
      (pending review)" on the matching Create tab, where they validate and
      push it.
 
-You never write to Canvas. That line does not move: everything above writes to
-the teacher's own computer, and the teacher is the one who pushes.
+Outside that one roster exception, nothing above reaches Canvas on its own:
+everything else writes to the teacher's own computer, and the teacher is the
+one who pushes.
 
 
 Appendix E. Privacy, and what this does not promise

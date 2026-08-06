@@ -39,7 +39,7 @@ matters most in this document is that one of them is not where the docs say it i
 
 ## 3. Scenario 1: "I need my teaching day to run cleanly"
 
-### 3.1 The blocking one: a fail-closed error that names a screen nobody built [V]
+### 3.1 The blocking one: a fail-closed error that names a screen nobody built [FIXED 2026-08-06]
 
 `_VAULT_CONFLICT_ERROR` at `api/mcp_server/tools.py:574-577` reads:
 
@@ -66,7 +66,22 @@ Worth noting the asymmetry: the same class of problem *is* surfaced for catalogs
 `api/webui/static/powergrader/setup_core.js:301` ("A competing OneDrive catalog copy needs
 review."). The pattern exists and was never built for the identity vault.
 
-### 3.2 "Is my connection healthy" has three answers and the honest one is unwired [V]
+**Fixed 2026-08-06.** That catalog "pattern" turned out to be thinner than it reads here on
+first pass: it is a passive warning sentence appended to a status string, with no interactive
+resolution at all, so porting it 1:1 would not have closed this finding (a teacher who hits the
+MCP error is in their AI chat, not browsing the WebUI, and a sentence buried in a status line
+they'd have to already be looking at doesn't reach them). Built instead: a real section on the
+Students page (`roster.html`, id `roster-vault-conflict`), hidden unless a conflict exists,
+fed by a new `GET /api/names/vault-conflict` (filenames, modified time, size — never vault
+contents), with an "Open Identity Vault folder" button using the app's existing global
+`data-open-path` handler. The app still never auto-merges or auto-picks a winner, consistent
+with `feedback_vault.py`'s own design comment on why not; the fix is disclosure and a real
+place to go, not automated reconciliation. `_VAULT_CONFLICT_ERROR` now names the Students page
+by name instead of the generic "the CanvasExpert web UI." Verified live against a real
+OneDrive-shaped conflict file on the machine this was built on (created, confirmed the section
+renders with correct filename/timestamp/open-path, removed).
+
+### 3.2 "Is my connection healthy" has three answers and the honest one is unwired [readiness.py half FIXED 2026-08-06]
 
 - `/connections` renders `Canvas: Configured` from `bool(base_url) and token_is_set()`
   (`api/diagnostics.py:28-32`, template `connections.html:95-97`). No network call. A revoked
@@ -77,15 +92,20 @@ review."). The pattern exists and was never built for the identity vault.
   but it uses a bare `requests.get` and returns `str(e)` or `f"HTTP {r.status_code}:
   {r.text[:300]}"`. The teacher sees a raw resolver error or up to 300 characters of Canvas
   JSON. `api/webui/static/welcome.js:236-237` shows the same text with no prefix during
-  first run.
-- `api/webui/readiness.py` is the module that actually classifies `unauthorized` / `timeout`
+  first run. **Not touched** — still returns raw provider text on first run.
+- ~~`api/webui/readiness.py` is the module that actually classifies `unauthorized` / `timeout`
   / `network`. It has no template or JS consumer, and stronger than that: nothing ever calls
   `readiness.probe()`, so `_LAST_PROBE` stays `None` and `snapshot()` returns every component
-  as `{"status": "unknown"}`. The module is not merely unrendered, it never runs. Its CSS
-  lives on at `api/webui/static/ui/layouts.css:16-17`, alongside two more dead rules at
-  `:14-15`. Both routes are pinned by `api/tests/test_route_contract.py:211-212`.
+  as `{"status": "unknown"}`. The module is not merely unrendered, it never runs.~~ **Fixed.**
+  `routines.py`'s existing 30-min heartbeat (`_routines_heartbeat`) now calls
+  `readiness.probe(force=True)` every tick, so `_LAST_PROBE` gets populated ~90s after launch
+  and refreshed every 30 min from then on. `/connections`'s Canvas line now reads
+  `readiness.snapshot()` first, falling back to the old credential-presence text only in the
+  unlikely window before the first tick. Its CSS still lives on at
+  `api/webui/static/ui/layouts.css:16-17` unused (cosmetic, left alone). Both routes are
+  pinned by `api/tests/test_route_contract.py:211-212`.
 
-### 3.3 A requested sync that fails completely reports success [V]
+### 3.3 A requested sync that fails completely reports success [FIXED 2026-08-06]
 
 `api/webui/static/desk.js:308` treats `plan.state === "failed"` as a normal terminal state and
 resolves rather than throwing, so a "Sync now" whose every pass 401s walks through
@@ -99,6 +119,16 @@ consumers drop it, reading only `last_success_at` (`api/webui/routes/pages.py:34
 
 With no successful sync ever, Home says "Canvas data not synced yet," which is honest. The
 misleading age only appears after a token that used to work stops working.
+
+**Fixed 2026-08-06.** The specific `error_code` was computed server-side but never reached the
+coordinator's job view: `_Job` in `api/mirror/coordinator.py` only recorded a generic
+`error_class` (always `"acquisition_failed"` in practice, since the real runners never set that
+key), never the actual code. Added a proper `error_code` field, threaded through from each
+runner's `{"ok": False, "error_code": ...}` return. `desk.js`'s sync click handler now checks
+`plan.state === "failed"` explicitly, maps the failed job's `error_code` to a plain-language
+message (token/auth, forbidden, not-found, or a generic fallback), and stops before the
+work-scan/reload chain can overwrite it with the stale success-shaped summary. Verified live in
+the browser via a mocked fetch response, both the specific and fallback message paths.
 
 ### 3.4 "Is my teacher schedule complete" [V]
 
@@ -392,7 +422,7 @@ the per-student column: `sum(a["submitted"] - a["graded"] ...)` at the assignmen
 against `submitted_at` plus `workflow_state` per student. The two numbers can disagree on the
 same screen.
 
-### 5.4 "Prepare a local weekly routine" has no home [V]
+### 5.4 "Prepare a local weekly routine" has no home [scheduler bug FIXED 2026-08-06]
 
 `_run_routines_bg` (`api/webui/routes/routines.py:248-252`) opens:
 
@@ -422,6 +452,14 @@ and datetime but no AI client. CE is also not a persistent service, so nothing r
 app is closed.
 
 The clean shape the scenario asks for is roughly 80% built and has no assembly point.
+
+**Scheduler bug fixed 2026-08-06.** The README's claim was not aspirational, it was the
+intended contract, and the `if not meta.get("custom")` line was the one place the code broke
+it. Removed. Custom routines now run on the same heartbeat as built-ins; verified by reverting
+the one-line fix and watching a new regression test go red (no test existed before this). The
+other three constraints in this section (no MCP tool control, app-restart to add a routine, no
+LLM access from a routine, no persistent service) are unrelated design boundaries, not bugs,
+and are unchanged.
 
 ### 5.5 The write boundary, in the direction asked [V]
 
@@ -491,7 +529,15 @@ three were decided on 2026-08-05 and are now batches 8, 9, and 10 above (readine
 
 ## 9. Open decisions
 
-### 9.1 MCP Canvas write: decided, keep the capability, fix the disclosure everywhere it appears
+### 9.1 MCP Canvas write: decided, keep the capability, fix the disclosure everywhere it appears [FIXED 2026-08-06]
+
+**All seven sites fixed 2026-08-06** using the exact suggested wording below: `__init__.py`,
+`docs/mcp-server.md` (both the intro bullet and the `apply_roster_student_change` table row),
+`about.html`, and all three `START HERE - CanvasAgent.txt` Appendix D lines (with the required
+pre-edit hash added to `ai_ta.RETIRED_FILES` so a teacher's existing seeded copy gets
+re-seeded), plus the `test_tools.py` docstring. Verified: full suite green, CORE line 37
+confirmed untouched by construction (its wording is textually distinct from the Appendix D
+lines edited).
 
 `apply_roster_student_change` with a `canvas_group` patch writes real Canvas group
 memberships. The chain is `api/mcp_server/tools.py:308` (`canvas_group` in

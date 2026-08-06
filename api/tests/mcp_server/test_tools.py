@@ -1,4 +1,4 @@
-"""Offline tests for the read-only MCP server's tool implementations.
+"""Offline tests for the MCP server's tool implementations.
 
 Vault is isolated to ``tmp_path`` per test (never the real global vault).
 Fabricated data uses generic names ("Learner One") and large made-up Canvas

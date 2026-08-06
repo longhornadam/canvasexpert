@@ -281,6 +281,25 @@
       {% include "_student_reports_panels.html" %}
     </div>
 
+    <section class="ce-panel roster-vault-conflict" id="roster-vault-conflict" hidden>
+      <h2>Vault conflict found</h2>
+      <p class="ce-hint">
+        Your identity vault has more than one file, likely from switching computers while a
+        sync was in progress. Canvas Expert never merges these automatically, since guessing
+        wrong could mix up which fake name belongs to which student. Until this is resolved,
+        an assistant connected over MCP can't read pseudonymized data.
+      </p>
+      <ul id="roster-vault-conflict-files" class="roster-vault-conflict-files"></ul>
+      <p class="ce-hint">
+        Open the folder below and compare the files. Keep the one that matches this computer
+        and your most recent work, and move the others out of the folder (for example into a
+        subfolder named "Old"). Don't delete anything you're not sure about.
+      </p>
+      <div class="ce-actions">
+        <button type="button" id="roster-vault-conflict-open" class="small" data-open-path="">Open Identity Vault folder</button>
+      </div>
+    </section>
+
     <details class="ce-panel roster-v2-details" id="roster-safety-card">
       <summary><strong>AI safety tools</strong></summary>
       <div class="guided-pickers ce-roster-guided-pickers">

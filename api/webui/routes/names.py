@@ -10,6 +10,7 @@ import csv
 import json
 import os
 import shutil
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
@@ -186,6 +187,28 @@ def export_who_is_who(course_id: str = Form("")):
                 ", ".join(e.get("nicknames", [])),
             ])
     return JSONResponse({"ok": True, "path": who_path})
+
+
+@names_router.get("/vault-conflict")
+def vault_conflict():
+    """List any OneDrive-forked vault*.json copies beside the canonical vault,
+    with enough to help the teacher judge which is current. Never reads their
+    contents (student identity), only filesystem metadata."""
+    vault = _vault()
+    folder = os.path.dirname(vault.path) or "."
+    files = []
+    for name in vault.conflicts():
+        path = os.path.join(folder, name)
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        files.append({
+            "name": name,
+            "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
+            "size_bytes": stat.st_size,
+        })
+    return JSONResponse({"ok": True, "folder": folder, "files": files})
 
 
 @names_router.post("/backup-vault")

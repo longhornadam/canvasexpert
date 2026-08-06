@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from api.platform_services import config
 from api.platform_services.canvas_client import _canvas_send
 from api import operational_log
+from api.webui import readiness
 from . import powergrader as pg_routes
 from api.powergrader import (
     ai_workflow,
@@ -238,6 +239,10 @@ def _routines_heartbeat():
     _time.sleep(90)
     while True:
         try:
+            readiness.probe(force=True)
+        except Exception as exc:
+            operational_log.emit("routines.heartbeat_tick", "failed", error_class=type(exc))
+        try:
             if config.token_is_set():
                 _run_routines_bg()
         except Exception as exc:
@@ -246,13 +251,16 @@ def _routines_heartbeat():
 
 
 def _run_routines_bg():
+    # Custom routines get the same three triggers as built-ins (Run now /
+    # catch-up on launch / every 30 min here) -- see api/webui/README.md.
+    # No parallel path: both kinds pass through the same _ROUTINE_DEFS /
+    # _ROUTINE_RUNNERS registries.
     for rid, meta in _ROUTINE_DEFS.items():
-        if not meta.get("custom"):
-            state = _routine_state(rid)
-            if state["enabled"] and _routine_due(state):
-                try:
-                    res = _ROUTINE_RUNNERS[rid](state["params"])
-                    config.set_routine_state(rid, {"last_run": datetime.now().isoformat(timespec="seconds"),
-                                                   "last_summary": res["summary"]})
-                except Exception as exc:
-                    operational_log.emit("routines.scheduled_run", "failed", error_class=type(exc))
+        state = _routine_state(rid)
+        if state["enabled"] and _routine_due(state):
+            try:
+                res = _ROUTINE_RUNNERS[rid](state["params"])
+                config.set_routine_state(rid, {"last_run": datetime.now().isoformat(timespec="seconds"),
+                                               "last_summary": res["summary"]})
+            except Exception as exc:
+                operational_log.emit("routines.scheduled_run", "failed", error_class=type(exc))

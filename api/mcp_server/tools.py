@@ -572,8 +572,8 @@ def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
 
 
 _VAULT_CONFLICT_ERROR = (
-    "identity vault conflict detected — resolve in the CanvasExpert web UI "
-    "before pseudonymized reads continue"
+    "identity vault conflict detected — open the Students page in Canvas Expert "
+    "to review it before pseudonymized reads continue"
 )
 
 
