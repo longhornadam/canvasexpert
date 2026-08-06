@@ -861,7 +861,7 @@ The senior must reverify symbols on `dev` before writing a handoff. As of this d
 
 | Concern | Current starting points |
 |---|---|
-| Core Canvas transport | `api/webui/canvas_client.py`, `api/gradebook_queries.py` |
+| Core Canvas transport | `api/platform_services/canvas_client.py`, `api/gradebook_queries.py` |
 | Mirror storage/sync/query | `api/mirror/store.py`, `api/mirror/sync.py`, `api/mirror/queries.py` |
 | Mirror scheduler/manual sync | `api/webui/mirror_service.py` |
 | New Quiz mirror | `api/mirror/new_quizzes.py` |

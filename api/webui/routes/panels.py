@@ -32,8 +32,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from api import panel_themes
-from api.webui import (clock_time, config, deps, panel_data as panel_data_service,
-                       school_calendar, workspace)
+from api.platform_services import config, workspace
+from api.webui import (clock_time, deps, panel_data as panel_data_service,
+                       school_calendar)
 
 router = APIRouter()
 

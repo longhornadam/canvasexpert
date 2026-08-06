@@ -45,7 +45,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 from api import operational_log, runtime_paths
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 VERSION = 1

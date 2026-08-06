@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from .. import config
-from ..canvas_client import _canvas_send
+from api.platform_services import config
+from api.platform_services.canvas_client import _canvas_send
 from api import operational_log
 from . import powergrader as pg_routes
 from api.powergrader import (

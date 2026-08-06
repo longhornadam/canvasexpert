@@ -13,7 +13,7 @@ from api import gradebook_queries, gradebook_snapshot
 from api.feedback_vault import Vault
 from api.mirror import queries, store
 from api.mcp_server import tools
-from api.webui import workspace
+from api.platform_services import workspace
 
 COURSE = "111"
 

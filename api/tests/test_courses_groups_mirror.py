@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from api.mirror import store
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes import courses
 
 
@@ -88,7 +88,7 @@ class _FakeResponse:
 
 def test_fetch_group_category_groups_returns_normalized_shape(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
-    monkeypatch.setattr(courses, "_canvas_headers",
+    monkeypatch.setattr(courses, "canvas_headers",
                         lambda: ({"Authorization": "Bearer x"}, "https://canvas.example.invalid"))
     requested = []
 
@@ -120,7 +120,7 @@ def test_fetch_group_category_groups_returns_normalized_shape(monkeypatch, tmp_p
 
 def test_fetch_group_category_groups_returns_error_on_non_200(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
-    monkeypatch.setattr(courses, "_canvas_headers",
+    monkeypatch.setattr(courses, "canvas_headers",
                         lambda: ({"Authorization": "Bearer x"}, "https://canvas.example.invalid"))
     monkeypatch.setattr(courses.requests, "get",
                         lambda *a, **k: _FakeResponse(403, None))
@@ -133,7 +133,7 @@ def test_fetch_group_category_groups_returns_error_on_non_200(monkeypatch, tmp_p
 
 def test_fetch_group_category_groups_requires_token(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
-    monkeypatch.setattr(courses, "_canvas_headers", lambda: (None, None))
+    monkeypatch.setattr(courses, "canvas_headers", lambda: (None, None))
 
     groups_out, err = courses.fetch_group_category_groups("555001", "cat-1")
 
@@ -145,7 +145,7 @@ def test_load_group_categories_uses_shared_fetch_helper_for_each_category(monkey
     """The refactor shares one Canvas-shape-normalization path; the
     per-category degrade-to-empty-on-failure behavior is unchanged."""
     _mount(monkeypatch, tmp_path)
-    monkeypatch.setattr(courses, "_canvas_headers",
+    monkeypatch.setattr(courses, "canvas_headers",
                         lambda: ({"Authorization": "Bearer x"}, "https://canvas.example.invalid"))
 
     def fake_get(url, headers=None, params=None, timeout=20):

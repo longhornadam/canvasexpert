@@ -7,11 +7,12 @@ import json
 import uuid as _uuid
 from datetime import datetime, timedelta
 
-from .. import config, deps, mirror_service, school_calendar
-from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
+from api.platform_services import config
+from .. import deps, mirror_service, school_calendar
+from api.platform_services.canvas_client import canvas_get, canvas_get_all, _canvas_send
 from ..gradebook_service import _load_curve_events, _save_curve_events, _apply_curve_model
 from ..mirror_reads import students_or_live, submissions_or_live
-from ..schooldays import _school_days_late, _parse_iso_local
+from ..schooldays import _school_days_late, parse_iso_local
 from api import operational_log, routine_reads, student_packet
 from api.powergrader import assignment_refresh
 
@@ -23,7 +24,7 @@ from api.nq_report import html_to_text
 # --------------------------------------------------------------------------
 
 def _run_routine_sweep(params):
-    from ..schooldays import _school_days_late_detail
+    from ..schooldays import school_days_late_detail
     window = int(params.get("window_days", 30))
     cutoff = (datetime.now().date() - timedelta(days=window)).isoformat()
 
@@ -32,7 +33,7 @@ def _run_routine_sweep(params):
     span_start = span_end = None
     for c in config.active_courses():
         cid = str(c["id"])
-        asgns, err = _canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
+        asgns, err = canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
         if err:
             lines.append(f"✗ {c['nickname']}: {err}")
             ok = False
@@ -44,7 +45,7 @@ def _run_routine_sweep(params):
             lines.append(f"· {c['nickname']}: nothing due in window")
             continue
 
-        subs, err = _canvas_get_all(f"/api/v1/courses/{cid}/students/submissions",
+        subs, err = canvas_get_all(f"/api/v1/courses/{cid}/students/submissions",
                                     {"student_ids[]": "all", "per_page": 100}, timeout=90)
         if err:
             lines.append(f"✗ {c['nickname']}: {err}")
@@ -69,8 +70,8 @@ def _run_routine_sweep(params):
             a = amap.get(sub.get("assignment_id"))
             if not a:
                 continue
-            due = _parse_iso_local(sub.get("cached_due_date") or a.get("due_at"))
-            submitted = _parse_iso_local(sub.get("submitted_at"))
+            due = parse_iso_local(sub.get("cached_due_date") or a.get("due_at"))
+            submitted = parse_iso_local(sub.get("submitted_at"))
             if not due or not submitted:
                 continue
             candidates.append((sub, a, due, submitted))
@@ -91,7 +92,7 @@ def _run_routine_sweep(params):
     total = 0
     for cid, (c, candidates, name_by_id, extra) in per_course.items():
         for sub, a, due, submitted in candidates:
-            raw_days, excluded = _school_days_late_detail(due, submitted, no_count)
+            raw_days, excluded = school_days_late_detail(due, submitted, no_count)
             if raw_days <= 0:
                 continue
             uid = str(sub.get("user_id"))
@@ -127,7 +128,7 @@ def _run_routine_download(params):
     lines, ok, total, current, incomplete, failed = [], True, 0, 0, 0, 0
     for c in config.active_courses():
         asgns_result = routine_reads.read_scope(
-            "assignments", c["id"], live_reader=_canvas_get_all)
+            "assignments", c["id"], live_reader=canvas_get_all)
         if not asgns_result["ok"]:
             lines.append("✗ assignment listing failed")
             ok = False
@@ -160,7 +161,7 @@ def _run_routine_download(params):
 # --------------------------------------------------------------------------
 
 def _curve_apply_core(course_id, assignment_id, curve_type, settings, rows):
-    a, err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
+    a, err = canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
     if err:
         return False, None, [{"error": err}]
     # Audit-only baseline (recorded on the curve event as score_at_apply_time,
@@ -210,7 +211,7 @@ def _run_routine_curve(params):
     for c in config.active_courses():
         cid = str(c["id"])
         course_applied = 0
-        asgns, err = _canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
+        asgns, err = canvas_get_all(f"/api/v1/courses/{cid}/assignments", {"per_page": 100})
         if err:
             lines.append(f"✗ {c['nickname']}: {err}")
             ok = False
@@ -224,7 +225,7 @@ def _run_routine_curve(params):
             aid = str(a["id"])
             if (cid, aid) in curved_already:
                 continue
-            subs, err = _canvas_get_all(f"/api/v1/courses/{cid}/assignments/{aid}/submissions",
+            subs, err = canvas_get_all(f"/api/v1/courses/{cid}/assignments/{aid}/submissions",
                                         {"per_page": 100})
             if err:
                 continue
@@ -283,14 +284,14 @@ def _run_routine_grading_debt(params):
     for c in config.active_courses():
         cid = str(c["id"])
         asgns_result = routine_reads.read_scope(
-            "assignments", cid, live_reader=_canvas_get_all)
+            "assignments", cid, live_reader=canvas_get_all)
         if not asgns_result["ok"]:
             lines.append(f"✗ {c['nickname']}: {asgns_result['error']}")
             ok = False
             continue
         aname = {str(a["id"]): a.get("name", "") for a in (asgns_result["records"] or [])}
         subs_result = routine_reads.read_scope(
-            "submissions", cid, live_reader=_canvas_get_all)
+            "submissions", cid, live_reader=canvas_get_all)
         if not subs_result["ok"]:
             lines.append(f"✗ {c['nickname']}: {subs_result['error']}")
             ok = False
@@ -300,7 +301,7 @@ def _run_routine_grading_debt(params):
         for s_ in (subs_result["records"] or []):
             if s_.get("workflow_state") != "submitted" or not s_.get("submitted_at"):
                 continue
-            sub_dt = _parse_iso_local(s_["submitted_at"])
+            sub_dt = parse_iso_local(s_["submitted_at"])
             if not sub_dt:
                 continue
             candidates.append((sub_dt, aname.get(str(s_.get("assignment_id")), "?")))

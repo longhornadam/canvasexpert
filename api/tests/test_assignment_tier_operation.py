@@ -215,7 +215,7 @@ def test_retry_verifies_exact_ids_and_resumes_without_duplicates(monkeypatch):
     def send(method, path, body, timeout=30):
         writes.append(path)
         return {"id": 200 + len(writes)}, None
-    monkeypatch.setattr("api.operation_ledger.adapters.assignment.canvas_client._canvas_get", get)
+    monkeypatch.setattr("api.operation_ledger.adapters.assignment.canvas_client.canvas_get", get)
     monkeypatch.setattr("api.operation_ledger.adapters.assignment.canvas_client._canvas_send", send)
     result = adapter.execute(
         _payload(), {"course_id": "42", "steps": existing_steps},
@@ -231,7 +231,7 @@ def test_same_title_drift_allows_known_ids_and_blocks_unknown(monkeypatch):
     adapter = AssignmentAdapter(); resolved = _resolved()
     monkeypatch.setattr("api.operation_ledger.adapters.assignment.resolve_assignment_groups", lambda *a, **k: resolved)
     rows = [{"id": 101, "name": "Practice"}]
-    monkeypatch.setattr("api.operation_ledger.adapters.assignment.canvas_client._canvas_get_all", lambda *a, **k: (rows, None))
+    monkeypatch.setattr("api.operation_ledger.adapters.assignment.canvas_client.canvas_get_all", lambda *a, **k: (rows, None))
     step = models.new_step("create_tier_assignment:0"); step["state"] = "applied"; step["returned_object_id"] = "101"
     target = {"course_id": "42", "steps": [step]}
     stored = {"group_snapshot": resolved["safe"], "existing_assignments": []}
@@ -306,7 +306,7 @@ def test_reconcile_verifies_all_tier_dependency_ids(monkeypatch):
             assignment_id = "101" if tail == "301" else "102"
             return {"id": tail, "type": "Assignment", "content_id": assignment_id}, None
         return {"id": tail, "html_url": "https://canvas.invalid/a"}, None
-    monkeypatch.setattr("api.operation_ledger.adapters.assignment.canvas_client._canvas_get", get)
+    monkeypatch.setattr("api.operation_ledger.adapters.assignment.canvas_client.canvas_get", get)
     class Queue:
         @staticmethod
         def make_job_id(course_id, assignment_id): return f"{course_id}_{assignment_id}"
@@ -337,7 +337,7 @@ def test_reconcile_partial_tiers_stays_unresolved_without_send(monkeypatch):
         models.new_step("create_tier_assignment:1"),
     ]
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.assignment.canvas_client._canvas_get",
+        "api.operation_ledger.adapters.assignment.canvas_client.canvas_get",
         lambda path, params=None, timeout=20: ({"id": path.rsplit("/", 1)[-1]}, None),
     )
     result = adapter.reconcile(_payload(), {"course_id": "42", "steps": steps}, {})
@@ -370,7 +370,7 @@ def test_restart_recovery_proves_tiers_and_authorizes_no_duplicate(tmp_path, mon
     )
     operations.create_operation(op)
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.assignment.canvas_client._canvas_get",
+        "api.operation_ledger.adapters.assignment.canvas_client.canvas_get",
         lambda path, params=None, timeout=20: ({"id": path.rsplit("/", 1)[-1]}, None),
     )
     sends = []
@@ -407,7 +407,7 @@ def test_restart_recovery_partial_tiers_does_not_authorize_duplicate(tmp_path, m
         targets=[target],
     ))
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.assignment.canvas_client._canvas_get",
+        "api.operation_ledger.adapters.assignment.canvas_client.canvas_get",
         lambda path, params=None, timeout=20: ({"id": path.rsplit("/", 1)[-1]}, None),
     )
     summary = recovery.recover_pending_operations()

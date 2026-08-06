@@ -7,11 +7,11 @@ from api.nq_report import constructed_responses, html_to_text
 from api.feedback_vault import Vault
 from api import feedback_scrub, feedback_safety
 from api.powergrader import student_attachments, writing_timeline
-from api.webui import workspace
+from api.platform_services import workspace
 from api.feedback_contract import (
     CONTRACT_VERSION,
-    _REVIEW_NOTE,
-    _safe,
+    REVIEW_NOTE,
+    safe as safe_filename,
     build_contract_text,
 )
 
@@ -48,7 +48,7 @@ def pseudonymize(parsed: dict, vault: Vault, quiz_title: str) -> dict:
             } for it in written],
         })
     return {"contract_version": CONTRACT_VERSION, "quiz_title": quiz_title,
-            "review_required": True, "note": _REVIEW_NOTE, "students": students}
+            "review_required": True, "note": REVIEW_NOTE, "students": students}
 
 
 def _is_upload_item(item: dict) -> bool:
@@ -218,7 +218,7 @@ def pseudonymize_submissions(submissions: list, vault: Vault,
     return {"contract_version": CONTRACT_VERSION,
             "quiz_title": assignment_title,
             "source": "assignment",
-            "review_required": True, "note": _REVIEW_NOTE, "students": students}
+            "review_required": True, "note": REVIEW_NOTE, "students": students}
 
 
 def _scrub_bundle(bundle: dict, vault: Vault,
@@ -385,7 +385,7 @@ def write_safe_and_private(
     attachment_only: list[dict] = []
     excluded: list[str] = []
     shared_context_excluded = False
-    stem = _safe(bundle.get("quiz_title", "assignment"))
+    stem = safe_filename(bundle.get("quiz_title", "assignment"))
 
     if compact is None:
         # Longest fixed suffix written into each directory: if that alone

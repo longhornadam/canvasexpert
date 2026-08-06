@@ -7,7 +7,8 @@ import pytest
 
 from api import runtime_paths
 from api.mirror import store
-from api.webui import canvas_client, mirror_service, workspace
+from api.platform_services import canvas_client, workspace
+from api.webui import mirror_service
 
 
 @pytest.fixture
@@ -16,7 +17,7 @@ def _client_with(monkeypatch):
         calls = []
         queue = iter(responses)
         monkeypatch.setattr(
-            canvas_client, "_canvas_headers",
+            canvas_client, "canvas_headers",
             lambda: ({"Authorization": "Bearer test"}, "https://canvas.test"),
         )
 

@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 
 def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
     from api import runtime_paths
-    from api.webui import ai_ta, config, deps, workspace
+    from api.platform_services import config, workspace
+    from api.webui import ai_ta, deps
     from api.webui.routes import library
 
     roots = {
@@ -95,7 +96,8 @@ def test_rubric_picker_has_no_repo_fallback_and_labels_by_file_name(tmp_path, mo
     an empty list, never a silent fallback to the bundled repo copies; and a
     file's label is its own name, not a path relative to the repo root."""
     from api import runtime_paths
-    from api.webui import deps, workspace
+    from api.platform_services import workspace
+    from api.webui import deps
 
     monkeypatch.setattr(workspace, "workspace_root", lambda: None)
     assert deps.list_rubric_files() == []
@@ -112,6 +114,37 @@ def test_rubric_picker_has_no_repo_fallback_and_labels_by_file_name(tmp_path, mo
     assert all(
         str(runtime_paths.api_root() / "rubrics") not in f["path"] for f in files
     )
+
+
+def test_all_content_pickers_use_only_the_synced_library(tmp_path, monkeypatch):
+    from api import runtime_paths
+    from api.platform_services import workspace
+    from api.webui import deps
+
+    repo_root = tmp_path / "repo-api"
+    bundled = repo_root / "qf_materials" / "qf quiz examples"
+    bundled.mkdir(parents=True)
+    (bundled / "bundled-example.txt").write_text("bundled\n", encoding="utf-8")
+    monkeypatch.setattr(runtime_paths, "api_root", lambda: repo_root)
+
+    pickers = {
+        "quiz": deps.list_quiz_files,
+        "assignment": deps.list_assignment_files,
+        "page": deps.list_page_files,
+        "rubric": deps.list_rubric_files,
+    }
+    for kind, picker in pickers.items():
+        monkeypatch.setattr(workspace, "workspace_root", lambda: None)
+        assert picker() == [], kind
+
+        root = tmp_path / kind
+        folder = root / "Library" / runtime_paths._KIND_WORKSPACE_NAMES[kind]
+        folder.mkdir(parents=True)
+        (folder / f"{kind}-source.txt").write_text("library\n", encoding="utf-8")
+        monkeypatch.setattr(workspace, "workspace_root", lambda root=root: str(root))
+        files = picker()
+        assert [item["label"] for item in files] == [f"{kind}-source.txt"]
+        assert all("bundled-example.txt" not in item["path"] for item in files)
 
 
 def test_txt_file_labels_disambiguate_only_on_a_name_collision(tmp_path, monkeypatch):
@@ -134,7 +167,8 @@ def test_txt_file_labels_disambiguate_only_on_a_name_collision(tmp_path, monkeyp
 
 def test_quick_fix_contract_and_version(monkeypatch, tmp_path):
     from api import __version__
-    from api.webui import server, workspace
+    from api.platform_services import workspace
+    from api.webui import server
 
     from api.mcp_server import tools
     from api.mirror import store as mirror_store

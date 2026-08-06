@@ -168,7 +168,7 @@ def test_delta_after_full_does_not_erase_stored_comments(tmp_path):
 def test_mcp_get_submissions_never_leaks_comment_text(monkeypatch, tmp_path):
     from api.feedback_vault import Vault
     from api.mcp_server import tools
-    from api.webui import workspace
+    from api.platform_services import workspace
 
     canvas = FakeCanvas(submissions=[
         _sub(700010, submission_comments=[
@@ -788,7 +788,7 @@ def test_roster_pass_failure_degrades(tmp_path):
 # --- workspace guard -----------------------------------------------------------------
 
 def test_passes_report_unconfigured_workspace(monkeypatch):
-    from api.webui import workspace
+    from api.platform_services import workspace
     monkeypatch.setattr(workspace, "workspace_root", lambda: None)
     canvas = FakeCanvas()
     result = sync.full_pass(COURSE, canvas_get_all=canvas,

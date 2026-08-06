@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 from api.feedback_vault import Vault
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 class IdentityMigrationError(ValueError):

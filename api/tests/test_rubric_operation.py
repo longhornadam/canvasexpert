@@ -67,7 +67,7 @@ SAMPLE_RF_JSON = """<RUBRICFORGE_JSON>
 </RUBRICFORGE_JSON>"""
 
 
-def _fake_canvas_get(path, params=None, timeout=20):
+def _fakecanvas_get(path, params=None, timeout=20):
     if "rubrics/789" in path:
         return {"id": 789, "title": "ELA Writing Rubric",
                 "html_url": "https://c/42/rubrics/789"}, None
@@ -148,8 +148,8 @@ def test_verify_targets_rejects_unknown_course(monkeypatch):
 
 def test_capture_baseline_no_existing(monkeypatch):
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.rubric.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.rubric.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     adapter = RubricAdapter()
     payload = {"title": "New Rubric", "total_points": 10, "criteria": []}
@@ -159,8 +159,8 @@ def test_capture_baseline_no_existing(monkeypatch):
 
 def test_capture_baseline_finds_existing(monkeypatch):
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.rubric.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.rubric.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     adapter = RubricAdapter()
     payload = {"title": "Existing Rubric", "total_points": 10, "criteria": []}
@@ -214,8 +214,8 @@ def test_execute_creates_rubric(tmp_path, monkeypatch):
         _fake_canvas_send,
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.rubric.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.rubric.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.rubric.config.active_courses",
@@ -280,8 +280,8 @@ def test_execute_handles_canvas_error(tmp_path, monkeypatch):
         fail_send,
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.rubric.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.rubric.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
 
     adapter = RubricAdapter()
@@ -334,8 +334,8 @@ def test_execute_handles_canvas_error(tmp_path, monkeypatch):
 
 def test_reconcile_finds_rubric(monkeypatch):
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.rubric.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.rubric.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     adapter = RubricAdapter()
     result = adapter.reconcile(
@@ -376,8 +376,8 @@ def test_pipeline_with_mocks(tmp_path, monkeypatch):
         _fake_courses,
     )
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.rubric.canvas_client._canvas_get",
-        _fake_canvas_get,
+        "api.operation_ledger.adapters.rubric.canvas_client.canvas_get",
+        _fakecanvas_get,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.rubric.canvas_client._canvas_send",

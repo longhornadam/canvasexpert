@@ -151,7 +151,7 @@ def test_prepare_refuses_an_existing_canvas_category_name(group_export_env, monk
     client, _ = group_export_env
     canvas = _Canvas(existing=[{"id": "category-old", "name": "New Seating Groups"}])
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_get_all", canvas.get_all,
+        "api.operation_ledger.adapters.seating_group_set.canvas_client.canvas_get_all", canvas.get_all,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_send", canvas.send,
@@ -169,7 +169,7 @@ def test_prepare_rejects_an_invalid_new_group_set_name_before_canvas_lookup(grou
     client, _ = group_export_env
     canvas = _Canvas()
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_get_all", canvas.get_all,
+        "api.operation_ledger.adapters.seating_group_set.canvas_client.canvas_get_all", canvas.get_all,
     )
 
     response = _prepare(client, "New\nGroups")
@@ -184,7 +184,7 @@ def test_prepare_review_apply_creates_only_one_new_category_groups_and_membershi
     client, reconciled = group_export_env
     canvas = _Canvas(existing=[{"id": "category-existing", "name": "Existing groups"}])
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_get_all", canvas.get_all,
+        "api.operation_ledger.adapters.seating_group_set.canvas_client.canvas_get_all", canvas.get_all,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_send", canvas.send,
@@ -238,7 +238,7 @@ def test_uncertain_category_creation_never_sends_a_duplicate_on_retry(group_expo
     client, reconciled = group_export_env
     canvas = _Canvas(category_error="timeout while waiting for Canvas")
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_get_all", canvas.get_all,
+        "api.operation_ledger.adapters.seating_group_set.canvas_client.canvas_get_all", canvas.get_all,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_send", canvas.send,
@@ -262,7 +262,7 @@ def test_group_failure_is_partial_and_reconciles_the_exact_new_category(group_ex
     client, reconciled = group_export_env
     canvas = _Canvas(group_error="HTTP 400: group rejected")
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_get_all", canvas.get_all,
+        "api.operation_ledger.adapters.seating_group_set.canvas_client.canvas_get_all", canvas.get_all,
     )
     monkeypatch.setattr(
         "api.operation_ledger.adapters.seating_group_set.canvas_client._canvas_send", canvas.send,

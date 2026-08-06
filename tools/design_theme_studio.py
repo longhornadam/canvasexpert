@@ -45,7 +45,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from api import panel_themes                                    # noqa: E402
-from api.webui import workspace                                 # noqa: E402
+from api.platform_services import workspace                      # noqa: E402
 
 OUT_DIR = REPO_ROOT / "out" / "design" / "panel-themes"
 SOURCE_BLOCK_ID = "canvasexpert-theme"

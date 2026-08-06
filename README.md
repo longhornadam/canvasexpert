@@ -1,6 +1,6 @@
 # CanvasExpert
 
-Created by a teacher for teachers.
+A computer science teacher's project to stay sharp and get some work done.
 
 Free. Private. Open source. Uses your secure Canvas "Personal Access Token". Runs entirely on your computer.
 
@@ -83,3 +83,5 @@ you first for exactly that reason.
 
 Never send anyone's personally identifiable information (PII) to an AI service. Not only is that uncool,
 it's illegal.
+
+If you use this, follow all relevant employer policies and rules.

@@ -16,7 +16,7 @@ from api.submission_transport import (
     fetch_submission as _fetch_submission,
     get_all_pages as _get_all_pages,
 )
-from api.webui.workspace import safe_component, extended_path
+from api.platform_services.workspace import safe_component, extended_path
 
 
 def safe_name(value, max_len=80):

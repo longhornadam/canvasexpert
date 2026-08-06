@@ -5,7 +5,8 @@ import uuid as _uuid
 from fastapi import File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-from .. import af, config, pf, rf, runner
+from api.platform_services import config
+from .. import af, pf, rf, runner
 from api import operational_log, runtime_paths
 from ..deps import TEMP_DIR, REPO_ROOT
 

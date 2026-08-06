@@ -1,6 +1,7 @@
 from docx import Document
 
-from api.webui import source_materials, workspace
+from api.platform_services import workspace
+from api.webui import source_materials
 from api.webui.source_material_extractors import extract_text_from_bytes as _extract_text_from_bytes
 
 

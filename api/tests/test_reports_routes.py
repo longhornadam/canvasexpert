@@ -58,7 +58,7 @@ def _catalog_document(*, assignments_state="current", groups_state="current",
 def _forbid_canvas(monkeypatch):
     """Fail loudly if the live path is ever reached."""
     monkeypatch.setattr(
-        reports, "_canvas_headers",
+        reports, "canvas_headers",
         lambda: (_ for _ in ()).throw(AssertionError("Canvas must not be called")),
     )
     monkeypatch.setattr(
@@ -184,7 +184,7 @@ def test_falls_back_to_live_fetch_when_group_scope_is_not_current(monkeypatch):
         reports.read_service.course_catalog, "read_catalog",
         lambda course_id: _catalog_document(assignments_state="current", groups_state="stale"),
     )
-    monkeypatch.setattr(reports, "_canvas_headers", _headers)
+    monkeypatch.setattr(reports, "canvas_headers", _headers)
 
     live_rows = [
         {
@@ -259,7 +259,7 @@ def test_falls_back_to_live_fetch_when_assignment_scope_is_not_current(monkeypat
         reports.read_service.course_catalog, "read_catalog",
         lambda course_id: _catalog_document(assignments_state="unavailable", groups_state="current"),
     )
-    monkeypatch.setattr(reports, "_canvas_headers", _headers)
+    monkeypatch.setattr(reports, "canvas_headers", _headers)
 
     calls = []
 
@@ -282,7 +282,7 @@ def test_falls_back_to_live_fetch_when_no_catalog_exists(monkeypatch):
         reports.read_service.course_catalog, "read_catalog",
         lambda course_id: {"catalog": None},
     )
-    monkeypatch.setattr(reports, "_canvas_headers", lambda: (None, ""))
+    monkeypatch.setattr(reports, "canvas_headers", lambda: (None, ""))
 
     response = _client().get(f"/api/assignments-full?course_id={COURSE}")
     body = response.json()

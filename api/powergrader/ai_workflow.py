@@ -9,7 +9,8 @@ from api import ai_transmission
 from api import feedback_pipeline as fp
 from api import feedback_safety as safety
 from api import openrouter_client as orc
-from api.webui import config, source_materials, workspace
+from api.platform_services import config, workspace
+from api.webui import source_materials
 from api.powergrader import ai_workflow_support, context, copilot_packet, packet, privacy
 
 

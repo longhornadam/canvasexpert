@@ -1,6 +1,9 @@
 """Crash-safe apply/retry execution for the operation ledger."""
 
 import copy
+import time
+
+from api import operational_log
 
 from . import claims, models, operations, registry, storage
 from .catalog_reconcile import reconcile_catalog_after_apply
@@ -118,50 +121,84 @@ def _replace_step(target: dict, step: dict) -> None:
 
 
 def apply_operation(operation_id: str, batch_id: str, review_digest: str) -> dict:
-    op = operations.get_operation(operation_id)
-    if op is None:
-        raise ValueError(f"operation {operation_id} not found")
-    from . import batches
-    if not batches.validate_apply(op, batch_id, review_digest):
-        raise ValueError("review batch or digest does not match stored review")
-    adapter = registry.get_adapter(op["kind"])
-    old_status = op.get("status", "reviewed")
-    if not models.validate_operation_status_transition(old_status, "applying"):
-        raise ValueError(f"operation is in status '{old_status}', cannot apply")
-    operations.set_operation_status(operation_id, "applying")
+    started = time.monotonic()
+    op = None
+    try:
+        op = operations.get_operation(operation_id)
+        if op is None:
+            raise ValueError(f"operation {operation_id} not found")
+        from . import batches
+        if not batches.validate_apply(op, batch_id, review_digest):
+            raise ValueError("review batch or digest does not match stored review")
+        adapter = registry.get_adapter(op["kind"])
+        old_status = op.get("status", "reviewed")
+        if not models.validate_operation_status_transition(old_status, "applying"):
+            raise ValueError(f"operation is in status '{old_status}', cannot apply")
+        operations.set_operation_status(operation_id, "applying")
 
-    target_results = []
-    for target in op.get("targets", []):
-        target_results.append(_execute_target(adapter, op, op["normalized_payload"], target))
-    return _finish_operation(operation_id, target_results)
+        target_results = []
+        for target in op.get("targets", []):
+            target_results.append(_execute_target(adapter, op, op["normalized_payload"], target))
+        result = _finish_operation(operation_id, target_results)
+    except Exception as exc:
+        _emit_apply("failed", op, started, error_class=type(exc))
+        raise
+    _emit_apply(_apply_outcome(result["status"]), op, started)
+    return result
 
 
 def retry_operation(operation_id: str) -> dict:
-    op = operations.get_operation(operation_id)
-    if op is None:
-        raise ValueError(f"operation {operation_id} not found")
-    adapter = registry.get_adapter(op["kind"])
-    old_status = op.get("status", "attention")
-    if not models.validate_operation_status_transition(old_status, "applying"):
-        raise ValueError(f"operation is in status '{old_status}', cannot retry")
-    operations.set_operation_status(operation_id, "applying")
+    started = time.monotonic()
+    op = None
+    try:
+        op = operations.get_operation(operation_id)
+        if op is None:
+            raise ValueError(f"operation {operation_id} not found")
+        adapter = registry.get_adapter(op["kind"])
+        old_status = op.get("status", "attention")
+        if not models.validate_operation_status_transition(old_status, "applying"):
+            raise ValueError(f"operation is in status '{old_status}', cannot retry")
+        operations.set_operation_status(operation_id, "applying")
 
-    unresolved_keys = {t["target_key"] for t in adapter.retry_selector(op)}
-    target_results = []
-    for target in op.get("targets", []):
-        if target["target_key"] not in unresolved_keys:
-            target_results.append({
-                "target_key": target["target_key"],
-                "state": target.get("state"),
-                "returned_object_id": target.get("returned_object_id"),
-                "returned_object_url": target.get("returned_object_url"),
-                "error_code": target.get("error_code"),
-                "skipped_retry": True,
-            })
-        else:
-            target_results.append(_execute_target(
-                adapter, op, op["normalized_payload"], target))
-    return _finish_operation(operation_id, target_results)
+        unresolved_keys = {t["target_key"] for t in adapter.retry_selector(op)}
+        target_results = []
+        for target in op.get("targets", []):
+            if target["target_key"] not in unresolved_keys:
+                target_results.append({
+                    "target_key": target["target_key"],
+                    "state": target.get("state"),
+                    "returned_object_id": target.get("returned_object_id"),
+                    "returned_object_url": target.get("returned_object_url"),
+                    "error_code": target.get("error_code"),
+                    "skipped_retry": True,
+                })
+            else:
+                target_results.append(_execute_target(
+                    adapter, op, op["normalized_payload"], target))
+        result = _finish_operation(operation_id, target_results)
+    except Exception as exc:
+        _emit_apply("failed", op, started, error_class=type(exc))
+        raise
+    _emit_apply(_apply_outcome(result["status"]), op, started)
+    return result
+
+
+def _apply_outcome(status: str) -> str:
+    if status == "applied":
+        return "ok"
+    if status in {"partial", "attention"}:
+        return "blocked"
+    return "failed"
+
+
+def _emit_apply(outcome: str, operation: dict | None, started: float,
+                *, error_class=None) -> None:
+    operational_log.emit(
+        "operation_ledger.apply", outcome,
+        duration_ms=max(0, int(round((time.monotonic() - started) * 1000))),
+        count=len((operation or {}).get("targets") or []),
+        error_class=error_class,
+    )
 
 
 def _finish_operation(operation_id: str, target_results: list[dict]) -> dict:

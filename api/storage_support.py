@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from api.webui import workspace
+from api.platform_services import workspace
 
 UTC_COMPACT_STAMP_FORMAT = "%Y%m%dT%H%M%S%fZ"
 

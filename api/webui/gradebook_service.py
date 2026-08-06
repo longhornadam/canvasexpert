@@ -7,8 +7,9 @@ unit-testable without HTTP.
 import json
 from pathlib import Path
 
-from . import config, deps, school_calendar
-from .schooldays import _parse_iso_local
+from api.platform_services import config
+from . import deps, school_calendar
+from .schooldays import parse_iso_local
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage
 
@@ -174,13 +175,13 @@ def _split_for_extra_time(course_id, student_ids, base_due_iso, base_lock_iso=No
     """
     roster = {str(e["id"]): int(e.get("days", 1))
               for e in config.get_extra_time(course_id)}
-    base_due = _parse_iso_local(base_due_iso) if base_due_iso else None
+    base_due = parse_iso_local(base_due_iso) if base_due_iso else None
     if not roster or not base_due:
         return {"ok": True, "standard": list(student_ids), "extended": []}
 
     bell_schedules, _problems = deps.load_bell_schedules()
     known_schedule_ids = set(bell_schedules)
-    base_lock = _parse_iso_local(base_lock_iso) if base_lock_iso else None
+    base_lock = parse_iso_local(base_lock_iso) if base_lock_iso else None
 
     standard, buckets = [], {}
     for sid in student_ids:
@@ -248,6 +249,6 @@ def _expand_variants_extra_time(course_id, entries, settings):
 
 
 # The legacy _sweep_compute was deleted in slice 00c: it unpacked four values
-# from schooldays._school_days_late_detail (which returns two) and crashed on
+# from schooldays.school_days_late_detail (which returns two) and crashed on
 # any late submission. The single sweep-compute owner is
 # api/operation_ledger/adapters/sweep.py::_compute_sweep.

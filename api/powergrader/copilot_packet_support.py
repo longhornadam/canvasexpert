@@ -6,7 +6,7 @@ import json
 import os
 
 from api import feedback_contract
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def write_text(path: str, text: str) -> None:

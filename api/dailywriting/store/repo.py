@@ -21,7 +21,7 @@ class StoreError(RuntimeError):
 
 
 def workspace_store_root() -> Path:
-    from api.webui import workspace
+    from api.platform_services import workspace
     folder = workspace.system_folder(STORE_FOLDER)
     if not folder:
         raise StoreError("no Canvas Expert workspace is configured, so there is nowhere private to keep writing records")

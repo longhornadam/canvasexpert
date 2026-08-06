@@ -2,8 +2,8 @@ from __future__ import annotations
 
 """PowerGrader late catch-up helpers."""
 
-from api.webui import config, workspace
-from api.webui.schooldays import _parse_iso_local, _school_days_late_detail
+from api.platform_services import config, workspace
+from api.webui.schooldays import parse_iso_local, school_days_late_detail
 
 
 def is_real_submission(sub: dict) -> bool:
@@ -83,12 +83,12 @@ def compute_late_meta(
         "batch_id": batch_id,
     }
 
-    due_dt = _parse_iso_local(due_iso)
-    submitted_dt = _parse_iso_local(submitted_iso)
+    due_dt = parse_iso_local(due_iso)
+    submitted_dt = parse_iso_local(submitted_iso)
     if not due_dt or not submitted_dt or no_count_dates is None:
         return meta
 
-    raw_days, _excluded = _school_days_late_detail(due_dt, submitted_dt, no_count_dates)
+    raw_days, _excluded = school_days_late_detail(due_dt, submitted_dt, no_count_dates)
     school_days = max(int(raw_days or 0) - max(int(extra_time_days or 0), 0), 0)
     meta["school_days_late"] = school_days
     meta["seconds_late_override"] = school_days * 86400

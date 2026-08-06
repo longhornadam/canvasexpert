@@ -30,7 +30,8 @@ from __future__ import annotations
 
 from api.mirror import store
 from api.operation_ledger.adapters.sweep import _compute_sweep
-from api.webui import mirror_reads, workspace
+from api.platform_services import workspace
+from api.webui import mirror_reads
 from api.webui.routes import routines_builtin
 
 COURSE = "555201"
@@ -82,7 +83,7 @@ def _explode(*_args, **_kwargs):
 def test_students_or_live_serves_fresh_mirror_with_zero_live_calls(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", _explode)
     rows, err, source = mirror_reads.students_or_live(COURSE)
     assert err is None and source == "mirror"
     assert {r["id"] for r in rows} == {"900201", "900202"}
@@ -91,7 +92,7 @@ def test_students_or_live_serves_fresh_mirror_with_zero_live_calls(monkeypatch, 
 def test_assignments_or_live_serves_fresh_mirror_with_zero_live_calls(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", _explode)
     rows, err, source = mirror_reads.assignments_or_live(COURSE)
     assert err is None and source == "mirror"
     assert {r["id"] for r in rows} == {"700200"}
@@ -100,7 +101,7 @@ def test_assignments_or_live_serves_fresh_mirror_with_zero_live_calls(monkeypatc
 def test_submissions_or_live_serves_fresh_mirror_with_zero_live_calls(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", _explode)
     rows, err, source = mirror_reads.submissions_or_live(COURSE)
     assert err is None and source == "mirror"
     assert {r["user_id"] for r in rows} == {"900201", "900202"}
@@ -112,7 +113,7 @@ def test_students_or_live_falls_back_live_when_stale(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path), fresh=False)
     live_rows = [{"id": 1, "name": "Live Student"}]
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", lambda *a, **k: (live_rows, None))
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", lambda *a, **k: (live_rows, None))
     rows, err, source = mirror_reads.students_or_live(COURSE)
     assert err is None and source == "canvas" and rows == live_rows
 
@@ -121,7 +122,7 @@ def test_assignments_or_live_falls_back_live_when_stale(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path), fresh=False)
     live_rows = [{"id": 1, "name": "Live Assignment"}]
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", lambda *a, **k: (live_rows, None))
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", lambda *a, **k: (live_rows, None))
     rows, err, source = mirror_reads.assignments_or_live(COURSE)
     assert err is None and source == "canvas" and rows == live_rows
 
@@ -130,7 +131,7 @@ def test_submissions_or_live_falls_back_live_when_stale(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path), fresh=False)
     live_rows = [{"user_id": 1, "assignment_id": 1}]
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", lambda *a, **k: (live_rows, None))
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", lambda *a, **k: (live_rows, None))
     rows, err, source = mirror_reads.submissions_or_live(COURSE)
     assert err is None and source == "canvas" and rows == live_rows
 
@@ -141,7 +142,7 @@ def test_helper_falls_back_live_when_mirror_read_errors(monkeypatch, tmp_path):
     from api.mirror import queries as mirror_queries
     monkeypatch.setattr(mirror_queries, "course_assignments", lambda course_id, **k: (None, "boom"))
     live_rows = [{"id": 1}]
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", lambda *a, **k: (live_rows, None))
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", lambda *a, **k: (live_rows, None))
     rows, err, source = mirror_reads.assignments_or_live(COURSE)
     assert err is None and source == "canvas" and rows == live_rows
 
@@ -153,7 +154,7 @@ def test_grading_debt_reads_mirror_with_zero_live_calls(monkeypatch, tmp_path):
     are safe to flip and both do, per the spec's line range (~252-258)."""
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", _explode)
     monkeypatch.setattr(routines_builtin.config, "active_courses",
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
@@ -190,7 +191,7 @@ def test_grading_debt_falls_back_live_when_stale(monkeypatch, tmp_path):
                  "workflow_state": "submitted",
                  "submitted_at": "2020-01-01T09:00:00Z"}], None
 
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", fake_get)
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", fake_get)
     result = routines_builtin._run_routine_grading_debt({"school_days": 3})
     assert result["ok"] is True
     assert "1 ungraded" in result["summary"]
@@ -224,7 +225,7 @@ def test_grading_debt_output_identical_mirror_served_vs_live_served(monkeypatch,
             return [dict(ASSIGNMENTS[0])], None
         return [dict(row) for row in SUBMISSIONS], None
 
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", fake_get)
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", fake_get)
     live_served = routines_builtin._run_routine_grading_debt({"school_days": 3})
 
     assert mirror_served == live_served
@@ -259,8 +260,8 @@ def test_sweep_reads_students_from_mirror_but_assignments_and_submissions_stay_l
                      "points_possible": 10, "published": True}], None
         return [], None  # no live submissions -> nothing to write, harmless
 
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", fake_get_all)
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)  # students must not go live
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", fake_get_all)
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", _explode)  # students must not go live
 
     result = routines_builtin._run_routine_sweep({})
     assert result["ok"] is True
@@ -275,8 +276,8 @@ def test_curve_apply_core_reads_audit_baseline_from_mirror(monkeypatch, tmp_path
     to the target one."""
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(mirror_reads, "_canvas_get_all", _explode)
-    monkeypatch.setattr(routines_builtin, "_canvas_get",
+    monkeypatch.setattr(mirror_reads, "canvas_get_all", _explode)
+    monkeypatch.setattr(routines_builtin, "canvas_get",
                         lambda path: ({"name": "Lab Report"}, None))
     sent = []
     monkeypatch.setattr(routines_builtin, "_canvas_send",
@@ -317,7 +318,7 @@ def test_sweep_compute_is_not_flipped_and_stays_live(monkeypatch, tmp_path):
         return [], None
 
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all",
+        "api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all",
         fake_get_all)
     entries, skipped, err = _compute_sweep(COURSE, {})
     assert err is None

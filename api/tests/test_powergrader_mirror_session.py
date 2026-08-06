@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from api.mirror import store
 from api.powergrader import canvas_fetch
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 COURSE = "900101"
@@ -59,7 +59,7 @@ def _populate_mirror(root, *, rows, roster=ROSTER):
 
 
 def _mock_assignment_get(monkeypatch, adata):
-    monkeypatch.setattr(canvas_fetch, "_canvas_get", lambda *_a, **_k: (dict(adata), None))
+    monkeypatch.setattr(canvas_fetch, "canvas_get", lambda *_a, **_k: (dict(adata), None))
 
 
 def test_successful_focused_refresh_serves_complete_roster_rows_without_live_fetch(tmp_path, monkeypatch):
@@ -74,7 +74,7 @@ def test_successful_focused_refresh_serves_complete_roster_rows_without_live_fet
             return [_submission(attempt=2, body="Focused current reflection.")], None
         raise AssertionError("live submission fetch must not run")
 
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", focused_canvas)
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", focused_canvas)
     subs, adata, error = canvas_fetch.fetch_submissions(COURSE, ASSIGNMENT)
 
     assert error is None
@@ -102,7 +102,7 @@ def test_failed_focused_refresh_keeps_last_good_and_falls_back_to_live(tmp_path,
             return live_rows, None
         raise AssertionError(f"unexpected path {path}")
 
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", failing_focused_canvas)
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", failing_focused_canvas)
     subs, _adata, error = canvas_fetch.fetch_submissions(COURSE, ASSIGNMENT)
 
     assert error is None
@@ -126,7 +126,7 @@ def test_incomplete_roster_falls_back_to_live_canvas_users(tmp_path, monkeypatch
             return live_rows, None
         raise AssertionError(f"unexpected path {path}")
 
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", incomplete_roster_canvas)
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", incomplete_roster_canvas)
     subs, _adata, error = canvas_fetch.fetch_submissions(COURSE, ASSIGNMENT)
 
     assert error is None
@@ -142,7 +142,7 @@ def test_empty_focused_result_is_servable_without_a_roster(tmp_path, monkeypatch
             return [], None
         raise AssertionError("live submission fetch must not run")
 
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", focused_empty_canvas)
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", focused_empty_canvas)
     subs, _adata, error = canvas_fetch.fetch_submissions(COURSE, ASSIGNMENT)
 
     assert error is None
@@ -158,7 +158,7 @@ def test_upload_capable_assignment_never_attempts_the_focused_path(tmp_path, mon
                   "workflow_state": "submitted", "attachments": [
                       {"filename": "essay.pdf", "url": "https://canvas.test/files/1", "size": 10},
                   ]}]
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", lambda *_a, **_k: (live_rows, None))
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", lambda *_a, **_k: (live_rows, None))
 
     subs, _adata, error = canvas_fetch.fetch_submissions(COURSE, ASSIGNMENT)
 
@@ -173,7 +173,7 @@ def test_explicit_materialization_keeps_text_entry_on_live_path(tmp_path, monkey
                         _raise_if_called("focused refresh must not run when materializing files"))
     live_rows = [{"user_id": STUDENT, "submission_type": "online_text_entry",
                   "workflow_state": "submitted", "body": "Live materialized body."}]
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", lambda *_a, **_k: (live_rows, None))
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", lambda *_a, **_k: (live_rows, None))
 
     subs, _adata, error = canvas_fetch.fetch_submissions(
         COURSE, ASSIGNMENT, materialize_ordinary_files=True,
@@ -189,7 +189,7 @@ def test_new_quiz_lti_assignment_never_attempts_the_focused_path(tmp_path, monke
     monkeypatch.setattr(canvas_fetch.mirror_sync, "sync_assignment_submissions",
                         _raise_if_called("focused refresh must not run for the New Quiz flow"))
     live_rows = [{"user_id": STUDENT, "submission_type": "external_tool", "workflow_state": "submitted"}]
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", lambda *_a, **_k: (live_rows, None))
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", lambda *_a, **_k: (live_rows, None))
 
     from api.powergrader import new_quiz_fetch
     monkeypatch.setattr(new_quiz_fetch, "fetch", lambda *args, **kwargs: ([], None))

@@ -10,7 +10,7 @@ from pathlib import Path
 def test_support_bundle_is_minimal_and_identifier_free(tmp_path, monkeypatch):
     from api import __version__, diagnostics, operational_log
     from api.mcp_server.contract import TOOL_SCHEMA_VERSION
-    from api.webui import workspace
+    from api.platform_services import workspace
 
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local-app-data"))
     workspace_root = tmp_path / "workspace"
@@ -94,7 +94,7 @@ def test_connections_page_and_mcpb_use_runtime_paths_without_client_config_write
 
     from api import __version__, connections, diagnostics, runtime_paths
     from api.mcp_server.contract import TOOL_SCHEMA_VERSION
-    from api.webui import config, workspace
+    from api.platform_services import config, workspace
     from api.webui import server
 
     first_app = tmp_path / "first-app"

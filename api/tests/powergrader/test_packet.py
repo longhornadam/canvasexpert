@@ -9,7 +9,7 @@ import pytest
 from api.feedback_vault import Vault
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes import powergrader
 from api.powergrader import packet, privacy, session_builder
 

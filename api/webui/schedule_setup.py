@@ -10,7 +10,8 @@ import json
 import os
 import tempfile
 
-from . import config, day_schedule, deps, workspace
+from api.platform_services import config, workspace
+from . import day_schedule, deps
 
 
 # The loaders report a missing file or folder as a problem string. Each piece

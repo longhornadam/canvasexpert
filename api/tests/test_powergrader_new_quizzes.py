@@ -216,7 +216,7 @@ def test_report_transport_errors_are_actionable_and_bounded():
 
 
 def test_freshness_regenerates_once_then_fails_closed(monkeypatch):
-    monkeypatch.setattr(nq, "_canvas_headers", lambda: ({"Authorization": "Bearer synthetic"}, "https://base"))
+    monkeypatch.setattr(nq, "canvas_headers", lambda: ({"Authorization": "Bearer synthetic"}, "https://base"))
     core = [{"user_id": "fake", "submitted_at": "2026-01-03T00:00:00Z", "user": {"name": "Fictional"}}]
     item = [{"entry": [{"id": "essay", "item_body": "Prompt", "points_possible": 1}]}]
     stale = [{"student_data": {"id": "fake", "attempt": 1, "submitted_at": "2026-01-01T00:00:00Z"}, "item_responses": [{"item_id": "essay", "answer": "old"}]}]

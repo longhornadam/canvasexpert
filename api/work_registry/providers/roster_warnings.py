@@ -7,8 +7,8 @@ import os
 
 from api import feedback_scrub
 from api.mirror import store as mirror_store
-from api.webui import config
-from api.webui import workspace
+from api.platform_services import config
+from api.platform_services import workspace
 from api import feedback_vault
 from api.webui.routes.roster_helpers import _compute_warnings
 

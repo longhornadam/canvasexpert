@@ -16,7 +16,7 @@ from docx import Document
 from docx.shared import Inches
 
 from api.nq_report import constructed_responses, html_to_text
-from api.webui import workspace
+from api.platform_services import workspace
 from engine.utils.text_utils import safe_filename_component
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}

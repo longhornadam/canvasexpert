@@ -85,7 +85,7 @@ def _pin_workspace() -> None:
     """Best-effort: pin the workspace path so the headless MCP server this connect
     is enabling resolves the same workspace the app does. Never blocks a connect."""
     try:
-        from api.webui import config
+        from api.platform_services import config
 
         config.ensure_workspace_pinned()
     except Exception as exc:

@@ -11,11 +11,11 @@ from api.feedback_vault import Vault
 from engine.utils.text_utils import safe_filename_component
 
 CONTRACT_VERSION = "1.0"
-_REVIEW_NOTE = ("Pseudonymized for privacy. Review the response text for any "
+REVIEW_NOTE = ("Pseudonymized for privacy. Review the response text for any "
                 "self-identifying details (names, places) before sending to an LLM.")
 
 
-def _safe(name, max_len=80):
+def safe(name, max_len=80):
     return safe_filename_component(name, max_len=max_len, fallback="quiz")
 
 

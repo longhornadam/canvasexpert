@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import config
+from api.platform_services import config
 from api import operational_log
 from api.operation_ledger import paths as ledger_paths
 from api.operation_ledger import storage as ledger_storage

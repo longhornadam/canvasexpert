@@ -16,7 +16,8 @@ import sys
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from .. import config, deps, school_calendar, workspace
+from api.platform_services import config, workspace
+from .. import deps, school_calendar
 from api import operational_log, runtime_paths
 from ..local_request_guard import csrf_token
 from api.operation_ledger import operations as operation_store

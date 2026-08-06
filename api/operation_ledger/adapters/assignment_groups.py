@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 
 
 class GroupResolutionError(ValueError):
@@ -18,7 +18,7 @@ def resolve_assignment_groups(
     selected_category_id=None,
 ) -> dict:
     """Return a durable safe snapshot and transient group-to-student IDs."""
-    get_all = canvas_get_all or canvas_client._canvas_get_all
+    get_all = canvas_get_all or canvas_client.canvas_get_all
     category_id = (
         selected_category_id
         if selected_category_id is not None

@@ -6,7 +6,7 @@ import os
 
 from api.mirror import new_quizzes, store
 from api.powergrader import assignment_refresh, canvas_fetch, new_quiz_fetch
-from api.webui import config, workspace
+from api.platform_services import config, workspace
 
 
 COURSE = "course-synthetic"
@@ -371,9 +371,9 @@ def test_malformed_item_join_and_unmatched_attempt_are_explicit(tmp_path):
 
 def test_cached_new_quiz_path_skips_core_and_report_reads(monkeypatch, tmp_path):
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
-    monkeypatch.setattr(new_quiz_fetch, "_canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.invalid"))
-    monkeypatch.setattr(canvas_fetch, "_canvas_get_all", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("core read")))
-    monkeypatch.setattr(canvas_fetch, "_canvas_get", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("assignment read")))
+    monkeypatch.setattr(new_quiz_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.invalid"))
+    monkeypatch.setattr(canvas_fetch, "canvas_get_all", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("core read")))
+    monkeypatch.setattr(canvas_fetch, "canvas_get", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("assignment read")))
 
     cached = {
         "source": "mirror", "assignment": _assignment(),

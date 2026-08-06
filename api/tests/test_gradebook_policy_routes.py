@@ -11,7 +11,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from api.mirror import store as mirror_store
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.server import app
 from api.webui.routes import gradebook_policy
 
@@ -57,7 +57,7 @@ def _mount(monkeypatch, tmp_path):
 def test_get_late_policy_serves_current_projection_with_zero_live_calls(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     mirror_store.write_late_policy(COURSE, RAW_CANVAS_POLICY, root=str(tmp_path))
-    monkeypatch.setattr(gradebook_policy, "_canvas_get", _explode)
+    monkeypatch.setattr(gradebook_policy, "canvas_get", _explode)
     monkeypatch.setattr(gradebook_policy, "_canvas_send", _explode)
 
     resp = client.get(f"/api/late-policy?course_id={COURSE}")
@@ -76,7 +76,7 @@ def test_get_late_policy_serves_current_projection_with_zero_live_calls(monkeypa
 def test_get_late_policy_missing_projection_falls_back_live_and_seeds(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     # Nothing written yet -> read_late_policy() is None -> live fallback.
-    monkeypatch.setattr(gradebook_policy, "_canvas_get",
+    monkeypatch.setattr(gradebook_policy, "canvas_get",
                         lambda path, *a, **k: ({"late_policy": RAW_CANVAS_POLICY}, None))
 
     resp = client.get(f"/api/late-policy?course_id={COURSE}")
@@ -89,7 +89,7 @@ def test_get_late_policy_missing_projection_falls_back_live_and_seeds(monkeypatc
 
     # Seeded: a second call with the live seam exploding must now serve
     # from the mirror this call just wrote.
-    monkeypatch.setattr(gradebook_policy, "_canvas_get", _explode)
+    monkeypatch.setattr(gradebook_policy, "canvas_get", _explode)
     resp2 = client.get(f"/api/late-policy?course_id={COURSE}")
     data2 = resp2.json()
     assert data2["ok"] is True
@@ -106,7 +106,7 @@ def test_get_late_policy_stale_projection_falls_back_live(monkeypatch, tmp_path)
 
     live_calls = []
     monkeypatch.setattr(
-        gradebook_policy, "_canvas_get",
+        gradebook_policy, "canvas_get",
         lambda path, *a, **k: (live_calls.append(path) or ({"late_policy": RAW_CANVAS_POLICY}, None)))
 
     resp = client.get(f"/api/late-policy?course_id={COURSE}")
@@ -118,7 +118,7 @@ def test_get_late_policy_stale_projection_falls_back_live(monkeypatch, tmp_path)
 
 def test_get_late_policy_404_returns_null_policy_unchanged(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
-    monkeypatch.setattr(gradebook_policy, "_canvas_get",
+    monkeypatch.setattr(gradebook_policy, "canvas_get",
                         lambda path, *a, **k: (None, "HTTP 404: Not Found"))
 
     resp = client.get(f"/api/late-policy?course_id={COURSE}")
@@ -130,7 +130,7 @@ def test_get_late_policy_404_returns_null_policy_unchanged(monkeypatch, tmp_path
 
 def test_get_late_policy_live_error_still_surfaces(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
-    monkeypatch.setattr(gradebook_policy, "_canvas_get",
+    monkeypatch.setattr(gradebook_policy, "canvas_get",
                         lambda path, *a, **k: (None, "HTTP 401: unauthorized"))
 
     resp = client.get(f"/api/late-policy?course_id={COURSE}")
@@ -148,7 +148,7 @@ def test_apply_late_policy_success_invalidates_that_course_projection(monkeypatc
     assert mirror_store.late_policy_is_current(
         mirror_store.read_late_policy(COURSE, root=str(tmp_path)))
 
-    monkeypatch.setattr(gradebook_policy, "_canvas_get",
+    monkeypatch.setattr(gradebook_policy, "canvas_get",
                         lambda path, *a, **k: ({"late_policy": RAW_CANVAS_POLICY}, None))
     sent = []
     monkeypatch.setattr(
@@ -175,7 +175,7 @@ def test_apply_late_policy_reconcile_failure_leaves_scope_stale_not_falsely_curr
     _mount(monkeypatch, tmp_path)
     mirror_store.write_late_policy(COURSE, RAW_CANVAS_POLICY, root=str(tmp_path))
 
-    monkeypatch.setattr(gradebook_policy, "_canvas_get",
+    monkeypatch.setattr(gradebook_policy, "canvas_get",
                         lambda path, *a, **k: ({"late_policy": RAW_CANVAS_POLICY}, None))
     monkeypatch.setattr(gradebook_policy, "_canvas_send",
                         lambda method, url, payload: ({}, None))
@@ -211,7 +211,7 @@ def test_apply_late_policy_write_path_still_live_even_with_fresh_mirror(monkeypa
 
     get_calls = []
     monkeypatch.setattr(
-        gradebook_policy, "_canvas_get",
+        gradebook_policy, "canvas_get",
         lambda path, *a, **k: (get_calls.append(path) or ({"late_policy": RAW_CANVAS_POLICY}, None)))
     send_calls = []
     monkeypatch.setattr(

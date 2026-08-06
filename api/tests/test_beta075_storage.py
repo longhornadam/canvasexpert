@@ -15,7 +15,7 @@ def _vault_writer(path: str, barrier, canvas_id: str):
 
 
 def _settings_writer(barrier, index: int):
-    from api.webui.config import canvas, courses, roster
+    from api.platform_services.config import canvas, courses, roster
 
     barrier.wait()
     courses.bookmark_course(f"course-{index}", f"Course {index}")
@@ -52,8 +52,8 @@ def test_spawned_vault_writers_preserve_both_students(tmp_path):
 
 
 def test_settings_transactions_preserve_interleaved_nested_updates(tmp_path, monkeypatch):
-    from api.webui import workspace
-    from api.webui.config import _io, canvas, courses, roster
+    from api.platform_services import workspace
+    from api.platform_services.config import _io, canvas, courses, roster
 
     machine_path = tmp_path / "machine.json"
     monkeypatch.setattr(_io, "CONFIG_PATH", str(machine_path))
@@ -104,7 +104,7 @@ def test_settings_transactions_preserve_interleaved_nested_updates(tmp_path, mon
 def test_session_and_queue_transactions_preserve_interleaved_updates(tmp_path, monkeypatch):
     from api import storage_support
     from api.powergrader import autoscore_queue, session_store
-    from api.webui import workspace
+    from api.platform_services import workspace
 
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
     session_id = "sentinel-session"

@@ -16,8 +16,8 @@ from fastapi.responses import JSONResponse
 
 from api import feedback_scrub, feedback_vault, pseudonym_rename
 from api import roster_service
-from .. import config, workspace
-from ..canvas_client import _canvas_get_all
+from api.platform_services import config, workspace
+from api.platform_services.canvas_client import canvas_get_all
 
 names_router = APIRouter(prefix="/api/names", tags=["names"])
 

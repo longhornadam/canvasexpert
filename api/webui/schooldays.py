@@ -12,7 +12,7 @@ over calling these pure helpers directly with a hand-fetched set.
 from datetime import datetime, timedelta
 
 
-def _parse_iso_local(s):
+def parse_iso_local(s):
     """Canvas ISO timestamp → datetime in the machine's local timezone.
     Local matters: a 23:59 CST due date is 05:59Z the NEXT day — weekday and
     holiday checks must happen in school-local time."""
@@ -40,7 +40,7 @@ def _school_days_late(due_dt, submitted_dt, no_count_dates):
     return n
 
 
-def _school_days_late_detail(due_dt, submitted_dt, no_count_dates):
+def school_days_late_detail(due_dt, submitted_dt, no_count_dates):
     """Returns (school_days_late, excluded_list).
     excluded_list: ["YYYY-MM-DD (no-count)", ...]"""
     if submitted_dt.date() <= due_dt.date():

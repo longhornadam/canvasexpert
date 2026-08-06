@@ -25,7 +25,7 @@ from .adapter_support import (
 )
 from .assignment_groups import GroupResolutionError, resolve_assignment_groups
 from .module_placement import attach_assignment_type_module_item
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 from api.webui.runner import run_json_object
 
 
@@ -207,7 +207,7 @@ class QuizAdapter:
         title = plan.get("title", "")
         baseline: dict = {"existing_quiz": None}
 
-        assignments, error = canvas_client._canvas_get(
+        assignments, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments",
             params={"per_page": 100, "search_term": title},
         )
@@ -245,7 +245,7 @@ class QuizAdapter:
             title = v["plan"].get("title", "")
             if title in existing_by_title:
                 continue
-            assignments, error = canvas_client._canvas_get(
+            assignments, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments",
                 params={"per_page": 100, "search_term": title},
             )

@@ -12,8 +12,8 @@ import mimetypes
 import os
 from pathlib import Path
 
-from api.webui import workspace
-from api.webui.source_material_extractors import _collapse_ws, _decode_bytes
+from api.platform_services import workspace
+from api.webui.source_material_extractors import collapse_ws, decode_bytes
 from api.powergrader import writing_timeline
 
 
@@ -102,7 +102,7 @@ def _docx_segments(data: bytes) -> tuple[str, list[dict]]:
                     rows.append(" | ".join(values))
             if rows:
                 chunks.append("[Table]\n" + "\n".join(rows))
-    text = _collapse_ws("\n\n".join(chunks))
+    text = collapse_ws("\n\n".join(chunks))
     if not text and not media:
         raise ValueError("No readable visible body was found in DOCX.")
     return text, media
@@ -162,7 +162,7 @@ def route_bytes(filename: str, data: bytes, *, max_ai_chars: int = MAX_AI_TEXT_C
         "local_only": False,
     }
     if ext in TRUSTED_TEXT_EXTS:
-        text = _decode_bytes(data) if ext not in {".html", ".htm"} else _decode_bytes(data)
+        text = decode_bytes(data) if ext not in {".html", ".htm"} else decode_bytes(data)
         if len(text) > max_ai_chars:
             result.update(extraction_status="exceeds_ai_budget", local_only=True)
             result["text"] = text

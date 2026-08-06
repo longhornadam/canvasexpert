@@ -48,11 +48,11 @@ def migrate_legacy_file(legacy_path, new_path) -> None:
 
 
 def _workspace_module():
-    """Return the workspace module for either supported import layout."""
-    loaded = sys.modules.get("webui.workspace") or sys.modules.get("api.webui.workspace")
+    """Return the canonical platform workspace module without an import cycle."""
+    loaded = sys.modules.get("api.platform_services.workspace")
     if loaded is not None:
         return loaded
-    from .webui import workspace
+    from .platform_services import workspace
     return workspace
 
 
@@ -113,28 +113,16 @@ def content_folders(kind: str) -> list[Path]:
     if workspace_name is None:
         raise ValueError(f"unknown content folder kind: {kind}")
 
+    # The synced Library is the only teacher-facing source for all picker
+    # kinds. Bundled qf_materials files are examples, not current workspace
+    # content, and must never appear in a picker or become a silent fallback.
     folders: list[Path] = []
-    if kind == "quiz":
-        folders.append(api_root() / "qf_materials" / "qf quiz examples")
-    elif kind == "assignment":
-        folders.extend([
-            api_root() / "qf_materials" / "assignment examples",
-            api_root() / "qf_materials" / "qf quiz examples",
-        ])
-    elif kind == "page":
-        folders.append(api_root() / "qf_materials" / "qf quiz examples")
-
     current = library_folder(workspace_name)
     if current:
-        if kind == "rubric":
-            folders.insert(0, current)
-        else:
-            folders.append(current)
-    # Rubrics come ONLY from the synced Library folder (feature-freeze
-    # hardening initiative, D1): no repo fallback. An unconfigured
-    # workspace yields an empty rubric list rather than silently serving
-    # bundled repo copies -- the picker's existing "no workspace configured"
-    # banner is the pointer to set one up, not a second, quieter fallback.
+        folders.append(current)
+    # An unconfigured workspace yields an empty list rather than silently
+    # serving bundled repo copies; the picker's existing setup guidance is the
+    # pointer to configure one.
     return folders
 
 

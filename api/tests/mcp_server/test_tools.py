@@ -30,7 +30,7 @@ from api import feedback_safety, feedback_scrub, gradebook_queries, roster_servi
 from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
 from api.mirror import store as mirror_store
-from api.webui import canvas_client, workspace
+from api.platform_services import canvas_client, workspace
 
 FIXTURE_USERS = [
     {
@@ -1123,13 +1123,13 @@ def _forbid_live_reads(monkeypatch):
 
     Patches the seams inside ``canvas_client`` rather than a wrapper
     re-exported into ``tools``, so a read that arrives by any route --
-    including a helper that lazily imports ``_canvas_get_all`` at call time,
-    the way ``roster_service`` does -- still trips this. ``_canvas_headers``
+    including a helper that lazily imports ``canvas_get_all`` at call time,
+    the way ``roster_service`` does -- still trips this. ``canvas_headers``
     is covered alongside the physical GET because every read consults it
     first and bails early when no token is saved; without it the tripwire
     would quietly stop working on a machine with no Canvas token.
     """
-    monkeypatch.setattr(canvas_client, "_canvas_headers", _explode_live)
+    monkeypatch.setattr(canvas_client, "canvas_headers", _explode_live)
     monkeypatch.setattr(canvas_client, "_physical_get", _explode_live)
 
 

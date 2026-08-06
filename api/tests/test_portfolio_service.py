@@ -23,7 +23,7 @@ import pytest
 
 from api import portfolio_service, report_local_reads
 from api.mirror import store
-from api.webui import workspace
+from api.platform_services import workspace
 
 COURSE_ID = "333"
 ASSIGNMENT_TEXT = "800010"

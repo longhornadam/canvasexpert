@@ -32,7 +32,7 @@ from api.assignment_collection import acquire_assignment_collection
 # already-acquired assignment receipt to Catalog's assignment scope only
 # (1.0beta slice 02c) — no second Canvas call is made on Catalog's behalf.
 from api import course_catalog, operational_log
-from api.course_catalog import _error_code
+from api.course_catalog import error_code
 
 from . import new_quizzes, store
 
@@ -63,7 +63,7 @@ def _assignment_receipt_error(rows, error, complete) -> str:
     if error:
         if error in {"pagination_incomplete", "invalid_response"}:
             return error
-        return _error_code(error)
+        return error_code(error)
     if not complete:
         return "pagination_incomplete"
     if not isinstance(rows, list):
@@ -134,7 +134,7 @@ def sync_assignment_submissions(course_id, assignment_id, *, canvas_get_all,
         error = str(exc)
         rows = None
     if error:
-        return {"ok": False, "error": error, "error_code": _error_code(error)}
+        return {"ok": False, "error": error, "error_code": error_code(error)}
     document = store.merge_submissions(course_id, assignment_id, rows or [],
                                        root=root, attempted_at=started)
     return {"ok": True, "assignment_id": str(assignment_id),
@@ -180,18 +180,18 @@ def refresh_submissions_course_delta(course_id, *, canvas_get_all, root=None,
             course_id, canvas_get_all,
             submitted_since=watermarks["submitted_since"], with_history=True)
     except Exception as exc:
-        return _result(False, logical_requests=1, error_code=_error_code(str(exc)))
+        return _result(False, logical_requests=1, error_code=error_code(str(exc)))
     if error:
-        return _result(False, logical_requests=1, error_code=_error_code(error))
+        return _result(False, logical_requests=1, error_code=error_code(error))
 
     try:
         graded, error = _fetch_submissions(
             course_id, canvas_get_all,
             graded_since=watermarks["graded_since"], with_history=False)
     except Exception as exc:
-        return _result(False, logical_requests=2, error_code=_error_code(str(exc)))
+        return _result(False, logical_requests=2, error_code=error_code(str(exc)))
     if error:
-        return _result(False, logical_requests=2, error_code=_error_code(error))
+        return _result(False, logical_requests=2, error_code=error_code(error))
 
     grouped = _group_by_assignment(list(submitted or []) + list(graded or []))
     for assignment_id, rows in grouped.items():
@@ -356,7 +356,7 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
     students, error = _fetch_students(course_id, canvas_get_all)
     if error:
         store.record_pass(course_id, "full", ok=False,
-                          error_code=_error_code(error), attempted_at=started, root=root)
+                          error_code=error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
     sections, _s_err = _fetch_sections(course_id, canvas_get_all)
     submissions, error = _fetch_submissions(course_id, canvas_get_all,
@@ -364,10 +364,10 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
     if error:
         store.record_submission_comments_state(
             course_id, ok=False,
-            error_code=_error_code(error),
+            error_code=error_code(error),
             attempted_at=started, root=root)
         store.record_pass(course_id, "full", ok=False,
-                          error_code=_error_code(error), attempted_at=started, root=root)
+                          error_code=error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
 
     document, diagnostics = _commit_assignment_index(
@@ -438,14 +438,14 @@ def delta_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None,
         submitted_since=watermarks["submitted_since"], with_history=True)
     if error:
         store.record_pass(course_id, "delta", ok=False,
-                          error_code=_error_code(error), attempted_at=started, root=root)
+                          error_code=error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
     graded, error = _fetch_submissions(
         course_id, canvas_get_all,
         graded_since=watermarks["graded_since"], with_history=False)
     if error:
         store.record_pass(course_id, "delta", ok=False,
-                          error_code=_error_code(error), attempted_at=started, root=root)
+                          error_code=error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
 
     _document, diagnostics = _commit_assignment_index(
@@ -480,7 +480,7 @@ def roster_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
     students, error = _fetch_students(course_id, canvas_get_all)
     if error:
         store.record_pass(course_id, "roster", ok=False,
-                          error_code=_error_code(error), attempted_at=started, root=root)
+                          error_code=error_code(error), attempted_at=started, root=root)
         return {"ok": False, "error": error}
     sections, _s_err = _fetch_sections(course_id, canvas_get_all)
     store.write_roster(course_id, students, sections, root=root, attempted_at=started)

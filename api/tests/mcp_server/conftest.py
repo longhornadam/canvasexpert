@@ -5,7 +5,7 @@ import pytest
 from api.feedback_vault import Vault
 from api.mcp_server import tools
 from api.mirror import store as mirror_store
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 @pytest.fixture

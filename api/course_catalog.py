@@ -26,7 +26,7 @@ from api.assignment_collection import (
     acquire_assignment_collection,
 )
 from api.storage_support import quarantine_corrupt_file
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 CATALOG_VERSION = 3
@@ -446,7 +446,7 @@ def normalize_page(row: dict) -> dict:
     }
 
 
-def _error_code(error) -> str:
+def error_code(error) -> str:
     text = str(error or "").lower()
     if "no canvas token" in text or "no token" in text:
         return "auth_unavailable"
@@ -505,10 +505,10 @@ def _incomplete_membership(
 
 def _top_level_failure(error, complete, rows, previous_scope: dict | None, attempted_at: str, *, empty_records) -> dict | None:
     if error:
-        error_code = str(error).strip()
-        if error_code not in {"pagination_incomplete", "invalid_response"}:
-            error_code = _error_code(error)
-        return _scope_failure(previous_scope, attempted_at, error_code, empty_records=empty_records)
+        failure_code = str(error).strip()
+        if failure_code not in {"pagination_incomplete", "invalid_response"}:
+            failure_code = error_code(error)
+        return _scope_failure(previous_scope, attempted_at, failure_code, empty_records=empty_records)
     if complete is not True:
         return _scope_failure(previous_scope, attempted_at, "pagination_incomplete", empty_records=empty_records)
     if not isinstance(rows, list):

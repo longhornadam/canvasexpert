@@ -40,6 +40,26 @@ def test_known_name_in_freetext_is_soft_not_blocking(tmp_path):
     assert verdict["soft"] and verdict["soft"][0]["name"] == "Ada Lovelace"
 
 
+def test_mcp_soft_flags_log_only_an_aggregate_count(tmp_path, monkeypatch):
+    from api.mcp_server import pseudonym
+
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Ada Lovelace", "5001")
+    payload = {"note": "Ada Lovelace submitted a revision."}
+    records = []
+    monkeypatch.setattr(
+        pseudonym.operational_log, "emit",
+        lambda *args, **kwargs: records.append((args, kwargs)),
+    )
+
+    result = pseudonym.gate(payload, v)
+
+    assert result == {"ok": True, **payload}
+    assert records == [(('mcp.safety_soft_flags', 'ok'), {'count': 1})]
+    assert "Ada Lovelace" not in repr(records)
+    assert "note" not in repr(records)
+
+
 def test_real_id_as_value_is_hard_blocked(tmp_path):
     v = Vault(str(tmp_path / "vault.json"))
     v.get_or_assign("9001", "Ada Lovelace", "5001")

@@ -26,7 +26,7 @@ from __future__ import annotations
 from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 
-from .canvas_client import _canvas_get_all
+from api.platform_services.canvas_client import canvas_get_all
 
 
 def students_or_live(course_id):
@@ -37,7 +37,7 @@ def students_or_live(course_id):
         rows, error = mirror_queries.course_students(course_id)
         if not error and isinstance(rows, list):
             return rows, None, "mirror"
-    rows, error = _canvas_get_all(
+    rows, error = canvas_get_all(
         f"/api/v1/courses/{course_id}/users",
         {"enrollment_type[]": "student", "per_page": 100})
     return rows, error, "canvas"
@@ -51,7 +51,7 @@ def assignments_or_live(course_id):
         rows, error = mirror_queries.course_assignments(course_id)
         if not error and isinstance(rows, list):
             return rows, None, "mirror"
-    rows, error = _canvas_get_all(
+    rows, error = canvas_get_all(
         f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
     return rows, error, "canvas"
 
@@ -64,7 +64,7 @@ def submissions_or_live(course_id):
         rows, error = mirror_queries.course_submissions(course_id)
         if not error and isinstance(rows, list):
             return rows, None, "mirror"
-    rows, error = _canvas_get_all(
+    rows, error = canvas_get_all(
         f"/api/v1/courses/{course_id}/students/submissions",
         {"student_ids[]": "all", "per_page": 100}, timeout=60)
     return rows, error, "canvas"

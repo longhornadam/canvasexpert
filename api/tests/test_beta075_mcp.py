@@ -8,7 +8,7 @@ from api import course_scope, gradebook_queries, gradebook_snapshot
 from api.feedback_vault import Vault
 from api.mcp_server import contract, pseudonym, tools
 from api.mirror import store as mirror_store
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes import gradebook_snapshot as gradebook_route
 
 

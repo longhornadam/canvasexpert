@@ -28,14 +28,14 @@ def _headers():
 
 
 def _canvas_calls(monkeypatch, table):
-    """Install a fake ``_canvas_get_all`` recording every call path."""
+    """Install a fake ``canvas_get_all`` recording every call path."""
     calls = []
 
     def fake(path, params=None):
         calls.append(path)
         return table.get(path, ([], None))
 
-    monkeypatch.setattr(courses, "_canvas_get_all", fake)
+    monkeypatch.setattr(courses, "canvas_get_all", fake)
     return calls
 
 
@@ -113,7 +113,7 @@ def _install_all_current(monkeypatch):
                         lambda course_id: _current_roster(ROSTER_STUDENTS))
     monkeypatch.setattr(courses.mirror_store, "read_groups",
                         lambda course_id: _current_groups(GROUPS_CATEGORIES))
-    monkeypatch.setattr(courses, "_canvas_headers", _headers)
+    monkeypatch.setattr(courses, "canvas_headers", _headers)
 
 
 def test_current_catalog_serves_assignments_with_reconstructed_html_url_and_no_live_call(monkeypatch):
@@ -325,7 +325,7 @@ def test_full_live_fallback_shape_matches_legacy_minus_email(monkeypatch):
                         lambda course_id: {"catalog": None, "source": "none", "warnings": []})
     monkeypatch.setattr(courses.mirror_store, "read_roster", lambda course_id: None)
     monkeypatch.setattr(courses.mirror_store, "read_groups", lambda course_id: None)
-    monkeypatch.setattr(courses, "_canvas_headers", _headers)
+    monkeypatch.setattr(courses, "canvas_headers", _headers)
 
     live_users = [{"id": 101, "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada"}]
     live_cats = [{"id": "cat-1", "name": "Teams"}]

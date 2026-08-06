@@ -197,10 +197,10 @@ def _persisted_route_environment(monkeypatch, tmp_path, session, vault_path, *, 
     monkeypatch.setattr(powergrader_routes, "_load_session", locked_load)
     monkeypatch.setattr(powergrader_routes, "_save_session", locked_save)
     monkeypatch.setattr(powergrader_routes, "_vault", lambda: Vault(str(vault_path)))
-    monkeypatch.setattr(powergrader_routes, "_canvas_get_all", canvas_get_all)
+    monkeypatch.setattr(powergrader_routes, "canvas_get_all", canvas_get_all)
     monkeypatch.setattr(
         powergrader_routes,
-        "_canvas_get",
+        "canvas_get",
         lambda path: (_fresh_submission()["assignment"], None),
     )
     monkeypatch.setattr(powergrader_routes, "_canvas_send", canvas_send)

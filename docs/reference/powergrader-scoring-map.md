@@ -41,7 +41,7 @@ anymore.
   and stages partially rather than all-or-nothing. Staged scores are suggestions awaiting
   teacher review; nothing reaches Canvas on this path even when auto-post is enabled.
 - **Persona/pattern library:** `api/webui/routes/feedback_library.py` and
-  `api/webui/config/feedback.py`. PowerGrader's advanced controls use these routes;
+  `api/platform_services/config/feedback.py`. PowerGrader's advanced controls use these routes;
   no second registry or config format exists. (These modules keep the `feedback_`
   name until the optional engine-rename phase.)
 - **Legacy redirect owner:** `api/webui/routes/pages.py::feedback_expert_page`.

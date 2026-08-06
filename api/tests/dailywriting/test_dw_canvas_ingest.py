@@ -35,7 +35,7 @@ from api.dailywriting.store.repo import Repository
 from api.feedback_vault import Vault
 from api.mcp_server import tools
 from api.mirror import store as mirror_store
-from api.webui import workspace
+from api.platform_services import workspace
 
 COURSE_ID = "111"
 ASSIGNMENT_ID = "700010"
@@ -168,10 +168,10 @@ class FakeCanvas:
 
     def install(self, monkeypatch, *, token=True):
         client = canvas_attachments.canvas_client
-        monkeypatch.setattr(client, "_canvas_headers", lambda: (
+        monkeypatch.setattr(client, "canvas_headers", lambda: (
             ({"Authorization": "Bearer fixture-token"}, "https://canvas.example")
             if token else (None, None)))
-        monkeypatch.setattr(client, "_canvas_get", self._get)
+        monkeypatch.setattr(client, "canvas_get", self._get)
         monkeypatch.setattr(client, "canvas_stream_get", self._stream)
         return self
 
@@ -488,7 +488,7 @@ def test_no_mcp_module_reaches_the_ingest_path():
     6 forbids, so the assistant-facing package must not import this driver or
     its acquisition seam -- directly or by re-export.
 
-    `api.webui.canvas_client` is held to the same rule. It is the raw Canvas
+    `api.platform_services.canvas_client` is held to the same rule. It is the raw Canvas
     HTTP transport, and the MCP tools have no business holding it: they serve
     from the local mirror, catalog, and writing store, and the one tool that
     does move Canvas data (`refresh_mirror`) goes through Canvas Expert's own
@@ -499,7 +499,7 @@ def test_no_mcp_module_reaches_the_ingest_path():
     forbidden = {
         "api.dailywriting.canvas_ingest",
         "api.dailywriting.canvas_attachments",
-        "api.webui.canvas_client",
+        "api.platform_services.canvas_client",
     }
     mcp_dir = os.path.join(_API_DIR, "mcp_server")
     checked = 0
@@ -859,7 +859,7 @@ def test_missing_canvas_token_refuses_before_any_write(monkeypatch, tmp_path):
 
 def test_acquisition_goes_through_the_real_client_and_emits_a_valid_scope(monkeypatch,
                                                                           tmp_path):
-    """Everything above stubs `_canvas_get` and `canvas_stream_get`, which
+    """Everything above stubs `canvas_get` and `canvas_stream_get`, which
     leaves the transport layer itself unexercised: the operational log accepts
     a fixed set of priorities and rejects anything else by raising, so a bad
     telemetry scope here would fail only in front of a teacher. This test
@@ -868,7 +868,7 @@ def test_acquisition_goes_through_the_real_client_and_emits_a_valid_scope(monkey
     """
     _mount(monkeypatch, tmp_path)
     client = canvas_attachments.canvas_client
-    monkeypatch.setattr(client, "_canvas_headers",
+    monkeypatch.setattr(client, "canvas_headers",
                         lambda: ({"Authorization": "Bearer fixture-token"},
                                  "https://canvas.example"))
 

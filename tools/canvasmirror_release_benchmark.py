@@ -88,7 +88,7 @@ class ProfileRefusal(ValueError):
 
 
 def _metrics(fn):
-    from api.webui.canvas_client import canvas_get_telemetry, telemetry_snapshot
+    from api.platform_services.canvas_client import canvas_get_telemetry, telemetry_snapshot
     started = time.monotonic()
     with canvas_get_telemetry("course.refresh", "manual") as telemetry:
         result = fn()
@@ -207,17 +207,17 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--live-readonly", action="store_true", help="run configured read-only release profile")
     args = parser.parse_args(argv)
     try:
-        from api.webui import config, workspace
+        from api.platform_services import config, workspace
         output = validate_output_path(args.output, workspace_root=workspace.workspace_root())
         if args.self_check:
             result = synthetic_self_check(output, workspace_root=workspace.workspace_root())
         else:
-            from api.webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_get_all_complete
+            from api.platform_services.canvas_client import canvas_get, canvas_get_all, canvas_get_all_complete
             focused = os.environ.get("CANVAS_EXPERT_RELEASE_FOCUSED_ASSIGNMENT_ID", "").strip()
             try:
-                result = run_live_readonly(config.active_courses(), canvas_get=_canvas_get,
-                                           canvas_get_all=_canvas_get_all,
-                                           canvas_get_all_complete=_canvas_get_all_complete,
+                result = run_live_readonly(config.active_courses(), canvas_get=canvas_get,
+                                           canvas_get_all=canvas_get_all,
+                                           canvas_get_all_complete=canvas_get_all_complete,
                                            focused_assignment_id=focused)
             except ProfileRefusal:
                 result = {"kind": "canvasmirror_release_harness", "classification": "refused",

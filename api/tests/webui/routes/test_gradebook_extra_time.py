@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from api.mirror import store as mirror_store
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.server import app
 from api.webui.routes import gradebook_extra_time
 

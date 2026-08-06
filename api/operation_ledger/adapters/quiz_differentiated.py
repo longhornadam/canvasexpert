@@ -5,7 +5,7 @@ from __future__ import annotations
 from .. import models
 from .adapter_support import as_list, build_result, has_outbound_marker, normalize
 from . import quiz_steps
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 
 
 def execute(
@@ -154,7 +154,7 @@ def reconcile(payload: dict, target: dict) -> dict:
     create_module_step = stored_steps.get("create_module")
     if create_module_step and create_module_step.get("returned_object_id"):
         module_id = create_module_step["returned_object_id"]
-        module, error = canvas_client._canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}")
+        module, error = canvas_client.canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}")
         if error or not module or str(module.get("id")) != str(module_id):
             return {"state": "sent_unknown", "steps": projected}
         projected.append({"step_key": "create_module", "state": "applied", "returned_object_id": module_id, "returned_object_url": None, "error_code": None})
@@ -166,7 +166,7 @@ def reconcile(payload: dict, target: dict) -> dict:
         quiz_step = stored_steps.get(quiz_key, models.new_step(quiz_key))
         quiz_id = quiz_step.get("returned_object_id")
         if not quiz_id:
-            assignments, error = canvas_client._canvas_get(
+            assignments, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments",
                 params={"per_page": 100, "search_term": title},
             )
@@ -176,7 +176,7 @@ def reconcile(payload: dict, target: dict) -> dict:
                 return {"state": "sent_unknown", "steps": projected}
             return {"state": "sent_unknown" if has_marker else "pending", "steps": projected}
 
-        quiz, error = canvas_client._canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
+        quiz, error = canvas_client.canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
         if error:
             if "404" in str(error) and not quiz_step.get("outbound_started_at"):
                 return {"state": "pending", "steps": projected}
@@ -197,7 +197,7 @@ def reconcile(payload: dict, target: dict) -> dict:
             item_id = item_step.get("returned_object_id")
             if not item_id:
                 return {"state": "sent_unknown" if has_marker else "pending", "steps": projected, "returned_object_id": quiz_id}
-            verify, verify_error = canvas_client._canvas_get(
+            verify, verify_error = canvas_client.canvas_get(
                 f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}/items/{item_id}"
             )
             if verify_error or not verify:
@@ -210,12 +210,12 @@ def reconcile(payload: dict, target: dict) -> dict:
             attach_step = stored_steps.get(attach_key, models.new_step(attach_key))
             attach_item_id = attach_step.get("returned_object_id")
             if attach_item_id:
-                item, error = canvas_client._canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}/items/{attach_item_id}")
+                item, error = canvas_client.canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}/items/{attach_item_id}")
                 if not error and item:
                     if str(item.get("type", "")).lower() == "assignment" and str(item.get("content_id")) == str(quiz_id):
                         projected.append({"step_key": attach_key, "state": "applied", "returned_object_id": attach_item_id, "returned_object_url": None, "error_code": None, "module_id": module_id})
                         continue
-            items_list, error = canvas_client._canvas_get_all(
+            items_list, error = canvas_client.canvas_get_all(
                 f"/api/v1/courses/{course_id}/modules/{module_id}/items",
                 {"per_page": 100},
             )

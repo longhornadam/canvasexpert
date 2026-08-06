@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from ..canvas_client import _canvas_get, _canvas_send
+from api.platform_services.canvas_client import canvas_get, _canvas_send
 from api import operational_log
 from api.mirror import store as mirror_store
 
@@ -24,7 +24,7 @@ def get_late_policy(course_id: str):
         return JSONResponse({"ok": True, "policy": document["policy"],
                              "source": "mirror", "synced_at": document["synced_at"]})
 
-    data, err = _canvas_get(f"/api/v1/courses/{course_id}/late_policy")
+    data, err = canvas_get(f"/api/v1/courses/{course_id}/late_policy")
     if err and "404" in err:
         return JSONResponse({"ok": True, "policy": None,
                              "source": "canvas", "synced_at": ""})
@@ -55,7 +55,7 @@ def apply_late_policy(courses: str = Form(...), policy: str = Form(...)):
     for t in targets:
         cid = str(t.get("id", ""))
         cname = t.get("name", f"course {cid}")
-        existing, gerr = _canvas_get(f"/api/v1/courses/{cid}/late_policy")
+        existing, gerr = canvas_get(f"/api/v1/courses/{cid}/late_policy")
         if gerr and "404" not in gerr:
             results.append({"course_name": cname, "ok": False, "error": gerr})
             continue

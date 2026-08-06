@@ -15,8 +15,8 @@ import requests
 
 from api import nq_report, portfolio, portfolio_service, student_packet
 from api.mirror import read_service, store as mirror_store
-from .. import config, workspace
-from ..canvas_client import _canvas_get_all, _canvas_headers
+from api.platform_services import config, workspace
+from api.platform_services.canvas_client import canvas_get_all, canvas_headers
 from ..gradebook_service import _load_curve_events
 
 router = APIRouter(prefix="/api", tags=["reports"])
@@ -65,7 +65,7 @@ def list_assignments_full(course_id: str):
         )
         return JSONResponse({"ok": True, "assignments": assignments})
 
-    hdrs, base = _canvas_headers()
+    hdrs, base = canvas_headers()
     if not hdrs:
         return JSONResponse({"ok": False, "error": "No token saved."})
     results, params = [], {"per_page": 100}
@@ -182,7 +182,7 @@ def api_students(course_id: str):
     if has_ids:
         pass  # records already in hand
     else:
-        users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
+        users, err = canvas_get_all(f"/api/v1/courses/{course_id}/users",
                                      {"enrollment_type[]": "student", "per_page": 100})
         if err:
             return JSONResponse({"ok": False, "error": err})
@@ -305,7 +305,7 @@ async def portfolio_merged(course_id: str = Form(...),
         if roster_scope["state"] == "current" and isinstance(roster_scope.get("records"), list):
             users = roster_scope["records"]
         else:
-            users, err = _canvas_get_all(f"/api/v1/courses/{course_id}/users",
+            users, err = canvas_get_all(f"/api/v1/courses/{course_id}/users",
                                          {"enrollment_type[]": "student", "per_page": 100})
             if err:
                 return JSONResponse({"ok": False, "error": err})

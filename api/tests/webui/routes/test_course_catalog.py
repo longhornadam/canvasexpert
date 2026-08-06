@@ -749,14 +749,14 @@ def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
 
     monkeypatch.setattr(course_catalog_routes.course_catalog, "read_catalog", fake_read)
     monkeypatch.setattr(
-        course_catalog_routes, "_canvas_get_all",
+        course_catalog_routes, "canvas_get_all",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GET contacted Canvas")),
     )
     def complete_assignments(path, params):
         assignment_calls.append((path, params))
         return receipt
 
-    monkeypatch.setattr(course_catalog_routes, "_canvas_get_all_complete", complete_assignments)
+    monkeypatch.setattr(course_catalog_routes, "canvas_get_all_complete", complete_assignments)
 
     def fake_refresh(course_id, course_name, *, canvas_get_all, canvas_get_all_complete,
                      assignment_receipt):
@@ -781,8 +781,8 @@ def test_routes_gate_current_courses_and_get_is_disk_only(monkeypatch):
     assert calls == ["course-1"]
     assert len(refresh_calls) == 1
     assert refresh_calls[0][0:2] == ("course-1", "Fictional Course")
-    assert refresh_calls[0][2] is course_catalog_routes._canvas_get_all
-    assert refresh_calls[0][3] is course_catalog_routes._canvas_get_all_complete
+    assert refresh_calls[0][2] is course_catalog_routes.canvas_get_all
+    assert refresh_calls[0][3] is course_catalog_routes.canvas_get_all_complete
     assert refresh_calls[0][4] is receipt
     assert assignment_calls == [("/api/v1/courses/course-1/assignments", {"per_page": 100})]
     assert mirror_calls == [("course-1", receipt)]

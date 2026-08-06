@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
 
 from api import seating_constraints, seating_grouping, seating_state
-from .. import config
+from api.platform_services import config
 
 
 router = APIRouter(prefix="/api/seating", tags=["seating"])

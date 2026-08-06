@@ -37,7 +37,7 @@ def route_env(tmp_path, monkeypatch):
         }, None
 
     monkeypatch.setattr(
-        "api.operation_ledger.adapters.quick_assignment.canvas_client._canvas_get",
+        "api.operation_ledger.adapters.quick_assignment.canvas_client.canvas_get",
         fake_get,
     )
     monkeypatch.setattr(
@@ -79,8 +79,15 @@ def test_prepare_preserves_selected_target_order(route_env):
     assert created == []
 
 
-def test_prepare_review_apply_writes_only_selected_targets(route_env):
+def test_prepare_review_apply_writes_only_selected_targets(route_env, monkeypatch):
+    from api import operational_log
+
     client, created = route_env
+    records = []
+    monkeypatch.setattr(
+        operational_log, "emit",
+        lambda *args, **kwargs: records.append((args, kwargs)),
+    )
     prepared = client.post(
         "/api/operations/content.quick_assignment/prepare",
         json=_body([{"course_id": "202"}, {"course_id": "101"}]),
@@ -99,6 +106,11 @@ def test_prepare_review_apply_writes_only_selected_targets(route_env):
     assert applied.status_code == 200
     assert applied.json()["status"] == "applied"
     assert created == ["202", "101"]
+    assert any(args == ("operation_ledger.write", "ok") for args, _ in records)
+    apply_records = [item for item in records if item[0] == ("operation_ledger.apply", "ok")]
+    assert len(apply_records) == 1
+    assert apply_records[0][1]["count"] == 2
+    assert set(apply_records[0][1]) == {"duration_ms", "count", "error_class"}
 
 
 @pytest.mark.parametrize("body", [

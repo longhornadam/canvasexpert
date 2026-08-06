@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes import names
 
 

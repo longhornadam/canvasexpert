@@ -30,7 +30,8 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from .. import calendar_csv, config, deps, school_calendar, schedule_setup, workspace
+from api.platform_services import config, workspace
+from .. import calendar_csv, deps, school_calendar, schedule_setup
 from ..deps import API_DIR, templates
 from .pages import _open_in_os
 

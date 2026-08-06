@@ -66,7 +66,7 @@ def test_freeze_review(monkeypatch):
     assert r["entry_count"] == 1
 
 def test_baseline_canvas_error_detects_drift(monkeypatch):
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all",
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all",
                         lambda *a, **kw: ([], None))
     monkeypatch.setattr(
         "api.operation_ledger.adapters.sweep.school_calendar.resolve_instructional_range",
@@ -100,7 +100,7 @@ FAKE_SUBMISSIONS = [{
 }]
 FAKE_STUDENTS = [{"id": 1, "sortable_name": "Smith, John"}]
 
-def _mock_canvas_get_all(path, params=None, timeout=30):
+def _mockcanvas_get_all(path, params=None, timeout=30):
     if "assignments" in path and "submissions" not in path:
         return FAKE_ASSIGNMENTS, None
     if "submissions" in path:
@@ -114,7 +114,7 @@ def _mock_canvas_send(method, path, payload, timeout=30):
 
 def test_execute_applies_sweep(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _mock_canvas_get_all)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all", _mockcanvas_get_all)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_send", _mock_canvas_send)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
     monkeypatch.setattr(
@@ -161,7 +161,7 @@ def test_execute_no_late_subs(tmp_path, monkeypatch):
         if "users" in path:
             return [{"id": 1, "sortable_name": "Smith, John"}], None
         return [], None
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _no_late)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all", _no_late)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_send", _mock_canvas_send)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
     monkeypatch.setattr(
@@ -183,7 +183,7 @@ def test_capture_baseline_refuses_when_calendar_cannot_cover_the_late_range(tmp_
     due/submitted range -- the whole sweep must refuse rather than silently
     reporting zero (or miscounted) late entries."""
     _root(tmp_path, monkeypatch)
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _mock_canvas_get_all)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all", _mockcanvas_get_all)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
     monkeypatch.setattr(
         "api.operation_ledger.adapters.sweep.school_calendar.resolve_instructional_range",
@@ -203,7 +203,7 @@ def test_execute_handles_canvas_error(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     def _fail(path, params=None, timeout=30):
         return None, "HTTP 500"
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _fail)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all", _fail)
     adapter = SweepAdapter()
     payload = {"settings": {"honor_extra_time": True}}
     op = models.new_operation(
@@ -229,7 +229,7 @@ def test_execute_handles_canvas_error(tmp_path, monkeypatch):
 
 def test_pipeline_with_mocks(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
-    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_get_all", _mock_canvas_get_all)
+    monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client.canvas_get_all", _mockcanvas_get_all)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.canvas_client._canvas_send", _mock_canvas_send)
     monkeypatch.setattr("api.operation_ledger.adapters.sweep.config.active_courses", _fake_courses)
     monkeypatch.setattr(

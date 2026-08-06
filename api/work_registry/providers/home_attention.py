@@ -8,7 +8,7 @@ from . import as_datetime, WorkCourseReads, check_deadline, finding, text
 
 
 _TA_MARKER = "TA SCORE + FEEDBACK"
-_PROVEN_STAFF_ROLES = {
+PROVEN_STAFF_ROLES = {
     "admin", "administrator", "instructor", "staff", "ta", "teacher",
     "teaching_assistant",
 }
@@ -38,7 +38,7 @@ def _author_id(comment: dict) -> str:
     return direct or nested
 
 
-def _author_role(comment: dict) -> str:
+def author_role(comment: dict) -> str:
     author = comment.get("author") if isinstance(comment.get("author"), dict) else {}
     return text(
         comment.get("author_role") or comment.get("author_type")
@@ -72,7 +72,7 @@ def _is_ta_comment(comment: dict, author_id: str, student_id: str) -> bool:
 
 
 def _is_proven_staff(comment: dict, author_id: str, student_id: str) -> bool:
-    return author_id != student_id and _author_role(comment) in _PROVEN_STAFF_ROLES
+    return author_id != student_id and author_role(comment) in PROVEN_STAFF_ROLES
 
 
 def classify_comment_follow_up(submission: dict) -> str:

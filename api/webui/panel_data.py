@@ -13,7 +13,8 @@ from datetime import date, datetime, timedelta
 from api import audience, learning_objectives
 from api.mirror import read_service
 from api.course_catalog import read_catalog
-from api.webui import clock_time, config, deps, school_calendar
+from api.platform_services import config
+from api.webui import clock_time, deps, school_calendar
 
 
 DEFAULT_DUE_DAYS = 7

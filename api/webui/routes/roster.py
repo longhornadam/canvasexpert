@@ -20,8 +20,8 @@ from api import operational_log
 from api import roster_context
 from api import roster_service
 from api.mirror import store as mirror_store
-from .. import config
-from ..canvas_client import _canvas_get_all, _canvas_send
+from api.platform_services import config
+from api.platform_services.canvas_client import canvas_get_all, _canvas_send
 from .courses import fetch_group_category_groups, load_group_categories
 from .names import _vault
 from . import roster_groups
@@ -69,7 +69,7 @@ _apply_score_matrix_patch = roster_context._apply_score_matrix_patch
 
 
 def _fetch_sections(course_id: str) -> dict:
-    return roster_service.fetch_sections(course_id, canvas_get_all=_canvas_get_all)
+    return roster_service.fetch_sections(course_id, canvas_get_all=canvas_get_all)
 
 
 _fetch_students = roster_service.fetch_students

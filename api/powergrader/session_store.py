@@ -7,7 +7,7 @@ from pathlib import Path
 
 from api.storage_support import atomic_write_json, interprocess_lock
 
-from api.webui import workspace
+from api.platform_services import workspace
 
 # Per-session lock registry for interactive auto-post serialization
 _session_locks: dict[str, threading.RLock] = {}

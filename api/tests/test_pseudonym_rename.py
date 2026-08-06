@@ -69,7 +69,7 @@ def test_a_rename_never_brings_a_workspace_folder_into_being(tmp_path, monkeypat
     `api/tests/test_work_registry.py` guards the same property for the
     workbench registry."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("api.webui.workspace.workspace_root", lambda: "")
+    monkeypatch.setattr("api.platform_services.workspace.workspace_root", lambda: "")
 
     assert pseudonym_rename.backfill_assessment_history() == ""
     assert pseudonym_rename.refresh_published_profile() == ""

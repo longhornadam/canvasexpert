@@ -6,10 +6,11 @@ import glob
 import os
 import traceback
 
-from .. import config, deps, school_calendar
-from ..canvas_client import _canvas_get, _canvas_get_all, _canvas_send
+from api.platform_services import config
+from .. import deps, school_calendar
+from api.platform_services.canvas_client import canvas_get, canvas_get_all, _canvas_send
 from ..deps import _CUSTOM_DIR
-from ..schooldays import _school_days_late, _parse_iso_local
+from ..schooldays import _school_days_late, parse_iso_local
 from api import routine_reads
 from datetime import datetime, timedelta
 
@@ -18,7 +19,7 @@ def _canvas_read(scope, course_id):
     """Custom-routine ``canvas_read`` tool — delegates to the typed mirror-first
     reader. Returns the full ``{ok, records, error, source, synced_at,
     generation}`` dict so freshness is available without a second read."""
-    return routine_reads.read_scope(scope, course_id, live_reader=_canvas_get_all)
+    return routine_reads.read_scope(scope, course_id, live_reader=canvas_get_all)
 
 
 def _combined_calendar_for_routines(date_from: str | None = None, date_to: str | None = None) -> dict:
@@ -67,15 +68,15 @@ def _routine_sdk(routine_fn):
     """Build the SDK dict passed to custom routine files at load time."""
     return {
         "routine": routine_fn,
-        "canvas_get": _canvas_get,
-        "canvas_get_all": _canvas_get_all,
+        "canvas_get": canvas_get,
+        "canvas_get_all": canvas_get_all,
         "canvas_send": _canvas_send,
         "canvas_read": _canvas_read,
         "active_courses": config.active_courses,
         "sweep_settings": config.get_sweep_settings,
         "combined_calendar": _combined_calendar_for_routines,
         "school_days_late": _school_days_late,
-        "parse_iso_local": _parse_iso_local,
+        "parse_iso_local": parse_iso_local,
         "datetime": datetime,
         "timedelta": timedelta,
     }

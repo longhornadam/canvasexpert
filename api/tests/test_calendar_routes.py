@@ -7,7 +7,8 @@ import pathlib
 import pytest
 from fastapi.testclient import TestClient
 
-from api.webui import deps, workspace
+from api.platform_services import workspace
+from api.webui import deps
 from api.webui.server import app
 
 client = TestClient(app)

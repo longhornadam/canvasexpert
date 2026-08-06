@@ -6,8 +6,8 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 
-from . import config, workspace
-from .canvas_client import _canvas_get
+from api.platform_services import config, workspace
+from api.platform_services.canvas_client import canvas_get
 from .routes.settings import _probe_openrouter_key
 
 
@@ -40,7 +40,7 @@ def _code(error: str, status_code: int | None = None) -> str:
 def _probe_canvas() -> dict:
     if not config.token_is_set() or not config.get_canvas_base():
         return _component("unconfigured", "unconfigured")
-    data, error = _canvas_get("/api/v1/users/self/profile", timeout=5)
+    data, error = canvas_get("/api/v1/users/self/profile", timeout=5)
     if data is not None:
         return _component("ready")
     return _component("degraded", _code(error))

@@ -23,7 +23,8 @@ from .adapter_support import (
     replace_step as _replace_local_step,
 )
 from .assignment_groups import GroupResolutionError, resolve_assignment_groups
-from api.webui import af, canvas_client, config
+from api.platform_services import canvas_client, config
+from api.webui import af
 
 
 KIND = "content.assignment"
@@ -184,7 +185,7 @@ class AssignmentAdapter:
                 groups = resolve_assignment_groups(course_id, payload["tiers"])
             except GroupResolutionError as exc:
                 return {"canvas_error": str(exc)}
-            assignments, error = canvas_client._canvas_get_all(
+            assignments, error = canvas_client.canvas_get_all(
                 f"/api/v1/courses/{course_id}/assignments",
                 {"per_page": 100, "search_term": name},
             )
@@ -199,7 +200,7 @@ class AssignmentAdapter:
             return {"group_snapshot": groups["safe"], "existing_assignments": matches}
 
         baseline = {"existing_assignment": None}
-        assignments, error = canvas_client._canvas_get(
+        assignments, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments",
             params={"per_page": 100, "search_term": name},
         )
@@ -383,7 +384,7 @@ class AssignmentAdapter:
 
 
 def _find_assignment_group(course_id: str, name: str) -> int | None:
-    data, error = canvas_client._canvas_get_all(
+    data, error = canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/assignment_groups",
         {"per_page": 100},
     )
@@ -464,7 +465,7 @@ def _ordered_steps(target: dict) -> list[dict]:
 
 
 def _read_modules(course_id: str):
-    return canvas_client._canvas_get_all(
+    return canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/modules", {"per_page": 100}
     )
 

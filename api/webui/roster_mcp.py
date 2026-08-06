@@ -2,7 +2,7 @@
 
 import json
 
-from . import config
+from api.platform_services import config
 from .routes import roster as roster_routes
 
 

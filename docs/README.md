@@ -32,12 +32,10 @@ Useful starting references for new debugging and refactor sessions:
 ## Handoff Convention
 
 The senior/orchestrator makes the difficult product and architecture decisions, then writes
-one substantial brief. One executor implements it:
-Luna for established patterns, Terra for complex/guardrail-adjacent work, or an external
-VS Code agent chosen by the user. Do not run planner/implementer/reviewer swarms.
+one substantial brief. One executor implements it.
 
-Keep one active brief by default. The brief is the durable context checkpoint when a chat is
-compacted, an executor changes, or work moves between Codex and VS Code. It must lock scope,
+Keep one active brief by default in handoffs/. The brief is the durable context checkpoint when a chat is
+compacted, an executor changes, or work moves between agents. It must lock scope,
 decisions, references, verification, and stop conditions before implementation starts. The
 executor records its compact traffic-light result in that same brief before handback so test
 evidence and current state do not exist only in chat.

@@ -1,7 +1,7 @@
 """Offline tests for Roster Console config helpers."""
 import pytest
 
-from api.webui import config
+from api.platform_services import config
 
 
 @pytest.fixture(autouse=True)

@@ -28,7 +28,7 @@ from api.feedback_vault import Vault
 from api.mcp_server import pseudonym, tools
 from api.mirror import store as mirror_store
 from api.powergrader.autoscore_claims import machine_id
-from api.webui import workspace
+from api.platform_services import workspace
 
 FIXTURE_USERS = [
     {

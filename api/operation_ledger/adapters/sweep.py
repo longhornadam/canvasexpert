@@ -6,9 +6,10 @@ Canvas Submissions API, and returns per-student results.
 """
 from .. import models
 from api import operational_log
-from api.webui import canvas_client, config, deps, school_calendar
+from api.platform_services import canvas_client, config
+from api.webui import deps, school_calendar
 from api.webui.schooldays import (
-    _parse_iso_local, _school_days_late_detail,
+    parse_iso_local, school_days_late_detail,
 )
 
 
@@ -247,7 +248,7 @@ class SweepAdapter:
             f"/api/v1/courses/{course_id}/assignments/"
             f"{sample['assignment_id']}/submissions/{sample['user_id']}"
         )
-        sub, err = canvas_client._canvas_get(path)
+        sub, err = canvas_client.canvas_get(path)
         if err:
             return {"state": "sent_unknown"}
         if not sub:
@@ -277,7 +278,7 @@ def _compute_sweep(course_id: str, settings: dict):
     Single sweep-compute owner: ``/api/sweep/preview`` and the ledger
     baseline/drift/execute path all call this, so preview shows exactly what
     apply will write. Semantics match the healthy
-    ``_school_days_late_detail`` consumers (PowerGrader late catch-up, the
+    ``school_days_late_detail`` consumers (PowerGrader late catch-up, the
     work-registry late-work provider, the routine sweep): the first return
     value is the school-day count with no-count dates already excluded;
     ``excluded`` is display detail only, never a reason to drop a row.
@@ -294,18 +295,18 @@ def _compute_sweep(course_id: str, settings: dict):
     date_from = str(settings.get("date_from") or "").strip()
     date_to = str(settings.get("date_to") or "").strip()
 
-    assignments, err = canvas_client._canvas_get_all(
+    assignments, err = canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/assignments", {"per_page": 100})
     if err:
         return [], [], err
 
-    subs, err = canvas_client._canvas_get_all(
+    subs, err = canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/students/submissions",
         {"student_ids[]": "all", "per_page": 100}, timeout=60)
     if err:
         return [], [], err
 
-    students, err = canvas_client._canvas_get_all(
+    students, err = canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/users",
         {"enrollment_type[]": "student", "per_page": 100})
     if err:
@@ -340,8 +341,8 @@ def _compute_sweep(course_id: str, settings: dict):
 
         # Per-student due date wins over the whole-class due_at so overrides
         # and section/individual due dates compute lateness correctly.
-        due = _parse_iso_local(sub.get("cached_due_date") or a.get("due_at"))
-        subd = _parse_iso_local(sub.get("submitted_at"))
+        due = parse_iso_local(sub.get("cached_due_date") or a.get("due_at"))
+        subd = parse_iso_local(sub.get("submitted_at"))
         if not due or not subd:
             continue
 
@@ -368,7 +369,7 @@ def _compute_sweep(course_id: str, settings: dict):
     for sub, a, due, subd in candidates:
         aid = sub.get("assignment_id")
         uid = sub.get("user_id")
-        school_days, excluded = _school_days_late_detail(
+        school_days, excluded = school_days_late_detail(
             due, subd, no_count)
         extra_days = min(extra_by_uid.get(str(uid), 0), school_days)
         effective_days = school_days - extra_days

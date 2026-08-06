@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from api.roster_service import fetch_students as _fetch_students
-from api import feedback_safety, feedback_scrub
+from api import feedback_safety, feedback_scrub, operational_log
 from api.nq_report import html_to_text
 
 
@@ -124,8 +124,9 @@ def gate(payload: dict, vault) -> dict:
     """Final outbound safety check for every student-data tool. Fail closed:
     any hard violation withholds the payload entirely; only sanitized
     violation descriptions are returned, never the flagged name or id value.
-    Soft flags (a roster name appearing inside free text) are dropped
-    silently — they do not block and are not surfaced to the MCP client."""
+    Soft flags (a roster name appearing inside free text) remain non-blocking
+    and are not surfaced to the MCP client. Their aggregate count is recorded
+    in the privacy-minimized operational log."""
     verdict = feedback_safety.scan_payload(payload, vault)
     if not verdict["green"]:
         return {
@@ -133,4 +134,8 @@ def gate(payload: dict, vault) -> dict:
             "error": "Safety scan blocked this result before it left the machine.",
             "violations": [_sanitize_violation(h) for h in verdict["hard"]],
         }
+    if verdict["soft"]:
+        operational_log.emit(
+            "mcp.safety_soft_flags", "ok", count=len(verdict["soft"])
+        )
     return {"ok": True, **payload}

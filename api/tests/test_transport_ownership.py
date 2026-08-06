@@ -36,7 +36,7 @@ CLIENT_CTORS = {"Session", "Client", "AsyncClient"}
 # Adding a file here is a deliberate, reviewed decision; drift fails the test.
 ALLOWED_DIRECT_HTTP = {
     # Shared Canvas transports (the intended chokepoints)
-    "api/webui/canvas_client.py",        # shared webui Canvas client (_canvas_send/_canvas_get)
+    "api/platform_services/canvas_client.py",    # shared platform Canvas client (_canvas_send/canvas_get)
     "api/canvas.py",                     # shared transport for standalone sandbox scripts
     # External / diagnostic / sandbox owners
     "api/openrouter_client.py",          # external OpenRouter AI transport (not Canvas)

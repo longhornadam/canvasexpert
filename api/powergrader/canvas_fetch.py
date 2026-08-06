@@ -14,8 +14,8 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-from api.webui import config, workspace
-from api.webui.canvas_client import _canvas_get, _canvas_get_all, _canvas_headers
+from api.platform_services import config, workspace
+from api.platform_services.canvas_client import canvas_get, canvas_get_all, canvas_headers
 from api.mirror import new_quizzes
 from api.mirror import queries as mirror_queries
 from api.mirror import sync as mirror_sync
@@ -50,7 +50,7 @@ def _mirror_session_submissions(course_id: str, assignment_id: str):
     """
     try:
         result = mirror_sync.sync_assignment_submissions(
-            course_id, assignment_id, canvas_get_all=_canvas_get_all)
+            course_id, assignment_id, canvas_get_all=canvas_get_all)
     except Exception:
         return None, "sync_exception"
     if not result.get("ok"):
@@ -131,7 +131,7 @@ def _acquire_ordinary_submissions(course_id: str, assignment_id: str, adata: dic
         rows, _reason = _mirror_session_submissions(course_id, assignment_id)
         if rows is not None:
             return _enrich_mirror_rows(rows, course_id=course_id, adata=adata), None
-    return _canvas_get_all(
+    return canvas_get_all(
         f"/api/v1/courses/{course_id}/students/submissions",
         {"student_ids[]": ["all"], "assignment_ids[]": [assignment_id],
          "include[]": ["assignment", "user"], "per_page": 100},
@@ -157,7 +157,7 @@ def fetch_submissions(course_id: str, assignment_id: str, *, session_id: str | N
         adata.setdefault("id", str(assignment_id))
         adata["is_quiz_lti_assignment"] = True
     else:
-        adata, assignment_err = _canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
+        adata, assignment_err = canvas_get(f"/api/v1/courses/{course_id}/assignments/{assignment_id}")
         if assignment_err:
             return None, None, assignment_err
         adata = adata or {}
@@ -429,7 +429,7 @@ def ingest_ordinary_attachments(
     source URL is used for transport and is intentionally never copied into the
     returned records.
     """
-    headers, canvas_base = _canvas_headers()
+    headers, canvas_base = canvas_headers()
     client = http_session or requests.Session()
     if headers:
         client.headers.update(headers)
@@ -575,7 +575,7 @@ def enrich_with_code_files(subs):
     Production PowerGrader start, late catch-up, and scheduled autoscore flows
     use ``ingest_ordinary_attachments`` instead and do not populate ``code_files``.
     """
-    hdrs, _ = _canvas_headers()
+    hdrs, _ = canvas_headers()
     if not hdrs:
         return
     sess = requests.Session()

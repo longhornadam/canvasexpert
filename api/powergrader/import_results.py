@@ -7,7 +7,7 @@ from functools import wraps
 
 from api import feedback_pipeline as fp
 from api.powergrader import session_store
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def _session_locked(func):

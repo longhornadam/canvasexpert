@@ -29,7 +29,7 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, List
 
-from api.webui import workspace
+from api.platform_services import workspace
 
 from . import history_store
 

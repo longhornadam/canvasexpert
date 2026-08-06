@@ -5,10 +5,10 @@ from contextlib import contextmanager
 import pytest
 
 from api.webui.server import app
-from api.webui import config
+from api.platform_services import config
 import api.webui.routes.roster as roster_routes
 from api.mirror import store as mirror_store
-from api.webui import workspace
+from api.platform_services import workspace
 
 client = TestClient(app)
 

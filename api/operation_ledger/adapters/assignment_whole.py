@@ -21,8 +21,8 @@ from .adapter_support import (
 )
 from .module_placement import attach_assignment_type_module_item
 from api import operational_log
-from api.webui import canvas_client
-from api.webui import config
+from api.platform_services import canvas_client
+from api.platform_services import config
 
 
 def execute(
@@ -150,7 +150,7 @@ def execute(
 def _verify_existing_assignment(*, course_id: str, steps: list[dict], step: dict, assignment_id: str | None, assignment_url: str | None) -> tuple[str | None, str | None, bool, dict | None]:
     assignment_verified = False
     if step.get("state") in ("applied", "skipped") and assignment_id:
-        assignment, error = canvas_client._canvas_get(
+        assignment, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
         )
         if not error and assignment:
@@ -166,7 +166,7 @@ def _verify_existing_assignment(*, course_id: str, steps: list[dict], step: dict
                 error_code="assignment_exact_id_unverified",
             )
     elif assignment_id:
-        assignment, error = canvas_client._canvas_get(
+        assignment, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
         )
         if not error and assignment:
@@ -287,7 +287,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
 
     if not assignment_id:
         name = payload.get("name", "")
-        assignments, error = canvas_client._canvas_get(
+        assignments, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments",
             params={"per_page": 100, "search_term": name},
         )
@@ -297,7 +297,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
             return {"state": "sent_unknown"}
         return {"state": "sent_unknown" if has_marker else "pending"}
 
-    assignment, error = canvas_client._canvas_get(
+    assignment, error = canvas_client.canvas_get(
         f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
     )
     if error:
@@ -328,7 +328,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
 
     item_id = attach_step.get("returned_object_id")
     if item_id:
-        item, item_error = canvas_client._canvas_get(
+        item, item_error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}"
         )
         if not item_error and item:
@@ -339,7 +339,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
                 result["module_item_id"] = item_id
                 return result
 
-    items, item_error = canvas_client._canvas_get_all(
+    items, item_error = canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/modules/{module_id}/items",
         {"per_page": 100},
     )

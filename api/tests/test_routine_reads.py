@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from api import routine_reads
 from api.mirror import store
-from api.webui import mirror_reads, workspace
+from api.platform_services import workspace
+from api.webui import mirror_reads
 from api.webui.routes import routines_builtin, routines_custom
 
 COURSE = "555301"
@@ -193,7 +194,7 @@ def test_result_keys_are_exactly_the_named_set(monkeypatch, tmp_path):
 def test_grading_debt_uses_read_scope_with_zero_live_calls_when_fresh(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", _explode)
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", _explode)
     monkeypatch.setattr(routines_builtin.config, "active_courses",
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
@@ -230,7 +231,7 @@ def test_grading_debt_falls_back_live_via_read_scope_when_stale(monkeypatch, tmp
                  "workflow_state": "submitted",
                  "submitted_at": "2020-01-01T09:00:00Z"}], None
 
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", fake_get)
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", fake_get)
     result = routines_builtin._run_routine_grading_debt({"school_days": 3})
     assert result["ok"] is True
     assert "1 ungraded" in result["summary"]
@@ -239,7 +240,7 @@ def test_grading_debt_falls_back_live_via_read_scope_when_stale(monkeypatch, tmp
 def test_download_assignment_listing_uses_read_scope(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", _explode)
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", _explode)
     monkeypatch.setattr(routines_builtin.config, "get_token", lambda: "tok")
     monkeypatch.setattr(routines_builtin.config, "active_courses",
                         lambda: [{"id": COURSE, "nickname": "Course"}])
@@ -262,7 +263,7 @@ def test_download_assignment_listing_uses_read_scope(monkeypatch, tmp_path):
 def test_grading_debt_lines_never_serialize_the_source_envelope(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(routines_builtin, "_canvas_get_all", _explode)
+    monkeypatch.setattr(routines_builtin, "canvas_get_all", _explode)
     monkeypatch.setattr(routines_builtin.config, "active_courses",
                         lambda: [{"id": COURSE, "nickname": "Course"}])
     monkeypatch.setattr(routines_builtin.config, "get_sweep_settings",
@@ -284,7 +285,7 @@ def test_grading_debt_lines_never_serialize_the_source_envelope(monkeypatch, tmp
 def test_custom_sdk_injects_canvas_read(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     _populate(str(tmp_path))
-    monkeypatch.setattr(routines_custom, "_canvas_get_all", _explode)
+    monkeypatch.setattr(routines_custom, "canvas_get_all", _explode)
     sdk = routines_custom._routine_sdk(lambda *a, **k: None)
     assert "canvas_read" in sdk
     result = sdk["canvas_read"]("assignments", COURSE)
@@ -293,12 +294,12 @@ def test_custom_sdk_injects_canvas_read(monkeypatch, tmp_path):
     assert {r["id"] for r in result["records"]} == {"800200"}
 
 
-def test_custom_sdk_canvas_get_all_and_canvas_send_remain(monkeypatch, tmp_path):
+def test_custom_sdkcanvas_get_all_and_canvas_send_remain(monkeypatch, tmp_path):
     _mount(monkeypatch, tmp_path)
     sdk = routines_custom._routine_sdk(lambda *a, **k: None)
-    assert sdk["canvas_get_all"] is routines_custom._canvas_get_all
+    assert sdk["canvas_get_all"] is routines_custom.canvas_get_all
     assert sdk["canvas_send"] is routines_custom._canvas_send
-    assert sdk["canvas_get"] is routines_custom._canvas_get
+    assert sdk["canvas_get"] is routines_custom.canvas_get
 
 
 # --- (g) proof that writing-routine (sweep/curve) owners/imports are unchanged --
@@ -314,6 +315,6 @@ def test_sweep_and_curve_still_use_the_unmigrated_mirror_reads_helpers():
 
 
 def test_read_scope_owns_no_canvas_import():
-    assert not hasattr(routine_reads, "_canvas_get")
-    assert not hasattr(routine_reads, "_canvas_get_all")
+    assert not hasattr(routine_reads, "canvas_get")
+    assert not hasattr(routine_reads, "canvas_get_all")
     assert not hasattr(routine_reads, "_canvas_send")

@@ -8,7 +8,7 @@
 .ce-calendar-inline-link { flex: 0 0 auto; margin-top: 3px; font-size: 13px; font-weight: 700; }
 .ce-calendar-summary { display: flex; align-items: baseline; justify-content: space-between; gap: var(--ce-space-4); cursor: pointer; }
 .ce-calendar-summary::marker { color: var(--ce-accent-canvas); }
-.ce-calendar-summary-title { font-family: var(--ce-font-display); font-size: var(--ce-text-heading); font-weight: 700; letter-spacing: -.025em; }
+.ce-calendar-summary-title { font-size: var(--ce-text-heading); font-weight: 700; }
 .ce-calendar-summary-note { color: var(--ce-ink-muted); font-size: 13px; }
 .ce-calendar-secondary-body { margin-top: var(--ce-space-4); }
 .ce-calendar-upcoming-more { margin-top: var(--ce-space-2); }

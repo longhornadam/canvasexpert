@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .adapter_support import as_list, build_result, find_step, has_outbound_marker, module_id_from_steps, normalize, prepend_step
 from . import quiz_steps
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 
 
 def execute(payload: dict, target: dict, context, *, ordered_steps) -> dict:
@@ -82,7 +82,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
     has_marker = has_outbound_marker(steps)
 
     if not quiz_id:
-        assignments, error = canvas_client._canvas_get(
+        assignments, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments",
             params={"per_page": 100, "search_term": title},
         )
@@ -92,7 +92,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
             return {"state": "sent_unknown"}
         return {"state": "sent_unknown" if has_marker else "pending"}
 
-    quiz, error = canvas_client._canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
+    quiz, error = canvas_client.canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
     if error:
         if "404" in str(error) and not quiz_step.get("outbound_started_at"):
             return {"state": "pending"}
@@ -110,7 +110,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
         item_id = item_step.get("returned_object_id")
         if not item_id:
             return {"state": "sent_unknown" if has_marker else "pending", "returned_object_id": quiz_id}
-        verify, verify_error = canvas_client._canvas_get(
+        verify, verify_error = canvas_client.canvas_get(
             f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}/items/{item_id}"
         )
         if verify_error or not verify:
@@ -126,12 +126,12 @@ def reconcile(payload: dict, target: dict, *, ordered_steps) -> dict:
         return {"state": "sent_unknown" if has_marker else "pending", "returned_object_id": quiz_id}
     item_id = attach_step.get("returned_object_id")
     if item_id:
-        item, item_error = canvas_client._canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}")
+        item, item_error = canvas_client.canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}/items/{item_id}")
         if not item_error and item:
             if str(item.get("type", "")).lower() == "assignment" and str(item.get("content_id")) == str(quiz_id):
                 result["module_item_id"] = item_id
                 return result
-    items_list, item_error = canvas_client._canvas_get_all(
+    items_list, item_error = canvas_client.canvas_get_all(
         f"/api/v1/courses/{course_id}/modules/{module_id}/items",
         {"per_page": 100},
     )

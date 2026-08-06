@@ -17,7 +17,7 @@ from api.operation_ledger.adapters import quiz as quiz_adapter_module
 from api.operation_ledger.adapters.assignment_groups import (
     GroupResolutionError, resolve_assignment_groups,
 )
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 
 
 # ── Sample variant plans ─────────────────────────────────────────────────
@@ -149,8 +149,8 @@ def _mock_canvas_send(monkeypatch, responses=None):
     return calls
 
 
-def _mock_canvas_get(monkeypatch, responses=None):
-    """Mock _canvas_get with a queue of (data, error) tuples."""
+def _mockcanvas_get(monkeypatch, responses=None):
+    """Mock canvas_get with a queue of (data, error) tuples."""
     calls = []
     queue = list(responses or [])
 
@@ -160,12 +160,12 @@ def _mock_canvas_get(monkeypatch, responses=None):
             return queue.pop(0)
         return None, "no more mock responses"
 
-    monkeypatch.setattr(canvas_client, "_canvas_get", fake_get)
+    monkeypatch.setattr(canvas_client, "canvas_get", fake_get)
     return calls
 
 
-def _mock_canvas_get_all(monkeypatch, responses=None):
-    """Mock _canvas_get_all with a queue of (list, error) tuples."""
+def _mockcanvas_get_all(monkeypatch, responses=None):
+    """Mock canvas_get_all with a queue of (list, error) tuples."""
     queue = list(responses or [])
 
     def fake_get_all(path, params=None, timeout=30):
@@ -173,7 +173,7 @@ def _mock_canvas_get_all(monkeypatch, responses=None):
             return queue.pop(0)
         return [], None
 
-    monkeypatch.setattr(canvas_client, "_canvas_get_all", fake_get_all)
+    monkeypatch.setattr(canvas_client, "canvas_get_all", fake_get_all)
 
 
 def _make_variants(*plans):
@@ -186,7 +186,7 @@ def _make_variants(*plans):
 
 
 def _get_all_canned(path, params=None, timeout=30):
-    """Canned _canvas_get_all for group resolution."""
+    """Canned canvas_get_all for group resolution."""
     if "group_categories" in path:
         return [{"id": 10, "name": " Blue "}, {"id": 20, "name": "GOLD"}], None
     if "/groups/10/memberships" in path:
@@ -339,7 +339,7 @@ def test_capture_baseline_differentiated(tmp_path, monkeypatch):
         "/tmp/v0.txt": VARIANT_PLAN_A,
         "/tmp/v1.txt": VARIANT_PLAN_B,
     })
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # no existing Support quiz
         ([], None),  # no existing Extend quiz
     ])
@@ -418,7 +418,7 @@ def test_group_snapshot_drift_detected(tmp_path, monkeypatch):
     })
 
     # Mock GET responses for assignment lookups in capture_baseline
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # no existing Support (first call)
         ([], None),  # no existing Extend (first call)
     ])
@@ -427,7 +427,7 @@ def test_group_snapshot_drift_detected(tmp_path, monkeypatch):
 
     # Different snapshot triggers drift
     # check_drift calls capture_baseline again, needs more GET responses
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # no existing Support (second call)
         ([], None),  # no existing Extend (second call)
     ])
@@ -441,7 +441,7 @@ def test_group_snapshot_drift_detected(tmp_path, monkeypatch):
 def test_review_is_safe(monkeypatch):
     _mock_active_courses(monkeypatch)
     adapter = QuizAdapter()
-    monkeypatch.setattr(canvas_client, "_canvas_get_all", _get_all_canned)
+    monkeypatch.setattr(canvas_client, "canvas_get_all", _get_all_canned)
     resolved = resolve_assignment_groups(
         "101",
         [{"label": "variant_0", "group": "Blue"}, {"label": "variant_1", "group": "Gold"}],
@@ -538,11 +538,11 @@ def test_two_variant_write_order_and_transient_ids(monkeypatch):
     )
 
     # Mock GET responses: patch verifies and module lookups
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ({"id": 1001, "name": "Quiz A", "published": True}, None),  # verify patch v0
         ({"id": 1006, "name": "Quiz B", "published": True}, None),  # verify patch v1
     ])
-    _mock_canvas_get_all(monkeypatch, [
+    _mockcanvas_get_all(monkeypatch, [
         ([{"id": 301, "name": "Unit 1"}], None),  # module lookup v0
         ([{"id": 301, "name": "Unit 1"}], None),  # module lookup v1 (cached)
     ])
@@ -698,8 +698,8 @@ def test_retry_verifies_exact_ids_and_resumes(monkeypatch):
         ({"id": 401}, None),  # module item verify attach_module:0
         ({"id": 102, "name": "Algebra Quiz - Extend", "published": True}, None),  # verify patch v1
     ]
-    _mock_canvas_get(monkeypatch, get_responses)
-    _mock_canvas_get_all(monkeypatch, [
+    _mockcanvas_get(monkeypatch, get_responses)
+    _mockcanvas_get_all(monkeypatch, [
         ([{"id": 301, "name": "Unit 1"}], None),  # module lookup v0
         ([{"id": 301, "name": "Unit 1"}], None),  # module lookup v1
     ])
@@ -764,10 +764,10 @@ def test_extra_time_buckets_create_separate_overrides(monkeypatch):
     monkeypatch.setattr(quiz_adapter_module, "resolve_assignment_groups", lambda *a, **k: resolved)
 
     # Mock GET for verify-after-patch and module lookup
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ({"id": 101, "name": "Quiz", "published": True}, None),  # verify patch
     ])
-    _mock_canvas_get_all(monkeypatch, [
+    _mockcanvas_get_all(monkeypatch, [
         ([{"id": 301, "name": "Unit 1"}], None),  # module lookup
     ])
 
@@ -823,7 +823,7 @@ def test_reconcile_verifies_variant_quiz_ids(monkeypatch):
     # Verify items for variant 0
     get_responses.append(({"id": 201}, None))  # item 1
     get_responses.append(({"id": 202}, None))  # item 2
-    # Module item GET for attach_module:0 (falls through to _canvas_get_all)
+    # Module item GET for attach_module:0 (falls through to canvas_get_all)
     get_responses.append((None, "no match"))  # returned as (item, error); error truthy → fall through
     # Verify quiz 102
     get_responses.append(({"id": 102, "title": "Algebra Quiz - Extend"}, None))
@@ -831,8 +831,8 @@ def test_reconcile_verifies_variant_quiz_ids(monkeypatch):
     get_responses.append(({"id": 203}, None))  # item 1
     # Module item GET for attach_module:1 (falls through)
     get_responses.append((None, "no match"))
-    _mock_canvas_get(monkeypatch, get_responses)
-    _mock_canvas_get_all(monkeypatch, [
+    _mockcanvas_get(monkeypatch, get_responses)
+    _mockcanvas_get_all(monkeypatch, [
         ([{"id": 401, "type": "Assignment", "content_id": 101}], None),
         ([{"id": 402, "type": "Assignment", "content_id": 102}], None),
     ])
@@ -882,7 +882,7 @@ def test_reconcile_missing_quiz_id_is_pending(monkeypatch):
     _mock_active_courses(monkeypatch)
     adapter = QuizAdapter()
 
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ([], None),  # no existing assignments found
     ])
 
@@ -900,14 +900,14 @@ def test_reconcile_no_pii_in_projected_steps(monkeypatch):
     _mock_active_courses(monkeypatch)
     adapter = QuizAdapter()
 
-    _mock_canvas_get(monkeypatch, [
+    _mockcanvas_get(monkeypatch, [
         ({"id": 101, "title": "Algebra Quiz - Support"}, None),
         ({"id": 201}, None),
         ({"id": 202}, None),
         ({"id": 102, "title": "Algebra Quiz - Extend"}, None),
         ({"id": 203}, None),
     ])
-    _mock_canvas_get_all(monkeypatch, [
+    _mockcanvas_get_all(monkeypatch, [
         ([{"id": 10, "name": "Unit 1"}], None),
         ([{"id": 401, "type": "Assignment", "content_id": 101}], None),
         ([{"id": 402, "type": "Assignment", "content_id": 102}], None),

@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from api.webui import workspace
+from api.platform_services import workspace
 from api.webui.routes import routines
 from api.webui.routes import routines_powergrader
 

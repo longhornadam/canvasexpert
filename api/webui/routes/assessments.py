@@ -13,7 +13,7 @@ from api.mirror import store as mirror_store
 from api.dataforge import paths as dataforge_paths
 from api.dataforge import views
 
-from .. import config
+from api.platform_services import config
 from ..deps import templates
 from ..local_request_guard import csrf_token
 

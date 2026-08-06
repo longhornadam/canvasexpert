@@ -3,7 +3,7 @@ import os
 
 import requests
 
-from api.webui import workspace
+from api.platform_services import workspace
 
 
 def get_all_pages(session, url, params=None):

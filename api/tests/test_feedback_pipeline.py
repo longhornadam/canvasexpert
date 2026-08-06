@@ -13,7 +13,7 @@ from api import feedback_pipeline as fp
 from api import feedback_safety as safety
 from api import openrouter_client as orc
 from api.nq_report import parse_student_analysis_file
-from api.webui import workspace
+from api.platform_services import workspace
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures",
                        "student_analysis_sample.csv")
@@ -248,7 +248,7 @@ def test_upsert_roster_captures_preferred_name_as_nickname(tmp_path):
     so the scrub removes it — the top leak vector (legal 'Joseph', goes by 'Joey')."""
     from api.webui.routes.names import _upsert_roster
     from api import feedback_scrub as scrub
-    from api.webui import config
+    from api.platform_services import config
 
     v = Vault(str(tmp_path / "vault.json"))
     users = [{"id": 8801, "name": "Joseph Smith", "sortable_name": "Smith, Joseph",
@@ -287,7 +287,7 @@ def test_write_safe_and_private_excludes_unscrubbed_student(tmp_path):
     assert result["excluded"], "the student mentioning 'Ghost' must be excluded"
     # The excluded student's SAFE .txt is not written; SAFE has fewer students.
     assert result["safe_students"] == len(bundle["students"]) - 1
-    safe_blob = (safe_dir / f"{fp._safe('Essay 1')}__bundle.json").read_text(encoding="utf-8")
+    safe_blob = (safe_dir / f"{fp.safe('Essay 1')}__bundle.json").read_text(encoding="utf-8")
     assert "Ghost" not in safe_blob                    # nothing un-scrubbed reached SAFE
 
 
@@ -322,7 +322,7 @@ def test_write_safe_and_private_inlines_rubric_into_how_to_score(tmp_path):
     safe_dir = tmp_path / "SAFE"
     fp.write_safe_and_private(bundle, v, str(safe_dir), str(tmp_path / "PRIVATE"),
                               rubric_text="Criterion: image has alt text")
-    how_to = (safe_dir / f"{fp._safe('Essay 1')}__HOW-TO-SCORE.txt").read_text(encoding="utf-8")
+    how_to = (safe_dir / f"{fp.safe('Essay 1')}__HOW-TO-SCORE.txt").read_text(encoding="utf-8")
     assert "image has alt text" in how_to
 
 
@@ -341,8 +341,8 @@ def test_write_safe_and_private_writes_scrubbed_shared_context(tmp_path):
     result = fp.write_safe_and_private(bundle, v, str(safe_dir), str(tmp_path / "PRIVATE"))
 
     assert result["shared_context"]
-    shared_text = (safe_dir / f"{fp._safe('Essay 1')}__SHARED-CONTEXT.txt").read_text(encoding="utf-8")
-    safe_blob = (safe_dir / f"{fp._safe('Essay 1')}__bundle.json").read_text(encoding="utf-8")
+    shared_text = (safe_dir / f"{fp.safe('Essay 1')}__SHARED-CONTEXT.txt").read_text(encoding="utf-8")
+    safe_blob = (safe_dir / f"{fp.safe('Essay 1')}__bundle.json").read_text(encoding="utf-8")
     assert "Source material: Passage" in shared_text
     assert "Ada" not in shared_text and "Lovelace" not in shared_text
     assert "Ada" not in safe_blob and "Lovelace" not in safe_blob
@@ -408,7 +408,7 @@ def test_code_file_upload_is_scored_html_preserved_and_name_scrubbed(tmp_path):
                                        submissions=subs)
     assert result["attachment_only"] == []     # code upload is scored, not excluded
     assert result["safe_students"] == 1         # not pulled by the verify gate
-    safe_blob = (safe_dir / f"{fp._safe('Webpage 1')}__bundle.json").read_text(encoding="utf-8")
+    safe_blob = (safe_dir / f"{fp.safe('Webpage 1')}__bundle.json").read_text(encoding="utf-8")
     assert "<h1>" in safe_blob                  # HTML tags survived the scrub
     assert "Ada" not in safe_blob and "Lovelace" not in safe_blob   # name scrubbed from code
 

@@ -4,7 +4,8 @@ closed on a broken Calendar instead of silently dropping extended overrides.
 import pytest
 
 from api.tests.calendar_fixtures import write_school_calendar
-from api.webui import gradebook_service, workspace
+from api.platform_services import workspace
+from api.webui import gradebook_service
 
 SCHEDULE_ID = "bell_schedule_ordinary"
 

@@ -6,8 +6,8 @@ from collections.abc import Callable
 
 def fetch_students(course_id: str, *, canvas_get_all=None) -> tuple[list[dict] | None, str | None]:
     if canvas_get_all is None:
-        from api.webui.canvas_client import _canvas_get_all
-        canvas_get_all = _canvas_get_all
+        from api.platform_services.canvas_client import canvas_get_all as default_canvas_get_all
+        canvas_get_all = default_canvas_get_all
     return canvas_get_all(
         f"/api/v1/courses/{course_id}/users",
         {"enrollment_type[]": ["student"], "include[]": ["enrollments"], "per_page": 100},
@@ -16,8 +16,8 @@ def fetch_students(course_id: str, *, canvas_get_all=None) -> tuple[list[dict] |
 
 def fetch_sections(course_id: str, *, canvas_get_all=None) -> dict[str, str]:
     if canvas_get_all is None:
-        from api.webui.canvas_client import _canvas_get_all
-        canvas_get_all = _canvas_get_all
+        from api.platform_services.canvas_client import canvas_get_all as default_canvas_get_all
+        canvas_get_all = default_canvas_get_all
     sections, error = canvas_get_all(
         f"/api/v1/courses/{course_id}/sections", {"per_page": 100}
     )

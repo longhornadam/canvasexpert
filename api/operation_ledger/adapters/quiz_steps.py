@@ -5,7 +5,7 @@ from __future__ import annotations
 from .. import models
 from .adapter_support import build_result, ensure_step, is_uncertain, replace_step
 from .module_placement import attach_assignment_type_module_item
-from api.webui import canvas_client, config
+from api.platform_services import canvas_client, config
 
 
 def build_assignment_patch(assignment_settings: dict) -> dict:
@@ -43,7 +43,7 @@ def ensure_quiz(
     quiz_url = current_quiz_url or quiz_step.get("returned_object_url")
 
     if quiz_step.get("state") in ("applied", "skipped") and quiz_id:
-        quiz, error = canvas_client._canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
+        quiz, error = canvas_client.canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
         if not error and quiz:
             quiz_step["state"] = "skipped"
             return quiz_id, quiz_url, None
@@ -56,7 +56,7 @@ def ensure_quiz(
         )
 
     if quiz_id:
-        quiz, error = canvas_client._canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
+        quiz, error = canvas_client.canvas_get(f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}")
         if not error and quiz:
             quiz_step["state"] = "skipped"
             return quiz_id, quiz_url, None
@@ -175,7 +175,7 @@ def create_override(
     override_step = ensure_step(steps, step_key)
     override_id = override_step.get("returned_object_id")
     if override_id:
-        existing, error = canvas_client._canvas_get(
+        existing, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments/{quiz_id}/overrides/{override_id}"
         )
         if error or not existing:
@@ -258,7 +258,7 @@ def ensure_item(
     item_step = ensure_step(steps, step_key)
     item_id = item_step.get("returned_object_id")
     if item_step.get("state") in ("applied", "skipped") and item_id:
-        verify, error = canvas_client._canvas_get(
+        verify, error = canvas_client.canvas_get(
             f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}/items/{item_id}"
         )
         if not error and verify:
@@ -272,7 +272,7 @@ def ensure_item(
             error_code="item_exact_id_unverified",
         )
     if item_id:
-        verify, error = canvas_client._canvas_get(
+        verify, error = canvas_client.canvas_get(
             f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}/items/{item_id}"
         )
         if not error and verify:
@@ -367,7 +367,7 @@ def patch_assignment(
             error_code=patch_step["error_code"],
             private_diagnostic=error,
         )
-    verify, verify_error = canvas_client._canvas_get(f"/api/v1/courses/{course_id}/assignments/{quiz_id}")
+    verify, verify_error = canvas_client.canvas_get(f"/api/v1/courses/{course_id}/assignments/{quiz_id}")
     if verify_error or not verify:
         patch_step["state"] = "sent_unknown"
         patch_step["error_code"] = "assignment_verify_failed"

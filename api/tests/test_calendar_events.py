@@ -1,6 +1,6 @@
 """Academic-calendar CSV parsing remains local, selected, and public-only.
 
-The projection/storage side this file used to cover (api.webui.config.calendars,
+The projection/storage side this file used to cover (api.platform_services.config.calendars,
 the legacy /api/calendar/load-builtin route) is retired; see
 docs/contracts/canonical-school-calendar-contract.md and test_school_calendar.py
 for its replacement.

@@ -84,7 +84,7 @@ def _emit_canvas(event: str, started: float, outcome: str, *, status_code=None,
     )
 
 
-def _canvas_headers():
+def canvas_headers():
     token = config.get_token()
     if not token:
         return None, None
@@ -168,12 +168,12 @@ def telemetry_snapshot(telemetry: _GetTelemetry) -> dict:
             "status_classes": dict(telemetry.status_classes)}
 
 
-def _canvas_get(path, params=None, timeout=20):
+def canvas_get(path, params=None, timeout=20):
     started = time.monotonic()
     telemetry = _GET_TELEMETRY.get()
     if telemetry is not None:
         telemetry.logical_count += 1
-    hdrs, base = _canvas_headers()
+    hdrs, base = canvas_headers()
     if not hdrs:
         _emit_canvas("canvas.get", started, "unconfigured")
         return None, "No Canvas token saved — go to Settings."
@@ -202,7 +202,7 @@ def canvas_stream_get(url, timeout=120):
     """Open one streamed GET on an absolute Canvas URL — returns (response, error).
 
     For a file the caller must read in bounded chunks, so it cannot go through
-    ``_canvas_get`` (which prefixes the configured base and parses JSON). It
+    ``canvas_get`` (which prefixes the configured base and parses JSON). It
     shares ``_physical_get``, and with it the ``Retry-After`` 429 retry and the
     mirror coordinator's cooperative yield and cancellation — the reason a
     class-wide unattended download loop belongs on this layer rather than on a
@@ -217,7 +217,7 @@ def canvas_stream_get(url, timeout=120):
     telemetry = _GET_TELEMETRY.get()
     if telemetry is not None:
         telemetry.logical_count += 1
-    hdrs, _base = _canvas_headers()
+    hdrs, _base = canvas_headers()
     if not hdrs:
         _emit_canvas("canvas.download", started, "unconfigured")
         return None, "No Canvas token saved — go to Settings."
@@ -259,7 +259,7 @@ def _canvas_get_all_pages(path, params=None, timeout=30, *, complete_only: bool)
     telemetry = _GET_TELEMETRY.get()
     if telemetry is not None:
         telemetry.logical_count += 1
-    hdrs, base = _canvas_headers()
+    hdrs, base = canvas_headers()
     event = "canvas.get_all_complete" if complete_only else "canvas.get_all"
     if not hdrs:
         _emit_canvas(event, started, "unconfigured")
@@ -306,14 +306,14 @@ def _canvas_get_all_pages(path, params=None, timeout=30, *, complete_only: bool)
     return out, None, True
 
 
-def _canvas_get_all(path, params=None, timeout=30):
+def canvas_get_all(path, params=None, timeout=30):
     """GET with Link-header pagination — returns the concatenated list."""
     rows, error, _complete = _canvas_get_all_pages(
         path, params=params, timeout=timeout, complete_only=False)
     return rows, error
 
 
-def _canvas_get_all_complete(path, params=None, timeout=30):
+def canvas_get_all_complete(path, params=None, timeout=30):
     """GET a proven-complete Canvas list for destructive membership callers.
 
     Returns ``(rows, error, complete)``.  ``complete`` is true only for a
@@ -331,7 +331,7 @@ def _canvas_send(method, path, payload, timeout=30):
     if not method_label.isidentifier():
         method_label = "other"
     event = f"canvas.send.{method_label}"
-    hdrs, base = _canvas_headers()
+    hdrs, base = canvas_headers()
     if not hdrs:
         _emit_canvas(event, started, "unconfigured")
         return None, "No Canvas token saved — go to Settings."

@@ -5,7 +5,8 @@ guess) and the native folder-browse endpoint.
 """
 from fastapi.testclient import TestClient
 
-from api.webui import config, server, workspace
+from api.platform_services import config, workspace
+from api.webui import server
 from api.webui.routes import onboarding
 
 

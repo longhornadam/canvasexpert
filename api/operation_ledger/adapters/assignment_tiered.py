@@ -5,7 +5,7 @@ from __future__ import annotations
 from .. import models
 from .adapter_support import build_result, ensure_step, find_step
 from .module_placement import attach_assignment_type_module_item
-from api.webui import canvas_client
+from api.platform_services import canvas_client
 
 
 def execute(
@@ -47,7 +47,7 @@ def execute(
         assignment_url = assignment_step.get("returned_object_url")
 
         if assignment_id:
-            existing, error = canvas_client._canvas_get(
+            existing, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
             )
             if error or not existing:
@@ -95,7 +95,7 @@ def execute(
         override_step = ensure_step(steps, override_key)
         override_id = override_step.get("returned_object_id")
         if override_id:
-            existing, error = canvas_client._canvas_get(
+            existing, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments/{assignment_id}/overrides/{override_id}"
             )
             if error or not existing:
@@ -194,7 +194,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps, autoscore_queue_fac
     module_id = module_step.get("returned_object_id")
 
     if payload.get("module_name") and module_id:
-        module, error = canvas_client._canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}")
+        module, error = canvas_client.canvas_get(f"/api/v1/courses/{course_id}/modules/{module_id}")
         if error or not module or str(module.get("id")) != str(module_id):
             return _tier_reconcile_result("sent_unknown", projected)
         projected.append(_applied_safe_step(module_step))
@@ -204,7 +204,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps, autoscore_queue_fac
         assignment_id = assignment_step.get("returned_object_id")
         if not assignment_id:
             return _tier_reconcile_unfinished(assignment_step, projected)
-        assignment, error = canvas_client._canvas_get(
+        assignment, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments/{assignment_id}"
         )
         if error or not assignment or str(assignment.get("id")) != str(assignment_id):
@@ -215,7 +215,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps, autoscore_queue_fac
         override_id = override_step.get("returned_object_id")
         if not override_id:
             return _tier_reconcile_unfinished(override_step, projected)
-        override, error = canvas_client._canvas_get(
+        override, error = canvas_client.canvas_get(
             f"/api/v1/courses/{course_id}/assignments/{assignment_id}/overrides/{override_id}"
         )
         if error or not override or str(override.get("id")) != str(override_id):
@@ -228,7 +228,7 @@ def reconcile(payload: dict, target: dict, *, ordered_steps, autoscore_queue_fac
             step_module_id = attach_step.get("module_id") or module_id
             if not item_id or not step_module_id:
                 return _tier_reconcile_unfinished(attach_step, projected)
-            item, error = canvas_client._canvas_get(
+            item, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/modules/{step_module_id}/items/{item_id}"
             )
             if (

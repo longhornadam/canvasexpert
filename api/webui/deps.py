@@ -19,7 +19,7 @@ def _sse(lines):
 from fastapi.templating import Jinja2Templates
 
 from api import __version__, runtime_paths
-from . import workspace
+from api.platform_services import workspace
 
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
 API_DIR   = os.path.dirname(WEBUI_DIR)
@@ -29,7 +29,7 @@ REPO_ROOT = os.path.dirname(API_DIR)
 # on first run via workspace.ensure_workspace). Resolved lazily so this module stays
 # importable even before the workspace is set up.
 def _calendars_dir():
-    from . import workspace as _ws
+    from api.platform_services import workspace as _ws
     return _ws.library_folder("Calendars")
 
 
@@ -41,7 +41,7 @@ def _calendar_label(filename: str) -> str:
 
 def _calendars_dir():
     """Resolve Calendars folder in the workspace Library."""
-    from . import workspace as _ws
+    from api.platform_services import workspace as _ws
     return _ws.library_folder("Calendars")
 
 
