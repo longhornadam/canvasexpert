@@ -12,6 +12,7 @@ Routes: GET  /api/files
         GET  /api/download-contract
 """
 import os
+from urllib.parse import quote
 
 from fastapi import APIRouter, Form, Request, UploadFile, File
 from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
@@ -97,6 +98,22 @@ def api_ai_ta_files():
     return JSONResponse({"files": list_ai_ta_files()})
 
 
+def _content_disposition(filename: str) -> str:
+    """Build an attachment Content-Disposition value carrying the real filename.
+
+    Emits both forms: a quoted ``filename`` fallback and the RFC 5987
+    ``filename*=UTF-8''...`` percent-encoded form, which browsers prefer when
+    present and which is the only one that can carry the name exactly. The
+    fallback is sanitized to plain ASCII rather than passed through raw --
+    Starlette encodes header values as Latin-1, so a non-Latin-1 character
+    there would crash the response instead of just losing fidelity.
+    """
+    ascii_name = filename.encode("ascii", "replace").decode("ascii")
+    ascii_name = ascii_name.replace("\\", "\\\\").replace('"', '\\"')
+    encoded = quote(filename, safe="")
+    return f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{encoded}'
+
+
 @router.get("/api/ai-ta/file")
 def api_ai_ta_file(name: str):
     """Return the content of one AI-TA flat file by basename.
@@ -109,7 +126,8 @@ def api_ai_ta_file(name: str):
             os.path.abspath(ai_ta_dir)):
         return JSONResponse({"error": "file not found"}, status_code=404)
     with open(path, encoding="utf-8") as f:
-        return PlainTextResponse(f.read())
+        return PlainTextResponse(
+            f.read(), headers={"Content-Disposition": _content_disposition(name)})
 
 
 @router.get("/api/ai-ta/toolkit-file")
@@ -123,7 +141,8 @@ def api_ai_ta_toolkit_file(name: str):
             os.path.abspath(toolkit_dir)):
         return JSONResponse({"error": "file not found"}, status_code=404)
     with open(path, encoding="utf-8") as f:
-        return PlainTextResponse(f.read())
+        return PlainTextResponse(
+            f.read(), headers={"Content-Disposition": _content_disposition(name)})
 
 
 @router.post("/api/ai-ta/rebuild")
