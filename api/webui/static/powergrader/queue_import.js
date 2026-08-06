@@ -56,7 +56,7 @@
     var copilot = (s && s.copilot_packet) || {};
     var batches = Array.isArray(copilot.batches) ? copilot.batches : [];
     if (!packetStrip || !packetActions) return;
-    if (!artifacts.packet_zip && !batches.length) return;
+    if (!artifacts.packet_folder && !batches.length) return;
     packetStrip.hidden = false;
     var buttons = [];
     if (artifacts.packet_folder) {
@@ -65,7 +65,6 @@
     if (copilot.packet_folder) {
       buttons.push('<button type="button" class="small" data-open-path="' + esc(copilot.packet_folder) + '">Open AI chat batch folder</button>');
     }
-    buttons.push('<a class="small" href="/api/powergrader/session/' + encodeURIComponent(sessionId) + '/packet" style="padding:4px 10px;border:1px solid var(--ce-rule);border-radius:var(--r-sm);text-decoration:none;background:var(--card);color:var(--ink)">Download packet ZIP</a>');
     packetActions.innerHTML = buttons.join('');
     if (batches.length) {
       if (legacyImportBox) legacyImportBox.hidden = true;

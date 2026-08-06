@@ -184,7 +184,7 @@
     { id: "pseudonymize", label: "Assign pseudonyms and separate identities", status: "pending", detail: "Real names stay in the local vault." },
     { id: "safety_scan", label: "Scan for real names before any LLM call", status: "pending", detail: "Hard matches become yellow or red before sending." },
     { id: "safe_private", label: "Write Safe AI Packet and Private decoder", status: "pending", detail: "The packet uses fake names. The decoder stays local." },
-    { id: "safe_ai_packet", label: "Create Safe AI Packet ZIP", status: "pending", detail: "Ready for your AI chat or the API route." }
+    { id: "safe_ai_packet", label: "Create Safe AI Packet", status: "pending", detail: "Fake-name files and scoring instructions, saved to your workspace." }
   ];
 
   var apiPrivacyTail = [

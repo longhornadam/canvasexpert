@@ -200,7 +200,6 @@ EXPECTED = [
     ('/api/powergrader/session/{session_id}/new-quiz-finalize', ('POST',)),
     ('/api/powergrader/session/{session_id}/new-quiz-csv-resolve', ('POST',)),
     ('/api/powergrader/session/{session_id}/new-quiz-review', ('POST',)),
-    ('/api/powergrader/session/{session_id}/packet', ('GET',)),
     ('/api/powergrader/session/{session_id}/push-review', ('POST',)),
     ('/api/powergrader/session/{session_id}/push', ('POST',)),
     ('/api/powergrader/estimate', ('POST',)),

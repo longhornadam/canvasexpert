@@ -5,7 +5,7 @@ import subprocess
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from api import openrouter_client as orc
 
@@ -583,23 +583,6 @@ def pg_late_score(session_id: str):
         "batch_id": result["batch_id"],
         "session_id": result["session_id"],
     })
-
-
-@router.get("/api/powergrader/session/{session_id}/packet")
-def pg_download_packet(session_id: str):
-    session = _load_session(session_id)
-    if not session:
-        return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
-    artifacts = session.get("privacy_artifacts") or {}
-    packet_zip = artifacts.get("packet_zip") or ""
-    # The ZIP can live past Windows' 260-char MAX_PATH in a deep workspace;
-    # resolve through extended_path so both the existence check and the send
-    # reach it (no-op on non-Windows / short paths).
-    resolved_zip = workspace.extended_path(packet_zip) if packet_zip else ""
-    if not resolved_zip or not os.path.isfile(resolved_zip):
-        return JSONResponse({"ok": False, "error": "Safe AI Packet ZIP not found."}, status_code=404)
-    filename = os.path.basename(packet_zip)
-    return FileResponse(resolved_zip, media_type="application/zip", filename=filename)
 
 
 @router.post("/api/powergrader/session/{session_id}/import-results")

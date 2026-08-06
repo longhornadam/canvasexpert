@@ -487,21 +487,26 @@ Modes:
 - **Score myself** — fetches submitted work and opens the queue with no AI packet
   or API call.
 - **Score with AI chat** — writes reviewed pseudonymized artifacts under `For AI/`
-  and private originals/state under the canonical workspace,
-  keeps the legacy
-  Safe AI Packet ZIP, and also creates Copilot-friendly batch folders. Each batch
-  folder has exactly three numbered upload files: assignment information, rubric
-  and TA personality, and that batch's pseudonymized student work. Teachers start
-  a fresh Copilot chat per batch, then paste each JSON response back into the
+  and private originals/state under the canonical workspace, and creates
+  chat-friendly batch folders. Each batch folder has exactly three numbered
+  upload files: assignment information, rubric and TA personality, and that
+  batch's pseudonymized student work. Teachers start a fresh AI chat per batch,
+  attach those three files, then paste each JSON response back into the
   matching batch panel in the same PowerGrader session.
 - **Auto-score with AI** — sends only the SAFE pseudonymized packet to the
   configured OpenRouter model after price checks, then loads AI suggestions into
   the same review queue.
 
-The Copilot flow is designed for education tenants where ZIP upload or large-file
-context behavior may be limited. Batch imports validate `pseudonym` and `item_id`
+Batches ship as loose files, never a ZIP: confirmed 2026-08-06, Microsoft 365
+Copilot cannot read a ZIP as an attachment (it can only produce one), per
+Microsoft's own file-formats-supported page. Since CanvasExpert stays
+vendor-neutral and cannot assume which chat a teacher has, loose files are the
+one artifact every chat can open. The flat packet still builds a ZIP alongside
+its folder as an internal artifact, but nothing in the product offers it as
+something to attach to an AI chat; the folder's loose files are. Batch imports
+validate `pseudonym` and `item_id`
 against the selected batch before updating AI suggestions, so a response from one
-batch cannot silently update another batch. Late Copilot batches are additive, use a
+batch cannot silently update another batch. Late batches are additive, use a
 distinct batch prefix and visible **Late** label, and own the SAFE bundle used to validate
 their later import.
 

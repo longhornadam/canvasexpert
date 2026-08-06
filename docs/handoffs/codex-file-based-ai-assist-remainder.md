@@ -152,30 +152,28 @@ state these guardrails, and 5.3 is what stops the four copies drifting again.
 
 ### 5.2 Batch packaging: one ZIP per batch, and a return lane for the whole-class ZIP
 
-**Status: ready, but gated on a manual test that has not been run.** Trace sections 4.3, 4.4, 4.5.
+**Status: REJECTED 2026-08-06. Do not implement.** Trace sections 4.3, 4.4, 4.5.
 
-**Run the gate first.** In the actual chat app the teacher will use, confirm by hand: that a `.zip`
-attachment is read and its contents enumerated; that every file inside is actually attended to rather
-than the first few; and that `.md` and `.json` attachments work. The vendor's self-report says all of
-this works, but that is a self-report, not a test. **If a ZIP is read but only partly attended to, stop
-and report rather than shipping the repackaging**, because partial attention produces silent
-under-scoring, which is the exact failure class `28ef33c` was written to close.
+The manual attach gate this item was waiting on has now run, informally: Microsoft 365 Copilot
+cannot read a ZIP as an attachment at all, as of 2026-08-06, per Microsoft's own
+file-formats-supported-by-Copilot page. It can produce a ZIP as output, not consume one as input.
+That falsifies the "vendor self-report" §4.5 leaned on (`.zip` read/write both work), which this
+item was gated on. Since CanvasExpert stays vendor-neutral and cannot assume which chat a teacher
+has, and the one confirmed data point is negative, ZIP is not a safe packaging choice for anything
+a teacher attaches to a chat.
 
-If the gate passes:
+**Do not build:**
 
-- **One ZIP per batch.** Batches currently ship three loose `.md` files
+- **One ZIP per batch.** Batches correctly ship three loose `.md` files
   (`01-info.md`, `02-rubric.md`, `03-work.md`) written by `build_copilot_batches` in
-  `api/powergrader/copilot_packet.py`. One ZIP per batch is a better artifact for any chat: one
-  attachment, no chance of attaching 01 and 03 but forgetting 02, and the readme travels with it.
-  Keep the loose files on disk as well; teachers browse that folder.
-- **A return lane for the whole-class ZIP.** `queue_import.js:63` always offers "Download packet ZIP",
-  and it is the most clickable artifact in the strip, but when batches exist line 66 hides
-  `legacyImportBox`, which holds the only whole-class textarea. A whole-class result pasted into a
-  batch box fails validation against that batch's `expected_results`. So either give the whole-class
-  ZIP a working return lane or stop offering it in batch mode. Do not leave it as a dead end.
-- **Path budget.** These paths are length-constrained against `workspace.TEACHER_VISIBLE_BUDGET`.
-  `_needs_compact_layout` projects the deepest expected child; if you add a `.zip` per batch, update
-  that projection to match or the budget check tests the wrong string.
+  `api/powergrader/copilot_packet.py`. Leave that as-is; it is the right shape, not a stopgap.
+- **A return lane for the whole-class ZIP.** Instead, the whole-class ZIP download was removed
+  entirely (2026-08-06): the `/api/powergrader/session/{session_id}/packet` route and the
+  "Download packet ZIP" button in `queue_import.js` are gone, since a ZIP with no working return
+  lane and no read guarantee across chats was a dead end, not a feature. `packet.py` still writes
+  the ZIP file alongside the packet folder as an internal artifact (many tests assert its shape),
+  but nothing in the product offers it as something to attach to an AI chat. The folder's loose
+  files are the one artifact every chat can open, and that is what the UI now points teachers to.
 
 **Do not change** `DEFAULT_COPILOT_CONTEXT_TOKENS = 128_000` as part of this. Batching exists because
 of the context window, not because of attachment limits, so a large class still needs splitting no
@@ -225,13 +223,8 @@ These are settled and non-negotiable in this repo.
 
 1. **Item 5.1 with 5.3 folded in**, as one commit. 5.1 is decided and ready, and it makes 5.3's
    consolidation load-bearing rather than cosmetic, so they belong together.
-2. **Item 5.2's manual attach gate.** Run it before writing any repackaging code. If a ZIP is read but
-   only partly attended to, stop and report; that changes the plan rather than just delaying it.
-3. **Item 5.2's code**, if the gate passes.
-
-5.1 and 5.2 touch different files (`writing_timeline.py` and `copilot_packet_support.py` versus
-`copilot_packet.py`'s layout code and `queue_import.js`), so if you prefer to run them in parallel,
-the only shared file is `copilot_packet.py`.
+2. ~~Item 5.2's manual attach gate~~ and ~~Item 5.2's code~~. Superseded 2026-08-06: the gate came
+   back negative (Copilot cannot read ZIP as input), so 5.2 is rejected outright. See section 5.2.
 
 Each step should land as its own commit, green against the section 3 gate, with the pre-existing
 failure still failing and nothing from section 4 swept in.
@@ -252,3 +245,20 @@ failure still failing and nothing from section 4 swept in.
   failure in `api/webui/static/pages/calendar.css` remained the sole failure.
 - Deviations: item 5.2 was not implemented. The existing sanitizer was not changed.
 - Unresolved decisions: none for items 5.1 and 5.3.
+
+## 2026-08-06 update: item 5.2 rejected, whole-class packet ZIP download removed
+
+Confirmed (not just gated): M365 Copilot cannot read a ZIP as an attachment, only produce one, per
+Microsoft's file-formats-supported-by-Copilot page. Item 5.2 is rejected outright rather than left
+pending; see the rewritten section 5.2 above. Batches keep their existing loose-file shape
+unchanged.
+
+Separately, the flat/legacy packet's "Download packet ZIP" button was removed from the PowerGrader
+queue (`queue_import.js`), along with its backend route
+(`GET /api/powergrader/session/{session_id}/packet` in `api/webui/routes/powergrader.py`) and its
+`test_route_contract.py` entry. That artifact was the one place in the shipped product that offered
+a ZIP as something to hand to an AI chat, and per the above it cannot reliably be. `packet.py` still
+writes the ZIP file next to the packet folder as an internal artifact (existing tests in
+`test_packet.py` still assert its shape), but no UI surface points a teacher at it anymore. The
+packet folder's loose files, already linked via "Open packet folder", are the artifact every chat
+can open.

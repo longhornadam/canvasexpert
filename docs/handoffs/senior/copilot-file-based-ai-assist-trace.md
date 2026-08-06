@@ -1,8 +1,19 @@
 # File-based AI assist trace: PowerGrader and Create with a chat that has no MCP
 
-**Status:** Batches 1, 2, 3, and 5 executed and committed 2026-08-05. Batches 4 (packaging half) and
-6 remain, plus one new finding (section 4.8) and one new open decision (section 8.4) that execution
-turned up. See section 0 for the pick-up point.
+**Status:** Batches 1, 2, 3, and 5 executed and committed 2026-08-05. Batch 6 remains. **Batch 4
+(packaging) is closed as of 2026-08-06: rejected**, not implemented — see the correction below and
+section 4.5. One new finding (section 4.8) and one open decision (section 8.4) that execution
+turned up are unaffected. See section 0 for the pick-up point.
+
+**Correction, 2026-08-06.** Section 4.5 concluded ZIP read/write was safe to lean on, based on a
+vendor self-report. That self-report was wrong. Confirmed via Microsoft's own
+file-formats-supported-by-Copilot support page: M365 Copilot can produce a ZIP as output but
+cannot read one as an attachment. Every conclusion in this document that depended on ZIP being
+readable input is reversed: Batch 4's "one ZIP per batch" and "ZIP return lane" plan (§4.3, §7) is
+rejected, not merely gated, and the flat packet's existing "Download packet ZIP" button and its
+backend route have been removed from the product rather than given a return lane. See §4.3, §4.5,
+and §7 for the specifics, left in place with strikethrough-style notes rather than rewritten, so the
+reasoning that led here stays legible.
 
 ---
 
@@ -234,13 +245,16 @@ looks like a thing you can hand to a chat app, and it is the one that cannot com
   ([import_results.py:58-78](../../api/powergrader/import_results.py:58)). A whole-class result
   pasted into Batch 1 fails with "belongs to another batch or was not in this batch".
 
-So the packet ZIP in packet mode is a dead end, and it is the most clickable thing in the strip.
-Its `START HERE` file still instructs the model to score every student and return one array, which
-is advice the session can no longer accept.
+So the packet ZIP in packet mode was a dead end, and it was the most clickable thing in the strip.
+Its `START HERE` file still instructed the model to score every student and return one array, which
+was advice the session could no longer accept.
 
-The obvious fix was "stop offering the ZIP in batch mode." §4.5 changes that, and the better fix is
-probably the opposite: give the ZIP a return lane, and consider shipping each batch as its own ZIP
-so the teacher attaches one file instead of three. Sequenced accordingly in §7.
+**Resolved 2026-08-06, reversing this section's original conclusion.** §4.5 at the time argued for
+giving the ZIP a return lane instead of removing it. That argument rested on ZIP being readable
+input, which is now confirmed false (see the correction at the top of this document). The actual
+fix taken: the "Download packet ZIP" button and its backend route were removed from the product.
+No return lane was built, because the artifact it would have served was never safe to promise in
+the first place.
 
 ### 4.4 The batch return channel is paste-only [V]
 
@@ -259,28 +273,39 @@ input reads the file locally with `FileReader` and drops the text into the texta
 ([queue_import.js:230-240](../../api/webui/static/powergrader/queue_import.js:230)). Lifting that
 same six lines onto the batch cards is most of the work.
 
-### 4.5 The format worry was wrong, and that reopens the packaging question [resolved]
+### 4.5 The format worry was wrong, and that reopens the packaging question [WRONG, corrected 2026-08-06]
 
 This was tagged [X] on the assumption that `.md` and `.json` might not be attachable. Per the
 vendor's own account, `.md`, `.json`, and `.zip` are all readable, ZIP contents are enumerable and
 extractable, and it can emit files including ZIPs. Treat that as a vendor self-report rather than a
 test result, but it is plausible and it points the same way as the rest of this section.
 
-Two consequences:
+**That vendor self-report was wrong.** Confirmed 2026-08-06 against Microsoft's own
+file-formats-supported-by-Copilot support page: M365 Copilot can emit a ZIP but cannot read one as
+an attachment. `.md` and `.json` as loose files remain fine; ZIP as an input artifact is not. The
+two consequences drawn below are only half right as a result.
+
+Two consequences, as originally written:
 
 - **Drop the `.docx` / `.txt` variant idea.** The packet's existing `.md` and `.json` are fine. That
-  removes a whole speculative work item.
-- **The packaging assumption is now the interesting question, not the format.** The batch layout
+  removes a whole speculative work item. **This part holds.**
+- ~~The packaging assumption is now the interesting question, not the format. The batch layout
   ships three loose `.md` files per batch because that was the safe shape for a chat that might only
   take plain text one file at a time. If ZIP reading holds, one ZIP per batch is a strictly better
   artifact: one attachment, no chance of the teacher attaching 01 and 03 but forgetting 02, and the
-  README travels with it.
+  README travels with it.~~ **This part does not hold.** ZIP reading does not hold, so the batch
+  layout's three loose files were never a stopgap waiting on a better packaging idea; they were
+  already the right answer, arrived at for the wrong stated reason. Batches keep shipping as loose
+  files.
 
 What does **not** change is §4.6. Batching exists because of the context window, not because of
 attachment limits, so a large class still needs splitting no matter how few files it arrives in. And
 the failure mode of a chat that reads a ZIP but silently attends to only part of it is the same
-silent under-scoring §4.6 describes, landing on the same silent import in §4.1. Which is the
-argument for fixing §4.1 first and then trusting bigger payloads, rather than the other way round.
+silent under-scoring §4.6 describes, landing on the same silent import in §4.1. Moot for batches now
+that ZIP packaging is rejected, but the same reasoning is why the flat packet's ZIP button was
+removed rather than kept as an unverified convenience: a silent-partial-read failure is exactly the
+failure class §4.1 exists to close, and there is no way to verify "attended to" from this side of
+the attachment.
 
 ### 4.6 Batch sizing is pinned to 128k with no way to change it [V]
 
@@ -500,11 +525,11 @@ the template section is the safe move and works regardless of what is on disk), 
 then decide the folder sweep. Take the Create-page "Copy scoring prompt" button with it (§6.3) or the
 retirement is cosmetic.
 
-**Batch 4: give the file lanes a home, and reconsider packaging.** §4.4, lift the existing
-`FileReader` handler onto the batch cards so a returned file can be picked rather than retyped.
-§4.3, decide the ZIP's fate now that ZIP reading is plausible: give the whole-class ZIP a return
-lane, and evaluate one-ZIP-per-batch as the upload artifact. Worth a real attach test in the app
-before committing, since this is the one item where the vendor's self-report is load-bearing.
+**Batch 4: give the file lanes a home.** §4.4, lift the existing `FileReader` handler onto the batch
+cards so a returned file can be picked rather than retyped. ~~Reconsider packaging: decide the ZIP's
+fate now that ZIP reading is plausible.~~ **Closed 2026-08-06, rejected**: ZIP reading is not
+plausible, it is confirmed absent. No ZIP return lane, no one-ZIP-per-batch. The flat packet's
+"Download packet ZIP" button and backend route were removed instead of given a return lane.
 
 **Batch 5: genericize the teacher-facing vendor naming.** §4.2. Nine UI strings, two warnings, and
 three on-disk artifact names. The folder rename is a path change, so it needs `RETIRED_FILES`
@@ -635,11 +660,12 @@ batch approaches it.
 
 ## 9. Still unverified
 
-- **Narrowed by the format answer in §4.5, not closed.** `.md`, `.json`, and `.zip` read/write rests
-  on a vendor self-report, which is plausible but is not a test. Two things behind it stay open and
-  both matter to Batch 4: whether a chat that opens a ZIP reliably attends to *every* file inside it
-  rather than the first few, and what any given chat's usable context is in practice versus the
-  hardcoded 128k in §4.6. Both fail the same silent way, which is why Batch 1 comes first.
+- **Closed 2026-08-06.** `.md` and `.json` read/write hold. ZIP does not: confirmed against
+  Microsoft's file-formats-supported-by-Copilot page that M365 Copilot cannot read a ZIP as an
+  attachment. The follow-on questions this used to leave open, whether a chat that opens a ZIP
+  attends to every file inside rather than the first few, and what a given chat's usable context is
+  versus the hardcoded 128k in §4.6, are moot for ZIP specifically now that it is off the table. The
+  128k question survives independently; see §8.3.
 - Whether angle-bracket envelope tags survive a chat's rendering into the clipboard (§6.1). The
   recommended fix routes around this rather than depending on the answer, so it is no longer
   blocking.
