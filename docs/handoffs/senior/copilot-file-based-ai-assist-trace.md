@@ -312,12 +312,23 @@ The batch path does neither. `_student_blocks`
 only `pseudonym`, `item_id`, `possible`, and the response text. It never reads `writing_timeline`.
 And file 02's contract (`rubric_persona_text`) never mentions `writing_process_observations`.
 
-So in the primary non-MCP path, the Writing Timeline feature produces nothing. Both halves are
-missing consistently, the data and the instruction, which reads more like an unstated decision than
-a bug. But nothing records it, the flat packet in the very same session behaves differently, and the
-queue still shows a "Tracked DOCX, Writing Timeline" badge
-([powergrader_queue.html:24](../../api/webui/templates/powergrader_queue.html:24)), so a teacher on
-a tracked assignment in packet mode sees the badge and gets no observations.
+So in the primary non-MCP path, the AI is never given the timeline data and never asked for
+`writing_process_observations`. Both halves are missing consistently, the data and the instruction,
+which reads more like an unstated decision than a bug, but nothing records it and the flat packet in
+the very same session behaves differently.
+
+**Corrected 2026-08-05.** An earlier version of this section said the queue's "Tracked DOCX, Writing
+Timeline" badge promises something packet mode cannot deliver, and section 8.4 leaned toward hiding
+the badge in packet mode. That was wrong and the instinct was acted on and then withdrawn before any
+code changed. The timeline strip renders from **local session data**
+([queue_writing_timeline.js:56](../../api/webui/static/powergrader/queue_writing_timeline.js:56)
+reads `students[].attachments[].writing_timeline`), not from the AI. Packet mode therefore gives the
+teacher the full working timeline view: signals, sparkline, and navigation. The badge is accurate,
+and hiding it would remove a feature that works.
+
+The scope of the real gap is narrower than first written: what is absent in packet mode is only the
+AI's teacher-only observation note. Nothing in the UI promises that note, so nothing is currently
+lying to anyone.
 
 Left unfixed on purpose. See section 8.4.
 
@@ -585,9 +596,10 @@ and the teacher is the one choosing the destination.
 
 Three options:
 
-- **Leave it out, and say so.** Writing Timeline is an API-lane and MCP-lane feature. Hide the badge
-  in packet mode so the teacher is not promised something the path cannot deliver. Smallest change,
-  and honest.
+- **Leave it out, and write it down.** Treat writing-process observations as an API-lane and MCP-lane
+  capability. Change no behavior, and document the difference so it stops being rediscovered.
+  Smallest, and honest. Note this option no longer includes hiding the badge: see the correction in
+  section 4.8 for why that would remove working local functionality.
 - **Include it, gated.** Carry the safe projection into `03-work.md` and add
   `writing_process_observations` to file 02's contract, behind the same acknowledgement the packet
   mode already requires. Most capable, most exposure, and it makes section 4.7's consolidation
@@ -595,8 +607,8 @@ Three options:
 - **Include only the aggregate.** Author count and revision-span summary, never per-document
   detail. Middle path, and probably enough for the coaching use the feature was built for.
 
-No recommendation from me here. The first is the safe default if you want the badge to stop lying
-this week; the third is likelier to be what you actually want.
+No recommendation from me here. The third is likelier to be what you actually want; the first costs
+nothing and is defensible on its own.
 
 ### 8.3 Whether batch sizing becomes visible
 
