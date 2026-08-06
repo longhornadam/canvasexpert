@@ -7,6 +7,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.webui import workspace
+from api import feedback_contract
+from api.powergrader import copilot_packet_support, packet
 from api.powergrader.copilot_packet import build_copilot_batches
 
 
@@ -79,6 +81,91 @@ def test_build_copilot_batches_creates_one_small_batch(tmp_path):
     assert "Alan Turing" not in combined
 
 
+def test_batch_student_work_carries_only_available_aggregate_timeline(tmp_path):
+    available = _student("Fictional Learner", "42", "A response with revisions.")
+    available["responses"][0]["writing_timeline"] = {
+        "documents": [{
+            "available": True,
+            "valid": True,
+            "block_count": 7,
+            "insertion_count": 5,
+            "deletion_count": 2,
+            "trail_present": True,
+            "track_revisions_present": True,
+            "tracking_protection_present": False,
+            "tracking_protection_enforced": False,
+            "tracking_lock_present": True,
+            "properties": {
+                "total_time_minutes": 37,
+                "revision": 8,
+                "creator_category": "submission_author",
+                "last_modified_by_category": "other_roster_author",
+            },
+            "largest_insertions": [{
+                "character_count": 400,
+                "timestamp": "2026-07-27T10:00:00-05:00",
+            }],
+        }],
+    }
+    unavailable = _student("Fictional Peer", "43", "A response without a usable timeline.")
+    unavailable["responses"][0]["writing_timeline"] = {
+        "documents": [{"available": False, "valid": False}],
+    }
+
+    info = build_copilot_batches(
+        assignment_name="Timeline Essay",
+        safe_dir=str(tmp_path),
+        llm_bundle=_bundle([available, unavailable]),
+        rubric_text="Score for claim and evidence.",
+        persona={"name": "Sage"},
+    )
+    work = Path(info["batches"][0]["files"]["student_work"]).read_text(encoding="utf-8")
+
+    assert work.count("### Writing Timeline Summary") == 1
+    for line in (
+        "Available: yes",
+        "Valid: yes",
+        "Block count: 7",
+        "Insertion count: 5",
+        "Deletion count: 2",
+        "Revision trail present: yes",
+        "Track revisions present: yes",
+        "Tracking protection present: no",
+        "Tracking protection enforced: no",
+        "Tracking lock present: yes",
+        "Total time minutes: 37",
+        "Revision: 8",
+        "Creator category: submission_author",
+        "Last modified by category: other_roster_author",
+    ):
+        assert line in work
+    assert "largest_insertions" not in work
+    assert "2026-07-27T10:00:00-05:00" not in work
+
+
+def test_scoring_output_contract_is_shared_by_packet_and_batch_surfaces():
+    persona = {
+        "name": "Sage",
+        "signoff_policy": "ai_disclosure",
+        "signoff_text": "Drafted by {name} (AI), reviewed by your teacher.",
+    }
+    surfaces = [
+        feedback_contract.build_contract_text("Sage", rubric_text="Score evidence.", persona=persona),
+        packet.paste_format_text(_bundle([_student("Fictional Learner", "42", "Response.")]), persona),
+        copilot_packet_support.rubric_persona_text("Timeline Essay", "Score evidence.", persona),
+        copilot_packet_support.batch_prompt(1, 1, persona=persona),
+    ]
+
+    for text in surfaces:
+        assert "writing_process_observations" in text
+        assert '"pseudonym"' in text
+        assert '"item_id"' in text
+        assert '"score"' in text
+        assert '"feedback"' in text
+        assert "observational, teacher-only" in text
+        assert "integrity conclusion, probability, or penalty recommendation" in text
+        assert "must not change the score or the student-facing `feedback`" in text
+        assert "Drafted by Sage (AI), reviewed by your teacher." in text
 def test_copilot_metadata_uses_batch_folders_not_zip(tmp_path):
     info = build_copilot_batches(
         assignment_name="Folder Based Essay",

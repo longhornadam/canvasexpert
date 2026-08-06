@@ -9,6 +9,7 @@ from api.webui.source_materials import estimate_text_tokens
 
 from .packet import safe_ai_packet_name
 from . import copilot_packet_support as support
+from . import writing_timeline
 
 
 DEFAULT_COPILOT_CONTEXT_TOKENS = 128_000
@@ -35,6 +36,25 @@ def _safe_assignment_name(assignment_name: str) -> str:
     return packet_name
 
 
+def _writing_timeline_sections(response: dict) -> list[str]:
+    timeline = response.get("writing_timeline")
+    if not isinstance(timeline, dict):
+        return []
+    documents = timeline.get("documents")
+    if isinstance(documents, list):
+        projections = [document for document in documents if isinstance(document, dict)]
+    else:
+        projections = [timeline]
+    sections: list[str] = []
+    multiple = len(projections) > 1
+    for index, projection in enumerate(projections, start=1):
+        title = "Writing Timeline Summary"
+        if multiple:
+            title = f"Writing Timeline Summary {index}"
+        sections.extend(writing_timeline.aggregate_summary_lines(projection, title=title))
+    return sections
+
+
 
 
 def _student_blocks(llm_bundle: dict) -> list[dict]:
@@ -47,11 +67,16 @@ def _student_blocks(llm_bundle: dict) -> list[dict]:
             item_id = str(response.get("item_id") or "")
             possible = response.get("possible")
             text = str(response.get("response") or "").strip()
+            timeline_lines = _writing_timeline_sections(response)
+            timeline_section = ""
+            if timeline_lines:
+                timeline_section = "\n" + "\n".join(timeline_lines) + "\n"
             block = (
                 f"## Student {ordinal:02d}\n\n"
                 f"Pseudonym: {pseudonym}\n"
                 f"Item ID: {item_id}\n"
-                f"Possible points: {possible if possible is not None else ''}\n\n"
+                f"Possible points: {possible if possible is not None else ''}\n"
+                f"{timeline_section}\n"
                 "### Response\n\n"
                 f"{text or 'No text response was available in the SAFE packet.'}\n"
             )
@@ -151,7 +176,7 @@ def build_copilot_batches(
     fixed_context_tokens = (
         estimate_text_tokens(file_01_text)
         + estimate_text_tokens(file_02_text)
-        + estimate_text_tokens(support.batch_prompt(1, 1))
+        + estimate_text_tokens(support.batch_prompt(1, 1, persona=persona))
     )
     available = effective_context_tokens - output_reserve_tokens - safety_margin_tokens - fixed_context_tokens
     warnings: list[str] = []
@@ -242,7 +267,7 @@ def build_copilot_batches(
         support.write_text(rubric_persona_path, file_02_text)
         support.write_text(student_work_path, student_work_text)
 
-        prompt = support.batch_prompt(index, total_batches)
+        prompt = support.batch_prompt(index, total_batches, persona=persona)
         token_estimate = (
             estimate_text_tokens(file_01_text)
             + estimate_text_tokens(file_02_text)

@@ -282,6 +282,58 @@ def test_safe_artifact_strips_raw_office_metadata_and_preserves_only_projection(
     assert feedback_safety.assert_scrubbed(safe, vault)["green"] is True
 
 
+def test_aggregate_summary_excludes_event_detail_and_raw_properties():
+    projection = {
+        "available": True,
+        "valid": True,
+        "block_count": 7,
+        "insertion_count": 5,
+        "deletion_count": 2,
+        "trail_present": True,
+        "track_revisions_present": True,
+        "tracking_protection_present": False,
+        "tracking_protection_enforced": False,
+        "tracking_lock_present": True,
+        "properties": {
+            "total_time_minutes": 37,
+            "revision": 8,
+            "creator_category": "submission_author",
+            "last_modified_by_category": "other_roster_author",
+            "creator": "Private Office Name",
+        },
+        "largest_insertions": [{
+            "character_count": 400,
+            "timestamp": "2026-07-27T10:00:00-05:00",
+        }],
+    }
+
+    summary = writing_timeline.aggregate_summary(projection)
+
+    assert summary == {
+        "available": True,
+        "valid": True,
+        "block_count": 7,
+        "insertion_count": 5,
+        "deletion_count": 2,
+        "trail_present": True,
+        "track_revisions_present": True,
+        "tracking_protection_present": False,
+        "tracking_protection_enforced": False,
+        "tracking_lock_present": True,
+        "properties": {
+            "total_time_minutes": 37,
+            "revision": 8,
+            "creator_category": "submission_author",
+            "last_modified_by_category": "other_roster_author",
+        },
+    }
+    lines = writing_timeline.aggregate_summary_lines(projection)
+    rendered = "\n".join(lines)
+    assert "Largest" not in rendered
+    assert "timestamp" not in rendered
+    assert "Creator: Private Office Name" not in rendered
+
+
 def test_optional_teacher_observation_round_trips_but_never_enters_write_fields(tmp_path):
     vault = Vault(str(tmp_path / "vault.json"))
     pseudonym = vault.get_or_assign("learner", "Fictional Learner", "")

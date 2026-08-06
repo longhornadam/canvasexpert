@@ -9,6 +9,7 @@ import json
 import os
 import zipfile
 
+from api import feedback_contract
 from api import feedback_pipeline as fp
 from api.webui import workspace
 
@@ -104,33 +105,23 @@ def paste_format_text(bundle: dict, persona: dict | None = None) -> str:
     first_response = ((first_student.get("responses") or [{}])[0])
     pseudonym = first_student.get("pseudonym") or "<copy pseudonym exactly>"
     item_id = first_response.get("item_id") or "<copy item_id exactly>"
-    signoff = fp.persona_signoff(persona or {})
-    feedback_hint = "Brief rubric-based feedback."
-    if signoff:
-        feedback_hint = (
-            "Brief rubric-based feedback. End with the persona signoff exactly once. "
-            + signoff
-        )
-    sample = [{
-        "pseudonym": pseudonym,
-        "item_id": str(item_id),
-        "score": 1,
-        "feedback": feedback_hint,
-    }]
-    if signoff:
-        sample[0]["disclosure"] = signoff
+    contract = feedback_contract.scoring_output_contract(
+        persona=persona,
+        identity_source="Student Responses.json",
+        pseudonym=pseudonym,
+        item_id=str(item_id),
+        include_signoff_in_feedback=True,
+    )
     return (
         "Paste Results Back Here - Format\n"
         "================================\n\n"
         "After your AI chat scores the packet, paste ONLY the JSON array or a JSON "
         "object with a results array back into PowerGrader.\n\n"
         "Required shape:\n\n"
-        + json.dumps(sample, indent=2, ensure_ascii=False)
+        + json.dumps([contract["sample"]], indent=2, ensure_ascii=False)
         + "\n\nRules:\n"
-        "- Copy pseudonym and item_id exactly from Student Responses.json.\n"
-        "- score may be a number or null for comment-only feedback.\n"
-        "- feedback must be non-empty.\n"
-        "- disclosure is optional metadata; include it only when the selected persona uses a signoff.\n"
+        + contract["rules_text"]
+        + "\n"
         "- PowerGrader validates this before adding AI suggestions to the session.\n"
     )
 

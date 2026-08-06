@@ -34,6 +34,23 @@ _ALLOWED_AUTHOR_CATEGORIES = {
     "other_roster_author",
     "unrecognized_author_present",
 }
+_TRACKING_BOOLEAN_KEYS = (
+    "trail_present",
+    "track_revisions_present",
+    "tracking_protection_present",
+    "tracking_protection_enforced",
+    "tracking_lock_present",
+)
+_AGGREGATE_KEYS = (
+    "available",
+    "valid",
+    "block_count",
+    "insertion_count",
+    "deletion_count",
+    *_TRACKING_BOOLEAN_KEYS,
+)
+_PROPERTY_NUMBER_KEYS = ("total_time_minutes", "revision")
+_PROPERTY_AUTHOR_KEYS = ("creator_category", "last_modified_by_category")
 
 
 def _normalized_values(value, *, extension: bool = False) -> set[str]:
@@ -464,6 +481,21 @@ def _safe_block(block: dict) -> dict:
     return safe
 
 
+def _safe_properties(properties: dict | None) -> dict:
+    if not isinstance(properties, dict):
+        return {}
+    safe_properties = {}
+    for key in _PROPERTY_NUMBER_KEYS:
+        value = properties.get(key)
+        if isinstance(value, int) and value >= 0:
+            safe_properties[key] = value
+    for key in _PROPERTY_AUTHOR_KEYS:
+        value = properties.get(key)
+        if value in _ALLOWED_AUTHOR_CATEGORIES:
+            safe_properties[key] = value
+    return safe_properties
+
+
 def safe_projection(report: dict | None) -> dict | None:
     """Rebuild the outbound projection from a strict value whitelist."""
     if not isinstance(report, dict):
@@ -485,35 +517,13 @@ def safe_projection(report: dict | None) -> dict | None:
             if isinstance(item, dict) and item.get("type") == "deletion"
         ),
     }
-    for key in (
-        "trail_present",
-        "track_revisions_present",
-        "tracking_protection_present",
-        "tracking_protection_enforced",
-        "tracking_lock_present",
-    ):
+    for key in _TRACKING_BOOLEAN_KEYS:
         if isinstance(report.get(key), bool):
             projection[key] = report[key]
 
-    properties = report.get("properties")
-    if isinstance(properties, dict):
-        safe_properties = {}
-        for source, target in (
-            ("total_time_minutes", "total_time_minutes"),
-            ("revision", "revision"),
-        ):
-            value = properties.get(source)
-            if isinstance(value, int) and value >= 0:
-                safe_properties[target] = value
-        for source, target in (
-            ("creator_category", "creator_category"),
-            ("last_modified_by_category", "last_modified_by_category"),
-        ):
-            value = properties.get(source)
-            if value in _ALLOWED_AUTHOR_CATEGORIES:
-                safe_properties[target] = value
-        if safe_properties:
-            projection["properties"] = safe_properties
+    safe_properties = _safe_properties(report.get("properties"))
+    if safe_properties:
+        projection["properties"] = safe_properties
 
     # The per-block array is deliberately NOT projected.  Counts above already
     # carry the volume signal, nothing downstream reads it, and a heavily tracked
@@ -525,6 +535,70 @@ def safe_projection(report: dict | None) -> dict | None:
         and int(item.get("character_count") or 0) > 0
     ][:3]
     return projection
+
+
+def aggregate_summary(projection: dict | None) -> dict | None:
+    """Return the aggregate-only portion of a SAFE timeline projection."""
+    if not isinstance(projection, dict):
+        return None
+    summary = {}
+    for key in _AGGREGATE_KEYS:
+        value = projection.get(key)
+        if key in _TRACKING_BOOLEAN_KEYS or key in {"available", "valid"}:
+            if isinstance(value, bool):
+                summary[key] = value
+        elif isinstance(value, int) and value >= 0:
+            summary[key] = value
+    if "available" not in summary:
+        return None
+    safe_properties = _safe_properties(projection.get("properties"))
+    if safe_properties:
+        summary["properties"] = safe_properties
+    return summary
+
+
+_SUMMARY_FIELD_LABELS = (
+    ("available", "Available"),
+    ("valid", "Valid"),
+    ("block_count", "Block count"),
+    ("insertion_count", "Insertion count"),
+    ("deletion_count", "Deletion count"),
+    ("trail_present", "Revision trail present"),
+    ("track_revisions_present", "Track revisions present"),
+    ("tracking_protection_present", "Tracking protection present"),
+    ("tracking_protection_enforced", "Tracking protection enforced"),
+    ("tracking_lock_present", "Tracking lock present"),
+)
+_SUMMARY_PROPERTY_LABELS = (
+    ("total_time_minutes", "Total time minutes"),
+    ("revision", "Revision"),
+    ("creator_category", "Creator category"),
+    ("last_modified_by_category", "Last modified by category"),
+)
+
+
+def aggregate_summary_lines(
+    projection: dict | None,
+    *,
+    title: str = "Writing Timeline Summary",
+) -> list[str]:
+    """Render a readable, aggregate-only summary for a teacher-facing packet."""
+    summary = aggregate_summary(projection)
+    if not summary or not summary.get("available"):
+        return []
+    lines = [f"### {title}"]
+    for key, label in _SUMMARY_FIELD_LABELS:
+        if key not in summary:
+            continue
+        value = summary[key]
+        if isinstance(value, bool):
+            value = "yes" if value else "no"
+        lines.append(f"{label}: {value}")
+    properties = summary.get("properties") or {}
+    for key, label in _SUMMARY_PROPERTY_LABELS:
+        if key in properties:
+            lines.append(f"{label}: {properties[key]}")
+    return lines
 
 
 OBSERVATION_WITHHELD_NOTICE = (
@@ -551,7 +625,7 @@ _INTEGRITY_CONCLUSION_PATTERNS = tuple(
         r"\bsomeone else (wrote|authored|typed|did)\b",
         r"\bnot (the )?(real |actual )?author\b",
         r"\bdid ?n[o']?t (write|author)\b",
-        # Hedged authorship claims — the contract forbids probability, not just verdicts.
+        # Hedged authorship claims, the contract forbids probability, not just verdicts.
         r"\b(likely|probably|possibly|may have|might have|appears? to have|"
         r"seems? to have|evidently|clearly)\b[^.!?]{0,60}\b(wrote|written|authored?|"
         r"copied|outside help|another person|used ai)\b",

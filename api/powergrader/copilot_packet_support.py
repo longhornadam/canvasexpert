@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 
-from api import feedback_pipeline as fp
+from api import feedback_contract
 from api.webui import workspace
 
 
@@ -59,18 +60,15 @@ def rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) -
     persona = persona or {}
     ta_name = (persona.get("name") or "").strip() or "your teaching assistant"
     personality = (persona.get("personality") or "").strip()
-    signoff = fp.persona_signoff(persona, ta_name)
     rubric = (rubric_text or "").strip()
-    feedback_hint = "Brief rubric-based feedback."
-    disclosure_line = ""
-    signoff_rule = "- Do not add a separate signature or disclosure beyond the selected persona.\n"
-    if signoff:
-        feedback_hint = "Brief rubric-based feedback. End with the persona signoff exactly once."
-        disclosure_line = f',\n  "disclosure": "{signoff}"'
-        signoff_rule = (
-            f"- End feedback with this persona signoff exactly once: {signoff}\n"
-            "- Do not add a separate signature or disclosure.\n"
-        )
+    contract = feedback_contract.scoring_output_contract(
+        persona=persona,
+        ai_ta_name=ta_name,
+        identity_source="StudentWork",
+        pseudonym="<copy from StudentWork exactly>",
+        item_id="<copy from StudentWork exactly>",
+        include_signoff_in_feedback=True,
+    )
     return (
         "# Rubric and TA Personality - SAFE\n\n"
         f"Assignment: {assignment_name}\n\n"
@@ -82,34 +80,36 @@ def rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) -
         "## Rubric\n\n"
         f"{rubric or 'No rubric text was provided. Use the assignment point value and teacher directions.'}\n\n"
         "## Required JSON Output\n\n"
-        "Return only a JSON array. Each element must be exactly:\n\n"
+        f"{contract['format_instruction']}\n\n"
         "```json\n"
-        "{\n"
-        '  "pseudonym": "<copy from StudentWork exactly>",\n'
-        '  "item_id": "<copy from StudentWork exactly>",\n'
-        '  "score": 2,\n'
-        f'  "feedback": "{feedback_hint}"{disclosure_line}\n'
-        "}\n"
+        f"{json.dumps(contract['sample'], indent=2, ensure_ascii=False)}\n"
         "```\n\n"
         "Rules:\n\n"
+        f"{contract['rules_text']}\n"
         "- Score only students in file 03.\n"
-        "- Copy `pseudonym` and `item_id` exactly.\n"
-        "- `score` may be a number or null.\n"
-        "- `feedback` must be non-empty.\n"
-        f"{signoff_rule}"
-        "- Do not identify students.\n"
         "- Do not mention real names.\n"
     )
 
 
-def batch_prompt(batch_number: int, total_batches: int) -> str:
+def batch_prompt(
+    batch_number: int,
+    total_batches: int,
+    persona: dict | None = None,
+) -> str:
+    contract = feedback_contract.scoring_output_contract(
+        persona=persona,
+        identity_source="StudentWork",
+        pseudonym="<copy>",
+        item_id="<copy>",
+    )
     return (
         "Use the three uploaded files in order: 01 Assignment Information, 02 Rubric and TA "
         f"Personality, and 03 StudentWork for Batch {batch_number} of {total_batches}.\n\n"
         f"Score only the students listed in the StudentWork file for Batch {batch_number} of "
         f"{total_batches}. Do not score students from any other batch.\n\n"
-        "Return only valid JSON. Return a JSON array only, with one object per scored student. "
-        "Copy pseudonym and item_id exactly from StudentWork."
+        f"{contract['format_instruction']}\n\n"
+        f"```json\n{json.dumps(contract['sample'], indent=2, ensure_ascii=False)}\n```\n\n"
+        f"Rules:\n{contract['rules_text']}"
     )
 
 

@@ -37,6 +37,66 @@ def persona_signoff(persona: dict | None = None,
     return template.replace("{name}", name)
 
 
+def scoring_output_contract(
+        *,
+        persona: dict | None = None,
+        ai_ta_name: str = "your teaching assistant",
+        identity_source: str = "the bundle",
+        pseudonym: str = "<copy>",
+        item_id: str = "<copy>",
+        feedback_hint: str = "Brief rubric-based feedback.",
+        include_signoff_in_feedback: bool = False,
+) -> dict:
+    """Return the shared scoring output contract and its JSON example."""
+    persona = persona or {}
+    signoff = persona_signoff(persona, ai_ta_name)
+    feedback = feedback_hint.strip() or "Brief rubric-based feedback."
+    if signoff and include_signoff_in_feedback:
+        feedback = f"{feedback} End with the persona signoff exactly once. {signoff}"
+    sample = {
+        "pseudonym": pseudonym,
+        "item_id": item_id,
+        "score": 1,
+        "feedback": feedback,
+        "writing_process_observations": "<optional teacher-only observation>",
+    }
+    rules = [
+        f"Copy pseudonym and item_id exactly from {identity_source} so results can be matched.",
+        "If the bundle includes `shared_context`, use that assignment/source material when scoring every response. Do not ask for missing source material unless it is truly impossible to score without it.",
+        "Quote briefly from the response to justify the score.",
+        "Do not identify students.",
+        "`score` may be a number or null for comment-only feedback.",
+        "`feedback` must be non-empty.",
+        "When a response includes `writing_timeline`, you may return `writing_process_observations` as an observational, teacher-only string.",
+        "It must never be an integrity conclusion, probability, or penalty recommendation.",
+        "It must not change the score or the student-facing `feedback`.",
+        "Use the full score range; `possible` gives each item's maximum.",
+    ]
+    if signoff:
+        rules.extend([
+            f"End feedback with this persona signoff exactly once: {signoff}",
+            "Do not invent a separate signature or disclosure beyond the selected persona.",
+            "If `disclosure` is present, copy the persona signoff exactly.",
+        ])
+    else:
+        rules.extend([
+            "Do not invent a separate signature or disclosure beyond the selected persona.",
+            "`disclosure` is optional metadata; leave it empty if the persona has no signoff.",
+        ])
+    if signoff:
+        sample["disclosure"] = signoff
+    return {
+        "format_instruction": (
+            "Return only valid JSON. Return a JSON array only, with one object per scored "
+            "student. Each element must be exactly:"
+        ),
+        "sample": sample,
+        "rules": tuple(rules),
+        "rules_text": "\n".join(f"- {rule}" for rule in rules),
+        "signoff": signoff,
+    }
+
+
 def build_contract_text(ai_ta_name: str = "your teaching assistant",
                         rubric_text: str = "",
                         persona: dict | None = None) -> str:
@@ -52,46 +112,36 @@ def build_contract_text(ai_ta_name: str = "your teaching assistant",
     """
     persona = persona or {}
     ai_ta_name = str(persona.get("name") or ai_ta_name or "your teaching assistant").strip()
-    signoff = persona_signoff(persona, ai_ta_name)
+    contract = scoring_output_contract(
+        persona=persona,
+        ai_ta_name=ai_ta_name,
+        identity_source="the bundle",
+        pseudonym="<copy>",
+        item_id="<copy>",
+    )
+    signoff = contract["signoff"]
     signoff_clause = ""
-    disclosure_example = ""
-    disclosure_rule = "- `disclosure` is optional metadata; leave it empty if the persona has no signoff."
     if signoff:
         signoff_clause = (
             "\n\nThis persona uses this student-visible signoff. End each `feedback` "
             f"value with it exactly once:\n{signoff}"
         )
-        disclosure_example = f',\n    "disclosure": "{signoff}"'
-        disclosure_rule = "- If `disclosure` is present, copy the persona signoff exactly."
     if rubric_text.strip():
         rubric_clause = ("The scoring rubric is included at the bottom of this file "
-                         "— score strictly by it, do not invent criteria.")
+                         ", score strictly by it, do not invent criteria.")
         rubric_block = f"\n\n--- RUBRIC (score strictly by this) ---\n{rubric_text.strip()}\n"
     else:
-        rubric_clause = ("A RubricForge rubric is attached as Knowledge — score "
-                         "strictly by it, do not invent criteria.")
+        rubric_clause = ("No scoring rubric was provided, use the available assignment "
+                         "context, score cautiously, and do not invent criteria.")
         rubric_block = ""
+    sample = json.dumps(contract["sample"], indent=2, ensure_ascii=False)
     return f"""You are {ai_ta_name}, a teaching assistant helping a real teacher
 score student writing and draft feedback. {rubric_clause}
 
 You will receive a JSON bundle of pseudonymized responses. For EACH response return
-one result object. Output ONLY a JSON array, each element exactly:
+one result object. {contract["format_instruction"]}
 
-  {{"pseudonym": "<copy>", "item_id": "<copy>", "score": <number>,
-    "feedback": "<actionable, kind, rubric-anchored feedback for the student>",
-    "writing_process_observations": "<optional teacher-only observation>"{disclosure_example}}}
+{sample}
 
 Rules:
-- Copy `pseudonym` and `item_id` back EXACTLY so results can be matched.
-- If the bundle includes `shared_context`, use that assignment/source material
-  when scoring every response. Do not ask for missing source material unless it
-  is truly impossible to score without it.
-- Quote briefly from the response to justify the score.
-- Do not identify students.
-- When a response includes `writing_timeline`, you may return
-  `writing_process_observations` as an observational, teacher-only string.
-  It must never be an integrity conclusion, probability, or penalty recommendation.
-  It must not change the score or the student-facing `feedback`.
-- Do not invent a separate signature or disclosure beyond the selected persona.
-{disclosure_rule}
-- Use the full score range; `possible` gives each item's maximum.{signoff_clause}{rubric_block}"""
+{contract["rules_text"]}{signoff_clause}{rubric_block}"""
