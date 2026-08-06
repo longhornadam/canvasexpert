@@ -170,7 +170,7 @@ def _resolve_calendar_state(date_str: str) -> str:
 
 
 def _course_for_block(block: dict, *, relation: str, next_change: str,
-                      active_courses_reader) -> dict:
+                      next_change_minutes=None, active_courses_reader) -> dict:
     """Turn a resolved Teacher Schedule block into a Panel course result,
     enforcing the Current-course boundary: a block mapped to a Previous (or
     unknown) course never reads its catalog."""
@@ -200,6 +200,7 @@ def _course_for_block(block: dict, *, relation: str, next_change: str,
         # When this panel stops being right. The panel re-reads at the bell
         # instead of drifting for up to a refresh interval into the next class.
         "next_change": next_change,
+        "next_change_minutes": next_change_minutes,
     }
 
 
@@ -282,14 +283,17 @@ def resolve_panel_course(block: str, *, now=None, schedule_reader=None,
         return _no_course("day_over", "No more classes today.")
 
     boundary = active_block.get("end") if relation == "now" else active_block.get("start")
-    next_change = clock_time.format_time(clock_time.parse_time(boundary))
+    next_change_minutes = clock_time.parse_time(boundary)
+    next_change = clock_time.format_time(next_change_minutes)
     return _course_for_block(active_block, relation=relation, next_change=next_change,
+                             next_change_minutes=next_change_minutes,
                              active_courses_reader=active_reader)
 
 
 def _no_course(state: str, message: str, block: str = "") -> dict:
     return {"course_id": "", "relation": "", "block": block,
-            "state": state, "message": message, "next_change": ""}
+            "state": state, "message": message, "next_change": "",
+            "next_change_minutes": None}
 
 
 whats_due_payload = panel_data_service.whats_due_payload
@@ -432,11 +436,13 @@ def panel_data(kind: str, block: str = "", days: int | None = None):
                 "ok": True, "state": scope["state"], "days": requested_days,
                 "assignments": [], "message": scope["message"],
                 "relation": "", "block": scope["block"], "next_change": "",
+                "next_change_minutes": scope["next_change_minutes"],
             })
         payload = whats_due_payload(scope["course_id"], requested_days)
         payload["relation"] = scope["relation"]
         payload["block"] = scope["block"]
         payload["next_change"] = scope["next_change"]
+        payload["next_change_minutes"] = scope["next_change_minutes"]
         if not payload.get("course_name"):
             payload["course_name"] = scope["block"]
         return JSONResponse(payload)

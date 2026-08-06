@@ -52,17 +52,78 @@ def _file_key(filename: str) -> str:
     return _re.sub(r'[^a-z0-9]+', '_', stem.lower()).strip('_')
 
 
+def _bell_schedule_conflict_stems(stem: str) -> list[str]:
+    """Return canonical-stem candidates named by sync-copy suffix shapes."""
+    import re as _re
+
+    patterns = (
+        r"^(?P<canonical>.+) \(\d+\)$",
+        r"^(?P<canonical>.+?) \([^)]*conflicted copy[^)]*\)$",
+        r"^(?P<canonical>.+?)\s+conflicted copy.*$",
+    )
+    for pattern in patterns:
+        match = _re.match(pattern, stem, flags=_re.IGNORECASE)
+        if match:
+            return [match.group("canonical").rstrip()]
+
+    candidates = []
+    for match in reversed(list(_re.finditer("-", stem))):
+        suffix = stem[match.end():]
+        if suffix and not any(character.isspace() for character in suffix):
+            candidates.append(stem[:match.start()].rstrip())
+    return candidates
+
+
+def _bell_schedule_conflicts(cal_dir: str) -> list[tuple[str, str]]:
+    """Return ``(copy_path, canonical_path)`` pairs for neighboring copies."""
+    paths = [
+        path for path in _glob.glob(os.path.join(cal_dir, "*.csv"))
+        if os.path.basename(path).lower().startswith("bell schedule")
+    ]
+    by_stem = {
+        os.path.splitext(os.path.basename(path))[0].casefold(): path
+        for path in paths
+    }
+    conflicts = []
+    for path in paths:
+        stem = os.path.splitext(os.path.basename(path))[0]
+        canonical_path = None
+        for canonical_stem in _bell_schedule_conflict_stems(stem):
+            canonical_path = by_stem.get(canonical_stem.casefold())
+            if canonical_path and os.path.abspath(canonical_path) != os.path.abspath(path):
+                break
+        if canonical_path and os.path.abspath(canonical_path) != os.path.abspath(path):
+            conflicts.append((path, canonical_path))
+    return sorted(conflicts, key=lambda pair: os.path.basename(pair[0]).casefold())
+
+
+def _bell_schedule_conflict_problems(cal_dir: str) -> list[str]:
+    return [
+        (
+            f"Bell Schedule conflict copy '{os.path.basename(copy_path)}' matches "
+            f"'{os.path.basename(canonical_path)}'; choose which duplicate to delete."
+        )
+        for copy_path, canonical_path in _bell_schedule_conflicts(cal_dir)
+    ]
+
+
 def list_bell_schedule_files():
     """[{name, label, schedule_id, path}] for every 'Bell Schedule*'-prefixed
-    CSV in the workspace Calendars folder."""
+    CSV in the workspace Calendars folder, excluding recognized sync copies."""
     cal_dir = _calendars_dir()
     if not cal_dir or not os.path.isdir(cal_dir):
         return []
 
+    conflict_paths = {
+        os.path.abspath(copy_path)
+        for copy_path, _canonical_path in _bell_schedule_conflicts(cal_dir)
+    }
     found = []
     for path in sorted(_glob.glob(os.path.join(cal_dir, "*.csv"))):
         name = os.path.basename(path)
         if not name.lower().startswith("bell schedule"):
+            continue
+        if os.path.abspath(path) in conflict_paths:
             continue
         found.append({
             "name": name,
@@ -85,6 +146,9 @@ def load_bell_schedules() -> tuple:
 
     schedules = {}
     all_problems = []
+    cal_dir = _calendars_dir()
+    if cal_dir and os.path.isdir(cal_dir):
+        all_problems.extend(_bell_schedule_conflict_problems(cal_dir))
 
     for file_info in list_bell_schedule_files():
         path = file_info["path"]

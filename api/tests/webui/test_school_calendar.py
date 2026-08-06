@@ -330,7 +330,11 @@ def test_preview_change_reports_affected_dates_and_base_revision(tmp_path):
     assert preview["base_revision"] == 1
     assert preview["is_noop"] is False
     assert preview["operation"] == "date_change"
-    assert preview["conflicts"] == []
+    assert preview["conflicts"] == [{
+        "date": "2026-08-18", "reason": "kind_change",
+        "from_kind": "instructional", "from_label": None,
+        "to_kind": "no_school",
+    }]
     assert preview["affected"] == [{
         "date": "2026-08-18",
         "before": {"kind": "instructional", "schedule_id": "ordinary"},
@@ -356,6 +360,78 @@ def test_preview_change_range_with_weekday_subset(tmp_path):
     assert problems == []
     dates = [entry["date"] for entry in preview["affected"]]
     assert dates == ["2026-08-21", "2026-08-28"]  # the two Fridays in range
+
+
+def test_preview_change_warns_on_holiday_and_apply_preserves_label(tmp_path):
+    _seeded(tmp_path, no_school_dates=["2026-08-19"],
+            date_labels={"2026-08-19": "Staff Development"})
+    preview, problems = sc.preview_change(
+        kind="instructional", schedule_id="friday_schedule",
+        dates=["2026-08-19"], known_schedule_ids={"friday_schedule"}, root=_root(tmp_path))
+
+    assert problems == []
+    assert preview["conflicts"] == [{
+        "date": "2026-08-19", "reason": "kind_change",
+        "from_kind": "no_school", "from_label": "Staff Development",
+        "to_kind": "instructional",
+    }]
+    altered_projection = dict(preview, conflicts=[{"date": "2026-08-19", "reason": "reviewed"}])
+    applied, problems = sc.apply_change(
+        altered_projection, expected_revision=preview["base_revision"], root=_root(tmp_path))
+    assert problems == []
+    assert applied["days"]["2026-08-19"] == {
+        "kind": "instructional", "schedule_id": "friday_schedule",
+        "label": "Staff Development",
+    }
+
+
+def test_preview_change_without_weekdays_warns_on_weekends(tmp_path):
+    _seeded(tmp_path, coverage_start="2026-08-17", coverage_end="2026-08-24")
+    preview, problems = sc.preview_change(
+        kind="instructional", schedule_id="friday_schedule",
+        date_from="2026-08-17", date_to="2026-08-24",
+        known_schedule_ids={"friday_schedule"}, root=_root(tmp_path))
+
+    assert problems == []
+    assert preview["conflicts"] == [
+        {"date": "2026-08-22", "reason": "weekend", "from_kind": "no_school",
+         "from_label": "Weekend", "to_kind": "instructional"},
+        {"date": "2026-08-23", "reason": "weekend", "from_kind": "no_school",
+         "from_label": "Weekend", "to_kind": "instructional"},
+    ]
+
+
+def test_instructional_label_is_preserved_without_one_and_replaced_when_supplied(tmp_path):
+    _seeded(tmp_path)
+    path = tmp_path / "Library" / "Calendars" / "School Calendar.json"
+    document = _read_document(tmp_path)
+    document["days"]["2026-08-17"]["label"] = "Early release"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    preserve_preview, problems = sc.preview_change(
+        kind="instructional", schedule_id="friday_schedule", dates=["2026-08-17"],
+        known_schedule_ids={"friday_schedule"}, root=_root(tmp_path))
+    assert problems == []
+    assert preserve_preview["mutation"]["entries"] == {
+        "2026-08-17": {"kind": "instructional", "schedule_id": "friday_schedule",
+                        "label": "Early release"},
+    }
+    applied, problems = sc.apply_change(
+        preserve_preview, expected_revision=1, root=_root(tmp_path))
+    assert problems == []
+    assert applied["days"]["2026-08-17"]["label"] == "Early release"
+
+    replace_preview, problems = sc.preview_change(
+        kind="instructional", schedule_id="friday_schedule", label="First day",
+        dates=["2026-08-18"], known_schedule_ids={"friday_schedule"}, root=_root(tmp_path))
+    assert problems == []
+    assert replace_preview["affected"][0]["after"] == {
+        "kind": "instructional", "schedule_id": "friday_schedule", "label": "First day",
+    }
+    applied, problems = sc.apply_change(
+        replace_preview, expected_revision=2, root=_root(tmp_path))
+    assert problems == []
+    assert applied["days"]["2026-08-18"]["label"] == "First day"
 
 
 def test_preview_change_refuses_both_dates_and_range(tmp_path):

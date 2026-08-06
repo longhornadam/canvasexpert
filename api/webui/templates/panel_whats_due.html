@@ -111,21 +111,17 @@
   /* Follow the bell. Without this the panel keeps last period's work on the
      wall until the next refresh lands, which is the whole point of following
      a schedule rather than a pinned course. */
-  function atBoundary(hhmm) {
+  function atBoundary(minutes) {
     clearTimeout(boundaryTimer);
-    if (!hhmm) return;
-    var parts = String(hhmm).split(":");
-    var when = new Date();
-    when.setHours(+parts[0], +parts[1], 20, 0);   /* just past the bell */
-    var wait = when - new Date();
-    if (wait > 0) boundaryTimer = setTimeout(load, wait);
+    var wait = Panel.msUntilMinutes(minutes);
+    if (wait !== null) boundaryTimer = setTimeout(load, wait);
   }
 
   function render(payload) {
     var sub = payload.course_name || payload.block || "";
     if (payload.relation === "next" && sub) sub = "Next · " + sub;
     document.getElementById("sub").textContent = sub;
-    atBoundary(payload.next_change);
+    atBoundary(payload.next_change_minutes);
 
     if (payload.state !== "ready") {
       showMessage(payload.message || "Nothing to show.");

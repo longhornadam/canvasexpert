@@ -988,7 +988,8 @@ def preview_change(*, kind, schedule_id=None, label=None, dates=None, date_from=
     Rejects an instructional new value naming a Bell Schedule outside
     ``known_schedule_ids`` here, at write time. The returned preview carries
     a normalized ``mutation`` (kind/entry/dates) and a ``preview_digest``;
-    ``affected`` is display-only -- apply never trusts it as write authority.
+    ``affected`` and advisory ``conflicts`` are display-only -- apply never
+    trusts them as write authority.
     """
     if kind not in DAY_KINDS:
         return None, [f"kind must be one of {sorted(DAY_KINDS)}"]
@@ -1027,11 +1028,35 @@ def preview_change(*, kind, schedule_id=None, label=None, dates=None, date_from=
         new_entry["label"] = label
 
     affected = []
+    date_entries = {}
+    conflicts = []
     for date_key in target_dates:
         before = doc["days"].get(date_key)
-        affected.append({"date": date_key, "before": before, "after": dict(new_entry)})
+        after = dict(new_entry)
+        if kind == "instructional" and label is None and isinstance(before, dict):
+            if "label" in before:
+                after["label"] = before["label"]
+                date_entries[date_key] = after
+        affected.append({"date": date_key, "before": before, "after": after})
+
+        if date_key and _parse_date(date_key).weekday() >= 5:
+            reason = "weekend"
+        elif isinstance(before, dict) and before.get("kind") != kind:
+            reason = "kind_change"
+        else:
+            reason = None
+        if reason:
+            conflicts.append({
+                "date": date_key,
+                "reason": reason,
+                "from_kind": before.get("kind") if isinstance(before, dict) else None,
+                "from_label": before.get("label") if isinstance(before, dict) else None,
+                "to_kind": kind,
+            })
 
     mutation = {"kind": kind, "entry": new_entry, "dates": target_dates}
+    if date_entries:
+        mutation["entries"] = date_entries
     preview = {
         "operation": "date_change",
         "base_revision": doc["revision"],
@@ -1039,7 +1064,7 @@ def preview_change(*, kind, schedule_id=None, label=None, dates=None, date_from=
         "mutation": mutation,
         "affected": affected,
         "is_noop": all(entry["before"] == entry["after"] for entry in affected),
-        "conflicts": [],
+        "conflicts": conflicts,
     }
     preview["preview_digest"] = _digest_for_mutation("date_change", doc["revision"], mutation)
     return preview, []
@@ -1072,13 +1097,18 @@ def apply_change(preview: dict, *, expected_revision: int, root=None) -> tuple[d
         return None, ["stale or altered preview: digest mismatch"]
 
     entry = mutation["entry"]
+    entries = mutation.get("entries", {})
+    if not isinstance(entries, dict) or any(not isinstance(value, dict)
+                                            for value in entries.values()):
+        return None, ["a valid preview is required"]
     dates = mutation["dates"]
-    if all(doc["days"].get(date_key) == entry for date_key in dates):
+    if all(doc["days"].get(date_key) == entries.get(date_key, entry)
+           for date_key in dates):
         return doc, []
 
     next_days = dict(doc["days"])
     for date_key in dates:
-        next_days[date_key] = dict(entry)
+        next_days[date_key] = dict(entries.get(date_key, entry))
 
     next_doc = {**doc, "days": next_days, "revision": doc["revision"] + 1}
     parsed, problems = parse_document(next_doc)

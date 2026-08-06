@@ -67,6 +67,16 @@ def _local_minutes(now=None) -> int:
     return current.hour * 60 + current.minute
 
 
+def _bell_schedule_label(schedule_id) -> str:
+    """Return a teacher-facing label for a loaded Bell Schedule id."""
+    value = str(schedule_id or "").strip().replace("_", " ")
+    prefix = "bell schedule "
+    if value.casefold().startswith(prefix):
+        value = value[len(prefix):].strip()
+        return f"{value.title()} Bell Schedule" if value else "Bell Schedule"
+    return value.title() or "Bell Schedule"
+
+
 def _iso(value) -> str:
     return value.isoformat() if isinstance(value, date) else str(value or "")
 
@@ -307,21 +317,32 @@ def bobcat_hour_payload(*, now=None, calendar_reader=None,
             "no_regular_classes": "No regular classes today.",
         }.get(state, "Calendar needs attention. Open Calendar in Canvas Expert.")
         return _empty_bobcat(state or "calendar_needs_attention", day=day, message=message)
-    if resolution.get("schedule_id") != "bell_schedule_bobcat_hour":
+    schedule_id = resolution.get("schedule_id")
+    meetings = schedules.get(schedule_id) or []
+    bobcat_label = _bell_schedule_label(schedule_id)
+    if not any(
+        isinstance(meeting, dict)
+        and str(meeting.get("period_id") or "").casefold().startswith("bobcat")
+        for meeting in meetings
+    ):
         return _empty_bobcat("not_bobcat_hour_day", day=day,
-                             message="Today uses another Bell Schedule.")
+                             message=f"Today uses the {bobcat_label}, which has no Bobcat Hour.")
 
-    meetings = schedules.get("bell_schedule_bobcat_hour") or []
     slots = {}
+    found_bobcat_ids = set()
     for meeting in meetings:
         if not isinstance(meeting, dict):
             continue
         period_id = str(meeting.get("period_id") or "")
+        if period_id.casefold().startswith("bobcat"):
+            found_bobcat_ids.add(period_id)
         if period_id in ("bobcat_a", "bobcat_b"):
             slots[period_id[-1].upper()] = meeting
     if set(slots) != {"A", "B"}:
+        found = ", ".join(sorted(found_bobcat_ids, key=str.casefold)) or "none"
         return _empty_bobcat("calendar_needs_attention", day=day,
-                             message="Bobcat Hour Bell Schedule needs attention.")
+                             message=("Bobcat Hour needs two periods, bobcat_a and bobcat_b. "
+                                      f"This Bell Schedule has: {found}."))
 
     projection, failure = _projection(day, day, projection_reader)
     if projection is None:

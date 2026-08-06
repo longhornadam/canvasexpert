@@ -607,8 +607,18 @@
     }
     lastPreview = data;
     var affected = data.affected || [];
+    var conflicts = data.conflicts || [];
+    var conflictHtml = conflicts.length
+      ? '<div><strong>Advisory:</strong> ' + conflicts.map(function (conflict) {
+        var reason = conflict.reason === "weekend" ? "weekend" : "day kind changes";
+        var label = conflict.from_label ? ' ("' + esc(conflict.from_label) + '")' : "";
+        return '<div>' + friendlyDate(conflict.date) + ": " + esc(reason) +
+          "; " + esc(conflict.from_kind || "(unset)") + label +
+          " &rarr; " + esc(conflict.to_kind || "") + '</div>';
+      }).join("") + '</div>'
+      : "";
     resultEl.hidden = false;
-    resultEl.innerHTML = affected.map(function (entry) {
+    resultEl.innerHTML = conflictHtml + affected.map(function (entry) {
       return '<div>' + friendlyDate(entry.date) + ": " +
         describeDayEntry(entry.before) + " &rarr; " + describeDayEntry(entry.after) + '</div>';
     }).join("");

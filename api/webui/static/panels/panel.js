@@ -85,6 +85,19 @@
     el.classList.add("p-in");
   }
 
+  /* Return the delay until a local minute-past-midnight boundary, just after
+     the bell. Presentation text is deliberately not an input here: the
+     server's numeric field is the timer contract. */
+  function msUntilMinutes(minutes, now) {
+    if (typeof minutes !== "number" || !Number.isFinite(minutes) ||
+        minutes < 0 || minutes > 1439) return null;
+    now = now || new Date();
+    var when = new Date(now.getTime());
+    when.setHours(0, minutes, 20, 0);  /* just past the bell */
+    var wait = when - now;
+    return wait > 0 && Number.isFinite(wait) ? wait : null;
+  }
+
   /* ── paginated list ───────────────────────────────────────────────────
      cfg = { body, dots, items, render(item, rowEl), every, divisor,
              minRow, maxRow }                                            */
@@ -174,6 +187,7 @@
     rowsThatFit: rowsThatFit,
     onResize: onResize,
     fade: fade,
+    msUntilMinutes: msUntilMinutes,
     list: function (cfg) { return new List(cfg); }
   };
 })(window);

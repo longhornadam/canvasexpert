@@ -95,6 +95,56 @@ BOBCAT_SCHEDULE = {"bell_schedule_bobcat_hour": [
 ]}
 
 
+def test_bobcat_uses_the_calendar_schedule_id_for_renamed_schedule():
+    renamed_id = "bell_schedule_bobcat_hour_laptop_kd1ofhrj"
+    renamed_schedule = {renamed_id: BOBCAT_SCHEDULE["bell_schedule_bobcat_hour"]}
+
+    out = bobcat_hour_payload(
+        now=NOW,
+        calendar_reader=lambda: (_calendar(renamed_id), []),
+        bell_schedule_reader=lambda: (renamed_schedule, []),
+        projection_reader=_reader(_projection()),
+    )
+
+    assert out["state"] == "nothing_scheduled"
+    assert set(out["groups"]) == {"A", "B"}
+
+
+def test_bobcat_reports_normal_day_with_schedule_name_when_no_bobcat_periods_exist():
+    schedule_id = "bell_schedule_friday"
+    out = bobcat_hour_payload(
+        now=NOW,
+        calendar_reader=lambda: (_calendar(schedule_id), []),
+        bell_schedule_reader=lambda: ({schedule_id: [
+            {"period_id": "1", "start": "8:00 AM", "end": "9:00 AM"},
+        ]}, []),
+        projection_reader=_reader(_projection()),
+    )
+
+    assert out["state"] == "not_bobcat_hour_day"
+    assert out["message"] == "Today uses the Friday Bell Schedule, which has no Bobcat Hour."
+    assert "needs attention" not in out["message"]
+
+
+def test_bobcat_reports_expected_and_found_period_ids_for_incomplete_schedule():
+    schedule_id = "bell_schedule_bobcat_hour"
+    out = bobcat_hour_payload(
+        now=NOW,
+        calendar_reader=lambda: (_calendar(schedule_id), []),
+        bell_schedule_reader=lambda: ({schedule_id: [
+            {"period_id": "1", "start": "8:00 AM", "end": "9:00 AM"},
+            {"period_id": "bobcat", "start": "12:11 PM", "end": "1:13 PM"},
+        ]}, []),
+        projection_reader=_reader(_projection()),
+    )
+
+    assert out["state"] == "calendar_needs_attention"
+    assert out["message"] == (
+        "Bobcat Hour needs two periods, bobcat_a and bobcat_b. "
+        "This Bell Schedule has: bobcat."
+    )
+
+
 def test_bobcat_groups_matching_activities_and_exposes_current_block():
     events = [
         {"id": "club-2", "kind": "club", "label": "Z Club", "detail": "Room 2",

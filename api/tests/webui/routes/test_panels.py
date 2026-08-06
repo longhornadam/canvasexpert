@@ -200,6 +200,7 @@ def test_follows_the_block_meeting_right_now(_at, _resolve):
     assert out["relation"] == "now"
     assert out["block"] == "ELA 7 A"
     assert out["next_change"] == "9:05 AM"   # re-reads at the bell, not on drift
+    assert out["next_change_minutes"] == 545
 
 
 def test_between_blocks_looks_ahead_to_the_next_one(_at, _resolve):
@@ -209,6 +210,7 @@ def test_between_blocks_looks_ahead_to_the_next_one(_at, _resolve):
     assert out["course_id"] == "333"
     assert out["relation"] == "next"
     assert out["next_change"] == "10:05 AM"
+    assert out["next_change_minutes"] == 605
 
 
 def test_before_the_first_bell_shows_the_first_block(_at, _resolve):
@@ -293,9 +295,26 @@ def test_the_data_route_carries_the_schedule_context(monkeypatch, _schedule):
     assert body["relation"] == "now"
     assert body["block"] == "ELA 7 B"
     assert body["next_change"] == "11:59 PM"
+    assert body["next_change_minutes"] == 1439
     # With no catalog the panel still labels itself from the schedule rather
     # than showing a blank header.
     assert body["course_name"] == "ELA 7 B"
+
+
+def test_no_course_payload_has_no_boundary_minutes(_at, _resolve):
+    out = _resolve("", now=_at(16, 0))
+
+    assert out["next_change"] == ""
+    assert out["next_change_minutes"] is None
+
+
+def test_whats_due_template_uses_numeric_boundary_data():
+    template = (Path(__file__).resolve().parents[4]
+                / "api" / "webui" / "templates" / "panel_whats_due.html")
+    source = template.read_text(encoding="utf-8")
+
+    assert "atBoundary(payload.next_change_minutes)" in source
+    assert 'split(":")' not in source
 
 
 def test_known_themes_resolve_to_themselves():
