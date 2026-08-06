@@ -537,11 +537,12 @@ skill files, served from the Library/AI Authoring folder (`/api/ai-ta/file?name=
 - **Authoring skills** — Author a Quiz / Assignment / Page / Rubric (the Forge
   contracts as skills). These same files power the Work tools inline
   "Forge one with your LLM" copy buttons.
-- **Scoring skills** — one per rubric in the Library/Rubrics folder; paste a skill, then
-  paste essays one at a time.
 - **MagicSchool Toolkit** — setup recipes for building dedicated MagicSchool tools.
 
-**Rebuild library** regenerates the files from the contracts + rubric folder.
+**Rebuild library** regenerates the files from the contracts. The per-rubric "Score
+with ..." skill files are retired (no vault, no way back into a PowerGrader
+session; the Safe AI Packet flow covers AI-assisted scoring properly); rebuilding
+also sweeps out any unedited copy an earlier rebuild left behind.
 
 ---
 

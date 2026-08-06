@@ -7,6 +7,13 @@ from api.webui import rf
 ROOT = Path(__file__).resolve().parents[3]
 RUBRIC_DIR = ROOT / "api" / "rubrics"
 
+# A real ZIP -- which is what a .docx actually is -- rather than random
+# bytes, so this reflects what a teacher's AI chat actually hands back.
+DOCX_FILES = {
+    "[Content_Types].xml": b"<Types xmlns=\"x\"/>",
+    "word/document.xml": b"<w:document>a real Word document body, not JSON</w:document>",
+}
+
 
 def load(name):
     data, problems = rf.parse_file(str(RUBRIC_DIR / name))
@@ -71,19 +78,12 @@ def test_canvas_rubric_payload_shapes_and_range_flag():
     assert payload2["rubric"]["criteria"]["0"]["criterion_use_range"] is False
 
 
-def test_student_page_html_and_scoring_prompt_use_file_content():
+def test_student_page_html_uses_file_content():
     classroom = load("ELA7_Classroom_Writing_Rubric.txt")
     html = rf.student_page_html(classroom)
     for criterion in classroom["criteria"]:
         for rating in criterion["ratings"]:
             assert rating["student_description"] in html
-
-    prompt = rf.scoring_prompt(classroom)
-    for criterion in classroom["criteria"]:
-        for rating in criterion["ratings"]:
-            assert rating["description"] in prompt
-    for key in classroom["scoring_guidance"]["output_template"].keys():
-        assert f'"{key}"' in prompt
 
 
 def test_validate_flags_each_rule():
@@ -110,3 +110,15 @@ def test_validate_flags_each_rule():
         mutator(data)
         problems = rf.validate(data)
         assert any(expected in problem for problem in problems), (expected, problems)
+
+
+def test_parse_file_on_a_docx_upload_returns_a_readable_problem_instead_of_raising(tmp_path, _make_zip):
+    docx_path = tmp_path / "rubric.docx"
+    _make_zip(docx_path, DOCX_FILES)
+
+    data, problems = rf.parse_file(str(docx_path))
+
+    assert data is None
+    assert len(problems) == 1
+    assert "Word document" in problems[0]
+    assert "paste the JSON directly" in problems[0]

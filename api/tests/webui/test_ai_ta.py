@@ -1,14 +1,17 @@
 from pathlib import Path
 
 from api import runtime_paths
-from api.webui import ai_ta
+from api.webui import ai_ta, rf
 
 # D1 (feature-freeze hardening initiative) removed the repo `api/rubrics`
 # folder from the runtime rubric PICKER's default search path (rubrics come
-# only from the synced Library folder now). This test's own point is
-# build_library's "one scoring skill per rubric on file" behavior, not that
-# fallback, so it passes the repo's example rubrics explicitly instead of
-# relying on the removed default.
+# only from the synced Library folder now). These tests pass the repo's
+# example rubrics explicitly instead of relying on the removed default:
+# test_build_library_writes_expected_files uses them as a smoke check that
+# build_library tolerates real rubric files, and
+# test_build_library_sweeps_unedited_retired_score_files uses them to
+# recognize an unedited leftover from before per-rubric scoring skills were
+# retired.
 _EXAMPLE_RUBRICS = [runtime_paths.api_root() / "rubrics"]
 
 
@@ -30,7 +33,6 @@ def test_build_library_writes_expected_files(tmp_path):
     assert "Author a Page (PageForge).txt" in names
     assert "Author a Rubric (RubricForge).txt" in names
     assert "About This Folder.txt" in names
-    assert "Score with - ELA 7 Standard Writing Rubric.txt" in names
 
     for path in target.iterdir():
         if path.is_dir():
@@ -46,9 +48,6 @@ def test_build_library_writes_expected_files(tmp_path):
     assert quiz_text.lstrip().startswith("# QuizForge")
     assert "STIMULUS is for actual content students must reference" in quiz_text
 
-    score_text = (target / "Score with - ELA 7 Standard Writing Rubric.txt").read_text(encoding="utf-8")
-    assert "Conventions & Language" in score_text
-
     sentinel = target / "START HERE - CanvasAgent.txt"
     sentinel.write_text(sentinel.read_text(encoding="utf-8") + "\nSENTINEL\n", encoding="utf-8")
 
@@ -58,6 +57,45 @@ def test_build_library_writes_expected_files(tmp_path):
     assert names2 == names
     # first / second return paths across both flat files and toolkit subdir
     assert "SENTINEL" in sentinel.read_text(encoding="utf-8")
+
+
+def test_build_library_sweeps_unedited_retired_score_files(tmp_path):
+    """The per-rubric scoring-skill generator is retired (docs/handoffs/senior/
+    copilot-file-based-ai-assist-trace.md section 8.2): build_library no
+    longer writes "Score with - ..." files. A copy an earlier rebuild left
+    behind is removed only while it still matches what the generator would
+    have produced from the rubric on file; a teacher's edit, or a file with
+    no rubric to match it against, survives.
+    """
+    target = tmp_path / "AI Authoring"
+    target.mkdir(parents=True)
+
+    ela7_path = _EXAMPLE_RUBRICS[0] / "ELA7_Classroom_Writing_Rubric.txt"
+    data, problems = rf.parse_file(str(ela7_path))
+    assert data is not None and not problems
+
+    # Unedited leftover: byte-for-byte what the retired generator produced
+    # from this rubric. Should be swept.
+    unedited = target / "Score with - ELA 7 Standard Writing Rubric.txt"
+    unedited.write_text(ai_ta._legacy_rubric_score_text(data), encoding="utf-8")
+
+    # Matches a real rubric's filename (District ECR), but a teacher's own
+    # words on top of it. Should survive.
+    edited = target / "Score with - District ECR Rubric (0-10).txt"
+    edited.write_text("a teacher's own notes on top of this file\n", encoding="utf-8")
+
+    # No rubric on file produces this filename. Should survive untouched --
+    # the sweep can only act on what it can verify.
+    orphaned = target / "Score with - A Rubric Nobody Has Anymore.txt"
+    orphaned.write_text("no matching rubric exists for this one\n", encoding="utf-8")
+
+    ai_ta.build_library(target, rubric_folders=_EXAMPLE_RUBRICS)
+
+    assert not unedited.exists()
+    assert edited.exists()
+    assert edited.read_text(encoding="utf-8") == "a teacher's own notes on top of this file\n"
+    assert orphaned.exists()
+    assert orphaned.read_text(encoding="utf-8") == "no matching rubric exists for this one\n"
 
 
 def test_toolkit_subfolder_created(tmp_path):

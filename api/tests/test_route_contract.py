@@ -93,7 +93,6 @@ EXPECTED = [
     ('/api/portfolio/merged', ('POST',)),
     ('/api/push/preview', ('POST',)),
     ('/api/rf/files', ('GET',)),
-    ('/api/rf/scoring-prompt', ('GET',)),
     ('/api/rf/validate', ('POST',)),
     ('/api/routines', ('GET',)),
     ('/api/routines/run', ('POST',)),

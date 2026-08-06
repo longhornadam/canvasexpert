@@ -3,7 +3,7 @@ import os
 import uuid as _uuid
 
 from fastapi import File, Form, UploadFile
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
 
 from .. import af, config, pf, rf, runner
 from api import operational_log, runtime_paths
@@ -26,6 +26,14 @@ def register_validation_routes(
         os.makedirs(TEMP_DIR, exist_ok=True)
         if file and file.filename:
             data = await file.read()
+            try:
+                data.decode("utf-8")
+            except UnicodeDecodeError:
+                return JSONResponse({"ok": False, "error": (
+                    "this file is not text (it looks like a Word document, PDF, or "
+                    "other binary file): ask your AI chat for a .md, .json, or .txt "
+                    "file, or paste the JSON directly"
+                )})
             with open(path, "wb") as fh:
                 fh.write(data)
         elif content.strip():
@@ -166,10 +174,3 @@ def register_validation_routes(
             summary = rf.summary(data)
         return JSONResponse({"ok": data is not None and not problems,
                              "problems": problems, "summary": summary})
-
-    @router.get("/api/rf/scoring-prompt")
-    def api_rf_scoring_prompt(path: str):
-        data, problems = rf.parse_file(path)
-        if data is None or problems:
-            return JSONResponse({"ok": False, "problems": problems or ["unreadable file"]}, status_code=400)
-        return PlainTextResponse(rf.scoring_prompt(data))

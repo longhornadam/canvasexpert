@@ -18,6 +18,12 @@ def parse_file(path):
             text = f.read()
     except OSError as e:
         return None, [f"cannot read file: {e}"]
+    except UnicodeDecodeError:
+        return None, [
+            "this file is not text (it looks like a Word document, PDF, or other "
+            "binary file): ask your AI chat for a .md, .json, or .txt file, or paste "
+            "the JSON directly"
+        ]
     return parse(text)
 
 
@@ -221,51 +227,6 @@ def student_page_html(d):
         parts.append(reminder)
     parts.append(f'<p><strong>Total: {_text(total)} points</strong></p>')
     return "\n".join(parts)
-
-
-def scoring_prompt(d):
-    lines = [
-        "You are an experienced teacher scoring student writing with the rubric below.",
-        "Score each criterion independently and honestly — a response can be excellent in",
-        "one criterion and weak in another. Use the full range. Quote briefly from the",
-        "student's work to justify every score.",
-        "",
-        f"RUBRIC: {_text(d.get('title'))} ({total_points(d)} points)",
-        "",
-    ]
-
-    for i, criterion in enumerate(d.get("criteria") or []):
-        lines.append(f"CRITERION {i + 1}: {_text(criterion.get('name'))} — {_text(criterion.get('points'))} points")
-        cq = _text(criterion.get('core_question'))
-        if cq:
-            lines.append(f"Core question: {cq}")
-        for rating in criterion.get("ratings") or []:
-            range_min = rating.get("range_min")
-            band = f" (band {range_min}-{rating.get('points')})" if range_min is not None else ""
-            lines.append(f"  [{rating.get('points')} pts{band}] {_text(rating.get('label'))}: {_text(rating.get('description'))}")
-        lines.append("")
-
-    guidance = d.get("scoring_guidance") or {}
-    if guidance:
-        lines.append("SCORING PRINCIPLES")
-        for item in guidance.get("design_principles") or []:
-            lines.append(f"- {_text(item)}")
-        for item in guidance.get("consistency_tips") or []:
-            lines.append(f"- {_text(item)}")
-        scr_scaling = _text(guidance.get("scr_scaling"))
-        if scr_scaling:
-            lines.append(scr_scaling)
-        lines.append("")
-
-        output_template = guidance.get("output_template")
-        if output_template is not None:
-            lines.append("Return your evaluation as JSON in exactly this structure, then a short")
-            lines.append("plain-English summary a student could read:")
-            lines.append(json.dumps(output_template, indent=2))
-            lines.append("")
-
-    lines.append("I will paste one student response at a time. Wait for it.")
-    return "\n".join(lines)
 
 
 def summary(d):

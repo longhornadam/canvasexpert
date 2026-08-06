@@ -8,7 +8,6 @@
     "hideBanner",
     "moduleChoice",
     "pushContent",
-    "setRubricStatus",
     "syncRubricControls",
   ].every(function (name) { return typeof push[name] === "function"; }) &&
     typeof window.localToISO === "function";
@@ -97,22 +96,6 @@
         });
       }
     }).catch(function (e) { log("ERROR: " + e); });
-  });
-
-  document.getElementById("btn-af-copy-prompt")?.addEventListener("click", async function () {
-    if (!requireReady()) return;
-    var path = afRubricSel?.value;
-    if (!path) return;
-    push.setRubricStatus("Copying…", "");
-    try {
-      var resp = await fetch("/api/rf/scoring-prompt?path=" + encodeURIComponent(path));
-      var text = await resp.text();
-      if (!resp.ok) throw new Error(text || "Could not load prompt");
-      await navigator.clipboard.writeText(text);
-      push.setRubricStatus("Copied — paste into MagicSchool or Copilot", "ok");
-    } catch (e) {
-      push.setRubricStatus(String(e), "error");
-    }
   });
 
   document.getElementById("btn-af-push")?.addEventListener("click", function () {

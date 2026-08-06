@@ -10,7 +10,7 @@
     Equip your AI assistant to draft Canvas-ready materials from the Canvas Expert contracts.
   </p>
   <p class="hint ce-ai-expert__intro">
-    The Canvas tools act on Canvas; this page provides paste-ready authoring and scoring instructions.
+    The Canvas tools act on Canvas; this page provides paste-ready authoring instructions.
     Each skill below is a paste-ready file.
   </p>
 
@@ -55,34 +55,6 @@
     </div>
     {% endif %}{% endfor %}
     {% endfor %}
-  </div>
-
-  <!-- ── Scoring skills ──────────────────────────────────────────────────── -->
-  <div class="ai-section" id="scoring">
-    <h2>Scoring skills</h2>
-    <p class="hint ce-ai-scoring-note">
-      One skill per rubric. Paste a skill file, then paste student essays one at a time.
-      New rubrics in your Rubrics folder appear here after
-      <button type="button" id="btn-rebuild-inline" class="small">Rebuild</button>
-      <span id="rebuild-status" class="hint ce-ai-inline-status"></span>
-    </p>
-    {% set score_files = [] %}
-    {% for f in ai_ta_files %}{% if f.label.startswith("Score with") %}{% set _ = score_files.append(f) %}{% endif %}{% endfor %}
-    {% if score_files %}
-    {% for f in score_files %}
-    <div class="ai-skill-row">
-      <div class="ai-skill-body">
-        <strong>{{ f.label }}</strong>
-      </div>
-      <div class="ai-skill-actions">
-        <button type="button" class="small btn-copy-skill" data-name="{{ f.label | e }}">Copy</button>
-        <a href="/api/ai-ta/file?name={{ f.label | urlencode }}" download class="ce-ai-download">Download</a>
-      </div>
-    </div>
-    {% endfor %}
-    {% else %}
-    <p class="hint">No scoring skills yet — rebuild the library after adding rubric files to your Rubrics folder.</p>
-    {% endif %}
   </div>
 
   <!-- ── MagicSchool Toolkit ─────────────────────────────────────────────── -->
@@ -195,7 +167,7 @@ document.addEventListener("click", async function(e) {
   }
 });
 
-// Rebuild (inline button in scoring section)
+// Rebuild (footer button)
 async function doRebuild(statusEl, btn) {
   if (btn) { btn.disabled = true; btn.textContent = "Rebuilding..."; }
   if (statusEl) statusEl.textContent = "Rebuilding...";
@@ -214,9 +186,6 @@ async function doRebuild(statusEl, btn) {
   }
 }
 
-document.getElementById("btn-rebuild-inline")?.addEventListener("click", function() {
-  doRebuild(document.getElementById("rebuild-status"), this);
-});
 document.getElementById("btn-ai-ta-rebuild")?.addEventListener("click", function() {
   doRebuild(document.getElementById("ai-ta-status"), this);
 });

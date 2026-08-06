@@ -24,6 +24,12 @@ def parse_file(path):
             text = f.read()
     except OSError as e:
         return None, [f"cannot read file: {e}"]
+    except UnicodeDecodeError:
+        return None, [
+            "this file is not text (it looks like a Word document, PDF, or other "
+            "binary file): ask your AI chat for a .md, .json, or .txt file, or paste "
+            "the JSON directly"
+        ]
     return parse(text)
 
 

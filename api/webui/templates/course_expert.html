@@ -69,7 +69,7 @@
       </span>
     </li>
     <li>Ask your assistant for the content you want. For example, you might use ChatGPT, Claude, or another AI chat.</li>
-    <li>Paste JSON or upload the returned file on the tab below, then validate it before review.</li>
+    <li>Upload the returned file or paste JSON on the tab below, then validate it before review.</li>
   </ol>
   <p class="ce-hint ce-u-m0">All the instruction files live in your AI Authoring folder. <a href="/ai-expert">See them all</a></p>
 </section>
@@ -162,7 +162,7 @@
           <button type="button" class="file-src-btn" data-src="select">Library</button>
           <button type="button" class="file-src-btn active" data-src="paste">Paste JSON</button>
           <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-          <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+          <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt,.md">
         </div>
         <textarea class="file-src-paste" placeholder="Paste your &lt;QUIZFORGE_JSON&gt;…"></textarea>
         <p class="file-src-hint ce-initially-hidden"></p>
@@ -325,7 +325,7 @@
             <button type="button" class="file-src-btn active" data-src="select">Library</button>
             <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt,.md">
           </div>
           <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…"></textarea>
           <p class="file-src-hint ce-initially-hidden"></p>
@@ -348,7 +348,6 @@
             </label>
           </div>
           <div class="ce-actions ce-u-mt-3">
-            <button type="button" id="btn-af-copy-prompt" class="small">Copy scoring prompt</button>
             <span id="af-rubric-status" class="hint ce-u-align-center"></span>
           </div>
         </div>
@@ -452,7 +451,7 @@
             <button type="button" class="file-src-btn active" data-src="select">Library</button>
             <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt,.md">
           </div>
           <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;PAGEFORGE_JSON&gt;…"></textarea>
           <p class="file-src-hint ce-initially-hidden"></p>
@@ -508,7 +507,7 @@
             <button type="button" class="file-src-btn active" data-src="select">Library</button>
             <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
-            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt">
+            <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt,.md">
           </div>
           <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;RUBRICFORGE_JSON&gt;…"></textarea>
           <p class="file-src-hint ce-initially-hidden"></p>

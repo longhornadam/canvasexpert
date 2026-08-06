@@ -44,23 +44,39 @@ def test_workspace_paths_are_resolved_at_call_time(tmp_path, monkeypatch):
 
     def fake_parse(path):
         if str(tmp_path / "two" / "Library" / "Rubrics") in str(path):
-            return {"title": "Workspace Two Marker"}, []
+            return {"title": "Workspace Two Marker", "total_points": 10, "criteria": []}, []
         return None, ["not a workspace sentinel"]
 
     monkeypatch.setattr(ai_ta.rf, "parse_file", fake_parse)
-    monkeypatch.setattr(
-        ai_ta.rf,
-        "scoring_prompt",
-        lambda data: f"rubric marker: {data['title']}",
-    )
+
+    def seed_stale_score_file():
+        # The retired per-rubric scoring-skill generator used to write files
+        # shaped like this one. _sweep_retired_scoring_skills only recognizes
+        # it as an untouched leftover by re-parsing the rubric that produced
+        # it, so seeding it here and asserting it gets swept proves
+        # build_library consulted workspace TWO's Rubrics folder for this
+        # call, not a stale cached one.
+        path = tmp_path / "two" / "Library" / "AI Authoring" / "Score with - Workspace Two Marker.txt"
+        path.write_text(
+            ai_ta._legacy_rubric_score_text(
+                {"title": "Workspace Two Marker", "total_points": 10, "criteria": []}
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    stale = seed_stale_score_file()
     built = ai_ta.build_library(runtime_paths.ai_ta_dir(), rubric_folders=None)
-    assert (tmp_path / "two" / "Library" / "AI Authoring" / "Score with - Workspace Two Marker.txt").exists()
-    assert not (tmp_path / "one" / "Library" / "AI Authoring" / "Score with - Workspace Two Marker.txt").exists()
+    assert not stale.exists()
     assert all(Path(path).is_relative_to(tmp_path / "two") for path in built)
 
+    # Same proof again, this time through the HTTP route, which resolves both
+    # the target dir and the rubric folder internally rather than taking them
+    # as explicit arguments.
+    stale = seed_stale_score_file()
     rebuilt = json.loads(library.api_ai_ta_rebuild().body)
     assert rebuilt["ok"] is True
-    assert "Workspace Two Marker" in "\n".join(rebuilt["files"])
+    assert not stale.exists()
     assert not hasattr(config, "RUBRIC_" + "FOLDERS")
 
     cwd = tmp_path / "unrelated-cwd"
