@@ -30,6 +30,11 @@
     return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
+  function readNote(d) {
+    if (!d || d.parsed_count === undefined || d.parsed_count === null) return '';
+    return ' Read ' + d.parsed_count + ' result(s) total.';
+  }
+
   function getSession() {
     return queue.getSession ? queue.getSession() : null;
   }
@@ -54,7 +59,7 @@
       buttons.push('<button type="button" class="small" data-open-path="' + esc(artifacts.packet_folder) + '">Open packet folder</button>');
     }
     if (copilot.packet_folder) {
-      buttons.push('<button type="button" class="small" data-open-path="' + esc(copilot.packet_folder) + '">Open Copilot batch folder</button>');
+      buttons.push('<button type="button" class="small" data-open-path="' + esc(copilot.packet_folder) + '">Open AI chat batch folder</button>');
     }
     buttons.push('<a class="small" href="/api/powergrader/session/' + encodeURIComponent(sessionId) + '/packet" style="padding:4px 10px;border:1px solid var(--ce-rule);border-radius:var(--r-sm);text-decoration:none;background:var(--card);color:var(--ink)">Download packet ZIP</a>');
     packetActions.innerHTML = buttons.join('');
@@ -81,8 +86,8 @@
     var total = copilot.student_count || getStudents().length || 0;
     return '<div class="pg-copilot-note">' +
       'This is one PowerGrader session. Do not start a new PowerGrader session for later batches.<br>' +
-      'For each batch, start a new Copilot chat, upload files 01, 02, and 03, paste the batch prompt, then paste Copilot&apos;s JSON back here.<br>' +
-      '<span>These files use pseudonyms and remove obvious student identifiers before you upload them. Review the files before sending them to Copilot.</span>' +
+      'For each batch, start a new AI chat, upload files 01, 02, and 03, paste the batch prompt, then paste your AI chat&apos;s JSON back here.<br>' +
+      '<span>These files use pseudonyms and remove obvious student identifiers before you upload them. Review the files before sending them to your AI chat.</span>' +
       '</div>' +
       '<div class="pg-copilot-summary">Imported ' + imported + ' of ' + batches.length + ' batches. AI suggestions loaded for ' + loaded + ' of ' + total + ' students.</div>' +
       batches.map(renderCopilotBatch).join('');
@@ -103,15 +108,18 @@
         '<span class="pg-batch-status ' + esc(status) + '">' + esc(titleCase(status)) + '</span>' +
       '</div>' +
       '<div class="pg-copilot-batch-meta">' + esc(meta) + '</div>' +
-      '<div class="pg-copilot-batch-meta">Start a new Copilot chat for this batch. Upload files 01, 02, and 03 from this folder.</div>' +
+      '<div class="pg-copilot-batch-meta">Start a new AI chat for this batch. Upload files 01, 02, and 03 from this folder.</div>' +
       warningHtml +
       '<div class="pg-copilot-batch-actions">' +
         '<button type="button" class="small" data-open-path="' + esc(batch.folder || '') + '">Open batch folder</button>' +
-        '<button type="button" class="small" data-copy-batch-prompt="' + esc(batch.batch_id || '') + '">Copy Copilot prompt</button>' +
+        '<button type="button" class="small" data-copy-batch-prompt="' + esc(batch.batch_id || '') + '">Copy AI chat prompt</button>' +
       '</div>' +
       '<details class="pg-import-box">' +
         '<summary>Paste JSON for ' + esc(label) + '</summary>' +
-        '<textarea data-batch-results="' + esc(batch.batch_id || '') + '" rows="5"></textarea>' +
+        '<label>Or choose a compatible result file ' +
+          '<input type="file" accept=".json,.txt,.md" data-batch-result-file="' + esc(batch.batch_id || '') + '">' +
+        '</label>' +
+        '<textarea data-batch-results="' + esc(batch.batch_id || '') + '" rows="5" placeholder="[{&quot;pseudonym&quot;:&quot;...&quot;,&quot;item_id&quot;:&quot;...&quot;,&quot;score&quot;:2,&quot;feedback&quot;:&quot;...&quot;}]"></textarea>' +
         '<div class="pg-import-actions">' +
           '<button type="button" class="primary small" data-import-batch="' + esc(batch.batch_id || '') + '">Import this batch</button>' +
           '<span class="hint" data-batch-status-text="' + esc(batch.batch_id || '') + '"></span>' +
@@ -178,7 +186,7 @@
         return refreshSessionAfterImport(function(){
           if (importStatus) {
             var warnings = d.validation && d.validation.warnings ? d.validation.warnings.length : 0;
-            importStatus.textContent = 'Imported ' + d.updated + ' AI suggestion(s)' + (warnings ? ' with ' + warnings + ' warning(s).' : '.');
+            importStatus.textContent = 'Imported ' + d.updated + ' AI suggestion(s)' + (warnings ? ' with ' + warnings + ' warning(s).' : '.') + readNote(d);
           }
           if (queue.showStatus) queue.showStatus('AI suggestions imported for review.', false);
         });
@@ -205,6 +213,23 @@
       if (importStatus) importStatus.textContent = 'Result file loaded locally. Validate and import it into this session.';
     };
     reader.onerror = function () { if (importStatus) importStatus.textContent = 'Could not read that result file.'; };
+    reader.readAsText(file, 'utf-8');
+  });
+
+  document.addEventListener('change', function (e) {
+    var fileInput = e.target.closest('[data-batch-result-file]');
+    if (!fileInput) return;
+    var batchId = fileInput.getAttribute('data-batch-result-file') || '';
+    var file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    var textarea = document.querySelector('[data-batch-results="' + cssEscape(batchId) + '"]');
+    var status = batchStatusEl(batchId);
+    var reader = new FileReader();
+    reader.onload = function () {
+      if (textarea) textarea.value = String(reader.result || '');
+      if (status) status.textContent = 'Result file loaded locally. Validate and import it into this session.';
+    };
+    reader.onerror = function () { if (status) status.textContent = 'Could not read that result file.'; };
     reader.readAsText(file, 'utf-8');
   });
 
@@ -245,7 +270,7 @@
     var status = batchStatusEl(batchId);
     var text = textarea ? textarea.value.trim() : '';
     if (!text) {
-      if (status) status.textContent = 'Paste Copilot JSON first.';
+      if (status) status.textContent = 'Paste AI JSON first.';
       return;
     }
     importBatchBtn.disabled = true;
@@ -265,7 +290,7 @@
           var batch = findBatch(batchId);
           var label = batch && batch.label ? batch.label : batchId;
           var freshStatus = batchStatusEl(batchId);
-          if (freshStatus) freshStatus.textContent = label + ' imported: ' + d.updated + ' AI suggestion(s).';
+          if (freshStatus) freshStatus.textContent = label + ' imported: ' + d.updated + ' AI suggestion(s).' + readNote(d);
           if (queue.showStatus) queue.showStatus(label + ' imported for review.', false);
         });
       })

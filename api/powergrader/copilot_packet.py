@@ -18,11 +18,11 @@ MIN_STUDENTWORK_TOKENS = 20_000
 PACKET_VERSION = 1
 
 _LARGE_CONTEXT_WARNING = (
-    "Assignment information plus rubric/persona is large; Copilot may miss student work. "
+    "Assignment information plus rubric/persona is large; your AI chat may miss student work. "
     "Consider shorter context or API scoring."
 )
 _OVERSIZED_STUDENT_WARNING = (
-    "This one student's SAFE work is larger than the target Copilot budget. "
+    "This one student's SAFE work is larger than the target AI chat budget. "
     "Score this batch carefully or manually."
 )
 
@@ -101,7 +101,7 @@ def _needs_compact_layout(safe_dir: str, packet_name: str, assignment_name: str)
     """
     safe_name = _safe_assignment_name(assignment_name)
     return workspace.needs_compact_layout(
-        safe_dir, packet_name, "Copilot Batches", "Batch 99 of 99",
+        safe_dir, packet_name, "AI Chat Batches", "Batch 99 of 99",
         f"03 - {safe_name} - StudentWork - SAFE - Batch 99 of 99.md",
     )
 
@@ -144,7 +144,7 @@ def build_copilot_batches(
     if compact:
         bat_container = os.path.abspath(os.path.join(safe_dir, packet_name, "Batches"))
     else:
-        bat_container = os.path.abspath(os.path.join(safe_dir, packet_name, "Copilot Batches"))
+        bat_container = os.path.abspath(os.path.join(safe_dir, packet_name, "AI Chat Batches"))
 
     file_01_text = support.assignment_info_text(assignment_name, llm_bundle)
     file_02_text = support.rubric_persona_text(assignment_name, rubric_text, persona)
@@ -163,21 +163,21 @@ def build_copilot_batches(
     total_batches = len(raw_batches)
     batches: list[dict] = []
 
-    readme_path = os.path.join(bat_container, "README - Copilot Steps.md")
+    readme_path = os.path.join(bat_container, "README - Steps for your AI chat.md")
     if compact:
         # README is a bit shorter to keep paths within budget
         readme_path = os.path.join(bat_container, "README.md")
     readme_lines = [
-        "# Copilot Steps",
+        "# Steps for your AI chat",
         "",
         "This is one PowerGrader session. Do not start a new PowerGrader session for each batch.",
         "",
         "For each batch:",
         "",
-        "1. Start a new Copilot chat.",
+        "1. Start a new AI chat.",
         "2. Upload files 01, 02, and 03 from that batch folder.",
         "3. Paste the batch prompt from PowerGrader.",
-        "4. Copy Copilot's JSON response.",
+        "4. Copy your AI chat's JSON response.",
         "5. Return to the same PowerGrader session.",
         "6. Paste results into the matching batch import box.",
         "7. Continue with the next batch.",

@@ -59,7 +59,7 @@ def test_build_copilot_batches_creates_one_small_batch(tmp_path):
     assert info["batch_count"] == 1
     assert Path(info["packet_folder"]).is_absolute()
     assert Path(info["readme_path"]).is_file()
-    assert Path(info["readme_path"]).name == "README - Copilot Steps.md"
+    assert Path(info["readme_path"]).name == "README - Steps for your AI chat.md"
     readme = Path(info["readme_path"]).read_text(encoding="utf-8")
     assert "This is one PowerGrader session. Do not start a new PowerGrader session for each batch." in readme
     assert "Paste results into the matching batch import box." in readme
@@ -146,11 +146,11 @@ def test_build_copilot_batches_warns_for_oversized_single_student(tmp_path):
     assert batch["student_count"] == 1
     assert batch["expected_results"] == [{"pseudonym": "Atlas Reed", "item_id": "501"}]
     assert batch["warnings"]
-    assert "larger than the target Copilot budget" in batch["warnings"][0]
+    assert "larger than the target AI chat budget" in batch["warnings"][0]
 
 
 def test_build_copilot_batches_compact_layout_deep_workspace(tmp_path, monkeypatch):
-    """In a deep workspace, Copilot batches use compact layout with short names."""
+    """In a deep workspace, AI chat batches use compact layout with short names."""
     # Pad the root to simulate a deep workspace
     padding = max(1, 80 - len(str(tmp_path)))
     deep_root = tmp_path / ("D" * padding)
@@ -170,7 +170,7 @@ def test_build_copilot_batches_compact_layout_deep_workspace(tmp_path, monkeypat
         assignment_id="assignment-1000002",
     )
 
-    # Verify compact layout: batches under "Batches" not "Copilot Batches"
+    # Verify compact layout: batches under "Batches" not "AI Chat Batches"
     assert "Batches" in info["packet_folder"] or "Batches" in str(info["batches"][0]["folder"])
     # All returned paths must be <= budget
     assert len(info["packet_folder"]) <= workspace.TEACHER_VISIBLE_BUDGET
@@ -191,7 +191,7 @@ def test_build_copilot_batches_compact_layout_deep_workspace(tmp_path, monkeypat
 
 
 def test_build_copilot_batches_normal_layout_short_root(tmp_path):
-    """Under a short root, Copilot batches use the normal readable layout."""
+    """Under a short root, AI chat batches use the normal readable layout."""
     bundle = _bundle([
         _student("Sparky McGee", "42", "A short response."),
     ])

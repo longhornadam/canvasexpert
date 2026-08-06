@@ -54,7 +54,7 @@
     lateScoreBtn.hidden = true;
     lateScoreBtn.disabled = true;
     // Relabel for packet mode
-    lateScoreBtn.textContent = isPacket ? 'Generate Late Copilot Batch' : 'Score New Late Work';
+    lateScoreBtn.textContent = isPacket ? 'Generate Late AI Chat Batch' : 'Score New Late Work';
     var initialMissing = (late.initial_missing_user_ids || []).length;
     var knownCount = (late.known_user_ids || []).length;
     var scoredCount = (late.scored_user_ids || []).length;
@@ -64,7 +64,7 @@
       '<div class="pg-late-detail-row">Known in queue: ' + knownCount + '</div>',
     ];
     if (isPacket) {
-      details.push('<div class="pg-late-detail-row">Copilot batches generated: ' + generatedCount + '</div>');
+      details.push('<div class="pg-late-detail-row">AI chat batches generated: ' + generatedCount + '</div>');
     } else {
       details.push('<div class="pg-late-detail-row">Already appended: ' + scoredCount + '</div>');
     }
@@ -150,7 +150,7 @@
   lateScoreBtn && lateScoreBtn.addEventListener('click', function(){
     lateScoreBtn.disabled = true;
     var mode = currentMode();
-    var label = mode === 'packet' ? 'Generating late Copilot batch…' : 'Scoring new late submissions…';
+    var label = mode === 'packet' ? 'Generating late AI chat batch…' : 'Scoring new late submissions…';
     if (lateSummary) lateSummary.textContent = label;
     fetch('/api/powergrader/session/' + sessionId + '/late-score', {method:'POST'})
       .then(function(r){ return r.json(); })

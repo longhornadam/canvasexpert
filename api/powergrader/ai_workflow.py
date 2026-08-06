@@ -288,11 +288,11 @@ def run_ai_workflow(
                 copilot_detail += f" {copilot_warnings[0]}"
             privacy_steps.append(privacy.privacy_step(
                 "copilot_batches",
-                "Created Copilot batch folders",
+                "Created AI chat batch folders",
                 "warn" if copilot_warnings else "ok",
                 copilot_detail,
                 path=copilot_info.get("packet_folder"),
-                action_label="Open Copilot batch folder",
+                action_label="Open AI chat batch folder",
             ))
 
         if safe_students == 0:

@@ -150,7 +150,7 @@ def update_late_watch_after_generate(session: dict, appended_user_ids: list[str]
     late_watch["generated_user_ids"] = sorted(generated_ids)
     late_watch["last_generated"] = now_iso
     late_watch["last_summary"] = (
-        f"{len(appended_user_ids or [])} late submission(s) processed for Copilot batch."
+        f"{len(appended_user_ids or [])} late submission(s) processed for AI chat batch."
         if appended_user_ids else "No late submissions processed."
     )
 
