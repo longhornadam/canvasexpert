@@ -182,6 +182,10 @@
     feedbackEl.focus();
   });
 
+  // Both panel buttons shipped without a listener, which went unnoticed because the
+  // panel itself was never unhidden. applyAiFeedback had no caller at all.
+  useAiScore && useAiScore.addEventListener('click', applyAiScore);
+  useAiFeed && useAiFeed.addEventListener('click', applyAiFeedback);
   saveNextBtn && saveNextBtn.addEventListener('click', function(){ saveGrade('approved', true); });
   skipBtn && skipBtn.addEventListener('click', function(){ saveGrade('skipped', true); });
   pushOneBtn && pushOneBtn.addEventListener('click', pushOne);

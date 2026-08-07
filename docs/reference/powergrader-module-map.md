@@ -30,6 +30,7 @@ namespace shims.
 |---|---|
 | Start/session assembly | `start_workflow.py`, `session_builder.py`, `session_store.py` |
 | Teacher save/push | `session_actions.py`, `queue_review.js` |
+| Blind-first scoring | `blind_first.py`, `queue_blind_first.js` |
 | AI workflow and SAFE artifacts | `ai_workflow.py`, `ai_workflow_support.py`, `queue_privacy.js` |
 | Copilot packets/import | `copilot_packet.py`, `copilot_packet_support.py`, `import_results.py`, `queue_import.js` |
 | MCP scoring packet/staging | `scoring_packet.py`, `api/mcp_server/tools.py` (`list_scoring_sessions`, `get_scoring_packet`, `stage_scores`), reusing `import_results.py` |
@@ -39,12 +40,13 @@ namespace shims.
 | Scheduled autoscore | `autoscore_queue.py`, `autoscore_claims.py`, `scheduled_autoscore_support.py`, `routes/routines_powergrader.py` |
 | Automatic-post policy | `autopush_policy.py`, `autopush_policy_result.py`, `push_context.py`, `interactive_autopush.py` |
 | Setup/catalog flow | `setup_core.js`, `setup_sessions.js`, `setup_autoscore.js`, `course_catalog.py`, `routes/course_catalog.py` |
-| Queue state/rendering | `queue_core.js`, `queue_review.js`, `queue_import.js`, `queue_late_catchup.js`, `queue_privacy.js`, `queue_writing_timeline.js` |
+| Queue state/rendering | `queue_core.js`, `queue_review.js`, `queue_blind_first.js`, `queue_import.js`, `queue_late_catchup.js`, `queue_privacy.js`, `queue_writing_timeline.js` |
 | Source-material context | `api/webui/source_materials.py`, `api/webui/source_material_extractors.py` |
 
 Browser load order is template-owned. Setup loads the shim before sessions, core, and
-autoscore features. Queue loads the shim before core, review, privacy, late-catchup, and
-import features. Preserve `window.CE_POWERGRADER_SETUP` and existing queue namespace seams.
+autoscore features. Queue loads the shim before core, review, blind-first, privacy,
+late-catchup, and import features. Preserve `window.CE_POWERGRADER_SETUP` and existing
+queue namespace seams.
 
 ## Privacy and write boundaries
 
@@ -127,6 +129,65 @@ Invariants worth protecting:
   connected assistant will state the stale rule confidently. `test_mcp_server_tools.py`
   pins the two together.
 
+## AI suggestion panel
+
+`pg-ai-panel` is the standing "what did the AI say / put it back" reference in AI-mode
+sessions. It shipped unreachable: `queue_core.js` set `aiPanel.hidden = true` on every
+render and nothing ever set it false, and neither `pg-use-ai-score` nor
+`pg-use-ai-feedback` had a click listener, leaving `applyAiFeedback` with no caller
+anywhere in the app. The AI's score therefore reached the teacher only by silently
+pre-filling the score box, with no comparison surface and no way back once edited.
+
+- Visibility is `queue_core.js`'s call for ordinary AI sessions and
+  `queue_blind_first.js`'s once blind-first is on; the two compose through the single
+  `aiPanel.hidden = blindFirstActive() || …` assignment plus the render-tail hook. Do not
+  reintroduce an unconditional hide.
+- The feedback text lives in a `<details>` because in a non-blind session both boxes
+  already hold the AI's values on first render — showing the same paragraph twice above
+  the textarea is pure vertical cost. Blind-first opens it on a disagreement, where the
+  AI's reasoning is the thing being judged rather than a reference.
+- `test_powergrader_ai_suggestion_panel_is_reachable_and_wired` pins the panel, the
+  disclosure, and both listeners together, because a hidden panel is exactly why the
+  missing listeners went unnoticed.
+
+## Blind-first scoring
+
+Per-session, default off, `assisted`/`packet` only — Score myself has no suggestion to
+withhold. When on, the teacher records their own score before the AI's is shown, and the
+queue reports whether the two actually disagreed.
+
+Invariants worth protecting:
+
+- **Withholding is server-side, in `blind_first.project_session`.** `pg_get_session`
+  returns the projection, so an unrevealed `ai_score` never reaches the browser at all.
+  Hiding a populated field in the DOM would not be this feature: a number the page
+  received has already had its chance to anchor, and "hidden" is one accidental unhide
+  from visible. Verified in the browser — the client's students carry `ai_score: null`
+  while blind-first is on.
+- **The projection never mutates the stored session.** It copies each redacted student
+  first, because the caller holds the same dict the session file is written from.
+  Stripping in place would destroy the AI scores on the next save.
+- **A blind capture is written exactly once.** `_capture_blind` is guarded by
+  `has_blind_capture`; a second reveal returns the same suggestion and leaves the
+  original capture intact. Re-recording after the teacher has seen the model would turn
+  the agreement log into a record of the model agreeing with itself.
+- **Approving without revealing still records a blind score.** `save_grade` calls
+  `record_implicit_blind` inside the lock it already holds — that path is the cleanest
+  datapoint the feature produces. It deliberately does not set `ai_revealed`, so the
+  suggestion stays withheld if the teacher comes back to that student.
+- **`record_implicit_blind` is unlocked on purpose.** The interprocess half of
+  `session_store.session_lock` is not reentrant, so it takes an already-loaded session
+  rather than a session id. Do not "tidy" it into a `@_session_locked` function.
+- **`blind_score` outranks `ai_score` when pre-filling the score box** (`queue_core.js`).
+  Without that ordering the re-render straight after a reveal overwrites the number the
+  teacher just committed to — reintroducing the exact anchoring this feature removes.
+- **Turning blind-first off never un-reveals a student.** A score the teacher has seen
+  cannot be un-seen, and rewriting the record to claim otherwise would make the
+  agreement log a lie.
+- Blind capture is teacher-only session data: never a Canvas payload, receipt, or SAFE
+  artifact. Pinned by
+  `test_blind_capture_never_reaches_the_canvas_payload`.
+
 ## Symptom routing
 
 | Symptom | Start with |
@@ -135,6 +196,8 @@ Invariants worth protecting:
 | Session start or assembly | `powergrader.py::pg_start`, `start_workflow.py`, `session_builder.py` |
 | Queue rendering/navigation | `queue_core.js`, `queue_review.js` |
 | Save or reviewed push | `queue_review.js`, `session_actions.py` |
+| AI score visible too early, or reveal/agreement wrong | `blind_first.py`, `queue_blind_first.js`, `queue_core.js::renderStudent` |
+| Suggestion panel missing, or "Use AI's score/feedback" does nothing | `queue_core.js::renderStudent` (`aiPanel.hidden`), `queue_review.js` listeners |
 | Packet/import mismatch | `queue_import.js`, `import_results.py`, `copilot_packet.py` |
 | Evidence/attachments | `assignment_refresh.py`, `canvas_fetch.py`, `new_quiz_fetch.py`, `student_attachments.py` |
 | Late submission flow | `queue_late_catchup.js`, `powergrader_late.py`, `late_catchup.py` |
@@ -152,6 +215,7 @@ Core focused regressions:
 - `api/tests/test_powergrader_import_results.py`
 - `api/tests/test_powergrader_late_catchup.py`
 - `api/tests/test_writing_timeline.py`
+- `api/tests/powergrader/test_blind_first.py`
 - `api/tests/test_route_contract.py`
 
 The handoff must add the focused policy/idempotency tests owned by any changed high-risk

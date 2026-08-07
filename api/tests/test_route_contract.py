@@ -192,6 +192,8 @@ EXPECTED = [
     ('/powergrader/session/{session_id}', ('GET',)),
     ('/api/powergrader/session/{session_id}', ('GET',)),
     ('/api/powergrader/session/{session_id}/staged', ('GET',)),
+    ('/api/powergrader/session/{session_id}/blind-first', ('POST',)),
+    ('/api/powergrader/session/{session_id}/blind-reveal', ('POST',)),
     ('/api/powergrader/session/{session_id}/grade', ('POST',)),
     ('/api/powergrader/session/{session_id}/late-preview', ('POST',)),
     ('/api/powergrader/session/{session_id}/late-score', ('POST',)),

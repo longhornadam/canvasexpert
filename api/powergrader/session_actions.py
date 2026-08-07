@@ -7,6 +7,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
+from api.powergrader import blind_first
 from api.powergrader import late_catchup
 from api.powergrader import session_store
 
@@ -428,7 +429,14 @@ def save_grade(
         if student["user_id"] == user_id:
             student["teacher_score"] = score_val
             student["teacher_feedback"] = teacher_feedback.strip()
-            student["status"] = status if status in ("approved", "skipped", "pending") else "approved"
+            resolved = status if status in ("approved", "skipped", "pending") else "approved"
+            student["status"] = resolved
+            # A teacher who scores and approves without ever revealing has produced
+            # the cleanest blind datapoint there is; record it before it is lost.
+            # Unlocked call: we already hold this session's lock.
+            blind_first.record_implicit_blind(
+                session, student, score_val, student["teacher_feedback"], resolved,
+            )
             invalidate_pending_review(session)
             save_session(session)
             approved = sum(1 for item in session["students"] if item.get("status") == "approved")

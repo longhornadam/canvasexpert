@@ -20,6 +20,7 @@
   var aiPanel = document.getElementById('pg-ai-panel');
   var aiScoreVal = document.getElementById('pg-ai-score-val');
   var aiFeedTxt = document.getElementById('pg-ai-feedback-text');
+  var aiFeedDetails = document.getElementById('pg-ai-feedback-details');
   var useAiScore = document.getElementById('pg-use-ai-score');
   var useAiFeed = document.getElementById('pg-use-ai-feedback');
   var bulkPushBtn = document.getElementById('pg-bulk-push');
@@ -67,6 +68,11 @@
   function isAiMode() {
     return MODE === 'assisted' || MODE === 'packet';
   }
+  function blindFirstActive() {
+    var settings = session && session.blind_first;
+    return isAiMode() && !!(settings && settings.enabled);
+  }
+  queue.blindFirstActive = blindFirstActive;
   function setAiDraftState(active) {
     var value = active ? 'true' : 'false';
     if (aiDraftBadge) {
@@ -100,6 +106,7 @@
         }
         queue.setSession(d.session);
         queue.setStudents(session.students || []);
+        queue.blindFirstSummary = d.blind_first || null;
         rubricText = session.rubric_name || '';
         if (rubricText) {
           rubricPanel.hidden = false;
@@ -114,6 +121,7 @@
         if (queue.renderLateWatch) queue.renderLateWatch(session);
         if (queue.renderPacketPanel) queue.renderPacketPanel(session);
         if (queue.renderAutoPost) queue.renderAutoPost(session);
+        if (queue.renderBlindFirst) queue.renderBlindFirst(session);
         renderStudent(Math.min(currentIndex, Math.max(0, students.length - 1)));
         if (options.onSuccess) options.onSuccess(session);
         return true;
@@ -198,7 +206,12 @@
 
     if (st.teacher_score !== null && st.teacher_score !== undefined) {
       scoreEl.value = st.teacher_score;
-    } else if (isAiMode() && hasAiScore) {
+    } else if (st.blind_score !== null && st.blind_score !== undefined) {
+      // Once a blind score exists it outranks the model's, including on the
+      // re-render straight after a reveal. Pre-filling from ai_score here would
+      // overwrite the number the teacher just committed to.
+      scoreEl.value = st.blind_score;
+    } else if (isAiMode() && hasAiScore && !blindFirstActive()) {
       scoreEl.value = st.ai_score;
     } else {
       scoreEl.value = '';
@@ -208,7 +221,9 @@
     setAiDraftState(false);
     if (st.teacher_feedback) {
       feedbackEl.value = st.teacher_feedback;
-    } else if (isAiMode() && (hasAiScore || hasAiFeed)) {
+    } else if (blindFirstActive() && st.blind_feedback) {
+      feedbackEl.value = st.blind_feedback;
+    } else if (isAiMode() && (hasAiScore || hasAiFeed) && !blindFirstActive()) {
       feedbackEl.value = buildAiDraft(st);
       usedAiDraft = true;
     } else {
@@ -219,8 +234,15 @@
       setTimeout(function(){ try { feedbackEl.setSelectionRange(0, 0); } catch(e){} }, 0);
     }
 
-    aiPanel.hidden = true;
-    aiScoreVal.textContent = hasAiScore ? st.ai_score : 'No AI score';
+    // The panel is a "what did the AI say / put it back" reference. In an ordinary AI
+    // session both boxes already hold the AI's values on first render, so the feedback
+    // text stays collapsed until asked for; blind-first re-decides all of this at the
+    // end of the render, and opens the text on a disagreement.
+    aiPanel.hidden = blindFirstActive() || !(isAiMode() && (hasAiScore || hasAiFeed));
+    if (aiFeedDetails) aiFeedDetails.open = false;
+    aiScoreVal.textContent = hasAiScore
+      ? st.ai_score
+      : (st.blind_withheld === true ? 'Hidden until you reveal' : 'No AI score');
     aiFeedTxt.textContent = hasAiFeed ? formatAiFeedback(st.ai_feedback) : '(No AI feedback)';
     useAiScore.disabled = !hasAiScore;
     useAiFeed.disabled = !hasAiFeed;
@@ -311,6 +333,7 @@
       }
     }
     if (queue.renderNewQuizItems) queue.renderNewQuizItems(st);
+    if (queue.renderBlindFirstStudent) queue.renderBlindFirstStudent(st);
   }
 
   function buildSrcdoc(bodyHtml) {

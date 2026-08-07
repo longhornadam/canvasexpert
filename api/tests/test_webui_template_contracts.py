@@ -732,6 +732,30 @@ def test_powergrader_ai_draft_stays_out_of_feedback_text():
     assert "Restored AI feedback for editing" in review
 
 
+def test_powergrader_ai_suggestion_panel_is_reachable_and_wired():
+    """The panel shipped unreachable: hidden on every render, both buttons unwired.
+
+    ``aiPanel.hidden = true`` ran unconditionally in renderStudent and nothing ever
+    set it false, so the AI's score reached the teacher only by silently pre-filling
+    the score box. Neither button had a click listener, and applyAiFeedback had no
+    caller anywhere. Keep all three fixed together — a hidden panel is exactly why
+    the missing listeners went unnoticed.
+    """
+    template = _slurp("api/webui/templates/powergrader_queue.html")
+    core = _slurp("api/webui/static/powergrader/queue_core.js")
+    review = _slurp("api/webui/static/powergrader/queue_review.js")
+    assert 'id="pg-ai-panel"' in template
+    assert 'id="pg-use-ai-score"' in template
+    assert 'id="pg-use-ai-feedback"' in template
+    assert 'id="pg-ai-feedback-details"' in template
+    assert "aiPanel.hidden = true;" not in core, (
+        "the suggestion panel must never be unconditionally hidden again"
+    )
+    assert "aiPanel.hidden = blindFirstActive()" in core
+    assert "useAiScore.addEventListener('click', applyAiScore)" in review
+    assert "useAiFeed.addEventListener('click', applyAiFeedback)" in review
+
+
 def test_powergrader_import_uses_shared_session_id():
     """Packet links use the queue namespace session id, not an IIFE-local name."""
     js = _slurp("api/webui/static/powergrader/queue_import.js")

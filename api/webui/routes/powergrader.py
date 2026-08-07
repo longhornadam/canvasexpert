@@ -14,8 +14,8 @@ from .. import mirror_service, source_materials
 from api import course_scope, operational_log
 from api.platform_services.canvas_client import canvas_get, canvas_get_all, _canvas_send
 from ..deps import list_rubric_files, templates
-from api.powergrader import (ai_workflow, assignment_refresh, canvas_fetch, context, estimates,
-                             import_results, late_catchup, privacy,
+from api.powergrader import (ai_workflow, assignment_refresh, blind_first, canvas_fetch, context,
+                             estimates, import_results, late_catchup, privacy,
                              new_quiz_csv, new_quiz_grader,
                              session_actions, session_builder, session_store,
                              start_workflow, student_attachments, writing_timeline)
@@ -469,7 +469,13 @@ def pg_get_session(session_id: str):
     session = _load_session(session_id)
     if not session:
         return JSONResponse({"ok": False, "error": "Session not found."}, status_code=404)
-    return JSONResponse({"ok": True, "session": session})
+    # Blind-first withholds unrevealed AI scores here rather than in the browser.
+    # A value the page received has already had its chance to anchor the teacher.
+    return JSONResponse({
+        "ok": True,
+        "session": blind_first.project_session(session),
+        "blind_first": blind_first.summary(session),
+    })
 
 
 @router.get("/api/powergrader/session/{session_id}/staged")
@@ -647,6 +653,40 @@ def pg_auto_post_disable(session_id: str):
         "auto_post": auto_post,
         "auto_post_summary": session.get("auto_post_summary"),
     })
+
+
+@router.post("/api/powergrader/session/{session_id}/blind-first")
+def pg_blind_first(
+    session_id: str,
+    enabled: str = Form("true"),
+    threshold: str = Form(""),
+):
+    payload, status_code = blind_first.set_enabled(
+        session_id,
+        enabled=enabled,
+        threshold=threshold,
+        load_session=_load_session,
+        save_session=_save_session,
+    )
+    return JSONResponse(payload, status_code=status_code)
+
+
+@router.post("/api/powergrader/session/{session_id}/blind-reveal")
+def pg_blind_reveal(
+    session_id: str,
+    user_id: str = Form(""),
+    blind_score: str = Form(""),
+    blind_feedback: str = Form(""),
+):
+    payload, status_code = blind_first.reveal(
+        session_id,
+        user_id=user_id,
+        blind_score=blind_score,
+        blind_feedback=blind_feedback,
+        load_session=_load_session,
+        save_session=_save_session,
+    )
+    return JSONResponse(payload, status_code=status_code)
 
 
 @router.post("/api/powergrader/session/{session_id}/grade")

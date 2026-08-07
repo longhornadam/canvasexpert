@@ -91,6 +91,21 @@
   </div>
 </div>
 
+<!-- ── Blind-first strip ─────────────────────────────────────────────── -->
+<div id="pg-blind-strip" class="pg-privacy-strip" hidden>
+  <div class="pg-privacy-head">
+    <strong>Blind-first scoring</strong>
+    <span id="pg-blind-summary" class="pg-privacy-summary"></span>
+    <div id="pg-blind-actions" class="pg-privacy-actions">
+      <label class="pg-blind-threshold">Agreement within
+        <input type="number" id="pg-blind-threshold" min="0" step="0.5" class="ce-u-compact-input">
+        pt
+      </label>
+      <button type="button" id="pg-blind-toggle" class="small">Turn on blind-first</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Main pane ─────────────────────────────────────────────────────── -->
 <div class="pg-main">
 
@@ -115,13 +130,28 @@
     </div>
     <div id="pg-new-quiz-items" class="pg-ai-panel" hidden></div>
 
+    <!-- Blind-first: your score is recorded before the AI's is shown -->
+    <div id="pg-blind-box" class="pg-blind-box" hidden>
+      <div class="pg-blind-head">
+        <span class="pg-blind-badge">Blind-first</span>
+        <span id="pg-blind-note" class="pg-blind-note"></span>
+      </div>
+      <div class="pg-blind-actions">
+        <button type="button" id="pg-blind-reveal" class="small">Reveal AI score (R)</button>
+        <button type="button" id="pg-blind-show-anyway" class="small" hidden>Show it anyway</button>
+      </div>
+    </div>
+
     <!-- AI suggestion (manual-chat packet or API mode) -->
     <div id="pg-ai-panel" class="pg-ai-panel" hidden>
       <div class="pg-ai-header">
         <span class="pg-ai-badge-sm">✨ AI suggestion</span>
         <span class="pg-ai-score-row">Score: <strong id="pg-ai-score-val">—</strong></span>
       </div>
-      <div id="pg-ai-feedback-text" class="pg-ai-feedback-text"></div>
+      <details id="pg-ai-feedback-details" class="pg-ai-feedback-details">
+        <summary>What the AI wrote</summary>
+        <div id="pg-ai-feedback-text" class="pg-ai-feedback-text"></div>
+      </details>
       <div class="pg-ai-actions">
         <button type="button" id="pg-use-ai-score" class="small">Use AI's score (A)</button>
         <button type="button" id="pg-use-ai-feedback" class="small">Use AI's feedback</button>
@@ -169,6 +199,7 @@
   <span><kbd>→</kbd> next</span>
   <span><kbd>↓</kbd> skip</span>
   <span><kbd>↑</kbd> approve &amp; next</span>
+  <span id="pg-kbd-r-hint" hidden><kbd>R</kbd> reveal AI</span>
   <span id="pg-kbd-a-hint" hidden><kbd>A</kbd> use AI score</span>
   <span><kbd>B</kbd> bulk push</span>
 </div>
@@ -184,6 +215,7 @@
 <script src="/static/powergrader/queue_core.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_writing_timeline.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_review.js?v={{ asset_v }}"></script>
+<script src="/static/powergrader/queue_blind_first.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_new_quiz.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_privacy.js?v={{ asset_v }}"></script>
 <script src="/static/powergrader/queue_late_catchup.js?v={{ asset_v }}"></script>

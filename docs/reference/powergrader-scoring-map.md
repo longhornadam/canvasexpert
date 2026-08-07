@@ -99,6 +99,12 @@ derivation against observed `route_bytes` behavior so it cannot drift again.
   never writes AI feedback. This invariant is machine-enforced by
   `api/tests/test_grading_surface_invariant.py`, which fails the build if any file
   outside `api/powergrader/` writes `comment[text_comment]`.
+- **Blind-first withholds unrevealed AI scores from the browser, not just from the DOM.**
+  `api/powergrader/blind_first.py` owns the projection `pg_get_session` returns; a
+  session with blind-first on ships `ai_score: null` for every unrevealed student. The
+  teacher's blind capture (`blind_score`, `blind_feedback`, `blind_delta`) is teacher-only
+  session data and never enters a Canvas payload, a push receipt, a SAFE artifact, or a
+  catalog. See the Blind-first section of `docs/reference/powergrader-module-map.md`.
 - SAFE files are pseudonymized, not guaranteed anonymous; teachers review them before
   external upload.
 - CSV bytes, legacy result-folder paths, names, IDs, grades, comments, and submission
