@@ -1,5 +1,5 @@
 {% extends "layouts/workspace.html" %}
-{% from "ui/_macros.html" import rail, page_header %}
+{% from "ui/_macros.html" import rail %}
 {% block title %}PowerGrader — Canvas Expert{% endblock %}
 {% block workspace_variant %}left-main{% endblock %}
 {% block workspace_body_class %}pg-setup-body{% endblock %}
@@ -72,8 +72,6 @@
 {% endcall %}
 {% endblock %}
 
-{% block workspace_header %}{{ page_header('PowerGrader', 'Score an assignment, then post grades and feedback to Canvas.') }}{% endblock %}
-
 {% block primary %}
 
 <div class="pg-workbench-content">
@@ -104,7 +102,7 @@
           <div class="pg-route-card">
             <label class="pg-route-choice">
               <input type="radio" name="pg-mode-choice" value="packet">
-              <span><strong>Score with AI chat</strong><small>Makes a file you can paste into Claude or ChatGPT yourself.</small></span>
+              <span><strong>Score with AI chat</strong><small>Makes a file you can paste into your own AI chat yourself.</small></span>
             </label>
             <details class="pg-what">
               <summary>What is this?</summary>
