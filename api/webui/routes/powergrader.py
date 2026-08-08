@@ -5,7 +5,7 @@ import subprocess
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from api import openrouter_client as orc
 
@@ -18,7 +18,7 @@ from api.powergrader import (ai_workflow, assignment_refresh, blind_first, canva
                              estimates, import_results, late_catchup, privacy,
                              new_quiz_csv, new_quiz_grader,
                              session_actions, session_builder, session_store,
-                             start_workflow, student_attachments, writing_timeline)
+                             start_workflow, student_attachments, writing_timeline, media_recordings)
 from .powergrader_helpers import (
     build_late_preview_payload,
     build_late_watch_state,
@@ -144,6 +144,44 @@ def powergrader_queue(request: Request, session_id: str):
             mode_label=_mode_label(session.get("mode", "fast")),
         ),
     )
+
+
+@router.get("/api/powergrader/session/{session_id}/media/{stream_key}")
+def pg_media_stream(session_id: str, stream_key: str):
+    """Serve one completed canonical recording to its owning local session only."""
+    session = _load_session(session_id)
+    if not session:
+        return JSONResponse({"ok": False, "error": "Media recording not found."}, status_code=404)
+    owner = next((student for student in session.get("students") or []
+                  if any(item.get("media_recording") and item.get("stream_key") == stream_key
+                         for item in student.get("attachments") or [])), None)
+    if not owner:
+        return JSONResponse({"ok": False, "error": "Media recording not found."}, status_code=404)
+    root = workspace.workspace_root()
+    course_name = config.course_display_name(session.get("course_id")) or session.get("course_id")
+    manifest = workspace.read_assignment_evidence_manifest(
+        course_name, session.get("course_id"), str(session.get("assignment_id")), session.get("assignment_id"), root,
+    )
+    if not manifest or manifest.get("status") != "current":
+        return JSONResponse({"ok": False, "error": "Media recording is not ready for playback."}, status_code=409)
+    record = next((entry for entry in manifest.get("evidence") or []
+                   if entry.get("kind") == "media_recording" and str(entry.get("user_id")) == str(owner.get("user_id"))
+                   and media_recordings.stream_key(entry.get("evidence_id")) == stream_key), None)
+    if not record or not record.get("relative_path") or not record.get("canonical_sha256"):
+        return JSONResponse({"ok": False, "error": "Media recording is not ready for playback."}, status_code=409)
+    path = os.path.abspath(os.path.join(root, record["relative_path"]))
+    if not workspace.path_within_workspace(path, root) or not os.path.isfile(workspace.extended_path(path)):
+        return JSONResponse({"ok": False, "error": "Media recording is not ready for playback."}, status_code=409)
+    try:
+        if media_recordings._sha256(path) != record["canonical_sha256"]:
+            return JSONResponse({"ok": False, "error": "Media recording verification failed."}, status_code=409)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Media recording is not ready for playback."}, status_code=409)
+    return FileResponse(path, media_type="audio/wav", headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, private",
+        "Pragma": "no-cache",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 @router.get("/api/powergrader/sessions")
 def list_sessions():
@@ -300,11 +338,18 @@ def pg_start(
         response_kind=response_kind,
         new_quiz_snapshot=is_new_quiz,
     )
+    if any(s.get("submission_type") == "media_recording" for s in submitted):
+        late_watch.update({
+            "supported": False,
+            "enabled": False,
+            "reason": "Late AI catch-up is unavailable for a session containing media recordings.",
+        })
 
     # AI workflow
+    media_user_ids = {str(s.get("user_id")) for s in submitted if s.get("submission_type") == "media_recording"}
     ai_result = ai_workflow.run_ai_workflow(
         mode=mode,
-        submitted=submitted,
+        submitted=[s for s in submitted if str(s.get("user_id")) not in media_user_ids],
         assignment_name=assignment_name,
         assignment_description=assignment_description,
         course_id=course_id,
@@ -331,6 +376,10 @@ def pg_start(
     privacy_steps = ai_result["privacy_steps"]
     privacy_artifacts = ai_result["privacy_artifacts"]
     ai_by_uid = ai_result["ai_by_uid"]
+    ai_failures = dict(ai_result.get("ai_failures") or {})
+    for user_id in media_user_ids:
+        ai_by_uid.pop(user_id, None)
+        ai_failures[user_id] = {"code": "media_analysis_unavailable", "message": "Media recording analysis is unavailable; grade this recording manually."}
     late_watch["source_context"] = ai_result.get("source_context") or {}
 
     # Roster context
@@ -344,7 +393,7 @@ def pg_start(
         submitted=submitted,
         ai_by_uid=ai_by_uid,
         ai_item_by_uid=ai_result.get("ai_item_by_uid") or {},
-        ai_failures=ai_result.get("ai_failures") or {},
+        ai_failures=ai_failures,
         roster_settings=roster_settings,
         tier_map=tier_map,
         monitored=monitored,
@@ -369,6 +418,7 @@ def pg_start(
         str(auto_post).lower() in {"1", "true", "yes", "on"}
         and mode in ("assisted", "packet")
         and not is_new_quiz
+        and not media_user_ids
     )
 
     session = start_workflow.build_start_session(

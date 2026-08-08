@@ -3,10 +3,13 @@
 from datetime import datetime
 
 from api.powergrader.student_attachments import eligibility_decision
+from api.powergrader import media_recordings
 
 
 def _attachment_metadata(attachment: dict) -> dict:
     """Persist review metadata only; never persist a Canvas/signed URL."""
+    if attachment.get("media_recording"):
+        return media_recordings.review_metadata(attachment)
     allowed = (
         "filename", "display_name", "local_path", "declared_size", "actual_size",
         "size", "detected_media_type", "media_type", "download_status",
@@ -62,6 +65,7 @@ def build_students(
         if expected_count is None and not attachments:
             expected_count = 0
         eligibility = eligibility_decision(attachments, expected_count=expected_count)
+        has_media_recording = any(item.get("media_recording") for item in attachments)
         requires_speedgrader = any(
             "upload" in str(item.get("type") or "").lower().replace("_", "-")
             or (str(item.get("type") or "").lower() != "essay" and item.get("earned_score") is None)
@@ -79,6 +83,8 @@ def build_students(
             "attachment_expected_count": expected_count,
             "new_quiz_items": new_quiz_items,
             "attachment_eligibility": eligibility,
+            "has_media_recording": has_media_recording,
+            "analysis_unavailable": "Media recording analysis is unavailable; grade this recording manually." if has_media_recording else "",
             "new_quiz_files_error": s.get("new_quiz_files_error"),
             "speedgrader_required": requires_speedgrader,
             "code_files":    code_files,

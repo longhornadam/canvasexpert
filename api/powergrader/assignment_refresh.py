@@ -14,6 +14,7 @@ from api.platform_services import workspace
 
 
 REFRESH_BINARY_LIMIT = 10 * 1024 * 1024
+MEDIA_CLASS_LIMIT = 500 * 1024 * 1024
 
 
 class RefreshBudget:
@@ -66,6 +67,40 @@ def _existing_records(manifest, root, course_id, assignment_id, kind):
     return reusable
 
 
+def _existing_media_records(manifest, root, course_id, assignment_id):
+    reusable = {}
+    for entry in (manifest or {}).get("evidence", []):
+        if entry.get("kind") != "media_recording" or entry.get("course_id") != str(course_id) or entry.get("assignment_id") != str(assignment_id):
+            continue
+        media_id = str(entry.get("evidence_id") or "")
+        original_rel, canonical_rel = entry.get("original_relative_path"), entry.get("relative_path")
+        if not media_id or not original_rel or not canonical_rel:
+            continue
+        original_path = os.path.abspath(os.path.join(root, original_rel))
+        canonical_path = os.path.abspath(os.path.join(root, canonical_rel))
+        if not (workspace.path_within_workspace(original_path, root) and workspace.path_within_workspace(canonical_path, root)
+                and os.path.isfile(original_path) and os.path.isfile(canonical_path)):
+            continue
+        from api.powergrader import media_recordings
+        try:
+            if (media_recordings._sha256(original_path) != entry.get("original_sha256")
+                    or media_recordings._sha256(canonical_path) != entry.get("canonical_sha256")):
+                continue
+        except OSError:
+            continue
+        reusable[media_id] = {
+            "filename": "recording", "item_id": media_id, "item_link": media_id,
+            "attempt": entry.get("attempt") or 1, "download_status": "reused",
+            "extraction_status": "validated", "ai_eligible": False, "local_only": True,
+            "media_recording": True, "analysis_unavailable": True,
+            "actual_size": entry.get("actual_size"), "duration_seconds": entry.get("duration_seconds"),
+            "original_path": original_path, "canonical_path": canonical_path,
+            "original_sha256": entry.get("original_sha256"), "canonical_sha256": entry.get("canonical_sha256"),
+            "content_indicator": entry.get("content_indicator") or {}, "warnings": [],
+        }
+    return reusable
+
+
 def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
     """Refresh one assignment and return URL-free submission material plus scope state."""
     root = workspace.workspace_root()
@@ -78,6 +113,7 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
     evidence_assignment_name = str(assignment_id)
     existing = workspace.read_assignment_evidence_manifest(course_name, course_id, evidence_assignment_name, assignment_id, root)
     budget = RefreshBudget()
+    media_budget = RefreshBudget(MEDIA_CLASS_LIMIT)
     cached_new_quiz, _cache_state = new_quizzes.read_fresh_snapshot(
         course_id, assignment_id, root=root,
         max_age_hours=config.mirror_serve_max_age_hours(),
@@ -110,6 +146,10 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
         canvas_fetch.ingest_ordinary_attachments(subs or [], course_name=course_name, course_id=course_id,
             assignment_name=evidence_assignment_name, assignment_id=assignment_id, byte_budget=budget,
             target_path=target_path, reusable_records=reusable, require_identity=True)
+        canvas_fetch.ingest_media_recordings(subs or [], course_name=course_name, course_id=course_id,
+            assignment_name=evidence_assignment_name, assignment_id=assignment_id, target_path=target_path,
+            byte_budget=media_budget,
+            reusable_records=_existing_media_records(existing, root, course_id, assignment_id))
 
     evidence = []
     incomplete = bool(conflicts)
@@ -122,10 +162,13 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
             item_id = str(attachment.get("item_id") or "")
             source_id = str(attachment.get("evidence_id") or item_id or attachment.get("id") or "")
             kind = "new_quiz" if submission.get("new_quiz_attempt") is not None else "ordinary"
+            if attachment.get("media_recording"):
+                kind = "media_recording"
             if kind == "ordinary":
                 # Canvas file IDs are the only acceptable ordinary evidence identity.
                 source_id = str(attachment.get("item_id") or "")
-            rel = _relative(attachment.get("local_path"), root)
+            private_path = attachment.get("canonical_path") if kind == "media_recording" else attachment.get("local_path")
+            rel = _relative(private_path, root)
             record = {"kind": kind, "course_id": str(course_id), "assignment_id": str(assignment_id),
                 "user_id": uid, "submission_id": str(submission.get("id") or ""), "attempt": attempt,
                 "evidence_id": source_id, "content_indicator": attachment.get("content_indicator") or _indicator(attachment), "relative_path": rel,
@@ -133,7 +176,15 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
                 "ai_eligible": bool(attachment.get("ai_eligible")), "local_only": bool(attachment.get("local_only")),
                 "extraction_status": attachment.get("extraction_status"), "warnings": attachment.get("warnings") or [],
                 "acquisition": _safe_error(attachment)}
-            if not source_id or not rel or attachment.get("download_status") not in {"downloaded", "reused"}:
+            if kind == "media_recording":
+                record.update({
+                    "original_relative_path": _relative(attachment.get("original_path"), root),
+                    "duration_seconds": attachment.get("duration_seconds"),
+                    "original_sha256": attachment.get("original_sha256"),
+                    "canonical_sha256": attachment.get("canonical_sha256"),
+                })
+            if (not source_id or not rel or attachment.get("download_status") not in {"downloaded", "reused"}
+                    or (kind == "media_recording" and not (record.get("original_relative_path") and record.get("original_sha256") and record.get("canonical_sha256")))):
                 incomplete = True
             evidence.append(record)
         if submission.get("new_quiz_files_error"):
@@ -142,7 +193,8 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
     manifest = {"version": 1, "course_id": str(course_id), "assignment_id": str(assignment_id),
         "refreshed_at": datetime.now(timezone.utc).isoformat(), "status": status,
         "assignment_indicators": _indicator(assignment), "assignment_name": assignment_name, "evidence": evidence,
-        "binary_budget_bytes": REFRESH_BINARY_LIMIT, "binary_bytes_reserved": budget.used}
+        "binary_budget_bytes": REFRESH_BINARY_LIMIT, "binary_bytes_reserved": budget.used,
+        "media_budget_bytes": MEDIA_CLASS_LIMIT, "media_bytes_reserved": media_budget.used}
     path = None
     if not conflicts:
         path = workspace.write_assignment_evidence_manifest(manifest, course_name=course_name, course_id=course_id,

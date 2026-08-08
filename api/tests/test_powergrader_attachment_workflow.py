@@ -40,6 +40,31 @@ def test_course_display_name_prefers_saved_nickname(monkeypatch):
     assert courses.course_display_name("missing-course") == "missing-course"
 
 
+def test_media_recording_has_one_expected_evidence_item_when_canvas_source_is_missing(monkeypatch):
+    monkeypatch.setattr(canvas_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    submissions = [{"user_id": "synthetic-user", "submission_type": "media_recording", "attachments": []}]
+    canvas_fetch.ingest_media_recordings(
+        submissions, course_name="Synthetic", course_id="course", assignment_name="Assignment", assignment_id="assignment",
+    )
+    row = submissions[0]
+    assert row["expected_attachment_count"] == 1
+    assert len(row["attachments"]) == 1
+    assert row["attachments"][0]["error_code"] == "media_source_missing"
+
+
+def test_media_source_url_is_transport_only_and_removed_from_submissions(monkeypatch):
+    monkeypatch.setattr(canvas_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
+    submissions = [{"user_id": "synthetic-user", "submission_type": "media_recording", "attachments": [],
+                    "media_comment": {"media_id": "media", "display_name": "synthetic.wav",
+                                      "media_type": "audio/wav", "url": "https://canvas.test/signed-private"}}]
+    canvas_fetch.ingest_media_recordings(
+        submissions, course_name="Synthetic", course_id="course", assignment_name="Assignment", assignment_id="assignment",
+        download=lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("synthetic download failure")),
+    )
+    assert "media_comment" not in submissions[0]
+    assert "signed-private" not in json.dumps(submissions)
+
+
 def test_ordinary_ingestion_preserves_all_formats_and_routes_shared_gate(tmp_path, monkeypatch):
     monkeypatch.setattr(assignment_refresh.canvas_fetch, "canvas_headers", lambda: ({"Authorization": "synthetic"}, "https://canvas.test"))
     monkeypatch.setattr(canvas_fetch.workspace, "workspace_root", lambda: str(tmp_path))

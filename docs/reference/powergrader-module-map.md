@@ -34,7 +34,7 @@ namespace shims.
 | AI workflow and SAFE artifacts | `ai_workflow.py`, `ai_workflow_support.py`, `queue_privacy.js` |
 | Copilot packets/import | `copilot_packet.py`, `copilot_packet_support.py`, `import_results.py`, `queue_import.js` |
 | MCP scoring packet/staging | `scoring_packet.py`, `api/mcp_server/tools.py` (`list_scoring_sessions`, `get_scoring_packet`, `stage_scores`), reusing `import_results.py` |
-| Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `new_quiz_fetch.py`, `student_attachments.py` |
+| Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `media_recordings.py`, `new_quiz_fetch.py`, `student_attachments.py` |
 | Writing Timeline | `writing_timeline.py`, `student_attachments.py::attach_writing_timelines`, `queue_writing_timeline.js` |
 | Late catch-up | `late_catchup.py`, `routes/powergrader_late.py`, `queue_late_catchup.js` |
 | Scheduled autoscore | `autoscore_queue.py`, `autoscore_claims.py`, `scheduled_autoscore_support.py`, `routes/routines_powergrader.py` |
@@ -44,7 +44,7 @@ namespace shims.
 | Source-material context | `api/webui/source_materials.py`, `api/webui/source_material_extractors.py` |
 
 Browser load order is template-owned. Setup loads the shim before sessions, core, and
-autoscore features. Queue loads the shim before core, review, blind-first, privacy,
+autoscore features. Queue loads the shim before core, media-recording playback, review, blind-first, privacy,
 late-catchup, and import features. Preserve `window.CE_POWERGRADER_SETUP` and existing
 queue namespace seams.
 
@@ -64,7 +64,11 @@ queue namespace seams.
     idempotency, and receipt checks;
   - one newly created assisted/packet interactive session, under the per-session lock from
     authoritative reload through final save.
-- Interactive auto-post is unavailable to Score myself, Classic Quiz, and New Quiz.
+- Interactive auto-post is unavailable to Score myself, Classic Quiz, New Quiz, and any
+  session containing an ordinary Canvas media recording. Media recordings retain the private
+  original plus a local-only PCM16 mono 16 kHz WAV for teacher playback; they never enter a
+  SAFE packet or automated scoring path. The browser receives only duration/status and a
+  session-scoped audio stream URL, never a private path or Canvas media URL.
   Packet late generation never writes; only a valid import against that late batch's SAFE
   bundle may trigger the scoped path. Uncertain results remain drafts.
 - New Quiz sessions have a separate teacher-reviewed item-finalization lane for item scores

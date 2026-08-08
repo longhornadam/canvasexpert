@@ -20,6 +20,7 @@ from api.mirror import new_quizzes
 from api.mirror import queries as mirror_queries
 from api.mirror import sync as mirror_sync
 from api.powergrader import student_attachments
+from api.powergrader import media_recordings
 
 
 REQUEST_TIMEOUT = 30
@@ -274,7 +275,7 @@ def _close_response(response):
 
 
 def _download_canvas_attachment(url: str, dest: str, *, declared_size=None,
-                               http_session=None, canvas_base: str = "") -> dict:
+                               http_session=None, canvas_base: str = "", max_bytes=None) -> dict:
     """Stream one Canvas attachment to an atomic final path.
 
     The first request and same-host redirects retain Canvas credentials.  An
@@ -364,6 +365,8 @@ def _download_canvas_attachment(url: str, dest: str, *, declared_size=None,
                         if not chunk:
                             continue
                         actual += len(chunk)
+                        if max_bytes is not None and actual > int(max_bytes):
+                            raise ValueError("download exceeded the permitted media size")
                         if actual > free_space:
                             raise OSError("insufficient local storage")
                         output.write(chunk)
@@ -566,6 +569,97 @@ def ingest_ordinary_attachments(
         submission["attachments"] = records
         # New sessions must never depend on the retired extension-only lane.
         submission.pop("code_files", None)
+    return submissions
+
+
+def ingest_media_recordings(
+    submissions: list[dict], *, course_name: str, course_id: str,
+    assignment_name: str, assignment_id: str, http_session=None, download=None,
+    target_path=None, byte_budget=None, reusable_records=None,
+) -> list[dict]:
+    """Acquire ordinary Canvas ``media_recording`` submissions as private evidence.
+
+    Canvas's documented MediaComment object is consumed only in this local
+    transport function.  Its URL is never copied into a submission or record.
+    """
+    headers, canvas_base = canvas_headers()
+    client = http_session or requests.Session()
+    if headers:
+        client.headers.update(headers)
+    downloader = download or _download_canvas_attachment
+    for submission in submissions or []:
+        if submission.get("submission_type") != "media_recording":
+            continue
+        attempt = _attempt(submission)
+        submission["expected_media_count"] = 1
+        submission["expected_attachment_count"] = int(submission.get("expected_attachment_count") or 0) + 1
+        # The signed source is transport-only: remove it from the in-memory
+        # submission before any later session/manifest path can observe it.
+        source, failure = media_recordings.normalize_media_comment(
+            submission.pop("media_comment", None), attempt=attempt,
+        )
+        records = submission.setdefault("attachments", [])
+        if failure:
+            records.append(failure)
+            continue
+        source["attempt"] = attempt
+        filename = source["filename"]
+        media_id = source["media_id"]
+        if not headers or not canvas_base:
+            records.append(media_recordings.held(
+                "canvas_auth_unavailable", "The media recording could not be authenticated.",
+                filename=filename, item_id=media_id, attempt=attempt,
+            ))
+            continue
+        reuse = (reusable_records or {}).get(media_id)
+        if (reuse and reuse.get("content_indicator") == source.get("content_indicator")
+                and os.path.isfile(workspace.extended_path(reuse.get("original_path", "")))
+                and os.path.isfile(workspace.extended_path(reuse.get("canonical_path", "")))):
+            if byte_budget is None or byte_budget.reserve(reuse.get("actual_size")):
+                record = dict(reuse)
+                record["download_status"] = "reused"
+                records.append(record)
+                continue
+        dest, _ = (target_path(submission, source, filename, attempt) if target_path else _target_path(
+            course_name=course_name, course_id=course_id, assignment_name=assignment_name,
+            assignment_id=assignment_id, submission=submission, filename=filename,
+        ))
+        if not dest:
+            records.append(media_recordings.held(
+                "destination_unavailable", "The local workspace destination was unavailable.",
+                filename=filename, item_id=media_id, attempt=attempt,
+            ))
+            continue
+        canonical = os.path.splitext(dest)[0] + ".canonical.wav"
+        try:
+            remaining = media_recordings.MAX_MEDIA_BYTES
+            if byte_budget is not None:
+                remaining = min(remaining, max(0, int(byte_budget.limit) - int(byte_budget.used)))
+            if remaining <= 0:
+                raise ValueError("media class budget exceeded")
+            result = downloader(source["url"], dest, declared_size=None, http_session=client,
+                                canvas_base=canvas_base, max_bytes=remaining) or {}
+            record = media_recordings.finalize_recording(
+                source=source, original_path=dest, canonical_path=canonical,
+            )
+            if record.get("download_status") == "downloaded" and byte_budget is not None:
+                if not byte_budget.reserve(record.get("actual_size")):
+                    record = media_recordings.held(
+                        "media_class_limit_exceeded", "The class media limit was reached; review this recording locally.",
+                        filename=filename, item_id=media_id, attempt=attempt,
+                    )
+        except requests.RequestException:
+            record = media_recordings.held(
+                "media_download_failed", "The media recording could not be downloaded from Canvas.",
+                filename=filename, item_id=media_id, attempt=attempt,
+            )
+        except Exception as exc:
+            code = "media_size_exceeded" if "media size" in str(exc).lower() else "media_download_failed"
+            record = media_recordings.held(
+                code, "The media recording could not be preserved locally.",
+                filename=filename, item_id=media_id, attempt=attempt,
+            )
+        records.append(record)
     return submissions
 
 

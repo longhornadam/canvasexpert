@@ -130,6 +130,7 @@
   queue.reloadSession = reloadSession;
 
   function renderStudent(i) {
+    if (queue.stopMediaRecording) queue.stopMediaRecording();
     if (!students.length) { subPane.innerHTML = '<p class="pg-no-text">No students in session.</p>'; return; }
     idx = Math.max(0, Math.min(i, students.length - 1));
     queue.setIndex(idx);
@@ -333,6 +334,7 @@
       }
     }
     if (queue.renderNewQuizItems) queue.renderNewQuizItems(st);
+    if (queue.renderMediaRecordings) queue.renderMediaRecordings(st);
     if (queue.renderBlindFirstStudent) queue.renderBlindFirstStudent(st);
   }
 

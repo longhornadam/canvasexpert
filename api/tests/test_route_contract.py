@@ -14,6 +14,7 @@ the extra-time panel). The reports endpoint is at `/api/students` (returns id+na
 These were previously both at `/api/students` causing a shadow; the gradebook one was renamed.
 """
 import json
+import hashlib
 
 from api.webui.server import app
 from api.webui.routes import powergrader as powergrader_routes
@@ -191,6 +192,7 @@ EXPECTED = [
     ('/powergrader', ('GET',)),
     ('/powergrader/session/{session_id}', ('GET',)),
     ('/api/powergrader/session/{session_id}', ('GET',)),
+    ('/api/powergrader/session/{session_id}/media/{stream_key}', ('GET',)),
     ('/api/powergrader/session/{session_id}/staged', ('GET',)),
     ('/api/powergrader/session/{session_id}/blind-first', ('POST',)),
     ('/api/powergrader/session/{session_id}/blind-reveal', ('POST',)),
@@ -239,6 +241,32 @@ def test_powergrader_staged_route_is_narrow_and_404s(monkeypatch):
     missing = powergrader_routes.pg_get_staged("missing")
     assert missing.status_code == 404
     assert json.loads(missing.body) == {"ok": False, "error": "Session not found."}
+
+
+def test_media_stream_is_session_owned_complete_and_workspace_contained(tmp_path, monkeypatch):
+    audio = tmp_path / "ready.wav"
+    audio.write_bytes(b"synthetic wav")
+    digest = hashlib.sha256(audio.read_bytes()).hexdigest()
+    stream_key = powergrader_routes.media_recordings.stream_key("media")
+    monkeypatch.setattr(powergrader_routes, "_load_session", lambda _session_id: {
+        "course_id": "course", "assignment_id": "assignment", "students": [{"user_id": "student", "attachments": [{"media_recording": True, "stream_key": stream_key}]}],
+    })
+    monkeypatch.setattr(powergrader_routes.workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(powergrader_routes.config, "course_display_name", lambda _course: "Synthetic")
+    monkeypatch.setattr(powergrader_routes.workspace, "read_assignment_evidence_manifest", lambda *args: {
+        "status": "current", "evidence": [{"kind": "media_recording", "user_id": "student", "evidence_id": "media",
+        "relative_path": "ready.wav", "canonical_sha256": digest}],
+    })
+    ready = powergrader_routes.pg_media_stream("session", stream_key)
+    assert ready.media_type == "audio/wav"
+    assert ready.headers["cache-control"].startswith("no-store")
+    assert powergrader_routes.pg_media_stream("session", "other").status_code == 404
+    assert powergrader_routes.pg_media_stream("session", "../media").status_code == 404
+    monkeypatch.setattr(powergrader_routes.workspace, "read_assignment_evidence_manifest", lambda *args: {
+        "status": "current", "evidence": [{"kind": "media_recording", "user_id": "student", "evidence_id": "media",
+        "relative_path": "../outside.wav", "canonical_sha256": digest}],
+    })
+    assert powergrader_routes.pg_media_stream("session", stream_key).status_code == 409
 
 
 def _current_routes():

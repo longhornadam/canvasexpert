@@ -281,7 +281,7 @@ def eligibility_decision(attachments: list[dict], *, expected_count: int | None 
         # route_bytes() is also used as an in-memory preflight helper.  Once a
         # record carries transport metadata, however, it must prove that the
         # original was downloaded and finalized before it can enter the AI lane.
-        if "download_status" in item and item.get("download_status") != "downloaded":
+        if "download_status" in item and item.get("download_status") not in {"downloaded", "reused"}:
             reasons.append(f"{filename}: {item.get('download_status') or 'download status missing'}")
         local_path = item.get("local_path")
         if "download_status" in item and (not local_path or not os.path.isfile(workspace.extended_path(local_path))):
