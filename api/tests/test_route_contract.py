@@ -111,6 +111,8 @@ EXPECTED = [
     ('/api/support-bundle', ('POST',)),
     ('/api/powergrader/refresh', ('POST',)),
     ('/api/powergrader/open-assignment-folder', ('POST',)),
+    ('/api/powergrader/oral-reading/model-status', ('GET',)),
+    ('/api/powergrader/oral-reading/setup-model', ('POST',)),
     ('/api/sweep/preview', ('POST',)),
     ('/api/temp-upload', ('POST',)),
     ('/api/tier-tags', ('GET',)),
@@ -241,6 +243,22 @@ def test_powergrader_staged_route_is_narrow_and_404s(monkeypatch):
     missing = powergrader_routes.pg_get_staged("missing")
     assert missing.status_code == 404
     assert json.loads(missing.body) == {"ok": False, "error": "Session not found."}
+
+
+def test_oral_reading_model_routes_are_local_status_and_explicit_setup(monkeypatch):
+    monkeypatch.setattr(powergrader_routes.oral_reading, "model_status", lambda: {
+        "available": False, "model_id": "small.en", "approximate_download_mib": 500,
+    })
+    status = powergrader_routes.pg_oral_reading_model_status()
+    assert json.loads(status.body) == {
+        "ok": True, "available": False, "model_id": "small.en", "approximate_download_mib": 500,
+    }
+    monkeypatch.setattr(powergrader_routes.oral_reading, "install_model", lambda: {
+        "ok": False, "error": "The local speech model could not be prepared.",
+    })
+    setup = powergrader_routes.pg_oral_reading_setup_model()
+    assert setup.status_code == 503
+    assert json.loads(setup.body)["ok"] is False
 
 
 def test_media_stream_is_session_owned_complete_and_workspace_contained(tmp_path, monkeypatch):
