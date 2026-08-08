@@ -70,7 +70,9 @@ engine-accurate names.
   observation guard. `feedback_results.reidentify` and `feedback_artifacts` both
   depend on it; it imports nothing from `api/` in return.
 - `api/powergrader/oral_reading.py` — local-only media transcript/alignment evidence;
-  it imports neither Canvas nor LLM clients and is excluded from all scoring/SAFE lanes.
+  it imports neither Canvas nor LLM clients. `feedback_artifacts` may rebuild a
+  scrubbed transcript-first allowlist for SAFE scoring; audio, paths, media IDs,
+  filenames, word events, and model-cache values remain private.
 - `api/ai_transmission.py` — the single authorization boundary for live OpenRouter sends
 - `api/operational_log.py` — sanitized local support/transport event log
 - `docs/contracts/feedback-scoring-contract.md` — scoring contract

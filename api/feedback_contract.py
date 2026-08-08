@@ -46,6 +46,7 @@ def scoring_output_contract(
         item_id: str = "<copy>",
         feedback_hint: str = "Brief rubric-based feedback.",
         include_signoff_in_feedback: bool = False,
+        packet_digest: str = "",
 ) -> dict:
     """Return the shared scoring output contract and its JSON example."""
     persona = persona or {}
@@ -71,6 +72,8 @@ def scoring_output_contract(
         "It must never be an integrity conclusion, probability, or penalty recommendation.",
         "It must not change the score or the student-facing `feedback`.",
         "Use the full score range; `possible` gives each item's maximum.",
+        "When a response includes `oral_reading`, use only the supplied passage, transcript, metrics, uncertainty, and candidate differences.",
+        "Do not infer pronunciation, expression, prosody, identity, disability, effort, intent, cheating, or diagnosis; low ASR confidence is not a reading error.",
     ]
     if signoff:
         rules.extend([
@@ -85,12 +88,21 @@ def scoring_output_contract(
         ])
     if signoff:
         sample["disclosure"] = signoff
+    format_instruction = (
+        "Return only valid JSON. Return a JSON array only, with one object per scored "
+        "student. Each element must be exactly:"
+    )
+    envelope = None
+    if packet_digest:
+        format_instruction = (
+            "Return only valid JSON. Return one top-level object with this exact "
+            "`packet_digest` and a `results` array of ordinary result objects:"
+        )
+        envelope = {"packet_digest": packet_digest, "results": [sample]}
     return {
-        "format_instruction": (
-            "Return only valid JSON. Return a JSON array only, with one object per scored "
-            "student. Each element must be exactly:"
-        ),
+        "format_instruction": format_instruction,
         "sample": sample,
+        "envelope": envelope,
         "rules": tuple(rules),
         "rules_text": "\n".join(f"- {rule}" for rule in rules),
         "signoff": signoff,

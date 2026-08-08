@@ -79,6 +79,15 @@ rubric and the scoring instructions (`build_contract_text`).
   `unrecognized_author_present` author categories. It contains no raw Office
   author/property value, filename, path, excerpt, header/body text, real ID/name,
   or another student's pseudonym.
+- `oral_reading` - optional transcript-first evidence for an ordinary Canvas media
+  recording. It is rebuilt from private local analysis as version `"1.0"` and
+  contains only an evidence digest, passage digest, confirmed passage, transcript,
+  allowlisted aggregate metrics/uncertainty, and at most 100 candidate differences.
+  `needs_review` means every count is a candidate. It never contains audio bytes,
+  paths, URLs, filenames, Canvas/media IDs, word events, or model/cache details.
+  Use only the supplied evidence: do not infer pronunciation, expression, prosody,
+  identity, disability, effort, intent, cheating, or diagnosis, and never treat low
+  ASR confidence as a reading error.
 - **Every timestamp is US Central (`America/Chicago`), never UTC** — in the parsed
   report, in this projection, and in the teacher UI. The offset therefore varies
   with daylight saving (`-05:00` CDT / `-06:00` CST). This is deliberate: a
@@ -146,6 +155,11 @@ Rules enforced by `validate_results`:
   caught at re-identification — the single funnel where model output becomes a
   teacher-facing row. The guard fails closed: a false positive costs one
   observation, a false negative puts an accusation in front of a teacher.
+- When a packet or Copilot batch contains `oral_reading`, its reply is one
+  top-level envelope with `packet_digest` and `results`. `packet_digest` is import
+  metadata, not a result-object field: PowerGrader rejects an absent or mismatched
+  digest before merge so the reply remains bound to the current SAFE oral evidence.
+  MCP keeps its existing separate packet-digest parameter.
 
 ### Future (not in v1)
 

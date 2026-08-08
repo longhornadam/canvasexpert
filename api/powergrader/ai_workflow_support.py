@@ -52,6 +52,7 @@ def build_privacy_artifacts(write_result: dict, safe_dir: str, private_dir: str)
         "student_txt_count": len(write_result.get("student_txts") or []),
         "attachment_only_count": len(write_result.get("attachment_only") or []),
         "excluded_count": len(write_result.get("excluded") or []),
+        "media_hold_count": len(write_result.get("media_holds") or []),
     }
 
 

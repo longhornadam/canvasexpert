@@ -66,8 +66,9 @@ queue namespace seams.
     authoritative reload through final save.
 - Interactive auto-post is unavailable to Score myself, Classic Quiz, New Quiz, and any
   session containing an ordinary Canvas media recording. Media recordings retain the private
-  original plus a local-only PCM16 mono 16 kHz WAV for teacher playback; they never enter a
-  SAFE packet or automated scoring path. The browser receives only duration/status and a
+  original plus a local-only PCM16 mono 16 kHz WAV for teacher playback; only a scrubbed,
+  transcript-first oral-reading projection may enter a SAFE scoring packet, never audio or
+  media metadata. The browser receives only duration/status and a
   session-scoped audio stream URL, never a private path or Canvas media URL.
   Read-aloud comparison uses the separate teacher-confirmed passage and local model
   only; see `docs/contracts/oral-reading-evidence-contract.md`.

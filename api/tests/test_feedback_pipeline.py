@@ -107,6 +107,78 @@ def test_pseudonymize_submissions_is_safety_green(tmp_path):
     assert verdict["green"] is True and not verdict["hard"]
 
 
+def test_media_read_aloud_safe_projection_is_scrubbed_and_has_no_private_media_fields(tmp_path):
+    """Law: only the explicit transcript-first oral allowlist reaches SAFE."""
+    assignment = {"id": 4242, "name": "Read Aloud", "points_possible": 10, "description": ""}
+    submission = {
+        "user_id": 9001, "body": "", "submitted_at": "2026-06-01T10:00:00Z",
+        "assignment": assignment, "user": {"name": "Ada Lovelace", "sis_user_id": "5001"},
+        "attachments": [{
+            "filename": "private.wav", "item_id": "media-private", "download_status": "downloaded", "media_recording": True,
+            "oral_reading": {
+                "status": "needs_review", "passage": "Ada reads carefully",
+                "passage_digest": "p" * 64, "transcript": "Ada reads carefully",
+                "metrics": {"source_words": 3, "exact_matched_words": 3, "accuracy": 1.0, "wcpm": 90},
+                "uncertainty": ["low_confidence"],
+                "difference_candidates": [{"kind": "substitution", "expected": "Ada", "observed": "Ada", "start_seconds": 1.2}],
+                "canonical_sha256": "a" * 64, "canonical_path": "C:/private/audio.wav",
+                "word_events": [{"word": "Ada", "start": 1.2}], "model_version": "private-cache",
+            },
+        }],
+    }
+    vault = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize_submissions([submission], vault, "Read Aloud")
+    result = fp.write_safe_and_private(bundle, vault, str(tmp_path / "SAFE"), str(tmp_path / "PRIVATE"))
+    safe = json.loads(open(result["safe_bundle"], encoding="utf-8").read())
+    oral = safe["students"][0]["responses"][0]["oral_reading"]
+
+    assert oral["version"] == "1.0"
+    assert oral["candidate_counts_only"] is True
+    assert oral["evidence_digest"]
+    assert "Ada" not in json.dumps(safe)
+    for forbidden in ("private.wav", "media-private", "canonical_sha256", "canonical_path", "word_events", "model_version", "url"):
+        assert forbidden not in json.dumps(safe)
+    assert safety.scan_payload(safe, vault)["green"] is True
+
+
+def test_media_read_aloud_unavailable_stays_in_private_teacher_queue(tmp_path):
+    assignment = {"id": 4242, "name": "Read Aloud", "points_possible": 10, "description": ""}
+    submission = {
+        "user_id": 9001, "body": "", "submitted_at": "2026-06-01T10:00:00Z",
+        "assignment": assignment, "user": {"name": "Ada Lovelace", "sis_user_id": "5001"},
+        "attachments": [{"filename": "private.wav", "download_status": "failed", "media_recording": True,
+                         "oral_reading": {"status": "unavailable", "error_message": "Model is unavailable."}}],
+    }
+    vault = Vault(str(tmp_path / "vault.json"))
+    bundle = fp.pseudonymize_submissions([submission], vault, "Read Aloud")
+    result = fp.write_safe_and_private(bundle, vault, str(tmp_path / "SAFE"), str(tmp_path / "PRIVATE"))
+
+    assert result["safe_students"] == 0
+    assert result["media_holds"] == [{"pseudonym": bundle["students"][0]["pseudonym"], "message": "Model is unavailable."}]
+
+
+def test_media_read_aloud_scrub_survivor_gets_a_specific_private_hold(tmp_path):
+    vault = Vault(str(tmp_path / "vault.json"))
+    vault._by_id["999"] = {"pseudonym": "", "pseudo_first": "", "pseudo_last": "",
+                            "real_name": "Ghost", "sis_id": "", "nicknames": [], "first_seen": ""}
+    bundle = {
+        "students": [{"pseudonym": "Learner One", "local_attachments": [], "responses": [{
+            "item_id": "42", "response": "", "oral_reading": {
+                "version": "1.0", "status": "complete", "passage": "Ghost reads", "transcript": "Ghost reads",
+                "passage_digest": "p" * 64, "evidence_digest": "e" * 64,
+                "metrics": {}, "uncertainty": [], "difference_candidates": [],
+            },
+        }]}],
+    }
+    result = fp.write_safe_and_private(bundle, vault, str(tmp_path / "SAFE"), str(tmp_path / "PRIVATE"))
+
+    assert result["safe_students"] == 0
+    assert result["media_holds"] == [{
+        "pseudonym": "Learner One",
+        "message": "Read-aloud evidence could not be safely scrubbed; review the recording locally.",
+    }]
+
+
 def test_pseudonymize_submissions_keeps_latest_attempt(tmp_path):
     a = {"id": 1, "name": "A", "points_possible": 5, "description": "x"}
     subs = [

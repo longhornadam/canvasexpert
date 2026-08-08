@@ -1,18 +1,18 @@
 # Media-recording read-aloud scoring initiative
 
-**Status:** Senior context. Batches A and B are accepted GREEN under the user-authorized
-synthetic-only verification override. Batch C is the next candidate for direct-brief promotion.
+**Status:** Senior context. Batches A through C are accepted GREEN under the user-authorized
+synthetic-only verification override. Batch D is optional and the next candidate for promotion.
 
 **Baseline inspected:** local `dev` at `450e97ffd97e6312adc185b535ae46cd7b8cbf81`
 on 2026-08-07. The working tree already contains unrelated user changes in
 `Open Canvas Expert.bat`, `Repair.bat`, and
 `api/default_docs/AI Authoring/START HERE - CanvasAgent.txt`; preserve them.
 
-**Next batch pointer:** Batch C, using sections 1-7, 9.3, 10.1, 11, and 13 of this plan. Batches
-A and B were accepted on 2026-08-07 under the explicit synthetic-only override because no dummy
-or live courses exist. The documented `MediaComment` source shape is implemented and fails closed
-on unknown transport behavior; direct media URL and signed cross-origin behavior remain a later
-integration risk, not a reason for compatibility code.
+**Next batch pointer:** Batch D, using sections 1-7, 9.4, 10.1, 11, and 13 of this plan. Batches
+A through C were accepted on 2026-08-07 under the explicit synthetic-only override because no
+dummy or live courses exist. The documented `MediaComment` source shape is implemented and fails
+closed on unknown transport behavior; direct media URL and signed cross-origin behavior remain a
+later integration risk, not a reason for compatibility code.
 
 This is persistent senior planning context. It does not itself authorize implementation.
 Terra promotes exactly one batch at a time into the single direct brief under

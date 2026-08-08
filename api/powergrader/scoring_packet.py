@@ -11,7 +11,7 @@ student response from it: the tool layer gates first, then tabulates.
 import hashlib
 import json
 
-from api import feedback_contract
+from api import feedback_artifacts, feedback_contract
 from api.webui import source_materials
 
 
@@ -98,6 +98,8 @@ def build_packet(
                     "possible": response.get("possible"),
                 }
             text = (response.get("response") or "").strip()
+            oral_text = feedback_artifacts.oral_reading_text(response.get("oral_reading"))
+            text = "\n\n".join(part for part in (text, oral_text) if part)
             if not text:
                 held += 1
                 if pseudonym not in held_pseudonyms:

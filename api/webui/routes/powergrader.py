@@ -373,7 +373,7 @@ def pg_start(
     media_user_ids = {str(s.get("user_id")) for s in media_submissions}
     ai_result = ai_workflow.run_ai_workflow(
         mode=mode,
-        submitted=[s for s in submitted if str(s.get("user_id")) not in media_user_ids],
+        submitted=submitted,
         assignment_name=assignment_name,
         assignment_description=assignment_description,
         course_id=course_id,
@@ -401,9 +401,6 @@ def pg_start(
     privacy_artifacts = ai_result["privacy_artifacts"]
     ai_by_uid = ai_result["ai_by_uid"]
     ai_failures = dict(ai_result.get("ai_failures") or {})
-    for user_id in media_user_ids:
-        ai_by_uid.pop(user_id, None)
-        ai_failures[user_id] = {"code": "media_manual_review", "message": "Media recording evidence stays local and requires teacher review."}
     late_watch["source_context"] = ai_result.get("source_context") or {}
 
     # Roster context

@@ -2,11 +2,12 @@
 
 import json
 import os
+import re
 from datetime import datetime
 from functools import wraps
 
 from api import feedback_pipeline as fp
-from api.powergrader import session_store
+from api.powergrader import scoring_packet, session_store
 from api.platform_services import workspace
 
 
@@ -115,9 +116,25 @@ def import_results_into_session(
     except Exception as e:
         return {"ok": False, "error": f"Could not load Safe AI Packet bundle: {e}"}, 200
 
-    # 5. Validate against bundle
-    vault = vault_factory()
+    # 5. Oral-reading replies are bound to the exact current SAFE evidence.
+    # This is envelope metadata only: result objects retain the ordinary v1 shape.
     bundle_for_validation = _bundle_for_batch(bundle, expected_keys) if clean_batch_id else bundle
+    if _has_oral_reading(bundle_for_validation):
+        supplied_digest = _packet_digest_from_results_text(results_text)
+        expected_digest = scoring_packet.packet_digest(session.get("session_id"), bundle)
+        if not supplied_digest:
+            return {
+                "ok": False,
+                "error": "Read-aloud results must include the packet_digest envelope from this Safe AI Packet.",
+            }, 200
+        if supplied_digest != expected_digest:
+            return {
+                "ok": False,
+                "error": "Packet digest mismatch: retrieve the current Safe AI Packet before importing read-aloud results.",
+            }, 200
+
+    # 6. Validate against bundle
+    vault = vault_factory()
     verdict = fp.validate_results(parsed, bundle_for_validation, vault)
     if not verdict["ok"]:
         return {
@@ -126,7 +143,7 @@ def import_results_into_session(
             "validation": verdict,
         }, 200
 
-    # 6. Reidentify and merge
+    # 7. Reidentify and merge
     rows = fp.reidentify(parsed, vault)
     by_uid = fp.merge_rows_by_uid(rows)
     item_by_uid = fp.item_rows_by_uid(rows)
@@ -143,7 +160,7 @@ def import_results_into_session(
         updated_user_ids.add(uid)
     updated = len(updated_user_ids)
 
-    # 7. Update batch metadata
+    # 8. Update batch metadata
     unresolved_count = sum(1 for row in rows if not row.get("resolved"))
     if batch is not None:
         batch["imported_at"] = datetime.now().isoformat(timespec="seconds")
@@ -155,7 +172,7 @@ def import_results_into_session(
         else:
             batch["status"] = "partial"
 
-    # 8. Log and save
+    # 9. Log and save
     session.setdefault("ai_import_log", []).append({
         "ts": datetime.now().isoformat(timespec="seconds"),
         "batch_id": clean_batch_id,
@@ -192,6 +209,34 @@ def _zero_parse_failure() -> tuple[dict, int]:
 def _awaiting_ai_suggestions(session: dict) -> bool:
     """True when at least one session student has no AI draft yet."""
     return any(not st.get("ai_feedback") for st in session.get("students") or [])
+
+
+def _has_oral_reading(bundle: dict) -> bool:
+    return any(
+        isinstance(response.get("oral_reading"), dict)
+        for student in (bundle or {}).get("students") or []
+        for response in student.get("responses") or []
+    )
+
+
+def _packet_digest_from_results_text(results_text: str) -> str:
+    """Read only the additive result-envelope digest, including fenced JSON."""
+    raw = str(results_text or "").strip()
+    candidates: list[object] = []
+    try:
+        candidates.append(json.loads(raw))
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        for match in re.finditer(r"[\[{]", raw):
+            try:
+                value, _end = decoder.raw_decode(raw, match.start())
+            except json.JSONDecodeError:
+                continue
+            candidates.append(value)
+    for candidate in candidates:
+        if isinstance(candidate, dict) and isinstance(candidate.get("packet_digest"), str):
+            return candidate["packet_digest"].strip()
+    return ""
 
 
 def _bundle_for_batch(full_bundle: dict, expected_keys: set[tuple[str, str]]) -> dict:

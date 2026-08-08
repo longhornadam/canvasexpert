@@ -9,9 +9,10 @@ import json
 import os
 import zipfile
 
-from api import feedback_contract
+from api import feedback_artifacts, feedback_contract
 from api import feedback_pipeline as fp
 from api.platform_services import workspace
+from . import scoring_packet
 
 
 def _assignment_stable_id(assignment_name: str, assignment_id: str = "") -> str:
@@ -95,12 +96,15 @@ def readable_responses_text(bundle: dict) -> str:
                 lines.append(str(response.get("prompt") or ""))
             lines.append("\nResponse:")
             lines.append(str(response.get("response") or ""))
+            oral_text = feedback_artifacts.oral_reading_text(response.get("oral_reading"))
+            if oral_text:
+                lines.extend(["", oral_text])
             lines.append("")
         lines.append("")
     return "\n".join(lines).strip() + "\n"
 
 
-def paste_format_text(bundle: dict, persona: dict | None = None) -> str:
+def paste_format_text(bundle: dict, persona: dict | None = None, *, packet_digest: str = "") -> str:
     first_student = ((bundle or {}).get("students") or [{}])[0]
     first_response = ((first_student.get("responses") or [{}])[0])
     pseudonym = first_student.get("pseudonym") or "<copy pseudonym exactly>"
@@ -111,6 +115,7 @@ def paste_format_text(bundle: dict, persona: dict | None = None) -> str:
         pseudonym=pseudonym,
         item_id=str(item_id),
         include_signoff_in_feedback=True,
+        packet_digest=packet_digest if feedback_artifacts.has_oral_reading(bundle) else "",
     )
     return (
         "Paste Results Back Here - Format\n"
@@ -118,7 +123,7 @@ def paste_format_text(bundle: dict, persona: dict | None = None) -> str:
         "After your AI chat scores the packet, paste ONLY the JSON array or a JSON "
         "object with a results array back into PowerGrader.\n\n"
         "Required shape:\n\n"
-        + json.dumps([contract["sample"]], indent=2, ensure_ascii=False)
+        + json.dumps(contract["envelope"] or [contract["sample"]], indent=2, ensure_ascii=False)
         + "\n\nRules:\n"
         + contract["rules_text"]
         + "\n"
@@ -133,6 +138,7 @@ def build_safe_ai_packet(
     llm_bundle: dict,
     persona: dict | None = None,
     assignment_id: str = "",
+    session_id: str = "",
 ) -> dict:
     """Create a teacher-facing packet folder + ZIP from the SAFE artifacts.
 
@@ -182,7 +188,11 @@ def build_safe_ai_packet(
         "Source Materials.txt",
         shared_text or "No separate source material was included in this packet.\n",
     )
-    write_packet_file("Paste Results Back Here - Format.txt", paste_format_text(llm_bundle, persona))
+    packet_digest = scoring_packet.packet_digest(session_id, llm_bundle)
+    write_packet_file(
+        "Paste Results Back Here - Format.txt",
+        paste_format_text(llm_bundle, persona, packet_digest=packet_digest),
+    )
 
     for student_txt in write_result.get("student_txts") or []:
         if os.path.isfile(workspace.extended_path(student_txt)):
@@ -200,6 +210,7 @@ def build_safe_ai_packet(
         "packet_folder": packet_dir,
         "packet_zip": paths["zip"],
         "packet_files": files,
+        **({"packet_digest": packet_digest} if feedback_artifacts.has_oral_reading(llm_bundle) else {}),
     }
 
 

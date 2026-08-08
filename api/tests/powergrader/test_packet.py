@@ -11,7 +11,7 @@ from api.feedback_vault import Vault
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from api.platform_services import workspace
 from api.webui.routes import powergrader
-from api.powergrader import packet, privacy, session_builder
+from api.powergrader import packet, privacy, scoring_packet, session_builder
 
 
 def _bundle(pseudonym="Sparky McGee"):
@@ -130,6 +130,38 @@ def test_import_results_updates_session_ai_suggestions(tmp_path, monkeypatch):
     assert data["updated"] == 1
     assert saved["students"][0]["ai_score"] == 2
     assert "Strong theme evidence" in saved["students"][0]["ai_feedback"]
+
+
+def test_oral_reading_import_requires_current_packet_digest(tmp_path, monkeypatch):
+    vault = Vault(str(tmp_path / "vault.json"))
+    pseudonym = vault.get_or_assign("9001", "Ada Lovelace", "5001")
+    bundle = _bundle(pseudonym)
+    bundle["students"][0]["responses"][0]["oral_reading"] = {
+        "version": "1.0", "status": "complete", "evidence_digest": "e" * 64,
+        "passage_digest": "p" * 64, "passage": "read this", "transcript": "read this",
+        "metrics": {"accuracy": 1.0, "wcpm": 90}, "uncertainty": [], "difference_candidates": [],
+    }
+    safe_bundle = tmp_path / "bundle.json"
+    safe_bundle.write_text(json.dumps(bundle), encoding="utf-8")
+    session = {
+        "session_id": "sid", "privacy_artifacts": {"safe_bundle": str(safe_bundle)},
+        "students": [{"user_id": "9001", "real_name": "Ada Lovelace", "ai_score": None, "ai_feedback": None}],
+    }
+    saved = {}
+    monkeypatch.setattr(powergrader, "_load_session", lambda _session_id: session)
+    monkeypatch.setattr(powergrader, "_save_session", lambda value: saved.update(value))
+    monkeypatch.setattr(powergrader, "_vault", lambda: vault)
+    result = {"pseudonym": pseudonym, "item_id": "42", "score": 2, "feedback": "Strong evidence."}
+
+    missing = json.loads(powergrader.pg_import_results("sid", results=json.dumps([result])).body)
+    digest = scoring_packet.packet_digest("sid", bundle)
+    accepted = json.loads(powergrader.pg_import_results(
+        "sid", results=json.dumps({"packet_digest": digest, "results": [result]})
+    ).body)
+
+    assert missing["ok"] is False and "packet_digest" in missing["error"]
+    assert accepted["ok"] is True
+    assert saved["students"][0]["ai_score"] == 2
 
 
 def test_openrouter_debug_file_omits_key_and_records_response(tmp_path):

@@ -1,5 +1,6 @@
 """Feedback tools bundle and artifact writing helpers."""
 import csv
+import hashlib
 import json
 import os
 
@@ -16,6 +17,85 @@ from api.feedback_contract import (
 )
 
 
+ORAL_READING_SAFE_VERSION = "1.0"
+_ORAL_READING_METRICS = ("source_words", "exact_matched_words", "accuracy", "wcpm")
+_ORAL_READING_CANDIDATE_KEYS = ("kind", "expected", "observed", "start_seconds", "candidate")
+
+
+def _canonical_digest(value: dict) -> str:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _safe_oral_reading(report: object) -> tuple[dict | None, str]:
+    """Rebuild the only outbound oral-reading shape from private local evidence.
+
+    The report's audio bindings, word events, model details, and any local paths
+    deliberately do not survive this projection.  The digest binds the exact
+    scrubbed evidence that a scorer can see, rather than a recording or cache.
+    """
+    if not isinstance(report, dict):
+        return None, "Read-aloud analysis was unavailable; review the recording locally."
+    status = str(report.get("status") or "")
+    if status not in {"complete", "needs_review"}:
+        detail = str(report.get("error_message") or "").strip()
+        return None, detail or "Read-aloud analysis was unavailable; review the recording locally."
+    passage = str(report.get("passage") or "").strip()
+    transcript = str(report.get("transcript") or "").strip()
+    passage_digest = str(report.get("passage_digest") or "").strip()
+    if not passage or not transcript or not passage_digest:
+        return None, "Read-aloud evidence was incomplete; review the recording locally."
+    metrics = report.get("metrics") or {}
+    candidates = report.get("difference_candidates") or []
+    safe = {
+        "version": ORAL_READING_SAFE_VERSION,
+        "status": status,
+        "passage": passage,
+        "passage_digest": passage_digest,
+        "transcript": transcript,
+        "metrics": {key: metrics[key] for key in _ORAL_READING_METRICS if key in metrics},
+        "uncertainty": [str(value) for value in (report.get("uncertainty") or [])],
+        "difference_candidates": [
+            {key: candidate[key] for key in _ORAL_READING_CANDIDATE_KEYS if key in candidate}
+            for candidate in candidates[:100] if isinstance(candidate, dict)
+        ],
+    }
+    if status == "needs_review":
+        safe["candidate_counts_only"] = True
+    safe["evidence_digest"] = _canonical_digest(safe)
+    return safe, ""
+
+
+def has_oral_reading(bundle: dict) -> bool:
+    return any(
+        isinstance(response.get("oral_reading"), dict)
+        for student in (bundle or {}).get("students") or []
+        for response in student.get("responses") or []
+    )
+
+
+def oral_reading_text(oral: object) -> str:
+    """Render the SAFE oral evidence identically for text-only packet lanes."""
+    if not isinstance(oral, dict):
+        return ""
+    lines = ["### Oral-reading evidence", ""]
+    if oral.get("status") == "needs_review":
+        lines.extend(["All counts below are candidates and require teacher review.", ""])
+    lines.extend([
+        "Confirmed passage:", str(oral.get("passage") or ""), "",
+        "Transcript:", str(oral.get("transcript") or ""), "",
+        "Metrics:", json.dumps(oral.get("metrics") or {}, ensure_ascii=False, sort_keys=True),
+    ])
+    uncertainty = oral.get("uncertainty") or []
+    if uncertainty:
+        lines.extend(["", "Uncertainty:", ", ".join(str(value) for value in uncertainty)])
+    candidates = oral.get("difference_candidates") or []
+    if candidates:
+        lines.extend(["", "Candidate differences:"])
+        lines.extend(json.dumps(candidate, ensure_ascii=False, sort_keys=True) for candidate in candidates)
+    return "\n".join(lines).strip()
+
+
 def _attachment_meta(attachment: dict) -> dict:
     """Copy local evidence metadata without any URL/token-bearing fields."""
     allowed = {
@@ -24,6 +104,9 @@ def _attachment_meta(attachment: dict) -> dict:
         "extracted_text_path", "attempt", "item_id", "item_link", "ai_eligible",
         "local_only", "warnings", "error_code", "error_message",
         "writing_timeline",
+        # This private report is immediately rebuilt through _safe_oral_reading
+        # before the SAFE bundle is written.  No other media field is allowed out.
+        "media_recording", "oral_reading",
     }
     return {k: attachment.get(k) for k in allowed if k in attachment}
 
@@ -235,6 +318,21 @@ def _scrub_bundle(bundle: dict, vault: Vault,
                 r["prompt"] = feedback_scrub.scrub_text(r["prompt"], rmap)
             if r.get("response"):
                 r["response"] = feedback_scrub.scrub_text(r["response"], rmap)
+            oral = r.get("oral_reading")
+            if isinstance(oral, dict):
+                for key in ("passage", "transcript"):
+                    if oral.get(key):
+                        oral[key] = feedback_scrub.scrub_text(str(oral[key]), rmap)
+                for candidate in oral.get("difference_candidates") or []:
+                    if not isinstance(candidate, dict):
+                        continue
+                    for key in ("expected", "observed"):
+                        if candidate.get(key):
+                            candidate[key] = feedback_scrub.scrub_text(str(candidate[key]), rmap)
+                # Bind the exact scrubbed projection, not private source evidence.
+                oral["evidence_digest"] = _canonical_digest({
+                    key: value for key, value in oral.items() if key != "evidence_digest"
+                })
     shared = out.get("shared_context")
     if isinstance(shared, dict):
         if shared.get("assignment_description"):
@@ -248,15 +346,17 @@ def _scrub_bundle(bundle: dict, vault: Vault,
 
 
 def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str,
-                                    compact: bool = False) -> tuple[dict, list[str], list[str]]:
+                                    compact: bool = False) -> tuple[dict, list[str], list[str], list[dict]]:
     """Convert downloaded local evidence into safe text/media or hold the student."""
     import copy
 
     out = copy.deepcopy(bundle)
     excluded: list[str] = []
     log: list[str] = []
+    media_holds: list[dict] = []
     kept_students = []
     for student in out.get("students") or []:
+        pseudo = student.get("pseudonym") or "unknown"
         attachments = [a for a in student.get("local_attachments") or [] if isinstance(a, dict)]
         if not attachments:
             student.pop("local_attachments", None)
@@ -264,8 +364,30 @@ def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str,
             kept_students.append(student)
             continue
         expected_count = student.get("_expected_attachment_count", len(attachments))
+        media = [attachment for attachment in attachments if attachment.get("media_recording")]
+        ordinary = [attachment for attachment in attachments if not attachment.get("media_recording")]
+        if media:
+            # A media recording is never an attachment derivative.  Its local-only
+            # report is optionally rebuilt as response evidence, or held locally.
+            for attachment in media:
+                oral, hold_reason = _safe_oral_reading(attachment.get("oral_reading"))
+                if oral is None:
+                    excluded.append(pseudo)
+                    media_holds.append({"pseudonym": pseudo, "message": hold_reason})
+                    log.append(f"!! HELD {pseudo} — {hold_reason}")
+                    break
+                for response in student.get("responses") or []:
+                    response["oral_reading"] = oral
+            if pseudo in excluded:
+                continue
+        attachments = ordinary
+        if not attachments:
+            student.pop("local_attachments", None)
+            student.pop("_expected_attachment_count", None)
+            kept_students.append(student)
+            continue
+        expected_count = max(0, int(student.get("_expected_attachment_count", len(attachments))) - len(media))
         decision = student_attachments.eligibility_decision(attachments, expected_count=expected_count)
-        pseudo = student.get("pseudonym") or "unknown"
         if not decision["eligible"]:
             excluded.append(pseudo)
             log.append(f"!! HELD {pseudo} — attachment evidence needs teacher review: {decision['reasons'][0]}")
@@ -326,7 +448,7 @@ def _prepare_attachment_safe_bundle(bundle: dict, safe_dir: str,
         if pseudo not in excluded:
             kept_students.append(student)
     out["students"] = kept_students
-    return out, excluded, log
+    return out, excluded, log, media_holds
 
 
 def _shared_context_blob(shared) -> str:
@@ -396,10 +518,18 @@ def write_safe_and_private(
         )
 
     # Step 1: convert approved local evidence, then scrub text.
-    prepared, attachment_excluded, attachment_log = _prepare_attachment_safe_bundle(bundle, safe_dir, compact=compact)
+    prepared, attachment_excluded, attachment_log, media_holds = _prepare_attachment_safe_bundle(
+        bundle, safe_dir, compact=compact
+    )
     excluded.extend(attachment_excluded)
     log.extend(attachment_log)
     safe = _scrub_bundle(prepared, vault, protected=protected)
+    oral_pseudonyms = {
+        str(student.get("pseudonym") or "")
+        for student in safe.get("students") or []
+        if any(isinstance(response.get("oral_reading"), dict)
+               for response in student.get("responses") or [])
+    }
 
     # Step 2: assert_scrubbed receipt — structural HARD gate (forbidden identity
     # keys / raw ids). A correctly built bundle never trips this; it catches a
@@ -418,13 +548,22 @@ def write_safe_and_private(
     # "safe" file. Never block the whole batch; never leak.
     clean_students = []
     for s in safe.get("students", []):
-        blob = " ".join((r.get("prompt") or "") + " " + (r.get("response") or "")
-                        for r in s.get("responses", []))
+        blob = " ".join(
+            " ".join(((r.get("prompt") or ""), (r.get("response") or ""),
+                      oral_reading_text(r.get("oral_reading"))))
+            for r in s.get("responses", [])
+        )
         survivors = feedback_scrub.verify_clean(blob, vault)
         if survivors:
-            excluded.append(s.get("pseudonym", "?"))
-            log.append(f"!! EXCLUDED {s.get('pseudonym','?')} from SAFE — scrub left a "
+            pseudo = s.get("pseudonym", "?")
+            excluded.append(pseudo)
+            log.append(f"!! EXCLUDED {pseudo} from SAFE — scrub left a "
                        f"real identifier ({len(survivors)} hit); score this one manually.")
+            if pseudo in oral_pseudonyms:
+                media_holds.append({
+                    "pseudonym": pseudo,
+                    "message": "Read-aloud evidence could not be safely scrubbed; review the recording locally.",
+                })
         else:
             clean_students.append(s)
     safe["students"] = clean_students
@@ -520,6 +659,9 @@ def write_safe_and_private(
                     f.write(f"Prompt:\n{r['prompt']}\n\n")
                 if r.get("response"):
                     f.write(f"Response:\n{r['response']}\n\n")
+                oral_text = oral_reading_text(r.get("oral_reading"))
+                if oral_text:
+                    f.write(f"{oral_text}\n\n")
         student_txts.append(txt_path)
     log.append(f"✓ {stem}: {len(student_txts)} per-student SAFE .txt file(s)")
 
@@ -561,6 +703,7 @@ def write_safe_and_private(
         "shared_context_excluded": shared_context_excluded,
         "attachment_only": attachment_only,
         "excluded": excluded,
+        "media_holds": media_holds,
         "log": log,
     }
 

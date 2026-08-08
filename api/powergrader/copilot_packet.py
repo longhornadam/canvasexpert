@@ -8,7 +8,8 @@ from api.platform_services import workspace
 from api.webui.source_materials import estimate_text_tokens
 
 from .packet import safe_ai_packet_name
-from . import copilot_packet_support as support
+from . import copilot_packet_support as support, scoring_packet
+from api import feedback_artifacts
 from . import writing_timeline
 
 
@@ -68,6 +69,7 @@ def _student_blocks(llm_bundle: dict) -> list[dict]:
             possible = response.get("possible")
             text = str(response.get("response") or "").strip()
             timeline_lines = _writing_timeline_sections(response)
+            oral_text = feedback_artifacts.oral_reading_text(response.get("oral_reading"))
             timeline_section = ""
             if timeline_lines:
                 timeline_section = "\n" + "\n".join(timeline_lines) + "\n"
@@ -79,6 +81,7 @@ def _student_blocks(llm_bundle: dict) -> list[dict]:
                 f"{timeline_section}\n"
                 "### Response\n\n"
                 f"{text or 'No text response was available in the SAFE packet.'}\n"
+                + (f"\n{oral_text}\n" if oral_text else "")
             )
             blocks.append({
                 "pseudonym": pseudonym,
@@ -144,6 +147,7 @@ def build_copilot_batches(
     batch_id_prefix: str | None = None,
     safe_bundle_path: str | None = None,
     assignment_id: str = "",
+    session_id: str = "",
 ) -> dict:
     """Build fresh-chat Copilot batch folders from a SAFE LLM bundle.
 
@@ -172,11 +176,15 @@ def build_copilot_batches(
         bat_container = os.path.abspath(os.path.join(safe_dir, packet_name, "AI Chat Batches"))
 
     file_01_text = support.assignment_info_text(assignment_name, llm_bundle)
-    file_02_text = support.rubric_persona_text(assignment_name, rubric_text, persona)
+    packet_digest = scoring_packet.packet_digest(session_id, llm_bundle)
+    oral_packet = feedback_artifacts.has_oral_reading(llm_bundle)
+    file_02_text = support.rubric_persona_text(
+        assignment_name, rubric_text, persona, packet_digest=packet_digest if oral_packet else ""
+    )
     fixed_context_tokens = (
         estimate_text_tokens(file_01_text)
         + estimate_text_tokens(file_02_text)
-        + estimate_text_tokens(support.batch_prompt(1, 1, persona=persona))
+        + estimate_text_tokens(support.batch_prompt(1, 1, persona=persona, packet_digest=packet_digest if oral_packet else ""))
     )
     available = effective_context_tokens - output_reserve_tokens - safety_margin_tokens - fixed_context_tokens
     warnings: list[str] = []
@@ -267,7 +275,9 @@ def build_copilot_batches(
         support.write_text(rubric_persona_path, file_02_text)
         support.write_text(student_work_path, student_work_text)
 
-        prompt = support.batch_prompt(index, total_batches, persona=persona)
+        prompt = support.batch_prompt(
+            index, total_batches, persona=persona, packet_digest=packet_digest if oral_packet else ""
+        )
         token_estimate = (
             estimate_text_tokens(file_01_text)
             + estimate_text_tokens(file_02_text)
@@ -288,6 +298,7 @@ def build_copilot_batches(
                 "student_work": student_work_path,
             },
             "safe_bundle": safe_bundle_path,
+            **({"packet_digest": packet_digest} if oral_packet else {}),
             "prompt": prompt,
             "student_count": len(raw_batch["entries"]),
             "token_estimate": token_estimate,

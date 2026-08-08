@@ -56,7 +56,7 @@ def assignment_info_text(assignment_name: str, llm_bundle: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) -> str:
+def rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict, *, packet_digest: str = "") -> str:
     persona = persona or {}
     ta_name = (persona.get("name") or "").strip() or "your teaching assistant"
     personality = (persona.get("personality") or "").strip()
@@ -68,6 +68,7 @@ def rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) -
         pseudonym="<copy from StudentWork exactly>",
         item_id="<copy from StudentWork exactly>",
         include_signoff_in_feedback=True,
+        packet_digest=packet_digest,
     )
     return (
         "# Rubric and TA Personality - SAFE\n\n"
@@ -82,7 +83,7 @@ def rubric_persona_text(assignment_name: str, rubric_text: str, persona: dict) -
         "## Required JSON Output\n\n"
         f"{contract['format_instruction']}\n\n"
         "```json\n"
-        f"{json.dumps(contract['sample'], indent=2, ensure_ascii=False)}\n"
+        f"{json.dumps(contract['envelope'] or contract['sample'], indent=2, ensure_ascii=False)}\n"
         "```\n\n"
         "Rules:\n\n"
         f"{contract['rules_text']}\n"
@@ -95,12 +96,14 @@ def batch_prompt(
     batch_number: int,
     total_batches: int,
     persona: dict | None = None,
+    packet_digest: str = "",
 ) -> str:
     contract = feedback_contract.scoring_output_contract(
         persona=persona,
         identity_source="StudentWork",
         pseudonym="<copy>",
         item_id="<copy>",
+        packet_digest=packet_digest,
     )
     return (
         "Use the three uploaded files in order: 01 Assignment Information, 02 Rubric and TA "
@@ -108,7 +111,7 @@ def batch_prompt(
         f"Score only the students listed in the StudentWork file for Batch {batch_number} of "
         f"{total_batches}. Do not score students from any other batch.\n\n"
         f"{contract['format_instruction']}\n\n"
-        f"```json\n{json.dumps(contract['sample'], indent=2, ensure_ascii=False)}\n```\n\n"
+        f"```json\n{json.dumps(contract['envelope'] or contract['sample'], indent=2, ensure_ascii=False)}\n```\n\n"
         f"Rules:\n{contract['rules_text']}"
     )
 

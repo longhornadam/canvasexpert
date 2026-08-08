@@ -208,6 +208,13 @@ def run_ai_workflow(
             )
 
         privacy_artifacts = ai_workflow_support.build_privacy_artifacts(write_result, safe_dir, private_dir)
+        for hold in write_result.get("media_holds") or []:
+            who = vault.reverse(str(hold.get("pseudonym") or ""))
+            if who and who.get("canvas_id"):
+                ai_failures[str(who["canvas_id"])] = {
+                    "code": "media_oral_reading_hold",
+                    "message": str(hold.get("message") or "Read-aloud evidence requires teacher review."),
+                }
 
         privacy_steps.append(privacy.privacy_step(
             "safe_private", "Wrote inspectable Safe AI Packet and Private decoder files", "ok",
@@ -256,7 +263,9 @@ def run_ai_workflow(
             )
 
         safe_students = len(llm_bundle.get("students") or [])
-        packet_info = packet.build_safe_ai_packet(artifact_name, safe_dir, write_result, llm_bundle, persona)
+        packet_info = packet.build_safe_ai_packet(
+            artifact_name, safe_dir, write_result, llm_bundle, persona, session_id=session_id
+        )
         privacy_artifacts.update(packet_info)
         privacy_steps.append(privacy.privacy_step(
             "safe_ai_packet", "Created Safe AI Packet", "ok",
@@ -276,6 +285,7 @@ def run_ai_workflow(
                 persona=persona,
                 batch_id_prefix=copilot_batch_prefix,
                 safe_bundle_path=write_result.get("safe_bundle"),
+                session_id=session_id,
             )
             privacy_artifacts["copilot_packet_folder"] = copilot_info.get("packet_folder")
             privacy_artifacts["copilot_readme"] = copilot_info.get("readme_path")

@@ -166,6 +166,30 @@ def test_scoring_output_contract_is_shared_by_packet_and_batch_surfaces():
         assert "integrity conclusion, probability, or penalty recommendation" in text
         assert "must not change the score or the student-facing `feedback`" in text
         assert "Drafted by Sage (AI), reviewed by your teacher." in text
+
+
+def test_oral_reading_packet_and_batch_require_digest_envelope(tmp_path):
+    bundle = _bundle([_student("Fictional Learner", "42", "")])
+    bundle["students"][0]["responses"][0]["oral_reading"] = {
+        "version": "1.0", "status": "complete", "evidence_digest": "e" * 64,
+        "passage_digest": "p" * 64, "passage": "read this", "transcript": "read this",
+        "metrics": {"accuracy": 1.0, "wcpm": 90}, "uncertainty": [], "difference_candidates": [],
+    }
+    digest = "d" * 64
+
+    packet_text = packet.paste_format_text(bundle, packet_digest=digest)
+    info = build_copilot_batches(
+        assignment_name="Read Aloud", safe_dir=str(tmp_path), llm_bundle=bundle,
+        rubric_text="Use supplied evidence.", persona={"name": "Sage"}, session_id="session-1",
+    )
+    batch = info["batches"][0]
+    rubric = Path(batch["files"]["rubric_persona"]).read_text(encoding="utf-8")
+
+    assert '"packet_digest"' in packet_text
+    assert "results" in packet_text
+    assert batch["packet_digest"]
+    assert '"packet_digest"' in rubric
+    assert "pronunciation" in rubric
 def test_copilot_metadata_uses_batch_folders_not_zip(tmp_path):
     info = build_copilot_batches(
         assignment_name="Folder Based Essay",
