@@ -457,6 +457,11 @@ Read-only grade distribution view.
 
 ## PowerGrader (`/powergrader`)
 
+Ordinary local media review is the default. The setup’s **Read-aloud analysis** checkbox
+is explicit and default-off; only when selected are the passage and local-model controls
+shown. Validated `downloaded` and `reused` recordings play through a per-record,
+session-scoped URL, including when another focused-evidence record is held.
+
 Keyboard-first grading queue for one Canvas assignment. A teacher starts one
 session, reviews submissions student by student, approves or edits feedback, and
 pushes approved grades/comments back to Canvas.

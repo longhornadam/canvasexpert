@@ -34,7 +34,7 @@ namespace shims.
 | AI workflow and SAFE artifacts | `ai_workflow.py`, `ai_workflow_support.py`, `queue_privacy.js` |
 | Copilot packets/import | `copilot_packet.py`, `copilot_packet_support.py`, `import_results.py`, `queue_import.js` |
 | MCP scoring packet/staging | `scoring_packet.py`, `api/mcp_server/tools.py` (`list_scoring_sessions`, `get_scoring_packet`, `stage_scores`), reusing `import_results.py` |
-| Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `media_recordings.py`, `oral_reading.py`, `new_quiz_fetch.py`, `student_attachments.py` |
+| Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `media_recordings.py`, `oral_reading.py`, `new_quiz_fetch.py`, `student_attachments.py`; each ready media record authorizes its own stream |
 | Writing Timeline | `writing_timeline.py`, `student_attachments.py::attach_writing_timelines`, `queue_writing_timeline.js` |
 | Late catch-up | `late_catchup.py`, `routes/powergrader_late.py`, `queue_late_catchup.js` |
 | Scheduled autoscore | `autoscore_queue.py`, `autoscore_claims.py`, `scheduled_autoscore_support.py`, `routes/routines_powergrader.py` |
@@ -70,7 +70,8 @@ queue namespace seams.
   transcript-first oral-reading projection may enter a SAFE scoring packet, never audio or
   media metadata. The browser receives only duration/status and a
   session-scoped audio stream URL, never a private path or Canvas media URL.
-  Read-aloud comparison uses the separate teacher-confirmed passage and local model
+  Ordinary media review is default-on without analysis. Read-aloud comparison is an explicit
+  default-off session selection; one selected run constructs its local model once. It uses the separate teacher-confirmed passage and local model
   only; see `docs/contracts/oral-reading-evidence-contract.md`.
   Packet late generation never writes; only a valid import against that late batch's SAFE
   bundle may trigger the scoped path. Uncertain results remain drafts.
@@ -206,7 +207,7 @@ Invariants worth protecting:
 | AI score visible too early, or reveal/agreement wrong | `blind_first.py`, `queue_blind_first.js`, `queue_core.js::renderStudent` |
 | Suggestion panel missing, or "Use AI's score/feedback" does nothing | `queue_core.js::renderStudent` (`aiPanel.hidden`), `queue_review.js` listeners |
 | Packet/import mismatch | `queue_import.js`, `import_results.py`, `copilot_packet.py` |
-| Evidence/attachments | `assignment_refresh.py`, `canvas_fetch.py`, `new_quiz_fetch.py`, `student_attachments.py` |
+| Evidence/attachments or held/playable media | `assignment_refresh.py`, `canvas_fetch.py`, `media_recordings.py`, `oral_reading.py`, `new_quiz_fetch.py`, `student_attachments.py` |
 | Late submission flow | `queue_late_catchup.js`, `powergrader_late.py`, `late_catchup.py` |
 | Auto-post eligibility/idempotency | `autopush_policy.py`, `push_context.py`, `interactive_autopush.py`, `autoscore_claims.py` |
 | Scheduled routine | `routines_powergrader.py`, `scheduled_autoscore_support.py`, `autoscore_queue.py` |
@@ -223,6 +224,7 @@ Core focused regressions:
 - `api/tests/test_powergrader_late_catchup.py`
 - `api/tests/test_writing_timeline.py`
 - `api/tests/powergrader/test_blind_first.py`
+- `api/tests/powergrader/test_assignment_refresh.py`, `test_media_recordings.py`, and `test_oral_reading.py`
 - `api/tests/test_route_contract.py`
 
 The handoff must add the focused policy/idempotency tests owned by any changed high-risk

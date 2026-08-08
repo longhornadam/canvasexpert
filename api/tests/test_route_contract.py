@@ -15,6 +15,7 @@ These were previously both at `/api/students` causing a shadow; the gradebook on
 """
 import json
 import hashlib
+import pytest
 
 from api.webui.server import app
 from api.webui.routes import powergrader as powergrader_routes
@@ -261,7 +262,7 @@ def test_oral_reading_model_routes_are_local_status_and_explicit_setup(monkeypat
     assert json.loads(setup.body)["ok"] is False
 
 
-def test_media_stream_is_session_owned_complete_and_workspace_contained(tmp_path, monkeypatch):
+def test_media_stream_is_session_owned_per_record_and_workspace_contained(tmp_path, monkeypatch):
     audio = tmp_path / "ready.wav"
     audio.write_bytes(b"synthetic wav")
     digest = hashlib.sha256(audio.read_bytes()).hexdigest()
@@ -272,7 +273,7 @@ def test_media_stream_is_session_owned_complete_and_workspace_contained(tmp_path
     monkeypatch.setattr(powergrader_routes.workspace, "workspace_root", lambda: str(tmp_path))
     monkeypatch.setattr(powergrader_routes.config, "course_display_name", lambda _course: "Synthetic")
     monkeypatch.setattr(powergrader_routes.workspace, "read_assignment_evidence_manifest", lambda *args: {
-        "status": "current", "evidence": [{"kind": "media_recording", "user_id": "student", "evidence_id": "media",
+        "status": "incomplete", "evidence": [{"kind": "media_recording", "user_id": "student", "evidence_id": "media",
         "relative_path": "ready.wav", "canonical_sha256": digest}],
     })
     ready = powergrader_routes.pg_media_stream("session", stream_key)
@@ -285,6 +286,32 @@ def test_media_stream_is_session_owned_complete_and_workspace_contained(tmp_path
         "relative_path": "../outside.wav", "canonical_sha256": digest}],
     })
     assert powergrader_routes.pg_media_stream("session", stream_key).status_code == 409
+
+
+@pytest.mark.parametrize("record", [
+    None,
+    {"kind": "media_recording", "user_id": "student", "evidence_id": "media", "canonical_sha256": "hash"},
+    {"kind": "media_recording", "user_id": "student", "evidence_id": "media", "relative_path": "missing.wav", "canonical_sha256": "hash"},
+    {"kind": "media_recording", "user_id": "other", "evidence_id": "media", "relative_path": "ready.wav", "canonical_sha256": "hash"},
+    {"kind": "media_recording", "user_id": "student", "evidence_id": "media", "relative_path": "ready.wav"},
+])
+def test_media_stream_missing_record_path_or_file_fails_closed(tmp_path, monkeypatch, record):
+    key = powergrader_routes.media_recordings.stream_key("media")
+    monkeypatch.setattr(powergrader_routes, "_load_session", lambda _: {"course_id": "course", "assignment_id": "assignment", "students": [{"user_id": "student", "attachments": [{"media_recording": True, "stream_key": key}]}]})
+    monkeypatch.setattr(powergrader_routes.workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(powergrader_routes.config, "course_display_name", lambda _: "Synthetic")
+    monkeypatch.setattr(powergrader_routes.workspace, "read_assignment_evidence_manifest", lambda *args: {"status": "incomplete", "evidence": [] if record is None else [record]})
+    assert powergrader_routes.pg_media_stream("session", key).status_code == 409
+
+
+def test_media_stream_tampered_digest_fails_closed(tmp_path, monkeypatch):
+    audio = tmp_path / "ready.wav"; audio.write_bytes(b"synthetic")
+    key = powergrader_routes.media_recordings.stream_key("media")
+    monkeypatch.setattr(powergrader_routes, "_load_session", lambda _: {"course_id":"course", "assignment_id":"assignment", "students":[{"user_id":"student", "attachments":[{"media_recording":True,"stream_key":key}]}]})
+    monkeypatch.setattr(powergrader_routes.workspace, "workspace_root", lambda: str(tmp_path))
+    monkeypatch.setattr(powergrader_routes.config, "course_display_name", lambda _: "Synthetic")
+    monkeypatch.setattr(powergrader_routes.workspace, "read_assignment_evidence_manifest", lambda *args: {"evidence":[{"kind":"media_recording","user_id":"student","evidence_id":"media","relative_path":"ready.wav","canonical_sha256":"wrong"}]})
+    assert powergrader_routes.pg_media_stream("session", key).status_code == 409
 
 
 def _current_routes():

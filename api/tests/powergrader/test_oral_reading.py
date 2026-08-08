@@ -98,18 +98,19 @@ def test_invalid_duration_and_report_reuse_binding():
 
 
 def test_missing_model_never_calls_transcriber(monkeypatch):
-    monkeypatch.setattr(oral_reading, "model_status", lambda: {"available": False})
+    monkeypatch.setattr(oral_reading, "construct_transcriber", lambda: (_ for _ in ()).throw(
+        oral_reading.LocalTranscriberUnavailable("model_missing", "Local speech model is not installed.")
+    ))
     called = False
     def transcribe(_):
         nonlocal called
         called = True
         raise AssertionError("normal analysis must not download or transcribe")
-    report = oral_reading.analyze_recording({"canonical_path": "synthetic.wav", "canonical_sha256": "hash", "duration_seconds": 1}, "one", transcribe=transcribe)
+    report = oral_reading.analyze_recording({"canonical_path": "synthetic.wav", "canonical_sha256": "hash", "duration_seconds": 1}, "one")
     assert report["error_code"] == "model_missing" and not called
 
 
 def test_stubbed_adapter_is_local_and_never_uses_network(monkeypatch):
-    monkeypatch.setattr(oral_reading, "model_status", lambda: {"available": True})
     record = {"canonical_path": "synthetic.wav", "canonical_sha256": hashlib.sha256(b"synthetic").hexdigest(), "duration_seconds": 10, "attempt": 1}
     report = oral_reading.analyze_recording(record, "one two", transcribe=lambda _: ("en", _events("one", "two"), "stub"))
     assert report["status"] == "complete" and report["model_version"] == "stub"
@@ -135,11 +136,11 @@ global.document={getElementById:id=>id==="pg-submission-pane"?pane:null,createEl
 vm.runInThisContext(fs.readFileSync(process.argv[1],"utf8"));
 window.CE_POWERGRADER_QUEUE.renderMediaRecordings({attachments:[
  {media_recording:true,download_status:"downloaded",extraction_status:"validated",stream_key:"one",oral_reading:{status:"complete",passage:"one two",transcript:"one two",metrics:{accuracy:1,wcpm:2},difference_candidates:[]}},
- {media_recording:true,download_status:"downloaded",extraction_status:"validated",stream_key:"two",oral_reading:{status:"needs_review",uncertainty:["low_confidence"],difference_candidates:[]}},
- {media_recording:true,download_status:"failed",error_message:"Local model unavailable"}
+ {media_recording:true,download_status:"reused",extraction_status:"validated",stream_key:"two",oral_reading:{status:"needs_review",uncertainty:["low_confidence"],difference_candidates:[]}},
+ ...["downloaded","reused","failed","pending",""].flatMap(status=>["validated","held",""] .map(extraction_status=>({media_recording:true,download_status:status,extraction_status})))
 ]});
 function text(n){return n.textContent+ n.children.map(text).join(" ");} const output=text(pane);
-if(!output.includes("teacher review, not a score")||!output.includes("low_confidence")||!output.includes("Recording held")) process.exit(2);
+ if(!output.includes("teacher review, not a score")||!output.includes("low_confidence")||!output.includes("Recording held")||pane.children.length!==17||pane.children.filter(n=>n.children.some(c=>c.controls)).length!==4||pane.children.filter(n=>text(n).includes("Recording held")).length!==13) process.exit(2);
 '''
     result = subprocess.run(["node", "-e", script, str(ROOT / "webui/static/powergrader/queue_media_recording.js")],
                             capture_output=True, text=True, check=False)

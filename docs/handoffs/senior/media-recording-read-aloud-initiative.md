@@ -432,12 +432,13 @@ the prior AI draft.
 ## 6. Teacher workflow
 
 1. Teacher selects a PowerGrader assignment.
-2. If actual submitted work includes media recordings, setup shows a required Read-aloud passage
-   section.
-3. Teacher confirms one passage, rubric, scoring mode, and whether raw audio may leave the
+2. Setup defaults to ordinary local media review. The teacher explicitly selects Read-aloud
+   analysis before passage and local-model controls appear.
+3. When selected, teacher confirms one passage, rubric, scoring mode, and whether raw audio may leave the
    computer. Raw audio defaults off.
 4. PowerGrader performs focused Canvas acquisition and shows per-student progress/status.
-5. Local conversion and speech analysis run with per-student isolation.
+5. Local conversion runs for media review; selected read-aloud analysis constructs its local
+   model once and runs with per-student isolation.
 6. Students with complete text-first evidence enter the AI scoring lane. Held students still
    enter the teacher queue with an explanation and local/SpeedGrader fallback.
 7. Queue shows local audio controls, passage, transcript/alignment summary, uncertainty, AI draft,

@@ -20,7 +20,7 @@
     rows.forEach(function(item){
       var section=document.createElement('section'); section.className='pg-sub-section pg-media-recording';
       var label=document.createElement('div'); label.className='pg-sub-label'; label.textContent='Media recording'; section.appendChild(label);
-      var ready=item.download_status === 'downloaded' && item.extraction_status === 'validated';
+      var ready=(item.download_status === 'downloaded' || item.download_status === 'reused') && item.extraction_status === 'validated';
       if (!ready) {
         var held=document.createElement('p'); held.className='pg-no-text'; held.textContent='Recording held: ' + (item.error_message || 'Local media review is unavailable.'); section.appendChild(held);
       } else {

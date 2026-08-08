@@ -125,7 +125,7 @@ def powergrader_setup(request: Request):
             source_materials_folder=source_dir,
             source_material_files=source_materials.list_source_files(),
             source_response_presets=source_materials.RESPONSE_PRESETS,
-            oral_reading_model=oral_reading.model_status(),
+            oral_reading_model={},
         ),
     )
 
@@ -163,7 +163,7 @@ def pg_media_stream(session_id: str, stream_key: str):
     manifest = workspace.read_assignment_evidence_manifest(
         course_name, session.get("course_id"), str(session.get("assignment_id")), session.get("assignment_id"), root,
     )
-    if not manifest or manifest.get("status") != "current":
+    if not manifest:
         return JSONResponse({"ok": False, "error": "Media recording is not ready for playback."}, status_code=409)
     record = next((entry for entry in manifest.get("evidence") or []
                    if entry.get("kind") == "media_recording" and str(entry.get("user_id")) == str(owner.get("user_id"))
@@ -303,6 +303,7 @@ def pg_start(
     source_files_json: str = Form(""),
     source_uploads: list[UploadFile] = File(None),
     oral_reading_passage: str = Form(""),
+    oral_reading_enabled: str = Form("false"),
 ):
     if not course_id or not assignment_id:
         return JSONResponse({"ok": False, "error": "course_id and assignment_id are required."})
@@ -333,15 +334,26 @@ def pg_start(
         return JSONResponse({"ok": False, "error": "No submitted work found for this assignment.",
                              "privacy_steps": []})
     media_submissions = [s for s in submitted if s.get("submission_type") == "media_recording"]
-    passage_tokens, passage_error = oral_reading.validate_passage(oral_reading_passage) if media_submissions else (None, None)
-    if passage_error:
+    oral_enabled = str(oral_reading_enabled).lower() in {"1", "true", "yes", "on"}
+    if oral_enabled and not media_submissions:
+        return JSONResponse({"ok": False, "error": "Read-aloud analysis needs at least one submitted media recording.", "code": "oral_reading_media_required", "privacy_steps": []})
+    passage_tokens, passage_error = oral_reading.validate_passage(oral_reading_passage) if oral_enabled else (None, None)
+    if oral_enabled and passage_error:
         return JSONResponse({"ok": False, "error": passage_error, "code": "oral_reading_passage_required", "privacy_steps": []})
     oral_passage = " ".join(passage_tokens or [])
-    if media_submissions:
+    if oral_enabled:
+        try:
+            transcriber = oral_reading.construct_transcriber()
+            construction_error = None
+        except oral_reading.LocalTranscriberUnavailable as exc:
+            transcriber, construction_error = None, exc
         for submission in media_submissions:
             for attachment in submission.get("attachments") or []:
                 if attachment.get("media_recording"):
-                    attachment["oral_reading"] = oral_reading.analyze_recording(attachment, oral_passage)
+                    if construction_error:
+                        attachment["oral_reading"] = {"status": "unavailable", "error_code": construction_error.code, "error_message": construction_error.message}
+                    else:
+                        attachment["oral_reading"] = oral_reading.analyze_recording(attachment, oral_passage, transcribe=transcriber)
     writing_timeline_tracked = writing_timeline.is_tracked_assignment(adata)
     if writing_timeline_tracked:
         student_attachments.attach_writing_timelines(
@@ -467,7 +479,7 @@ def pg_start(
         evidence_manifest=refresh.get("manifest_path"),
         evidence_status=refresh.get("status", "unknown"),
         auto_post_enabled=auto_post_enabled,
-        oral_reading_passage=({"passage": oral_passage, "digest": oral_reading.passage_digest(passage_tokens)} if passage_tokens else {}),
+        oral_reading_passage=({"enabled": True, "passage": oral_passage, "digest": oral_reading.passage_digest(passage_tokens)} if oral_enabled else {"enabled": False}),
     )
     session["writing_timeline_tracked"] = writing_timeline_tracked
     _save_session(session)

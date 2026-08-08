@@ -154,6 +154,13 @@ def refresh_assignment(course_id: str, assignment_id: str, *, session_id: str):
     evidence = []
     incomplete = bool(conflicts)
     for submission in subs or []:
+        # Canvas includes roster rows with no submitted attempt.  They have no
+        # evidence to validate and must not hold an unrelated completed record.
+        if submission.get("workflow_state") == "unsubmitted" or (
+            not submission.get("submission_type") and not submission.get("attachments")
+            and submission.get("new_quiz_attempt") is None
+        ):
+            continue
         uid = str(submission.get("user_id") or "")
         attempt = submission.get("new_quiz_attempt") or submission.get("attempt") or submission.get("submission_attempt")
         if not uid or attempt in (None, ""):

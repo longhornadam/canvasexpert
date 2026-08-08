@@ -43,6 +43,34 @@ def model_status() -> dict:
             "approximate_download_mib": 500}
 
 
+class LocalTranscriberUnavailable(RuntimeError):
+    """Content-minimized failure raised while constructing the one local model."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def construct_transcriber():
+    """Construct one local-only transcriber; this path never downloads weights."""
+    snapshot = _model_snapshot()
+    if not snapshot:
+        raise LocalTranscriberUnavailable("model_missing", "Local speech model is not installed.")
+    try:
+        from faster_whisper import WhisperModel
+        model = WhisperModel(str(snapshot), device="cpu", compute_type=COMPUTE_TYPE)
+    except Exception as exc:
+        raise LocalTranscriberUnavailable("model_unavailable", "Local speech model is unavailable.") from exc
+
+    def transcribe(path):
+        segments, info = model.transcribe(path, word_timestamps=True)
+        events = [{"word": word.word, "start": word.start, "end": word.end, "probability": word.probability}
+                  for segment in segments for word in (segment.words or [])]
+        return info.language, events, "faster-whisper"
+    return transcribe
+
+
 def install_model() -> dict:
     """Explicit setup action only.  Constructing WhisperModel may download weights."""
     try:
@@ -82,20 +110,32 @@ def passage_digest(tokens: list[str]) -> str:
 def align(source: list[str], observed: list[str]) -> list[dict]:
     """Deterministic Levenshtein alignment with exact/sub/omit/insert tie order."""
     rows, cols = len(source), len(observed)
-    cost = [[0] * (cols + 1) for _ in range(rows + 1)]
-    for i in range(rows + 1): cost[i][0] = i
-    for j in range(cols + 1): cost[0][j] = j
+    # Keep costs in two numeric rows; backpointers preserve the existing tie
+    # order without allocating a quadratic matrix of Python integers.
+    previous = list(range(cols + 1))
+    back = bytearray((rows + 1) * (cols + 1))
+    for j in range(1, cols + 1): back[j] = 3
     for i in range(1, rows + 1):
+        current = [i] + [0] * cols
+        back[i * (cols + 1)] = 2
         for j in range(1, cols + 1):
-            substitution = cost[i - 1][j - 1] + (source[i - 1] != observed[j - 1])
-            cost[i][j] = min(substitution, cost[i - 1][j] + 1, cost[i][j - 1] + 1)
+            substitution = previous[j - 1] + (source[i - 1] != observed[j - 1])
+            omission, insertion = previous[j] + 1, current[j - 1] + 1
+            if substitution <= omission and substitution <= insertion:
+                current[j] = substitution; back[i * (cols + 1) + j] = 0 if source[i - 1] == observed[j - 1] else 1
+            elif omission <= insertion:
+                current[j] = omission; back[i * (cols + 1) + j] = 2
+            else:
+                current[j] = insertion; back[i * (cols + 1) + j] = 3
+        previous = current
     i, j, result = rows, cols, []
     while i or j:
-        if i and j and source[i - 1] == observed[j - 1] and cost[i][j] == cost[i - 1][j - 1]:
+        direction = back[i * (cols + 1) + j]
+        if i and j and direction == 0:
             result.append({"kind": "exact", "source_index": i - 1, "observed_index": j - 1}); i -= 1; j -= 1
-        elif i and j and cost[i][j] == cost[i - 1][j - 1] + 1:
+        elif i and j and direction == 1:
             result.append({"kind": "substitution", "source_index": i - 1, "observed_index": j - 1}); i -= 1; j -= 1
-        elif i and cost[i][j] == cost[i - 1][j] + 1:
+        elif i and direction == 2:
             result.append({"kind": "omission", "source_index": i - 1}); i -= 1
         else:
             result.append({"kind": "insertion", "observed_index": j - 1}); j -= 1
@@ -167,23 +207,16 @@ def make_report(*, canonical_sha256: str, attempt: object, passage: str, duratio
 
 def analyze_recording(record: dict, passage: str, *, transcribe=None) -> dict:
     """Analyze an already-finalized canonical recording; never downloads at start."""
-    status = model_status()
-    if not status["available"]:
-        return {"status": "unavailable", "error_code": "model_missing", "error_message": "Local speech model is not installed."}
     if not record.get("canonical_path") or not record.get("canonical_sha256"):
         return {"status": "unavailable", "error_code": "canonical_audio_missing", "error_message": "Canonical local audio is unavailable."}
     try:
         if transcribe is None:
-            from faster_whisper import WhisperModel
-            model = WhisperModel(str(_model_snapshot()), device="cpu", compute_type=COMPUTE_TYPE)
-            segments, info = model.transcribe(record["canonical_path"], word_timestamps=True)
-            events = [{"word": word.word, "start": word.start, "end": word.end, "probability": word.probability}
-                      for segment in segments for word in (segment.words or [])]
-            language, version = info.language, "faster-whisper"
-        else:
-            language, events, version = transcribe(record["canonical_path"])
+            transcribe = construct_transcriber()
+        language, events, version = transcribe(record["canonical_path"])
         return make_report(canonical_sha256=record["canonical_sha256"], attempt=record.get("attempt", 1), passage=passage,
                            duration_seconds=record.get("duration_seconds"), language=language, word_events=events, model_version=version)
+    except LocalTranscriberUnavailable as exc:
+        return {"status": "unavailable", "error_code": exc.code, "error_message": exc.message}
     except Exception:
         return {"status": "unavailable", "error_code": "transcription_failed", "error_message": "Local transcription could not be completed."}
 

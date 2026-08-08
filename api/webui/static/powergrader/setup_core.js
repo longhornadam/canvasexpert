@@ -37,6 +37,8 @@
   var syncCourseBtn = document.getElementById('pg-sync-course-list');
   var catalogStatus = document.getElementById('pg-course-catalog-status');
   var oralPassage = document.getElementById('pg-oral-reading-passage');
+  var oralReadingEnabled = document.getElementById('pg-oral-reading-enabled');
+  var oralReadingControls = document.getElementById('pg-oral-reading-controls');
   var oralModelStatus = document.getElementById('pg-oral-reading-status');
   var oralModelSetup = document.getElementById('pg-oral-reading-setup');
 
@@ -135,7 +137,20 @@
   }
 
   function bindOralReadingSetup() {
-    setOralModelStatus(setupConfig.oralReadingModel || {});
+    function toggle() {
+      var enabled = !!(oralReadingEnabled && oralReadingEnabled.checked);
+      if (oralReadingControls) oralReadingControls.hidden = !enabled;
+      if (oralPassage) oralPassage.disabled = !enabled;
+      if (oralModelSetup) oralModelSetup.disabled = !enabled;
+      if (!enabled && oralModelStatus) oralModelStatus.textContent = '';
+      if (enabled) {
+        fetch('/api/powergrader/oral-reading/model-status').then(function(response){ return response.json(); })
+          .then(setOralModelStatus).catch(function(){ if (oralModelStatus) oralModelStatus.textContent = 'Local speech model status is unavailable.'; });
+      }
+    }
+    if (oralReadingEnabled) oralReadingEnabled.checked = false;
+    toggle();
+    if (oralReadingEnabled) oralReadingEnabled.addEventListener('change', toggle);
     if (!oralModelSetup) return;
     oralModelSetup.addEventListener('click', function(){
       oralModelSetup.disabled = true;
@@ -531,6 +546,7 @@
         pg.syncSourceFilesJson();
       }
       var fd = new FormData(form);
+      fd.set('oral_reading_enabled', oralReadingEnabled && oralReadingEnabled.checked ? 'true' : 'false');
       var watchLate = document.getElementById('pg-watch-late');
       fd.set('watch_late', watchLate && watchLate.checked ? 'true' : 'false');
       fd.set('auto_post', autoPostEnabled ? 'true' : 'false');
