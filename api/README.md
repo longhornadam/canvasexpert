@@ -106,6 +106,12 @@ Canvas token in Credential Manager. Synced state is last-writer-wins through
 OneDrive; conflict copies like `settings-<PC>.json` are ignored by the app. If
 OneDrive is absent, the app falls back to the local folders exactly as before.
 
+Read-aloud media evidence uses an optional local `faster-whisper` `small.en` model.
+Use PowerGrader’s explicit “Set up local speech model” control (about 500 MiB) before
+starting a media session; ordinary grading never downloads it. Weights stay in
+`%LOCALAPPDATA%\CanvasExpert\speech-models` or the machine-local
+`CANVAS_EXPERT_WHISPER_MODEL_CACHE` override, never in the workspace or an AI packet.
+
 **Full feature reference** (Settings, Dashboard, Push Quiz/Assignment/Page/Module,
 Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 

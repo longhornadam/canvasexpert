@@ -92,6 +92,7 @@ def build_start_session(
     evidence_manifest: str | None = None,
     evidence_status: str = "unknown",
     auto_post_enabled: bool = False,
+    oral_reading_passage: dict | None = None,
 ) -> dict:
     session = build_session(
         session_id=session_id,
@@ -116,6 +117,7 @@ def build_start_session(
         new_quiz_item_finalization_supported=new_quiz_item_finalization_supported,
         evidence_manifest=evidence_manifest,
         evidence_status=evidence_status,
+        oral_reading_passage=oral_reading_passage,
     )
     session["auto_post"] = _auto_post_block(mode, auto_post_enabled)
     session["auto_post_log"] = []

@@ -46,3 +46,7 @@ mcp>=1.12,<2
 # normalizes every timestamp to Central and must not fall back to UTC, which would
 # make an evening writing session read as overnight work.
 tzdata>=2024.1
+
+# Local-only read-aloud transcription.  Weights are downloaded only by the
+# explicit PowerGrader setup control, never while starting a grading session.
+faster-whisper>=1.2.1,<2

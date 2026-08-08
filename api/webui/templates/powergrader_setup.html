@@ -279,6 +279,19 @@
     </section>
 
     <!-- ═══ Action footer ═══ -->
+    <section class="pg-step" aria-labelledby="pg-oral-reading-title">
+      <h2 id="pg-oral-reading-title" class="pg-step-title">Read-aloud recordings</h2>
+      <p class="hint">Only when the selected assignment has Canvas media recordings: paste the teacher-confirmed passage. Recording evidence stays local; it is not AI scoring.</p>
+      <label for="pg-oral-reading-passage">Confirmed passage
+        <textarea id="pg-oral-reading-passage" name="oral_reading_passage" rows="4" maxlength="24000"
+          placeholder="Required for a submitted media recording; 1–3,000 English words."></textarea>
+      </label>
+      <div class="ce-actions">
+        <button type="button" id="pg-oral-reading-setup" class="small">Set up local speech model (about 500 MiB)</button>
+        <span id="pg-oral-reading-status" class="hint" aria-live="polite">Checking local speech model…</span>
+      </div>
+    </section>
+
     <div class="pg-start-actions">
       <label class="pg-ai-check" id="pg-ai-check-wrap" hidden>
         <input type="checkbox" id="pg-ai-check">
@@ -380,7 +393,8 @@
 window.POWERGRADER_SETUP_CONFIG = {
   defaultModel: {{ default_openrouter_model | tojson }},
   modelPresets: {{ openrouter_model_presets | tojson }},
-  hasWorkspace: {{ has_workspace | tojson }}
+  hasWorkspace: {{ has_workspace | tojson }},
+  oralReadingModel: {{ oral_reading_model | tojson }}
 };
 </script>
 <script src="/static/powergrader_setup.js?v={{ asset_v }}"></script>

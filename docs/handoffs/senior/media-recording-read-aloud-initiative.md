@@ -1,18 +1,18 @@
 # Media-recording read-aloud scoring initiative
 
-**Status:** Senior context. Batch A is accepted GREEN under the user-authorized synthetic-only
-verification override. Batch B is the next candidate for direct-brief promotion.
+**Status:** Senior context. Batches A and B are accepted GREEN under the user-authorized
+synthetic-only verification override. Batch C is the next candidate for direct-brief promotion.
 
 **Baseline inspected:** local `dev` at `450e97ffd97e6312adc185b535ae46cd7b8cbf81`
 on 2026-08-07. The working tree already contains unrelated user changes in
 `Open Canvas Expert.bat`, `Repair.bat`, and
 `api/default_docs/AI Authoring/START HERE - CanvasAgent.txt`; preserve them.
 
-**Next batch pointer:** Batch B, using sections 1-7, 9.2, 10.1, 11, and 13 of this plan.
-Batch A was accepted on 2026-08-07 under the explicit synthetic-only override because no
-dummy or live courses exist. The documented `MediaComment` source shape is implemented and
-fails closed on unknown transport behavior; direct media URL and signed cross-origin behavior
-remain a later integration risk, not a reason for compatibility code.
+**Next batch pointer:** Batch C, using sections 1-7, 9.3, 10.1, 11, and 13 of this plan. Batches
+A and B were accepted on 2026-08-07 under the explicit synthetic-only override because no dummy
+or live courses exist. The documented `MediaComment` source shape is implemented and fails closed
+on unknown transport behavior; direct media URL and signed cross-origin behavior remain a later
+integration risk, not a reason for compatibility code.
 
 This is persistent senior planning context. It does not itself authorize implementation.
 Terra promotes exactly one batch at a time into the single direct brief under
@@ -943,15 +943,16 @@ Stop rather than guess if:
 
 ## Execution result
 
-- Traffic light: GREEN, Batch A accepted under the explicit synthetic-only override.
-- Commit: pending Terra's Batch A integration commit.
-- Changed files: private media acquisition/conversion/manifest/session/queue route and feature
-  seams; focused tests; `docs/reference/powergrader-module-map.md`; Batch A direct brief.
-- Commands/counts: the Batch A named gate passed, 25 tests; `git diff --check` and targeted
-  compilation passed. Local `/powergrader` rendered with zero console errors. No Canvas,
-  credential, student-data, browser-authentication, or external-system access occurred.
-- Deviations: the user waived the otherwise-required live dummy-media preflight because no
-  dummy or live course exists. The empty local environment cannot render a real queue session;
-  queue behavior is covered by synthetic focused tests and the local route/template render.
+- Traffic light: GREEN, Batches A and B accepted under the explicit synthetic-only override.
+- Commit: Batch A `dfec0b6`; Batch B pending Terra's integration commit.
+- Changed files: Batch A private media acquisition/conversion/manifest/session/queue route and
+  feature seams; Batch B local transcription/alignment/report/setup/queue seams; focused tests;
+  route cards, local setup documentation, and the oral-reading contract.
+- Commands/counts: Batch A gate passed 25 tests; Batch B gate passed 55 tests. Each had a clean
+  diff check and proportionate compile/render verification. No Canvas, credential, student-data,
+  browser-authentication, or external-system access occurred in either batch.
+- Deviations: the user waived the otherwise-required live dummy-media preflight because no dummy
+  or live course exists. Browser loopback automation was blocked by client policy during Batch B,
+  so the local route/template and synthetic queue states were rendered directly instead.
 - Unresolved integration risk: exact live `MediaComment` and signed-media transport behavior
   remains intentionally unproved. No other product or architecture decision is delegated.

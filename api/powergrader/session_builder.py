@@ -4,12 +4,18 @@ from datetime import datetime
 
 from api.powergrader.student_attachments import eligibility_decision
 from api.powergrader import media_recordings
+from api.powergrader import oral_reading
 
 
 def _attachment_metadata(attachment: dict) -> dict:
     """Persist review metadata only; never persist a Canvas/signed URL."""
     if attachment.get("media_recording"):
-        return media_recordings.review_metadata(attachment)
+        metadata = media_recordings.review_metadata(attachment)
+        report = attachment.get("oral_reading")
+        if isinstance(report, dict):
+            metadata["oral_reading"] = oral_reading.review_projection(report)
+            metadata["oral_reading_private"] = report
+        return metadata
     allowed = (
         "filename", "display_name", "local_path", "declared_size", "actual_size",
         "size", "detected_media_type", "media_type", "download_status",
@@ -84,7 +90,7 @@ def build_students(
             "new_quiz_items": new_quiz_items,
             "attachment_eligibility": eligibility,
             "has_media_recording": has_media_recording,
-            "analysis_unavailable": "Media recording analysis is unavailable; grade this recording manually." if has_media_recording else "",
+            "analysis_unavailable": "" if has_media_recording else "",
             "new_quiz_files_error": s.get("new_quiz_files_error"),
             "speedgrader_required": requires_speedgrader,
             "code_files":    code_files,
@@ -141,6 +147,7 @@ def build_session(
     new_quiz_item_finalization_supported: bool = False,
     evidence_manifest: str | None = None,
     evidence_status: str = "unknown",
+    oral_reading_passage: dict | None = None,
 ) -> dict:
     """Build the session dictionary ready to save."""
     return {
@@ -166,6 +173,7 @@ def build_session(
         "new_quiz_item_finalization_supported": new_quiz_item_finalization_supported,
         "evidence_manifest": evidence_manifest,
         "evidence_status": evidence_status,
+        "oral_reading_passage": oral_reading_passage or {},
         "students":        students or [],
         "push_log":        [],
     }

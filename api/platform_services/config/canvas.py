@@ -153,6 +153,12 @@ def ensure_workspace_pinned() -> str | None:
     return None
 
 
+def get_whisper_model_cache() -> str:
+    """Machine-local read-aloud model cache; it is never workspace state."""
+    override = os.environ.get("CANVAS_EXPERT_WHISPER_MODEL_CACHE", "").strip()
+    return override or os.path.join(os.environ.get("LOCALAPPDATA", ""), "CanvasExpert", "speech-models")
+
+
 # --------------------------------------------------------------------------
 # Runtime credential bundle
 # --------------------------------------------------------------------------

@@ -34,7 +34,7 @@ namespace shims.
 | AI workflow and SAFE artifacts | `ai_workflow.py`, `ai_workflow_support.py`, `queue_privacy.js` |
 | Copilot packets/import | `copilot_packet.py`, `copilot_packet_support.py`, `import_results.py`, `queue_import.js` |
 | MCP scoring packet/staging | `scoring_packet.py`, `api/mcp_server/tools.py` (`list_scoring_sessions`, `get_scoring_packet`, `stage_scores`), reusing `import_results.py` |
-| Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `media_recordings.py`, `new_quiz_fetch.py`, `student_attachments.py` |
+| Focused assignment evidence | `assignment_refresh.py`, `canvas_fetch.py`, `media_recordings.py`, `oral_reading.py`, `new_quiz_fetch.py`, `student_attachments.py` |
 | Writing Timeline | `writing_timeline.py`, `student_attachments.py::attach_writing_timelines`, `queue_writing_timeline.js` |
 | Late catch-up | `late_catchup.py`, `routes/powergrader_late.py`, `queue_late_catchup.js` |
 | Scheduled autoscore | `autoscore_queue.py`, `autoscore_claims.py`, `scheduled_autoscore_support.py`, `routes/routines_powergrader.py` |
@@ -69,6 +69,8 @@ queue namespace seams.
   original plus a local-only PCM16 mono 16 kHz WAV for teacher playback; they never enter a
   SAFE packet or automated scoring path. The browser receives only duration/status and a
   session-scoped audio stream URL, never a private path or Canvas media URL.
+  Read-aloud comparison uses the separate teacher-confirmed passage and local model
+  only; see `docs/contracts/oral-reading-evidence-contract.md`.
   Packet late generation never writes; only a valid import against that late batch's SAFE
   bundle may trigger the scoped path. Uncertain results remain drafts.
 - New Quiz sessions have a separate teacher-reviewed item-finalization lane for item scores

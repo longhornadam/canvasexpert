@@ -18,7 +18,7 @@ from api.powergrader import (ai_workflow, assignment_refresh, blind_first, canva
                              estimates, import_results, late_catchup, privacy,
                              new_quiz_csv, new_quiz_grader,
                              session_actions, session_builder, session_store,
-                             start_workflow, student_attachments, writing_timeline, media_recordings)
+                             start_workflow, student_attachments, writing_timeline, media_recordings, oral_reading)
 from .powergrader_helpers import (
     build_late_preview_payload,
     build_late_watch_state,
@@ -125,6 +125,7 @@ def powergrader_setup(request: Request):
             source_materials_folder=source_dir,
             source_material_files=source_materials.list_source_files(),
             source_response_presets=source_materials.RESPONSE_PRESETS,
+            oral_reading_model=oral_reading.model_status(),
         ),
     )
 
@@ -182,6 +183,18 @@ def pg_media_stream(session_id: str, stream_key: str):
         "Pragma": "no-cache",
         "X-Content-Type-Options": "nosniff",
     })
+
+
+@router.get("/api/powergrader/oral-reading/model-status")
+def pg_oral_reading_model_status():
+    return JSONResponse({"ok": True, **oral_reading.model_status()})
+
+
+@router.post("/api/powergrader/oral-reading/setup-model")
+def pg_oral_reading_setup_model():
+    """The only route allowed to cause a local speech-model download."""
+    result = oral_reading.install_model()
+    return JSONResponse(result, status_code=200 if result.get("ok") else 503)
 
 @router.get("/api/powergrader/sessions")
 def list_sessions():
@@ -289,6 +302,7 @@ def pg_start(
     source_text: str = Form(""),
     source_files_json: str = Form(""),
     source_uploads: list[UploadFile] = File(None),
+    oral_reading_passage: str = Form(""),
 ):
     if not course_id or not assignment_id:
         return JSONResponse({"ok": False, "error": "course_id and assignment_id are required."})
@@ -318,6 +332,16 @@ def pg_start(
     if not submitted:
         return JSONResponse({"ok": False, "error": "No submitted work found for this assignment.",
                              "privacy_steps": []})
+    media_submissions = [s for s in submitted if s.get("submission_type") == "media_recording"]
+    passage_tokens, passage_error = oral_reading.validate_passage(oral_reading_passage) if media_submissions else (None, None)
+    if passage_error:
+        return JSONResponse({"ok": False, "error": passage_error, "code": "oral_reading_passage_required", "privacy_steps": []})
+    oral_passage = " ".join(passage_tokens or [])
+    if media_submissions:
+        for submission in media_submissions:
+            for attachment in submission.get("attachments") or []:
+                if attachment.get("media_recording"):
+                    attachment["oral_reading"] = oral_reading.analyze_recording(attachment, oral_passage)
     writing_timeline_tracked = writing_timeline.is_tracked_assignment(adata)
     if writing_timeline_tracked:
         student_attachments.attach_writing_timelines(
@@ -338,7 +362,7 @@ def pg_start(
         response_kind=response_kind,
         new_quiz_snapshot=is_new_quiz,
     )
-    if any(s.get("submission_type") == "media_recording" for s in submitted):
+    if media_submissions:
         late_watch.update({
             "supported": False,
             "enabled": False,
@@ -346,7 +370,7 @@ def pg_start(
         })
 
     # AI workflow
-    media_user_ids = {str(s.get("user_id")) for s in submitted if s.get("submission_type") == "media_recording"}
+    media_user_ids = {str(s.get("user_id")) for s in media_submissions}
     ai_result = ai_workflow.run_ai_workflow(
         mode=mode,
         submitted=[s for s in submitted if str(s.get("user_id")) not in media_user_ids],
@@ -379,7 +403,7 @@ def pg_start(
     ai_failures = dict(ai_result.get("ai_failures") or {})
     for user_id in media_user_ids:
         ai_by_uid.pop(user_id, None)
-        ai_failures[user_id] = {"code": "media_analysis_unavailable", "message": "Media recording analysis is unavailable; grade this recording manually."}
+        ai_failures[user_id] = {"code": "media_manual_review", "message": "Media recording evidence stays local and requires teacher review."}
     late_watch["source_context"] = ai_result.get("source_context") or {}
 
     # Roster context
@@ -446,6 +470,7 @@ def pg_start(
         evidence_manifest=refresh.get("manifest_path"),
         evidence_status=refresh.get("status", "unknown"),
         auto_post_enabled=auto_post_enabled,
+        oral_reading_passage=({"passage": oral_passage, "digest": oral_reading.passage_digest(passage_tokens)} if passage_tokens else {}),
     )
     session["writing_timeline_tracked"] = writing_timeline_tracked
     _save_session(session)
@@ -523,7 +548,7 @@ def pg_get_session(session_id: str):
     # A value the page received has already had its chance to anchor the teacher.
     return JSONResponse({
         "ok": True,
-        "session": blind_first.project_session(session),
+        "session": oral_reading.project_session(blind_first.project_session(session)),
         "blind_first": blind_first.summary(session),
     })
 

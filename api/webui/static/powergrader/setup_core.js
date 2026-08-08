@@ -36,6 +36,9 @@
   var evidenceStatus = document.getElementById('pg-evidence-status');
   var syncCourseBtn = document.getElementById('pg-sync-course-list');
   var catalogStatus = document.getElementById('pg-course-catalog-status');
+  var oralPassage = document.getElementById('pg-oral-reading-passage');
+  var oralModelStatus = document.getElementById('pg-oral-reading-status');
+  var oralModelSetup = document.getElementById('pg-oral-reading-setup');
 
   function currentMode() {
     var checked = modeChoices.find(function(el){ return el.checked; });
@@ -122,6 +125,29 @@
   function setStatus(msg, err){
     status.textContent = msg;
     status.style.color = err ? 'var(--ce-red, #c0392b)' : '';
+  }
+
+  function setOralModelStatus(data) {
+    if (!oralModelStatus) return;
+    oralModelStatus.textContent = data && data.available
+      ? 'Local speech model is ready. Recording analysis stays on this computer.'
+      : 'Local speech model is not installed. Recording analysis will be held for review.';
+  }
+
+  function bindOralReadingSetup() {
+    setOralModelStatus(setupConfig.oralReadingModel || {});
+    if (!oralModelSetup) return;
+    oralModelSetup.addEventListener('click', function(){
+      oralModelSetup.disabled = true;
+      if (oralModelStatus) oralModelStatus.textContent = 'Preparing the local speech model…';
+      fetch('/api/powergrader/oral-reading/setup-model', {method: 'POST'})
+        .then(function(response){ return response.json(); })
+        .then(function(data){
+          if (data.ok) setOralModelStatus(data);
+          else if (oralModelStatus) oralModelStatus.textContent = data.error || 'The local speech model could not be prepared. Try again.';
+        }).catch(function(){ if (oralModelStatus) oralModelStatus.textContent = 'The local speech model could not be prepared. Try again.'; })
+        .finally(function(){ oralModelSetup.disabled = false; });
+    });
   }
 
   function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
@@ -473,6 +499,9 @@
       var aid = asnEl.value;
       if (!cid || !aid) { setStatus('Select a course and assignment first.', true); return; }
       var mode = modeInput.value;
+      if (oralPassage && oralPassage.value.trim() && oralPassage.value.trim().split(/\s+/).length > 3000) {
+        setStatus('The confirmed passage cannot exceed 3,000 words.', true); return;
+      }
       var autoPostCheck = document.getElementById('pg-auto-post');
       var autoPostEnabled = autoPostCheck && autoPostCheck.checked && !autoPostCheck.disabled;
       // If auto-post is enabled, await the confirmation BEFORE disabling the button
@@ -579,5 +608,6 @@
   bindStartSession();
   bindEvidenceActions();
   bindCourseCatalogActions();
+  bindOralReadingSetup();
   if (typeof pg.loadSessions === 'function') pg.loadSessions('');
 })();

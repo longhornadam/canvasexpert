@@ -18,6 +18,7 @@ def build_setup_page_context(
     source_materials_folder: str,
     source_material_files: list[dict],
     source_response_presets: dict,
+    oral_reading_model: dict,
 ) -> dict:
     return {
         "nav_section": "grade",
@@ -36,6 +37,7 @@ def build_setup_page_context(
         "source_materials_folder": source_materials_folder,
         "source_material_files": source_material_files,
         "source_response_presets": source_response_presets,
+        "oral_reading_model": oral_reading_model,
     }
 
 
