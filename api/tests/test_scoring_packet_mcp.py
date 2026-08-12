@@ -34,7 +34,7 @@ _ORDINALS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven"]
 
 
 def _seed_vault(monkeypatch, tmp_path, count: int = 3) -> list[dict]:
-    """Vault holding ``count`` students, each with a pinned pseudonym.
+    """Vault holding ``count`` students, each with a pinned one-word pseudonym.
 
     Returns [{canvas_id, real_name, pseudonym}] and binds the tool layer's
     vault factory to it.
@@ -44,12 +44,13 @@ def _seed_vault(monkeypatch, tmp_path, count: int = 3) -> list[dict]:
     for i in range(1, count + 1):
         canvas_id = f"90000{i}"
         real_name = f"Real Student {i}"
+        pseudonym = feedback_vault._REGISTRY_WORDS[i]
         vault.get_or_assign(canvas_id, real_name=real_name)
-        vault.set_pseudonym(canvas_id, "Learner", _ORDINALS[i])
+        vault.set_pseudonym(canvas_id, pseudonym)
         people.append({
             "canvas_id": canvas_id,
             "real_name": real_name,
-            "pseudonym": f"Learner {_ORDINALS[i]}",
+            "pseudonym": pseudonym,
         })
     vault.save()
     monkeypatch.setattr(tools, "_vault_factory", lambda: vault)

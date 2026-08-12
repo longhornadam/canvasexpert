@@ -159,10 +159,10 @@ def test_media_read_aloud_unavailable_stays_in_private_teacher_queue(tmp_path):
 
 def test_media_read_aloud_scrub_survivor_gets_a_specific_private_hold(tmp_path):
     vault = Vault(str(tmp_path / "vault.json"))
-    vault._by_id["999"] = {"pseudonym": "", "pseudo_first": "", "pseudo_last": "",
+    vault._by_id["999"] = {"pseudonym": "",
                             "real_name": "Ghost", "sis_id": "", "nicknames": [], "first_seen": ""}
     bundle = {
-        "students": [{"pseudonym": "Learner One", "local_attachments": [], "responses": [{
+        "students": [{"pseudonym": "Quartz", "local_attachments": [], "responses": [{
             "item_id": "42", "response": "", "oral_reading": {
                 "version": "1.0", "status": "complete", "passage": "Ghost reads", "transcript": "Ghost reads",
                 "passage_digest": "p" * 64, "evidence_digest": "e" * 64,
@@ -174,7 +174,7 @@ def test_media_read_aloud_scrub_survivor_gets_a_specific_private_hold(tmp_path):
 
     assert result["safe_students"] == 0
     assert result["media_holds"] == [{
-        "pseudonym": "Learner One",
+        "pseudonym": "Quartz",
         "message": "Read-aloud evidence could not be safely scrubbed; review the recording locally.",
     }]
 
@@ -305,14 +305,13 @@ def test_normalize_ai_feedback_removes_duplicate_signature_and_formats():
 # --------------------------------------------------------------------------
 
 def test_pseudonymize_submissions_fake_names_avoid_roster(tmp_path):
-    """The guided flow must assign fake names disjoint from real roster tokens even
-    without a prior Name Manager sync (regression: roster_names was not passed)."""
+    """The guided flow must assign pseudonyms disjoint from real roster tokens even
+    without a prior sync (regression: roster_names was not passed)."""
     v = Vault(str(tmp_path / "vault.json"))
     fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")
     roster_tokens = {"ada", "lovelace", "alan", "turing", "grace", "hopper"}
     for e in v.entries():
-        assert e["pseudo_first"].lower() not in roster_tokens
-        assert e["pseudo_last"].lower() not in roster_tokens
+        assert e["pseudonym"].lower() not in roster_tokens
 
 
 def test_upsert_roster_captures_preferred_name_as_nickname(tmp_path):
@@ -345,7 +344,7 @@ def test_write_safe_and_private_excludes_unscrubbed_student(tmp_path):
     v = Vault(str(tmp_path / "vault.json"))
     # A vault entry with a real name but NO pseudonym -> no scrub rule is built for
     # it, so a mention of "Ghost" cannot be scrubbed but verify_clean still flags it.
-    v._by_id["999"] = {"pseudonym": "", "pseudo_first": "", "pseudo_last": "",
+    v._by_id["999"] = {"pseudonym": "",
                        "real_name": "Ghost", "sis_id": "", "nicknames": [],
                        "first_seen": ""}
     bundle = fp.pseudonymize_submissions(_submissions_fixture(), v, "Essay 1")

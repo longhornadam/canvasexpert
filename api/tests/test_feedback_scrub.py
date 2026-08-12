@@ -28,7 +28,7 @@ def test_jose_flores_scrub_in_sentence(tmp_path):
     result = scrub.scrub_text(text, rmap)
     assert "Jose Flores" not in result
     e = v.entries()[0]
-    assert e["pseudo_first"] in result or e["pseudonym"] in result
+    assert e["pseudonym"] in result
 
 
 def test_nickname_scrubbed_to_full_pseudonym(tmp_path):

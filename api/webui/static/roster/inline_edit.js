@@ -93,7 +93,7 @@
     if (key === "nicknames") {
       s.nicknames = value;
     } else if (key === "pseudonym") {
-      s.pseudonym = [value.first, value.last].filter(Boolean).join(" ");
+      s.pseudonym = value;
     } else if (key === "extra_time") {
       s.extra_time = { enabled: !!value.enabled, days: value.days || 0 };
     } else if (key === "canvas_group") {
@@ -213,10 +213,7 @@
     tableBody.querySelectorAll(".roster-v2-pseudo").forEach(function (el) {
       el.addEventListener("change", function () {
         var id = el.dataset.id;
-        var parts = el.value.trim().split(/\s+/);
-        var first = parts[0] || "";
-        var last = parts.slice(1).join(" ") || "";
-        saveField(id, "pseudonym", { first: first, last: last });
+        saveField(id, "pseudonym", el.value.trim());
       });
     });
 

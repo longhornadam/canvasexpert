@@ -321,8 +321,6 @@ def roster_get(course_id: str = Query("")):
             "sections": sections,
             "nicknames": nicknames,
             "pseudonym": ve.get("pseudonym", ""),
-            "pseudo_first": ve.get("pseudo_first", ""),
-            "pseudo_last": ve.get("pseudo_last", ""),
             "extra_time": et,
             "monitored": {"enabled": monitored_flag, "note": monitored_note},
             "seating_context": seating_context,

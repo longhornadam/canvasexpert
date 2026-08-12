@@ -1,44 +1,151 @@
-"""Offline tests for feedback tools vault v2: fake-name pseudonyms, nicknames,
-collision avoidance, entries() shape, regenerate.
+"""Offline tests for feedback tools vault v3: one-word registry pseudonyms,
+nicknames, collision avoidance, entries() shape, regenerate, and the
+schema-v3 clean-break fail-closed law.
+
+See `docs/contracts/pseudonym-contract.md` for the full contract this file
+pins.
 """
 import json
-import os
 
 import pytest
 
-from api.feedback_vault import PseudonymCollisionError, Vault
+from api import feedback_vault as fv
+from api.feedback_vault import (
+    InvalidPseudonymError,
+    PseudonymCollisionError,
+    PseudonymRegistryError,
+    Vault,
+    VaultSchemaError,
+)
+
+_WORDS = fv._REGISTRY_WORDS  # already validated at import time; reused, never mutated
 
 
-def test_v2_pseudonym_is_fake_name_not_sequential(tmp_path):
-    """v2 should assign a multi-word fake name, not 'S001'."""
-    v = Vault(str(tmp_path / "vault.json"))
-    p = v.get_or_assign("9001", "Ada Lovelace", "5001")
-    assert p.count(" ") >= 1          # "Sparky McGee" — at least first + last
-    assert not p.startswith("S0")     # not the old scheme
+# --- registry law -----------------------------------------------------------
+
+def test_registry_meets_the_locked_contract():
+    """Exactly the mineral/weather/ocean categories, at least 256 unique,
+    ASCII title-case single-token words, no cross-category duplicate."""
+    with open(fv._REGISTRY_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+
+    assert set(data) == {"mineral", "weather", "ocean"}
+    seen: set[str] = set()
+    for category, words in data.items():
+        assert isinstance(words, list) and words, category
+        for word in words:
+            assert fv._WORD_RE.fullmatch(word), f"{word!r} in {category}"
+            assert word.isascii()
+            folded = word.lower()
+            assert folded not in seen, f"{word!r} duplicated across categories"
+            seen.add(folded)
+
+    assert len(seen) >= 256
 
 
-def test_stable_across_calls(tmp_path):
-    """Same canvas_id returns the same pseudonym."""
-    v = Vault(str(tmp_path / "vault.json"))
-    p1 = v.get_or_assign("9001", "Ada Lovelace", "5001")
-    p2 = v.get_or_assign("9001")
-    assert p1 == p2
+_THIRD = len(_WORDS) // 3
+_M, _W, _O = _WORDS[:_THIRD], _WORDS[_THIRD:2 * _THIRD], _WORDS[2 * _THIRD:]
 
 
-def test_persists(tmp_path):
-    """Save + reload preserves pseudonyms."""
+@pytest.mark.parametrize("bad_doc", [
+    {"mineral": _M, "weather": _W},                               # missing 'ocean'
+    {"mineral": _M[:1], "weather": _W[:1], "ocean": _O[:1]},       # far below 256 total
+    {"mineral": _M + [_W[0]], "weather": _W, "ocean": _O},         # cross-category dup
+    {"mineral": _M + ["not-a-word"], "weather": _W, "ocean": _O},  # not title-case ASCII
+    {"mineral": _M + ["Two Words"], "weather": _W, "ocean": _O},   # multiword entry
+])
+def test_registry_loader_fails_closed_on_structural_problems(tmp_path, monkeypatch, bad_doc):
+    path = tmp_path / "bad_registry.json"
+    path.write_text(json.dumps(bad_doc), encoding="utf-8")
+    monkeypatch.setattr(fv, "_REGISTRY_PATH", str(path))
+    with pytest.raises(PseudonymRegistryError):
+        fv._load_registry()
+
+
+# --- assignment law ----------------------------------------------------------
+
+def test_assigned_pseudonym_is_an_available_registry_word_stable_and_unique(tmp_path):
     vpath = str(tmp_path / "vault.json")
     v = Vault(vpath)
     p1 = v.get_or_assign("9001", "Ada Lovelace", "5001")
-    v.save()
+    p2 = v.get_or_assign("9002", "Alan Turing", "5002")
 
+    assert p1.lower() in {w.lower() for w in _WORDS}
+    assert p2.lower() in {w.lower() for w in _WORDS}
+    assert p1 != p2
+    assert v.get_or_assign("9001") == p1          # stable on re-sight
+
+    v.save()
     v2 = Vault(vpath)
-    assert v2.get_or_assign("9001") == p1
+    assert v2.get_or_assign("9001") == p1         # stable after persistence
     assert v2.reverse(p1)["real_name"] == "Ada Lovelace"
 
 
+def test_get_or_assign_avoids_supplied_roster_name_tokens(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    banned_word = _WORDS[0]
+    pseudonym = v.get_or_assign("9001", "Roster Student",
+                                roster_names={f"Roster {banned_word}"})
+    assert pseudonym.lower() != banned_word.lower()
+
+
+def test_exhaustion_fails_closed_rather_than_synthesizing(tmp_path, monkeypatch):
+    """Never a placeholder or numbered word on exhaustion."""
+    monkeypatch.setattr(fv, "_REGISTRY_WORDS", [_WORDS[0]])
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "First Student")      # takes the only word
+    with pytest.raises(PseudonymRegistryError):
+        v.get_or_assign("9002", "Second Student")
+
+
+def test_empty_vault_is_usable(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    assert len(v) == 0
+    assert v.entries() == []
+    names, ids = v.all_real_identifiers()
+    assert names == set()
+    assert ids == set()
+
+
+def test_reverse_unknown_returns_none(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    assert v.reverse("Nobody") is None
+
+
+# --- schema-v3 clean break: fail closed on a retired-shape document ---------
+
+def test_missing_vault_file_starts_empty(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    assert len(v) == 0
+
+
+def test_present_document_missing_schema_version_fails_closed(tmp_path):
+    path = tmp_path / "vault.json"
+    path.write_text(json.dumps({"by_canvas_id": {}}), encoding="utf-8")
+    with pytest.raises(VaultSchemaError):
+        Vault(str(path))
+
+
+def test_present_document_with_retired_pseudo_first_field_fails_closed(tmp_path):
+    """The only permitted source reference to pseudo_first/pseudo_last: an
+    explicit fail-closed rejection of the retired two-part shape."""
+    path = tmp_path / "vault.json"
+    path.write_text(json.dumps({
+        "schema_version": 3,
+        "by_canvas_id": {
+            "9001": {
+                "pseudonym": _WORDS[0], "pseudo_first": "Old", "pseudo_last": "Shape",
+                "real_name": "Retired Shape", "sis_id": "", "nicknames": [],
+            },
+        },
+    }), encoding="utf-8")
+    with pytest.raises(VaultSchemaError):
+        Vault(str(path))
+
+
+# --- nicknames ----------------------------------------------------------------
+
 def test_nicknames_round_trip(tmp_path):
-    """Nicknames are stored and appear in all_real_identifiers()."""
     v = Vault(str(tmp_path / "vault.json"))
     v.get_or_assign("9001", "Jose Flores", "5001")
     v.set_nicknames("9001", ["Paco", "Josey"])
@@ -49,16 +156,14 @@ def test_nicknames_round_trip(tmp_path):
 
 
 def test_nicknames_dedup_and_strip(tmp_path):
-    """Nicknames are deduplicated and empty strings removed."""
     v = Vault(str(tmp_path / "vault.json"))
     v.get_or_assign("9001", "Jose Flores", "5001")
     v.set_nicknames("9001", ["Paco", "paco", "", "  ", "Paco"])
     entry = v._by_id["9001"]
-    assert entry["nicknames"] == ["Paco"]  # deduped and lowercase kept? no, original case
+    assert entry["nicknames"] == ["Paco"]
 
 
 def test_all_real_identifiers_includes_nicknames(tmp_path):
-    """all_real_identifiers includes nicknames in the names set."""
     v = Vault(str(tmp_path / "vault.json"))
     v.get_or_assign("9001", "Jose Flores", "5001")
     v.set_nicknames("9001", ["Paco"])
@@ -71,82 +176,73 @@ def test_all_real_identifiers_includes_nicknames(tmp_path):
     assert "Maria Gonzalez" in names
 
 
+# --- entries() shape ----------------------------------------------------------
+
 def test_entries_shape(tmp_path):
-    """entries() returns list of dicts with the expected keys, sorted by real_name."""
+    """entries() returns list of dicts with exactly the schema-v3 fields,
+    sorted by real_name -- no retired pseudo_first/pseudo_last component."""
     v = Vault(str(tmp_path / "vault.json"))
     v.get_or_assign("9002", "Maria Gonzalez")
     v.get_or_assign("9001", "Ada Lovelace", "5001")
     v.set_nicknames("9001", ["Ada"])
     entries = v.entries()
     assert len(entries) == 2
-    # Sorted by real_name
     assert entries[0]["real_name"] == "Ada Lovelace"
     assert entries[1]["real_name"] == "Maria Gonzalez"
     row = entries[0]
-    assert "canvas_id" in row
-    assert "pseudonym" in row
-    assert "pseudo_first" in row
-    assert "pseudo_last" in row
-    assert "nicknames" in row
+    assert set(row) == {"canvas_id", "real_name", "sis_id", "pseudonym", "nicknames", "first_seen"}
     assert row["nicknames"] == ["Ada"]
 
 
+# --- manual set / regenerate: the same allowlist and collision law ----------
+
+def _two_students(path):
+    vault = Vault(str(path))
+    vault.get_or_assign("9001", "Synthetic One", "SIS-1")
+    vault.set_pseudonym("9001", _WORDS[0])
+    vault.get_or_assign("9002", "Synthetic Two", "SIS-2")
+    vault.set_pseudonym("9002", _WORDS[1])
+    vault.save()
+    return vault
+
+
 def test_set_pseudonym_override(tmp_path):
-    """Manual override changes the pseudonym."""
     v = Vault(str(tmp_path / "vault.json"))
     v.get_or_assign("9001", "Jose Flores", "5001")
-    v.set_pseudonym("9001", "Custom", "Name")
-    assert v.get_or_assign("9001") == "Custom Name"
-    e = v._by_id["9001"]
-    assert e["pseudo_first"] == "Custom"
-    assert e["pseudo_last"] == "Name"
+    v.set_pseudonym("9001", _WORDS[2])
+    assert v.get_or_assign("9001") == _WORDS[2]
 
 
-def test_regenerate_produces_different_name(tmp_path):
-    """Regenerate creates a different fake name."""
+def test_set_pseudonym_normalizes_case_to_the_registry_entry(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Jose Flores", "5001")
+    v.set_pseudonym("9001", _WORDS[3].upper())
+    assert v.get_or_assign("9001") == _WORDS[3]
+
+
+@pytest.mark.parametrize("bad_value", [
+    "",
+    "   ",
+    "Two Words",
+    123,
+    None,
+    "Notarealregistryword",
+])
+def test_set_pseudonym_rejects_invalid_values_without_mutating_the_vault(tmp_path, bad_value):
+    v = Vault(str(tmp_path / "vault.json"))
+    original = v.get_or_assign("9001", "Jose Flores", "5001")
+    with pytest.raises(InvalidPseudonymError):
+        v.set_pseudonym("9001", bad_value)
+    assert v.get_or_assign("9001") == original
+
+
+def test_regenerate_produces_a_different_available_registry_word(tmp_path):
     v = Vault(str(tmp_path / "vault.json"))
     orig = v.get_or_assign("9001", "Jose Flores", "5001")
     v.regenerate_pseudonym("9001")
     new = v.get_or_assign("9001")
     assert new != orig
-
-
-def test_fake_name_no_collision_with_roster(tmp_path):
-    """Fake name shouldn't contain a real roster token."""
-    v = Vault(str(tmp_path / "vault.json"))
-    roster = {"Jose Flores", "Maria Gonzalez", "Student Name"}
-    p = v.get_or_assign("9001", "Jose Flores", "5001", roster_names=roster)
-    pseudo_lower = p.lower()
-    for name in roster:
-        for token in name.lower().split():
-            assert token not in pseudo_lower.split(), \
-                f"Fake name '{p}' contains real roster token '{token}'"
-
-
-def test_reverse_unknown_returns_none(tmp_path):
-    """Reverse for an unknown pseudonym returns None."""
-    v = Vault(str(tmp_path / "vault.json"))
-    assert v.reverse("Nobody") is None
-
-
-def test_empty_vault_is_usable(tmp_path):
-    """Empty vault works."""
-    v = Vault(str(tmp_path / "vault.json"))
-    assert len(v) == 0
-    assert v.entries() == []
-    names, ids = v.all_real_identifiers()
-    assert names == set()
-    assert ids == set()
-
-
-def _two_students(path):
-    vault = Vault(str(path))
-    vault.get_or_assign("9001", "Synthetic One", "SIS-1")
-    vault.set_pseudonym("9001", "Alpha", "Oneton")
-    vault.get_or_assign("9002", "Synthetic Two", "SIS-2")
-    vault.set_pseudonym("9002", "Beta", "Twoton")
-    vault.save()
-    return vault
+    assert new.lower() in {w.lower() for w in _WORDS}
 
 
 def test_set_pseudonym_refuses_a_name_another_student_holds(tmp_path):
@@ -155,17 +251,17 @@ def test_set_pseudonym_refuses_a_name_another_student_holds(tmp_path):
     another."""
     vault = _two_students(tmp_path / "vault.json")
     with pytest.raises(PseudonymCollisionError):
-        vault.set_pseudonym("9002", "Alpha", "Oneton")
+        vault.set_pseudonym("9002", _WORDS[0])
 
 
 def test_set_pseudonym_allows_a_student_to_keep_their_own_name(tmp_path):
     """Re-setting a student to the name they already hold, or changing only its
-    capitalization or spacing, is not a collision."""
+    capitalization, is not a collision."""
     vault = _two_students(tmp_path / "vault.json")
-    vault.set_pseudonym("9001", "Alpha", "Oneton")
-    assert vault.reverse("Alpha Oneton")["canvas_id"] == "9001"
-    vault.set_pseudonym("9001", " alpha ", "ONETON")
-    assert vault.reverse("alpha ONETON")["canvas_id"] == "9001"
+    vault.set_pseudonym("9001", _WORDS[0])
+    assert vault.reverse(_WORDS[0])["canvas_id"] == "9001"
+    vault.set_pseudonym("9001", _WORDS[0].upper())
+    assert vault.reverse(_WORDS[0])["canvas_id"] == "9001"
 
 
 def test_a_refused_rename_leaves_the_vault_untouched(tmp_path):
@@ -176,15 +272,15 @@ def test_a_refused_rename_leaves_the_vault_untouched(tmp_path):
     before = json.loads(path.read_text(encoding="utf-8"))
 
     with pytest.raises(PseudonymCollisionError):
-        vault.set_pseudonym("9002", "Alpha", "Oneton")
+        vault.set_pseudonym("9002", _WORDS[0])
 
-    assert vault.reverse("Alpha Oneton")["canvas_id"] == "9001"
-    assert vault.reverse("Beta Twoton")["canvas_id"] == "9002"
+    assert vault.reverse(_WORDS[0])["canvas_id"] == "9001"
+    assert vault.reverse(_WORDS[1])["canvas_id"] == "9002"
     assert json.loads(path.read_text(encoding="utf-8")) == before
 
     reloaded = Vault(str(path))
-    assert reloaded.reverse("Alpha Oneton")["canvas_id"] == "9001"
-    assert reloaded.reverse("Beta Twoton")["canvas_id"] == "9002"
+    assert reloaded.reverse(_WORDS[0])["canvas_id"] == "9001"
+    assert reloaded.reverse(_WORDS[1])["canvas_id"] == "9002"
 
 
 def test_a_refused_rename_also_discards_a_nickname_edit_in_the_same_patch(tmp_path):
@@ -197,11 +293,11 @@ def test_a_refused_rename_also_discards_a_nickname_edit_in_the_same_patch(tmp_pa
     try:
         with vault.transaction():
             vault.set_nicknames("9002", ["Bee"])
-            vault.set_pseudonym("9002", "Alpha", "Oneton")
+            vault.set_pseudonym("9002", _WORDS[0])
     except PseudonymCollisionError:
         pass
 
     reloaded = Vault(str(path))
     entry = next(e for e in reloaded.entries() if str(e.get("canvas_id")) == "9002")
     assert entry.get("nicknames") == []
-    assert reloaded.reverse("Beta Twoton")["canvas_id"] == "9002"
+    assert reloaded.reverse(_WORDS[1])["canvas_id"] == "9002"

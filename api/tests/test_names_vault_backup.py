@@ -14,7 +14,7 @@ def test_backup_vault_filename_matches_run_stamp_format(tmp_path, monkeypatch):
     vault_dir = workspace.identity_vault_dir()
     os.makedirs(vault_dir, exist_ok=True)
     with open(os.path.join(vault_dir, "vault.json"), "w", encoding="utf-8") as f:
-        f.write("{}")
+        f.write(json.dumps({"schema_version": 3, "by_canvas_id": {}}))
 
     response = names.backup_vault()
     body = json.loads(response.body)

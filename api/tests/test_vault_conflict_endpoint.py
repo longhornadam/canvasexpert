@@ -15,7 +15,7 @@ def _mount(tmp_path, monkeypatch):
 def test_no_conflict_returns_empty_file_list(tmp_path, monkeypatch):
     vault_dir = _mount(tmp_path, monkeypatch)
     with open(os.path.join(vault_dir, "vault.json"), "w", encoding="utf-8") as f:
-        f.write(json.dumps({"by_canvas_id": {}}))
+        f.write(json.dumps({"schema_version": 3, "by_canvas_id": {}}))
 
     response = names.vault_conflict()
     body = json.loads(response.body)
@@ -26,7 +26,7 @@ def test_no_conflict_returns_empty_file_list(tmp_path, monkeypatch):
 def test_conflict_files_report_name_size_and_mtime_not_contents(tmp_path, monkeypatch):
     vault_dir = _mount(tmp_path, monkeypatch)
     with open(os.path.join(vault_dir, "vault.json"), "w", encoding="utf-8") as f:
-        f.write(json.dumps({"by_canvas_id": {}}))
+        f.write(json.dumps({"schema_version": 3, "by_canvas_id": {}}))
     conflict_path = os.path.join(vault_dir, "vault-OTHERPC.json")
     with open(conflict_path, "w", encoding="utf-8") as f:
         f.write(json.dumps({"by_canvas_id": {"999": {"real_name": "Someone Real", "pseudonym": "Fake Person"}}}))

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from api import feedback_vault
 from api.feedback_vault import Vault
 from api.mcp_server import tools
 
@@ -248,3 +251,51 @@ def test_adapter_itself_refuses_the_replacing_nickname_key(monkeypatch, tmp_path
     stored = next(entry for entry in Vault(path).entries()
                   if str(entry["canvas_id"]) == str(USER["id"]))
     assert stored["nicknames"] == ["Sam"]
+
+
+def _second_student_pseudonym(path: str) -> str:
+    vault = Vault(path)
+    with vault.transaction():
+        pseudo = vault.get_or_assign("920002", "Riley Student", "SIS-920002")
+    return pseudo
+
+
+@pytest.mark.parametrize("patch_value,accepted", [
+    ("VALID", True),
+    ("", False),
+    ("   ", False),
+    ("Two Words", False),
+    (123, False),
+    ("Notarealregistryword", False),
+    ("COLLIDING", False),
+])
+def test_roster_pseudonym_patch_boundary_via_mcp(monkeypatch, tmp_path, patch_value, accepted):
+    """Contract: the MCP roster preview/apply pair accepts exactly one
+    available registry word for a `pseudonym` patch and refuses blank,
+    multiword, non-string, out-of-registry, and colliding values without a
+    partial write -- the same allowlist/collision law as the Web UI route,
+    enforced through the shared `roster_updates.update_student` updater."""
+    path, pseudo = _setup(monkeypatch, tmp_path)
+    second_pseudo = _second_student_pseudonym(path)
+    monkeypatch.setattr(tools, "_vault_factory", lambda: Vault(path))
+
+    if patch_value == "VALID":
+        patch_value = next(w for w in feedback_vault._REGISTRY_WORDS
+                           if w not in (pseudo, second_pseudo))
+    elif patch_value == "COLLIDING":
+        patch_value = second_pseudo
+
+    preview = tools.preview_roster_student_change("course-1", pseudo, {"pseudonym": patch_value})
+    assert preview["ok"] is True  # preview only checks patch keys, not the pseudonym's own shape
+
+    applied = tools.apply_roster_student_change(
+        "course-1", preview["preview"], preview["preview_digest"], preview["settings_digest"])
+
+    reloaded = Vault(path)
+    if accepted:
+        assert applied["ok"] is True
+        assert applied["pseudonym"] == patch_value
+        assert reloaded.get_or_assign(USER["id"]) == patch_value
+    else:
+        assert applied["ok"] is False
+        assert reloaded.get_or_assign(USER["id"]) == pseudo, "a rejected value must not mutate the vault"

@@ -106,10 +106,9 @@ def build_replacement_map(vault_entries: list[dict],
     longest-token-first.
 
     Per student, map:
-      - full real name -> full fake name
-      - first name -> pseudo_first
-      - last name -> pseudo_last
-      - each nickname -> full pseudonym
+      - full real name -> full one-word pseudonym
+      - each real-name token (first, middle, last) -> the SAME pseudonym
+      - each nickname -> the SAME pseudonym
       - canvas_id, sis_id (when >= _MIN_ID_SCRUB_LEN chars) -> ID_PLACEHOLDER
 
     A token that is ALSO in `protected` is STILL scrubbed (roster identity wins
@@ -117,14 +116,12 @@ def build_replacement_map(vault_entries: list[dict],
     are NOT roster tokens.
 
     The returned rules are ordered by pattern length descending (longest match
-    first) so 'Jose Flores' -> 'Sparky McGee' beats the single-token rules.
+    first) so 'Jose Flores' -> 'Quartz' beats the single-token rules.
     """
     rules: list[tuple[str, str]] = []  # (regex_string, replacement)
 
     for entry in vault_entries:
         real_name = entry.get("real_name", "").strip()
-        pseudo_first = entry.get("pseudo_first", "")
-        pseudo_last = entry.get("pseudo_last", "")
         pseudo = entry.get("pseudonym", "")
         nicknames = entry.get("nicknames", [])
 
@@ -140,22 +137,23 @@ def build_replacement_map(vault_entries: list[dict],
 
         if not real_name and not nicknames:
             continue
+        if not pseudo:
+            # No pseudonym on file to substitute in -- nothing else can be
+            # scrubbed safely for this entry (see verify_clean).
+            continue
 
-        # Full real name -> full pseudonym (e.g. "Jose Flores" -> "Sparky McGee").
+        # Full real name -> full pseudonym (e.g. "Jose Flores" -> "Quartz").
         # Folded so an unaccented typing of an accented roster name ("Jose
         # Flores" for vault "José Flores") still matches — matching only;
         # the replacement text is unaffected.
-        if real_name and pseudo:
-            rules.append((re.escape(_fold(real_name)), pseudo))
+        rules.append((re.escape(_fold(real_name)), pseudo))
 
-        # Individual tokens
-        tokens = _tokenize(real_name)
-        for i, token in enumerate(tokens):
-            if not token:
-                continue
-            mapped = pseudo_first if i == 0 else (pseudo_last if i == len(tokens) - 1 else pseudo_first)
-            if mapped:
-                rules.append((re.escape(_fold(token)), mapped))
+        # Every individual token (first, middle, last) resolves to the SAME
+        # complete pseudonym -- there is no separate first/last component to
+        # map to under the one-word contract.
+        for token in _tokenize(real_name):
+            if token:
+                rules.append((re.escape(_fold(token)), pseudo))
 
         # Nicknames/aliases -> full pseudonym so every identity alias resolves
         # consistently to the student's existing pseudonym. Folded like every
@@ -163,7 +161,7 @@ def build_replacement_map(vault_entries: list[dict],
         # guarantee as real_name).
         for nn in nicknames:
             if nn.strip():
-                rules.append((re.escape(_fold(nn.strip())), pseudo or pseudo_first))
+                rules.append((re.escape(_fold(nn.strip())), pseudo))
 
     # Sort by pattern length descending (longest first) so full-name rules beat
     # single-token rules

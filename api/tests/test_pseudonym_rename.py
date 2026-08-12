@@ -5,21 +5,33 @@ to be prepared BEFORE the vault forgets the old pseudonym, and stored writing
 has to be rewritten AFTER the new one exists. These tests pin that order, and
 pin that a teacher who has never used either feature can still rename a
 student.
+
+The manual-rename and regenerate routes exercised here are the live
+`POST /api/roster/student` Roster Console route -- the dead
+`/api/names/pseudonym` and `/api/names/pseudonym/regenerate` routes were
+deleted rather than ported, but the rename-ordering law lives in the shared
+`roster_updates.update_student` updater both the Web UI and MCP call, so the
+law is exercised the same way either route reaches it.
 """
+import json
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from api import pseudonym_rename
+from api import feedback_vault, pseudonym_rename
 from api.feedback_vault import Vault
 from api.webui import server
 from api.webui.routes import names as names_routes
+from api.webui.routes import roster as roster_routes
+from api.webui.routes import roster_updates
+
+_WORDS = feedback_vault._REGISTRY_WORDS
 
 
 def _vault(tmp_path):
     vault = Vault(str(tmp_path / "vault.json"))
     vault.get_or_assign("9001", "Synthetic One", "SIS-1")
-    vault.set_pseudonym("9001", "Alpha", "Oneton")
+    vault.set_pseudonym("9001", _WORDS[0])
     vault.save()
     return vault
 
@@ -29,7 +41,7 @@ def test_current_pseudonym_does_not_mint_for_an_unknown_student(tmp_path):
     `get_or_assign` would."""
     vault = _vault(tmp_path)
     before = len(vault)
-    assert pseudonym_rename.current_pseudonym(vault, "9001") == "Alpha Oneton"
+    assert pseudonym_rename.current_pseudonym(vault, "9001") == _WORDS[0]
     assert pseudonym_rename.current_pseudonym(vault, "does-not-exist") == ""
     assert pseudonym_rename.current_pseudonym(vault, "") == ""
     assert len(vault) == before
@@ -162,7 +174,11 @@ def _wire_order(monkeypatch, tmp_path, *, rewrite_error=""):
     """Record the order of the two side effects around the vault write."""
     calls = []
     vault = _vault(tmp_path)
-    monkeypatch.setattr(names_routes, "_vault", lambda: vault)
+    # roster.py captured its own `_vault` reference at import time (`from
+    # .names import _vault`), so the live rename route's factory must be
+    # patched on roster_routes itself -- patching names_routes._vault would
+    # not reach it.
+    monkeypatch.setattr(roster_routes, "_vault", lambda: vault)
 
     def backfill():
         calls.append(("backfill", pseudonym_rename.current_pseudonym(vault, "9001")))
@@ -172,50 +188,57 @@ def _wire_order(monkeypatch, tmp_path, *, rewrite_error=""):
         calls.append(("rewrite", old, new))
         return rewrite_error
 
-    monkeypatch.setattr(names_routes.pseudonym_rename, "backfill_assessment_history", backfill)
-    monkeypatch.setattr(names_routes.pseudonym_rename, "rewrite_writing_spans", rewrite)
+    # roster_updates.py imports the same `api.pseudonym_rename` module object
+    # names.py does, so patching it here reaches both entry points.
+    monkeypatch.setattr(roster_updates.pseudonym_rename, "backfill_assessment_history", backfill)
+    monkeypatch.setattr(roster_updates.pseudonym_rename, "rewrite_writing_spans", rewrite)
     return calls, vault
+
+
+def _rename_via_roster(pseudonym=None, *, regenerate=False):
+    patch = {"regenerate_pseudonym": True} if regenerate else {"pseudonym": pseudonym}
+    return TestClient(server.app).post(
+        "/api/roster/student",
+        data={"course_id": "1", "user_id": "9001", "patch": json.dumps(patch)})
 
 
 def test_the_manual_rename_route_prepares_history_then_rewrites_writing(monkeypatch, tmp_path):
     calls, vault = _wire_order(monkeypatch, tmp_path)
-    response = TestClient(server.app).post(
-        "/api/names/pseudonym",
-        data={"canvas_id": "9001", "first": "Beta", "last": "Twoton"})
+    response = _rename_via_roster(_WORDS[1])
 
     assert response.status_code == 200
+    assert response.json()["ok"] is True
     # The backfill ran while the vault still held the old name, and the rewrite
     # ran afterward with both names in hand.
     assert calls == [
-        ("backfill", "Alpha Oneton"),
-        ("rewrite", "Alpha Oneton", "Beta Twoton"),
+        ("backfill", _WORDS[0]),
+        ("rewrite", _WORDS[0], _WORDS[1]),
     ]
-    assert pseudonym_rename.current_pseudonym(vault, "9001") == "Beta Twoton"
+    assert pseudonym_rename.current_pseudonym(vault, "9001") == _WORDS[1]
 
 
 def test_the_regenerate_route_carries_the_rename_through_too(monkeypatch, tmp_path):
     calls, vault = _wire_order(monkeypatch, tmp_path)
-    response = TestClient(server.app).post(
-        "/api/names/pseudonym/regenerate", data={"canvas_id": "9001"})
+    response = _rename_via_roster(regenerate=True)
 
     assert response.status_code == 200
-    minted = response.json()["pseudonym"]
+    assert response.json()["ok"] is True
     assert [call[0] for call in calls] == ["backfill", "rewrite"]
-    assert calls[0][1] == "Alpha Oneton"
-    assert calls[1][1:] == ("Alpha Oneton", minted)
+    assert calls[0][1] == _WORDS[0]
+    minted = calls[1][2]
+    assert calls[1][1] == _WORDS[0]
+    assert pseudonym_rename.current_pseudonym(vault, "9001") == minted
 
 
 def test_an_unfinished_rewrite_surfaces_instead_of_reporting_success(monkeypatch, tmp_path):
     """The name is saved by then, so this cannot be silent: the teacher has to
     know the writing record still refers to the old one."""
-    _wire_order(monkeypatch, tmp_path, rewrite_error="stored writing still says Alpha Oneton")
-    response = TestClient(server.app).post(
-        "/api/names/pseudonym",
-        data={"canvas_id": "9001", "first": "Beta", "last": "Twoton"})
+    _wire_order(monkeypatch, tmp_path, rewrite_error=f"stored writing still says {_WORDS[0]}")
+    response = _rename_via_roster(_WORDS[1])
 
-    assert response.status_code == 409
+    assert response.status_code == 200
     assert response.json()["ok"] is False
-    assert "Alpha Oneton" in response.json()["error"]
+    assert _WORDS[0] in response.json()["error"]
 
 
 def test_a_refused_collision_never_reaches_the_writing_store(monkeypatch, tmp_path):
@@ -223,13 +246,12 @@ def test_a_refused_collision_never_reaches_the_writing_store(monkeypatch, tmp_pa
     would move to a name no student holds."""
     calls, vault = _wire_order(monkeypatch, tmp_path)
     vault.get_or_assign("9002", "Synthetic Two", "SIS-2")
-    vault.set_pseudonym("9002", "Gamma", "Threeton")
+    vault.set_pseudonym("9002", _WORDS[2])
     vault.save()
 
-    response = TestClient(server.app).post(
-        "/api/names/pseudonym",
-        data={"canvas_id": "9001", "first": "Gamma", "last": "Threeton"})
+    response = _rename_via_roster(_WORDS[2])
 
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
     assert [call[0] for call in calls] == ["backfill"], "the rewrite must not have run"
-    assert pseudonym_rename.current_pseudonym(vault, "9001") == "Alpha Oneton"
+    assert pseudonym_rename.current_pseudonym(vault, "9001") == _WORDS[0]

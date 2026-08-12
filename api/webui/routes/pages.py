@@ -252,12 +252,6 @@ def seating_page(request: Request):
     })
 
 
-@router.get("/name-manager", response_class=HTMLResponse)
-def name_manager_page(request: Request):
-    """Old Name Manager — redirect to the new Roster Console."""
-    return RedirectResponse(url="/roster", status_code=302)
-
-
 @router.get("/about", response_class=HTMLResponse)
 def about(request: Request):
     return templates.TemplateResponse(request, "about.html", {"nav_section": "help"})

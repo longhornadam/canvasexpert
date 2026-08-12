@@ -253,18 +253,19 @@ def vault_identity(tmp_path):
     def build(*students):
         entries = {}
         for index, (real_name, sis_id, pseudonym) in enumerate(students, start=1):
-            first, _, last = str(pseudonym).partition(" ")
             entries[f"canvas-{index}"] = {
                 "pseudonym": pseudonym,
-                "pseudo_first": first,
-                "pseudo_last": last,
                 "real_name": real_name,
                 "sis_id": str(sis_id),
                 "nicknames": [],
             }
         path = tmp_path / "vault" / "vault.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"by_canvas_id": entries}), encoding="utf-8")
+        # schema_version 3 is the current Identity Vault contract (see
+        # docs/contracts/pseudonym-contract.md); the `pseudonym` value passed
+        # in here is an opaque test label, not required to be a registry
+        # word, since VaultIdentity only ever treats it as an exact string.
+        path.write_text(json.dumps({"schema_version": 3, "by_canvas_id": entries}), encoding="utf-8")
         return identity.VaultIdentity(Vault(str(path)))
 
     return build

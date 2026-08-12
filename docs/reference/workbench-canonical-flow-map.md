@@ -23,7 +23,6 @@
 | Alternate path | Canonical replacement | Reason retained |
 |---|---|---|
 | Gradebook extra-time tab (`/gradebook?tab=extra-time`) | Roster extra-time lens (`/roster?focus=extra-time`) | Convenience view within gradebook context; reads same config; no independent write path |
-| `/name-manager` → 302 redirect to `/roster` | `/roster` safety lens | Clean redirect; no duplicate surface |
 | `/feedback-expert` → 307 redirect to `/powergrader?advanced=import` | PowerGrader advanced import | Legacy bookmarks retain a session-bound import/review entry; no direct legacy push route remains |
 | `/course` (Course Info detail page) | N/A – distinct outcome | Read-only course inspection; not a duplicate of any other surface |
 | `/ai-expert` (AI helper files) | N/A – distinct outcome | Paste-ready LLM skill files; not a duplicate |
@@ -82,7 +81,6 @@
 | PowerGrader legacy JSON import box | Still actively used by `queue_import.js` for non-Copilot import path |
 | `push/core.js` legacy globals | Still consumed by `push/quiz.js`, `push/assignment.js`, `push/page.js`, `push/rubric.js`, `course_expert/quick_assignment.js` |
 | `/api/push/preview` (dry-run POST) | Still called by `push/quiz.js` for QuizForge dry-run preview |
-| `/name-manager` → 302 redirect | Already a clean redirect; no duplicate surface to retire |
 | `gradebook_service.py` curve migration | Data migration, not a surface; no teacher-visible behavior |
 | `app_context.js` localStorage migration | One-time data migration, not a surface |
 | Legacy SAFE/PRIVATE workspace artifacts | Compatibility-read safety boundary; PowerGrader owns active review/write flow |

@@ -1,10 +1,15 @@
 """Name Manager API — the vault-editor surface behind the Name Manager screen.
 
-Roster sync, nicknames, pseudonyms, protected (literary) names, collision
-detection, live scrub-test, and who-is-who / vault-backup export. All local;
-these endpoints touch the vault (PII), which lives synced-private and never
-leaves the machine. Split out of routes/feedback.py — distinct surface, its own
-`names_router`.
+Protected (literary) names, live scrub-test, and who-is-who / vault-backup
+export. All local; these endpoints touch the vault (PII), which lives
+synced-private and never leaves the machine. Split out of routes/feedback.py
+— distinct surface, its own `names_router`.
+
+Roster sync, nicknames, pseudonym set/regenerate, and collision detection are
+owned by the Roster Console (`GET /api/roster`, `POST /api/roster/student`,
+see `roster.py` and `roster_updates.py`) and its MCP adapter; the equivalent
+Name Manager routes were dead (zero production callers) and were deleted
+rather than ported to the schema-v3 one-word pseudonym contract.
 """
 import csv
 import json
@@ -12,13 +17,12 @@ import os
 import shutil
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Form, Query
+from fastapi import APIRouter, Form
 from fastapi.responses import JSONResponse
 
-from api import feedback_scrub, feedback_vault, pseudonym_rename
+from api import feedback_scrub, feedback_vault
 from api import roster_service
 from api.platform_services import config, workspace
-from api.platform_services.canvas_client import canvas_get_all
 
 names_router = APIRouter(prefix="/api/names", tags=["names"])
 
@@ -28,87 +32,9 @@ def _vault():
     return feedback_vault.Vault(os.path.join(root or ".", "vault.json"))
 
 
-_fetch_students = roster_service.fetch_students
+# Re-exported for `api/tests/test_feedback_pipeline.py`, which exercises
+# roster upsert (preferred-name-as-nickname capture) through this module path.
 _upsert_roster = roster_service.upsert_roster
-
-
-
-@names_router.get("/roster")
-def names_roster(course_id: str = Query("")):
-    """Sync roster from Canvas, upsert into vault, return entries joined with
-    real name/section. Reuses the existing users fetch pattern."""
-    if not course_id:
-        return JSONResponse({"ok": False, "error": "course_id required."})
-    vault = _vault()
-    users, err = _fetch_students(course_id)
-    if err:
-        # Maybe the user already has cached/offline entries
-        with vault.transaction():
-            return JSONResponse({"ok": True, "entries": vault.entries(),
-                                 "vault_conflict": vault.conflicts(),
-                                 "note": f"Canvas fetch failed: {err}"})
-
-    with vault.transaction():
-        _upsert_roster(vault, users)
-        return JSONResponse({"ok": True, "entries": vault.entries(),
-                             "vault_conflict": vault.conflicts()})
-
-
-@names_router.post("/nickname")
-def set_nickname(canvas_id: str = Form(""), nicknames: str = Form("")):
-    """Set nicknames for a student (comma-separated)."""
-    vault = _vault()
-    with vault.transaction():
-        vault.set_nicknames(canvas_id, [n.strip() for n in nicknames.split(",") if n.strip()])
-    return JSONResponse({"ok": True})
-
-
-@names_router.post("/pseudonym")
-def set_pseudonym(canvas_id: str = Form(""), first: str = Form(""), last: str = Form("")):
-    """Manual pseudonym override."""
-    vault = _vault()
-    old_pseudonym = pseudonym_rename.current_pseudonym(vault, canvas_id)
-
-    blocked = pseudonym_rename.backfill_assessment_history()
-    if blocked:
-        return JSONResponse({"ok": False, "error": blocked}, status_code=409)
-
-    try:
-        with vault.transaction():
-            vault.set_pseudonym(canvas_id, first, last)
-    except feedback_vault.PseudonymCollisionError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
-
-    incomplete = pseudonym_rename.rewrite_writing_spans(
-        old_pseudonym, pseudonym_rename.current_pseudonym(vault, canvas_id))
-    stale = pseudonym_rename.refresh_published_profile()
-    if incomplete or stale:
-        return JSONResponse(
-            {"ok": False, "error": incomplete or stale}, status_code=409)
-    return JSONResponse({"ok": True})
-
-
-@names_router.post("/pseudonym/regenerate")
-def regenerate_pseudonym(canvas_id: str = Form("")):
-    """Regenerate a random non-colliding fake name."""
-    vault = _vault()
-    old_pseudonym = pseudonym_rename.current_pseudonym(vault, canvas_id)
-
-    blocked = pseudonym_rename.backfill_assessment_history()
-    if blocked:
-        return JSONResponse({"ok": False, "error": blocked}, status_code=409)
-
-    with vault.transaction():
-        vault.regenerate_pseudonym(canvas_id)
-        pseudonym = vault.get_or_assign(canvas_id)
-
-    incomplete = pseudonym_rename.rewrite_writing_spans(old_pseudonym, pseudonym)
-    stale = pseudonym_rename.refresh_published_profile()
-    if incomplete or stale:
-        return JSONResponse(
-            {"ok": False, "error": incomplete or stale, "pseudonym": pseudonym},
-            status_code=409)
-    return JSONResponse({"ok": True, "pseudonym": pseudonym})
 
 
 @names_router.get("/protected")
@@ -135,22 +61,6 @@ def set_protected(data: str = Form("")):
     custom = parsed.get("custom", [])
     config.set_custom_protected_names(custom)
     return JSONResponse({"ok": True})
-
-
-@names_router.get("/collisions")
-def get_collisions(course_id: str = Query("")):
-    """Compute name collisions for the current vault. course_id is optional
-    (used to sync roster first if empty vault)."""
-    vault = _vault()
-    with vault.transaction():
-        if not vault.entries() and course_id:
-            # Auto-sync if vault is empty and we have a course
-            users, err = _fetch_students(course_id)
-            if not err:
-                _upsert_roster(vault, users)
-        protected = config.active_protected_names()
-        collisions = feedback_scrub.find_collisions(vault.entries(), protected)
-    return JSONResponse({"ok": True, "collisions": collisions})
 
 
 @names_router.post("/scrub-test")

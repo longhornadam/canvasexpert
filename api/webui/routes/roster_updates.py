@@ -74,10 +74,8 @@ def update_student(
 
     if "pseudonym" in data:
         p = data["pseudonym"]
-        if (not isinstance(p, dict) or set(p) != {"first", "last"}
-                or not isinstance(p["first"], str) or not isinstance(p["last"], str)
-                or not p["first"].strip() or not p["last"].strip()):
-            return {"ok": False, "error": "pseudonym must be {first, last}."}
+        if not isinstance(p, str) or not p.strip():
+            return {"ok": False, "error": "pseudonym must be a non-empty string."}
     if "regenerate_pseudonym" in data and not isinstance(data["regenerate_pseudonym"], bool):
         return {"ok": False, "error": "regenerate_pseudonym must be a boolean."}
 
@@ -144,12 +142,11 @@ def update_student(
                 vault.add_nicknames(user_id, nickname_values["add_nicknames"])
 
             if "pseudonym" in data:
-                p = data["pseudonym"]
-                vault.set_pseudonym(user_id, p["first"], p["last"])
+                vault.set_pseudonym(user_id, data["pseudonym"])
 
             if data.get("regenerate_pseudonym"):
                 vault.regenerate_pseudonym(user_id)
-    except feedback_vault.PseudonymCollisionError as exc:
+    except (feedback_vault.PseudonymCollisionError, feedback_vault.InvalidPseudonymError) as exc:
         # transaction() only saves on the success path, so a refused rename
         # persists nothing, including any nickname change in the same patch.
         return {"ok": False, "error": str(exc)}

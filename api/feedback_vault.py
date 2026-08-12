@@ -1,4 +1,4 @@
-"""Pseudonym vault v2 — the real<->pseudonym map for feedback tools.
+"""Pseudonym vault v3 -- the real<->pseudonym map for feedback tools.
 
 The single most sensitive artifact in the app: it is the only thing that can
 re-identify pseudonymized work. It lives in the synced workspace
@@ -6,16 +6,23 @@ re-identify pseudonymized work. It lives in the synced workspace
 anywhere.
 
 Keyed on the Canvas user id (stable, present in the Student Analysis CSV `ID`
-column), so a student keeps the same opaque pseudonym forever — across CSVs,
+column), so a student keeps the same opaque pseudonym forever -- across CSVs,
 sources, and years.
 
-v2 pseudonyms are realistic fake names like "Sparky McGee" drawn from a pool
-disjoint from real rosters. Pure stdlib; offline-testable.
+v3 pseudonyms are one ordinary word -- a mineral, weather concept, or ocean
+state -- drawn from the reviewed registry at `api/data/pseudonym_words.json`.
+See `docs/contracts/pseudonym-contract.md` for the full contract. This is a
+pre-launch clean break: an on-disk document that is not schema_version 3, or
+that still carries a retired `pseudo_first`/`pseudo_last` component field,
+fails closed rather than being migrated or dual-read.
+
+Pure stdlib; offline-testable.
 """
 import fnmatch
 import json
 import os
 import random
+import re
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -24,29 +31,104 @@ from api.powergrader.autoscore_claims import machine_id
 from api.storage_support import atomic_write_json, interprocess_lock
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_REGISTRY_PATH = os.path.join(_MODULE_DIR, "data", "pseudonym_words.json")
+_REGISTRY_CATEGORIES = ("mineral", "weather", "ocean")
+_MIN_REGISTRY_WORDS = 256
+_WORD_RE = re.compile(r"^[A-Z][a-z]+$")
+
+SCHEMA_VERSION = 3
 
 
 class PseudonymCollisionError(ValueError):
     """A pseudonym is already held by a different student."""
 
 
-def _load_name_pool(filename: str) -> list[str]:
-    path = os.path.join(_MODULE_DIR, "data", filename)
-    if not os.path.exists(path):
-        return []
-    with open(path, encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
+class InvalidPseudonymError(ValueError):
+    """A supplied pseudonym value is not one available registry word."""
 
 
-_FAST_FIRST = _load_name_pool("fake_first_names.txt")
-_FAST_LAST = _load_name_pool("fake_last_names.txt")
+class PseudonymRegistryError(RuntimeError):
+    """The reviewed pseudonym registry is missing or structurally invalid."""
+
+
+class VaultSchemaError(ValueError):
+    """The on-disk Identity Vault document is not a valid schema-v3 vault."""
+
+
+def _load_registry() -> tuple[list[str], dict[str, str]]:
+    """Load and validate `api/data/pseudonym_words.json`.
+
+    Fails closed: any structural problem (missing file, wrong categories, a
+    word that is not one ASCII title-case token, a duplicate) raises
+    `PseudonymRegistryError` at import time rather than falling back to a
+    placeholder or numbered word. Returns (words, category_by_lower); the
+    category map exists only so this loader can prove each word lands in
+    exactly one category, and is not otherwise used by `Vault`.
+    """
+    try:
+        with open(_REGISTRY_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PseudonymRegistryError(
+            f"Pseudonym registry at {_REGISTRY_PATH} could not be read: {exc}"
+        ) from exc
+
+    if not isinstance(data, dict) or set(data) != set(_REGISTRY_CATEGORIES):
+        raise PseudonymRegistryError(
+            "Pseudonym registry must have exactly the categories "
+            f"{sorted(_REGISTRY_CATEGORIES)}."
+        )
+
+    words: list[str] = []
+    category_by_lower: dict[str, str] = {}
+    for category in _REGISTRY_CATEGORIES:
+        entries = data[category]
+        if not isinstance(entries, list) or not entries:
+            raise PseudonymRegistryError(
+                f"Registry category '{category}' must be a non-empty list."
+            )
+        for word in entries:
+            if not isinstance(word, str) or not _WORD_RE.fullmatch(word) or not word.isascii():
+                raise PseudonymRegistryError(
+                    f"Registry word {word!r} in '{category}' must be one ASCII "
+                    "title-case alphabetic token."
+                )
+            folded = word.lower()
+            if folded in category_by_lower:
+                raise PseudonymRegistryError(
+                    f"Registry word {word!r} is duplicated (case-insensitively)."
+                )
+            category_by_lower[folded] = category
+            words.append(word)
+
+    if len(words) < _MIN_REGISTRY_WORDS:
+        raise PseudonymRegistryError(
+            f"Pseudonym registry has {len(words)} words; at least "
+            f"{_MIN_REGISTRY_WORDS} are required."
+        )
+    return words, category_by_lower
+
+
+_REGISTRY_WORDS, _REGISTRY_CATEGORY_BY_LOWER = _load_registry()
+_REGISTRY_CANONICAL_BY_LOWER = {w.lower(): w for w in _REGISTRY_WORDS}
+
+
+def _canonical_registry_word(value: object) -> str | None:
+    """The exact registry-cased word for `value`, or None if `value` is not
+    a single word present in the registry (case-insensitively)."""
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if not candidate or len(candidate.split()) != 1:
+        return None
+    return _REGISTRY_CANONICAL_BY_LOWER.get(candidate.lower())
 
 
 class Vault:
     def __init__(self, path: str):
         self.path = path
-        self._by_id = {}          # canvas_id(str) -> {pseudonym, pseudo_first, pseudo_last,
-                                  #                   real_name, sis_id, nicknames, first_seen}
+        self._by_id = {}          # canvas_id(str) -> {pseudonym, real_name, sis_id,
+                                  #                    nicknames, first_seen}
         self._by_pseudo = {}      # pseudonym -> canvas_id(str)
         self.conflict_files: list[str] = []
         self._load()
@@ -56,8 +138,37 @@ class Vault:
         if os.path.exists(self.path):
             with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
+            self._validate_document_shape(data)
         self._apply_document(data)
         self.conflict_files = self._scan_conflicts()
+
+    @staticmethod
+    def _validate_document_shape(data: dict) -> None:
+        """Fail closed on any vault document that predates schema v3.
+
+        This is the pre-launch clean break: no migration, no dual-read, no
+        silent rewrite. A present document must declare `schema_version: 3`
+        and must not carry a retired `pseudo_first`/`pseudo_last` field on
+        any entry. Moving the offending file aside is a deliberate,
+        recoverable operator action -- never something this code does.
+        """
+        if not isinstance(data, dict):
+            raise VaultSchemaError("Identity Vault file is not a JSON object.")
+        if data.get("schema_version") != SCHEMA_VERSION:
+            raise VaultSchemaError(
+                "Identity Vault schema_version is missing or unsupported "
+                f"(expected {SCHEMA_VERSION}). This is a pre-launch clean "
+                "break: move the existing vault file aside to start a fresh one."
+            )
+        raw_entries = data.get("by_canvas_id", {})
+        if not isinstance(raw_entries, dict):
+            raise VaultSchemaError("Identity Vault by_canvas_id must be an object.")
+        for entry in raw_entries.values():
+            if isinstance(entry, dict) and ("pseudo_first" in entry or "pseudo_last" in entry):
+                raise VaultSchemaError(
+                    "Identity Vault entry still carries a retired pseudo_first/"
+                    "pseudo_last field from the two-part pseudonym scheme."
+                )
 
     def _scan_conflicts(self) -> list[str]:
         """OneDrive can fork this file across machines, naming copies like
@@ -91,27 +202,6 @@ class Vault:
             for cid, v in self._by_id.items()
             if isinstance(v, dict) and v.get("pseudonym")
         }
-        # Upgrade legacy entries: fill missing v2 fields
-        for cid, entry in self._by_id.items():
-            changed = False
-            if "pseudo_first" not in entry:
-                entry["pseudo_first"] = ""
-                changed = True
-            if "pseudo_last" not in entry:
-                entry["pseudo_last"] = ""
-                changed = True
-            if "nicknames" not in entry:
-                entry["nicknames"] = []
-                changed = True
-            # Upgrade S001-style pseudonyms to fake names
-            if entry.get("pseudonym", "").startswith("S0") and not entry.get("pseudo_first"):
-                old_pseudo = entry["pseudonym"]
-                self._assign_fake_name(entry, set(), set())
-                self._by_pseudo.pop(old_pseudo, None)
-                self._by_pseudo[entry["pseudonym"]] = cid
-                changed = True
-            if changed:
-                self._by_id[cid] = entry
 
     def _lock_path(self) -> Path:
         path = Path(self.path)
@@ -119,6 +209,7 @@ class Vault:
 
     def _save_unlocked(self):
         atomic_write_json(Path(self.path), {
+            "schema_version": SCHEMA_VERSION,
             "by_canvas_id": self._by_id,
             "written_by": machine_id(),
             "written_at": datetime.now().isoformat(timespec="seconds"),
@@ -141,89 +232,46 @@ class Vault:
         with interprocess_lock(self._lock_path()):
             self._save_unlocked()
 
-    def _existing_tokens(self, roster_names: set | None = None) -> tuple[set, set]:
-        """Return (used_fake_firsts, used_fake_lasts) from the vault + roster."""
-        used_first: set = set()
-        used_last: set = set()
-        for cid, entry in self._by_id.items():
-            if entry.get("pseudo_first"):
-                used_first.add(entry["pseudo_first"].lower())
-            if entry.get("pseudo_last"):
-                used_last.add(entry["pseudo_last"].lower())
+    def _used_pseudonym_tokens(self, exclude: str = "") -> set:
+        """Case-folded tokens of every pseudonym currently held, optionally
+        excluding one pseudonym (so `regenerate_pseudonym` can replace a
+        student's own word without treating it as "already taken")."""
+        excluded = exclude.lower()
+        return {p.lower() for p in self._by_pseudo if p.lower() != excluded}
+
+    def _select_available_word(self, banned: set) -> str:
+        """One random registry word not in `banned`. Fails closed -- never
+        synthesizes a placeholder or numbered word on exhaustion."""
+        available = [w for w in _REGISTRY_WORDS if w.lower() not in banned]
+        if not available:
+            raise PseudonymRegistryError(
+                "The pseudonym registry is exhausted: every word is already "
+                "assigned or collides with a current roster name."
+            )
+        return random.choice(available)
+
+    @staticmethod
+    def _roster_tokens(roster_names: set | None) -> set:
+        tokens: set = set()
         if roster_names:
-            for n in roster_names:
-                tokens = n.strip().lower().split()
-                for t in tokens:
-                    # A roster token blocks both first and last pools
-                    used_first.add(t)
-                    used_last.add(t)
-        return used_first, used_last
-
-    def _assign_fake_name(self, entry: dict, used_first: set, used_last: set,
-                          roster_tokens: set | None = None):
-        """Pick (first, last) from the pool, collision-checked against used tokens
-        and the combined roster-token + vault set. Mutates entry in-place."""
-        # Build the full set of tokens that must not match a fake name
-        banned = set(used_first) | set(used_last)
-        if roster_tokens:
-            banned |= {t.lower() for t in roster_tokens}
-
-        pool_first = [n for n in _FAST_FIRST if n.lower() not in banned]
-        pool_last = [n for n in _FAST_LAST if n.lower() not in banned]
-
-        if not pool_first:
-            # Fallback: pick any fake first, append a number
-            first = _FAST_FIRST[0] if _FAST_FIRST else "Student"
-            suffix = 1
-            while f"{first.lower()}{suffix}" in banned:
-                suffix += 1
-            first = f"{first}{suffix}"
-        else:
-            first = random.choice(pool_first)
-
-        if not pool_last:
-            last = _FAST_LAST[0] if _FAST_LAST else "Person"
-            suffix = 1
-            while f"{last.lower()}{suffix}" in banned:
-                suffix += 1
-            last = f"{last}{suffix}"
-        else:
-            last = random.choice(pool_last)
-
-        entry["pseudo_first"] = first
-        entry["pseudo_last"] = last
-        entry["pseudonym"] = f"{first} {last}"
+            for name in roster_names:
+                tokens.update(t.lower() for t in str(name).split())
+        return tokens
 
     def get_or_assign(self, canvas_id, real_name="", sis_id="",
                       roster_names: set | None = None) -> str:
-        """Return the stable pseudonym for this student, assigning one on first sight.
-        Backfills name/sis if they were unknown before. If `roster_names` is provided,
-        the fake name will avoid colliding with any real roster token.
-        Does not auto-save."""
+        """Return the stable pseudonym for this student, assigning one
+        available registry word on first sight. Backfills name/sis if they
+        were unknown before. If `roster_names` is provided, the assigned
+        word will avoid colliding with any real roster token. Does not
+        auto-save."""
         cid = str(canvas_id)
         entry = self._by_id.get(cid)
         if entry is None:
-            from datetime import datetime
-            used_first, used_last = self._existing_tokens(roster_names)
-            pseudo_first = ""
-            pseudo_last = ""
-            pseudonym = ""
-            # Pick a fake name
-            used_fake_tokens = set()
-            if roster_names:
-                for n in roster_names:
-                    used_fake_tokens.update(t.lower() for t in n.split())
-            entry_pseudo = {}
-            self._assign_fake_name(entry_pseudo, used_first, used_last,
-                                   roster_tokens=used_fake_tokens)
-            pseudo_first = entry_pseudo["pseudo_first"]
-            pseudo_last = entry_pseudo["pseudo_last"]
-            pseudonym = entry_pseudo["pseudonym"]
-
+            banned = self._used_pseudonym_tokens() | self._roster_tokens(roster_names)
+            pseudonym = self._select_available_word(banned)
             entry = {
                 "pseudonym": pseudonym,
-                "pseudo_first": pseudo_first,
-                "pseudo_last": pseudo_last,
                 "real_name": real_name,
                 "sis_id": sis_id,
                 "nicknames": [],
@@ -256,7 +304,7 @@ class Vault:
 
     def add_nicknames(self, canvas_id, nicknames: list[str]):
         """Merge nicknames into the existing set (dedup case-insensitively, strip,
-        no empty strings) — does NOT clobber teacher-entered ones. Caller saves."""
+        no empty strings) -- does NOT clobber teacher-entered ones. Caller saves."""
         cid = str(canvas_id)
         entry = self._by_id.get(cid)
         if entry is None:
@@ -271,34 +319,36 @@ class Vault:
                 merged.append(ns)
         entry["nicknames"] = sorted(merged)
 
-    def set_pseudonym(self, canvas_id, first: str, last: str):
-        """Manual override from the UI. Caller must call save().
+    def set_pseudonym(self, canvas_id, value: str):
+        """Manual override from the UI/MCP. Caller must call save().
 
-        Raises PseudonymCollisionError if a different student already holds the
-        name. `regenerate_pseudonym` has always been collision-checked; without
-        the same check here, two entries could share one pseudonym and the
-        reverse index would resolve to whichever was written last, quietly
-        attaching one student's work to another.
+        `value` must be exactly one word already present in the registry
+        (matched case-insensitively; the canonical registry casing is what
+        gets stored). Raises `InvalidPseudonymError` for a non-string,
+        blank, multiword, or out-of-registry value, and
+        `PseudonymCollisionError` if a different student already holds it.
+        Both checks run before any mutation, so a refused rename leaves the
+        vault untouched without depending on the transaction to roll back.
         """
         cid = str(canvas_id)
         entry = self._by_id.get(cid)
         if entry is None:
             return
-        new_pseudonym = f"{first.strip()} {last.strip()}"
-        # Checked before any mutation, so a refused rename leaves the vault
-        # untouched without depending on the transaction to roll back.
-        holder = self._canvas_id_holding(new_pseudonym)
+        canonical = _canonical_registry_word(value)
+        if canonical is None:
+            raise InvalidPseudonymError(
+                "pseudonym must be exactly one word from the reviewed registry."
+            )
+        holder = self._canvas_id_holding(canonical)
         if holder is not None and holder != cid:
             raise PseudonymCollisionError(
-                f"The pseudonym '{new_pseudonym}' already belongs to another "
+                f"The pseudonym '{canonical}' already belongs to another "
                 "student. Choose a different one."
             )
         old_pseudo = entry.get("pseudonym", "")
-        entry["pseudo_first"] = first.strip()
-        entry["pseudo_last"] = last.strip()
-        entry["pseudonym"] = new_pseudonym
+        entry["pseudonym"] = canonical
         self._by_pseudo.pop(old_pseudo, None)
-        self._by_pseudo[entry["pseudonym"]] = cid
+        self._by_pseudo[canonical] = cid
 
     def _canvas_id_holding(self, pseudonym: str):
         """The canvas_id already using this pseudonym, or None.
@@ -315,39 +365,21 @@ class Vault:
         return None
 
     def regenerate_pseudonym(self, canvas_id, roster_names: set | None = None):
-        """Assign a new fake name, collision-checked. Caller must call save()."""
+        """Assign a new available registry word, collision-checked, and
+        guaranteed different from the current one. Caller must call save()."""
         cid = str(canvas_id)
         entry = self._by_id.get(cid)
         if entry is None:
             return
         old_pseudo = entry.get("pseudonym", "")
-        used_first, used_last = self._existing_tokens(roster_names)
-        # Temporarily remove self from the used sets
-        old_first = entry.get("pseudo_first", "").lower()
-        old_last = entry.get("pseudo_last", "").lower()
-        used_first.discard(old_first)
-        used_last.discard(old_last)
-
-        used_fake_tokens = set()
-        if roster_names:
-            for n in roster_names:
-                used_fake_tokens.update(t.lower() for t in n.split())
-
-        fresh = {}
-        self._assign_fake_name(fresh, used_first, used_last,
-                               roster_tokens=used_fake_tokens)
-        # If we happened to get the same one, try again
-        if fresh["pseudonym"] == old_pseudo:
-            used_first.add(fresh["pseudo_first"].lower())
-            fresh = {}
-            self._assign_fake_name(fresh, used_first, used_last,
-                                   roster_tokens=used_fake_tokens)
-
-        entry["pseudo_first"] = fresh["pseudo_first"]
-        entry["pseudo_last"] = fresh["pseudo_last"]
-        entry["pseudonym"] = fresh["pseudonym"]
+        banned = self._used_pseudonym_tokens(exclude=old_pseudo) | self._roster_tokens(roster_names)
+        # Also ban the student's own current word so regenerate always hands
+        # back something different.
+        banned.add(old_pseudo.lower())
+        new_pseudonym = self._select_available_word(banned)
+        entry["pseudonym"] = new_pseudonym
         self._by_pseudo.pop(old_pseudo, None)
-        self._by_pseudo[entry["pseudonym"]] = cid
+        self._by_pseudo[new_pseudonym] = cid
 
     def reverse(self, pseudonym: str):
         """Pseudonym -> {canvas_id, real_name, sis_id} or None."""
@@ -367,8 +399,6 @@ class Vault:
                 "real_name": e.get("real_name", ""),
                 "sis_id": e.get("sis_id", ""),
                 "pseudonym": e.get("pseudonym", ""),
-                "pseudo_first": e.get("pseudo_first", ""),
-                "pseudo_last": e.get("pseudo_last", ""),
                 "nicknames": e.get("nicknames", []),
                 "first_seen": e.get("first_seen", ""),
             })
@@ -377,7 +407,7 @@ class Vault:
         return result
 
     def all_real_identifiers(self):
-        """(names, ids) sets of every real identifier the vault knows — used by the
+        """(names, ids) sets of every real identifier the vault knows -- used by the
         outbound safety scan to detect any leak before transmission.
         Now includes nicknames."""
         names, ids = set(), set()

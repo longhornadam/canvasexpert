@@ -100,22 +100,21 @@ def test_stamped_save_round_trips_and_fresh_load_ignores_stamp(tmp_path):
     assert v2.conflicts() == []
 
 
-# --- legacy vault (no stamp keys at all) --------------------------------------
+# --- legacy vault (schema v3, but no OneDrive stamp keys at all) -------------
 
 def test_legacy_vault_without_stamp_keys_loads_fine(tmp_path):
     vault_path = str(tmp_path / "vault.json")
     with open(vault_path, "w", encoding="utf-8") as f:
-        json.dump({"by_canvas_id": {
+        json.dump({"schema_version": 3, "by_canvas_id": {
             "900001": {
-                "pseudonym": "Sparky McGee", "pseudo_first": "Sparky",
-                "pseudo_last": "McGee", "real_name": "Learner One",
+                "pseudonym": "Quartz", "real_name": "Learner One",
                 "sis_id": "", "nicknames": [], "first_seen": "",
             },
         }}, f)
 
     v = Vault(vault_path)
     assert len(v) == 1
-    assert v.get_or_assign("900001") == "Sparky McGee"
+    assert v.get_or_assign("900001") == "Quartz"
     assert v.conflicts() == []
 
 
@@ -123,7 +122,7 @@ def test_legacy_vault_without_stamp_keys_loads_fine(tmp_path):
 
 def test_conflict_copy_detected(tmp_path):
     vault_path = tmp_path / "vault.json"
-    vault_path.write_text(json.dumps({"by_canvas_id": {}}), encoding="utf-8")
+    vault_path.write_text(json.dumps({"schema_version": 3, "by_canvas_id": {}}), encoding="utf-8")
     (tmp_path / "vault-OTHERPC.json").write_text("{}", encoding="utf-8")
 
     v = Vault(str(vault_path))
@@ -132,7 +131,7 @@ def test_conflict_copy_detected(tmp_path):
 
 def test_parenthesized_conflict_copy_also_detected(tmp_path):
     vault_path = tmp_path / "vault.json"
-    vault_path.write_text(json.dumps({"by_canvas_id": {}}), encoding="utf-8")
+    vault_path.write_text(json.dumps({"schema_version": 3, "by_canvas_id": {}}), encoding="utf-8")
     (tmp_path / "vault (1).json").write_text("{}", encoding="utf-8")
 
     v = Vault(str(vault_path))
@@ -141,7 +140,7 @@ def test_parenthesized_conflict_copy_also_detected(tmp_path):
 
 def test_lock_file_and_canonical_name_not_flagged(tmp_path):
     vault_path = tmp_path / "vault.json"
-    vault_path.write_text(json.dumps({"by_canvas_id": {}}), encoding="utf-8")
+    vault_path.write_text(json.dumps({"schema_version": 3, "by_canvas_id": {}}), encoding="utf-8")
     (tmp_path / "vault.json.lock").write_text("0", encoding="utf-8")
 
     v = Vault(str(vault_path))
@@ -157,7 +156,7 @@ def test_no_conflict_when_no_extra_files(tmp_path):
 
 def test_get_roster_fails_closed_on_vault_conflict(monkeypatch, tmp_path):
     vault_path = tmp_path / "vault.json"
-    vault_path.write_text(json.dumps({"by_canvas_id": {}}), encoding="utf-8")
+    vault_path.write_text(json.dumps({"schema_version": 3, "by_canvas_id": {}}), encoding="utf-8")
     (tmp_path / "vault-OTHERPC.json").write_text("{}", encoding="utf-8")
 
     _use_vault(monkeypatch, str(vault_path))

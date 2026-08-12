@@ -11,7 +11,8 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
   real Canvas group membership when the teacher tells the assistant to do it.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
-  fake name (e.g. "Sparky McGee") — never a real name, Canvas user ID, or SIS ID.
+  one-word pseudonym (e.g. "Quartz") — never a real name, Canvas user ID, or SIS ID. See
+  `docs/contracts/pseudonym-contract.md` for the full pseudonym shape contract.
 - **Fail-closed.** Every student-data result also passes the existing outbound safety scan
   (`api/feedback_safety.py::scan_payload`) as a final check. If it isn't green, the tool
   withholds the payload and returns only a sanitized violation description.

@@ -6,11 +6,15 @@ import pytest
 
 from api.webui.server import app
 from api.platform_services import config
+from api import feedback_vault
+from api.feedback_vault import Vault
 import api.webui.routes.roster as roster_routes
 from api.mirror import store as mirror_store
 from api.platform_services import workspace
 
 client = TestClient(app)
+
+_WORDS = feedback_vault._REGISTRY_WORDS
 
 
 class FakeVault:
@@ -21,9 +25,7 @@ class FakeVault:
                 "real_name": "Ada Lovelace",
                 "sis_id": "SIS-SECRET",
                 "nicknames": ["Addie"],
-                "pseudonym": "Sparky McGee",
-                "pseudo_first": "Sparky",
-                "pseudo_last": "McGee",
+                "pseudonym": _WORDS[0],
                 "first_seen": "",
             }
         }
@@ -40,14 +42,12 @@ class FakeVault:
         row = self.rows.setdefault(str(canvas_id), {"canvas_id": str(canvas_id)})
         row["nicknames"] = nicknames
 
-    def set_pseudonym(self, canvas_id, first, last):
+    def set_pseudonym(self, canvas_id, value):
         row = self.rows.setdefault(str(canvas_id), {"canvas_id": str(canvas_id)})
-        row["pseudo_first"] = first
-        row["pseudo_last"] = last
-        row["pseudonym"] = f"{first} {last}"
+        row["pseudonym"] = value
 
     def regenerate_pseudonym(self, canvas_id):
-        self.set_pseudonym(canvas_id, "Fresh", "Alias")
+        self.set_pseudonym(canvas_id, _WORDS[1])
 
     def save(self):
         self.saved = True
@@ -198,7 +198,9 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     row = data["students"][0]
     assert row["id"] == "101"
     assert row["nicknames"] == ["Addie"]
-    assert row["pseudonym"] == "Sparky McGee"
+    assert row["pseudonym"] == _WORDS[0]
+    assert "pseudo_first" not in row
+    assert "pseudo_last" not in row
     assert row["extra_time"] == {"enabled": True, "days": 2}
     assert row["monitored"] == {"enabled": True, "note": "Private note"}
     assert row["seating_context"] == {
@@ -897,7 +899,56 @@ def test_roster_student_validates_pseudonym_shape():
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("ok") is False
-    assert "first" in data.get("error", "").lower()
+    assert "string" in data.get("error", "").lower()
+
+
+def _real_vault_pair(monkeypatch, tmp_path):
+    """Two students in a real (not fake-doubled) Vault, wired onto the route,
+    for the pseudonym patch Contract test below -- the deeper registry and
+    collision checks only exist on the real `Vault`, not `FakeVault`."""
+    vault = Vault(str(tmp_path / "vault.json"))
+    with vault.transaction():
+        first = vault.get_or_assign("101", "Ada Lovelace", "SIS-101")
+        second = vault.get_or_assign("102", "Alan Turing", "SIS-102")
+    monkeypatch.setattr(roster_routes, "_vault", lambda: vault)
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: ([], "No token saved."))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
+    monkeypatch.setattr(roster_routes, "load_group_categories", lambda course_id: ([], None, ""))
+    return vault, first, second
+
+
+@pytest.mark.parametrize("patch_value,accepted", [
+    ("VALID", True),
+    ("", False),
+    ("   ", False),
+    ("Two Words", False),
+    (123, False),
+    ("Notarealregistryword", False),
+    ("COLLIDING", False),
+])
+def test_roster_student_pseudonym_patch_boundary(monkeypatch, tmp_path, patch_value, accepted):
+    """Contract: the Roster route's pseudonym patch accepts exactly one
+    available registry word and refuses blank, multiword, non-string,
+    out-of-registry, and colliding values without a partial write."""
+    vault, first, second = _real_vault_pair(monkeypatch, tmp_path)
+    if patch_value == "VALID":
+        patch_value = next(w for w in _WORDS if w not in (first, second))
+    elif patch_value == "COLLIDING":
+        patch_value = second  # already held by canvas_id 102
+
+    resp = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({"pseudonym": patch_value}),
+    })
+    data = resp.json()
+    reloaded = Vault(str(tmp_path / "vault.json"))
+
+    if accepted:
+        assert data["ok"] is True
+        assert reloaded.get_or_assign("101") == patch_value
+    else:
+        assert data["ok"] is False
+        assert reloaded.get_or_assign("101") == first, "a rejected value must not mutate the vault"
 
 
 def test_roster_student_saves_and_clears_seating_context(monkeypatch, isolated_roster):
