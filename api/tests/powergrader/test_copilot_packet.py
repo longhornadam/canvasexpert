@@ -245,7 +245,7 @@ def test_build_copilot_batches_warns_for_oversized_single_student(tmp_path):
         assignment_name="Oversized Fictional Essay",
         safe_dir=str(tmp_path),
         llm_bundle=_bundle([
-            _student("Atlas Reed", "501", "large safe response " * 5000),
+            _student("Quartz", "501", "large safe response " * 5000),
         ]),
         rubric_text="Score carefully.",
         persona={"name": "Sage"},
@@ -255,7 +255,7 @@ def test_build_copilot_batches_warns_for_oversized_single_student(tmp_path):
     assert info["batch_count"] == 1
     batch = info["batches"][0]
     assert batch["student_count"] == 1
-    assert batch["expected_results"] == [{"pseudonym": "Atlas Reed", "item_id": "501"}]
+    assert batch["expected_results"] == [{"pseudonym": "Quartz", "item_id": "501"}]
     assert batch["warnings"]
     assert "larger than the target AI chat budget" in batch["warnings"][0]
 

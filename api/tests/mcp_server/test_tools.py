@@ -1434,7 +1434,7 @@ def test_gate_fails_closed_on_leaking_identity_key(tmp_path):
     vault = Vault(str(tmp_path / "vault.json"))
     vault.get_or_assign("900001", "Leaked Real Name", "SIS-900001")
 
-    leaking_payload = {"roster": [{"pseudonym": "Whatever Fake Name", "name": "Leaked Real Name"}]}
+    leaking_payload = {"roster": [{"pseudonym": "Quartz", "name": "Leaked Real Name"}]}
     result = pseudonym.gate(leaking_payload, vault)
 
     assert result["ok"] is False
@@ -1447,7 +1447,7 @@ def test_gate_fails_closed_on_leaking_identity_key(tmp_path):
 
 def test_gate_passes_clean_payload_through(tmp_path):
     vault = Vault(str(tmp_path / "vault.json"))
-    clean_payload = {"roster": [{"pseudonym": "Whatever Fake Name", "section_names": ["Period 1"]}]}
+    clean_payload = {"roster": [{"pseudonym": "Quartz", "section_names": ["Period 1"]}]}
     result = pseudonym.gate(clean_payload, vault)
     assert result == {"ok": True, **clean_payload}
 
@@ -1477,7 +1477,7 @@ def test_gate_hard_blocks_unscrubbed_id_in_text_field_and_sanitizes_violation(tm
     raw id value -- only _sanitize_violation's generic description."""
     vault = Vault(str(tmp_path / "vault.json"))
     vault.get_or_assign("900456", "Learner Two", "50099")
-    leaking_payload = {"submissions": [{"pseudonym": "Whatever Fake Name",
+    leaking_payload = {"submissions": [{"pseudonym": "Quartz",
                                         "text": "my canvas number is 900456 today"}]}
     result = pseudonym.gate(leaking_payload, vault)
     assert result["ok"] is False

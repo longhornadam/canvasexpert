@@ -1,14 +1,13 @@
 # Unified senior handoff
 
-**Status:** No direct brief is currently locked for execution. The one-word pseudonym cutover
-closed GREEN on 2026-08-12 (outcome recorded in section 4); no other document under
-`docs/handoffs/` is current.
+**Status:** One bounded closure-correction brief is locked in section 3. The one-word pseudonym
+cutover implementation is complete, but its GREEN retirement was premature because the required
+fixture-hygiene and rendered-browser evidence was not durably satisfied.
 
 **Last consolidated:** 2026-08-12
 
-**Current next pointer:** None. A future senior selects at most one item from section 5, writes
-independent acceptance criteria, and adds a new section 3. Nothing in this file currently
-authorizes implementation.
+**Current next pointer:** Section 3 only: close the one-word pseudonym evidence gap without
+changing production behavior. Nothing in section 5 authorizes implementation.
 
 ## 1. Authority and disposition
 
@@ -46,11 +45,121 @@ The consolidation exposed conflicts that are now settled:
 5. **No compatibility work is justified.** Canvas Expert remains pre-launch with no legacy users
    or records. All future promotions use clean current shapes and one source of truth.
 
-## 3. Direct brief
+## 3. Direct brief: one-word pseudonym closure correction
 
-None currently locked. The prior direct brief (one-word pseudonym cutover) closed GREEN on
-2026-08-12; its outcome is recorded in section 4. A future senior writes a new section 3 only
-when the next batch is ready for execution.
+**Status:** READY FOR EXECUTION
+
+**Risk:** Low. Tests, read-only browser evidence, and closure documentation only; no production
+code, private vault, Canvas data, or live-course interaction.
+
+**Baseline:** Local `dev` at `ea6fa6b`, one clean unpushed commit ahead of `origin/dev` after the
+2026-08-12 fetch.
+
+### 3.1 Objective and acceptance criteria
+
+Close the bounded evidence gap found after `ea6fa6b` without reopening the pseudonym design:
+
+1. Replace every multiword pseudonym JSON literal found by the locked hygiene check with a valid
+   one-word value from `api/data/pseudonym_words.json`. This includes the ordinary packet/gate
+   examples and the structurally fictional conflict file; this correction adds no new rejection
+   behavior.
+2. Changes are limited to the four named test files and this handoff. No production file changes.
+3. The four-file focused gate passes with `pytest-randomly` disabled, the exact hygiene check
+   returns zero matches, and `git diff --check` passes.
+4. `/roster` is rendered from a lifespan-disabled local server without selecting or refreshing a
+   real course. `window.CE_ROSTER`, `table.js`, and `inline_edit.js` load; a valid fictional
+   one-word row renders; a stubbed edit captures a `/api/roster/student` JSON patch whose
+   `pseudonym` is a string; and the browser records zero CanvasExpert console errors or warnings.
+5. The execution result below records the commit hash, changed files, exact command counts,
+   hygiene result, browser evidence, zero production/Canvas/private-vault interaction, and the
+   accepted documentation deviation from `ea6fa6b`.
+
+### 3.2 Locked decisions, scope, and non-goals
+
+- Use existing registry words; do not invent or extend the vocabulary.
+- Test functions remain functions. Do not add tests: only correct invalid fictional examples.
+- Authorized test files are exactly:
+  - `api/tests/test_scoring_packet_mcp.py`;
+  - `api/tests/mcp_server/test_tools.py`;
+  - `api/tests/powergrader/test_copilot_packet.py`; and
+  - `api/tests/test_vault_conflict_endpoint.py`.
+- The prior edit to `docs/reference/workbench-canonical-flow-map.md` is accepted as a necessary
+  truth correction for the deleted `/name-manager` route. Record it as the sole deviation from
+  the former file allowlist; do not edit that document again.
+- Do not amend or rewrite `ea6fa6b`. Make one follow-up executor commit. Do not push; the senior
+  reviews, retires this brief, and pushes afterward under the user's explicit authorization.
+- Do not rerun the full API suite: it passed at `ea6fa6b`, and this correction changes only
+  fictional test values. Do not touch Canvas, credentials, configured courses, the configured
+  Identity Vault, production code, or section 5.
+
+### 3.3 Required references and preflight
+
+Read only:
+
+1. `AGENTS.md`;
+2. this file, sections 1-3;
+3. `docs/reference/project-state.md` sections **Status: pre-launch**, **Userbase**, and **What this
+   means for scope**;
+4. `docs/contracts/pseudonym-contract.md` in full;
+5. `api/webui/README.md` section **Rendered verification (read-only)**; and
+6. the four authorized test files plus `api/data/pseudonym_words.json`.
+
+Before writing, confirm branch `dev`, baseline `ea6fa6b` with only this senior-authored handoff
+edit dirty, exactly one handoff file, and the 14 known exact hygiene hits across the four
+authorized files. Stop if another file matches, any authorized test file has an overlapping edit,
+or a production change appears necessary.
+
+### 3.4 Named verification gate
+
+```powershell
+py -m pytest api/tests/test_scoring_packet_mcp.py api/tests/mcp_server/test_tools.py api/tests/powergrader/test_copilot_packet.py api/tests/test_vault_conflict_endpoint.py -p no:randomly
+```
+
+Exact hygiene check (PowerShell-native so quote handling is stable):
+
+```powershell
+$files = Get-ChildItem api/tests,api/dailywriting/fixtures -Recurse -File
+$files | Select-String -Pattern '"pseudonym"\s*:\s*"[^" ]+ [^"]+"'
+git diff --check
+```
+
+Render `/roster` using the lifespan-disabled command in the required Web UI reference. Inject only
+fictional in-memory state, stub `window.fetch` before the edit, clear the fictional state, and
+stop the server after verification. Do not select a course or send the edit request.
+
+### 3.5 Stop conditions
+
+Return RED before expanding scope if a production file must change, a hygiene hit exists outside
+the four authorized files, or the browser check would touch a real course, Canvas, or the
+configured vault. Return YELLOW for an unrelated focused-test failure or an unavailable browser
+environment. Do not substitute source inspection for browser evidence.
+
+### 3.6 Execution result
+
+- Traffic light: GREEN
+- Commit hash: This follow-up executor commit; its exact hash is returned in chat because a commit
+  cannot contain its own final hash.
+- Changed files: `api/tests/test_scoring_packet_mcp.py`,
+  `api/tests/mcp_server/test_tools.py`, `api/tests/powergrader/test_copilot_packet.py`,
+  `api/tests/test_vault_conflict_endpoint.py`, and this handoff.
+- Focused gate command and result/count: `py -m pytest api/tests/test_scoring_packet_mcp.py
+  api/tests/mcp_server/test_tools.py api/tests/powergrader/test_copilot_packet.py
+  api/tests/test_vault_conflict_endpoint.py -p no:randomly` -> 176 passed in 5.51s.
+- Exact hygiene result: the locked `Get-ChildItem` / `Select-String` command returned 0 matches;
+  `git diff --check` passed with no errors.
+- Rendered `/roster` evidence and console warning/error count: the lifespan-disabled local route
+  returned HTTP 200; `window.CE_ROSTER` existed; `table.js` and `inline_edit.js` each loaded once;
+  an in-memory fictional `Quartz` row rendered; a pre-stubbed edit captured POST
+  `/api/roster/student` with JSON patch `{"pseudonym":"Mica"}` (string); the fictional row/state
+  was then cleared. Browser count: 0 console warnings/errors and 0 page errors.
+- Canvas/private-vault interaction: zero. No course was selected or refreshed, every page `fetch`
+  was intercepted in-browser before dispatch, the edit request was not sent, and the local server
+  was stopped after verification.
+- Accepted prior deviation: `ea6fa6b` corrected
+  `docs/reference/workbench-canonical-flow-map.md` outside the former allowlist for the deleted
+  `/name-manager` route; this execution did not edit it.
+- New deviations: none.
+- Unresolved decisions: none.
 
 ## 4. Closed work retained only for orientation
 
@@ -61,7 +170,7 @@ when the next batch is ready for execution.
 | Three-scenario teacher trace | Vault-conflict repair, readiness probing, honest failed-sync status, custom-routine scheduling, Pages `page_id`, and MCP Canvas-write disclosure are fixed. The dead Name Manager routes are deleted (see the one-word pseudonym cutover row below). Other old findings require fresh validation before any promotion. |
 | File-based AI-assist trace | Silent zero-import, vendor-neutral naming, real download filenames, unsafe scoring-skill retirement, binary upload guard, aggregate-only Writing Timeline projection, and one output-contract source are complete. ZIP input/return packaging is rejected because M365 Copilot cannot read ZIP attachments. |
 | Media-recording read-aloud initiative | Batches A-C plus later hardening are complete under the user-authorized synthetic-only override. Transcript-first local scoring is current. Raw-audio Batch D is optional; Batch E remains field-use gated. |
-| One-word pseudonym cutover | Complete and GREEN on 2026-08-12. `docs/contracts/pseudonym-contract.md` is authoritative; `api/data/pseudonym_words.json` holds the 351-word mineral/weather/ocean registry; the Identity Vault is schema v3; Roster, MCP, and the scrubber all use the single-string contract. The five dead `/api/names/*` routes and `/name-manager` are deleted (`docs/reference/workbench-canonical-flow-map.md` corrected to match). Pre-launch clean break: any vault predating this cutover was retired rather than migrated, with teacher authorization since the school year had not yet started. |
+| One-word pseudonym cutover | Implementation commit `ea6fa6b` delivered the schema-v3 registry cutover, but the post-commit senior audit found fixture-hygiene and rendered-evidence gaps. Section 3 is the sole authorized closure correction; do not promote another batch until it closes. |
 
 Do not re-derive or reimplement closed work from this table. Read the relevant current route card
 or contract when a future teacher-visible need reaches that subsystem.
