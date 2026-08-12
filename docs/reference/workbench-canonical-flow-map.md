@@ -63,7 +63,7 @@
 |---|---|---|
 | `GET /api/powergrader/session/{session_id}/packet` (Download packet ZIP) | "Open packet folder" (loose files) | Route deleted from `powergrader.py`; button deleted from `queue_import.js`; 1 route entry removed from `test_route_contract.py::EXPECTED` |
 
-**Why:** confirmed 2026-08-06 that M365 Copilot cannot read a ZIP as an attachment (only produce one), which was the assumption behind offering the packet as a single ZIP. `packet.py` still builds the ZIP on disk next to the packet folder as an internal artifact (existing tests in `test_packet.py` cover its shape), but no UI surface points a teacher at it. See `docs/handoffs/senior/copilot-file-based-ai-assist-trace.md` §4.3/§4.5 for the full correction.
+**Why:** confirmed 2026-08-06 that M365 Copilot cannot read a ZIP as an attachment (only produce one), which was the assumption behind offering the packet as a single ZIP. `packet.py` still builds the ZIP on disk next to the packet folder as an internal artifact (existing tests in `test_packet.py` cover its shape), but no UI surface points a teacher at it. The full retired trace remains in Git history at `ed22cfd`.
 
 ---
 

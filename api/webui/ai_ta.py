@@ -8,8 +8,7 @@ regenerates that text; it only seeds it into a teacher's workspace (once, never
 overwriting an edit).
 
 It also sweeps unedited "Score with - ..." files left behind by the retired
-per-rubric scoring-skill generator; see _sweep_retired_scoring_skills below and
-docs/handoffs/senior/copilot-file-based-ai-assist-trace.md section 8.2.
+per-rubric scoring-skill generator; see _sweep_retired_scoring_skills below.
 
 Pure module: builds plain-text output files only. The web UI / server owns the
 HTTP routes and startup hook.
@@ -88,8 +87,8 @@ RETIRED_FILES = {
         # Before "Automations" was renamed to "Routines" (feature-freeze
         # hardening initiative, D2).
         "a7f4d921a378a5044680db39f679cf66eba3cef7369179d5056cc99139c246e6",
-        # Before Appendix D's "you cannot write to Canvas at all" disclosure
-        # fix (three-scenario-teacher-trace.md §9.1).
+        # Before the 2026-08-06 Appendix D disclosure fix for the one explicit
+        # digest-protected MCP Canvas-group write.
         "c8a48dea97670303c973422218bebaf2b65f87e64691a71dc647891ab71f9978",
     }),
 }
@@ -133,9 +132,8 @@ def _legacy_rubric_score_text(data):
     file, built from rf.scoring_prompt. That generator is retired: it told a
     teacher to paste real student writing into a chat with no pseudonymization,
     and its output carried no pseudonym/item_id, so it could never be imported
-    into a PowerGrader session (docs/handoffs/senior/
-    copilot-file-based-ai-assist-trace.md section 8.2). rf.scoring_prompt went
-    with it, since nothing else called it.
+    into a PowerGrader session. rf.scoring_prompt went with it, since nothing
+    else called it.
 
     This is a frozen, private duplicate of what that function produced, kept
     only so _sweep_retired_scoring_skills can recognize a file an earlier

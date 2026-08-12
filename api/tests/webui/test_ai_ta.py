@@ -60,12 +60,11 @@ def test_build_library_writes_expected_files(tmp_path):
 
 
 def test_build_library_sweeps_unedited_retired_score_files(tmp_path):
-    """The per-rubric scoring-skill generator is retired (docs/handoffs/senior/
-    copilot-file-based-ai-assist-trace.md section 8.2): build_library no
+    """The per-rubric scoring-skill generator is retired: build_library no
     longer writes "Score with - ..." files. A copy an earlier rebuild left
     behind is removed only while it still matches what the generator would
-    have produced from the rubric on file; a teacher's edit, or a file with
-    no rubric to match it against, survives.
+    have produced from the rubric on file; a teacher's edit, or a file with no
+    rubric to match it against, survives.
     """
     target = tmp_path / "AI Authoring"
     target.mkdir(parents=True)

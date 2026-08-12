@@ -1,11 +1,10 @@
 """Tests for api/feedback_results.py's parse_results output-shape tolerance.
 
-Covers the reproduction table from docs/handoffs/senior/copilot-file-based-ai-assist-trace.md
-section 4.1: eight reply shapes a teacher's AI chat might paste back, three of
-which already parsed correctly and five of which used to parse to zero rows
-while still reporting success downstream. None of these tests touch a session
-or the queue; api/tests/powergrader/test_import_results.py covers the
-fail-closed-on-zero behavior at that layer.
+Covers eight reply shapes a teacher's AI chat might paste back, three of which
+already parsed correctly and five of which used to parse to zero rows while
+still reporting success downstream. None of these tests touch a session or the
+queue; api/tests/powergrader/test_import_results.py covers the fail-closed-on-zero
+behavior at that layer.
 """
 import json
 
