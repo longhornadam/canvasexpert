@@ -3,7 +3,7 @@
 Every command here is local and read-or-write-to-disk only. None of them touch
 Canvas or create gradebook state.
 
-Output is pseudonymised because the store is: a command prints "Sparky McGee"
+Output is pseudonymised because the store is: a command prints "Pikachu"
 because that is the only name it has. Nothing here resolves back to a real
 student, which is what makes the output safe to paste into a note to yourself.
 """

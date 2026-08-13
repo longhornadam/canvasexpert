@@ -29,7 +29,7 @@ def test_conflict_files_report_name_size_and_mtime_not_contents(tmp_path, monkey
         f.write(json.dumps({"schema_version": 3, "by_canvas_id": {}}))
     conflict_path = os.path.join(vault_dir, "vault-OTHERPC.json")
     with open(conflict_path, "w", encoding="utf-8") as f:
-        f.write(json.dumps({"by_canvas_id": {"999": {"real_name": "Someone Real", "pseudonym": "Quartz"}}}))
+        f.write(json.dumps({"by_canvas_id": {"999": {"real_name": "Someone Real", "pseudonym": "Pikachu"}}}))
 
     response = names.vault_conflict()
     body = json.loads(response.body)
@@ -43,4 +43,4 @@ def test_conflict_files_report_name_size_and_mtime_not_contents(tmp_path, monkey
     assert entry["modified_at"]
     dumped = json.dumps(body)
     assert "Someone Real" not in dumped
-    assert "Quartz" not in dumped
+    assert "Pikachu" not in dumped

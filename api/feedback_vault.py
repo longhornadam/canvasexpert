@@ -9,8 +9,8 @@ Keyed on the Canvas user id (stable, present in the Student Analysis CSV `ID`
 column), so a student keeps the same opaque pseudonym forever -- across CSVs,
 sources, and years.
 
-v3 pseudonyms are one ordinary word -- a mineral, weather concept, or ocean
-state -- drawn from the reviewed registry at `api/data/pseudonym_words.json`.
+v3 pseudonyms are one Pokemon species name drawn from the reviewed registry at
+`api/data/pseudonym_words.json`.
 See `docs/contracts/pseudonym-contract.md` for the full contract. This is a
 pre-launch clean break: an on-disk document that is not schema_version 3, or
 that still carries a retired `pseudo_first`/`pseudo_last` component field,
@@ -32,12 +32,8 @@ from api.storage_support import atomic_write_json, interprocess_lock
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REGISTRY_PATH = os.path.join(_MODULE_DIR, "data", "pseudonym_words.json")
-_REGISTRY_CATEGORIES = ("mineral", "weather", "ocean")
-# Raised alongside the 2026-08 registry expansion (351 -> 1000+ words) so the
-# floor keeps meaning something: it still exists only to catch a badly
-# truncated or corrupted file, not to size the registry for how many
-# students it needs to cover. See `registry_runway()` for that question.
-_MIN_REGISTRY_WORDS = 900
+_REGISTRY_CATEGORIES = ("pokemon",)
+_MIN_REGISTRY_WORDS = 256
 _WORD_RE = re.compile(r"^[A-Z][a-z]+$")
 
 SCHEMA_VERSION = 3
@@ -66,8 +62,8 @@ def _load_registry() -> tuple[list[str], dict[str, str]]:
     word that is not one ASCII title-case token, a duplicate) raises
     `PseudonymRegistryError` at import time rather than falling back to a
     placeholder or numbered word. Returns (words, category_by_lower); the
-    category map exists only so this loader can prove each word lands in
-    exactly one category, and is not otherwise used by `Vault`.
+    category map exists only so this loader can prove each word appears in
+    exactly one category once, and is not otherwise used by `Vault`.
     """
     try:
         with open(_REGISTRY_PATH, encoding="utf-8") as f:

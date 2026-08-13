@@ -168,7 +168,7 @@ def test_build_packet_rows_are_dicts_not_a_table():
     """
     result = scoring_packet.build_packet(
         session=_fake_session("s1", "c1"),
-        safe_bundle=_fake_safe_bundle([{"pseudonym": "Quartz"}], items=1),
+        safe_bundle=_fake_safe_bundle([{"pseudonym": "Pikachu"}], items=1),
         include_context=False,
     )
 
@@ -225,7 +225,7 @@ def test_build_packet_final_page_has_no_next_offset():
 
 
 def test_build_packet_context_toggle():
-    bundle = _fake_safe_bundle([{"pseudonym": "Quartz"}], items=1)
+    bundle = _fake_safe_bundle([{"pseudonym": "Pikachu"}], items=1)
 
     with_context = scoring_packet.build_packet(session=_fake_session("s1", "c1"),
                                                safe_bundle=bundle, include_context=True)
@@ -239,7 +239,7 @@ def test_build_packet_context_toggle():
 
 
 def test_build_packet_drops_media():
-    bundle = _fake_safe_bundle([{"pseudonym": "Quartz"}], items=1)
+    bundle = _fake_safe_bundle([{"pseudonym": "Pikachu"}], items=1)
     bundle["students"][0]["responses"][0]["media"] = [
         {"filename": "image.png", "local_path": "path/to/image.png"}
     ]
@@ -254,7 +254,7 @@ def test_build_packet_drops_media():
 
 
 def test_build_packet_projects_safe_oral_reading_as_text_without_media_transport_fields():
-    bundle = _fake_safe_bundle([{"pseudonym": "Quartz"}], items=1)
+    bundle = _fake_safe_bundle([{"pseudonym": "Pikachu"}], items=1)
     bundle["students"][0]["responses"][0]["response"] = ""
     bundle["students"][0]["responses"][0]["oral_reading"] = {
         "version": "1.0", "status": "needs_review", "evidence_digest": "e" * 64,
@@ -281,7 +281,7 @@ def test_build_packet_counts_each_held_response_once():
     It used to be counted in both the per-response branch and the
     whole-student fallback, so a single held submission reported held == 2.
     """
-    bundle = _fake_safe_bundle([{"pseudonym": "Quartz"}], items=1)
+    bundle = _fake_safe_bundle([{"pseudonym": "Pikachu"}], items=1)
     bundle["students"][0]["responses"][0]["response"] = ""
     bundle["students"][0]["responses"][0]["media"] = [{"filename": "essay.docx"}]
 
@@ -289,7 +289,7 @@ def test_build_packet_counts_each_held_response_once():
                                          safe_bundle=bundle, include_context=False)
 
     assert result["held"] == 1
-    assert result["held_pseudonyms"] == ["Quartz"]
+    assert result["held_pseudonyms"] == ["Pikachu"]
     assert result["total"] == 0
     assert result["returned"] == 0
 
@@ -312,7 +312,7 @@ def test_build_packet_held_never_exceeds_responses_present():
 
 def test_build_packet_keeps_full_text():
     long_response = "A" * 3000
-    bundle = _fake_safe_bundle([{"pseudonym": "Quartz"}], items=1)
+    bundle = _fake_safe_bundle([{"pseudonym": "Pikachu"}], items=1)
     bundle["students"][0]["responses"][0]["response"] = long_response
 
     result = scoring_packet.build_packet(session=_fake_session("s1", "c1"),
@@ -350,7 +350,7 @@ def test_build_packet_oversize_guard_on_a_single_response(monkeypatch):
     with pytest.raises(scoring_packet.PacketTooLarge) as exc:
         scoring_packet.build_packet(session=_fake_session("s1", "c1"),
                                     safe_bundle=_fake_safe_bundle(
-                                        [{"pseudonym": "Quartz"}], items=1),
+                                        [{"pseudonym": "Pikachu"}], items=1),
                                     limit=1)
 
     assert "limit=" not in str(exc.value)
@@ -359,7 +359,7 @@ def test_build_packet_oversize_guard_on_a_single_response(monkeypatch):
 
 def test_packet_digest_is_shared_by_both_sides():
     """build_packet and the staging guard must derive the same digest."""
-    bundle = _fake_safe_bundle([{"pseudonym": "Quartz"}], items=1)
+    bundle = _fake_safe_bundle([{"pseudonym": "Pikachu"}], items=1)
     packet = scoring_packet.build_packet(session=_fake_session("s1", "c1"),
                                          safe_bundle=bundle, include_context=False)
 
@@ -769,7 +769,7 @@ def test_stage_scores_reports_unresolved_pseudonyms(monkeypatch, tmp_path):
     _attach_bundle(session, tmp_path, bundle)
     _bind_session_store(monkeypatch, {"s1": session})
 
-    stranger = {"pseudonym": "Quartz"}
+    stranger = {"pseudonym": "Pikachu"}
     result = tools.stage_scores("s1", [_scored(people[0]), _scored(stranger)],
                                 scoring_packet.packet_digest("s1", bundle))
 

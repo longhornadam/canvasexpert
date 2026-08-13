@@ -107,14 +107,14 @@ def test_legacy_vault_without_stamp_keys_loads_fine(tmp_path):
     with open(vault_path, "w", encoding="utf-8") as f:
         json.dump({"schema_version": 3, "by_canvas_id": {
             "900001": {
-                "pseudonym": "Quartz", "real_name": "Learner One",
+                "pseudonym": "Pikachu", "real_name": "Learner One",
                 "sis_id": "", "nicknames": [], "first_seen": "",
             },
         }}, f)
 
     v = Vault(vault_path)
     assert len(v) == 1
-    assert v.get_or_assign("900001") == "Quartz"
+    assert v.get_or_assign("900001") == "Pikachu"
     assert v.conflicts() == []
 
 

@@ -20,7 +20,7 @@ def _vault(path):
         "schema_version": 3,
         "by_canvas_id": {
             "canvas-1": {
-                "pseudonym": "Quartz",
+                "pseudonym": "Pikachu",
                 "real_name": "Synthetic One", "sis_id": "SIS-1", "nicknames": [],
             },
         }
@@ -39,9 +39,9 @@ def _legacy_map(path):
 def test_rekey_plan_requires_exactly_one_vault_sis_match():
     plan = identity.build_rekey_plan(
         {"Student_101": "SIS-1", "Student_202": "SIS-old"},
-        [{"sis_id": "SIS-1", "pseudonym": "Quartz"}],
+        [{"sis_id": "SIS-1", "pseudonym": "Pikachu"}],
     )
-    assert plan == {"rekey": {"Student_101": "Quartz"}, "unmatched": ["Student_202"]}
+    assert plan == {"rekey": {"Student_101": "Pikachu"}, "unmatched": ["Student_202"]}
 
     with pytest.raises(identity.IdentityMigrationError, match="ambiguous"):
         identity.build_rekey_plan(
@@ -68,7 +68,7 @@ def test_migration_rekeys_named_rows_preserves_unmatched_scores_and_is_idempoten
     assert report["anonymous_students"] == 1
     assert migrated["identity_format"] == "identity_vault.v1"
     assert migrated["students"] == [
-        {"n": "Quartz", "pct": 82, "app": "y", "identity_state": "identity_vault"},
+        {"n": "Pikachu", "pct": 82, "app": "y", "identity_state": "identity_vault"},
         {"n": "", "pct": 44, "app": "n", "identity_state": "anonymous_aggregate"},
     ]
     assert not paths.anon_map.exists()
@@ -78,9 +78,9 @@ def test_migration_rekeys_named_rows_preserves_unmatched_scores_and_is_idempoten
 def test_vault_identity_never_invents_a_pseudonym_for_an_unenrolled_student(tmp_path):
     vault = _vault(tmp_path / "vault" / "vault.json")
     provider = identity.VaultIdentity(vault)
-    assert provider.map_student("Synthetic One", "SIS-1") == ("Quartz", "")
+    assert provider.map_student("Synthetic One", "SIS-1") == ("Pikachu", "")
     assert provider.map_student("Past Student", "SIS-old") == ("", "")
-    assert provider.linked_students() == {"Quartz": "SIS-1"}
+    assert provider.linked_students() == {"Pikachu": "SIS-1"}
 
 
 def test_vault_identity_resolves_canvas_id_both_directions(tmp_path):
@@ -88,9 +88,9 @@ def test_vault_identity_resolves_canvas_id_both_directions(tmp_path):
     provider = identity.VaultIdentity(vault)
     assert provider.canvas_id_for_student("Synthetic One", "SIS-1") == "canvas-1"
     assert provider.canvas_id_for_student("Past Student", "SIS-old") == ""
-    assert provider.pseudonym_for_canvas_id("canvas-1") == "Quartz"
+    assert provider.pseudonym_for_canvas_id("canvas-1") == "Pikachu"
     assert provider.pseudonym_for_canvas_id("canvas-does-not-exist") == ""
-    assert provider.canvas_id_map() == {"Quartz": "canvas-1"}
+    assert provider.canvas_id_map() == {"Pikachu": "canvas-1"}
 
 
 # --- backfilling canvas_id onto existing history rows ---------------------
@@ -99,23 +99,23 @@ def test_vault_identity_resolves_canvas_id_both_directions(tmp_path):
 def test_backfill_links_rows_whose_stored_pseudonym_still_matches_the_vault(tmp_path):
     paths = Paths(tmp_path)
     (paths.history_dir / "fall.json").write_text(json.dumps({
-        "id": "fall", "students": [{"n": "Quartz", "pct": 82.0}],
+        "id": "fall", "students": [{"n": "Pikachu", "pct": 82.0}],
     }), encoding="utf-8")
 
-    report = identity.backfill_canvas_ids(paths, {"Quartz": "canvas-1"})
+    report = identity.backfill_canvas_ids(paths, {"Pikachu": "canvas-1"})
     updated = json.loads((paths.history_dir / "fall.json").read_text(encoding="utf-8"))
 
     assert report == {"snapshots": 1, "linked_students": 1, "unresolved_students": 0}
-    assert updated["students"] == [{"n": "Quartz", "pct": 82.0, "canvas_id": "canvas-1"}]
+    assert updated["students"] == [{"n": "Pikachu", "pct": 82.0, "canvas_id": "canvas-1"}]
 
 
 def test_backfill_is_idempotent(tmp_path):
     paths = Paths(tmp_path)
     (paths.history_dir / "fall.json").write_text(json.dumps({
-        "id": "fall", "students": [{"n": "Quartz", "pct": 82.0}],
+        "id": "fall", "students": [{"n": "Pikachu", "pct": 82.0}],
     }), encoding="utf-8")
 
-    canvas_id_map = {"Quartz": "canvas-1"}
+    canvas_id_map = {"Pikachu": "canvas-1"}
     first = identity.backfill_canvas_ids(paths, canvas_id_map)
     second = identity.backfill_canvas_ids(paths, canvas_id_map)
 
@@ -132,17 +132,17 @@ def test_backfill_leaves_unresolvable_rows_anonymous(tmp_path):
     paths = Paths(tmp_path)
     (paths.history_dir / "snap.json").write_text(json.dumps({
         "id": "snap", "students": [
-            {"n": "Quartz", "pct": 82.0},
+            {"n": "Pikachu", "pct": 82.0},
             {"n": "Prior Year Student", "pct": 44.0},
         ],
     }), encoding="utf-8")
 
-    report = identity.backfill_canvas_ids(paths, {"Quartz": "canvas-1"})
+    report = identity.backfill_canvas_ids(paths, {"Pikachu": "canvas-1"})
     updated = json.loads((paths.history_dir / "snap.json").read_text(encoding="utf-8"))
 
     assert report == {"snapshots": 1, "linked_students": 1, "unresolved_students": 1}
     assert updated["students"] == [
-        {"n": "Quartz", "pct": 82.0, "canvas_id": "canvas-1"},
+        {"n": "Pikachu", "pct": 82.0, "canvas_id": "canvas-1"},
         {"n": "Prior Year Student", "pct": 44.0},
     ]
 
@@ -158,7 +158,7 @@ def test_backfill_cannot_repair_a_row_whose_pseudonym_was_already_renamed_away(t
     """
     paths = Paths(tmp_path)
     (paths.history_dir / "old.json").write_text(json.dumps({
-        "id": "old", "students": [{"n": "Quartz", "pct": 82.0}],
+        "id": "old", "students": [{"n": "Pikachu", "pct": 82.0}],
     }), encoding="utf-8")
 
     # The vault now only knows the NEW pseudonym: the rename already happened
@@ -174,14 +174,14 @@ def test_backfill_is_atomic_a_bad_snapshot_leaves_every_file_untouched(tmp_path)
     paths = Paths(tmp_path)
     good = paths.history_dir / "good.json"
     bad = paths.history_dir / "zzz_bad.json"
-    good_original = json.dumps({"id": "good", "students": [{"n": "Quartz", "pct": 82.0}]})
+    good_original = json.dumps({"id": "good", "students": [{"n": "Pikachu", "pct": 82.0}]})
     good.write_text(good_original, encoding="utf-8")
     # Sorts after "good.json", so a failure here proves the FIRST file's
     # already-staged temp gets rolled back too, not just files after it.
     bad.write_text(json.dumps({"id": "bad", "students": "not-a-list"}), encoding="utf-8")
 
     with pytest.raises(identity.IdentityMigrationError):
-        identity.backfill_canvas_ids(paths, {"Quartz": "canvas-1"})
+        identity.backfill_canvas_ids(paths, {"Pikachu": "canvas-1"})
 
     assert good.read_text(encoding="utf-8") == good_original, "the good file must not be rewritten"
     assert not list(paths.history_dir.glob("*.vault-migration.tmp")), (

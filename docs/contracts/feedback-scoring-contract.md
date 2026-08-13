@@ -27,7 +27,7 @@ rubric and the scoring instructions (`build_contract_text`).
   "source": "assignment",
   "students": [
     {
-      "pseudonym": "Quartz",
+      "pseudonym": "Pikachu",
       "responses": [
         {
           "item_id": "4242",
@@ -113,7 +113,7 @@ data, but a bare array is accepted for backward compatibility:
   "contract_version": "1.0",
   "results": [
     {
-      "pseudonym": "Quartz",
+      "pseudonym": "Pikachu",
       "item_id": "4242",
       "score": 8,
       "feedback": "Glows: clear thesis; strong opening example.\nGrows: tie the second paragraph back to the prompt.\nNext step: add one cited quote as evidence.",

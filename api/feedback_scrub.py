@@ -116,7 +116,7 @@ def build_replacement_map(vault_entries: list[dict],
     are NOT roster tokens.
 
     The returned rules are ordered by pattern length descending (longest match
-    first) so 'Jose Flores' -> 'Quartz' beats the single-token rules.
+    first) so 'Jose Flores' -> 'Pikachu' beats the single-token rules.
     """
     rules: list[tuple[str, str]] = []  # (regex_string, replacement)
 
@@ -142,7 +142,7 @@ def build_replacement_map(vault_entries: list[dict],
             # scrubbed safely for this entry (see verify_clean).
             continue
 
-        # Full real name -> full pseudonym (e.g. "Jose Flores" -> "Quartz").
+        # Full real name -> full pseudonym (e.g. "Jose Flores" -> "Pikachu").
         # Folded so an unaccented typing of an accented roster name ("Jose
         # Flores" for vault "José Flores") still matches — matching only;
         # the replacement text is unaffected.
@@ -183,8 +183,8 @@ def build_replacement_map(vault_entries: list[dict],
 
 def scrub_text(text: str, replacement_map: list[tuple]) -> str:
     """Apply the replacement map. Word-boundary, case-insensitive;
-    possessives fall out naturally (\\bJose\\b matches in 'Jose's' -> 'Sparky's').
-    Longest patterns first so 'Jose Flores'->'Sparky McGee' beats single-token rules.
+    possessives fall out naturally (\\bJose\\b matches in 'Jose's' -> 'Pikachu's').
+    Longest patterns first so 'Jose Flores'->'Pikachu' beats single-token rules.
 
     Patterns are compiled from accent-folded name tokens (see `_fold`), so
     matching runs against a folded copy of the text-so-far; each match's span

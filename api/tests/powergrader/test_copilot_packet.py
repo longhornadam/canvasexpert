@@ -46,7 +46,7 @@ def _upload_files(batch):
 
 def test_build_copilot_batches_creates_one_small_batch(tmp_path):
     bundle = _bundle([
-        _student("Sparky McGee", "42", "The character becomes braver."),
+        _student("Pikachu", "42", "The character becomes braver."),
         _student("Nova Bright", "43", "The character learns to listen."),
     ])
 
@@ -73,7 +73,7 @@ def test_build_copilot_batches_creates_one_small_batch(tmp_path):
     assert sorted(path.name[:4] for path in upload_files).count("03 -") == 1
 
     combined = "\n".join(path.read_text(encoding="utf-8") for path in upload_files)
-    assert "Sparky McGee" in combined
+    assert "Pikachu" in combined
     assert "Nova Bright" in combined
     assert "Item ID: 42" in combined
     assert "Item ID: 43" in combined
@@ -245,7 +245,7 @@ def test_build_copilot_batches_warns_for_oversized_single_student(tmp_path):
         assignment_name="Oversized Fictional Essay",
         safe_dir=str(tmp_path),
         llm_bundle=_bundle([
-            _student("Quartz", "501", "large safe response " * 5000),
+            _student("Pikachu", "501", "large safe response " * 5000),
         ]),
         rubric_text="Score carefully.",
         persona={"name": "Sage"},
@@ -255,7 +255,7 @@ def test_build_copilot_batches_warns_for_oversized_single_student(tmp_path):
     assert info["batch_count"] == 1
     batch = info["batches"][0]
     assert batch["student_count"] == 1
-    assert batch["expected_results"] == [{"pseudonym": "Quartz", "item_id": "501"}]
+    assert batch["expected_results"] == [{"pseudonym": "Pikachu", "item_id": "501"}]
     assert batch["warnings"]
     assert "larger than the target AI chat budget" in batch["warnings"][0]
 
@@ -268,7 +268,7 @@ def test_build_copilot_batches_compact_layout_deep_workspace(tmp_path, monkeypat
     deep_root.mkdir(parents=True, exist_ok=True)
 
     bundle = _bundle([
-        _student("Sparky McGee", "42", "The character becomes braver."),
+        _student("Pikachu", "42", "The character becomes braver."),
         _student("Nova Bright", "43", "The character learns to listen."),
     ])
 
@@ -304,7 +304,7 @@ def test_build_copilot_batches_compact_layout_deep_workspace(tmp_path, monkeypat
 def test_build_copilot_batches_normal_layout_short_root(tmp_path):
     """Under a short root, AI chat batches use the normal readable layout."""
     bundle = _bundle([
-        _student("Sparky McGee", "42", "A short response."),
+        _student("Pikachu", "42", "A short response."),
     ])
 
     info = build_copilot_batches(

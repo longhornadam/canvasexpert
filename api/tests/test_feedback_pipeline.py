@@ -162,7 +162,7 @@ def test_media_read_aloud_scrub_survivor_gets_a_specific_private_hold(tmp_path):
     vault._by_id["999"] = {"pseudonym": "",
                             "real_name": "Ghost", "sis_id": "", "nicknames": [], "first_seen": ""}
     bundle = {
-        "students": [{"pseudonym": "Quartz", "local_attachments": [], "responses": [{
+        "students": [{"pseudonym": "Pikachu", "local_attachments": [], "responses": [{
             "item_id": "42", "response": "", "oral_reading": {
                 "version": "1.0", "status": "complete", "passage": "Ghost reads", "transcript": "Ghost reads",
                 "passage_digest": "p" * 64, "evidence_digest": "e" * 64,
@@ -174,7 +174,7 @@ def test_media_read_aloud_scrub_survivor_gets_a_specific_private_hold(tmp_path):
 
     assert result["safe_students"] == 0
     assert result["media_holds"] == [{
-        "pseudonym": "Quartz",
+        "pseudonym": "Pikachu",
         "message": "Read-aloud evidence could not be safely scrubbed; review the recording locally.",
     }]
 

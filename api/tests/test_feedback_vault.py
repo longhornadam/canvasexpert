@@ -23,14 +23,24 @@ _WORDS = fv._REGISTRY_WORDS  # already validated at import time; reused, never m
 
 # --- registry law -----------------------------------------------------------
 
+# Species the contract permanently excludes: the word itself is not an
+# acceptable thing to call a student. Jynx is a racial caricature; the trash /
+# sludge / stink species and Hypno read as an insult or worse next to a child's
+# own work. See docs/contracts/pseudonym-contract.md.
+_EXCLUDED_SPECIES = {
+    "jynx",
+    "grimer", "muk", "trubbish", "garbodor", "stunky", "skuntank",
+    "hypno",
+}
+
+
 def test_registry_meets_the_locked_contract():
-    """Exactly the mineral/weather/ocean categories, at least
-    `_MIN_REGISTRY_WORDS` unique, ASCII title-case single-token words, no
-    cross-category duplicate."""
+    """Exactly the 'pokemon' category, at least 256 unique, ASCII title-case
+    single-token words, no duplicate, and every excluded species absent."""
     with open(fv._REGISTRY_PATH, encoding="utf-8") as f:
         data = json.load(f)
 
-    assert set(data) == {"mineral", "weather", "ocean"}
+    assert set(data) == {"pokemon"}
     seen: set[str] = set()
     for category, words in data.items():
         assert isinstance(words, list) and words, category
@@ -38,22 +48,21 @@ def test_registry_meets_the_locked_contract():
             assert fv._WORD_RE.fullmatch(word), f"{word!r} in {category}"
             assert word.isascii()
             folded = word.lower()
-            assert folded not in seen, f"{word!r} duplicated across categories"
+            assert folded not in seen, f"{word!r} duplicated in the registry"
             seen.add(folded)
 
-    assert len(seen) >= fv._MIN_REGISTRY_WORDS
-
-
-_THIRD = len(_WORDS) // 3
-_M, _W, _O = _WORDS[:_THIRD], _WORDS[_THIRD:2 * _THIRD], _WORDS[2 * _THIRD:]
+    assert len(seen) >= 256
+    assert seen & _EXCLUDED_SPECIES == set()
 
 
 @pytest.mark.parametrize("bad_doc", [
-    {"mineral": _M, "weather": _W},                                    # missing 'ocean'
-    {"mineral": _M[:1], "weather": _W[:1], "ocean": _O[:1]},            # far below the floor
-    {"mineral": _M + [_W[0]], "weather": _W, "ocean": _O},              # cross-category dup
-    {"mineral": _M + ["not-a-word"], "weather": _W, "ocean": _O},       # not title-case ASCII
-    {"mineral": _M + ["Two Words"], "weather": _W, "ocean": _O},        # multiword entry
+    {},                                          # missing 'pokemon'
+    {"pokemon": _WORDS, "mineral": _WORDS[:1]},  # unexpected extra category
+    {"pokemon": []},                             # empty category
+    {"pokemon": _WORDS[:1]},                     # far below 256 total
+    {"pokemon": _WORDS + [_WORDS[0]]},           # duplicated entry
+    {"pokemon": _WORDS + ["not-a-word"]},        # not title-case ASCII
+    {"pokemon": _WORDS + ["Two Words"]},         # multiword entry
 ])
 def test_registry_loader_fails_closed_on_structural_problems(tmp_path, monkeypatch, bad_doc):
     path = tmp_path / "bad_registry.json"

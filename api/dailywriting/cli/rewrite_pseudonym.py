@@ -1,7 +1,7 @@
 """Rewrite one student's retired pseudonym to their new one across every
 stored span, after a teacher renames them in the identity vault.
 
-    py -m api.dailywriting.cli.rewrite_pseudonym --old "Sparky McGee" --new "Juniper Weld"
+    py -m api.dailywriting.cli.rewrite_pseudonym --old "Pikachu" --new "Eevee"
     py -m api.dailywriting.cli.rewrite_pseudonym --old "..." --new "..." --dry-run
 
 `api/dailywriting/core/scrub.py` stores the vault's pseudonym directly in a
@@ -50,7 +50,7 @@ class RewriteReport:
 def _token_pairs(old_pseudonym: str, new_pseudonym: str) -> list[tuple[str, str]]:
     """(old, new) replacement pairs, longest-old-first.
 
-    A stored span may hold the full pseudonym ("Sparky McGee") or only the
+    A stored span holds the full one-word pseudonym ("Pikachu") or only the
     first or last name alone, exactly as `feedback_scrub.build_replacement_map`
     can land any of the three at ingest. When both names have the same
     two-token shape, this pairs first-with-first and last-with-last so a

@@ -5,26 +5,33 @@ scrubs to, or accepts a student pseudonym.
 
 ## Teacher-visible outcome
 
-Each student has one stable, unique, single-word pseudonym. The word is an ordinary
-mineral, weather concept, or ocean state. It is never an animal, a fictional character,
-a human-style first/last name, or a sequential identifier.
+Each student has one stable, unique, single-word pseudonym. The word is a Pokemon
+species name. It is never a human-style first/last name or a sequential identifier.
 
 Pseudonymized means identity-reduced, not anonymous. The existing review and outbound
 safety boundaries still apply.
 
 ## Canonical vocabulary
 
-`api/data/pseudonym_words.json` is the only vocabulary source. It has exactly three
-top-level category arrays: `mineral`, `weather`, and `ocean`.
+`api/data/pseudonym_words.json` is the only vocabulary source. It has exactly one
+top-level category array: `pokemon`, holding the National Pokedex species 1-1025 in
+dex order, minus the omissions below.
 
-- The flattened registry contains at least 900 unique words (over 1000 as of the
-  2026-08 expansion), so a middle school teacher's roster can grow across many
-  years without approaching the ceiling.
+- The flattened registry contains at least 256 unique words.
 - Every entry is one ASCII alphabetic token in title case, with no whitespace,
   punctuation, digits, or suffix generation.
-- Each word appears in exactly one category, compared case-insensitively.
-- Every entry must plainly belong to its named category. Animals, fictional characters,
-  character-adjacent names, and human-style personal names are forbidden.
+- Each word appears in the registry exactly once, compared case-insensitively.
+- Every entry must be a real Pokemon species name that is spelled as one plain ASCII
+  token. Species whose canonical spelling needs an apostrophe, accent, digit, hyphen, or
+  space (Farfetch'd, Flabebe, Porygon2, Ho-Oh, Mr. Mime, Tapu Koko, the Gen 9 paradox
+  names) are omitted rather than respelled. Human-style personal names are forbidden.
+- Some species are permanently excluded because the word itself is not an acceptable
+  thing to call a student, whatever the teacher's intent. A pseudonym is attached to a
+  child's work in front of that child. The excluded set is `Jynx` (its original design is
+  a racial caricature), the trash, sludge, and stink species `Grimer`, `Muk`, `Trubbish`,
+  `Garbodor`, `Stunky`, and `Skuntank`, and `Hypno` (its Pokedex lore is about carrying
+  off children). `api/tests/test_feedback_vault.py` pins this set so it cannot drift back
+  in; add to it rather than removing from it.
 - The registry is an allowlist. Code must never fall back to a word outside it.
 - The retired `fake_first_names.txt` and `fake_last_names.txt` pools do not coexist with
   this registry.

@@ -46,7 +46,7 @@ def test_t6_outbound_representation_requires_scrubbed_text(ingest_fixture):
 
 def test_a_roster_name_becomes_its_pseudonym(ingest_fixture):
     result = ingest_fixture(8)
-    assert "Quartz" in result.raw_text
+    assert "Pikachu" in result.raw_text
     kinds = {finding.kind for finding in result.scrub_findings}
     assert kinds <= {"roster_name", "roster_id"}
 
@@ -141,20 +141,20 @@ def test_a_nickname_the_teacher_entered_is_covered(roster_map):
     result = scrub.scrub_writing("Marc sat next to me during the test.",
                                  roster_map=roster_map)
     assert "Marc " not in result.text
-    assert "Quartz" in result.text
+    assert "Pikachu" in result.text
 
 
 def test_a_roster_first_name_alone_is_still_caught(roster_map):
     result = scrub.scrub_writing("Marcus said the same thing in class.",
                                  roster_map=roster_map)
     assert "Marcus" not in result.text
-    assert "Quartz" in result.text
+    assert "Pikachu" in result.text
 
 
 def test_a_full_roster_name_maps_to_the_full_pseudonym(roster_map):
     result = scrub.scrub_writing("Priya Raman disagreed with me.",
                                  roster_map=roster_map)
-    assert result.text.strip().startswith("Monsoon")
+    assert result.text.strip().startswith("Bulbasaur")
 
 
 def test_id_placeholder_is_used_for_a_real_id_in_free_text(roster_map):
