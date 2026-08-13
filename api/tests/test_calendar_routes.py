@@ -72,6 +72,18 @@ def test_calendar_page_disclosure_links_are_wired_to_open_secondary_surfaces():
     assert "openHashTarget" in js
 
 
+def test_calendar_readiness_copy_distinguishes_future_and_noninstructional_days():
+    js = (pathlib.Path(__file__).resolve().parents[1]
+          / "webui" / "static" / "pages" / "calendar.js").read_text(encoding="utf-8")
+
+    assert 'readiness.coverage_position === "before"' in js
+    assert 'readiness.coverage_position === "after"' in js
+    assert '"Ready. The school year starts "' in js
+    assert 'today.state === "no_school" || today.state === "no_regular_classes"' in js
+    assert '"No scheduled classes today"' in js
+    assert 'today.label ? ": " + today.label' in js
+
+
 def test_year_preview_is_create_at_base_revision_zero(isolated_workspace):
     calendars = isolated_workspace / "Library" / "Calendars"
     schedule_id = _bell_schedule(calendars)

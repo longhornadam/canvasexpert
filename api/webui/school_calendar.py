@@ -593,9 +593,16 @@ def readiness(*, bell_schedule_ids=None, today: str | None = None, root=None) ->
     today_str = today or date.today().isoformat()
     today_state = resolve_date(doc, today_str, known)
 
+    coverage_start = _parse_date(doc["coverage"]["start"])
     coverage_end = _parse_date(doc["coverage"]["end"])
     today_parsed = _parse_date(today_str)
     remaining_days = (coverage_end - today_parsed).days if coverage_end and today_parsed else None
+    if today_parsed and coverage_start and today_parsed < coverage_start:
+        coverage_position = "before"
+    elif today_parsed and coverage_end and today_parsed > coverage_end:
+        coverage_position = "after"
+    else:
+        coverage_position = "within"
 
     unknown_schedule_dates = sorted(
         date_key for date_key, entry in doc["days"].items()
@@ -603,9 +610,13 @@ def readiness(*, bell_schedule_ids=None, today: str | None = None, root=None) ->
     )
 
     needs_attention = (
-        today_state["state"] == "outside_coverage"
-        or bool(unknown_schedule_dates)
-        or (remaining_days is not None and remaining_days < LOW_COVERAGE_WARNING_DAYS)
+        bool(unknown_schedule_dates)
+        or coverage_position == "after"
+        or (
+            coverage_position == "within"
+            and remaining_days is not None
+            and remaining_days < LOW_COVERAGE_WARNING_DAYS
+        )
     )
 
     return {
@@ -613,6 +624,7 @@ def readiness(*, bell_schedule_ids=None, today: str | None = None, root=None) ->
         "revision": doc["revision"],
         "school_year": doc["school_year"],
         "coverage": doc["coverage"],
+        "coverage_position": coverage_position,
         "today": today_state,
         "remaining_coverage_days": remaining_days,
         "unknown_schedule_dates": unknown_schedule_dates,

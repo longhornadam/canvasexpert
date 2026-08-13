@@ -43,6 +43,77 @@ def test_readiness_is_unconfigured_with_no_document(tmp_path):
     assert readiness["status"] == "unconfigured"
 
 
+def test_readiness_is_ready_before_coverage_without_inventing_today(tmp_path):
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2027-05-28",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+
+    result = sc.readiness(
+        bell_schedule_ids={"ordinary"}, today="2026-08-13", root=_root(tmp_path))
+
+    assert result["status"] == "ready"
+    assert result["coverage_position"] == "before"
+    assert result["today"] == {"state": "outside_coverage", "date": "2026-08-13"}
+
+
+def test_readiness_needs_attention_after_coverage(tmp_path):
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2027-05-28",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+
+    result = sc.readiness(
+        bell_schedule_ids={"ordinary"}, today="2027-05-29", root=_root(tmp_path))
+
+    assert result["status"] == "needs_attention"
+    assert result["coverage_position"] == "after"
+    assert result["today"]["state"] == "outside_coverage"
+
+
+def test_readiness_keeps_unknown_schedule_and_active_low_runway_warnings(tmp_path):
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2026-08-21",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+
+    unknown = sc.readiness(
+        bell_schedule_ids=set(), today="2026-08-17", root=_root(tmp_path))
+    low_runway = sc.readiness(
+        bell_schedule_ids={"ordinary"}, today="2026-08-17", root=_root(tmp_path))
+
+    assert unknown["status"] == "needs_attention"
+    assert unknown["unknown_schedule_dates"]
+    assert low_runway["status"] == "needs_attention"
+    assert low_runway["remaining_coverage_days"] == 4
+
+
+def test_readiness_future_unknown_schedule_warns_without_expiring_today(tmp_path):
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2027-05-28",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+
+    result = sc.readiness(
+        bell_schedule_ids=set(), today="2026-08-13", root=_root(tmp_path))
+
+    assert result["status"] == "needs_attention"
+    assert result["coverage_position"] == "before"
+    assert result["today"]["state"] == "outside_coverage"
+    assert result["unknown_schedule_dates"]
+
+
+def test_readiness_is_ready_on_an_in_coverage_weekend(tmp_path):
+    sc.create_school_year(
+        school_year="2026-27", coverage_start="2026-08-17", coverage_end="2027-05-28",
+        default_schedule_id="ordinary", root=_root(tmp_path))
+
+    result = sc.readiness(
+        bell_schedule_ids={"ordinary"}, today="2026-08-22", root=_root(tmp_path))
+
+    assert result["status"] == "ready"
+    assert result["coverage_position"] == "within"
+    assert result["today"] == {
+        "state": "no_school", "date": "2026-08-22", "label": sc.WEEKEND_LABEL,
+    }
+
+
 # ── create_school_year ──────────────────────────────────────────────────────
 
 def test_create_school_year_covers_every_date_with_weekends_generated(tmp_path):

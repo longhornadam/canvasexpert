@@ -284,10 +284,15 @@ defect in the source file rather than a fact about the school year; the notes ar
 teacher which. The Calendar page shows them with the parsed counts.
 
 The page follows the WebUI presentation contract: controls before explanation, no sales copy,
-no permanent onboarding tour. Readiness is calm but unmissable. It becomes
-`needs_attention` when no valid calendar exists, today is outside coverage, an instructional
-date references an unknown Bell Schedule, or fewer than 30 calendar days remain in coverage.
-Warnings name the concrete repair and take the teacher to its control.
+no permanent onboarding tour. Readiness is calm but unmissable. A valid future school year is
+`ready` before coverage begins, while today's resolution remains `outside_coverage`; the page
+names the upcoming start date rather than asking for a repair. An expired school year is
+`needs_attention`. Readiness also becomes `needs_attention` when an instructional date references
+an unknown Bell Schedule or fewer than 30 calendar days remain in active coverage. An in-coverage
+`no_school` or `no_regular_classes` day is ready and is presented as having no scheduled classes
+today. These display/readiness semantics never relax requested-date or requested-range resolution:
+consumers still fail closed outside coverage. Warnings name the concrete repair and take the
+teacher to its control.
 
 Home surfaces Calendar only for a concrete repair, using reason-specific copy and an exact
 Calendar-section link; it does not expose a “School Schedule” umbrella.

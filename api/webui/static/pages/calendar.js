@@ -76,26 +76,36 @@
     } else if (readiness.status === "needs_attention") {
       notice.className = "ce-notice ce-notice--warn";
       var reasons = [];
-      if (readiness.today && readiness.today.state === "outside_coverage") {
+      if (readiness.today && readiness.today.state === "outside_coverage" &&
+          readiness.coverage_position === "after") {
         reasons.push("today is outside the configured coverage");
       }
       if ((readiness.unknown_schedule_dates || []).length) {
         reasons.push(readiness.unknown_schedule_dates.length + " date(s) name an unknown Bell Schedule");
       }
-      if (readiness.remaining_coverage_days != null && readiness.remaining_coverage_days < 30) {
+      if (readiness.coverage_position === "within" &&
+          readiness.remaining_coverage_days != null && readiness.remaining_coverage_days < 30) {
         reasons.push(readiness.remaining_coverage_days + " day(s) of coverage remaining");
       }
       notice.textContent = "Needs attention: " + (reasons.join("; ") || "check coverage") + ".";
     } else {
       var today = readiness.today || {};
-      var todayDetail = today.state === "instructional" || today.state === "ready"
-        ? (scheduleLabel(today.schedule_id) || today.schedule_id || "")
-        : (today.label || "");
       notice.className = "ce-notice ce-notice--ok";
-      notice.textContent = "Ready. School year " + (readiness.school_year || "") +
-        ", coverage " + ((readiness.coverage || {}).start || "") + " through " +
-        ((readiness.coverage || {}).end || "") +
-        (todayDetail ? ". Today: " + todayDetail + "." : ".");
+      if (readiness.coverage_position === "before") {
+        notice.textContent = "Ready. The school year starts " +
+          ((readiness.coverage || {}).start || "") + ".";
+      } else if (today.state === "no_school" || today.state === "no_regular_classes") {
+        notice.textContent = "No scheduled classes today" +
+          (today.label ? ": " + today.label : "") + ".";
+      } else {
+        var todayDetail = today.state === "instructional" || today.state === "ready"
+          ? (scheduleLabel(today.schedule_id) || today.schedule_id || "")
+          : (today.label || "");
+        notice.textContent = "Ready. School year " + (readiness.school_year || "") +
+          ", coverage " + ((readiness.coverage || {}).start || "") + " through " +
+          ((readiness.coverage || {}).end || "") +
+          (todayDetail ? ". Today: " + todayDetail + "." : ".");
+      }
     }
     el.appendChild(notice);
   }

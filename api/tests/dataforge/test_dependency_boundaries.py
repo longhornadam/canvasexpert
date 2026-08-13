@@ -73,3 +73,8 @@ def test_requirements_do_not_list_a_banned_dependency():
     req = (PACKAGE.parent / "requirements.txt").read_text(encoding="utf-8").lower()
     for name in BANNED:
         assert name not in req, f"requirements.txt still lists {name}"
+
+
+def test_requirements_declare_openpyxl_runtime_dependency():
+    req = (PACKAGE.parent / "requirements.txt").read_text(encoding="utf-8").lower()
+    assert "openpyxl>=3.1,<4" in req

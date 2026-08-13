@@ -148,6 +148,16 @@ def test_desk_ready_calendar_has_no_warning_and_uses_loaded_bell_schedule_ids(mo
     ("readiness", "expected_copy", "expected_links"),
     [
         (
+            {
+                "status": "ready",
+                "today": {"state": "outside_coverage"},
+                "coverage_position": "before",
+                "coverage": {"start": "2026-08-17", "end": "2027-05-28"},
+            },
+            [],
+            [],
+        ),
+        (
             {"status": "unconfigured"},
             ["The Calendar school year and dates need to be set up."],
             ["/calendar#calendar-create-card"],
@@ -161,6 +171,7 @@ def test_desk_ready_calendar_has_no_warning_and_uses_loaded_bell_schedule_ids(mo
             {
                 "status": "needs_attention",
                 "today": {"state": "outside_coverage"},
+                "coverage_position": "after",
                 "unknown_schedule_dates": [],
                 "remaining_coverage_days": 0,
                 "coverage": {"end": "2026-07-31"},
@@ -187,6 +198,7 @@ def test_desk_ready_calendar_has_no_warning_and_uses_loaded_bell_schedule_ids(mo
             {
                 "status": "needs_attention",
                 "today": {"state": "no_school"},
+                "coverage_position": "within",
                 "unknown_schedule_dates": [],
                 "remaining_coverage_days": 12,
                 "coverage": {"end": "2026-08-20"},
@@ -201,6 +213,7 @@ def test_desk_ready_calendar_has_no_warning_and_uses_loaded_bell_schedule_ids(mo
             {
                 "status": "needs_attention",
                 "today": {"state": "no_school"},
+                "coverage_position": "within",
                 "unknown_schedule_dates": ["2026-09-02"],
                 "remaining_coverage_days": 12,
                 "coverage": {"end": "2026-08-20"},
@@ -246,6 +259,7 @@ def test_desk_outside_coverage_does_not_duplicate_low_coverage_warning(monkeypat
     readiness = {
         "status": "needs_attention",
         "today": {"state": "outside_coverage"},
+        "coverage_position": "after",
         "unknown_schedule_dates": [],
         "remaining_coverage_days": 12,
         "coverage": {"end": "2026-08-20"},
@@ -261,6 +275,30 @@ def test_desk_outside_coverage_does_not_duplicate_low_coverage_warning(monkeypat
     assert response.status_code == 200
     assert "Calendar does not cover today." in response.text
     assert "Calendar coverage ends on 2026-08-20." not in response.text
+
+
+def test_desk_future_unknown_schedule_omits_expired_calendar_repair(monkeypatch):
+    _configure(monkeypatch)
+    readiness = {
+        "status": "needs_attention",
+        "today": {"state": "outside_coverage"},
+        "coverage_position": "before",
+        "unknown_schedule_dates": ["2026-08-17"],
+        "remaining_coverage_days": 288,
+        "coverage": {"start": "2026-08-17", "end": "2027-05-28"},
+    }
+    monkeypatch.setattr(pages.deps, "load_bell_schedules", lambda: ({"bell-a": []}, []))
+    monkeypatch.setattr(pages.school_calendar, "readiness", lambda **kwargs: readiness)
+    monkeypatch.setattr(pages.work_routes, "_section_jobs", lambda section: [])
+    monkeypatch.setattr(pages.operation_store, "list_operations_pii_minimized", lambda: [])
+    monkeypatch.setattr(pages.receipt_store, "list_receipts", lambda: [])
+
+    response = _client().get("/")
+
+    assert response.status_code == 200
+    assert "Calendar references 1 date with an unavailable Bell Schedule." in response.text
+    assert "Calendar does not cover today." not in response.text
+    assert "Calendar coverage ends" not in response.text
 
 
 def test_desk_active_courses_use_teacher_names_saved_order_and_empty_state(monkeypatch):

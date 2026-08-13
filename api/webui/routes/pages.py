@@ -77,7 +77,10 @@ def _calendar_home_warnings(readiness: dict) -> list[dict]:
 
     warnings = []
     today = readiness.get("today") or {}
-    if today.get("state") == "outside_coverage":
+    if (
+        today.get("state") == "outside_coverage"
+        and readiness.get("coverage_position") == "after"
+    ):
         warnings.append({
             "message": "Calendar does not cover today.",
             "actions": [{
@@ -109,7 +112,7 @@ def _calendar_home_warnings(readiness: dict) -> list[dict]:
     remaining_coverage_days = readiness.get("remaining_coverage_days")
     coverage_end = (readiness.get("coverage") or {}).get("end")
     if (
-        today.get("state") != "outside_coverage"
+        readiness.get("coverage_position") == "within"
         and remaining_coverage_days is not None
         and remaining_coverage_days < 30
         and coverage_end
