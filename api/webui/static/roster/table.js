@@ -34,7 +34,9 @@
       group_unset: "Group unset",
       multiple_groups_in_selected_set: "Multiple groups",
       protected_name_collision: "Protected name collision",
-      nickname_collision: "Nickname collision"
+      nickname_collision: "Nickname collision",
+      student_added: "New student",
+      student_changed_section: "Changed section"
     };
     return labels[code] || String(code || "Issue").replace(/_/g, " ");
   }

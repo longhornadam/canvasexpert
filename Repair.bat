@@ -1,15 +1,28 @@
 @echo off
 setlocal
 REM Force a clean reinstall of dependencies on the next launch. Use this if the app
-REM stops starting or a dependency looks broken. Removes only the per-user setup
-REM marker (no admin, touches nothing in the app folder); "Open Canvas Expert.bat"
-REM will then reinstall everything automatically.
-set "MARKER=%LOCALAPPDATA%\CanvasExpert\reqs.hash"
+REM stops starting or a dependency looks broken. Removes the app's own private
+REM Python environment and its setup marker, both of which live in the current
+REM user's %LOCALAPPDATA% (no admin, touches nothing in the app folder and nothing
+REM any other program depends on); "Open Canvas Expert.bat" then rebuilds both
+REM automatically.
+set "CE_DATA=%LOCALAPPDATA%\CanvasExpert"
+set "MARKER=%CE_DATA%\reqs.hash"
+set "VENV_DIR=%CE_DATA%\venv"
+set "CLEARED="
 if exist "%MARKER%" (
   del "%MARKER%"
-  echo Setup marker cleared. Double-click "Open Canvas Expert.bat" to reinstall and run.
+  set "CLEARED=1"
+)
+if exist "%VENV_DIR%" (
+  echo Removing the app's Python environment...
+  rmdir /s /q "%VENV_DIR%"
+  set "CLEARED=1"
+)
+if defined CLEARED (
+  echo Cleared. Double-click "Open Canvas Expert.bat" to rebuild and run.
 ) else (
-  echo Nothing to repair - no setup marker found. Just run "Open Canvas Expert.bat".
+  echo Nothing to repair - no setup found. Just run "Open Canvas Expert.bat".
 )
 
 REM --- Restore from the last self-update backup, if one exists ------------------

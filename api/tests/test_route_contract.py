@@ -164,6 +164,8 @@ EXPECTED = [
     ('/api/roster/assessment-groups/preview', ('POST',)),
     ('/api/roster/assessment-groups/sources', ('GET',)),
     ('/api/roster/bulk', ('POST',)),
+    ('/api/roster/changes/acknowledge', ('POST',)),
+    ('/api/roster/changes/migrate-section', ('POST',)),
     ('/api/roster/group-set', ('POST',)),
     ('/api/roster/group-labels', ('GET',)),
     ('/api/roster/group-labels', ('POST',)),

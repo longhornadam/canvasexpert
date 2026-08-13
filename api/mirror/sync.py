@@ -14,7 +14,9 @@ the complete-only assignment receipt before replacing membership:
   delta_pass   two course-level questions since the last watermark:
                "anything submitted?" (with submission_history) and
                "anything graded?". Near-empty for stagnant courses.
-  roster_pass  students + sections (cheap; rosters rarely change).
+  roster_pass  students + sections (cheap; rosters rarely change). Requires
+               a proven-complete student read and refuses a suspicious
+               full wipe; see ``_is_suspicious_roster_wipe``.
 
 Watermarks advance only on success, to (pass start - 10 min overlap); the
 store's merges are idempotent so overlap duplicates are harmless. Failures
@@ -77,12 +79,31 @@ def _assignment_receipt_error(rows, error, complete) -> str:
     return ""
 
 
-def _fetch_students(course_id, canvas_get_all):
-    return canvas_get_all(
+def _fetch_students(course_id, canvas_get_all_complete):
+    return canvas_get_all_complete(
         f"/api/v1/courses/{course_id}/users",
         {"enrollment_type[]": ["student"], "include[]": ["enrollments"],
          "per_page": 100},
     )
+
+
+def _roster_receipt_error(rows, error, complete) -> str:
+    """Validate the receipt before it can replace roster membership.
+
+    Mirrors ``_assignment_receipt_error``, minus the duplicate-id check:
+    a student concurrently enrolled in two sections of the same course
+    legitimately appears twice in this endpoint's response, and
+    ``normalize_student``/``write_roster`` already collapse that by id.
+    """
+    if error:
+        if error in {"pagination_incomplete", "invalid_response"}:
+            return error
+        return error_code(error)
+    if not complete:
+        return "pagination_incomplete"
+    if not isinstance(rows, list):
+        return "invalid_response"
+    return ""
 
 
 def _fetch_sections(course_id, canvas_get_all):
@@ -228,6 +249,17 @@ def _is_large_shrink(previous_count: int, new_count: int) -> bool:
     return new_count < previous_count * (1 - LARGE_SHRINK_RATIO)
 
 
+def _is_suspicious_roster_wipe(previous_count: int, new_count: int) -> bool:
+    """True when a proven-complete student read comes back empty while the
+    existing mirrored roster still holds students. Rosters stay in flux for
+    weeks while Skyward syncs and counselors move students between
+    sections, so one empty answer is far more likely a bad or mid-move
+    Canvas response than a genuine wipe. ``previous_count == 0`` (a first
+    sync, or a course with no roster yet) is never a wipe, so a genuinely
+    empty course can still write its first roster."""
+    return previous_count > 0 and new_count == 0
+
+
 def _commit_assignment_index(course_id, assignments, *, root, attempted_at) -> tuple[dict, dict]:
     """Write the assignment index (1.0beta slice 01b, locked design item 2)
     and prune orphan submission files (item 3), unless the collection just
@@ -353,12 +385,23 @@ def full_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None, 
         store.record_pass(course_id, "full", ok=False,
                           error_code=assignment_error, attempted_at=started, root=root)
         return {"ok": False, "error": error or assignment_error}
-    students, error = _fetch_students(course_id, canvas_get_all)
-    if error:
+    students, error, complete = _fetch_students(course_id, canvas_get_all_complete)
+    roster_error = _roster_receipt_error(students, error, complete)
+    if roster_error:
         store.record_pass(course_id, "full", ok=False,
-                          error_code=error_code(error), attempted_at=started, root=root)
-        return {"ok": False, "error": error}
-    sections, _s_err = _fetch_sections(course_id, canvas_get_all)
+                          error_code=roster_error, attempted_at=started, root=root)
+        return {"ok": False, "error": error or roster_error}
+    previous_roster = store.read_roster(course_id, root=root)
+    previous_student_count = len((previous_roster or {}).get("students") or {})
+    if _is_suspicious_roster_wipe(previous_student_count, len(students or [])):
+        store.record_pass(course_id, "full", ok=False,
+                          error_code="roster_wipe_refused", attempted_at=started, root=root)
+        return {"ok": False, "error": "roster_wipe_refused"}
+    sections, sections_error = _fetch_sections(course_id, canvas_get_all)
+    if sections_error:
+        # A failed sections fetch must not blank section names Canvas never
+        # actually reported as gone; fall back to the last-good map.
+        sections = (previous_roster or {}).get("sections") or {}
     submissions, error = _fetch_submissions(course_id, canvas_get_all,
                                             with_comments=True)
     if error:
@@ -472,17 +515,39 @@ def delta_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None,
             "new_quizzes": new_quiz_result}
 
 
-def roster_pass(course_id, *, canvas_get_all, root=None, now=None) -> dict:
+def roster_pass(course_id, *, canvas_get_all, canvas_get_all_complete, root=None,
+                now=None) -> dict:
+    """Students + sections (cheap; rosters rarely change).
+
+    The student fetch must prove completeness (``canvas_get_all_complete``)
+    before it can replace roster membership, the same rule the assignment
+    collection already follows. A complete answer that comes back with zero
+    students while the mirror still holds a nonempty roster is refused
+    outright rather than committed (see ``_is_suspicious_roster_wipe``), and
+    the previous roster document is left untouched. A section-fetch failure
+    keeps the previous section names instead of blanking them.
+    """
     blocked = _guard(course_id, root)
     if blocked:
         return blocked
     started = now or store.now_iso()
-    students, error = _fetch_students(course_id, canvas_get_all)
-    if error:
+    students, error, complete = _fetch_students(course_id, canvas_get_all_complete)
+    roster_error = _roster_receipt_error(students, error, complete)
+    if roster_error:
         store.record_pass(course_id, "roster", ok=False,
-                          error_code=error_code(error), attempted_at=started, root=root)
-        return {"ok": False, "error": error}
-    sections, _s_err = _fetch_sections(course_id, canvas_get_all)
+                          error_code=roster_error, attempted_at=started, root=root)
+        return {"ok": False, "error": error or roster_error}
+    previous_roster = store.read_roster(course_id, root=root)
+    previous_student_count = len((previous_roster or {}).get("students") or {})
+    if _is_suspicious_roster_wipe(previous_student_count, len(students or [])):
+        store.record_pass(course_id, "roster", ok=False,
+                          error_code="roster_wipe_refused", attempted_at=started, root=root)
+        return {"ok": False, "error": "roster_wipe_refused"}
+    sections, sections_error = _fetch_sections(course_id, canvas_get_all)
+    if sections_error:
+        # A failed sections fetch must not blank section names Canvas never
+        # actually reported as gone; fall back to the last-good map.
+        sections = (previous_roster or {}).get("sections") or {}
     store.write_roster(course_id, students, sections, root=root, attempted_at=started)
     store.record_pass(course_id, "roster", ok=True, attempted_at=started, root=root)
     return {"ok": True, "students": len(students or [])}

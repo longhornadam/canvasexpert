@@ -161,6 +161,19 @@ def test_relationships_round_trip_is_course_scoped():
     assert "roster_relationships" in config.SYNCED_KEYS
 
 
+def test_roster_baseline_round_trip_is_course_scoped():
+    first = {"acknowledged_at": "2026-08-01T00:00:00", "students": {"101": ["44"]}}
+    second = {"acknowledged_at": "2026-08-02T00:00:00", "students": {}}
+
+    assert config.get_roster_baseline("missing") == config.ROSTER_BASELINE_DEFAULT
+    config.set_roster_baseline("course-a", first)
+    config.set_roster_baseline("course-b", second)
+
+    assert config.get_roster_baseline("course-a") == first
+    assert config.get_roster_baseline("course-b") == second
+    assert "roster_baselines" in config.SYNCED_KEYS
+
+
 def test_courses_are_independent():
     config.set_roster_student_settings("100", {"101": {"tier": "Support"}})
     config.set_roster_student_settings("200", {"201": {"tier": "Core"}})

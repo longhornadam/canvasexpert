@@ -1209,7 +1209,25 @@ def test_get_seating_context_is_mirror_only_pseudonymized_and_scrubbed(monkeypat
     assert feedback_safety.scan_payload(result, Vault(vault_path))["green"] is True
 
 
-def test_get_seating_context_withholds_missing_or_ambiguous_section(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+def test_get_seating_context_requires_a_section_identifier(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
+    mirror_store.write_roster(MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
+    _set_seating_context(monkeypatch)
+
+    for result in (
+        tools.get_seating_context(MIRROR_COURSE),
+        tools.get_seating_context(MIRROR_COURSE, ""),
+        tools.get_seating_context(MIRROR_COURSE, "   ", "  "),
+    ):
+        assert result == {"ok": False, "error": "A section_id or section_name is required."}
+
+
+def test_get_seating_context_unknown_name_is_distinguishable_from_ambiguous_name(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    """A name matching zero sections and a name matching several must fail
+    differently: the first says the name is unknown, the second is actionable
+    with the candidate section ids so the caller can retry precisely. Neither
+    leaks student data."""
     _mount_mirror()
     _set_active_courses([MIRROR_COURSE])
     mirror_store.write_roster(
@@ -1218,11 +1236,74 @@ def test_get_seating_context_withholds_missing_or_ambiguous_section(monkeypatch,
     )
     _set_seating_context(monkeypatch)
 
-    for section_name in ("Missing", "Period"):
-        result = tools.get_seating_context(MIRROR_COURSE, section_name)
-        assert result["ok"] is False
-        assert set(result) == {"ok", "error"}
-        assert "800001" not in result["error"] and "800002" not in result["error"]
+    missing = tools.get_seating_context(MIRROR_COURSE, "Missing")
+    assert missing["ok"] is False
+    assert set(missing) == {"ok", "error"}
+    assert "no section named" in missing["error"].lower()
+    assert "800001" not in missing["error"] and "800002" not in missing["error"]
+
+    ambiguous = tools.get_seating_context(MIRROR_COURSE, "Period")
+    assert ambiguous["ok"] is False
+    assert set(ambiguous) == {"ok", "error"}
+    assert "800001" in ambiguous["error"] and "800002" in ambiguous["error"]
+    assert "section_id" in ambiguous["error"]
+    assert ambiguous["error"] != missing["error"]
+
+
+def test_get_seating_context_resolves_by_section_id(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    """section_id is a second, unambiguous way in: it must reach the same
+    result a caller would already get from the matching exact section_name."""
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
+    mirror_store.write_roster(MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
+    _set_seating_context(monkeypatch)
+    _forbid_live_reads(monkeypatch)
+
+    by_name = tools.get_seating_context(MIRROR_COURSE, "Period 1")
+    by_id = tools.get_seating_context(MIRROR_COURSE, section_id="800001")
+    assert by_id["ok"] is True
+    assert len(by_id["students"]) == 1
+    assert by_id == by_name
+
+    unknown_id = tools.get_seating_context(MIRROR_COURSE, section_id="999999")
+    assert unknown_id["ok"] is False
+    assert "999999" in unknown_id["error"]
+
+
+def test_get_seating_context_loose_match_absorbs_whitespace_and_case(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    """A SIS name that differs only by a stray trailing space or letter case
+    from what the caller typed must still resolve, as long as doing so stays
+    unambiguous."""
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
+    mirror_store.write_roster(
+        MIRROR_COURSE, [FIXTURE_USERS[0]],
+        {"800001": "Period 1 "}, root=str(tmp_path),
+    )
+    _set_seating_context(monkeypatch)
+
+    result = tools.get_seating_context(MIRROR_COURSE, "period 1")
+    assert result["ok"] is True
+    assert len(result["students"]) == 1
+
+
+def test_get_seating_context_loose_match_refuses_a_new_ambiguity(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
+    """Two sections that are distinct under an exact match ("Period 1 " vs
+    "period 1") but collide once case and whitespace are ignored must refuse
+    rather than silently pick one -- loosening a match may never introduce
+    an ambiguity the exact pass did not already have."""
+    _mount_mirror()
+    _set_active_courses([MIRROR_COURSE])
+    mirror_store.write_roster(
+        MIRROR_COURSE, FIXTURE_USERS,
+        {"800001": "Period 1 ", "800002": "period 1"}, root=str(tmp_path),
+    )
+    _set_seating_context(monkeypatch)
+
+    result = tools.get_seating_context(MIRROR_COURSE, "Period 1")
+    assert result["ok"] is False
+    assert set(result) == {"ok", "error"}
+    assert "800001" in result["error"] and "800002" in result["error"]
 
 
 def test_get_seating_context_refuses_stale_mirror_and_vault_conflict(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):

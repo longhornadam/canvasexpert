@@ -66,6 +66,23 @@ def test_roster_round_trip_keeps_only_consumer_fields(tmp_path):
     assert document["sections"] == SECTIONS
 
 
+def test_roster_unions_sections_for_a_user_listed_once_per_enrollment(tmp_path):
+    """Canvas can list one user once per enrollment rather than once with
+    every enrollment attached. A student mid-transfer is in the new section
+    before the old one is dropped, so last-wins would drop them out of the
+    section they are still sitting in."""
+    mover = {"id": 900001, "name": "Mover", "sortable_name": "Mover",
+             "short_name": "M", "sis_user_id": "SIS-1"}
+    store.write_roster(
+        COURSE,
+        [{**mover, "enrollments": [{"course_section_id": 800001}]},
+         {**mover, "enrollments": [{"course_section_id": 800002}]}],
+        SECTIONS, root=str(tmp_path))
+    document = store.read_roster(COURSE, root=str(tmp_path))
+    assert document["students"]["900001"]["enrollments"] == [
+        {"course_section_id": "800001"}, {"course_section_id": "800002"}]
+
+
 def test_roster_read_returns_none_for_missing_or_corrupt(tmp_path):
     assert store.read_roster(COURSE, root=str(tmp_path)) is None
     path = store.roster_path(COURSE, str(tmp_path))

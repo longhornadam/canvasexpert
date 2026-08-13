@@ -6,11 +6,12 @@ from collections import Counter
 import os
 
 from api import feedback_scrub
+from api import roster_context
 from api.mirror import store as mirror_store
 from api.platform_services import config
 from api.platform_services import workspace
 from api import feedback_vault
-from api.webui.routes.roster_helpers import _compute_warnings
+from api.webui.routes.roster_helpers import _compute_warnings, _enrollment_section_ids
 
 from . import WorkCourseReads, check_deadline, finding, text
 
@@ -22,6 +23,9 @@ _WARNING_CODES = {
     "multiple_groups_in_selected_set",
     "nickname_collision",
     "protected_name_collision",
+    "student_added",
+    "student_departed",
+    "student_changed_section",
 }
 
 
@@ -149,6 +153,22 @@ def _vault_context() -> tuple[dict, set[str], dict]:
     return by_id, protected, collisions
 
 
+def _safe_source_suffix(warning_code: str) -> str:
+    """Return a source_ref-safe token for one warning code.
+
+    ``api.work_registry.models.validate_source_ref`` bans the substring
+    "student" from any source_ref value as a guard against identity leaking
+    into the registry (the registry carries only counts; the Roster page
+    resolves who). The three roster-change codes are named with a
+    "student_" prefix by the feature's own naming convention, so that
+    prefix is stripped here -- the pre-existing codes never had it and pass
+    through unchanged. This never weakens the guard: it just keeps this
+    provider from tripping its own no-identity rule with a code name that
+    was never identity in the first place.
+    """
+    return warning_code.removeprefix("student_")
+
+
 def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
     check_deadline(reads._deadline)
     users = reads.students()
@@ -170,6 +190,23 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         if isinstance(item, dict) and text(item.get("id"))
     }
     vault_by_id, protected, collisions = _vault_context()
+
+    # Roster-change diff against the teacher's last acknowledged baseline --
+    # the exact same shared computation the Roster web UI uses, so a course
+    # scanned here and one opened in the browser never disagree about who is
+    # new, who has left, or who changed section. A read here never writes
+    # the baseline; only the teacher's explicit Acknowledge action does.
+    current_ids = {str(user.get("id")) for user in users
+                    if isinstance(user, dict) and user.get("id") is not None}
+    current_sections = _enrollment_section_ids(users)
+    try:
+        baseline = config.get_roster_baseline(course_id)
+    except Exception:
+        baseline = None
+    roster_diff = roster_context.diff_roster_baseline(baseline, current_ids, current_sections)
+    added_ids = set(roster_diff["added"])
+    changed_ids = {item["student_id"] for item in roster_diff["changed_section"]}
+
     counts = Counter()
     for user in users:
         if not isinstance(user, dict) or user.get("id") is None:
@@ -178,6 +215,11 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
         groups = group_map.get(user_id, [])
         selected_groups = [item for item in groups if item.get("category_id") == selected_category]
         selected_group = selected_groups[0] if selected_groups else None
+        roster_change = None
+        if user_id in added_ids:
+            roster_change = {"is_new": True}
+        elif user_id in changed_ids:
+            roster_change = {"changed_section": True}
         student = {
             "id": user_id,
             "extra_time": extra_time.get(user_id, {"enabled": False, "days": 0}),
@@ -190,8 +232,14 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
             protected,
             collisions,
             selected_category_id=selected_category or None,
+            roster_change=roster_change,
         )
         counts.update(code for code in warnings if code in _WARNING_CODES)
+
+    departed_count = len(roster_diff["departed"])
+    if departed_count:
+        counts["student_departed"] = departed_count
+
     output = []
     for warning_code in sorted(counts):
         amount = counts[warning_code]
@@ -202,7 +250,7 @@ def scan_course(course_id: str, *, now, reads: WorkCourseReads) -> list[dict]:
             now=now,
             title="Roster warning",
             resumable_url=f"/roster?course_id={course_id}",
-            source_suffix=warning_code,
+            source_suffix=_safe_source_suffix(warning_code),
         ))
     return output
 

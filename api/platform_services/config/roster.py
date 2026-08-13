@@ -159,6 +159,32 @@ def set_roster_relationships(course_id: str, relationships: dict):
 
 
 # --------------------------------------------------------------------------
+# Roster-change acknowledgment baseline
+#
+# Synced (not machine-local): this is the same course-scoped, Canvas-id-keyed
+# shape as roster_score_matrices/seating_course_states/monitored_students
+# above, all of which already sync so a teacher's own second PC sees the same
+# local roster state. It holds Canvas student and section ids only, never a
+# real name, so it sits on the same side of the privacy wall those do.
+# --------------------------------------------------------------------------
+
+ROSTER_BASELINE_DEFAULT = {"acknowledged_at": "", "students": {}}
+
+
+def get_roster_baseline(course_id: str) -> dict:
+    baselines = _io_mod._synced_state().get("roster_baselines", {})
+    return baselines.get(str(course_id), ROSTER_BASELINE_DEFAULT)
+
+
+def set_roster_baseline(course_id: str, baseline: dict):
+    _io_mod._modify_synced(
+        lambda state: state.setdefault("roster_baselines", {}).__setitem__(
+            str(course_id), baseline
+        )
+    )
+
+
+# --------------------------------------------------------------------------
 # Tier scheme
 # --------------------------------------------------------------------------
 

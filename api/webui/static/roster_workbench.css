@@ -33,7 +33,7 @@
 /* Reports brings its own course and student pickers, so the roster toolbar and
    table step aside for it. */
 .roster-workbench-shell:not([data-roster-lens="reports"]) #roster-reports { display: none; }
-.roster-workbench-shell[data-roster-lens="reports"] :is(#roster-toolbar, #roster-table-card, #roster-bulk-bar, #roster-score-matrix, #roster-relationships, .roster-v2-details) { display: none; }
+.roster-workbench-shell[data-roster-lens="reports"] :is(#roster-toolbar, #roster-table-card, #roster-bulk-bar, #roster-score-matrix, #roster-relationships, #roster-changes, .roster-v2-details) { display: none; }
 .roster-workbench-shell[data-roster-lens="accommodations"] .roster-v2-table, .roster-workbench-shell[data-roster-lens="groups"] .roster-v2-table, .roster-workbench-shell[data-roster-lens="monitoring"] .roster-v2-table { min-width: 620px; }
 .roster-workbench-shell[data-roster-lens="accommodations"] :is(.roster-col-nicknames, .roster-col-pseudo, .roster-col-group, .roster-col-monitor, .roster-col-note), .roster-workbench-shell[data-roster-lens="groups"] :is(.roster-col-nicknames, .roster-col-pseudo, .roster-col-extratime, .roster-col-monitor, .roster-col-note), .roster-workbench-shell[data-roster-lens="monitoring"] :is(.roster-col-nicknames, .roster-col-pseudo, .roster-col-extratime, .roster-col-group) { display: none; }
 .roster-v2-table-wrap { width: 100%; max-height: 70vh; padding: 0; overflow: auto; }
@@ -78,7 +78,7 @@
 .roster-classroom-profile button { padding: 2px 5px; font-size: 10px; white-space: nowrap; }
 .roster-profile-error { color: var(--ce-danger); font-size: 10px; }
 .roster-empty { padding: var(--ce-space-4) !important; color: var(--ce-ink-muted); font-size: 13px; text-align: center; }
-.roster-score-matrix, .roster-relationships { padding: var(--ce-space-3) var(--ce-space-4); }
+.roster-score-matrix, .roster-relationships, .roster-changes { padding: var(--ce-space-3) var(--ce-space-4); }
 .roster-score-matrix-heading { display: flex; align-items: start; justify-content: space-between; gap: var(--ce-space-3); }
 .roster-score-matrix-heading h2 { margin: 0; }
 .roster-score-matrix-heading p { margin: var(--ce-space-1) 0 0; }
@@ -93,6 +93,10 @@
 .roster-relationships-list { display: grid; gap: var(--ce-space-2); margin-top: var(--ce-space-3); color: var(--ce-ink-muted); }
 .roster-relationship-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ce-space-1) var(--ce-space-3); align-items: center; padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface); }
 .roster-relationship-row small { grid-column: 1; }
+.roster-changes-list { display: grid; gap: var(--ce-space-2); margin-top: var(--ce-space-3); color: var(--ce-ink-muted); }
+.roster-changes-list strong { margin-top: var(--ce-space-2); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ce-ink-muted); }
+.roster-change-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ce-space-1) var(--ce-space-3); align-items: center; padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface); }
+.roster-change-row small { grid-column: 1; }
 .roster-score-column { grid-template-columns: minmax(150px, 1fr) auto; align-items: end; min-width: 200px; padding: var(--ce-space-2); border: 1px solid var(--ce-rule); background: var(--ce-surface-soft); }
 .roster-score-column label { display: grid; gap: var(--ce-space-1); }
 .roster-score-grid-wrap { width: 100%; margin-top: var(--ce-space-3); overflow-x: auto; border: 1px solid var(--ce-rule); }

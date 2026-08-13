@@ -323,3 +323,30 @@ def delete_layout(state: object, layout_id: object) -> tuple[dict | None, str | 
         return None, "layout not found."
     return {"layouts": layouts,
             "modes": [mode for mode in current["modes"] if mode["layout_id"] != layout_id]}, None
+
+
+def clear_student_from_section(state: object, section_id: object, student_id: object) -> tuple[dict | None, str | None]:
+    """Remove one student's seat assignment from every mode in one section.
+
+    Used when a student changes section: the old chart's seat no longer
+    describes where they sit, and there is no safe automatic seat to place
+    them at in a different section's chart (it may not exist yet, or the
+    guess could silently displace someone actually enrolled there). Clearing
+    the stale assignment here is the honest move; the teacher seats them
+    again by hand once the new section's chart is ready.
+    """
+    current, error = validate_state(state)
+    if error:
+        return None, error
+    if not _valid_id(section_id) or not _valid_id(student_id):
+        return None, "clearing a seat requires a valid section and student id."
+    modes = []
+    for mode in current["modes"]:
+        if mode["section_id"] == section_id and student_id in mode["assignment"].values():
+            modes.append({**mode, "assignment": {
+                seat: assigned for seat, assigned in mode["assignment"].items()
+                if assigned != student_id
+            }})
+        else:
+            modes.append(mode)
+    return {"layouts": current["layouts"], "modes": modes}, None

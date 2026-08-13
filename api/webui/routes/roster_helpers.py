@@ -47,8 +47,16 @@ def _resolve_tier_display(course_id: str, tier_id: str | None,
 
 def _compute_warnings(student: dict, vault_entries_by_id: dict,
                       protected_names: set[str], collisions: dict,
-                      selected_category_id: str | None = None) -> list[str]:
-    """Return warning string codes for one student row."""
+                      selected_category_id: str | None = None,
+                      roster_change: dict | None = None) -> list[str]:
+    """Return warning string codes for one student row.
+
+    ``roster_change`` is this student's entry (if any) from
+    ``api.roster_context.diff_roster_baseline`` against the teacher's last
+    acknowledged roster -- ``{"is_new": True}`` or
+    ``{"changed_section": <detail>}``. A departed student has no live row to
+    attach a warning to, so that code is reported by the caller directly.
+    """
     warnings: list[str] = []
     cid = student["id"]
 
@@ -88,6 +96,12 @@ def _compute_warnings(student: dict, vault_entries_by_id: dict,
                 if vault_entry.get("real_name", "").lower() in item.lower():
                     warnings.append("nickname_collision")
                     break
+
+    if roster_change:
+        if roster_change.get("is_new"):
+            warnings.append("student_added")
+        if roster_change.get("changed_section"):
+            warnings.append("student_changed_section")
 
     return list(dict.fromkeys(warnings))
 

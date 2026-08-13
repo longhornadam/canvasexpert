@@ -32,12 +32,12 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 29 (47 tools).
+Tool schema version 30 (47 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
-| `list_sections(course_id)` | Section names from the local mirror roster; how to find the exact `section_name` `get_seating_context` requires | No |
+| `list_sections(course_id)` | Section ids and names from the local mirror roster; how to find the `section_id` or `section_name` `get_seating_context` takes | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items with their catalog `content_id` | No |
 | `get_course_pages(course_id, full_text=false)` | Published normalized pages from the Current course's local v3 catalog; body text is bounded unless explicitly requested | No |
@@ -56,7 +56,7 @@ Tool schema version 29 (47 tools).
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected preview of a pseudonym-first settings change; use before apply | Yes — pseudonymized |
 | `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the exact reviewed preview through the existing Roster mutation path; a `canvas_group` patch reaches Canvas | Yes — pseudonymized |
 | `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes — pseudonymized |
-| `get_seating_context(course_id, section_name)` | `mirror+local`: one exact section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
+| `get_seating_context(course_id, section_name="", section_id="")` | `mirror+local`: one section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
 | `get_writing_history(pseudonym, since="", until="", include_text=false, max_text_chars=2000)` | One student's Writing Record across time: dated submissions, assignment context, word counts, segment attribution, structural flags. No `course_id`; this reads a private per-student store, not a course, and it does not score or judge work | Yes — pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
@@ -234,8 +234,10 @@ Student-data tools (`get_roster`, `get_submissions`, `get_gradebook_snapshot`, a
 catalog reads (`list_sections`, `get_course_assignments`, and `get_modules`) and
 `refresh_mirror` accept any saved course, including Previous courses. `get_course_pages` and
 the Learning Objective preview/apply pair require a Current course. `get_seating_context`
-requires exactly one matching mirror section name and withholds all student data when the
-name is absent or ambiguous. Pseudonymized
+needs its `section_id` or `section_name` to resolve to exactly one mirror section: an id
+matches directly, a name matches exactly or, failing that, on a trim/case-fold retry, and
+it withholds all student data rather than guess when a name matches none or several
+sections (the latter names the candidate ids to retry with). Pseudonymized
 artifacts are scrubbed, not anonymous or guaranteed FERPA-safe; teachers review them before
 any external upload.
 

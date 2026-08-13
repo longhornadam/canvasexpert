@@ -92,7 +92,7 @@
 
     <p class="ce-hint">Canvas Expert runs from this unzipped folder. If you move the folder, reconnect above so the paths update. This page only edits your own AI app's config file and keeps a backup; it never needs administrator access.</p>
     <p><strong>Current folder</strong><br><code>{{ connection.app_root }}</code></p>
-    <div class="ce-health-list" aria-label="MCP server health">
+    <div class="ce-health-list" aria-label="System health">
       {% set canvas_ready = connection.readiness.components.canvas %}
       <span>Canvas:
         <strong>
@@ -106,6 +106,10 @@
         </strong>
       </span>
       <span>MCP: <strong>{{ "Ready" if connection.health.mcp.importable and connection.health.mcp.entrypoint_present else "Needs attention" }}</strong></span>
+      {% set registry = connection.health.pseudonym_registry %}
+      <span>Pseudonym registry:
+        <strong>{{ registry.words_remaining }} of {{ registry.words_total }} words left{% if registry.low_runway %}, running low{% endif %}</strong>
+      </span>
     </div>
 
     <h3>Claude Desktop, manual</h3>

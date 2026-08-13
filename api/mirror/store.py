@@ -676,8 +676,22 @@ def write_roster(course_id, users: list[dict], sections: dict, *,
     students = {}
     for user in users or []:
         normalized = normalize_student(user)
-        if normalized is not None:
+        if normalized is None:
+            continue
+        existing = students.get(normalized["id"])
+        if existing is None:
             students[normalized["id"]] = normalized
+            continue
+        # Canvas can list one user once per enrollment rather than once with
+        # every enrollment attached. Union the sections instead of letting the
+        # last row win: a student mid-transfer is enrolled in the new section
+        # before the old one is dropped, and last-wins would drop them out of
+        # the section they are still sitting in.
+        seen = {item["course_section_id"] for item in existing["enrollments"]}
+        for enrollment in normalized["enrollments"]:
+            if enrollment["course_section_id"] not in seen:
+                seen.add(enrollment["course_section_id"])
+                existing["enrollments"].append(enrollment)
     document = {
         "schema_version": MIRROR_VERSION,
         "course_id": str(course_id),

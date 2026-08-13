@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 29
+    assert contract.TOOL_SCHEMA_VERSION == 30
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -44,7 +44,10 @@ def test_live_mcp_schema_matches_versioned_contract():
         # while retaining the pre-DataForge 42-tool shape. v26 adds the offline
         # standards-profile read; v27 adds bounded assessment context; v28 adds
         # the read-only assessment grouping proposal; v29 adds the narrow
-        # existing-game score preview/apply pair.
+        # existing-game score preview/apply pair. v30 adds section_id to
+        # get_seating_context (and loosens section_name to a trim/case-fold
+        # retry) so a duplicate or slightly-off SIS section name can still be
+        # resolved instead of always refusing.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1

@@ -90,6 +90,9 @@ RETIRED_FILES = {
         # Before the 2026-08-06 Appendix D disclosure fix for the one explicit
         # digest-protected MCP Canvas-group write.
         "c8a48dea97670303c973422218bebaf2b65f87e64691a71dc647891ab71f9978",
+        # Before Appendix A described the app's private Python environment and
+        # Appendix D described resolving a shared section name by section_id.
+        "83d68d6cdb03eb4dbe009eceefec41a89f64447e8b1c6023502a9d887eecba2a",
     }),
 }
 

@@ -100,6 +100,16 @@ def test_freshness_gates_on_serve_max_age(tmp_path):
     assert queries.data_freshness(COURSE, root=str(tmp_path)) != ""
 
 
+def test_course_students_does_not_serve_a_stale_roster(tmp_path):
+    """course_students must gate on the serve-freshness threshold this
+    module's own docstring promises (design law #4): a readable but old
+    roster file must not be served as current just because it still parses.
+    Callers fall back to live Canvas on the resulting MIRROR_UNAVAILABLE."""
+    _populate(str(tmp_path), fresh=False)
+    students, err = queries.course_students(COURSE, root=str(tmp_path))
+    assert students is None and err == queries.MIRROR_UNAVAILABLE
+
+
 def test_course_submissions_filters_orphan_files_not_in_index(tmp_path):
     """1.0beta slice 01b, locked design item 1: a submission file on disk for
     an assignment id the committed index doesn't have must never surface in
@@ -131,6 +141,21 @@ def test_snapshot_queries_requires_fresh_and_complete_mirror(tmp_path):
     assert namespace is not None and synced != ""
 
 
+def test_snapshot_queries_refuses_a_stale_roster_behind_fresh_submissions(tmp_path):
+    """data_freshness reads the submissions envelope, which a delta pass keeps
+    current, while only a full or roster pass rewrites the roster. The roster
+    can therefore age past the serve window on its own, and this namespace has
+    to catch that here: load_snapshot has no live fallback once it commits,
+    so a roster refused mid-snapshot would surface as a hard error."""
+    root = str(tmp_path)
+    _populate(root)
+    assert queries.snapshot_queries(COURSE, root=root)[0] is not None
+    store.write_roster(COURSE, USERS, SECTIONS, root=root,
+                       attempted_at="2026-01-01T00:00:00Z")
+    namespace, synced = queries.snapshot_queries(COURSE, root=root)
+    assert namespace is None and synced == ""
+
+
 # --- mirror-first shared snapshot loader --------------------------------------------
 
 def test_load_snapshot_prefers_fresh_mirror(monkeypatch, tmp_path):
@@ -149,6 +174,24 @@ def test_load_snapshot_prefers_fresh_mirror(monkeypatch, tmp_path):
 def test_load_snapshot_falls_back_to_live_when_stale(monkeypatch, tmp_path):
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
     _populate(str(tmp_path), fresh=False)
+    monkeypatch.setattr(gradebook_queries, "course_students", lambda cid: ([], None))
+    monkeypatch.setattr(gradebook_queries, "course_assignments", lambda cid: ([], None))
+    monkeypatch.setattr(gradebook_queries, "course_submissions", lambda cid: ([], None))
+    snapshot, error = gradebook_snapshot.load_snapshot(COURSE)
+    assert error is None
+    assert snapshot["source"] == "canvas"
+    assert snapshot["synced_at"] == ""
+
+
+def test_load_snapshot_falls_back_to_live_when_only_the_roster_is_stale(monkeypatch, tmp_path):
+    """The teacher gets live Canvas, never a hard error, when submissions are
+    current but the roster is not. Reachable whenever roster passes keep
+    failing while deltas keep succeeding, which is exactly what happens when
+    Canvas is answering with a roster the wipe guard refuses to commit."""
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    _populate(str(tmp_path))
+    store.write_roster(COURSE, USERS, SECTIONS, root=str(tmp_path),
+                       attempted_at="2026-01-01T00:00:00Z")
     monkeypatch.setattr(gradebook_queries, "course_students", lambda cid: ([], None))
     monkeypatch.setattr(gradebook_queries, "course_assignments", lambda cid: ([], None))
     monkeypatch.setattr(gradebook_queries, "course_submissions", lambda cid: ([], None))

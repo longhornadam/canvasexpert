@@ -68,6 +68,17 @@
       </div>
     </div>
 
+    <section class="ce-panel roster-changes" id="roster-changes" hidden aria-labelledby="roster-changes-title">
+      <div class="roster-score-matrix-heading">
+        <div>
+          <h2 id="roster-changes-title">Roster changes</h2>
+          <p class="hint" id="roster-changes-status">Checking...</p>
+        </div>
+        <button type="button" id="roster-changes-acknowledge" class="small">Acknowledge current roster</button>
+      </div>
+      <div id="roster-changes-list" class="roster-changes-list"></div>
+    </section>
+
     <details class="ce-panel roster-v2-details roster-group-builder" id="roster-group-builder">
       <summary><strong>Create Canvas groups</strong></summary>
       <div class="roster-group-builder-body">
@@ -344,6 +355,7 @@
 <script src="/static/roster/safety.js?v={{ asset_v }}"></script>
 <script src="/static/roster/scores.js?v={{ asset_v }}"></script>
 <script src="/static/roster/relationships.js?v={{ asset_v }}"></script>
+<script src="/static/roster/changes.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/student_reports.js?v={{ asset_v }}"></script>
 <script src="/static/course_expert/portfolio.js?v={{ asset_v }}"></script>
 {% endblock %}

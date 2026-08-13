@@ -69,7 +69,8 @@ class FakeCanvas:
             return (None, self.errors["users"]) if "users" in self.errors \
                 else (self.users, None)
         if path.endswith("/sections"):
-            return self.sections, None
+            return (None, self.errors["sections"]) if "sections" in self.errors \
+                else (self.sections, None)
         if path.endswith("/students/submissions"):
             if "submissions" in self.errors:
                 return None, self.errors["submissions"]
@@ -81,7 +82,7 @@ class FakeCanvas:
         raise AssertionError(f"unexpected path {path}")
 
     def complete(self, path, params=None, timeout=30):
-        """Explicit all-pages receipt used only for assignment membership."""
+        """Explicit all-pages receipt used for assignment and roster membership."""
         rows, error = self(path, params, timeout)
         return rows, error, error is None
 
@@ -756,7 +757,9 @@ def test_refresh_submissions_course_delta_never_advances_or_claims_comment_fresh
 def test_roster_pass_never_advances_or_claims_comment_freshness(tmp_path):
     canvas = FakeCanvas()
     before = store.read_submission_comments_state(COURSE, root=str(tmp_path))
-    result = sync.roster_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    result = sync.roster_pass(COURSE, canvas_get_all=canvas,
+                              canvas_get_all_complete=canvas.complete,
+                              root=str(tmp_path), now=NOW)
     assert result["ok"] is True
     after = store.read_submission_comments_state(COURSE, root=str(tmp_path))
     assert after == before  # roster does not touch the comment sidecar at all
@@ -766,7 +769,9 @@ def test_roster_pass_never_advances_or_claims_comment_freshness(tmp_path):
 
 def test_roster_pass_updates_roster_only(tmp_path):
     canvas = FakeCanvas()
-    result = sync.roster_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    result = sync.roster_pass(COURSE, canvas_get_all=canvas,
+                              canvas_get_all_complete=canvas.complete,
+                              root=str(tmp_path), now=NOW)
     assert result == {"ok": True, "students": 1}
     assert store.read_roster(COURSE, root=str(tmp_path)) is not None
     assert store.read_assignments(COURSE, root=str(tmp_path)) is None
@@ -775,14 +780,156 @@ def test_roster_pass_updates_roster_only(tmp_path):
 
 def test_roster_pass_failure_degrades(tmp_path):
     canvas = FakeCanvas()
-    sync.roster_pass(COURSE, canvas_get_all=canvas, root=str(tmp_path), now=NOW)
+    sync.roster_pass(COURSE, canvas_get_all=canvas,
+                     canvas_get_all_complete=canvas.complete, root=str(tmp_path), now=NOW)
     failing = FakeCanvas(errors={"users": "HTTP 401: token"})
-    result = sync.roster_pass(COURSE, canvas_get_all=failing, root=str(tmp_path),
+    result = sync.roster_pass(COURSE, canvas_get_all=failing,
+                              canvas_get_all_complete=failing.complete, root=str(tmp_path),
                               now="2026-07-16T13:00:00Z")
     assert result["ok"] is False
     entry = store.read_sync(COURSE, root=str(tmp_path))["passes"]["roster"]
     assert entry["state"] == "stale"
     assert entry["last_success_at"] == NOW
+
+
+# --- roster completeness + suspicious-wipe guard (roster teacher-trace fix) -------
+
+def test_roster_pass_incomplete_receipt_preserves_last_good_roster(tmp_path):
+    """roster_pass must require a proven-complete read before it can replace
+    the roster, exactly like the assignment collection already requires for
+    itself. A partial page counts as a failed pass, never as the new roster."""
+    canvas = FakeCanvas()
+    assert sync.roster_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete,
+                            root=str(tmp_path), now=NOW)["ok"] is True
+    before = store.read_roster(COURSE, root=str(tmp_path))
+
+    result = sync.roster_pass(
+        COURSE, canvas_get_all=canvas,
+        canvas_get_all_complete=lambda *a, **k: ([], None, False),
+        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+
+    assert result == {"ok": False, "error": "pagination_incomplete"}
+    assert store.read_roster(COURSE, root=str(tmp_path)) == before
+    entry = store.read_sync(COURSE, root=str(tmp_path))["passes"]["roster"]
+    assert entry["state"] == "stale"
+    assert entry["error_code"] == "pagination_incomplete"
+
+
+def test_roster_pass_refuses_empty_wipe_against_nonempty_roster(tmp_path):
+    """A complete read that comes back with zero students must never replace
+    an existing nonempty roster. Skyward syncs and counselor section moves
+    can make a legitimate Canvas answer look like this transiently, and the
+    mirror must not treat a single empty page as the new truth."""
+    canvas = FakeCanvas()
+    assert sync.roster_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete,
+                            root=str(tmp_path), now=NOW)["ok"] is True
+    before = store.read_roster(COURSE, root=str(tmp_path))
+
+    empty_canvas = FakeCanvas(users=[])
+    result = sync.roster_pass(
+        COURSE, canvas_get_all=empty_canvas,
+        canvas_get_all_complete=empty_canvas.complete,
+        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+
+    assert result == {"ok": False, "error": "roster_wipe_refused"}
+    assert store.read_roster(COURSE, root=str(tmp_path)) == before
+    entry = store.read_sync(COURSE, root=str(tmp_path))["passes"]["roster"]
+    assert entry["state"] == "stale"
+    assert entry["error_code"] == "roster_wipe_refused"
+
+
+def test_roster_pass_allows_empty_roster_on_first_sync(tmp_path):
+    """A genuinely empty course (no prior mirrored roster at all) must still
+    be able to write its first roster: the wipe guard only fires once there
+    is a nonempty roster on record to lose."""
+    empty_canvas = FakeCanvas(users=[])
+    result = sync.roster_pass(COURSE, canvas_get_all=empty_canvas,
+                              canvas_get_all_complete=empty_canvas.complete,
+                              root=str(tmp_path), now=NOW)
+    assert result == {"ok": True, "students": 0}
+    document = store.read_roster(COURSE, root=str(tmp_path))
+    assert document["students"] == {}
+    assert document["state"] == "current"
+
+
+def test_full_pass_refuses_empty_wipe_and_never_commits_submissions(tmp_path):
+    """The same guard applies inside full_pass, and a refused roster must
+    stop the pass before submissions are ever fetched or committed on the
+    strength of a roster this pass just refused."""
+    canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
+    assert sync.full_pass(COURSE, canvas_get_all=canvas,
+                          canvas_get_all_complete=canvas.complete, root=str(tmp_path),
+                          now=NOW)["ok"] is True
+    before_roster = store.read_roster(COURSE, root=str(tmp_path))
+    before_submissions = store.read_submissions(COURSE, "700010", root=str(tmp_path))
+
+    def complete_with_empty_users(path, params=None, timeout=30):
+        if path.endswith("/users"):
+            return [], None, True
+        return canvas.complete(path, params, timeout)
+
+    def refuses_canvas_get_all(path, params=None, timeout=30):
+        raise AssertionError(
+            f"full_pass must not fetch sections/submissions after refusing "
+            f"the roster: {path}")
+
+    result = sync.full_pass(
+        COURSE, canvas_get_all=refuses_canvas_get_all,
+        canvas_get_all_complete=complete_with_empty_users,
+        root=str(tmp_path), now="2026-07-17T03:00:00Z")
+
+    assert result == {"ok": False, "error": "roster_wipe_refused"}
+    assert store.read_roster(COURSE, root=str(tmp_path)) == before_roster
+    assert store.read_submissions(COURSE, "700010", root=str(tmp_path)) == before_submissions
+    state = store.read_sync(COURSE, root=str(tmp_path))
+    assert state["passes"]["full"]["state"] == "stale"
+    assert state["passes"]["full"]["error_code"] == "roster_wipe_refused"
+
+
+# --- roster/full: sections-fetch failure must not blank section names ------------
+
+def test_roster_pass_sections_error_preserves_previous_section_names(tmp_path):
+    """A failed sections fetch must not blank section names Canvas never
+    actually reported as gone. The previous mirrored section map survives
+    a sections-only outage."""
+    canvas = FakeCanvas()
+    assert sync.roster_pass(COURSE, canvas_get_all=canvas,
+                            canvas_get_all_complete=canvas.complete,
+                            root=str(tmp_path), now=NOW)["ok"] is True
+    assert store.read_roster(COURSE, root=str(tmp_path))["sections"] == {"800001": "Period 1"}
+
+    failing_sections = FakeCanvas(errors={"sections": "HTTP 503: upstream"})
+    result = sync.roster_pass(
+        COURSE, canvas_get_all=failing_sections,
+        canvas_get_all_complete=failing_sections.complete,
+        root=str(tmp_path), now="2026-07-16T13:00:00Z")
+
+    assert result["ok"] is True
+    document = store.read_roster(COURSE, root=str(tmp_path))
+    assert document["sections"] == {"800001": "Period 1"}
+
+
+def test_full_pass_sections_error_preserves_previous_section_names(tmp_path):
+    """The same guard applies inside full_pass: a sections-fetch failure
+    there must not blank section names either, even though students and
+    submissions refresh normally in the same pass."""
+    canvas = FakeCanvas(submissions=[_sub(700010), _sub(700020)])
+    assert sync.full_pass(COURSE, canvas_get_all=canvas,
+                          canvas_get_all_complete=canvas.complete, root=str(tmp_path),
+                          now=NOW)["ok"] is True
+    assert store.read_roster(COURSE, root=str(tmp_path))["sections"] == {"800001": "Period 1"}
+
+    failing_sections = FakeCanvas(errors={"sections": "HTTP 503: upstream"},
+                                  submissions=[_sub(700010), _sub(700020)])
+    result = sync.full_pass(COURSE, canvas_get_all=failing_sections,
+                            canvas_get_all_complete=failing_sections.complete,
+                            root=str(tmp_path), now="2026-07-17T03:00:00Z")
+
+    assert result["ok"] is True
+    document = store.read_roster(COURSE, root=str(tmp_path))
+    assert document["sections"] == {"800001": "Period 1"}
 
 
 # --- workspace guard -----------------------------------------------------------------

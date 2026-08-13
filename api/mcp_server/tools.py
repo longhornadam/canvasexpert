@@ -630,7 +630,7 @@ def list_sections(course_id: str) -> dict:
     Canvas fallback) for any saved course (Current or Previous). No student
     data — no vault, no safety gate. Returns
     a {columns, rows} table of (section_id, section_name). Call this before
-    get_seating_context to discover valid section_name values."""
+    get_seating_context to discover its section_id/section_name values."""
     document = mirror_store.read_roster(course_id)
     if document is None:
         return {
@@ -1926,19 +1926,72 @@ def get_roster(course_id: str) -> dict:
     return result
 
 
-def get_seating_context(course_id: str, section_name: str) -> dict:
-    """Pseudonymized mirror+local seating context for one exact section name.
+def _resolve_section_id(sections: dict, *, section_id: str, section_name: str) -> tuple[str | None, str | None]:
+    """Resolve one mirror section id from an explicit id and/or a name.
 
-    Current mirrored identity/membership is joined with private local Roster
-    context. This deliberately narrow projection carries neither Canvas
-    identifiers nor private local reasons/notes, and it refuses rather than
-    guessing when mirror section names are absent or ambiguous.
+    A non-empty section_id is checked directly against the mirror's section
+    ids and wins outright, since an id is unambiguous by construction.
+    Otherwise section_name is matched exactly first, the common case the tool
+    description asks callers to use. A name matching zero sections gets one
+    retry, trimmed and case-folded on both sides, to absorb a stray SIS
+    whitespace or capitalization difference; that retry is accepted only when
+    it too lands on exactly one section, never when it would collapse two
+    sections the exact pass kept separate. A name matching two or more
+    sections, on either pass, is refused with the candidate ids rather than
+    guessed.
+
+    Returns ``(section_id, None)`` on one clear match, or ``(None, error)``.
+    """
+    by_id = {str(sid): str(name) for sid, name in sections.items()}
+
+    section_id = section_id.strip()
+    if section_id:
+        if section_id in by_id:
+            return section_id, None
+        return None, f"No section with id '{section_id}' exists in the local mirror."
+
+    exact = sorted(sid for sid, name in by_id.items() if name == section_name)
+    if len(exact) == 1:
+        return exact[0], None
+    if len(exact) > 1:
+        return None, (
+            f"{len(exact)} sections are named '{section_name}': ids "
+            f"{', '.join(exact)}. Call get_seating_context again with "
+            "section_id set to one of these."
+        )
+
+    loose_target = section_name.strip().casefold()
+    loose = sorted(
+        sid for sid, name in by_id.items() if name.strip().casefold() == loose_target
+    )
+    if len(loose) == 1:
+        return loose[0], None
+    if len(loose) > 1:
+        return None, (
+            f"{len(loose)} sections match '{section_name}' once case and "
+            f"whitespace are ignored: ids {', '.join(loose)}. Call "
+            "get_seating_context again with section_id set to one of these."
+        )
+
+    return None, f"No section named '{section_name}' exists in the local mirror."
+
+
+def get_seating_context(course_id: str, section_name: str = "", section_id: str = "") -> dict:
+    """Pseudonymized mirror+local seating context for one section.
+
+    Identify the section with section_id (unambiguous) or section_name (exact
+    match, or a trim/case-insensitive retry); a name matching zero or several
+    sections is refused with the candidate ids rather than guessed. Current
+    mirrored identity/membership is joined with private local Roster context,
+    carrying neither Canvas identifiers nor private local reasons/notes.
     """
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
-    if not isinstance(section_name, str):
-        return {"ok": False, "error": "A section name is required."}
+    if not isinstance(section_name, str) or not isinstance(section_id, str):
+        return {"ok": False, "error": "A section_id or section_name is required."}
+    if not section_name.strip() and not section_id.strip():
+        return {"ok": False, "error": "A section_id or section_name is required."}
 
     vault, vault_err = _open_vault()
     if vault_err:
@@ -1947,16 +2000,11 @@ def get_seating_context(course_id: str, section_name: str) -> dict:
     if mirror_doc is None:
         return {"ok": False, "error": _MIRROR_UNAVAILABLE_ROSTER_ERROR}
 
-    section_ids = [
-        str(section_id) for section_id, name in mirror_doc["sections"].items()
-        if name == section_name
-    ]
-    if len(section_ids) != 1:
-        return {
-            "ok": False,
-            "error": "The requested local mirror section is missing or ambiguous; student data is withheld.",
-        }
-    selected_section_id = section_ids[0]
+    selected_section_id, resolve_err = _resolve_section_id(
+        mirror_doc["sections"], section_id=section_id, section_name=section_name
+    )
+    if resolve_err:
+        return {"ok": False, "error": resolve_err}
 
     with _vault_transaction(vault):
         users = mirror_doc["students"]

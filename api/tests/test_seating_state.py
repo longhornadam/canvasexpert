@@ -14,8 +14,8 @@ def _layout(layout_id="layout-a", rows=2, columns=2, seats=None):
             "seats": seats, "near_teacher_seat_ids": []}
 
 
-def _mode(mode_id="mode-a", layout_id="layout-a", assignment=None, strategy="manual"):
-    return {"id": mode_id, "name": "Rows", "section_id": "section-a",
+def _mode(mode_id="mode-a", layout_id="layout-a", assignment=None, strategy="manual", section_id="section-a"):
+    return {"id": mode_id, "name": "Rows", "section_id": section_id,
             "layout_id": layout_id, "strategy": strategy, "assignment": assignment or {}}
 
 
@@ -98,6 +98,32 @@ def test_delete_layout_removes_only_dependent_modes():
     assert error is None
     assert [layout["id"] for layout in result["layouts"]] == ["layout-b"]
     assert [mode["id"] for mode in result["modes"]] == ["mode-b"]
+
+
+def test_clear_student_from_section_only_touches_that_section_and_student():
+    state = {
+        "layouts": [_layout(), _layout("layout-b", seats=[
+            {"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"},
+        ])],
+        "modes": [
+            _mode(assignment={"seat-1-1": "student-a", "seat-2-1": "student-b"}, section_id="section-old"),
+            _mode("mode-b", "layout-b", {"seat-1-1": "student-a"}, section_id="section-new"),
+        ],
+    }
+    cleared, error = seating_state.clear_student_from_section(state, "section-old", "student-a")
+    assert error is None
+    # Only student-a's seat in section-old is cleared; student-b keeps their
+    # seat, and student-a's seat in the unrelated section-new mode is untouched.
+    assert cleared["modes"][0]["assignment"] == {"seat-2-1": "student-b"}
+    assert cleared["modes"][1]["assignment"] == {"seat-1-1": "student-a"}
+
+    noop, error = seating_state.clear_student_from_section(cleared, "section-old", "student-a")
+    assert error is None
+    assert noop == cleared
+
+    rejected, error = seating_state.clear_student_from_section(state, "bad section", "student-a")
+    assert rejected is None
+    assert "valid section and student id" in error
 
 
 def test_near_teacher_marks_are_a_unique_current_seat_subset():

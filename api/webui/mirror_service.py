@@ -101,7 +101,8 @@ def _run_course_context(course_id: str):
 
 def _run_roster(course_id: str):
     with _telemetry("roster"):
-        return sync.roster_pass(course_id, canvas_get_all=canvas_get_all)
+        return sync.roster_pass(course_id, canvas_get_all=canvas_get_all,
+                                canvas_get_all_complete=canvas_get_all_complete)
 
 
 def _run_groups(course_id: str):
@@ -248,8 +249,9 @@ def _run_heartbeat_course(course: dict, *, canvas_get=None, canvas_get_all=None,
         pass_started = time.monotonic()
         try:
             kwargs = {"canvas_get_all": canvas_get_all, "now": now_iso}
-            if pass_name in {"full", "delta"}:
+            if pass_name in {"full", "delta", "roster"}:
                 kwargs["canvas_get_all_complete"] = canvas_get_all_complete
+            if pass_name in {"full", "delta"}:
                 kwargs["course_name"] = course.get("name")
             if concluded and pass_name == "full":
                 kwargs["skip_new_quiz_metadata"] = True

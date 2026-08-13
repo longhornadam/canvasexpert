@@ -17,7 +17,9 @@ safety boundaries still apply.
 `api/data/pseudonym_words.json` is the only vocabulary source. It has exactly three
 top-level category arrays: `mineral`, `weather`, and `ocean`.
 
-- The flattened registry contains at least 256 unique words.
+- The flattened registry contains at least 900 unique words (over 1000 as of the
+  2026-08 expansion), so a middle school teacher's roster can grow across many
+  years without approaching the ceiling.
 - Every entry is one ASCII alphabetic token in title case, with no whitespace,
   punctuation, digits, or suffix generation.
 - Each word appears in exactly one category, compared case-insensitively.

@@ -75,7 +75,7 @@ def list_courses() -> str:
 def list_sections(course_id: str) -> str:
     """A course's section names from the local mirror as a {columns, rows}
     table of (section_id, section_name). Call before get_seating_context to
-    discover valid section_name values. No student data."""
+    discover its section_id/section_name values. No student data."""
     return _compact(tools.list_sections(course_id))
 
 
@@ -211,11 +211,12 @@ def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
 
 
 @mcp.tool()
-def get_seating_context(course_id: str, section_name: str) -> str:
+def get_seating_context(course_id: str, section_name: str = "", section_id: str = "") -> str:
     """One section's pseudonymized seating context: supports, score values,
-    AI-context notes, and pair preferences. Needs an exact section_name;
-    refuses when it is absent or ambiguous. No Canvas IDs or private reasons."""
-    return _compact(tools.get_seating_context(course_id, section_name))
+    AI-context notes, and pair preferences. section_name matches exactly, or
+    loosely on case/whitespace; pass section_id instead if that is ever
+    ambiguous. No Canvas IDs or private reasons."""
+    return _compact(tools.get_seating_context(course_id, section_name, section_id))
 
 
 @mcp.tool()

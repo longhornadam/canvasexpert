@@ -62,6 +62,8 @@ def isolated_roster(monkeypatch):
         "settings": {},
         "score_matrices": {},
         "relationships": {},
+        "baselines": {},
+        "seating": {},
     }
 
     def fake_get_extra_time(course_id):
@@ -103,6 +105,18 @@ def isolated_roster(monkeypatch):
     def fake_set_roster_relationships(course_id, relationships):
         stores["relationships"][str(course_id)] = relationships
 
+    def fake_get_roster_baseline(course_id):
+        return stores["baselines"].get(str(course_id), config.ROSTER_BASELINE_DEFAULT)
+
+    def fake_set_roster_baseline(course_id, baseline):
+        stores["baselines"][str(course_id)] = baseline
+
+    def fake_get_seating_course_state(course_id):
+        return stores["seating"].get(str(course_id), config.SEATING_COURSE_STATE_DEFAULT)
+
+    def fake_set_seating_course_state(course_id, state):
+        stores["seating"][str(course_id)] = state
+
     def fake_get_roster_group_scheme(course_id):
         return stores.get("group_schemes", {}).get(str(course_id), {})
 
@@ -137,6 +151,10 @@ def isolated_roster(monkeypatch):
     monkeypatch.setattr(roster_routes.config, "set_roster_score_matrix", fake_set_roster_score_matrix)
     monkeypatch.setattr(roster_routes.config, "get_roster_relationships", fake_get_roster_relationships)
     monkeypatch.setattr(roster_routes.config, "set_roster_relationships", fake_set_roster_relationships)
+    monkeypatch.setattr(roster_routes.config, "get_roster_baseline", fake_get_roster_baseline)
+    monkeypatch.setattr(roster_routes.config, "set_roster_baseline", fake_set_roster_baseline)
+    monkeypatch.setattr(roster_routes.config, "get_seating_course_state", fake_get_seating_course_state)
+    monkeypatch.setattr(roster_routes.config, "set_seating_course_state", fake_set_seating_course_state)
     monkeypatch.setattr(roster_routes.config, "active_protected_names", lambda: set())
     monkeypatch.setattr(roster_routes.config, "get_roster_group_scheme", fake_get_roster_group_scheme)
     monkeypatch.setattr(roster_routes.config, "set_roster_group_scheme", fake_set_roster_group_scheme)
@@ -1552,3 +1570,233 @@ def test_roster_get_note_reports_profile_and_group_problems_together(monkeypatch
 
     assert "Test Student" in data["note"]
     assert "Groups: mirror unavailable" in data["note"]
+
+
+# --------------------------------------------------------------------------
+# Roster-change baseline: added / departed / changed-section warnings,
+# acknowledge, and the one-click section-change migration.
+# --------------------------------------------------------------------------
+
+
+def test_roster_get_has_no_roster_changes_before_any_acknowledgment(monkeypatch, isolated_roster):
+    """A course that has never been acknowledged has nothing to diff against,
+    so no student is flagged and the card reports itself as not tracking yet."""
+    users = [{"id": 101, "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada",
+              "short_name": "Ada", "enrollments": [{"course_section_id": "sec-a"}]}]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {"sec-a": "Period 1"})
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["roster_changes"] == {
+        "baseline_set": False, "added_count": 0, "changed_section_count": 0, "departed": [],
+    }
+    assert data["students"][0]["roster_change"] is None
+    assert "student_added" not in data["students"][0]["warnings"]
+
+
+def test_roster_changes_acknowledge_requires_course_id():
+    resp = client.post("/api/roster/changes/acknowledge", data={"course_id": ""})
+    assert resp.json() == {"ok": False, "error": "course_id required."}
+
+
+def test_acknowledge_then_new_and_moved_students_are_flagged(monkeypatch, isolated_roster):
+    baseline_users = [
+        {"id": 101, "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada",
+         "short_name": "Ada", "enrollments": [{"course_section_id": "sec-a"}]},
+    ]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (baseline_users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {"sec-a": "Period 1", "sec-b": "Period 2"})
+
+    ack = client.post("/api/roster/changes/acknowledge", data={"course_id": "1"}).json()
+    assert ack["ok"] is True
+    assert ack["baseline"]["students"] == {"101": ["sec-a"]}
+    assert ack["baseline"]["acknowledged_at"]
+
+    later_users = [
+        {"id": 101, "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada",
+         "short_name": "Ada", "enrollments": [{"course_section_id": "sec-b"}]},
+        {"id": 102, "name": "New Kid", "sortable_name": "Kid, New",
+         "short_name": "New", "enrollments": [{"course_section_id": "sec-b"}]},
+    ]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (later_users, None))
+
+    data = client.get("/api/roster?course_id=1").json()
+    rows = {row["id"]: row for row in data["students"]}
+
+    assert data["roster_changes"]["baseline_set"] is True
+    assert data["roster_changes"]["added_count"] == 1
+    assert data["roster_changes"]["changed_section_count"] == 1
+    assert rows["102"]["roster_change"] == {"is_new": True}
+    assert "student_added" in rows["102"]["warnings"]
+    changed = rows["101"]["roster_change"]["changed_section"]
+    assert changed["old_section_ids"] == ["sec-a"]
+    assert changed["new_section_ids"] == ["sec-b"]
+    assert changed["old_section_names"] == ["Period 1"]
+    assert changed["new_section_names"] == ["Period 2"]
+    assert changed["clean_swap"] is True
+    assert changed["can_migrate"] is True
+    assert "student_changed_section" in rows["101"]["warnings"]
+
+
+def test_roster_get_reports_departed_student_with_every_kind_of_held_data(monkeypatch, isolated_roster):
+    isolated_roster["vault"].rows["202"] = {
+        "canvas_id": "202", "real_name": "Riley Departed", "sis_id": "",
+        "nicknames": [], "pseudonym": _WORDS[3], "first_seen": "",
+    }
+    isolated_roster["baselines"]["1"] = {
+        "acknowledged_at": "2026-08-01T00:00:00",
+        "students": {"101": ["sec-a"], "202": ["sec-a"]},
+    }
+    isolated_roster["extra_time"]["1"] = [{"id": "202", "name": "Riley Departed", "days": 3}]
+    isolated_roster["monitored"]["202"] = {"name": "Riley Departed", "note": "watch"}
+    isolated_roster["settings"]["1"] = {"202": {"seating_context": {
+        "front_row": "required", "near_teacher": "none", "private_note": "", "ai_context_note": "",
+    }}}
+    isolated_roster["score_matrices"]["1"] = {
+        "columns": [{"id": "score-writing", "label": "Writing"}],
+        "values_by_section": {"sec-a": {"202": {"score-writing": 9}}},
+    }
+    isolated_roster["relationships"]["1"] = {"by_section": {"sec-a": [{
+        "student_a": "101", "student_b": "202", "type": "keep_apart", "reason": "",
+    }]}}
+    isolated_roster["seating"]["1"] = {
+        "layouts": [{"id": "layout-a", "name": "Room", "rows": 1, "columns": 1,
+                     "seats": [{"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"}],
+                     "near_teacher_seat_ids": []}],
+        "modes": [{"id": "mode-a", "name": "Fall chart", "section_id": "sec-a",
+                   "layout_id": "layout-a", "strategy": "manual",
+                   "assignment": {"seat-1-1": "202"}}],
+    }
+    users = [{"id": 101, "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada",
+              "short_name": "Ada", "enrollments": [{"course_section_id": "sec-a"}]}]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {"sec-a": "Period 1"})
+
+    data = client.get("/api/roster?course_id=1").json()
+
+    assert data["roster_changes"]["departed"] == [{
+        "student_id": "202",
+        "display_name": "Riley Departed",
+        "settings": True,
+        "extra_time_days": 3,
+        "monitored": True,
+        "score_values": [{"section_id": "sec-a", "section_name": "Period 1", "columns": ["score-writing"]}],
+        "relationship_pairs": [{"section_id": "sec-a", "section_name": "Period 1",
+                                "partner_id": "101", "partner_name": "Ada Lovelace", "type": "keep_apart"}],
+        "seats": [{"section_id": "sec-a", "mode_id": "mode-a", "mode_name": "Fall chart", "seat_id": "seat-1-1"}],
+    }]
+
+
+def test_migrate_section_rejects_when_no_clean_swap_exists(monkeypatch, isolated_roster):
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: ([], None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
+
+    resp = client.post("/api/roster/changes/migrate-section",
+                       data={"course_id": "1", "user_id": "999"})
+    data = resp.json()
+
+    assert data["ok"] is False
+    assert "unambiguous" in data["error"]
+
+
+def test_migrate_section_moves_score_values_pairs_and_seat_then_updates_only_that_baseline(
+    monkeypatch, isolated_roster,
+):
+    isolated_roster["baselines"]["chg"] = {
+        "acknowledged_at": "2026-08-01T00:00:00",
+        "students": {"101": ["sec-old"], "102": ["sec-old"], "103": ["sec-old"]},
+    }
+    isolated_roster["score_matrices"]["chg"] = {
+        "columns": [{"id": "score-writing", "label": "Writing"}],
+        "values_by_section": {"sec-old": {"101": {"score-writing": 5}}},
+    }
+    isolated_roster["relationships"]["chg"] = {"by_section": {"sec-old": [
+        {"student_a": "101", "student_b": "102", "type": "keep_apart", "reason": "r1"},
+        {"student_a": "101", "student_b": "103", "type": "preferred_pair", "reason": "r2"},
+    ]}}
+    isolated_roster["seating"]["chg"] = {
+        "layouts": [{"id": "layout-a", "name": "Room", "rows": 1, "columns": 2,
+                     "seats": [
+                         {"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"},
+                         {"id": "seat-1-2", "row": 1, "column": 2, "label": "1-2"},
+                     ],
+                     "near_teacher_seat_ids": []}],
+        "modes": [{"id": "mode-old", "name": "Fall chart", "section_id": "sec-old",
+                   "layout_id": "layout-a", "strategy": "manual",
+                   "assignment": {"seat-1-1": "101"}}],
+    }
+    # 101 and 102 both moved from sec-old to sec-new; 103 stayed in sec-old.
+    users = [
+        {"id": 101, "name": "Mover One", "sortable_name": "One, Mover",
+         "short_name": "One", "enrollments": [{"course_section_id": "sec-new"}]},
+        {"id": 102, "name": "Mover Two", "sortable_name": "Two, Mover",
+         "short_name": "Two", "enrollments": [{"course_section_id": "sec-new"}]},
+        {"id": 103, "name": "Stays Three", "sortable_name": "Three, Stays",
+         "short_name": "Three", "enrollments": [{"course_section_id": "sec-old"}]},
+    ]
+    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
+    monkeypatch.setattr(roster_routes, "_fetch_sections",
+                        lambda course_id: {"sec-old": "Old Period", "sec-new": "New Period"})
+
+    resp = client.post("/api/roster/changes/migrate-section",
+                       data={"course_id": "chg", "user_id": "101"})
+    data = resp.json()
+
+    assert data["ok"] is True
+    migration = data["migration"]
+    assert migration["old_section_id"] == "sec-old"
+    assert migration["new_section_id"] == "sec-new"
+    assert migration["moved_score_columns"] == ["score-writing"]
+    assert migration["moved_relationship_pairs"] == [
+        {"student_a": "101", "student_b": "102", "type": "keep_apart"},
+    ]
+    assert migration["broken_relationship_pairs"] == [
+        {"student_a": "101", "student_b": "103", "type": "preferred_pair", "reason": "r2", "partner_id": "103"},
+    ]
+    assert migration["cleared_seats"] == [
+        {"mode_id": "mode-old", "mode_name": "Fall chart", "seat_ids": ["seat-1-1"]},
+    ]
+
+    # Score values moved wholesale (old section had nothing left to keep).
+    matrix = isolated_roster["score_matrices"]["chg"]
+    assert "sec-old" not in matrix["values_by_section"]
+    assert matrix["values_by_section"]["sec-new"] == {"101": {"score-writing": 5}}
+
+    # The co-migrating pair moved; the pair with the student who stayed
+    # remains in the old section, visible and unresolved rather than dropped.
+    relationships = isolated_roster["relationships"]["chg"]
+    assert relationships["by_section"]["sec-old"] == [
+        {"student_a": "101", "student_b": "103", "type": "preferred_pair", "reason": "r2"},
+    ]
+    assert relationships["by_section"]["sec-new"] == [
+        {"student_a": "101", "student_b": "102", "type": "keep_apart", "reason": "r1"},
+    ]
+
+    # The stale seat is cleared, not guessed into a new-section seat.
+    seating = isolated_roster["seating"]["chg"]
+    assert seating["modes"][0]["assignment"] == {}
+
+    # Only student 101's own baseline entry advanced; 102 and 103 are
+    # untouched so their own still-open changes are not silently cleared.
+    baseline = isolated_roster["baselines"]["chg"]
+    assert baseline["students"]["101"] == ["sec-new"]
+    assert baseline["students"]["102"] == ["sec-old"]
+    assert baseline["students"]["103"] == ["sec-old"]
+
+    # Re-running migrate for 101 is a harmless no-op: nothing is left to
+    # move, and the relationship that already moved is not reported again.
+    again = client.post("/api/roster/changes/migrate-section",
+                        data={"course_id": "chg", "user_id": "101"}).json()
+    assert again["ok"] is False
+
+    # Migrating the co-migrating partner afterwards must not re-report or
+    # duplicate the pair that 101's migration already moved.
+    second = client.post("/api/roster/changes/migrate-section",
+                         data={"course_id": "chg", "user_id": "102"}).json()
+    assert second["ok"] is True
+    assert second["migration"]["moved_relationship_pairs"] == []
+    assert second["migration"]["broken_relationship_pairs"] == []
+    assert isolated_roster["relationships"]["chg"]["by_section"]["sec-new"] == [
+        {"student_a": "101", "student_b": "102", "type": "keep_apart", "reason": "r1"},
+    ]

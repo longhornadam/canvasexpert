@@ -13,6 +13,7 @@
   var tableCard = document.getElementById("roster-table-card");
   var safetyCard = document.getElementById("roster-safety-card");
   var groupLabelsEditor = document.getElementById("roster-group-labels-editor");
+  var changesCard = document.getElementById("roster-changes");
 
   var students = [];
   var groups = [];
@@ -23,6 +24,7 @@
   var selectedNameMap = {};
   var scoreMatrix = { columns: [], values_by_section: {} };
   var relationships = { by_section: {} };
+  var rosterChanges = { baseline_set: false, added_count: 0, changed_section_count: 0, departed: [] };
   var currentCourseId = "";
   var courseLoaded = false;
   var courseLoadHooks = [];
@@ -106,6 +108,7 @@
       tableCard.hidden = true;
       groupLabelsEditor.hidden = true;
       safetyCard.hidden = true;
+      if (changesCard) changesCard.hidden = true;
       return;
     }
 
@@ -131,6 +134,7 @@
         groupLabelScheme = data.group_label_scheme || {};
         scoreMatrix = data.score_matrix || { columns: [], values_by_section: {} };
         relationships = data.relationships || { by_section: {} };
+        rosterChanges = data.roster_changes || { baseline_set: false, added_count: 0, changed_section_count: 0, departed: [] };
         selectedNameMap = {};
         refreshCurrentCategoryGroups();
         renderSummary(data.counts);
@@ -171,6 +175,10 @@
     getRelationships: function () { return relationships; },
     setRelationships: function (value) {
       relationships = value || { by_section: {} };
+    },
+    getRosterChanges: function () { return rosterChanges; },
+    setRosterChanges: function (value) {
+      rosterChanges = value || { baseline_set: false, added_count: 0, changed_section_count: 0, departed: [] };
     },
     getGroupState: function () {
       return {

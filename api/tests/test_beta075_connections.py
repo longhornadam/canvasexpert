@@ -194,3 +194,43 @@ def test_connections_page_and_mcpb_use_runtime_paths_without_client_config_write
     assert diagnostics.health_snapshot()["environment"]["tunnel_client_present"] is False
     (second_app / "tools" / "tunnel-client.exe").write_bytes(b"synthetic")
     assert diagnostics.health_snapshot()["environment"]["tunnel_client_present"] is True
+
+
+def test_health_snapshot_pseudonym_registry_when_no_workspace_is_configured(monkeypatch):
+    """No workspace yet means no vault to read, but the registry's own total
+    is still true and non-sensitive, so it is reported anyway."""
+    from api import diagnostics, feedback_vault
+    from api.platform_services import workspace
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: None)
+    registry = diagnostics.health_snapshot()["pseudonym_registry"]
+    assert registry == {
+        "configured": False,
+        "words_total": len(feedback_vault._REGISTRY_WORDS),
+        "words_assigned": 0,
+        "words_remaining": len(feedback_vault._REGISTRY_WORDS),
+        "low_runway": False,
+    }
+
+
+def test_health_snapshot_pseudonym_registry_reflects_this_machines_real_vault(tmp_path, monkeypatch):
+    from api import diagnostics, feedback_vault
+    from api.platform_services import workspace
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+    vault_dir = workspace.identity_vault_dir()
+    os.makedirs(vault_dir, exist_ok=True)
+    vault = feedback_vault.Vault(os.path.join(vault_dir, "vault.json"))
+    vault.get_or_assign("9001", "Student One")
+    vault.get_or_assign("9002", "Student Two")
+    vault.save()
+
+    registry = diagnostics.health_snapshot()["pseudonym_registry"]
+    total = len(feedback_vault._REGISTRY_WORDS)
+    assert registry == {
+        "configured": True,
+        "words_total": total,
+        "words_assigned": 2,
+        "words_remaining": total - 2,
+        "low_runway": False,
+    }

@@ -24,8 +24,9 @@ _WORDS = fv._REGISTRY_WORDS  # already validated at import time; reused, never m
 # --- registry law -----------------------------------------------------------
 
 def test_registry_meets_the_locked_contract():
-    """Exactly the mineral/weather/ocean categories, at least 256 unique,
-    ASCII title-case single-token words, no cross-category duplicate."""
+    """Exactly the mineral/weather/ocean categories, at least
+    `_MIN_REGISTRY_WORDS` unique, ASCII title-case single-token words, no
+    cross-category duplicate."""
     with open(fv._REGISTRY_PATH, encoding="utf-8") as f:
         data = json.load(f)
 
@@ -40,7 +41,7 @@ def test_registry_meets_the_locked_contract():
             assert folded not in seen, f"{word!r} duplicated across categories"
             seen.add(folded)
 
-    assert len(seen) >= 256
+    assert len(seen) >= fv._MIN_REGISTRY_WORDS
 
 
 _THIRD = len(_WORDS) // 3
@@ -48,11 +49,11 @@ _M, _W, _O = _WORDS[:_THIRD], _WORDS[_THIRD:2 * _THIRD], _WORDS[2 * _THIRD:]
 
 
 @pytest.mark.parametrize("bad_doc", [
-    {"mineral": _M, "weather": _W},                               # missing 'ocean'
-    {"mineral": _M[:1], "weather": _W[:1], "ocean": _O[:1]},       # far below 256 total
-    {"mineral": _M + [_W[0]], "weather": _W, "ocean": _O},         # cross-category dup
-    {"mineral": _M + ["not-a-word"], "weather": _W, "ocean": _O},  # not title-case ASCII
-    {"mineral": _M + ["Two Words"], "weather": _W, "ocean": _O},   # multiword entry
+    {"mineral": _M, "weather": _W},                                    # missing 'ocean'
+    {"mineral": _M[:1], "weather": _W[:1], "ocean": _O[:1]},            # far below the floor
+    {"mineral": _M + [_W[0]], "weather": _W, "ocean": _O},              # cross-category dup
+    {"mineral": _M + ["not-a-word"], "weather": _W, "ocean": _O},       # not title-case ASCII
+    {"mineral": _M + ["Two Words"], "weather": _W, "ocean": _O},        # multiword entry
 ])
 def test_registry_loader_fails_closed_on_structural_problems(tmp_path, monkeypatch, bad_doc):
     path = tmp_path / "bad_registry.json"
@@ -60,6 +61,82 @@ def test_registry_loader_fails_closed_on_structural_problems(tmp_path, monkeypat
     monkeypatch.setattr(fv, "_REGISTRY_PATH", str(path))
     with pytest.raises(PseudonymRegistryError):
         fv._load_registry()
+
+
+# --- registry runway ---------------------------------------------------------
+# No delete/prune/release path exists on purpose (see the module docstring), so
+# these tests pin the forecast that exists instead: the shape of
+# `registry_runway()` and the exact boundary where `low_runway` flips.
+
+def test_registry_runway_shape_and_arithmetic():
+    total = len(_WORDS)
+    result = fv.registry_runway(10)
+    assert result == {
+        "words_total": total,
+        "words_assigned": 10,
+        "words_remaining": total - 10,
+        "low_runway": False,
+    }
+
+
+def test_registry_runway_clamps_a_negative_assigned_count_to_zero():
+    result = fv.registry_runway(-5)
+    assert result["words_assigned"] == 0
+    assert result["words_remaining"] == len(_WORDS)
+    assert result["low_runway"] is False
+
+
+def test_registry_runway_never_reports_negative_remaining_on_over_assignment():
+    """Should never happen in practice -- `_select_available_word` fails
+    closed before the vault could hold more entries than the registry has
+    words -- but the forecast must not go negative if it ever did."""
+    total = len(_WORDS)
+    result = fv.registry_runway(total + 50)
+    assert result["words_remaining"] == 0
+    assert result["low_runway"] is True
+
+
+def test_registry_runway_flips_low_exactly_at_the_threshold_boundary(monkeypatch):
+    """Concrete, easy-to-verify boundary: a 10-word registry with the real
+    20% low-runway fraction has a threshold of 2 words remaining. One word
+    above that threshold reads ready; at or below it reads low."""
+    monkeypatch.setattr(fv, "_REGISTRY_WORDS", list(_WORDS[:10]))
+    assert fv.registry_runway(7) == {
+        "words_total": 10, "words_assigned": 7, "words_remaining": 3,
+        "low_runway": False,
+    }
+    assert fv.registry_runway(8) == {
+        "words_total": 10, "words_assigned": 8, "words_remaining": 2,
+        "low_runway": True,
+    }
+
+
+def test_registry_runway_flips_low_at_the_real_registry_threshold():
+    """Same boundary, but against the real registry size rather than a
+    monkeypatched one, so a future registry resize cannot silently make this
+    test meaningless."""
+    total = len(_WORDS)
+    threshold = round(total * fv._LOW_RUNWAY_FRACTION)
+    assert fv.registry_runway(total - threshold - 1)["low_runway"] is False
+    assert fv.registry_runway(total - threshold)["low_runway"] is True
+
+
+def test_empty_vault_reports_full_runway_and_not_low(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    result = v.registry_runway()
+    assert result["words_assigned"] == 0
+    assert result["words_remaining"] == len(_WORDS)
+    assert result["low_runway"] is False
+
+
+def test_vault_registry_runway_counts_this_vaults_own_assignments(tmp_path):
+    v = Vault(str(tmp_path / "vault.json"))
+    v.get_or_assign("9001", "Student One")
+    v.get_or_assign("9002", "Student Two")
+    result = v.registry_runway()
+    assert result["words_assigned"] == 2
+    assert result["words_remaining"] == len(_WORDS) - 2
+    assert result["words_total"] == len(_WORDS)
 
 
 # --- assignment law ----------------------------------------------------------

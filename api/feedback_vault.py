@@ -33,7 +33,11 @@ from api.storage_support import atomic_write_json, interprocess_lock
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REGISTRY_PATH = os.path.join(_MODULE_DIR, "data", "pseudonym_words.json")
 _REGISTRY_CATEGORIES = ("mineral", "weather", "ocean")
-_MIN_REGISTRY_WORDS = 256
+# Raised alongside the 2026-08 registry expansion (351 -> 1000+ words) so the
+# floor keeps meaning something: it still exists only to catch a badly
+# truncated or corrupted file, not to size the registry for how many
+# students it needs to cover. See `registry_runway()` for that question.
+_MIN_REGISTRY_WORDS = 900
 _WORD_RE = re.compile(r"^[A-Z][a-z]+$")
 
 SCHEMA_VERSION = 3
@@ -112,6 +116,15 @@ def _load_registry() -> tuple[list[str], dict[str, str]]:
 _REGISTRY_WORDS, _REGISTRY_CATEGORY_BY_LOWER = _load_registry()
 _REGISTRY_CANONICAL_BY_LOWER = {w.lower(): w for w in _REGISTRY_WORDS}
 
+# The vault never releases a word (see the module docstring), so the registry
+# only ever drains as a teacher's roster grows year over year. Growing it back
+# means writing and reviewing a bigger `pseudonym_words.json` -- a real amount
+# of lead time, not a quick fix -- so the warning below has to fire long
+# before `_select_available_word` would actually raise `PseudonymRegistryError`.
+# A fifth of the registry left unassigned is the sensible line: at a rough
+# 170-student-a-year pace it still leaves more than a year to notice and act.
+_LOW_RUNWAY_FRACTION = 0.2
+
 
 def _canonical_registry_word(value: object) -> str | None:
     """The exact registry-cased word for `value`, or None if `value` is not
@@ -122,6 +135,31 @@ def _canonical_registry_word(value: object) -> str | None:
     if not candidate or len(candidate.split()) != 1:
         return None
     return _REGISTRY_CANONICAL_BY_LOWER.get(candidate.lower())
+
+
+def registry_runway(words_assigned: int) -> dict:
+    """Words total/assigned/remaining and whether the registry is running low.
+
+    Pure and I/O-free: `words_assigned` is the caller's own count of
+    currently-held pseudonyms (a `Vault` passes `len(self)`), so this stays
+    testable without a real vault file and callers who already know their
+    count do not need to construct a `Vault` just to ask this question.
+    `low_runway` flips to True once `words_remaining` drops to or below
+    `_LOW_RUNWAY_FRACTION` of `words_total`. This is a forecast, not a
+    failure: `PseudonymRegistryError` from `_select_available_word` remains
+    the only terminal behavior on true exhaustion. The point of this function
+    is that nobody should ever actually reach that error unwarned.
+    """
+    words_total = len(_REGISTRY_WORDS)
+    words_assigned = max(int(words_assigned), 0)
+    words_remaining = max(words_total - words_assigned, 0)
+    low_runway = words_remaining <= round(words_total * _LOW_RUNWAY_FRACTION)
+    return {
+        "words_total": words_total,
+        "words_assigned": words_assigned,
+        "words_remaining": words_remaining,
+        "low_runway": low_runway,
+    }
 
 
 class Vault:
@@ -424,3 +462,8 @@ class Vault:
 
     def __len__(self):
         return len(self._by_id)
+
+    def registry_runway(self) -> dict:
+        """This vault's view of `registry_runway`: how much of the shared
+        pseudonym registry is left, using this vault's own assigned count."""
+        return registry_runway(len(self))

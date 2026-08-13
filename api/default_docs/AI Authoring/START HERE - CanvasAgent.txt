@@ -76,7 +76,10 @@ folder. What happens then:
     "Install for me only" so no admin is needed, then double-clicks the same
     file again. Expect to field this one.
   * On the first launch, and afterwards only when the app's dependencies
-    change, it installs those into the teacher's own user account. It prints
+    change, it builds itself a private Python environment inside the teacher's
+    own user folder and installs those dependencies there. Keeping them out of
+    the shared per-user Python folder means CanvasExpert cannot disturb other
+    Python software on the machine, or be disturbed by it. It prints
     "First-time setup", takes a few minutes, and needs internet. Later
     launches go straight past it.
   * A console window opens and stays open. That window is the app itself
@@ -101,9 +104,10 @@ First time in the app, a four-step wizard runs:
 Opening it again later. Double-click the same "Open Canvas Expert.bat". There
 is no Start menu entry unless the teacher makes a shortcut to that file.
 
-If it stops starting. Double-click "Repair.bat" beside it. That clears the
-setup marker so the next launch reinstalls dependencies from scratch. It
-touches nothing in the app folder and needs no admin.
+If it stops starting. Double-click "Repair.bat" beside it. That removes the
+app's private Python environment so the next launch rebuilds it and reinstalls
+dependencies from scratch. It touches nothing in the app folder, nothing any
+other program relies on, and needs no admin.
 
 
 Appendix B. What CanvasExpert can do
@@ -239,8 +243,10 @@ Reading
   * get_modules, get_course_assignments, and get_course_pages read a local
     catalog on disk, never live Canvas. If the catalog looks empty, the teacher
     refreshes it from the web UI.
-  * list_sections(course_id) lists the section names, and is how you find the
-    exact name get_seating_context needs.
+  * list_sections(course_id) lists section ids and names. Pass section_name to
+    get_seating_context for the common case; if it refuses because the name
+    is shared by more than one section, retry with one of the section_id
+    values it lists.
   * get_roster, get_seating_context, get_submissions, and get_gradebook_snapshot
     read only the local mirror and will refuse when it is stale. When one
     refuses, call refresh_mirror(course_id), then retry that read once.

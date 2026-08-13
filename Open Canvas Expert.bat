@@ -11,11 +11,44 @@ if errorlevel 1 (
   pause & exit /b 1
 )
 
+REM --- Where this app's dependencies live ----------------------------------------
+REM A private environment, not the shared per-user site-packages that
+REM `pip install --user` writes to. That folder is shared with every other Python
+REM tool on the machine, so installing there meant this app could break unrelated
+REM software and unrelated software could break this app, with no signal either
+REM way. Environment and marker both sit in %LOCALAPPDATA% (per-user, no admin)
+REM and outside the app folder, so a self-update's whole-folder mirror leaves
+REM them alone.
+set "CE_DATA=%LOCALAPPDATA%\CanvasExpert"
+set "VENV_DIR=%CE_DATA%\venv"
+set "VENV_PY=%VENV_DIR%\Scripts\python.exe"
+set "MARKER=%CE_DATA%\reqs.hash"
+
+REM An environment whose base Python was upgraded or uninstalled still has a
+REM python.exe sitting on disk but can no longer run it, so prove the thing
+REM works rather than trusting the file to be there.
+set "VENV_OK="
+if exist "%VENV_PY%" (
+  "%VENV_PY%" -c "import sys" >nul 2>&1
+  if not errorlevel 1 set "VENV_OK=1"
+)
+
+if not defined VENV_OK (
+  if exist "%VENV_DIR%" rmdir /s /q "%VENV_DIR%"
+  echo.
+  echo First-time setup - building a private Python environment for this app.
+  echo It goes in your own user folder and needs no admin rights.
+  echo.
+  if not exist "%CE_DATA%" mkdir "%CE_DATA%"
+  py -m venv "%VENV_DIR%" || goto :setup_failed
+  REM A new environment holds none of the dependencies, whatever the marker says.
+  if exist "%MARKER%" del "%MARKER%"
+)
+
 REM --- First-run / dependency-change guard --------------------------------------
 REM Provision only when requirements.txt differs from what we last installed, so
-REM normal launches go straight to the app. The marker lives in %LOCALAPPDATA%
-REM (per-user, no admin, off the repo).
-set "MARKER=%LOCALAPPDATA%\CanvasExpert\reqs.hash"
+REM normal launches go straight to the app. The marker sits beside the environment
+REM it describes, so removing either one re-provisions both.
 set "CUR="
 for /f "skip=1 delims=" %%H in ('certutil -hashfile requirements.txt SHA256 2^>nul') do (
   if not defined CUR set "CUR=%%H"
@@ -25,18 +58,22 @@ if exist "%MARKER%" set /p OLD=<"%MARKER%"
 
 if not "%CUR%"=="%OLD%" (
   echo.
-  echo First-time setup ^(or dependencies changed^) - installing into your user account...
-  echo This runs once and needs no admin rights. Please wait.
+  echo Installing this app's dependencies. Needs internet, takes a few minutes
+  echo the first time, and changes nothing outside its own environment.
   echo.
-  py -m pip install --user -r requirements.txt || (echo. & echo Setup failed - check your internet connection and try again. & pause & exit /b 1)
-  if not exist "%LOCALAPPDATA%\CanvasExpert" mkdir "%LOCALAPPDATA%\CanvasExpert"
-  if defined CUR ( >"%MARKER%" echo %CUR% )
+  "%VENV_PY%" -m pip install -r requirements.txt || goto :setup_failed
+  REM `echo %CUR%` must end the line. Written as `( >"%MARKER%" echo %CUR% )` the
+  REM space before the paren lands in the file, so the stored hash never equalled
+  REM the computed one and this guard re-ran pip on every single launch.
+  if defined CUR (
+    >"%MARKER%" echo %CUR%
+  )
   echo.
   echo Setup complete.
   echo.
 )
 
-py qf_ui.py
+"%VENV_PY%" qf_ui.py
 if errorlevel 7 if not errorlevel 8 (
   REM Exit code 7 means a self-update is staged. The app has already exited,
   REM so this is the one moment nothing in the folder is open -- hand off to
@@ -47,3 +84,11 @@ if errorlevel 7 if not errorlevel 8 (
   exit /b
 )
 pause
+exit /b
+
+:setup_failed
+echo.
+echo Setup failed - check your internet connection and try again.
+echo If it keeps failing, double-click "Repair.bat" beside this file.
+pause
+exit /b 1

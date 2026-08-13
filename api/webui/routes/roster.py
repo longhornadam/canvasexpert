@@ -11,6 +11,7 @@ V3: Canvas groups are the source of truth for tier/group assignment.
 Does NOT write local tier_id.
 """
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import JSONResponse
@@ -19,11 +20,13 @@ from api import feedback_scrub
 from api import operational_log
 from api import roster_context
 from api import roster_service
+from api import seating_state
 from api.mirror import store as mirror_store
 from api.platform_services import config
 from api.platform_services.canvas_client import canvas_get_all, _canvas_send
 from .courses import fetch_group_category_groups, load_group_categories
 from .names import _vault
+from . import roster_changes
 from . import roster_groups
 from . import roster_canvas
 from . import roster_updates
@@ -53,6 +56,7 @@ WARNING_CODES = (
     "missing_pseudonym", "extra_time_without_days",
     "group_unset", "multiple_groups_in_selected_set",
     "nickname_collision", "protected_name_collision",
+    "student_added", "student_departed", "student_changed_section",
 )
 ROSTER_MAX_AGE_HOURS = 24
 # Compatibility re-exports for focused Roster tests and existing callers.  The
@@ -74,6 +78,19 @@ def _fetch_sections(course_id: str) -> dict:
 
 _fetch_students = roster_service.fetch_students
 _upsert_roster = roster_service.upsert_roster
+
+
+def _load_roster_users(course_id: str) -> tuple[list[dict], dict, str | None]:
+    """Users + section map, mirror-first with live fallback -- shared by the
+    roster GET below and the roster-change acknowledge/migrate actions, so
+    every one of them agrees on exactly who is "currently on the roster"."""
+    roster_document = mirror_store.read_roster(course_id)
+    if roster_document is not None and roster_document.get("state") == "current":
+        return list(roster_document["students"].values()), roster_document["sections"], None
+    users, err = _fetch_students(course_id)
+    if err:
+        return [], {}, f"Canvas fetch failed: {err}"
+    return users, _fetch_sections(course_id), None
 
 
 def _create_canvas_group(category_id: str, name: str) -> tuple[dict | None, str | None]:
@@ -182,15 +199,9 @@ def roster_get(course_id: str = Query("")):
     if not course_id:
         return JSONResponse({"ok": False, "error": "course_id required."})
 
-    roster_document = mirror_store.read_roster(course_id)
-    if roster_document is not None and roster_document.get("state") == "current":
-        users = list(roster_document["students"].values())
-        section_map = roster_document["sections"]
-    else:
-        users, err = _fetch_students(course_id)
-        if err:
-            return JSONResponse({"ok": False, "error": f"Canvas fetch failed: {err}"})
-        section_map = _fetch_sections(course_id)
+    users, section_map, err = _load_roster_users(course_id)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
 
     vault = _vault()
     with vault.transaction():
@@ -234,14 +245,27 @@ def roster_get(course_id: str = Query("")):
     relationships = roster_context.normalize_relationships(
         config.get_roster_relationships(course_id)
     )
+    seating_doc = seating_state.normalize_state(config.get_seating_course_state(course_id))
+
+    # Roster-change diff against the teacher's last acknowledged baseline.
+    # Never written here -- see roster_context.diff_roster_baseline and the
+    # /changes/acknowledge route below for why a read must not touch it.
+    current_student_ids = {str(u["id"]) for u in (users or []) if u.get("id") is not None}
+    roster_diff = roster_context.diff_roster_baseline(
+        config.get_roster_baseline(course_id), current_student_ids, enrollment_secs)
+    added_ids = set(roster_diff["added"])
+    changed_section_by_id = {item["student_id"]: item for item in roster_diff["changed_section"]}
 
     # Protected names for collision check
     protected_names = {p.lower() for p in config.active_protected_names()}
 
-    # Build vault lookup by canvas_id
+    # Build vault lookup by canvas_id. This also covers students who have
+    # left the roster -- the vault keeps their last-known real name, which
+    # is the only display name available for the departed list below.
     vault_by_id: dict[str, dict] = {}
     for ve in vault_entries_list:
         vault_by_id[ve["canvas_id"]] = ve
+    name_by_id = {uid: (entry.get("real_name") or uid) for uid, entry in vault_by_id.items()}
     course_ids = {str(u["id"]) for u in (users or [])}
     course_vault_entries = [ve for ve in vault_entries_list
                             if str(ve.get("canvas_id", "")) in course_ids]
@@ -312,6 +336,21 @@ def roster_get(course_id: str = Query("")):
             profile_invalid = True
             profile_warnings.append(f"Classroom profile for {display} is invalid; showing an empty profile.")
 
+        # Roster-change status for this student: new since the baseline, or
+        # still enrolled but in a different section now. Mutually exclusive
+        # by construction -- a student can only be "changed section" when
+        # they were already in the baseline, which a truly new student never is.
+        roster_change = None
+        if uid in added_ids:
+            roster_change = {"is_new": True}
+        else:
+            change = changed_section_by_id.get(uid)
+            if change:
+                roster_change = {"changed_section": roster_changes.changed_section_detail(
+                    change, score_matrix=score_matrix, relationships=relationships,
+                    seating_doc=seating_doc, section_names=section_map, name_by_id=name_by_id,
+                )}
+
         row = {
             "id": uid,
             "canvas_id": uid,
@@ -327,10 +366,12 @@ def roster_get(course_id: str = Query("")):
             "classroom_profile": classroom_profile,
             "canvas_groups": canvas_groups,
             "canvas_group": canvas_group,
+            "roster_change": roster_change,
             "warnings": [],
         }
         row["warnings"] = _compute_warnings(
-            row, vault_by_id, protected_names, collisions, selected_category_id)
+            row, vault_by_id, protected_names, collisions, selected_category_id,
+            roster_change=roster_change)
         if profile_invalid:
             row["warnings"].append("classroom_profile_invalid")
         students_out.append(row)
@@ -366,6 +407,25 @@ def roster_get(course_id: str = Query("")):
         if local.get("tier_id") or local.get("tier") or local.get("planned_group"):
             legacy_tier_count += 1
 
+    # Departed students have no live row above to carry a warning, so they
+    # are reported here instead -- with exactly what local data is still
+    # held for them, per api/webui/routes/roster_changes.departed_detail.
+    departed = [
+        roster_changes.departed_detail(
+            student_id,
+            display_name=name_by_id.get(student_id, student_id),
+            roster_student_settings=raw_roster_settings,
+            extra_time_by_id=extra_time_by_id,
+            monitored=monitored,
+            score_matrix=score_matrix,
+            relationships=relationships,
+            seating_doc=seating_doc,
+            section_names=section_map,
+            name_by_id=name_by_id,
+        )
+        for student_id in roster_diff["departed"]
+    ]
+
     return JSONResponse({
         "ok": True,
         "students": students_out,
@@ -374,6 +434,12 @@ def roster_get(course_id: str = Query("")):
         "group_label_scheme": group_scheme.get("group_labels", {}),
         "score_matrix": score_matrix,
         "relationships": relationships,
+        "roster_changes": {
+            "baseline_set": roster_diff["baseline_set"],
+            "added_count": len(roster_diff["added"]),
+            "changed_section_count": len(roster_diff["changed_section"]),
+            "departed": departed,
+        },
         "counts": {
             "total": total,
             "extra_time": extra_time_count,
@@ -461,6 +527,59 @@ def roster_relationships_update(
         return JSONResponse({"ok": False, "error": error})
     config.set_roster_relationships(course_id, updated)
     return JSONResponse({"ok": True, "relationships": updated})
+
+
+@router.post("/changes/acknowledge")
+def roster_changes_acknowledge(course_id: str = Form(...)):
+    """Snapshot the live roster as the new comparison baseline.
+
+    Only runs from this explicit teacher action, never from the GET above --
+    acknowledging is the one deliberate step allowed to make the
+    added/departed/changed-section diff go quiet again for this course.
+    """
+    if not course_id:
+        return JSONResponse({"ok": False, "error": "course_id required."})
+    users, _section_map, err = _load_roster_users(course_id)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    current_ids = {str(u["id"]) for u in (users or []) if u.get("id") is not None}
+    sections = _enrollment_section_ids(users)
+    # Every current id needs an entry, even an empty one for a student with
+    # no section -- _enrollment_section_ids omits those, and an id missing
+    # from the baseline entirely would look newly added on the next diff.
+    current_sections = {uid: sections.get(uid, []) for uid in current_ids}
+    baseline = roster_context.build_roster_baseline(
+        current_sections, acknowledged_at=datetime.now().isoformat(timespec="seconds"))
+    config.set_roster_baseline(course_id, baseline)
+    return JSONResponse({"ok": True, "baseline": baseline})
+
+
+@router.post("/changes/migrate-section")
+def roster_changes_migrate_section(course_id: str = Form(...), user_id: str = Form(...)):
+    """One-click move of one student's stranded old-section data to their new section."""
+    if not course_id or not user_id:
+        return JSONResponse({"ok": False, "error": "course_id and user_id required."})
+    users, _section_map, err = _load_roster_users(course_id)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    current_ids = {str(u["id"]) for u in (users or []) if u.get("id") is not None}
+    current_sections = _enrollment_section_ids(users)
+    diff = roster_context.diff_roster_baseline(
+        config.get_roster_baseline(course_id), current_ids, current_sections)
+    result, error = roster_changes.migrate_student_section(
+        course_id, user_id, diff,
+        get_roster_score_matrix=config.get_roster_score_matrix,
+        set_roster_score_matrix=config.set_roster_score_matrix,
+        get_roster_relationships=config.get_roster_relationships,
+        set_roster_relationships=config.set_roster_relationships,
+        get_seating_course_state=config.get_seating_course_state,
+        set_seating_course_state=config.set_seating_course_state,
+        get_roster_baseline=config.get_roster_baseline,
+        set_roster_baseline=config.set_roster_baseline,
+    )
+    if error:
+        return JSONResponse({"ok": False, "error": error})
+    return JSONResponse({"ok": True, "migration": result})
 
 
 @router.post("/bulk")

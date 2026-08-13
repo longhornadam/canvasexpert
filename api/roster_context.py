@@ -297,3 +297,108 @@ def replace_section_relationships(value: object, section_id: object, items: obje
     else:
         by_section.pop(section_id, None)
     return {"by_section": by_section}, None
+
+
+# --------------------------------------------------------------------------
+# Roster-change baseline: what the teacher last acknowledged, diffed against
+# the live roster. Shared by the Roster web UI and the roster.warning Work
+# Registry provider so "new student", "student left", and "student changed
+# section" mean exactly the same thing in both places.
+# --------------------------------------------------------------------------
+
+ROSTER_BASELINE_FIELDS = {"acknowledged_at", "students"}
+
+
+def _empty_roster_baseline() -> dict:
+    return {"acknowledged_at": "", "students": {}}
+
+
+def normalize_roster_baseline(value: object) -> dict:
+    """Return the safe, complete shape for one course's roster-acknowledgment baseline.
+
+    ``acknowledged_at`` empty means the teacher has never acknowledged this
+    course's roster. Callers must treat that as "nothing to compare yet" --
+    see diff_roster_baseline -- rather than diffing against an empty student
+    map and reporting every current student as newly added.
+    """
+    if not isinstance(value, dict) or set(value) != ROSTER_BASELINE_FIELDS:
+        return _empty_roster_baseline()
+    acknowledged_at = value.get("acknowledged_at")
+    raw_students = value.get("students")
+    if not isinstance(acknowledged_at, str) or not isinstance(raw_students, dict):
+        return _empty_roster_baseline()
+    students: dict[str, list[str]] = {}
+    for student_id, section_ids in raw_students.items():
+        if not _safe_score_matrix_id(student_id) or not isinstance(section_ids, list):
+            continue
+        clean = sorted({sid for sid in section_ids if _safe_score_matrix_id(sid)})
+        students[student_id] = clean
+    return {"acknowledged_at": acknowledged_at, "students": students}
+
+
+def build_roster_baseline(current_sections: dict, *, acknowledged_at: str) -> dict:
+    """Snapshot the live roster into a fresh acknowledgment baseline.
+
+    ``current_sections`` must have one entry per student who should count as
+    "known" going forward, even one mapping to an empty list for a student
+    with no section -- a student left out entirely would look newly added
+    the moment this baseline is next diffed, even though nothing changed.
+    """
+    return normalize_roster_baseline({
+        "acknowledged_at": acknowledged_at,
+        "students": {
+            student_id: list(section_ids)
+            for student_id, section_ids in (current_sections or {}).items()
+        },
+    })
+
+
+def diff_roster_baseline(baseline: object, current_student_ids, current_sections: dict) -> dict:
+    """Compare a saved acknowledgment baseline against the live roster.
+
+    ``current_student_ids`` is every student id currently on the roster.
+    ``current_sections`` maps a subset of those ids to their current section
+    ids (a student with no section may be absent; missing means none).
+
+    Returns which student ids are new since the baseline, which have left,
+    and which stayed but moved section. A changed-section entry is a
+    ``clean_swap`` only when the student left exactly one section and landed
+    in exactly one other -- the only shape unambiguous enough to migrate
+    automatically. Anything messier (a section added or dropped without a
+    matching one-for-one move) is still reported so it is never missed, just
+    not auto-migrated.
+
+    Every list comes back empty when the course has no baseline yet -- a
+    course that has never been acknowledged has nothing to diff against, and
+    treating an empty baseline as "everyone is new" would flood a first-ever
+    open with noise instead of real information.
+    """
+    normalized = normalize_roster_baseline(baseline)
+    baseline_set = bool(normalized["acknowledged_at"])
+    if not baseline_set:
+        return {"baseline_set": False, "added": [], "departed": [], "changed_section": []}
+
+    baseline_students = normalized["students"]
+    baseline_ids = set(baseline_students)
+    current_ids = {student_id for student_id in current_student_ids if _safe_score_matrix_id(student_id)}
+
+    added = sorted(current_ids - baseline_ids)
+    departed = sorted(baseline_ids - current_ids)
+
+    changed = []
+    for student_id in sorted(baseline_ids & current_ids):
+        old_sections = set(baseline_students.get(student_id) or [])
+        new_sections = set(current_sections.get(student_id) or [])
+        if old_sections == new_sections:
+            continue
+        left = sorted(old_sections - new_sections)
+        arrived = sorted(new_sections - old_sections)
+        if not left and not arrived:
+            continue
+        changed.append({
+            "student_id": student_id,
+            "old_section_ids": left,
+            "new_section_ids": arrived,
+            "clean_swap": len(left) == 1 and len(arrived) == 1,
+        })
+    return {"baseline_set": True, "added": added, "departed": departed, "changed_section": changed}

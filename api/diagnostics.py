@@ -102,8 +102,40 @@ def _mcp_status() -> tuple[bool, bool]:
     return importable, entrypoint_present
 
 
+def _pseudonym_registry_status() -> dict:
+    """Words total/assigned/remaining and low_runway for this machine's
+    Identity Vault, so a teacher running low on the pseudonym registry finds
+    out here -- in the same place every other quiet health fact lives --
+    long before `PseudonymRegistryError` would actually stop a new student
+    from being pseudonymized. See `feedback_vault.registry_runway` for the
+    forecast itself; this just locates this machine's vault and never raises,
+    matching every other helper in this module.
+    """
+    try:
+        from api import feedback_vault
+    except Exception:
+        return {
+            "configured": False, "words_total": 0, "words_assigned": 0,
+            "words_remaining": 0, "low_runway": False,
+        }
+    try:
+        root = workspace.identity_vault_dir()
+    except Exception:
+        root = None
+    if not root:
+        return {"configured": False, **feedback_vault.registry_runway(0)}
+    try:
+        vault = feedback_vault.Vault(os.path.join(root, "vault.json"))
+        runway = vault.registry_runway()
+    except Exception:
+        return {"configured": False, **feedback_vault.registry_runway(0)}
+    return {"configured": True, **runway}
+
+
 def health_snapshot() -> dict:
-    """Return public booleans and version strings without revealing local state."""
+    """Return public booleans, version strings, and a few non-identifying
+    counts (the pseudonym registry's own runway) without revealing local
+    state."""
     workspace_configured, workspace_writable, catalog_present = _workspace_status()
     mcp_importable, entrypoint_present = _mcp_status()
     try:
@@ -132,6 +164,7 @@ def health_snapshot() -> dict:
             "importable": mcp_importable,
             "entrypoint_present": entrypoint_present,
         },
+        "pseudonym_registry": _pseudonym_registry_status(),
         "environment": {
             "proxy_configured": any(bool(os.environ.get(name)) for name in _PROXY_ENV_NAMES),
             "tunnel_client_present": tunnel_present,
