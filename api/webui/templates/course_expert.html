@@ -315,19 +315,19 @@
         </div>
         <label>AssignmentForge file</label>
         <div class="file-source">
-          <select id="af-file">
+          <select id="af-file" class="ce-initially-hidden">
             <option value="">— select —</option>
             {% for f in assignment_files %}
             <option value="{{ f.path }}">{{ f.label }}</option>
             {% endfor %}
           </select>
           <div class="file-source-row">
-            <button type="button" class="file-src-btn active" data-src="select">Library</button>
-            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="select">Library</button>
+            <button type="button" class="file-src-btn active" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
             <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt,.md">
           </div>
-          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…"></textarea>
+          <textarea class="file-src-paste" placeholder="Paste your &lt;ASSIGNMENTFORGE_JSON&gt;…"></textarea>
           <p class="file-src-hint ce-initially-hidden"></p>
         </div>
         <label class="ce-u-mt-3">RubricForge file
@@ -441,19 +441,19 @@
         </div>
         <label>PageForge file</label>
         <div class="file-source">
-          <select id="pf-file">
+          <select id="pf-file" class="ce-initially-hidden">
             <option value="">— select —</option>
             {% for f in page_files %}
             <option value="{{ f.path }}">{{ f.label }}</option>
             {% endfor %}
           </select>
           <div class="file-source-row">
-            <button type="button" class="file-src-btn active" data-src="select">Library</button>
-            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="select">Library</button>
+            <button type="button" class="file-src-btn active" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
             <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt,.md">
           </div>
-          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;PAGEFORGE_JSON&gt;…"></textarea>
+          <textarea class="file-src-paste" placeholder="Paste your &lt;PAGEFORGE_JSON&gt;…"></textarea>
           <p class="file-src-hint ce-initially-hidden"></p>
         </div>
         <div class="settings-grid ce-grid-two ce-u-mt-3">
@@ -500,16 +500,16 @@
         </div>
         <label>RubricForge file</label>
         <div class="file-source">
-          <select id="rf-file">
+          <select id="rf-file" class="ce-initially-hidden">
             <option value="">— select —</option>
           </select>
           <div class="file-source-row">
-            <button type="button" class="file-src-btn active" data-src="select">Library</button>
-            <button type="button" class="file-src-btn" data-src="paste">Paste JSON</button>
+            <button type="button" class="file-src-btn" data-src="select">Library</button>
+            <button type="button" class="file-src-btn active" data-src="paste">Paste JSON</button>
             <button type="button" class="file-src-btn" data-src="upload">Upload…</button>
             <input type="file" class="file-src-input ce-initially-hidden" accept=".json,.txt,.md">
           </div>
-          <textarea class="file-src-paste ce-initially-hidden" placeholder="Paste your &lt;RUBRICFORGE_JSON&gt;…"></textarea>
+          <textarea class="file-src-paste" placeholder="Paste your &lt;RUBRICFORGE_JSON&gt;…"></textarea>
           <p class="file-src-hint ce-initially-hidden"></p>
         </div>
         <div class="ce-actions">

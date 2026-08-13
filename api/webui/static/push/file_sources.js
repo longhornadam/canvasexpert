@@ -9,14 +9,20 @@
     var hintEl = wrapper.querySelector(".file-src-hint");
     var srcBtns = Array.from(wrapper.querySelectorAll(".file-src-btn"));
 
+    function setVisible(el, visible) {
+      if (!el) return;
+      el.classList.toggle("ce-initially-hidden", !visible);
+      el.style.display = visible ? "" : "none";
+    }
+
     function setMode(mode) {
       srcBtns.forEach(function (b) {
         b.classList.toggle("active", b.dataset.src === mode);
       });
-      if (sel) sel.style.display = mode === "select" ? "" : "none";
-      if (pasteEl) pasteEl.style.display = mode === "paste" ? "" : "none";
+      setVisible(sel, mode === "select");
+      setVisible(pasteEl, mode === "paste");
       if (mode !== "paste" && hintEl) {
-        hintEl.style.display = "none";
+        setVisible(hintEl, false);
         hintEl.textContent = "";
         hintEl.className = "file-src-hint";
       }
@@ -75,7 +81,7 @@
         var file = this.files[0];
         if (!file) return;
         if (hintEl) {
-          hintEl.style.display = "";
+          setVisible(hintEl, true);
           hintEl.className = "file-src-hint";
           hintEl.textContent = "Uploading...";
         }
@@ -84,13 +90,13 @@
           setTempOption(path, "Uploaded: " + file.name);
           setMode("select");
           if (hintEl) {
-            hintEl.style.display = "";
+            setVisible(hintEl, true);
             hintEl.className = "file-src-hint ok";
             hintEl.textContent = "Ready: " + file.name;
           }
         } else {
           if (hintEl) {
-            hintEl.style.display = "";
+            setVisible(hintEl, true);
             hintEl.className = "file-src-hint err";
             hintEl.textContent = "Upload failed.";
           }
@@ -112,12 +118,12 @@
         clearTimeout(timer);
         var val = pasteEl.value.trim();
         if (!val) {
-          if (hintEl) hintEl.style.display = "none";
+          setVisible(hintEl, false);
           return;
         }
         timer = setTimeout(async function () {
           if (hintEl) {
-            hintEl.style.display = "";
+            setVisible(hintEl, true);
             hintEl.className = "file-src-hint";
             hintEl.textContent = "Saving...";
           }
