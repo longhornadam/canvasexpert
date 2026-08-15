@@ -8,9 +8,7 @@ Free. Private. Open source. Uses your secure Canvas "Personal Access Token". Run
 
 Step 1 - Click the green **Code** button near the top of this page, then **Download ZIP** and unzip it.
 Step 2 - Put the unzipped folder anywhere in your own files.
-Step 3 - Double-click `Open Canvas Expert.bat`. The first run installs what it needs into your own user account, no admin needed, then opens the app in your browser.
-
-One prerequisite it cannot install for you: **Python 3.13 or newer**. If the window says Python is not installed, get it from [python.org](https://www.python.org/downloads/), tick **Install for me only** (still no admin), then double-click `Open Canvas Expert.bat` again. If it ever stops starting, double-click `Repair.bat`.
+Step 3 - Double-click `Open Canvas Expert.bat`. The first run installs Python and everything else it needs into your own user account, no admin needed, then opens the app in your browser. If Windows Package Manager is unavailable, install Python 3.13 or newer from [python.org](https://www.python.org/downloads/) with **Install for me only**, then run the launcher again. If it ever stops starting, double-click `Repair.bat`.
 
 ## What it does
 

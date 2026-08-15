@@ -209,7 +209,10 @@ def update_student(
             course_id, user_id, {"classroom_profile": classroom_profile}
         )
 
-    return {"ok": True}
+    result = {"ok": True}
+    if renaming:
+        result["pseudonym"] = pseudonym_rename.current_pseudonym(vault, user_id)
+    return result
 
 
 def update_bulk(

@@ -969,6 +969,21 @@ def test_roster_student_pseudonym_patch_boundary(monkeypatch, tmp_path, patch_va
         assert reloaded.get_or_assign("101") == first, "a rejected value must not mutate the vault"
 
 
+def test_roster_student_regeneration_returns_new_unused_pseudonym(monkeypatch, tmp_path):
+    vault, first, second = _real_vault_pair(monkeypatch, tmp_path)
+
+    resp = client.post("/api/roster/student", data={
+        "course_id": "1", "user_id": "101",
+        "patch": json.dumps({"regenerate_pseudonym": True}),
+    })
+
+    data = resp.json()
+    reloaded = Vault(str(tmp_path / "vault.json"))
+    assert data["ok"] is True
+    assert data["pseudonym"] == reloaded.get_or_assign("101")
+    assert data["pseudonym"] not in {first, second}
+
+
 def test_roster_student_saves_and_clears_seating_context(monkeypatch, isolated_roster):
     users = [{
         "id": 101,

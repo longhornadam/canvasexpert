@@ -2,14 +2,43 @@
 setlocal
 cd /d "%~dp0api"
 
-REM --- Python present? (the only prerequisite a bat can't install without admin) ---
+REM --- Find Python 3.13+ or install it for this user -----------------------------
+set "PY_CMD="
+set "PY_ARGS="
 where py >nul 2>&1
-if errorlevel 1 (
-  echo Python is not installed.
-  echo Install the per-user Python 3.13 or newer from https://www.python.org/downloads/
-  echo  ^(tick "Install for me only" - no admin needed^), then run this again.
-  pause & exit /b 1
+if not errorlevel 1 (
+  py -3.13 -c "import sys" >nul 2>&1
+  if not errorlevel 1 (
+    set "PY_CMD=py"
+    set "PY_ARGS=-3.13"
+  )
 )
+if not defined PY_CMD (
+  where python >nul 2>&1
+  if not errorlevel 1 (
+    python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 13) else 1)" >nul 2>&1
+    if not errorlevel 1 set "PY_CMD=python"
+  )
+)
+if not defined PY_CMD (
+  echo.
+  echo Python 3.13 or newer is needed for first-time setup.
+  echo Installing it for your Windows user account now. No admin rights are needed.
+  echo.
+  where winget >nul 2>&1 || goto :python_missing
+  winget install --id Python.Python.3.13 --source winget --scope user --silent --accept-source-agreements --accept-package-agreements || goto :python_install_failed
+  set "PATH=%LOCALAPPDATA%\Programs\Python\Python313;%LOCALAPPDATA%\Programs\Python\Python313\Scripts;%PATH%"
+  if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
+    set PY_CMD="%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+  ) else (
+    where py >nul 2>&1
+    if not errorlevel 1 (
+      set "PY_CMD=py"
+      set "PY_ARGS=-3.13"
+    )
+  )
+)
+if not defined PY_CMD goto :python_install_failed
 
 REM --- Where this app's dependencies live ----------------------------------------
 REM A private environment, not the shared per-user site-packages that
@@ -40,7 +69,7 @@ if not defined VENV_OK (
   echo It goes in your own user folder and needs no admin rights.
   echo.
   if not exist "%CE_DATA%" mkdir "%CE_DATA%"
-  py -m venv "%VENV_DIR%" || goto :setup_failed
+  %PY_CMD% %PY_ARGS% -m venv "%VENV_DIR%" || goto :setup_failed
   REM A new environment holds none of the dependencies, whatever the marker says.
   if exist "%MARKER%" del "%MARKER%"
 )
@@ -90,5 +119,18 @@ exit /b
 echo.
 echo Setup failed - check your internet connection and try again.
 echo If it keeps failing, double-click "Repair.bat" beside this file.
+pause
+exit /b 1
+
+:python_missing
+echo.
+echo Windows Package Manager (winget) is not available, so Python could not be installed automatically.
+echo Install Python 3.13 or newer from https://www.python.org/downloads/ and run this again.
+pause
+exit /b 1
+
+:python_install_failed
+echo.
+echo Python could not be installed automatically. Check your internet connection and try again.
 pause
 exit /b 1

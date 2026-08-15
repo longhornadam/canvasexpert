@@ -31,6 +31,12 @@ _EXCLUDED_SPECIES = {
     "jynx",
     "grimer", "muk", "trubbish", "garbodor", "stunky", "skuntank",
     "hypno",
+    "snorlax", "swinub", "piloswine", "phanpy", "donphan", "miltank",
+    "makuhita", "hariyama", "gulpin", "swalot", "wailmer", "wailord",
+    "purugly", "munchlax", "hippopotas", "hippowdon", "lickilicky", "mamoswine",
+    "tepig", "pignite", "emboar", "guzzlord", "greedent", "cufant", "copperajah",
+    "lechonk", "oinkologne", "cetoddle", "cetitan",
+    "slowpoke", "slowbro", "slowking", "numel", "magikarp", "wobbuffet",
 }
 
 

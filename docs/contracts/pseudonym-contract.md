@@ -30,8 +30,15 @@ dex order, minus the omissions below.
   child's work in front of that child. The excluded set is `Jynx` (its original design is
   a racial caricature), the trash, sludge, and stink species `Grimer`, `Muk`, `Trubbish`,
   `Garbodor`, `Stunky`, and `Skuntank`, and `Hypno` (its Pokedex lore is about carrying
-  off children). `api/tests/test_feedback_vault.py` pins this set so it cannot drift back
-  in; add to it rather than removing from it.
+  off children). It also excludes names that directly evoke body-shaming through size,
+  gluttony, sumo, or elephant/hippo/whale/pig imagery: `Snorlax`, `Swinub`, `Piloswine`,
+  `Phanpy`, `Donphan`, `Miltank`, `Makuhita`, `Hariyama`, `Gulpin`, `Swalot`, `Wailmer`,
+  `Wailord`, `Purugly`, `Munchlax`, `Hippopotas`, `Hippowdon`, `Lickilicky`, `Mamoswine`,
+  `Tepig`, `Pignite`, `Emboar`, `Guzzlord`, `Greedent`, `Cufant`, `Copperajah`, `Lechonk`,
+  `Oinkologne`, `Cetoddle`, and `Cetitan`. `api/tests/test_feedback_vault.py` pins this
+  set so it cannot drift back in; add to it rather than removing from it. Names that
+  directly imply poor intelligence or uselessness are also excluded: `Slowpoke`,
+  `Slowbro`, `Slowking`, `Numel`, `Magikarp`, and `Wobbuffet`.
 - The registry is an allowlist. Code must never fall back to a word outside it.
 - The retired `fake_first_names.txt` and `fake_last_names.txt` pools do not coexist with
   this registry.

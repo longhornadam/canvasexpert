@@ -65,7 +65,14 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.ok) {
-            updateLocalStudent(userId, key, value);
+            if (key === "regenerate_pseudonym" && data.pseudonym) {
+              updateLocalStudent(userId, "pseudonym", data.pseudonym);
+              var row = tableBody.querySelector('tr[data-id="' + userId + '"]');
+              var pseudonymInput = row && row.querySelector(".roster-v2-pseudo");
+              if (pseudonymInput) pseudonymInput.value = data.pseudonym;
+            } else {
+              updateLocalStudent(userId, key, value);
+            }
             roster.setRowStatus(userId, isCanvasGroup ? "synced to Canvas" : "saved locally", "roster-v2-status-ok");
           } else {
             var apiMsg = data.error || "Save failed.";
