@@ -19,9 +19,9 @@ fails closed rather than being migrated or dual-read.
 Pure stdlib; offline-testable.
 """
 import fnmatch
+import hashlib
 import json
 import os
-import random
 import re
 from contextlib import contextmanager
 from datetime import datetime
@@ -273,16 +273,28 @@ class Vault:
         excluded = exclude.lower()
         return {p.lower() for p in self._by_pseudo if p.lower() != excluded}
 
-    def _select_available_word(self, banned: set) -> str:
-        """One random registry word not in `banned`. Fails closed -- never
-        synthesizes a placeholder or numbered word on exhaustion."""
-        available = [w for w in _REGISTRY_WORDS if w.lower() not in banned]
-        if not available:
+    def _select_available_word(self, banned: set, stable_key: str = "") -> str:
+        """Select a registry word by deterministic hash-and-probe.
+
+        The starting position is derived from the stable Canvas user key and
+        collisions probe in registry order.  The vault, rather than a caller's
+        partial roster, supplies the banned set so every machine makes the
+        same decision from the same shared state.
+        """
+        if not _REGISTRY_WORDS:
             raise PseudonymRegistryError(
-                "The pseudonym registry is exhausted: every word is already "
-                "assigned or collides with a current roster name."
+                "The pseudonym registry is empty."
             )
-        return random.choice(available)
+        digest = hashlib.sha256(str(stable_key).encode("utf-8")).digest()
+        start = int.from_bytes(digest[:8], "big") % len(_REGISTRY_WORDS)
+        for offset in range(len(_REGISTRY_WORDS)):
+            word = _REGISTRY_WORDS[(start + offset) % len(_REGISTRY_WORDS)]
+            if word.lower() not in banned:
+                return word
+        raise PseudonymRegistryError(
+            "The pseudonym registry is exhausted: every word is already "
+            "assigned or collides with a current vault identity."
+        )
 
     @staticmethod
     def _roster_tokens(roster_names: set | None) -> set:
@@ -302,8 +314,14 @@ class Vault:
         cid = str(canvas_id)
         entry = self._by_id.get(cid)
         if entry is None:
-            banned = self._used_pseudonym_tokens() | self._roster_tokens(roster_names)
-            pseudonym = self._select_available_word(banned)
+            # `roster_names` remains accepted for source compatibility, but
+            # intentionally does not participate in assignment.  A caller
+            # may only have a partial roster; the shared vault is the one
+            # authoritative source for identity-token collisions.
+            banned = self._used_pseudonym_tokens() | self._vault_identity_tokens()
+            if real_name:
+                banned |= {token.lower() for token in str(real_name).split()}
+            pseudonym = self._select_available_word(banned, cid)
             entry = {
                 "pseudonym": pseudonym,
                 "real_name": real_name,
@@ -318,7 +336,42 @@ class Vault:
                 entry["real_name"] = real_name
             if sis_id and not entry.get("sis_id"):
                 entry["sis_id"] = sis_id
+            if not entry.get("pseudonym"):
+                banned = self._used_pseudonym_tokens() | self._vault_identity_tokens()
+                pseudonym = self._select_available_word(banned, cid)
+                entry["pseudonym"] = pseudonym
+                self._by_pseudo[pseudonym] = cid
         return entry["pseudonym"]
+
+    def _vault_identity_tokens(self) -> set:
+        """Case-folded name tokens already recorded in this vault."""
+        tokens: set = set()
+        for entry in self._by_id.values():
+            if not isinstance(entry, dict):
+                continue
+            for field in ("real_name", "sis_id"):
+                tokens.update(str(entry.get(field) or "").split())
+            for nickname in entry.get("nicknames", []) or []:
+                tokens.update(str(nickname).split())
+        return {token.lower() for token in tokens if token}
+
+    def remember_identity(self, canvas_id, real_name="", sis_id="") -> None:
+        """Record identity metadata before assignment without choosing a word."""
+        cid = str(canvas_id)
+        entry = self._by_id.get(cid)
+        if entry is None:
+            self._by_id[cid] = {
+                "pseudonym": "",
+                "real_name": str(real_name or ""),
+                "sis_id": str(sis_id or ""),
+                "nicknames": [],
+                "first_seen": datetime.now().isoformat(timespec="seconds"),
+            }
+            return
+        if real_name and not entry.get("real_name"):
+            entry["real_name"] = str(real_name)
+        if sis_id and not entry.get("sis_id"):
+            entry["sis_id"] = str(sis_id)
 
     def set_nicknames(self, canvas_id, nicknames: list[str]):
         """Set the nicknames for a student (dedup case-insensitively, strip, no empty strings).
@@ -410,7 +463,7 @@ class Vault:
         # Also ban the student's own current word so regenerate always hands
         # back something different.
         banned.add(old_pseudo.lower())
-        new_pseudonym = self._select_available_word(banned)
+        new_pseudonym = self._select_available_word(banned, f"{cid}:regenerate:{old_pseudo}")
         entry["pseudonym"] = new_pseudonym
         self._by_pseudo.pop(old_pseudo, None)
         self._by_pseudo[new_pseudonym] = cid

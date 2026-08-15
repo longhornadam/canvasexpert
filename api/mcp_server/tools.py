@@ -137,6 +137,38 @@ def _tabulate(rows: list[dict], columns: tuple[str, ...]) -> dict:
             "rows": [[row.get(col) for col in columns] for row in rows]}
 
 
+_STUDENT_RESULT_KEYS = {
+    "pseudonym", "roster", "submissions", "students", "student",
+    "assessment_context", "placements", "writing_history",
+    "seating_context", "extra_time", "monitored", "classroom_profile",
+}
+
+
+def _contains_student_result(value) -> bool:
+    if isinstance(value, dict):
+        if any(str(key).casefold() in _STUDENT_RESULT_KEYS for key in value):
+            return True
+        return any(_contains_student_result(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_student_result(item) for item in value)
+    return False
+
+
+def final_response_gate(payload: dict) -> dict:
+    """Structural last-mile gate used by every MCP server wrapper.
+
+    Student-data tools still gate their precise payloads before shaping them;
+    this second chokepoint catches a new or changed wrapper that forgets that
+    step. Public/course-only results pass through without requiring a vault.
+    """
+    if not _contains_student_result(payload):
+        return payload
+    vault, error = _open_vault()
+    if error:
+        return {"ok": False, "error": error}
+    return pseudonym.gate(payload, vault)
+
+
 def _truncate_text(text: str, max_chars: int) -> str:
     """Trim with an explicit marker so the client knows to re-request the
     full text (max_text_chars=0) instead of assuming it saw everything."""

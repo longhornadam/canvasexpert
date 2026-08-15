@@ -59,7 +59,9 @@ def run_stdio() -> None:
 
 def _compact(payload: dict) -> str:
     """Serialize ourselves: compact separators, no ASCII-escaping of student
-    text. A ``str`` return passes through FastMCP verbatim."""
+    text. The tools layer applies a final structural privacy gate before the
+    response is serialized. A ``str`` return passes through FastMCP verbatim."""
+    payload = tools.final_response_gate(payload)
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
 

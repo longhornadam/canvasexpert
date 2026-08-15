@@ -29,6 +29,17 @@ def fetch_sections(course_id: str, *, canvas_get_all=None) -> dict[str, str]:
 
 def upsert_roster(vault, users: list[dict]) -> None:
     """Mutation-only roster upsert; persistence belongs to the caller."""
+    remember_identity = getattr(vault, "remember_identity", None)
+    if remember_identity is not None:
+        # Populate the shared identity set first. Assignment then sees the
+        # complete vault-derived collision set, independent of API row order.
+        for user in users or []:
+            canvas_id = str(user.get("id", ""))
+            if not canvas_id:
+                continue
+            name = user.get("name") or user.get("sortable_name") or ""
+            remember_identity(canvas_id, name, str(user.get("sis_user_id") or ""))
+
     roster_tokens: set = set()
     for user in users or []:
         for source in (user.get("name"), user.get("sortable_name"), user.get("short_name")):

@@ -28,11 +28,13 @@ from __future__ import annotations
 import json
 import os
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from api.storage_support import atomic_write_json
 from api.platform_services import workspace
+from api import feedback_scrub
 
 
 MIRROR_VERSION = 1
@@ -228,6 +230,123 @@ def _require_dir(course_id, root):
     return directory
 
 
+def _identity_vault(root=None):
+    """Open the one vault paired with this workspace root."""
+    directory = workspace.identity_vault_dir(root)
+    if not directory:
+        raise ValueError("workspace not configured — no identity vault location")
+    from api.feedback_vault import Vault
+    return Vault(os.path.join(directory, "vault.json"))
+
+
+@contextmanager
+def _vault_transaction(root=None):
+    vault = _identity_vault(root)
+    with vault.transaction():
+        yield vault
+
+
+def _pseudonym_for(vault, canvas_id) -> str:
+    return vault.get_or_assign(str(canvas_id))
+
+
+def _real_id_for(vault, pseudonym: str) -> str:
+    entry = vault.reverse(str(pseudonym))
+    return str(entry.get("canvas_id")) if entry else str(pseudonym)
+
+
+def _rehydrate_student(vault, pseudonym: str, stored: dict) -> dict:
+    identity = vault.reverse(str(pseudonym)) or {}
+    real_name = str(identity.get("real_name") or "")
+    nicknames = []
+    for entry in vault.entries():
+        if str(entry.get("canvas_id")) == str(identity.get("canvas_id")):
+            nicknames = list(entry.get("nicknames") or [])
+            break
+    sortable_name = real_name
+    if "," not in real_name and len(real_name.split()) >= 2:
+        parts = real_name.split()
+        sortable_name = f"{parts[-1]}, {' '.join(parts[:-1])}"
+    return {
+        "id": str(identity.get("canvas_id") or pseudonym),
+        "name": real_name,
+        "sortable_name": sortable_name,
+        "short_name": nicknames[0] if nicknames else real_name,
+        "sis_user_id": str(identity.get("sis_id") or ""),
+        "enrollments": [dict(item) for item in stored.get("enrollments") or []],
+    }
+
+
+def _rehydrate_roster(document: dict | None, root=None) -> dict | None:
+    if document is None:
+        return None
+    try:
+        vault = _identity_vault(root)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return document
+    result = dict(document)
+    result["students"] = {
+        _real_id_for(vault, pseudonym): _rehydrate_student(vault, pseudonym, stored)
+        for pseudonym, stored in document.get("students", {}).items()
+    }
+    return result
+
+
+def _rehydrate_groups(document: dict | None, root=None) -> dict | None:
+    if document is None:
+        return None
+    try:
+        vault = _identity_vault(root)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return document
+    result = dict(document)
+    categories = []
+    for category in document.get("categories", []):
+        updated = dict(category)
+        groups = []
+        for group in category.get("groups", []):
+            updated_group = dict(group)
+            memberships = []
+            for membership in group.get("memberships", []):
+                updated_membership = dict(membership)
+                updated_membership["user_id"] = _real_id_for(
+                    vault, membership.get("user_id", "")
+                )
+                memberships.append(updated_membership)
+            updated_group["memberships"] = memberships
+            groups.append(updated_group)
+        updated["groups"] = groups
+        categories.append(updated)
+    result["categories"] = categories
+    return result
+
+
+def _rehydrate_submissions(document: dict | None, root=None) -> dict | None:
+    if document is None:
+        return None
+    try:
+        vault = _identity_vault(root)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return document
+    result = dict(document)
+    submissions = {}
+    for pseudonym, entry in document.get("submissions", {}).items():
+        updated = {"current": dict(entry["current"]),
+                   "attempts": dict(entry["attempts"])}
+        updated["current"]["user_id"] = _real_id_for(vault, pseudonym)
+        comments = []
+        for comment in updated["current"].get("submission_comments") or []:
+            restored = dict(comment)
+            if restored.get("author_id"):
+                restored["author_id"] = _real_id_for(vault, restored["author_id"])
+            comments.append(restored)
+        if "submission_comments" in updated["current"]:
+            updated["current"]["submission_comments"] = comments
+        submissions[_real_id_for(vault, pseudonym)] = updated
+    result["submissions"] = submissions
+    return result
+
+
 # --- validation ---------------------------------------------------------------
 
 def _require_exact_keys(value, keys: set[str], label: str) -> None:
@@ -268,6 +387,17 @@ def validate_roster(document: dict, course_id) -> dict:
     _validate_common(document, _ROSTER_KEYS, course_id, "roster")
     if not isinstance(document.get("students"), dict) or not isinstance(document.get("sections"), dict):
         raise ValueError("roster collections are invalid")
+    for pseudonym, student in document["students"].items():
+        if (not isinstance(pseudonym, str) or not pseudonym.strip()
+                or not isinstance(student, dict)
+                or set(student) != {"enrollments"}
+                or not isinstance(student["enrollments"], list)):
+            raise ValueError("roster students must be pseudonym-keyed")
+        for enrollment in student["enrollments"]:
+            if (not isinstance(enrollment, dict)
+                    or set(enrollment) != {"course_section_id"}
+                    or not isinstance(enrollment["course_section_id"], str)):
+                raise ValueError("roster enrollment is invalid")
     return document
 
 
@@ -332,9 +462,13 @@ def validate_submissions(document: dict, course_id, assignment_id) -> dict:
     if not isinstance(entries, dict):
         raise ValueError("submissions collection is invalid")
     for user_id, entry in entries.items():
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValueError(f"submission {user_id} pseudonym is invalid")
         _require_exact_keys(entry, _SUBMISSION_ENTRY_KEYS, f"submission {user_id}")
         if not isinstance(entry["current"], dict) or not isinstance(entry["attempts"], dict):
             raise ValueError(f"submission {user_id} shape is invalid")
+        if entry["current"].get("user_id") != user_id:
+            raise ValueError(f"submission {user_id} identity is invalid")
     return document
 
 
@@ -507,7 +641,7 @@ def normalize_student(user: dict) -> dict | None:
     }
 
 
-def normalize_group_categories(categories: list[dict]) -> list[dict]:
+def normalize_group_categories(categories: list[dict], vault=None) -> list[dict]:
     """Copy only the private group fields Roster needs from its live loader.
 
     Group membership is FERPA-protected, so this deliberately rejects a
@@ -550,7 +684,9 @@ def normalize_group_categories(categories: list[dict]) -> list[dict]:
                     raise ValueError("live group membership is duplicated")
                 membership_ids.add(membership_id)
                 user_ids.add(user_id)
-                memberships.append({"id": membership_id, "user_id": user_id})
+                stored_user_id = (_pseudonym_for(vault, user_id)
+                                  if vault is not None else user_id)
+                memberships.append({"id": membership_id, "user_id": stored_user_id})
             normalized_groups.append({
                 "id": group_id, "name": group["name"], "memberships": memberships,
             })
@@ -580,7 +716,7 @@ def normalize_assignment(row: dict) -> dict | None:
     }
 
 
-def _attempt_record(entry: dict) -> dict | None:
+def _attempt_record(entry: dict, replacement_map=None) -> dict | None:
     attempt = entry.get("attempt")
     submitted_at = entry.get("submitted_at")
     if not attempt or not submitted_at:
@@ -589,7 +725,9 @@ def _attempt_record(entry: dict) -> dict | None:
         "attempt": int(attempt),
         "submitted_at": str(submitted_at),
         "submission_type": str(entry.get("submission_type") or ""),
-        "body": entry.get("body") if isinstance(entry.get("body"), str) else "",
+        "body": (feedback_scrub.scrub_text(entry.get("body"), replacement_map)
+                 if replacement_map is not None and isinstance(entry.get("body"), str)
+                 else entry.get("body") if isinstance(entry.get("body"), str) else ""),
         "attachment_names": [
             str(a.get("filename") or a.get("display_name") or "")
             for a in (entry.get("attachments") or [])
@@ -598,22 +736,25 @@ def _attempt_record(entry: dict) -> dict | None:
     }
 
 
-def _comment_record(entry: dict) -> dict:
+def _comment_record(entry: dict, replacement_map=None, vault=None) -> dict:
     # author_role uses the same fallback chain as the work-registry
     # classifier (home_attention.author_role) so staff-authored comments
     # stay provably staff when served from the mirror. Role label only —
     # still no names, avatars, or attachments.
     author = entry.get("author") if isinstance(entry.get("author"), dict) else {}
     return {
-        "author_id": str(entry.get("author_id") or ""),
+        "author_id": (_pseudonym_for(vault, entry.get("author_id"))
+                      if vault is not None and entry.get("author_id") not in (None, "")
+                      else ""),
         "author_role": str(entry.get("author_role") or entry.get("author_type")
                            or author.get("role") or author.get("type") or ""),
-        "comment": str(entry.get("comment") or ""),
+        "comment": (feedback_scrub.scrub_text(str(entry.get("comment") or ""), replacement_map)
+                    if replacement_map is not None else str(entry.get("comment") or "")),
         "created_at": str(entry.get("created_at") or ""),
     }
 
 
-def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
+def normalize_submission(row: dict, vault=None) -> tuple[str, dict, dict] | None:
     """Map one Canvas submission row to ``(user_id, current, attempts)``.
 
     ``current`` keeps Canvas field names so mirror-backed queries can hand
@@ -624,9 +765,13 @@ def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
     """
     if not isinstance(row, dict) or row.get("user_id") in (None, ""):
         return None
+    raw_user_id = str(row["user_id"])
+    pseudonym = (_pseudonym_for(vault, raw_user_id) if vault is not None else raw_user_id)
+    replacement_map = (feedback_scrub.build_replacement_map(vault.entries(), set())
+                       if vault is not None else None)
     current = {
         "assignment_id": str(row.get("assignment_id") or ""),
-        "user_id": str(row["user_id"]),
+        "user_id": pseudonym,
         "workflow_state": str(row.get("workflow_state") or ""),
         "submitted_at": row.get("submitted_at"),
         "graded_at": row.get("graded_at"),
@@ -644,10 +789,12 @@ def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
         "attempt": row.get("attempt"),
         "grade_matches_current_submission": row.get("grade_matches_current_submission"),
         "submission_type": str(row.get("submission_type") or ""),
-        "body": row.get("body") if isinstance(row.get("body"), str) else "",
+        "body": (feedback_scrub.scrub_text(row.get("body"), replacement_map)
+                 if replacement_map is not None and isinstance(row.get("body"), str)
+                 else row.get("body") if isinstance(row.get("body"), str) else ""),
         "url": row.get("url") if isinstance(row.get("url"), str) else "",
         "submission_comments": [
-            _comment_record(entry) for entry in (row.get("submission_comments") or [])
+            _comment_record(entry, replacement_map, vault) for entry in (row.get("submission_comments") or [])
             if isinstance(entry, dict)
         ],
     }
@@ -655,7 +802,8 @@ def normalize_submission(row: dict) -> tuple[str, dict, dict] | None:
     # The row itself first, then history — a history entry for the same
     # attempt is richer (attachments, exact body) and must win.
     for entry in [row] + list(row.get("submission_history") or []):
-        record = _attempt_record(entry) if isinstance(entry, dict) else None
+        record = (_attempt_record(entry, replacement_map)
+                  if isinstance(entry, dict) else None)
         if record is not None:
             attempts[str(record["attempt"])] = record
     return current["user_id"], current, attempts
@@ -673,35 +821,37 @@ def write_roster(course_id, users: list[dict], sections: dict, *,
                  state: str = "current") -> dict:
     _require_dir(course_id, root)
     attempted_at = attempted_at or now_iso()
-    students = {}
-    for user in users or []:
-        normalized = normalize_student(user)
-        if normalized is None:
-            continue
-        existing = students.get(normalized["id"])
-        if existing is None:
-            students[normalized["id"]] = normalized
-            continue
-        # Canvas can list one user once per enrollment rather than once with
-        # every enrollment attached. Union the sections instead of letting the
-        # last row win: a student mid-transfer is enrolled in the new section
-        # before the old one is dropped, and last-wins would drop them out of
-        # the section they are still sitting in.
-        seen = {item["course_section_id"] for item in existing["enrollments"]}
-        for enrollment in normalized["enrollments"]:
-            if enrollment["course_section_id"] not in seen:
-                seen.add(enrollment["course_section_id"])
-                existing["enrollments"].append(enrollment)
-    document = {
-        "schema_version": MIRROR_VERSION,
-        "course_id": str(course_id),
-        **_envelope(state, attempted_at),
-        "students": students,
-        "sections": {str(k): str(v) for k, v in (sections or {}).items()},
-    }
-    with course_lock(course_id):
-        return _write_document(roster_path(course_id, root),
-                               validate_roster(document, course_id))
+    with _vault_transaction(root) as vault:
+        from api import roster_service
+        roster_service.upsert_roster(vault, users)
+        students = {}
+        for user in users or []:
+            normalized = normalize_student(user)
+            if normalized is None:
+                continue
+            pseudonym = _pseudonym_for(vault, normalized["id"])
+            stored = {"enrollments": normalized["enrollments"]}
+            existing = students.get(pseudonym)
+            if existing is None:
+                students[pseudonym] = stored
+                continue
+            # Canvas can list one user once per enrollment rather than once
+            # with every enrollment attached; union the section memberships.
+            seen = {item["course_section_id"] for item in existing["enrollments"]}
+            for enrollment in stored["enrollments"]:
+                if enrollment["course_section_id"] not in seen:
+                    seen.add(enrollment["course_section_id"])
+                    existing["enrollments"].append(enrollment)
+        document = {
+            "schema_version": MIRROR_VERSION,
+            "course_id": str(course_id),
+            **_envelope(state, attempted_at),
+            "students": students,
+            "sections": {str(k): str(v) for k, v in (sections or {}).items()},
+        }
+        with course_lock(course_id):
+            return _write_document(roster_path(course_id, root),
+                                   validate_roster(document, course_id))
 
 
 def write_groups(course_id, categories: list[dict], *, root=None,
@@ -711,14 +861,15 @@ def write_groups(course_id, categories: list[dict], *, root=None,
     if state not in PASS_STATES:
         raise ValueError("groups state is invalid")
     attempted_at = attempted_at or now_iso()
-    document = {
-        "schema_version": MIRROR_VERSION,
-        "course_id": str(course_id),
-        **_envelope(state, attempted_at),
-        "categories": normalize_group_categories(categories),
-    }
-    with course_lock(course_id):
-        return _write_document(groups_path(course_id, root), validate_groups(document, course_id))
+    with _vault_transaction(root) as vault:
+        document = {
+            "schema_version": MIRROR_VERSION,
+            "course_id": str(course_id),
+            **_envelope(state, attempted_at),
+            "categories": normalize_group_categories(categories, vault),
+        }
+        with course_lock(course_id):
+            return _write_document(groups_path(course_id, root), validate_groups(document, course_id))
 
 
 def build_assignments_document(course_id, rows: list[dict], *, attempted_at: str,
@@ -768,39 +919,43 @@ def merge_submissions(course_id, assignment_id, rows: list[dict], *,
     """
     _require_dir(course_id, root)
     attempted_at = attempted_at or now_iso()
-    with course_lock(course_id):
-        existing = read_submissions(course_id, assignment_id, root=root)
-        existing_entries = (existing or {}).get("submissions") or {}
-        entries: dict[str, dict] = {} if replace else {
-            user_id: {"current": dict(entry["current"]),
-                      "attempts": dict(entry["attempts"])}
-            for user_id, entry in existing_entries.items()
-        }
-        for row in rows or []:
-            normalized = normalize_submission(row)
-            if normalized is None:
-                continue
-            user_id, current, attempts = normalized
-            previous = entries.get(user_id) or existing_entries.get(user_id) or {}
-            merged_attempts = dict(previous.get("attempts") or {})
-            merged_attempts.update(attempts)
-            # A row fetched without submission_comments (delta; or a full
-            # pass that omitted the include) must not erase comments a prior
-            # pass already stored — carry them forward when this row is bare.
-            if not current.get("submission_comments"):
-                previous_current = previous.get("current") or {}
-                if previous_current.get("submission_comments"):
-                    current["submission_comments"] = previous_current["submission_comments"]
-            entries[user_id] = {"current": current, "attempts": merged_attempts}
-        document = {
-            "schema_version": MIRROR_VERSION,
-            "course_id": str(course_id),
-            "assignment_id": str(assignment_id),
-            **_envelope(state, attempted_at),
-            "submissions": entries,
-        }
-        return _write_document(submission_path(course_id, assignment_id, root),
-                               validate_submissions(document, course_id, assignment_id))
+    with _vault_transaction(root) as vault:
+        with course_lock(course_id):
+            existing = _read_document(
+                submission_path(course_id, assignment_id, root),
+                lambda d: validate_submissions(d, course_id, assignment_id),
+            )
+            existing_entries = (existing or {}).get("submissions") or {}
+            entries: dict[str, dict] = {} if replace else {
+                user_id: {"current": dict(entry["current"]),
+                          "attempts": dict(entry["attempts"])}
+                for user_id, entry in existing_entries.items()
+            }
+            for row in rows or []:
+                normalized = normalize_submission(row, vault)
+                if normalized is None:
+                    continue
+                user_id, current, attempts = normalized
+                previous = entries.get(user_id) or existing_entries.get(user_id) or {}
+                merged_attempts = dict(previous.get("attempts") or {})
+                merged_attempts.update(attempts)
+                # A row fetched without submission_comments (delta; or a full
+                # pass that omitted the include) must not erase comments a prior
+                # pass already stored — carry them forward when this row is bare.
+                if not current.get("submission_comments"):
+                    previous_current = previous.get("current") or {}
+                    if previous_current.get("submission_comments"):
+                        current["submission_comments"] = previous_current["submission_comments"]
+                entries[user_id] = {"current": current, "attempts": merged_attempts}
+            document = {
+                "schema_version": MIRROR_VERSION,
+                "course_id": str(course_id),
+                "assignment_id": str(assignment_id),
+                **_envelope(state, attempted_at),
+                "submissions": entries,
+            }
+            return _write_document(submission_path(course_id, assignment_id, root),
+                                   validate_submissions(document, course_id, assignment_id))
 
 
 def prune_submission_files(course_id, keep_assignment_ids, *, root=None) -> list[str]:
@@ -826,13 +981,15 @@ def prune_submission_files(course_id, keep_assignment_ids, *, root=None) -> list
 # --- collection readers -----------------------------------------------------------
 
 def read_roster(course_id, *, root=None) -> dict | None:
-    return _read_document(roster_path(course_id, root),
-                          lambda d: validate_roster(d, course_id))
+    document = _read_document(roster_path(course_id, root),
+                              lambda d: validate_roster(d, course_id))
+    return _rehydrate_roster(document, root)
 
 
 def read_groups(course_id, *, root=None) -> dict | None:
-    return _read_document(groups_path(course_id, root),
-                          lambda d: validate_groups(d, course_id))
+    document = _read_document(groups_path(course_id, root),
+                              lambda d: validate_groups(d, course_id))
+    return _rehydrate_groups(document, root)
 
 
 def groups_are_current(document: dict | None, *, max_age_hours: float) -> bool:
@@ -868,7 +1025,8 @@ def invalidate_groups(course_id, *, root=None, attempted_at: str | None = None) 
     _require_dir(course_id, root)
     attempted_at = attempted_at or now_iso()
     with course_lock(course_id):
-        document = read_groups(course_id, root=root)
+        document = _read_document(groups_path(course_id, root),
+                                  lambda d: validate_groups(d, course_id))
         if document is None:
             return None
         document["state"] = "stale"
@@ -908,11 +1066,12 @@ def merge_group_category(course_id, category: dict, *, root=None,
         previous = next((c for c in existing if c.get("category_id") == category_id), None)
         category_name = (category.get("category_name")
                          or (previous or {}).get("category_name") or "")
-        normalized = normalize_group_categories([{
-            "category_id": category_id,
-            "category_name": category_name,
-            "groups": category.get("groups") or [],
-        }])[0]
+        with _vault_transaction(root) as vault:
+            normalized = normalize_group_categories([{
+                "category_id": category_id,
+                "category_name": category_name,
+                "groups": category.get("groups") or [],
+            }], vault)[0]
         merged = []
         replaced = False
         for existing_category in existing:
@@ -929,8 +1088,9 @@ def merge_group_category(course_id, category: dict, *, root=None,
             **_envelope("current", attempted_at),
             "categories": merged,
         }
-        return _write_document(groups_path(course_id, root),
-                               validate_groups(updated_document, course_id))
+        written = _write_document(groups_path(course_id, root),
+                                  validate_groups(updated_document, course_id))
+        return _rehydrate_groups(written, root)
 
 
 def mark_groups_stale(course_id, *, root=None, attempted_at: str | None = None) -> dict | None:
@@ -938,7 +1098,8 @@ def mark_groups_stale(course_id, *, root=None, attempted_at: str | None = None) 
     _require_dir(course_id, root)
     attempted_at = attempted_at or now_iso()
     with course_lock(course_id):
-        document = read_groups(course_id, root=root)
+        document = _read_document(groups_path(course_id, root),
+                                  lambda d: validate_groups(d, course_id))
         if document is None:
             return None
         document["state"] = "stale"
@@ -953,8 +1114,9 @@ def read_assignments(course_id, *, root=None) -> dict | None:
 
 
 def read_submissions(course_id, assignment_id, *, root=None) -> dict | None:
-    return _read_document(submission_path(course_id, assignment_id, root),
-                          lambda d: validate_submissions(d, course_id, assignment_id))
+    document = _read_document(submission_path(course_id, assignment_id, root),
+                              lambda d: validate_submissions(d, course_id, assignment_id))
+    return _rehydrate_submissions(document, root)
 
 
 def list_submission_assignment_ids(course_id, *, root=None) -> list[str]:
