@@ -15,6 +15,8 @@ Routes: GET  /calendar
         POST /api/calendar/change/apply
         POST /api/calendar/event/preview
         POST /api/calendar/event/apply
+        POST /api/calendar/bell-schedule/preview
+        POST /api/calendar/bell-schedule/apply
         POST /api/calendar/open-folder
 
 There is no direct-write create route: initial creation and complete-year
@@ -31,7 +33,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from api.platform_services import config, workspace
-from .. import calendar_csv, deps, school_calendar, schedule_setup
+from .. import bell_schedule, calendar_csv, deps, school_calendar, schedule_setup
 from ..deps import API_DIR, templates
 from .pages import _open_in_os
 
@@ -186,6 +188,30 @@ def apply_calendar_year(expected_revision: int = Form(...), preview: str = Form(
         "coverage": doc["coverage"],
         "day_count": len(doc["days"]),
     })
+
+
+@router.post("/api/calendar/bell-schedule/preview")
+def preview_bell_schedule(schedule_id: str = Form(...), content: str = Form(...)):
+    """Stage creating or replacing one Bell Schedule CSV. Never writes."""
+    preview, problems = bell_schedule.preview_bell_schedule(
+        schedule_id=schedule_id, content=content)
+    if problems or preview is None:
+        return JSONResponse({"ok": False, "problems": problems})
+    return JSONResponse({"ok": True, **preview})
+
+
+@router.post("/api/calendar/bell-schedule/apply")
+def apply_bell_schedule(expected_digest: str = Form(...), preview: str = Form(...)):
+    try:
+        preview_payload = json.loads(preview)
+    except json.JSONDecodeError as exc:
+        return JSONResponse({"ok": False, "problems": [f"bad request: {exc}"]})
+
+    result, problems = bell_schedule.apply_bell_schedule(
+        preview_payload, expected_digest=expected_digest)
+    if problems or result is None:
+        return JSONResponse({"ok": False, "problems": problems})
+    return JSONResponse({"ok": True, **result})
 
 
 @router.post("/api/calendar/import")

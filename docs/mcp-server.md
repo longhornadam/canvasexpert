@@ -32,7 +32,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 30 (47 tools).
+Tool schema version 31 (49 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -62,6 +62,8 @@ Tool schema version 30 (47 tools).
 | `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
 | `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
 | `get_bell_schedule(schedule_id="")` | Bell schedule CSV(s) from the workspace | No |
+| `preview_bell_schedule(schedule_id, content)` | Previews creating or replacing one Bell Schedule CSV, with base digest and before/after meeting projections | No |
+| `apply_bell_schedule(preview, expected_digest)` | Applies the exact reviewed Bell Schedule preview; refuses stale files or altered projections | No |
 | `get_day_schedule(date)` | Resolved schedule blocks for one date | No |
 | `get_teacher_schedule()` | The teacher's own block-name mapping | No |
 | `save_teacher_schedule(blocks)` | Replaces the teacher's schedule blocks live | No |

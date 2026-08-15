@@ -47,7 +47,7 @@ from api.mirror import queries as mirror_queries
 from api.mirror import read_service
 from api.mirror import store as mirror_store
 from api.platform_services import config, workspace
-from api.webui import mirror_service, schedule_setup, school_calendar
+from api.webui import bell_schedule, mirror_service, schedule_setup, school_calendar
 from api.webui.deps import REPO_ROOT
 from api.webui import deps
 from api import feedback_safety, feedback_vault
@@ -2372,6 +2372,24 @@ def get_bell_schedule(schedule_id: str = "") -> dict:
         "meetings": bell_schedules[schedule_id],
         "problems": problems,
     }
+
+
+def preview_bell_schedule(schedule_id: str, content: str) -> dict:
+    """Preview replacing or creating one Bell Schedule CSV. Never writes."""
+    preview, problems = bell_schedule.preview_bell_schedule(
+        schedule_id=schedule_id, content=content)
+    if preview is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, **preview}
+
+
+def apply_bell_schedule(preview: dict, expected_digest: str) -> dict:
+    """Apply an exact Bell Schedule preview after teacher confirmation."""
+    result, problems = bell_schedule.apply_bell_schedule(
+        preview, expected_digest=expected_digest)
+    if result is None:
+        return {"ok": False, "problems": problems}
+    return {"ok": True, **result}
 
 
 def get_day_schedule(date: str) -> dict:

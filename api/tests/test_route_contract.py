@@ -47,6 +47,8 @@ EXPECTED = [
     ('/api/calendar/import/template', ('GET',)),
     ('/api/calendar/change/preview', ('POST',)),
     ('/api/calendar/change/apply', ('POST',)),
+    ('/api/calendar/bell-schedule/preview', ('POST',)),
+    ('/api/calendar/bell-schedule/apply', ('POST',)),
     ('/api/calendar/event/preview', ('POST',)),
     ('/api/calendar/event/apply', ('POST',)),
     ('/api/calendar/open-folder', ('POST',)),

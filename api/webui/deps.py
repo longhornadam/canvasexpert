@@ -39,10 +39,12 @@ def _calendar_label(filename: str) -> str:
     return stem.replace("_", " ").replace("-", " ").strip()
 
 
-def _calendars_dir():
+def _calendars_dir(root=None):
     """Resolve Calendars folder in the workspace Library."""
     from api.platform_services import workspace as _ws
-    return _ws.library_folder("Calendars")
+    if root is None:
+        return _ws.library_folder("Calendars")
+    return _ws.library_folder("Calendars", root)
 
 
 def _file_key(filename: str) -> str:
@@ -107,10 +109,10 @@ def _bell_schedule_conflict_problems(cal_dir: str) -> list[str]:
     ]
 
 
-def list_bell_schedule_files():
+def list_bell_schedule_files(root=None):
     """[{name, label, schedule_id, path}] for every 'Bell Schedule*'-prefixed
     CSV in the workspace Calendars folder, excluding recognized sync copies."""
-    cal_dir = _calendars_dir()
+    cal_dir = _calendars_dir(root)
     if not cal_dir or not os.path.isdir(cal_dir):
         return []
 
@@ -134,7 +136,7 @@ def list_bell_schedule_files():
     return found
 
 
-def load_bell_schedules() -> tuple:
+def load_bell_schedules(root=None) -> tuple:
     """Load all bell schedules from workspace Calendars folder.
 
     Returns ({schedule_id: meetings_list}, problems_list):
@@ -146,11 +148,11 @@ def load_bell_schedules() -> tuple:
 
     schedules = {}
     all_problems = []
-    cal_dir = _calendars_dir()
+    cal_dir = _calendars_dir(root)
     if cal_dir and os.path.isdir(cal_dir):
         all_problems.extend(_bell_schedule_conflict_problems(cal_dir))
 
-    for file_info in list_bell_schedule_files():
+    for file_info in list_bell_schedule_files(root):
         path = file_info["path"]
         schedule_id = file_info["schedule_id"]
 

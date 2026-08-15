@@ -345,6 +345,21 @@ def get_bell_schedule(schedule_id: str = "") -> str:
 
 
 @mcp.tool()
+def preview_bell_schedule(schedule_id: str, content: str) -> str:
+    """Preview creating or replacing one Bell Schedule CSV. Never writes;
+    summarize the before/after meeting projection and get teacher confirmation
+    before calling apply_bell_schedule with its base_digest."""
+    return _compact(tools.preview_bell_schedule(schedule_id, content))
+
+
+@mcp.tool()
+def apply_bell_schedule(preview: dict, expected_digest: str) -> str:
+    """Apply an exact preview from preview_bell_schedule. Stale files,
+    altered projections, and altered preview digests are refused."""
+    return _compact(tools.apply_bell_schedule(preview, expected_digest))
+
+
+@mcp.tool()
 def get_day_schedule(date: str) -> str:
     """Teacher blocks resolved for a specific date, plus the Calendar's own
     resolution state (unconfigured, invalid_calendar, outside_coverage,
