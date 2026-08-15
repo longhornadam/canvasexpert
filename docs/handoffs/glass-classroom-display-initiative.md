@@ -372,7 +372,7 @@ Selected by a senior, with independent acceptance criteria, only when a slice is
 
 **Traffic light:** GREEN
 
-**Commit:** pending final commit
+**Commit:** `7c983b4` (implementation); closure report in the follow-up commit.
 
 **Changed files:** `api/webui/glass_board.py`, `api/webui/routes/glass.py`, `api/webui/templates/glass.html`, `api/webui/static/pages/glass.js`, `api/webui/static/pages/glass.css`, `api/webui/glass.py`, `api/webui/server.py`, `api/webui/README.md`, `api/tests/webui/test_glass_board.py`, `api/tests/webui/routes/test_glass.py`, `api/tests/test_route_contract.py`, and this execution report.
 
