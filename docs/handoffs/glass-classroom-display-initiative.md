@@ -1,11 +1,11 @@
 # Glass — classroom display initiative
 
-**Status:** Senior brief, locked for execution. Supersedes Panels.
+**Status:** Closed GREEN — Slice 1 accepted. Supersedes Panels.
 
 **Opened:** 2026-08-15
 
-**Current next pointer:** Slice 1 (resolver + clock) in section 8. Nothing beyond Slice 1 is
-authorized until Slice 1 closes GREEN.
+**Current next pointer:** Slice 2 (board mode) in section 8 is next. It is not authorized by this
+retired Slice 1 brief.
 
 ## 1. Authority and disposition
 
@@ -353,3 +353,17 @@ Selected by a senior, with independent acceptance criteria, only when a slice is
 - Rendered verification per `api/webui/README.md` before any slice with UI closes.
 - `api/tests/dataforge/test_data_never_committed.py` must continue to pass; no workspace data
   enters the repository.
+
+## 13. Execution result
+
+**Traffic light:** GREEN
+
+**Commit:** pending final amend
+
+**Changed files:** `api/webui/glass.py`, `api/tests/webui/test_glass.py`, and this execution report.
+
+**Verification:** `py -m pytest api/tests/webui/test_glass.py api/tests/webui/test_day_schedule.py api/tests/webui/test_school_calendar.py -p no:randomly` — 99 passed. `py -m pytest api/tests/webui -p no:randomly` — 389 passed. `py -m compileall -q api/webui/glass.py api/tests/webui/test_glass.py` — passed. `git diff --check` — passed.
+
+**Deviations:** No UI, route, Canvas client, Panel, or schedule-seed changes. The supplied Bell Schedules PDF was inspected because the seed CSVs do not currently contain explicit `lunch` rows; Glass handles explicit lunch intervals, including intervals overlapping a claimed run, without guessing or rewriting those sources.
+
+**Unresolved decisions:** Slice 2 board regions, the lunch authoring surface, and the remaining open decisions in section 11 remain deferred.
