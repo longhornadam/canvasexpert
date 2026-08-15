@@ -57,6 +57,8 @@ Source tests never substitute for rendered verification.
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
 | `/calendar` | **Calendar** — school dates, Bell Schedules, Teacher Schedule (see `docs/reference/panels-route-card.md`) | `pages/calendar.js` |
+| `/glass` | **Glass** — full-screen school-facing classroom board from the local School Calendar | `pages/glass.js` |
+| `/glass/data` | Glass's read-only calendar projection. Disk-only; never calls Canvas | route-driven |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
 | `/assessments` | **Assessments** — local Eduphoria import, reports, dashboard, history, and read-only roster coverage | route-driven |
@@ -130,6 +132,13 @@ primary-nav page, not in Settings.
 
 For the full contract, see `docs/contracts/canonical-school-calendar-contract.md`; for the
 Panels consumer relationship, see `docs/reference/panels-route-card.md`.
+
+### Glass module routing
+
+Glass is a full-screen display surface with no app chrome. Its resolver and calendar-only board
+projection live in `api/webui/glass.py` and `api/webui/glass_board.py`; the route adapter is
+`api/webui/routes/glass.py`; its page owns `templates/glass.html`, `static/pages/glass.js`, and
+`static/pages/glass.css`. Both `/glass` and `/glass/data` read local calendar/schedule files only.
 
 ### Assessments module routing
 

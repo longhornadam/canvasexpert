@@ -1,0 +1,54 @@
+{% extends "layouts/display.html" %}
+{% block title %}Glass{% endblock %}
+{% block display_body_class %}glass-page{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/pages/glass.css?v={{ asset_v }}">
+{% endblock %}
+{% block primary %}
+<div class="glass-frame">
+  <header class="glass-header">
+    <div class="glass-header__date" id="glass-date"></div>
+    <div class="glass-header__schedule" id="glass-schedule"></div>
+    <div class="glass-header__clock" id="glass-clock"></div>
+    <div class="glass-header__simulated" id="glass-simulated" hidden>SIMULATED</div>
+  </header>
+
+  <div class="glass-status" id="glass-status" hidden></div>
+
+  <main class="glass-board" aria-live="polite">
+    <section class="glass-region glass-region--today" aria-labelledby="glass-today-title">
+      <div class="glass-region__heading"><h1 id="glass-today-title">Today</h1><span id="glass-today-count"></span></div>
+      <div class="glass-list" id="glass-today"></div>
+    </section>
+
+    <section class="glass-region" aria-labelledby="glass-upcoming-title">
+      <div class="glass-region__heading"><h2 id="glass-upcoming-title">Coming up</h2><span>14 days</span></div>
+      <div class="glass-list" id="glass-upcoming"></div>
+    </section>
+
+    <section class="glass-region" aria-labelledby="glass-academic-title">
+      <div class="glass-region__heading"><h2 id="glass-academic-title">Academic dates</h2></div>
+      <div class="glass-list" id="glass-academic"></div>
+    </section>
+
+    <section class="glass-region" aria-labelledby="glass-sports-title">
+      <div class="glass-region__heading"><h2 id="glass-sports-title">Sports results</h2><span>14 days</span></div>
+      <div class="glass-list" id="glass-sports"></div>
+    </section>
+
+    <section class="glass-region" aria-labelledby="glass-bobcat-title">
+      <div class="glass-region__heading"><h2 id="glass-bobcat-title">Bobcat Hour</h2><span id="glass-bobcat-state"></span></div>
+      <div class="glass-list" id="glass-bobcat"></div>
+    </section>
+
+    <section class="glass-region glass-region--grading" aria-labelledby="glass-grading-title">
+      <div class="glass-region__heading"><h2 id="glass-grading-title">Grading period</h2></div>
+      <div id="glass-grading"></div>
+    </section>
+  </main>
+</div>
+<script>window.GLASS_INITIAL = {{ payload|tojson }};</script>
+{% endblock %}
+{% block display_scripts %}
+<script src="/static/pages/glass.js?v={{ asset_v }}"></script>
+{% endblock %}

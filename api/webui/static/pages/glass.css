@@ -1,0 +1,29 @@
+/* Glass is a projected frame: large type, calm regions, no app chrome. */
+.glass-page { background: var(--ce-surface); color: var(--ce-ink); }
+.glass-frame { display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 100%; height: 100%; padding: clamp(20px, 2.5vw, 48px); gap: clamp(12px, 1.5vw, 28px); overflow: hidden; }
+.glass-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: clamp(12px, 2vw, 36px); align-items: end; border-bottom: 2px solid var(--ce-rule-strong); padding-bottom: clamp(10px, 1vw, 18px); }
+.glass-header__date { font-family: var(--ce-font-display); font-size: clamp(25px, 3.2vw, 64px); font-weight: 800; line-height: 1; }
+.glass-header__schedule { color: var(--ce-accent-canvas); font-size: clamp(14px, 1.2vw, 24px); font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.glass-header__clock { font-family: var(--ce-font-mono); font-size: clamp(22px, 2vw, 40px); font-weight: 700; white-space: nowrap; }
+.glass-header__simulated { align-self: start; padding: 5px 8px; border: 1px solid var(--ce-attention); border-radius: 999px; color: var(--ce-attention); font-family: var(--ce-font-mono); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.glass-status { padding: 9px 12px; border-left: 4px solid var(--ce-attention); background: var(--ce-attention-soft); color: var(--ce-ink); font-size: clamp(14px, 1vw, 20px); font-weight: 700; }
+.glass-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: clamp(10px, 1.3vw, 24px); min-height: 0; }
+.glass-region { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: clamp(12px, 1.4vw, 24px); border: 1px solid var(--ce-rule); border-top: 4px solid var(--ce-accent-canvas); background: var(--ce-surface-raised); overflow: hidden; }
+.glass-region--today { border-top-color: var(--ce-accent-model); }
+.glass-region--grading { border-top-color: var(--ce-prepared); }
+.glass-region__heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: clamp(8px, .8vw, 16px); }
+.glass-region__heading h1, .glass-region__heading h2 { margin: 0; font-family: var(--ce-font-display); font-size: clamp(18px, 1.6vw, 32px); line-height: 1; }
+.glass-region__heading > span { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(10px, .75vw, 14px); white-space: nowrap; }
+.glass-list { display: grid; align-content: start; gap: 7px; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.glass-item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--ce-rule); }
+.glass-item:last-child { border-bottom: 0; }
+.glass-item__date, .glass-item__kind, .glass-item__slot { color: var(--ce-accent-canvas); font-family: var(--ce-font-mono); font-size: clamp(10px, .7vw, 14px); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
+.glass-item__title { min-width: 0; overflow: hidden; font-size: clamp(13px, 1vw, 21px); font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.glass-item__detail { margin-top: 3px; color: var(--ce-ink-muted); font-size: clamp(11px, .8vw, 16px); line-height: 1.25; }
+.glass-empty { display: grid; place-items: center; min-height: 70px; color: var(--ce-ink-muted); font-size: clamp(12px, .9vw, 18px); text-align: center; }
+.glass-grading-card { display: grid; align-content: center; gap: 8px; height: 100%; }
+.glass-grading-card__name { font-family: var(--ce-font-display); font-size: clamp(18px, 1.7vw, 34px); font-weight: 800; }
+.glass-grading-card__days { color: var(--ce-accent-canvas); font-family: var(--ce-font-mono); font-size: clamp(18px, 1.5vw, 30px); font-weight: 800; }
+.glass-grading-card__range { color: var(--ce-ink-muted); font-size: clamp(11px, .8vw, 16px); }
+@media (max-width: 1000px) { .glass-frame { overflow: auto; } .glass-board { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; } }
+@media (max-width: 620px) { .glass-frame { padding: 14px; } .glass-header { grid-template-columns: 1fr auto; } .glass-header__schedule { grid-column: 1 / -1; grid-row: 2; } .glass-header__simulated { grid-column: 2; grid-row: 1; } .glass-board { grid-template-columns: minmax(0, 1fr); } }

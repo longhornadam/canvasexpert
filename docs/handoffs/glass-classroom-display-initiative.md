@@ -1,11 +1,11 @@
 # Glass — classroom display initiative
 
-**Status:** Closed GREEN — Slice 1 accepted. Supersedes Panels.
+**Status:** Closed GREEN — Slice 2 accepted. Supersedes Panels.
 
 **Opened:** 2026-08-15
 
-**Current next pointer:** Slice 2 (board mode) in section 8 is next. It is not authorized by this
-retired Slice 1 brief.
+**Current next pointer:** Slice 3 (class mode) in section 8 is next. It is not authorized by this
+retired Slice 2 brief.
 
 ## 1. Authority and disposition
 
@@ -354,7 +354,7 @@ Selected by a senior, with independent acceptance criteria, only when a slice is
 - `api/tests/dataforge/test_data_never_committed.py` must continue to pass; no workspace data
   enters the repository.
 
-## 13. Execution result
+## 13. Slice 1 execution result
 
 **Traffic light:** GREEN
 
@@ -367,3 +367,17 @@ Selected by a senior, with independent acceptance criteria, only when a slice is
 **Deviations:** No UI, route, Canvas client, Panel, or schedule-seed changes. The supplied Bell Schedules PDF was inspected because the seed CSVs do not currently contain explicit `lunch` rows; Glass handles explicit lunch intervals, including intervals overlapping a claimed run, without guessing or rewriting those sources.
 
 **Unresolved decisions:** Slice 2 board regions, the lunch authoring surface, and the remaining open decisions in section 11 remain deferred.
+
+## 14. Slice 2 execution result
+
+**Traffic light:** GREEN
+
+**Commit:** pending final commit
+
+**Changed files:** `api/webui/glass_board.py`, `api/webui/routes/glass.py`, `api/webui/templates/glass.html`, `api/webui/static/pages/glass.js`, `api/webui/static/pages/glass.css`, `api/webui/glass.py`, `api/webui/server.py`, `api/webui/README.md`, `api/tests/webui/test_glass_board.py`, `api/tests/webui/routes/test_glass.py`, `api/tests/test_route_contract.py`, and this execution report.
+
+**Verification:** `py -m pytest api/tests/webui/test_glass.py api/tests/webui/test_glass_board.py api/tests/webui/routes/test_glass.py api/tests/test_route_contract.py -p no:randomly` — 19 passed. `py -m pytest api/tests/webui api/tests/test_route_contract.py -p no:randomly` — 404 passed. Rendered `/glass?at=2026-09-02T12:15:00-05:00` at 1280×720: 200 response, no horizontal or vertical overflow, required global present, and zero browser console errors.
+
+**Deviations:** Glass is available at direct `/glass` and `/glass/data` routes with no primary-nav link, preserving the full-screen display contract. Panels remains running and untouched; class-mode content remains deferred to Slice 3.
+
+**Unresolved decisions:** Slice 3 class-mode region inventory and the remaining open decisions in section 11 remain deferred.

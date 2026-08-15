@@ -34,7 +34,7 @@ def get_current_context(
     simulated.  The keyword inputs are small test seams and are not another
     persisted source of truth.
     """
-    local_at, simulated = _effective_at(at)
+    local_at, simulated = normalize_at(at)
 
     if calendar_document is _UNSET:
         calendar_document, calendar_problems = school_calendar.read()
@@ -109,6 +109,11 @@ def get_current_context(
         lunch_intervals=lunch_intervals,
         unclaimed=unclaimed,
     )
+
+
+def normalize_at(value=None):
+    """Return the effective local clock and whether it was simulated."""
+    return _effective_at(value)
 
 
 def _resolve_ready(

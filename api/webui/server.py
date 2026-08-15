@@ -61,6 +61,7 @@ from .routes.roster import router as _roster_router
 from .routes.roster_assessment_groups import router as _roster_assessment_groups_router
 from .routes.seating import router as _seating_router
 from .routes.panels import router as _panels_router
+from .routes.glass import router as _glass_router
 from .routes.settings import router as _settings_router
 from .routes.powergrader import router as _powergrader_router
 from .routes.readiness import router as _readiness_router
@@ -192,6 +193,7 @@ app.include_router(_roster_router)
 app.include_router(_roster_assessment_groups_router)
 app.include_router(_seating_router)
 app.include_router(_panels_router)
+app.include_router(_glass_router)
 app.include_router(_settings_router)
 app.include_router(_powergrader_router)
 app.include_router(_readiness_router)
