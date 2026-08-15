@@ -1,12 +1,11 @@
 # Glass — classroom display initiative
 
-**Status:** Closed GREEN — Slice 3 accepted. Supersedes Panels.
+**Status:** Closed GREEN — Slice 4 accepted. Supersedes Panels.
 
 **Opened:** 2026-08-15
 
-**Current next pointer:** Slice 4 (privacy inversion) in section 8 is next and requires only
-sections 5.1–5.3 of this brief. Outstanding senior decisions in section 11 remain carried
-forward; no further class-mode design decision is required to start Slice 4.
+**Current next pointer:** Slice 5 (bell schedule write pair) in section 8 is next and requires
+only section 7 of this brief. Outstanding senior decisions in section 11 remain carried forward.
 
 ## 1. Authority and disposition
 
@@ -278,7 +277,7 @@ own lunch between A and B. Both are currently hand-editing a CSV in a synced fol
 
 ## 8. Execution slices
 
-Slices 1, 2, and 3 are closed GREEN. Slice 4 is next.
+Slices 1, 2, 3, and 4 are closed GREEN. Slice 5 is next.
 
 **Slice 1 — resolver and clock.** `get_current_context()` per section 6, with `?at=` honored end
 to end and a test that simulates a full Bobcat Hour day, a full Homeroom day, and a full House Day
@@ -414,3 +413,34 @@ report.
 **Deviations:** The first pass chooses the existing full-screen grid, a seven-day due/celebration window, twelve-row caps for missing work and celebrations, and repeat-allowed browser-side random selection. Existing local-only classroom privacy projections are reused; no Canvas client, live call, new persistence, or student identifier is emitted to the browser.
 
 **Unresolved decisions:** Theme treatment, objective source alternatives, free-text disposition, and the remaining section 11 decisions stay deferred. Slice 4 privacy inversion is the next authorized batch.
+
+## 16. Slice 4 execution result
+
+**Traffic light:** GREEN
+
+**Commit:** `d426b14`
+
+**Changed files:** `api/feedback_vault.py`, `api/mirror/store.py`,
+`api/roster_service.py`, `api/mcp_server/tools.py`, `api/mcp_server/server.py`,
+`api/tests/mirror/test_privacy_inversion.py`, and this execution report.
+
+**Verification:** `py -m pytest api/tests/mirror api/tests/mcp_server -p no:randomly -q` —
+271 passed. `py -m pytest api/tests/test_feedback_pipeline.py api/tests/test_pseudonym_rename.py
+api/tests/test_roster_mcp_write.py api/tests/test_vault_conflict.py
+api/tests/test_courses_groups_mirror.py api/tests/webui/test_mirror_service.py
+api/tests/webui/routes/test_gradebook_extra_time.py -p no:randomly -q` — 119 passed.
+`py -m pytest api/tests/mirror/test_privacy_inversion.py -p no:randomly -q` — 3 passed.
+`py -m pytest api/tests/dataforge/test_data_never_committed.py -p no:randomly -q` — 1 passed.
+`py -m compileall -q api/feedback_vault.py api/mirror/store.py api/roster_service.py` and
+`git diff --check` passed. The full `api/tests` command exceeded the two-minute command limit
+without returning a failure report and is not claimed as passing.
+
+**Deviations:** The mirror keeps a local-reader rehydration view through the Identity Vault so
+existing teacher workflows retain their Canvas-facing shapes; the files on disk are
+pseudonym-keyed. Submission bodies and comments are scrubbed at write time, including comment
+author IDs stored as vault pseudonyms. Pseudonym assignment is deterministic hash-and-probe,
+with collision bans derived from the vault. MCP server serialization now has a structural final
+privacy gate. No migration, dual-read legacy shim, or Canvas client path was added.
+
+**Unresolved decisions:** The section 11 decisions remain deferred. Slice 5 is the next
+authorized batch and requires only section 7.
