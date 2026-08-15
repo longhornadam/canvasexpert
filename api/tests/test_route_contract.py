@@ -184,14 +184,6 @@ EXPECTED = [
     ('/api/seating/apply', ('POST',)),
     ('/api/seating/proposal', ('POST',)),
     ('/api/seating/state', ('POST',)),
-    ('/panels', ('GET',)),
-    # Generated CSS for the teacher's own themes. Must stay registered
-    # ahead of /panels/{kind}, which is a catch-all that would otherwise
-    # read this path as a Panel kind and 404 it.
-    ('/panels/themes.css', ('GET',)),
-    ('/panels/theme-art/{key}/{index}.{ext}', ('GET',)),
-    ('/panels/{kind}', ('GET',)),
-    ('/panels/{kind}/data', ('GET',)),
     ('/powergrader', ('GET',)),
     ('/powergrader/session/{session_id}', ('GET',)),
     ('/api/powergrader/session/{session_id}', ('GET',)),

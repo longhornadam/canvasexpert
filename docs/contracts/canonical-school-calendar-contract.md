@@ -171,10 +171,8 @@ calendar state never degrades to “weekends only,” “nothing scheduled,” o
 schedule. A feature that needs instructional-day math or a current class blocks elegantly and
 links to `/calendar`.
 
-A fixed teacher-block override is the one intentional bypass: a Panel URL may use
-`?block=<stable-teacher-block-name>` to display that block regardless of the live date or clock.
-It still resolves the block through the Teacher Schedule and still enforces the Current-course
-boundary. Raw `?course=` pinning is replaced, not retained as a second override contract.
+A fixed teacher-block override is not part of the Glass URL. Glass follows the live canonical
+date, clock, and Teacher Schedule resolution and does not accept raw `?course=` pinning.
 
 ## 5. Editing operations
 
@@ -229,9 +227,9 @@ payloads, not an authentication mechanism.
 ## 6. Calendar surface
 
 `/calendar` is a primary-nav working surface, not a Settings subsection. Its title and nav label
-are both **Calendar**. Panels remains in primary navigation.
+are both **Calendar**. Glass is the classroom display surface.
 
-The primary view begins with the Teacher Schedule because Panels consume those blocks. It keeps
+The primary view begins with the Teacher Schedule because Glass consumes those blocks. It keeps
 the compact Calendar readiness line, a short upcoming-date list, and the date/range change
 control immediately below it. Bell Schedule reference, school-year setup, and public events
 remain on this page as collapsed secondary surfaces; direct Calendar-section links open the
@@ -297,17 +295,16 @@ teacher to its control.
 Home surfaces Calendar only for a concrete repair, using reason-specific copy and an exact
 Calendar-section link; it does not expose a “School Schedule” umbrella.
 
-## 7. Panels contract carried by Calendar
+## 7. Glass contract carried by Calendar
 
-Panels normally mirror the live local date and clock. The builder does not gain a fake day,
-period, or clock preview. A fixed-block URL is a deliberate display override, not a preview
-mode, and the builder offers it by teacher-block label.
+Glass mirrors the live local date and clock. The builder does not gain a fake day, period, or
+clock preview, and Glass has no fixed-block URL override.
 
-If live resolution fails, the projected Panel shows the schedule/calendar problem rather than
+If live resolution fails, the projected Glass display shows the schedule/calendar problem rather than
 quietly behaving like an empty day. Its action text is brief (for example, “Calendar needs
 attention. Open Calendar in Canvas Expert.”). The builder provides the clickable repair link.
 
-The What's due panel:
+The What's due Glass region:
 
 - reads only a Current course, including when reached through a teacher block;
 - includes every due-today assignment through the end of the local calendar day, even after
@@ -319,13 +316,10 @@ The What's due panel:
 - shows a Previous-course mapping as “This class is no longer current. Update its Canvas
   course in Calendar.”
 
-Copy controls report success only when the Clipboard API or a selected-text fallback actually
-copies. Failure leaves the full address visible and says to select and copy it.
-
 ## 8. Consumer rule
 
-All current consumers must use the canonical service in the cutover batch: Panels and its
-feeds, Panels, Late Work Sweep, Gradebook date arithmetic, Extensions, PowerGrader late work,
+All current consumers must use the canonical service in the cutover batch: Glass, Late Work Sweep,
+Gradebook date arithmetic, Extensions, PowerGrader late work,
 built-in and custom routines, operation-ledger sweep planning, and MCP schedule/calendar reads.
 No consumer may import `config.calendars`, parse an academic/day-calendar file, or silently
 invent weekend-only behavior.

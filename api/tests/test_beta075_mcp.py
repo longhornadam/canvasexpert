@@ -150,24 +150,6 @@ def _toolish_mentions(text):
     }
 
 
-def test_panels_route_card_theme_tools_match_the_live_registry():
-    """The Panels card's six-theme-tool enumeration must fail on tool drift.
-
-    The group is derived from the live registry (every tool name containing
-    "theme") rather than hardcoded, so a newly registered theme tool makes
-    this fail until the doc's enumeration grows to match -- a hardcoded
-    expected set would keep passing right through that drift.
-    """
-    path = Path(__file__).resolve().parents[2] / "docs" / "reference" / "panels-route-card.md"
-    doc = path.read_text(encoding="utf-8")
-    match = re.search(r"the six MCP tools\s*\(([^)]+)\)", doc)
-    assert match, "the Panels card must state its complete six-tool group"
-    documented = set(re.findall(r"[a-z][a-z0-9_]+", match.group(1)))
-    derived = {name for name in _live_tool_names() if "theme" in name}
-    assert derived, "derivation is broken: it must not pass vacuously on an empty group"
-    assert documented == derived
-
-
 def test_mirror_doc_bound_tools_match_the_live_registry():
     """The four mirror-bound MCP readers must remain registered and named here.
 

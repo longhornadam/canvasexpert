@@ -56,30 +56,16 @@ Source tests never substitute for rendered verification.
 | `/ai-expert` | **AI helper files** — paste-ready LLM skill files | inline |
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
-| `/calendar` | **Calendar** — school dates, Bell Schedules, Teacher Schedule (see `docs/reference/panels-route-card.md`) | `pages/calendar.js` |
+| `/calendar` | **Calendar** — school dates, Bell Schedules, Teacher Schedule | `pages/calendar.js` |
 | `/glass` | **Glass** — full-screen school-facing classroom board from the local School Calendar | `pages/glass.js` |
 | `/glass/data` | Glass's read-only calendar projection. Disk-only; never calls Canvas | route-driven |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
 | `/assessments` | **Assessments** — local Eduphoria import, reports, dashboard, history, and read-only roster coverage | route-driven |
-| `/panels` | **Panels** console: pick a Panel, copy its URL, optionally fix it to one Teacher Schedule block | `pages/panels_clipboard.js` |
-| `/panels/{kind}` | One Panel, chrome-free, sized to whatever box it is dropped into | `panels/panel.js` |
-| `/panels/{kind}/data` | The Panel's single data fetch. Disk-only; never calls Canvas | route-driven |
-| `/panels/themes.css` | The teacher's own Panel themes, generated from their theme files | route-driven |
-| `/panels/theme-art/{key}/{index}.{ext}` | Processed bytes for one art entry, cached and immutable | route-driven |
 | `/about` | What-is-Canvas-Expert explainer | — |
 
 Home's Canvas sync action queues local read-only coordinator work and polls its opaque
 plan status before refreshing Work cards. It does not keep a Canvas request open.
-
-Panel route registration order is load-bearing. `/panels/themes.css` and
-`/panels/theme-art/...` are registered before `/panels/{kind}`, whose catch-all shape would
-otherwise treat those paths as Panel kinds and return 404.
-
-There are two different things called `themes.css`. The static file
-`static/panels/themes.css` contains hand-written rules for the eight built-in themes. The
-`/panels/themes.css` route serves generated CSS for the teacher's own themes. Every Panel
-links the static file first, then the route.
 
 ### Create module routing
 
@@ -130,8 +116,7 @@ primary-nav page, not in Settings.
 - Canonical service (schema, validation, create/preview/apply): `api/webui/school_calendar.py`
 - Teacher Schedule/Bell Schedule read-write: `api/webui/routes/schedule.py`, `api/webui/schedule_setup.py`
 
-For the full contract, see `docs/contracts/canonical-school-calendar-contract.md`; for the
-Panels consumer relationship, see `docs/reference/panels-route-card.md`.
+For the full contract, see `docs/contracts/canonical-school-calendar-contract.md`.
 
 ### Glass module routing
 
@@ -220,8 +205,7 @@ named Current-course boundary and the persisted `active` field remains unchanged
 
 ### Class schedule & calendar
 Moved to the primary-nav **Calendar** page (`/calendar`) — see
-`docs/contracts/canonical-school-calendar-contract.md` and
-`docs/reference/panels-route-card.md`. Settings links to it only.
+`docs/contracts/canonical-school-calendar-contract.md`. Settings links to it only.
 
 ### Download location
 Root folder for submission downloads. Each course gets its own subfolder.

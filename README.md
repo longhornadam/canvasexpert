@@ -37,12 +37,11 @@ grouping live next door.
 **Assessments** imports Eduphoria exports, matches them to your roster, and turns them into a standards
 profile, coverage reports, longitudinal history, and grouping suggestions.
 
-**Panels** puts classroom information on the board. Nine of them (what's due, missing work, learning
-objective, random student, birthdays, upcoming events, sports results, and more), each one a full-bleed URL
-you drop into Classroomscreen or any other display surface, with themes to match your room.
+**Glass** puts the current classroom information on the board: schedule state, learning objective,
+what's due, missing work, celebrations, and a browser-side Random Name button.
 
 **Calendar** holds your school year, bell schedules, no-school days, public events, and your own teaching
-schedule in one place. Panels and the late-work sweep both read from it.
+schedule in one place. Glass and the late-work sweep both read from it.
 
 **Routines** run the recurring chores so you stop remembering them.
 

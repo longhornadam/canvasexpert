@@ -42,7 +42,7 @@ router = APIRouter(tags=["calendar"])
 _TEMPLATE_PATH = os.path.join(API_DIR, "default_docs", "Calendars", "calendar_template.csv")
 
 # How far past today the Calendar page's first screenful looks for upcoming
-# dates. A separate, larger number from Panels' whats-due window -- this is a
+# dates. A separate, larger number from Glass's class window -- this is a
 # glance at the calendar itself, not an assignment due-date projection.
 UPCOMING_LOOKAHEAD_DAYS = 14
 

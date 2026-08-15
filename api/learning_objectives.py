@@ -2,7 +2,7 @@
 
 This module owns the only objective document. It knows the shape and source
 digest rules; MCP owns the Current-course gate and exposes only preview/apply.
-The Panel uses the same source-resolution helpers but never mutates the file.
+Glass uses the same source-resolution helpers but never mutates the file.
 """
 from __future__ import annotations
 

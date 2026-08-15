@@ -11,8 +11,7 @@ pushes content to live courses via the REST and New Quizzes APIs:
 - **Gradebook tools** — late policy sweep, student extensions, curves
 - **PowerGrader** — keyboard grading queue, Safe AI Packet export, Copilot batch
   import, optional API scoring
-- **Panels:** disk-only classroom display URLs for due work, roster-safe views, events,
-  and learning objectives
+- **Glass:** local classroom display with schedule, class regions, and Random Name
 - **School Calendar:** school dates, day kinds, grading periods, bell schedules, and Teacher Schedule
 - **MCP server:** local pseudonymized reads and preview/apply tools for teacher-owned writes
 - **Daily Writing:** longitudinal Writing Record and tracked-assignment Writing Timeline
@@ -180,7 +179,7 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `dailywriting/` | Writing Record and Writing Timeline extraction and storage helpers |
 | `rubrics/` | Default rubric library consumed by authoring and scoring skill generation |
 | `custom_routines/` | Teacher-authored local automation jobs and the routine authoring contract |
-| `panel_themes.py` | Built-in and teacher-owned Panel theme validation, palette derivation, and generated CSS |
+| `panel_themes.py` | Retained teacher-owned theme validation, palette derivation, and MCP support |
 | `learning_objectives.py` | Reviewed, revision-protected per-course Learning Objectives storage and validation |
 | `course_catalog.py` | Student-free local course, module, assignment, and page catalog reads |
 | `webui/` | Web UI: FastAPI app (`server.py`), single-account + bookmark config (`config.py` → `config.json`), templates/static, split feature scripts, subprocess/SSE runner |

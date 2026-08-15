@@ -5,7 +5,7 @@ import os
 from api import course_catalog, learning_objectives
 from api.mcp_server import tools
 from api.platform_services import workspace
-from api.webui.panel_data import learning_objective_payload
+from api.webui.glass_data import learning_objective_payload
 
 
 STAMP = "2026-08-30T12:00:00+00:00"

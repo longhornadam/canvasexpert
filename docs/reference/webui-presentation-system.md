@@ -49,8 +49,7 @@ That rules out a whole category of page that is easy to write by reflex:
 - **Reference copy is terse and factual.** Limits, addresses, and steps are a short list.
   Nothing is repeated for reassurance.
 
-Related: `docs/reference/panels-route-card.md` describes the surface this convention was
-written against.
+Glass is the current full-screen classroom display surface and follows this convention.
 
 ## Page conventions
 

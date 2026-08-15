@@ -18,8 +18,6 @@ Useful starting references for new debugging and refactor sessions:
 - `docs/reference/canvasmirror-1.0beta-information-spine.md` - grand vision, migration order,
   tool-to-Canvas routing, and release gates for making CanvasMirror the default project read
   spine without weakening live write preflights.
-- `docs/reference/panels-route-card.md` - Panels route/template/kit ownership map, the disk-only
-  and URL-stability contracts, and the responsive model every Panel depends on.
 - `docs/contracts/canonical-school-calendar-contract.md` - target authority for school dates,
   bell/teacher schedule relationships, Calendar UI/MCP edits, and dependent-feature gates.
 - `docs/reference/course-expert-module-map.md` - Work tools push/download route, script, and template ownership map.

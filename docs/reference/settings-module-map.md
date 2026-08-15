@@ -37,7 +37,7 @@ reports; this map intentionally does not maintain line-count snapshots.
   only; no automatic check, ever)
 
 Class schedule (Teacher Schedule editor, Bell Schedules) and the school calendar moved out of
-Settings onto the primary-nav Calendar page; see `docs/reference/panels-route-card.md` and
+Settings onto the primary-nav Calendar page; see
 `docs/contracts/canonical-school-calendar-contract.md`. Settings links to `/calendar` only.
 
 Current split:
@@ -96,7 +96,7 @@ unless there is a strong reason.
   `config/canvas.py`, `api/openrouter_client.py`
 - Current/Previous course problems: `settings/courses.js`, `settings.js`, `routes/settings.py`,
   `config/courses.py`
-- calendar/schedule problems: see `docs/reference/panels-route-card.md` and
+- calendar/schedule problems: see
   `docs/contracts/canonical-school-calendar-contract.md` (owned by the Calendar page, not Settings)
 - workspace/AI Authoring folder issues: `settings.html`, `settings/workspace.js`, `settings.js`,
   `api/platform_services/workspace.py`, `api/webui/ai_ta.py`

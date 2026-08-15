@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from api.mirror import read_service
 from api.platform_services import config
 
-from . import clock_time, glass, panel_data
+from . import clock_time, glass, glass_data
 
 
 DEFAULT_DUE_DAYS = 7
@@ -66,7 +66,7 @@ def get_class_context(
     )
 
     objective = _safe_region(
-        lambda: panel_data.learning_objective_payload(
+        lambda: glass_data.learning_objective_payload(
             course_id,
             now=local_at,
             catalog_reader=catalog_reader,
@@ -76,13 +76,13 @@ def get_class_context(
     )
     due = _due_region(course_id, local_at, catalog_scope, catalog_reader)
     missing = _safe_region(
-        lambda: panel_data.missing_work_payload(
+        lambda: glass_data.missing_work_payload(
             course_id, scope_reader=read_scope,
         ),
         "Missing work unavailable.",
     )
     celebrations = _safe_region(
-        lambda: panel_data.birthdays_celebrations_payload(
+        lambda: glass_data.birthdays_celebrations_payload(
             course_id,
             days=DEFAULT_CLASSROOM_DAYS,
             now=local_at,
@@ -92,7 +92,7 @@ def get_class_context(
         "Celebrations unavailable.",
     )
     random_name = _safe_region(
-        lambda: panel_data.random_student_payload(course_id, scope_reader=read_scope),
+        lambda: glass_data.random_student_payload(course_id, scope_reader=read_scope),
         "Roster unavailable.",
     )
 
@@ -159,7 +159,7 @@ def _due_region(course_id, local_at, scope, catalog_reader):
     if scope.get("state") != "current":
         return _region("mirror_needs_attention", "Sync now in Canvas Expert to show what is due.", assignments=[])
     try:
-        reader = catalog_reader or panel_data.read_catalog
+        reader = catalog_reader or glass_data.read_catalog
         catalog_result = reader(course_id)
         catalog = catalog_result.get("catalog") if isinstance(catalog_result, dict) else {}
         now_utc = local_at.astimezone(timezone.utc)
@@ -169,7 +169,7 @@ def _due_region(course_id, local_at, scope, catalog_reader):
         for record in scope.get("records") or []:
             if not isinstance(record, dict) or record.get("published", True) is False:
                 continue
-            due = panel_data._parse_due(record.get("due_at"))
+            due = glass_data._parse_due(record.get("due_at"))
             if due is None:
                 continue
             due_local = due.astimezone(local_at.tzinfo)

@@ -118,7 +118,7 @@ name is the one thing to avoid. Placement, recolour, size, and opacity are close
 bounded numbers, so art can decorate a board but cannot resize its type or fetch anything.
 
 Call `get_theme_contract` first; `preview_panel_theme` reports what it corrected, which is
-worth telling the teacher. See `docs/reference/panels-route-card.md` for the full model.
+worth telling the teacher. The theme format remains independent of the retired display route.
 
 `save_teacher_schedule` has no `course_id` parameter and makes no
 Canvas call; a teacher-set block `course_id` passes through untouched after string

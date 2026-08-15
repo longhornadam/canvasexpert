@@ -1,4 +1,4 @@
-"""Class schedule setup APIs used by Settings and Panels."""
+"""Class schedule setup APIs used by Settings and Glass."""
 
 import json
 

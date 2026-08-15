@@ -112,7 +112,7 @@ def _bell_schedule_conflict_problems(cal_dir: str) -> list[str]:
 def list_bell_schedule_files(root=None):
     """[{name, label, schedule_id, path}] for every 'Bell Schedule*'-prefixed
     CSV in the workspace Calendars folder, excluding recognized sync copies."""
-    cal_dir = _calendars_dir(root)
+    cal_dir = _calendars_dir() if root is None else _calendars_dir(root)
     if not cal_dir or not os.path.isdir(cal_dir):
         return []
 
@@ -148,11 +148,12 @@ def load_bell_schedules(root=None) -> tuple:
 
     schedules = {}
     all_problems = []
-    cal_dir = _calendars_dir(root)
+    cal_dir = _calendars_dir() if root is None else _calendars_dir(root)
     if cal_dir and os.path.isdir(cal_dir):
         all_problems.extend(_bell_schedule_conflict_problems(cal_dir))
 
-    for file_info in list_bell_schedule_files(root):
+    files = list_bell_schedule_files() if root is None else list_bell_schedule_files(root)
+    for file_info in files:
         path = file_info["path"]
         schedule_id = file_info["schedule_id"]
 

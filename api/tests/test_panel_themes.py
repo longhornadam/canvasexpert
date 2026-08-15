@@ -10,12 +10,10 @@ import re
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from api import panel_themes
 from api.mcp_server import tools
 from api.platform_services import workspace
-from api.webui.routes.panels import DEFAULT_THEME, resolve_theme
 
 GOOD = {"bg": "#f8fafc", "ink": "#101c30", "accent": "#123a70",
         "highlight": "#c8102e"}
@@ -429,75 +427,6 @@ def test_a_key_cannot_escape_the_themes_folder(themed_workspace):
         panel_themes.delete_theme("../Learning Objectives")
 
 
-# ── the Panels surfaces ───────────────────────────────────────────────────
-
-def _client():
-    from api.webui.server import app
-    return TestClient(app, base_url="http://127.0.0.1:8765")
-
-
-def test_resolve_theme_accepts_a_custom_key_and_still_never_rejects(themed_workspace):
-    preview = panel_themes.build_preview(key="mine", label="Mine", colors=GOOD)
-    panel_themes.apply_preview(preview=preview,
-                               preview_digest_value=preview["digest"])
-    assert resolve_theme("mine") == "mine"
-    assert resolve_theme("  MINE  ") == "mine"
-    assert resolve_theme("deleted-last-week") == DEFAULT_THEME
-    panel_themes.delete_theme("mine")
-    assert resolve_theme("mine") == DEFAULT_THEME
-
-
-def test_the_generated_stylesheet_is_served_and_not_read_as_a_panel_kind(themed_workspace):
-    preview = panel_themes.build_preview(key="mine", label="Mine", colors=GOOD)
-    panel_themes.apply_preview(preview=preview,
-                               preview_digest_value=preview["digest"])
-    response = _client().get("/panels/themes.css")
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/css")
-    assert 'html[data-panel-theme="mine"]' in response.text
-    assert "Unknown panel" not in response.text
-
-
-def test_the_stylesheet_is_valid_when_there_are_no_custom_themes(themed_workspace):
-    response = _client().get("/panels/themes.css")
-    assert response.status_code == 200
-    assert "{" not in response.text
-
-
-def test_a_panel_renders_with_a_custom_theme_and_links_the_stylesheet(themed_workspace):
-    preview = panel_themes.build_preview(key="mine", label="Mine", colors=GOOD)
-    panel_themes.apply_preview(preview=preview,
-                               preview_digest_value=preview["digest"])
-    body = _client().get("/panels/whats-due?theme=mine").text
-    assert 'data-panel-theme="mine"' in body
-    assert '/panels/themes.css' in body
-    assert '/static/panels/themes.css' in body
-
-
-def test_a_deleted_theme_leaves_a_saved_board_working(themed_workspace):
-    """The saved-board rule: a decoration going missing must not 404 a wall."""
-    response = _client().get("/panels/whats-due?theme=gone-last-week")
-    assert response.status_code == 200
-    assert f'data-panel-theme="{DEFAULT_THEME}"' in response.text
-
-
-def test_the_console_lists_the_teachers_own_themes(themed_workspace):
-    preview = panel_themes.build_preview(key="mine", label="Test navy",
-                                         colors=GOOD)
-    panel_themes.apply_preview(preview=preview,
-                               preview_digest_value=preview["digest"])
-    body = _client().get("/panels").text
-    assert 'value="mine"' in body
-    assert "Test navy" in body
-    assert 'label="Yours"' in body
-
-
-def test_the_console_names_the_files_it_could_not_read(themed_workspace):
-    _write(themed_workspace, "broken.json", "{oh no")
-    body = _client().get("/panels").text
-    assert "broken.json" in body
-
-
 # ── the MCP surface ───────────────────────────────────────────────────────
 
 def test_the_contract_describes_only_what_the_format_accepts():
@@ -522,7 +451,6 @@ def test_the_mcp_round_trip_lands_a_usable_theme(themed_workspace):
     assert listed["custom_count"] == 1
     assert ["test-navy", "Test navy", "yours"] in [
         row[:3] for row in listed["themes"]["rows"]]
-    assert resolve_theme("test-navy") == "test-navy"
 
 
 def test_mcp_tools_report_errors_rather_than_raising(themed_workspace):
