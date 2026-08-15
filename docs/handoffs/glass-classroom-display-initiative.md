@@ -401,7 +401,7 @@ Selected by a senior, with independent acceptance criteria, only when a slice is
 
 **Traffic light:** GREEN
 
-**Commit:** implementation commit recorded in Git with this closure report.
+**Commit:** `ae46825` (implementation); this closure report is in the follow-up commit.
 
 **Changed files:** `api/webui/glass_class.py`, `api/webui/glass_board.py`,
 `api/webui/routes/glass.py`, `api/webui/templates/glass.html`,
