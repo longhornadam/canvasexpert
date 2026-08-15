@@ -68,6 +68,41 @@ def get_board_context(
     return {"context": context, "board": board}
 
 
+def get_display_context(
+    at=None,
+    *,
+    calendar_document=_UNSET,
+    bell_schedules=_UNSET,
+    teacher_schedule=_UNSET,
+    scope_reader=None,
+    catalog_reader=None,
+    objective_reader=None,
+    profile_reader=None,
+) -> dict:
+    """Return board mode, or add the private class projection when in class mode."""
+    board_kwargs = {}
+    if calendar_document is not _UNSET:
+        board_kwargs["calendar_document"] = calendar_document
+    if bell_schedules is not _UNSET:
+        board_kwargs["bell_schedules"] = bell_schedules
+    if teacher_schedule is not _UNSET:
+        board_kwargs["teacher_schedule"] = teacher_schedule
+    payload = get_board_context(at, **board_kwargs)
+    if payload.get("context", {}).get("mode") != "class":
+        return payload
+    from . import glass_class
+
+    payload["classroom"] = glass_class.get_class_context(
+        payload["context"],
+        at=at,
+        scope_reader=scope_reader,
+        catalog_reader=catalog_reader,
+        objective_reader=objective_reader,
+        profile_reader=profile_reader,
+    )
+    return payload
+
+
 def _empty_board(state):
     return {
         "state": state,

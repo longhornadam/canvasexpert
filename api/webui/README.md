@@ -135,10 +135,12 @@ Panels consumer relationship, see `docs/reference/panels-route-card.md`.
 
 ### Glass module routing
 
-Glass is a full-screen display surface with no app chrome. Its resolver and calendar-only board
-projection live in `api/webui/glass.py` and `api/webui/glass_board.py`; the route adapter is
-`api/webui/routes/glass.py`; its page owns `templates/glass.html`, `static/pages/glass.js`, and
-`static/pages/glass.css`. Both `/glass` and `/glass/data` read local calendar/schedule files only.
+Glass is a full-screen display surface with no app chrome. Its resolver, class projection, and
+calendar-only board projection live in `api/webui/glass.py`, `api/webui/glass_class.py`, and
+`api/webui/glass_board.py`; the route adapter is `api/webui/routes/glass.py`; its page owns
+`templates/glass.html`, `static/pages/glass.js`, and `static/pages/glass.css`. Both `/glass` and
+`/glass/data` are local-only: board mode reads calendar/schedule files, while class mode also
+reads the current course's local mirror and Learning Objectives document.
 
 ### Assessments module routing
 

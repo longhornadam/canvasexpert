@@ -51,3 +51,6 @@ def test_glass_browser_clock_starts_from_server_timestamp():
     assert "Date.now()" not in source
     assert "new Date()" not in source
     assert "Date.parse(context.at" in source
+    template = (Path(__file__).resolve().parents[3]
+                / "webui" / "templates" / "glass.html").read_text(encoding="utf-8")
+    assert "Random Name" in template

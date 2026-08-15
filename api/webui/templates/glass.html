@@ -15,7 +15,7 @@
 
   <div class="glass-status" id="glass-status" hidden></div>
 
-  <main class="glass-board" aria-live="polite">
+  <main class="glass-board" id="glass-board" aria-live="polite">
     <section class="glass-region glass-region--today" aria-labelledby="glass-today-title">
       <div class="glass-region__heading"><h1 id="glass-today-title">Today</h1><span id="glass-today-count"></span></div>
       <div class="glass-list" id="glass-today"></div>
@@ -44,6 +44,43 @@
     <section class="glass-region glass-region--grading" aria-labelledby="glass-grading-title">
       <div class="glass-region__heading"><h2 id="glass-grading-title">Grading period</h2></div>
       <div id="glass-grading"></div>
+    </section>
+  </main>
+
+  <main class="glass-class" id="glass-class" aria-live="polite" hidden>
+    <section class="glass-class__period" aria-labelledby="glass-class-title">
+      <div class="glass-class__period-copy">
+        <div class="glass-kicker" id="glass-class-kicker">Class</div>
+        <h1 id="glass-class-title"></h1>
+        <div class="glass-class__label" id="glass-class-label"></div>
+      </div>
+      <div class="glass-class__time">
+        <div class="glass-kicker" id="glass-class-time-label">Time left</div>
+        <div id="glass-class-remaining">—</div>
+      </div>
+      <div class="glass-class__next">
+        <div class="glass-kicker">Then</div>
+        <div id="glass-class-next">—</div>
+      </div>
+      <button class="glass-random-button" id="glass-random-button" type="button">Random Name</button>
+      <div class="glass-random-result" id="glass-random-result" aria-live="polite">Press the button to choose.</div>
+    </section>
+
+    <section class="glass-region glass-region--objective" aria-labelledby="glass-objective-title">
+      <div class="glass-region__heading"><h2 id="glass-objective-title">Learning objective</h2></div>
+      <div class="glass-class__body" id="glass-objective"></div>
+    </section>
+    <section class="glass-region" aria-labelledby="glass-due-title">
+      <div class="glass-region__heading"><h2 id="glass-due-title">What’s due</h2><span>7 days</span></div>
+      <div class="glass-list" id="glass-due"></div>
+    </section>
+    <section class="glass-region" aria-labelledby="glass-missing-title">
+      <div class="glass-region__heading"><h2 id="glass-missing-title">Missing work</h2><span class="glass-as-of" id="glass-missing-as-of"></span></div>
+      <div class="glass-list" id="glass-missing"></div>
+    </section>
+    <section class="glass-region glass-region--celebrations" aria-labelledby="glass-celebrations-title">
+      <div class="glass-region__heading"><h2 id="glass-celebrations-title">Celebrations</h2><span class="glass-as-of" id="glass-celebrations-as-of"></span></div>
+      <div class="glass-list" id="glass-celebrations"></div>
     </section>
   </main>
 </div>

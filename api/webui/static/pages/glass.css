@@ -1,5 +1,6 @@
 /* Glass is a projected frame: large type, calm regions, no app chrome. */
 .glass-page { background: var(--ce-surface); color: var(--ce-ink); }
+.glass-board[hidden], .glass-class[hidden] { display: none; }
 .glass-frame { display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 100%; height: 100%; padding: clamp(20px, 2.5vw, 48px); gap: clamp(12px, 1.5vw, 28px); overflow: hidden; }
 .glass-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: clamp(12px, 2vw, 36px); align-items: end; border-bottom: 2px solid var(--ce-rule-strong); padding-bottom: clamp(10px, 1vw, 18px); }
 .glass-header__date { font-family: var(--ce-font-display); font-size: clamp(25px, 3.2vw, 64px); font-weight: 800; line-height: 1; }
@@ -25,5 +26,26 @@
 .glass-grading-card__name { font-family: var(--ce-font-display); font-size: clamp(18px, 1.7vw, 34px); font-weight: 800; }
 .glass-grading-card__days { color: var(--ce-accent-canvas); font-family: var(--ce-font-mono); font-size: clamp(18px, 1.5vw, 30px); font-weight: 800; }
 .glass-grading-card__range { color: var(--ce-ink-muted); font-size: clamp(11px, .8vw, 16px); }
+.glass-class { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); gap: clamp(10px, 1.3vw, 24px); min-height: 0; }
+.glass-class__period { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(150px, .6fr) minmax(150px, .8fr) auto; grid-template-rows: auto auto; gap: 8px clamp(16px, 2vw, 36px); align-items: center; padding: clamp(14px, 1.6vw, 26px); border: 1px solid var(--ce-rule); border-top: 5px solid var(--ce-accent-model); background: var(--ce-surface-raised); }
+.glass-kicker { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(10px, .7vw, 14px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.glass-class__period h1 { margin: 3px 0 0; font-family: var(--ce-font-display); font-size: clamp(26px, 3vw, 58px); line-height: 1; }
+.glass-class__label { margin-top: 7px; color: var(--ce-ink-muted); font-size: clamp(13px, 1vw, 20px); }
+.glass-class__time, .glass-class__next { min-width: 0; }
+.glass-class__time > div:last-child { color: var(--ce-accent-model); font-family: var(--ce-font-mono); font-size: clamp(25px, 2.7vw, 52px); font-weight: 800; white-space: nowrap; }
+.glass-class__next > div:last-child { margin-top: 6px; font-size: clamp(16px, 1.3vw, 26px); font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glass-random-button { align-self: end; min-height: 48px; padding: 10px 16px; border: 2px solid var(--ce-accent-canvas); background: var(--ce-accent-canvas); color: white; font: inherit; font-weight: 800; cursor: pointer; }
+.glass-random-button:focus-visible { outline: 3px solid var(--ce-attention); outline-offset: 3px; }
+.glass-random-result { grid-column: 1 / -1; color: var(--ce-ink-muted); font-size: clamp(13px, .9vw, 18px); }
+.glass-class .glass-region { min-height: 0; }
+.glass-region--objective { border-top-color: var(--ce-accent-model); }
+.glass-region--celebrations { border-top-color: var(--ce-prepared); }
+.glass-class__body { display: grid; align-content: center; min-height: 0; color: var(--ce-ink); font-size: clamp(18px, 1.45vw, 30px); font-weight: 700; line-height: 1.25; overflow: auto; }
+.glass-class__body--empty { color: var(--ce-ink-muted); font-size: clamp(13px, .9vw, 18px); font-weight: 500; }
+.glass-region__heading > span:empty { display: none; }
+.glass-as-of { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(9px, .6vw, 12px); font-weight: 700; white-space: nowrap; }
+.glass-missing-count { color: var(--ce-attention); font-family: var(--ce-font-mono); font-weight: 800; white-space: nowrap; }
+@media (max-width: 1000px) { .glass-class { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; overflow: auto; } .glass-class__period { grid-template-columns: minmax(0, 1fr) auto; } .glass-class__next { grid-column: 1; } .glass-random-button { grid-column: 2; grid-row: 1 / span 2; } .glass-random-result { grid-column: 1 / -1; } }
+@media (max-width: 620px) { .glass-class__period { grid-template-columns: minmax(0, 1fr); } .glass-random-button, .glass-random-result, .glass-class__next { grid-column: 1; grid-row: auto; } }
 @media (max-width: 1000px) { .glass-frame { overflow: auto; } .glass-board { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; } }
 @media (max-width: 620px) { .glass-frame { padding: 14px; } .glass-header { grid-template-columns: 1fr auto; } .glass-header__schedule { grid-column: 1 / -1; grid-row: 2; } .glass-header__simulated { grid-column: 2; grid-row: 1; } .glass-board { grid-template-columns: minmax(0, 1fr); } }

@@ -1,11 +1,12 @@
 # Glass — classroom display initiative
 
-**Status:** Closed GREEN — Slice 2 accepted. Supersedes Panels.
+**Status:** Closed GREEN — Slice 3 accepted. Supersedes Panels.
 
 **Opened:** 2026-08-15
 
-**Current next pointer:** Slice 3 (class mode) in section 8 is next. It is not authorized by this
-retired Slice 2 brief.
+**Current next pointer:** Slice 4 (privacy inversion) in section 8 is next and requires only
+sections 5.1–5.3 of this brief. Outstanding senior decisions in section 11 remain carried
+forward; no further class-mode design decision is required to start Slice 4.
 
 ## 1. Authority and disposition
 
@@ -277,7 +278,7 @@ own lunch between A and B. Both are currently hand-editing a CSV in a synced fol
 
 ## 8. Execution slices
 
-Only Slice 1 is authorized. Each slice closes GREEN before the next opens.
+Slices 1, 2, and 3 are closed GREEN. Slice 4 is next.
 
 **Slice 1 — resolver and clock.** `get_current_context()` per section 6, with `?at=` honored end
 to end and a test that simulates a full Bobcat Hour day, a full Homeroom day, and a full House Day
@@ -288,9 +289,23 @@ forward-window events and academic dates, sports results, Bobcat Hour clubs and 
 period countdown. All from `School Calendar.json`. Zero student data, therefore zero privacy
 surface — this is the correct first UI.
 
-**Slice 3 — class mode.** Period header with time remaining and next; learning objective; what's
-due; missing work; celebrations. Region inventory and priority order are written at the top of
-this slice, not now.
+**Slice 3 — class mode.** The class frame uses this first-pass inventory and order, selected for
+working classroom usefulness rather than a final visual hierarchy:
+
+1. Period header: class name, current/up-next phase, time remaining or time until start, and next
+   class.
+2. Learning objective: the reviewed Learning Objectives document remains the default source.
+3. What's due: published assignments due today through the next seven days.
+4. Missing work: shortened classroom names and missing assignment titles, capped at twelve rows.
+5. Celebrations: birthdays and teacher-entered celebrations in the next seven days, capped at
+   twelve rows.
+6. Random Name: a button that chooses a shortened classroom name from the current course roster
+   at any time while class mode is displayed. The selection happens in the browser and can repeat.
+
+The period header and Random Name control are always usable when their schedule/roster inputs are
+available. Each other region degrades independently with a plain status message; stale mirror
+regions show an `As of` timestamp and do not pretend to be current. The first pass uses the
+existing full-screen layout and can be rearranged later without changing these data boundaries.
 
 **Slice 4 — privacy inversion.** Section 5.1 through 5.3, plus migration for the three courses
 already synced.
@@ -381,3 +396,21 @@ Selected by a senior, with independent acceptance criteria, only when a slice is
 **Deviations:** Glass is available at direct `/glass` and `/glass/data` routes with no primary-nav link, preserving the full-screen display contract. Panels remains running and untouched; class-mode content remains deferred to Slice 3.
 
 **Unresolved decisions:** Slice 3 class-mode region inventory and the remaining open decisions in section 11 remain deferred.
+
+## 15. Slice 3 execution result
+
+**Traffic light:** GREEN
+
+**Commit:** implementation commit recorded in Git with this closure report.
+
+**Changed files:** `api/webui/glass_class.py`, `api/webui/glass_board.py`,
+`api/webui/routes/glass.py`, `api/webui/templates/glass.html`,
+`api/webui/static/pages/glass.js`, `api/webui/static/pages/glass.css`, `api/webui/README.md`,
+`api/tests/webui/test_glass_class.py`, `api/tests/webui/routes/test_glass.py`, and this execution
+report.
+
+**Verification:** `py -m pytest api/tests/webui/test_glass.py api/tests/webui/test_glass_class.py api/tests/webui/test_glass_board.py api/tests/webui/routes/test_glass.py api/tests/test_route_contract.py -p no:randomly` — 21 passed. `py -m pytest api/tests/webui api/tests/test_route_contract.py -p no:randomly` — 406 passed. Compileall and `git diff --check` passed. Rendered class mode at 1280×720 with a 200 response, class frame visible, board frame hidden, working Random Name click, no horizontal or vertical overflow, and zero browser console errors.
+
+**Deviations:** The first pass chooses the existing full-screen grid, a seven-day due/celebration window, twelve-row caps for missing work and celebrations, and repeat-allowed browser-side random selection. Existing local-only classroom privacy projections are reused; no Canvas client, live call, new persistence, or student identifier is emitted to the browser.
+
+**Unresolved decisions:** Theme treatment, objective source alternatives, free-text disposition, and the remaining section 11 decisions stay deferred. Slice 4 privacy inversion is the next authorized batch.

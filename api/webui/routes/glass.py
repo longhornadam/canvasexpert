@@ -17,7 +17,7 @@ def _effective_at(value: str):
 
 @router.get("/glass", response_class=HTMLResponse)
 def glass_page(request: Request, at: str = ""):
-    payload = glass_board.get_board_context(_effective_at(at))
+    payload = glass_board.get_display_context(_effective_at(at))
     return deps.templates.TemplateResponse(request, "glass.html", {
         "payload": payload,
     })
@@ -25,4 +25,4 @@ def glass_page(request: Request, at: str = ""):
 
 @router.get("/glass/data")
 def glass_data(at: str = ""):
-    return JSONResponse(glass_board.get_board_context(_effective_at(at)))
+    return JSONResponse(glass_board.get_display_context(_effective_at(at)))

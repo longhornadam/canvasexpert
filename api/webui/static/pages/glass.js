@@ -16,6 +16,17 @@
   function clockLabel(ms) {
     return new Intl.DateTimeFormat("en-US", {timeZone: timeZone, hour: "numeric", minute: "2-digit"}).format(new Date(ms));
   }
+  function dateTimeLabel(value) {
+    var parsed = new Date(value || "");
+    if (isNaN(parsed.getTime())) return text(value);
+    return new Intl.DateTimeFormat("en-US", {timeZone: timeZone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit"}).format(parsed);
+  }
+  function remainingLabel(seconds) {
+    if (seconds == null || isNaN(seconds)) return "—";
+    seconds = Math.max(0, Math.round(seconds));
+    return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+  }
+  function asOfLabel(value) { return value ? "As of " + dateTimeLabel(value) : ""; }
   function itemNode(item, kind) {
     var row = document.createElement("div"); row.className = "glass-item";
     var marker = document.createElement("span"); marker.className = "glass-item__" + (kind || "date");
@@ -46,6 +57,57 @@
     var range = document.createElement("div"); range.className = "glass-grading-card__range"; range.textContent = period.start + " – " + period.end;
     card.appendChild(name); card.appendChild(days); card.appendChild(range); target.appendChild(card);
   }
+  function regionMessage(target, region, fallback) {
+    target.replaceChildren();
+    var message = document.createElement("div"); message.className = "glass-class__body--empty";
+    message.textContent = (region && region.message) || fallback; target.appendChild(message);
+  }
+  function renderClassTime() {
+    var period = (frame.payload.classroom || {}).period || {};
+    var boundary = Date.parse(period.boundary_at || "");
+    var seconds = isNaN(boundary) ? period.remaining_seconds : Math.max(0, Math.round((boundary - frame.clockMs) / 1000));
+    byId("glass-class-remaining").textContent = remainingLabel(seconds);
+  }
+  function renderMissing(region) {
+    var target = byId("glass-missing"); target.replaceChildren(); byId("glass-missing-as-of").textContent = asOfLabel(region.as_of);
+    if (!region.students || !region.students.length) { regionMessage(target, region, "No missing work."); return; }
+    region.students.forEach(function (student) {
+      var row = document.createElement("div"); row.className = "glass-item";
+      var count = document.createElement("span"); count.className = "glass-missing-count"; count.textContent = String(student.missing_count || 0);
+      var stack = document.createElement("div"); var title = document.createElement("div"); title.className = "glass-item__title"; title.textContent = text(student.student_name);
+      var detail = document.createElement("div"); detail.className = "glass-item__detail"; detail.textContent = (student.assignment_titles || []).join(" · ");
+      stack.appendChild(title); if (detail.textContent) stack.appendChild(detail); row.appendChild(count); row.appendChild(stack); target.appendChild(row);
+    });
+  }
+  function renderCelebrations(region) {
+    byId("glass-celebrations-as-of").textContent = asOfLabel(region.as_of);
+    list("glass-celebrations", (region.items || []).map(function (item) {
+      return {label: item.student_name, detail: item.label, from: item.date};
+    }), "date", region.message || "Nothing to celebrate.");
+  }
+  function renderClass(payload) {
+    var classroom = payload.classroom || {}; var period = classroom.period || {};
+    byId("glass-class-kicker").textContent = period.state === "up_next" ? "Up next" : "Class";
+    byId("glass-class-title").textContent = text(period.name || period.label || "Class");
+    byId("glass-class-label").textContent = text(period.label || "");
+    byId("glass-class-time-label").textContent = period.state === "up_next" ? "Starts in" : "Time left";
+    byId("glass-class-next").textContent = period.next ? text(period.next.name || period.next.label || "") : "End of schedule";
+    renderClassTime();
+
+    var objective = classroom.objective || {}; var objectiveTarget = byId("glass-objective");
+    objectiveTarget.className = objective.objective ? "glass-class__body" : "glass-class__body glass-class__body--empty";
+    objectiveTarget.textContent = objective.objective || objective.message || "Learning objective unavailable.";
+    var due = classroom.due || {};
+    list("glass-due", (due.assignments || []).map(function (item) {
+      return {label: item.title, detail: dateTimeLabel(item.due_at), kind: "due"};
+    }), "due", due.message || "What’s due is unavailable.");
+    renderMissing(classroom.missing || {});
+    renderCelebrations(classroom.celebrations || {});
+    var random = classroom.random_name || {}; var button = byId("glass-random-button");
+    button.disabled = !random.names || !random.names.length;
+    var randomResult = byId("glass-random-result"); randomResult.dataset.selected = "";
+    randomResult.textContent = random.message || "Press the button to choose.";
+  }
   function render(payload) {
     frame.payload = payload || {}; var context = frame.payload.context || {}; var board = frame.payload.board || {};
     frame.clockMs = Date.parse(context.at || "");
@@ -55,6 +117,9 @@
     byId("glass-clock").textContent = clockLabel(frame.clockMs);
     byId("glass-simulated").hidden = !context.simulated;
     var status = byId("glass-status"); status.textContent = board.message || ""; status.hidden = !board.message;
+    var isClass = context.mode === "class" && frame.payload.classroom;
+    byId("glass-class").hidden = !isClass; byId("glass-board").hidden = !!isClass;
+    if (isClass) renderClass(frame.payload);
     var today = board.today_events || []; byId("glass-today-count").textContent = today.length ? today.length + " items" : "";
     list("glass-today", today, "date", "Nothing scheduled today.");
     list("glass-upcoming", board.forward_events || [], "date", "No upcoming events.");
@@ -65,7 +130,7 @@
     renderGrading(board.grading_period);
     scheduleTimers();
   }
-  function tick() { if (!isNaN(frame.clockMs)) byId("glass-clock").textContent = clockLabel(frame.clockMs += 1000); }
+  function tick() { if (!isNaN(frame.clockMs)) { byId("glass-clock").textContent = clockLabel(frame.clockMs += 1000); if (!byId("glass-class").hidden) renderClassTime(); } }
   function reload() {
     var at = isNaN(frame.clockMs) ? "" : new Date(frame.clockMs).toISOString();
     fetch("/glass/data" + (at ? "?at=" + encodeURIComponent(at) : ""), {cache: "no-store"})
@@ -78,5 +143,11 @@
     timers.poll = setTimeout(reload, 15 * 60 * 1000);
   }
   timers.tick = setInterval(tick, 1000);
+  byId("glass-random-button").addEventListener("click", function () {
+    var names = ((frame.payload.classroom || {}).random_name || {}).names || [];
+    if (!names.length) return;
+    var chosen = names[Math.floor(Math.random() * names.length)];
+    var target = byId("glass-random-result"); target.textContent = chosen; target.dataset.selected = "true";
+  });
   render(initial);
 }());
