@@ -307,8 +307,8 @@ available. Each other region degrades independently with a plain status message;
 regions show an `As of` timestamp and do not pretend to be current. The first pass uses the
 existing full-screen layout and can be rearranged later without changing these data boundaries.
 
-**Slice 4 — privacy inversion.** Section 5.1 through 5.3, plus migration for the three courses
-already synced.
+**Slice 4 — privacy inversion.** Section 5.1 through 5.3. This is a pre-launch clean cutover:
+no migration code, dual-read shim, or legacy mirror compatibility is authorized.
 
 **Slice 5 — bell schedule write pair.** Section 7.
 
