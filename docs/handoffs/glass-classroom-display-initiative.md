@@ -1,11 +1,11 @@
 # Glass — classroom display initiative
 
-**Status:** Closed GREEN — Slice 4 accepted. Supersedes Panels.
+**Status:** Closed GREEN — Slice 5 accepted. Supersedes Panels.
 
 **Opened:** 2026-08-15
 
-**Current next pointer:** Slice 5 (bell schedule write pair) in section 8 is next and requires
-only section 7 of this brief. Outstanding senior decisions in section 11 remain carried forward.
+**Current next pointer:** Slice 6 (retire Panels) in section 8 is next and requires only section 9
+of this brief. Outstanding senior decisions in section 11 remain carried forward.
 
 ## 1. Authority and disposition
 
@@ -277,7 +277,7 @@ own lunch between A and B. Both are currently hand-editing a CSV in a synced fol
 
 ## 8. Execution slices
 
-Slices 1, 2, 3, and 4 are closed GREEN. Slice 5 is next.
+Slices 1, 2, 3, 4, and 5 are closed GREEN. Slice 6 is next.
 
 **Slice 1 — resolver and clock.** `get_current_context()` per section 6, with `?at=` honored end
 to end and a test that simulates a full Bobcat Hour day, a full Homeroom day, and a full House Day
@@ -442,5 +442,33 @@ author IDs stored as vault pseudonyms. Pseudonym assignment is deterministic has
 with collision bans derived from the vault. MCP server serialization now has a structural final
 privacy gate. No migration, dual-read legacy shim, or Canvas client path was added.
 
-**Unresolved decisions:** The section 11 decisions remain deferred. Slice 5 is the next
-authorized batch and requires only section 7.
+**Unresolved decisions:** The section 11 decisions remain deferred. Slice 6 is the next
+authorized batch and requires only section 9.
+
+## 17. Slice 5 execution result
+
+**Traffic light:** GREEN
+
+**Commit:** `2e1f36c` (implementation); this closure report is in the follow-up commit.
+
+**Changed files:** `api/webui/bell_schedule.py`, `api/webui/deps.py`,
+`api/webui/routes/calendar.py`, `api/mcp_server/tools.py`, `api/mcp_server/server.py`,
+`api/mcp_server/contract.py`, `api/mcp_server/tool_schema_v31.json`,
+`api/tests/webui/test_bell_schedule.py`, `api/tests/mcp_server/test_tools.py`,
+`api/tests/test_beta075_mcp.py`, `api/tests/test_route_contract.py`, `docs/mcp-server.md`,
+and this execution report.
+
+**Verification:** `py -m pytest api/tests/webui/test_bell_schedule.py api/tests/mcp_server/test_tools.py
+api/tests/test_beta075_mcp.py api/tests/webui/test_school_calendar.py -p no:randomly -q` — 198 passed.
+`py -m pytest api/tests/test_route_contract.py api/tests/test_calendar_routes.py
+api/tests/webui/test_bell_schedule.py api/tests/mcp_server/test_tools.py api/tests/test_beta075_mcp.py
+-p no:randomly -q` — 170 passed. `py -m compileall -q` over the changed Python modules and
+`git diff --check` passed.
+
+**Deviations:** The operation uses a file digest rather than a numeric revision because Bell
+Schedules are independent CSV artifacts. The shared service is used by both the Calendar HTTP
+routes and MCP tools; it canonicalizes line endings/order and refuses stale or altered previews.
+No delete/rename operation was added because this slice edits or creates one schedule artifact.
+
+**Unresolved decisions:** The section 11 decisions remain deferred. Slice 6 (Panels retirement)
+is now the next authorized batch and requires only section 9.
