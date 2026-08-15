@@ -1,11 +1,11 @@
 # Glass — classroom display initiative
 
-**Status:** Closed GREEN — Slice 5 accepted. Supersedes Panels.
+**Status:** Closed GREEN — Slice 6 accepted. Supersedes Panels.
 
 **Opened:** 2026-08-15
 
-**Current next pointer:** Slice 6 (retire Panels) in section 8 is next and requires only section 9
-of this brief. Outstanding senior decisions in section 11 remain carried forward.
+**Current next pointer:** No next Glass slice is currently authorized. Slice 6 retired Panels;
+the remaining section 11 decisions stay deferred.
 
 ## 1. Authority and disposition
 
@@ -277,7 +277,7 @@ own lunch between A and B. Both are currently hand-editing a CSV in a synced fol
 
 ## 8. Execution slices
 
-Slices 1, 2, 3, 4, and 5 are closed GREEN. Slice 6 is next.
+Slices 1, 2, 3, 4, 5, and 6 are closed GREEN. No next slice is currently authorized.
 
 **Slice 1 — resolver and clock.** `get_current_context()` per section 6, with `?at=` honored end
 to end and a test that simulates a full Bobcat Hour day, a full Homeroom day, and a full House Day
@@ -470,5 +470,38 @@ Schedules are independent CSV artifacts. The shared service is used by both the 
 routes and MCP tools; it canonicalizes line endings/order and refuses stale or altered previews.
 No delete/rename operation was added because this slice edits or creates one schedule artifact.
 
-**Unresolved decisions:** The section 11 decisions remain deferred. Slice 6 (Panels retirement)
-is now the next authorized batch and requires only section 9.
+**Unresolved decisions:** The section 11 decisions remain deferred. No next Glass slice is
+currently authorized.
+
+## 18. Slice 6 execution result
+
+**Traffic light:** GREEN
+
+**Commit:** `1aeaa69` (implementation); this closure report is in the follow-up commit.
+
+**Changed files:** `api/webui/glass_data.py`, `api/webui/glass_class.py`,
+`api/webui/deps.py`, `api/webui/server.py`, `api/webui/routes/calendar.py`,
+`api/webui/routes/schedule.py`, `api/webui/clock_time.py`,
+`api/webui/templates/about.html`, `api/webui/templates/calendar.html`,
+`api/webui/templates/settings.html`, `api/webui/templates/layouts/_app_header.html`,
+the Panels route/templates/static assets/tests and route card, `api/tests/test_retired_paths.py`,
+`api/tests/test_route_contract.py`, `api/tests/test_learning_objectives.py`,
+`api/tests/test_panel_themes.py`, `AGENTS.md`, `README.md`, `api/README.md`, `api/webui/README.md`,
+`docs/README.md`, `docs/contracts/canonical-school-calendar-contract.md`,
+`docs/mcp-server.md`, `docs/reference/settings-module-map.md`, and
+`docs/reference/webui-presentation-system.md`.
+
+**Verification:** `py -m pytest api/tests/webui api/tests/test_beta075_mcp.py
+api/tests/test_webui_template_contracts.py -p no:randomly -q` — 392 passed.
+The focused retirement/Glass/theme gate passed 150 tests. `py -m compileall -q api/webui
+api/tests/test_retired_paths.py api/tests/test_route_contract.py` and `git diff --check` passed.
+
+**Deviations:** Glass projections formerly imported from `panel_data.py` moved into the
+independent `glass_data.py` module before the Panels module was removed. Teacher-owned theme
+validation and MCP tools remain available as explicitly retained infrastructure; their future
+Glass presentation is deferred. Obsolete Panel scratch pages were retired alongside the named
+Panel assets because they depended on the deleted responsive kit. No Canvas client or student
+data path was added.
+
+**Unresolved decisions:** The section 11 decisions remain deferred. No next Glass slice is
+currently authorized.
