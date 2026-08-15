@@ -358,7 +358,7 @@ Selected by a senior, with independent acceptance criteria, only when a slice is
 
 **Traffic light:** GREEN
 
-**Commit:** pending final amend
+**Commit:** `2d55ee5` (implementation); closure report in the follow-up commit.
 
 **Changed files:** `api/webui/glass.py`, `api/tests/webui/test_glass.py`, and this execution report.
 
