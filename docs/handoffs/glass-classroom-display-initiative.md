@@ -341,22 +341,23 @@ be reproduced in Glass.
 | Whole page dies with one region | — | Regions degrade independently; Glass never blanks |
 | Bare `except` turns a broken calendar into a normal day | `panels.py:161-170` returns `"ready"` on any failure | Repair states surface as repair states |
 
-## 11. Open decisions — not authorized
+## 11. Locked MVP decisions and deferred choices
 
-Selected by a senior, with independent acceptance criteria, only when a slice is ready.
+The MVP is primarily an information-contract product: it defines what data exists, how it is
+structured, and the rules for displaying it. Future UI, theme, and UX design is intentionally
+separate from this work.
 
-- **Objective source.** The Learning Objectives document is the decided default and the reviewed
-  digest workflow is retained. Whether a Canvas page may *also* drive a Glass region directly, as
-  a second lower-ceremony path, is undecided.
+- **Objective source.** Glass uses the reviewed Learning Objectives document for MVP. A Canvas
+  page may become an additional source later, but it is not required for the minimum functioning
+  product.
 - **Free-text disposition** (section 5.1) pending PowerGrader's verbatim-prose requirement.
-- **`up_next` lead-in bound.** Currently "the whole gap before a claimed run." Whether to cap it
-  (so a long unclaimed stretch does not read as passing period) is untested.
-- **Theme surface.** `panel_themes.py` is strictly palette, typeface, and one ornament layer, and
-  no theme can change layout or row count. Whether Glass keeps that contract, and whether a
-  distinct `up_next` treatment needs its own derived variables, is deferred to Slice 3.
-- **Bobcat Hour vocabulary.** `bobcat_hour` as a `period_id` is district-specific. Whether Glass
-  keys off that literal or off a general "unclaimed meeting with calendar events in its window" is
-  a Slice 2 decision.
+- **`up_next` lead-in bound.** Glass uses the entire gap before the next claimed run. There is no
+  MVP cap.
+- **Theme surface.** Previous Panels/SmartDeck themes are irrelevant to Glass and will not be
+  migrated or reused. Glass's future appearance is a separate design decision; no theme work is
+  part of the MVP information-contract scope.
+- **Bobcat Hour vocabulary.** Glass recognizes the explicit `bobcat_a` and `bobcat_b` meeting IDs.
+  Broader event-based inference is deferred.
 
 ## 12. Verification gates
 
@@ -470,8 +471,8 @@ Schedules are independent CSV artifacts. The shared service is used by both the 
 routes and MCP tools; it canonicalizes line endings/order and refuses stale or altered previews.
 No delete/rename operation was added because this slice edits or creates one schedule artifact.
 
-**Unresolved decisions:** The section 11 decisions remain deferred. No next Glass slice is
-currently authorized.
+**Unresolved decisions:** The section 11 decisions remain deferred. Slice 6 (Panels retirement)
+is now the next authorized batch and requires only section 9.
 
 ## 18. Slice 6 execution result
 
@@ -503,5 +504,5 @@ Glass presentation is deferred. Obsolete Panel scratch pages were retired alongs
 Panel assets because they depended on the deleted responsive kit. No Canvas client or student
 data path was added.
 
-**Unresolved decisions:** The section 11 decisions remain deferred. No next Glass slice is
-currently authorized.
+**Unresolved decisions:** Only the PowerGrader free-text disposition and future optional sources
+remain deferred. No next Glass slice is currently authorized.
