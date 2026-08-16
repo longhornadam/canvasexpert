@@ -5,84 +5,74 @@
 <link rel="stylesheet" href="/static/pages/glass.css?v={{ asset_v }}">
 {% endblock %}
 {% block primary %}
-<div class="glass-frame">
-  <header class="glass-header">
-    <div class="glass-header__date" id="glass-date"></div>
-    <div class="glass-header__schedule" id="glass-schedule"></div>
-    <div class="glass-header__clock" id="glass-clock"></div>
-    <div class="glass-header__simulated" id="glass-simulated" hidden>SIMULATED</div>
+<div class="glass-frame" id="glass-frame">
+  <header class="glass-header" aria-label="Glass status">
+    <span class="glass-header__date" id="glass-date"></span>
+    <span class="glass-header__clock" id="glass-clock"></span>
+    <span class="glass-header__period" id="glass-period"></span>
+    <span class="glass-header__course" id="glass-course"></span>
+    <span class="glass-header__boundary" id="glass-boundary"></span>
+    <span class="glass-header__simulated" id="glass-simulated" aria-label="SIMULATED" hidden>SIM</span>
   </header>
 
   <div class="glass-status" id="glass-status" hidden></div>
 
-  <main class="glass-board" id="glass-board" aria-live="polite">
-    <section class="glass-region glass-region--today" aria-labelledby="glass-today-title">
-      <div class="glass-region__heading"><h1 id="glass-today-title">Today</h1><span id="glass-today-count"></span></div>
-      <div class="glass-list" id="glass-today"></div>
-    </section>
-
-    <section class="glass-region" aria-labelledby="glass-upcoming-title">
-      <div class="glass-region__heading"><h2 id="glass-upcoming-title">Coming up</h2><span>14 days</span></div>
-      <div class="glass-list" id="glass-upcoming"></div>
-    </section>
-
-    <section class="glass-region" aria-labelledby="glass-academic-title">
-      <div class="glass-region__heading"><h2 id="glass-academic-title">Academic dates</h2></div>
-      <div class="glass-list" id="glass-academic"></div>
-    </section>
-
-    <section class="glass-region" aria-labelledby="glass-sports-title">
-      <div class="glass-region__heading"><h2 id="glass-sports-title">Sports results</h2><span>14 days</span></div>
-      <div class="glass-list" id="glass-sports"></div>
-    </section>
-
-    <section class="glass-region" aria-labelledby="glass-bobcat-title">
-      <div class="glass-region__heading"><h2 id="glass-bobcat-title">Bobcat Hour</h2><span id="glass-bobcat-state"></span></div>
-      <div class="glass-list" id="glass-bobcat"></div>
-    </section>
-
-    <section class="glass-region glass-region--grading" aria-labelledby="glass-grading-title">
-      <div class="glass-region__heading"><h2 id="glass-grading-title">Grading period</h2></div>
-      <div id="glass-grading"></div>
-    </section>
+  <main class="glass-content" id="glass-content" aria-live="polite">
+    <section class="glass-column" id="glass-left" aria-label="Class operations"></section>
+    <section class="glass-column glass-column--instruction" id="glass-middle" aria-label="Instruction"></section>
+    <section class="glass-column" id="glass-right" aria-label="School information"></section>
   </main>
 
-  <main class="glass-class" id="glass-class" aria-live="polite" hidden>
-    <section class="glass-class__period" aria-labelledby="glass-class-title">
-      <div class="glass-class__period-copy">
-        <div class="glass-kicker" id="glass-class-kicker">Class</div>
-        <h1 id="glass-class-title"></h1>
-        <div class="glass-class__label" id="glass-class-label"></div>
-      </div>
-      <div class="glass-class__time">
-        <div class="glass-kicker" id="glass-class-time-label">Time left</div>
-        <div id="glass-class-remaining">—</div>
-      </div>
-      <div class="glass-class__next">
-        <div class="glass-kicker">Then</div>
-        <div id="glass-class-next">—</div>
-      </div>
-      <button class="glass-random-button" id="glass-random-button" type="button">Random Name</button>
-      <div class="glass-random-result" id="glass-random-result" aria-live="polite">Press the button to choose.</div>
-    </section>
+  <footer class="glass-footer">
+    <div class="glass-tools" aria-label="Glass tools">
+      <button class="glass-tool" id="glass-random-button" aria-label="Random Name" type="button" data-tool="random" disabled>RANDOM NAME</button>
+      <button class="glass-tool" type="button" data-tool="timer">TIMER <span id="glass-timer-footer"></span></button>
+      <button class="glass-tool" type="button" data-tool="note">QUICK NOTE</button>
+      <button class="glass-tool" type="button" data-tool="blank">BLANK</button>
+    </div>
+    <div class="glass-footer__status" id="glass-footer-status"></div>
+  </footer>
 
-    <section class="glass-region glass-region--objective" aria-labelledby="glass-objective-title">
-      <div class="glass-region__heading"><h2 id="glass-objective-title">Learning objective</h2></div>
-      <div class="glass-class__body" id="glass-objective"></div>
-    </section>
-    <section class="glass-region" aria-labelledby="glass-due-title">
-      <div class="glass-region__heading"><h2 id="glass-due-title">What’s due</h2><span>7 days</span></div>
-      <div class="glass-list" id="glass-due"></div>
-    </section>
-    <section class="glass-region" aria-labelledby="glass-missing-title">
-      <div class="glass-region__heading"><h2 id="glass-missing-title">Missing work</h2><span class="glass-as-of" id="glass-missing-as-of"></span></div>
-      <div class="glass-list" id="glass-missing"></div>
-    </section>
-    <section class="glass-region glass-region--celebrations" aria-labelledby="glass-celebrations-title">
-      <div class="glass-region__heading"><h2 id="glass-celebrations-title">Celebrations</h2><span class="glass-as-of" id="glass-celebrations-as-of"></span></div>
-      <div class="glass-list" id="glass-celebrations"></div>
-    </section>
-  </main>
+  <div class="glass-tool-overlay" id="glass-tool-overlay" hidden>
+    <div class="glass-tool-panel" id="glass-tool-random" data-panel="random" hidden>
+      <div class="glass-tool-panel__label">RANDOM NAME</div>
+      <div class="glass-tool-panel__value" id="glass-random-result" aria-live="polite">—</div>
+      <button class="glass-action" id="glass-random-again" type="button">CHOOSE AGAIN</button>
+      <button class="glass-action glass-action--quiet" type="button" data-close-tool>CLOSE</button>
+    </div>
+    <div class="glass-tool-panel" id="glass-tool-timer" data-panel="timer" hidden>
+      <div class="glass-tool-panel__label">TIMER</div>
+      <div class="glass-tool-panel__value glass-tool-panel__value--timer" id="glass-timer-value">5:00</div>
+      <div class="glass-presets" aria-label="Timer duration">
+        <button class="glass-action" type="button" data-timer-minutes="5">5 MIN</button>
+        <button class="glass-action" type="button" data-timer-minutes="10">10 MIN</button>
+        <button class="glass-action" type="button" data-timer-minutes="15">15 MIN</button>
+      </div>
+      <div class="glass-tool-panel__actions">
+        <button class="glass-action" id="glass-timer-start" type="button">START</button>
+        <button class="glass-action" id="glass-timer-pause" type="button">PAUSE</button>
+        <button class="glass-action glass-action--quiet" id="glass-timer-reset" type="button">RESET</button>
+        <button class="glass-action glass-action--quiet" type="button" data-close-tool>CLOSE</button>
+      </div>
+    </div>
+    <div class="glass-tool-panel" id="glass-tool-note" data-panel="note" hidden>
+      <div class="glass-tool-panel__label">QUICK NOTE</div>
+      <textarea class="glass-note-input" id="glass-note-input" rows="3" maxlength="240" placeholder="Type a classroom note"></textarea>
+      <div class="glass-tool-panel__actions">
+        <button class="glass-action" id="glass-note-show" type="button">SHOW</button>
+        <button class="glass-action glass-action--quiet" id="glass-note-hide" type="button">HIDE</button>
+        <button class="glass-action glass-action--quiet" type="button" data-close-tool>CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="glass-note-overlay" id="glass-note-overlay" hidden>
+    <div class="glass-note-overlay__text" id="glass-note-overlay-text"></div>
+    <button class="glass-return" type="button" data-hide-note>HIDE NOTE</button>
+  </div>
+  <div class="glass-blank-overlay" id="glass-blank-overlay" hidden>
+    <button class="glass-return" type="button" data-close-blank>RETURN TO GLASS</button>
+  </div>
 </div>
 <script>window.GLASS_INITIAL = {{ payload|tojson }};</script>
 {% endblock %}

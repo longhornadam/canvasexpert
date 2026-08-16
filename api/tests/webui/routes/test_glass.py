@@ -26,6 +26,10 @@ def test_glass_page_loads_display_template_once(monkeypatch):
     assert "class=\"glass-frame\"" in response.text
     assert response.text.count("/static/pages/glass.js") == 1
     assert "SIMULATED" in response.text
+    assert 'id="glass-content"' in response.text
+    assert 'data-tool="timer"' in response.text
+    assert 'data-tool="note"' in response.text
+    assert 'data-tool="blank"' in response.text
     assert "ce-app-header" not in response.text
 
 

@@ -1,51 +1,76 @@
-/* Glass is a projected frame: large type, calm regions, no app chrome. */
+/* Glass is a projected instrument panel: flat surfaces, hard hierarchy, no dashboard chrome. */
 .glass-page { background: var(--ce-surface); color: var(--ce-ink); }
-.glass-board[hidden], .glass-class[hidden] { display: none; }
-.glass-frame { display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 100%; height: 100%; padding: clamp(20px, 2.5vw, 48px); gap: clamp(12px, 1.5vw, 28px); overflow: hidden; }
-.glass-header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: clamp(12px, 2vw, 36px); align-items: end; border-bottom: 2px solid var(--ce-rule-strong); padding-bottom: clamp(10px, 1vw, 18px); }
-.glass-header__date { font-family: var(--ce-font-display); font-size: clamp(25px, 3.2vw, 64px); font-weight: 800; line-height: 1; }
-.glass-header__schedule { color: var(--ce-accent-canvas); font-size: clamp(14px, 1.2vw, 24px); font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
-.glass-header__clock { font-family: var(--ce-font-mono); font-size: clamp(22px, 2vw, 40px); font-weight: 700; white-space: nowrap; }
-.glass-header__simulated { align-self: start; padding: 5px 8px; border: 1px solid var(--ce-attention); border-radius: 999px; color: var(--ce-attention); font-family: var(--ce-font-mono); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
-.glass-status { padding: 9px 12px; border-left: 4px solid var(--ce-attention); background: var(--ce-attention-soft); color: var(--ce-ink); font-size: clamp(14px, 1vw, 20px); font-weight: 700; }
-.glass-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: clamp(10px, 1.3vw, 24px); min-height: 0; }
-.glass-region { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; padding: clamp(12px, 1.4vw, 24px); border: 1px solid var(--ce-rule); border-top: 4px solid var(--ce-accent-canvas); background: var(--ce-surface-raised); overflow: hidden; }
-.glass-region--today { border-top-color: var(--ce-accent-model); }
-.glass-region--grading { border-top-color: var(--ce-prepared); }
-.glass-region__heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; margin-bottom: clamp(8px, .8vw, 16px); }
-.glass-region__heading h1, .glass-region__heading h2 { margin: 0; font-family: var(--ce-font-display); font-size: clamp(18px, 1.6vw, 32px); line-height: 1; }
-.glass-region__heading > span { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(10px, .75vw, 14px); white-space: nowrap; }
-.glass-list { display: grid; align-content: start; gap: 7px; min-height: 0; overflow: auto; scrollbar-width: thin; }
-.glass-item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--ce-rule); }
-.glass-item:last-child { border-bottom: 0; }
-.glass-item__date, .glass-item__kind, .glass-item__slot { color: var(--ce-accent-canvas); font-family: var(--ce-font-mono); font-size: clamp(10px, .7vw, 14px); font-weight: 800; text-transform: uppercase; white-space: nowrap; }
-.glass-item__title { min-width: 0; overflow: hidden; font-size: clamp(13px, 1vw, 21px); font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.glass-item__detail { margin-top: 3px; color: var(--ce-ink-muted); font-size: clamp(11px, .8vw, 16px); line-height: 1.25; }
-.glass-empty { display: grid; place-items: center; min-height: 70px; color: var(--ce-ink-muted); font-size: clamp(12px, .9vw, 18px); text-align: center; }
-.glass-grading-card { display: grid; align-content: center; gap: 8px; height: 100%; }
-.glass-grading-card__name { font-family: var(--ce-font-display); font-size: clamp(18px, 1.7vw, 34px); font-weight: 800; }
-.glass-grading-card__days { color: var(--ce-accent-canvas); font-family: var(--ce-font-mono); font-size: clamp(18px, 1.5vw, 30px); font-weight: 800; }
-.glass-grading-card__range { color: var(--ce-ink-muted); font-size: clamp(11px, .8vw, 16px); }
-.glass-class { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); gap: clamp(10px, 1.3vw, 24px); min-height: 0; }
-.glass-class__period { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(150px, .6fr) minmax(150px, .8fr) auto; grid-template-rows: auto auto; gap: 8px clamp(16px, 2vw, 36px); align-items: center; padding: clamp(14px, 1.6vw, 26px); border: 1px solid var(--ce-rule); border-top: 5px solid var(--ce-accent-model); background: var(--ce-surface-raised); }
-.glass-kicker { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(10px, .7vw, 14px); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.glass-class__period h1 { margin: 3px 0 0; font-family: var(--ce-font-display); font-size: clamp(26px, 3vw, 58px); line-height: 1; }
-.glass-class__label { margin-top: 7px; color: var(--ce-ink-muted); font-size: clamp(13px, 1vw, 20px); }
-.glass-class__time, .glass-class__next { min-width: 0; }
-.glass-class__time > div:last-child { color: var(--ce-accent-model); font-family: var(--ce-font-mono); font-size: clamp(25px, 2.7vw, 52px); font-weight: 800; white-space: nowrap; }
-.glass-class__next > div:last-child { margin-top: 6px; font-size: clamp(16px, 1.3vw, 26px); font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.glass-random-button { align-self: end; min-height: 48px; padding: 10px 16px; border: 2px solid var(--ce-accent-canvas); background: var(--ce-accent-canvas); color: white; font: inherit; font-weight: 800; cursor: pointer; }
-.glass-random-button:focus-visible { outline: 3px solid var(--ce-attention); outline-offset: 3px; }
-.glass-random-result { grid-column: 1 / -1; color: var(--ce-ink-muted); font-size: clamp(13px, .9vw, 18px); }
-.glass-class .glass-region { min-height: 0; }
-.glass-region--objective { border-top-color: var(--ce-accent-model); }
-.glass-region--celebrations { border-top-color: var(--ce-prepared); }
-.glass-class__body { display: grid; align-content: center; min-height: 0; color: var(--ce-ink); font-size: clamp(18px, 1.45vw, 30px); font-weight: 700; line-height: 1.25; overflow: auto; }
-.glass-class__body--empty { color: var(--ce-ink-muted); font-size: clamp(13px, .9vw, 18px); font-weight: 500; }
-.glass-region__heading > span:empty { display: none; }
-.glass-as-of { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(9px, .6vw, 12px); font-weight: 700; white-space: nowrap; }
-.glass-missing-count { color: var(--ce-attention); font-family: var(--ce-font-mono); font-weight: 800; white-space: nowrap; }
-@media (max-width: 1000px) { .glass-class { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; overflow: auto; } .glass-class__period { grid-template-columns: minmax(0, 1fr) auto; } .glass-class__next { grid-column: 1; } .glass-random-button { grid-column: 2; grid-row: 1 / span 2; } .glass-random-result { grid-column: 1 / -1; } }
-@media (max-width: 620px) { .glass-class__period { grid-template-columns: minmax(0, 1fr); } .glass-random-button, .glass-random-result, .glass-class__next { grid-column: 1; grid-row: auto; } }
-@media (max-width: 1000px) { .glass-frame { overflow: auto; } .glass-board { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; } }
-@media (max-width: 620px) { .glass-frame { padding: 14px; } .glass-header { grid-template-columns: 1fr auto; } .glass-header__schedule { grid-column: 1 / -1; grid-row: 2; } .glass-header__simulated { grid-column: 2; grid-row: 1; } .glass-board { grid-template-columns: minmax(0, 1fr); } }
+.glass-frame { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: 100%; height: 100%; padding: clamp(14px, 1.8vw, 30px) clamp(18px, 2.6vw, 44px); gap: clamp(10px, 1.3vw, 22px); overflow: hidden; }
+.glass-header { display: grid; grid-template-columns: minmax(0, 1.5fr) auto minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: clamp(8px, 1.4vw, 22px); align-items: baseline; min-width: 0; border-bottom: 1px solid var(--ce-rule-strong); padding: 0 0 clamp(9px, 1vw, 15px); white-space: nowrap; }
+.glass-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.glass-header__date { font-family: var(--ce-font-display); font-size: clamp(17px, 2vw, 34px); font-weight: 800; line-height: 1; }
+.glass-header__clock, .glass-header__period, .glass-header__boundary { font-family: var(--ce-font-mono); font-size: clamp(12px, .95vw, 17px); font-weight: 800; letter-spacing: .02em; }
+.glass-header__clock { font-size: clamp(15px, 1.25vw, 22px); }
+.glass-header__course { color: var(--ce-accent-canvas); font-size: clamp(12px, .9vw, 17px); font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.glass-header__boundary { color: var(--ce-ink-muted); text-transform: uppercase; }
+.glass-header__simulated { color: var(--ce-attention); font-family: var(--ce-font-mono); font-size: clamp(10px, .7vw, 13px); font-weight: 800; letter-spacing: .08em; }
+.glass-status { border-left: 3px solid var(--ce-attention); padding: 7px 10px; background: var(--ce-attention-soft); color: var(--ce-ink); font-family: var(--ce-font-mono); font-size: clamp(10px, .75vw, 13px); font-weight: 800; text-transform: uppercase; }
+.glass-content { display: grid; grid-template-columns: minmax(0, 25fr) minmax(0, 48fr) minmax(0, 27fr); gap: clamp(10px, 1.1vw, 18px); min-height: 0; }
+.glass-column { display: flex; flex-direction: column; gap: clamp(8px, .9vw, 14px); min-width: 0; min-height: 0; overflow: hidden; }
+.glass-column--instruction { border-left: 1px solid var(--ce-rule); border-right: 1px solid var(--ce-rule); padding: 0 clamp(8px, 1vw, 16px); }
+.glass-card { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--ce-rule); border-left: 3px solid var(--ce-accent-canvas); background: var(--ce-surface-raised); transition: grid-template-rows 420ms ease, border-color 420ms ease, flex-basis 420ms ease; }
+.glass-card[data-state="repair"], .glass-card[data-state="stale"] { border-left-color: var(--ce-attention); }
+.glass-card[data-card-id="objective"] { border-left-color: var(--ce-accent-model); flex: 1 1 auto; }
+.glass-card[data-card-id="objective"] .glass-card__body { font-size: clamp(21px, 2.15vw, 42px); font-weight: 750; line-height: 1.18; }
+.glass-card[data-card-id="objective"] .glass-card__compact { display: none; }
+.glass-card--compact { flex: 0 1 auto; grid-template-rows: auto; }
+.glass-card--compact .glass-card__body { display: none; }
+.glass-card--expanded { flex: 1 1 0; }
+.glass-card__head { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: clamp(8px, .75vw, 12px) clamp(10px, 1vw, 16px); border-bottom: 1px solid var(--ce-rule); }
+.glass-card__icon { flex: 0 0 auto; color: var(--ce-accent-canvas); font-size: clamp(16px, 1.25vw, 24px); line-height: 1; }
+.glass-card__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--ce-font-mono); font-size: clamp(10px, .72vw, 13px); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.glass-card__head-summary { min-width: 0; overflow: hidden; color: var(--ce-ink); font-size: clamp(12px, .95vw, 18px); font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.glass-card__meta { margin-left: auto; color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(9px, .62vw, 11px); white-space: nowrap; }
+.glass-card__body { min-height: 0; padding: clamp(10px, 1vw, 16px); overflow: hidden; }
+.glass-card__compact, .glass-card__detail { min-width: 0; }
+.glass-card__compact { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-height: 25px; cursor: pointer; }
+.glass-card__compact-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(12px, .95vw, 18px); font-weight: 750; }
+.glass-card__compact-sub { flex: 0 0 auto; color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(10px, .7vw, 13px); white-space: nowrap; }
+.glass-card__detail { display: grid; align-content: start; gap: 6px; height: 100%; overflow: hidden; }
+.glass-card__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; min-width: 0; padding: 3px 0 7px; border-bottom: 1px solid var(--ce-rule); }
+.glass-card__row:last-child { border-bottom: 0; }
+.glass-card__row-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(12px, .95vw, 18px); font-weight: 700; }
+.glass-card__row-detail { min-width: 0; overflow: hidden; color: var(--ce-ink-muted); font-size: clamp(10px, .72vw, 14px); text-overflow: ellipsis; white-space: nowrap; }
+.glass-card__row-meta { color: var(--ce-accent-canvas); font-family: var(--ce-font-mono); font-size: clamp(10px, .68vw, 13px); font-weight: 800; white-space: nowrap; }
+.glass-card__repair { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(11px, .75vw, 14px); font-weight: 700; line-height: 1.35; text-transform: uppercase; }
+.glass-card__repair::before { content: "↺ "; color: var(--ce-attention); }
+.glass-card[data-card-id="calendar"] .glass-card__icon, .glass-card[data-card-id="academic"] .glass-card__icon { color: var(--ce-accent-model); }
+.glass-card[data-card-id="celebrations"] { border-left-color: var(--ce-prepared); }
+.glass-card[data-card-id="grading"] { border-left-color: var(--ce-prepared); }
+.glass-card--manual { border-color: var(--ce-accent-canvas); }
+.glass-card--manual .glass-card__head { background: var(--ce-surface-sunken, var(--ce-surface)); }
+.glass-card:focus-visible, .glass-card__compact:focus-visible { outline: 2px solid var(--ce-attention); outline-offset: -2px; }
+.glass-ticker { overflow: hidden; white-space: nowrap; }
+.glass-ticker > span { display: inline-block; min-width: 100%; }
+.glass-ticker.is-ticker > span { animation: glass-ticker 18s linear infinite; }
+@keyframes glass-ticker { from { transform: translateX(0); } to { transform: translateX(calc(-100% + 100vw)); } }
+.glass-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; border-top: 1px solid var(--ce-rule-strong); padding-top: clamp(9px, .9vw, 14px); }
+.glass-tools { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.glass-tool, .glass-action, .glass-return { border: 1px solid var(--ce-rule-strong); border-radius: 2px; background: transparent; color: var(--ce-ink); font: inherit; font-family: var(--ce-font-mono); font-size: clamp(10px, .7vw, 13px); font-weight: 800; letter-spacing: .04em; cursor: pointer; }
+.glass-tool { min-height: 32px; padding: 7px 10px; }
+.glass-tool:hover, .glass-tool:focus-visible, .glass-action:hover, .glass-action:focus-visible, .glass-return:hover, .glass-return:focus-visible { border-color: var(--ce-accent-canvas); color: var(--ce-accent-canvas); outline: none; }
+.glass-tool:disabled { color: var(--ce-ink-muted); border-color: var(--ce-rule); cursor: not-allowed; }
+.glass-footer__status { min-width: 0; overflow: hidden; color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(10px, .65vw, 12px); text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
+.glass-tool-overlay, .glass-note-overlay, .glass-blank-overlay { position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--ce-surface) 94%, transparent); }
+.glass-tool-overlay[hidden], .glass-note-overlay[hidden], .glass-blank-overlay[hidden] { display: none; }
+.glass-tool-panel { display: grid; gap: 14px; width: min(560px, calc(100% - 36px)); padding: clamp(22px, 3vw, 48px); border: 1px solid var(--ce-rule-strong); border-top: 4px solid var(--ce-accent-canvas); background: var(--ce-surface-raised); }
+.glass-tool-panel__label { color: var(--ce-ink-muted); font-family: var(--ce-font-mono); font-size: clamp(11px, .8vw, 15px); font-weight: 800; letter-spacing: .08em; }
+.glass-tool-panel__value { min-height: 1.1em; font-family: var(--ce-font-display); font-size: clamp(42px, 7vw, 110px); font-weight: 850; line-height: 1; overflow-wrap: anywhere; }
+.glass-tool-panel__value--timer { font-family: var(--ce-font-mono); }
+.glass-tool-panel__actions, .glass-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.glass-action { min-height: 34px; padding: 8px 11px; }
+.glass-action--quiet { color: var(--ce-ink-muted); }
+.glass-note-input { width: 100%; resize: vertical; border: 1px solid var(--ce-rule-strong); border-radius: 0; padding: 10px; background: var(--ce-surface); color: var(--ce-ink); font: inherit; font-size: clamp(18px, 1.8vw, 30px); line-height: 1.2; }
+.glass-note-input:focus { outline: 2px solid var(--ce-attention); outline-offset: 2px; }
+.glass-note-overlay { grid-template-rows: 1fr auto; padding: clamp(26px, 6vw, 110px); background: var(--ce-surface); }
+.glass-note-overlay__text { align-self: center; max-width: 1100px; color: var(--ce-ink); font-family: var(--ce-font-display); font-size: clamp(34px, 6vw, 96px); font-weight: 800; line-height: 1.08; overflow-wrap: anywhere; text-align: center; }
+.glass-blank-overlay { background: var(--ce-surface); }
+.glass-return { padding: 11px 15px; }
+@media (prefers-reduced-motion: reduce) { .glass-card { transition: none; } .glass-ticker.is-ticker > span { animation: none; } }
+@media (max-width: 920px) { .glass-header { grid-template-columns: minmax(0, 1.5fr) auto minmax(0, 1fr) auto; } .glass-header__course { grid-column: 1 / span 2; grid-row: 2; } .glass-header__boundary { grid-column: 3 / span 2; grid-row: 2; } .glass-content { grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: auto; } .glass-column--instruction { border: 0; padding: 0; } .glass-column--instruction { grid-column: 1 / -1; grid-row: 1; min-height: 220px; } .glass-column:not(.glass-column--instruction) { min-height: 220px; } }
+@media (max-width: 620px) { .glass-frame { height: auto; min-height: 100%; padding: 12px; overflow: visible; } .glass-header { grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; white-space: normal; } .glass-header__date { grid-column: 1 / -1; } .glass-header__clock { grid-column: 1; grid-row: 2; } .glass-header__period { grid-column: 2; grid-row: 2; } .glass-header__course, .glass-header__boundary { grid-column: 1 / -1; grid-row: auto; } .glass-content { grid-template-columns: minmax(0, 1fr); overflow: visible; } .glass-column--instruction { grid-column: auto; grid-row: auto; min-height: 220px; } .glass-column:not(.glass-column--instruction) { min-height: 0; } .glass-footer { align-items: flex-start; flex-direction: column; } }

@@ -127,6 +127,21 @@ calendar-only board projection live in `api/webui/glass.py`, `api/webui/glass_cl
 `/glass/data` are local-only: board mode reads calendar/schedule files, while class mode also
 reads the current course's local mirror and Learning Objectives document.
 
+The settled presentation is a three-column instrument panel with a single clinical header and a
+footer dock containing **Random Name**, **Timer**, **Quick Note**, and **Blank**. Class mode keeps
+operations left, the objective-centered instruction column dominant, and public school information
+right; board mode distributes only its public calendar/school regions across the same columns.
+There are no rendered column headings, dashboard metrics, placeholders, or inferred agenda/resource
+content. Cards are created only from the current projection: empty-ready regions disappear, repair
+and stale states remain concise, and a compact-complete item never enters emphasis rotation. Each
+column has at most one expanded eligible card. One page-level controller advances one eligible
+column at a time on an approximately eight-second cadence only when a column has at least two
+eligible cards; manual selection pauses it for 20 seconds and reduced motion disables rotation,
+ticker motion, and transitions. Refreshes preserve local Timer and Quick Note state, while mode or
+course changes clear class-only Random Name selection. The client clock and all simulated labels
+remain derived from the server-provided `context.at`; no Glass browser clock or live Canvas call is
+allowed.
+
 ### Assessments module routing
 
 Assessments is a local-only DataForge surface. The route adapter owns HTTP responses and
