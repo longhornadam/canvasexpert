@@ -3,23 +3,19 @@ setlocal
 cd /d "%~dp0api"
 
 REM --- Find Python 3.13+ or install it for this user -----------------------------
+REM Ask for the newest 3.x, not for 3.13 exactly. The floor is "3.13 or newer", and
+REM a machine carrying only 3.14 meets it; pinning the request to -3.13 made those
+REM machines fail setup with a Python sitting right there.
+REM Every probe below is read with `||`, never with `if errorlevel 1`. The Python
+REM Install Manager (the `py` that ships with 3.14+) exits with a large NEGATIVE
+REM code when no runtime matches, and `if errorlevel 1` only matches codes >= 1, so
+REM a missing runtime read here as success and setup then died further down at
+REM `-m venv` with "No runtime installed that matches 3.13".
 set "PY_CMD="
 set "PY_ARGS="
-where py >nul 2>&1
-if not errorlevel 1 (
-  py -3.13 -c "import sys" >nul 2>&1
-  if not errorlevel 1 (
-    set "PY_CMD=py"
-    set "PY_ARGS=-3.13"
-  )
-)
-if not defined PY_CMD (
-  where python >nul 2>&1
-  if not errorlevel 1 (
-    python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 13) else 1)" >nul 2>&1
-    if not errorlevel 1 set "PY_CMD=python"
-  )
-)
+call :use_python_if_new_enough py -3
+if not defined PY_CMD call :use_python_if_new_enough python
+if not defined PY_CMD call :use_python_if_new_enough py -3.13
 if not defined PY_CMD (
   echo.
   echo Python 3.13 or newer is needed for first-time setup.
@@ -28,15 +24,9 @@ if not defined PY_CMD (
   where winget >nul 2>&1 || goto :python_missing
   winget install --id Python.Python.3.13 --source winget --scope user --silent --accept-source-agreements --accept-package-agreements || goto :python_install_failed
   set "PATH=%LOCALAPPDATA%\Programs\Python\Python313;%LOCALAPPDATA%\Programs\Python\Python313\Scripts;%PATH%"
-  if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
-    set PY_CMD="%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
-  ) else (
-    where py >nul 2>&1
-    if not errorlevel 1 (
-      set "PY_CMD=py"
-      set "PY_ARGS=-3.13"
-    )
-  )
+  call :use_python_if_new_enough "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+  if not defined PY_CMD call :use_python_if_new_enough py -3
+  if not defined PY_CMD call :use_python_if_new_enough python
 )
 if not defined PY_CMD goto :python_install_failed
 
@@ -134,3 +124,14 @@ echo.
 echo Python could not be installed automatically. Check your internet connection and try again.
 pause
 exit /b 1
+
+REM --- Candidate interpreter test ------------------------------------------------
+REM %1 is an interpreter (a name on PATH or a full path), %2 an optional version
+REM selector. A command that does not exist, a `py` selector with no matching
+REM runtime, and a Python older than the floor all end the same way: the probe
+REM exits nonzero, `||` catches it, and the caller moves on to the next candidate.
+:use_python_if_new_enough
+"%~1" %2 -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 13) else 1)" >nul 2>&1 || exit /b 0
+set PY_CMD="%~1"
+set "PY_ARGS=%~2"
+exit /b 0
