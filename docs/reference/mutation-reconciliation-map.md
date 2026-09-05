@@ -79,6 +79,10 @@ contract and test entries have been removed.
 grades/statuses to the whole-course bridge, verifies each write, then invokes
 `mirror_service.notify_course_changed` once for the course. Pending-review,
 unsubmitted, uncovered, and inactive rows never become scores.
+An ambiguous passback can become applied only from the narrow teacher-observed
+Canvas Grade Sync timestamp evidence defined by the bridge contract. That local
+ledger transition never sends another Canvas request; the resumed operation
+performs registration and then uses the same central catalog invalidation hook.
 
 ### 2. Assignment/Quiz/Module structure (`catalog.assignments`, `catalog.modules`, `new_quiz.metadata`)
 

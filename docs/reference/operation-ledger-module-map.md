@@ -33,8 +33,10 @@ These are high-risk Canvas write flows.
   quiz creation, item creation, assignment restriction, override creation, assignment
   patch verification, and Assignment-type module attachment.
 - `api/operation_ledger/adapters/sis_grade_bridge.py` — exact family discovery,
+  explicit-student or verified Differentiation Tag membership resolution,
   aggregate review, grade projection, source/bridge cutover, SIS passback,
-  registration, and ambiguous-outcome reconciliation for `gradebook.sis_bridge`.
+  narrow teacher-observed passback confirmation, registration, and
+  ambiguous-outcome reconciliation for `gradebook.sis_bridge`.
 
 ## Shared Support
 

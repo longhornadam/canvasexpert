@@ -32,7 +32,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 32 (52 tools).
+Tool schema version 33 (53 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -40,6 +40,7 @@ Tool schema version 32 (52 tools).
 | `list_sis_grade_bridges(course_id)` | Configured whole-course SIS bridges for a Current course | No |
 | `preview_sis_grade_bridge(course_id, family_title)` | Live invariant check and aggregate, digest-protected review for one exact differentiated family | No |
 | `apply_sis_grade_bridge(operation_id, batch_id, review_digest)` | Applies only the exact frozen bridge review through the Operation Ledger | No |
+| `confirm_sis_grade_bridge_passback(operation_id, observed_last_sync_at)` | Confirms one ambiguous passback from an exact teacher-observed Canvas Grade Sync timestamp; never resends passback | No |
 | `list_sections(course_id)` | Section ids and names from the local mirror roster; how to find the `section_id` or `section_name` `get_seating_context` takes | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items with their catalog `content_id` | No |
@@ -103,6 +104,13 @@ teacher command may preauthorize the complete preview/apply cycle only when it
 names that exact course and family, or explicitly requests all already-registered
 bridges. Any invariant failure still stops, and that authorization never extends
 to another family or to an unbounded Canvas write.
+
+An ambiguous bridge passback may be confirmed only when the teacher explicitly
+identifies the exact Canvas Grade Sync row and reports its `Last Sync` timestamp.
+`confirm_sis_grade_bridge_passback` requires that timestamp to be at or after the
+persisted passback request marker, records only student-free evidence, and resumes
+registration without another `POST /post_grades`. Never infer or approximate this
+evidence from a title or unrelated sync status.
 
 `get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
 needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`, `assignment`, `page`, `rubric`) read the same

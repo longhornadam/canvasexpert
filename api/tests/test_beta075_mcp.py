@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 32
+    assert contract.TOOL_SCHEMA_VERSION == 33
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -49,7 +49,8 @@ def test_live_mcp_schema_matches_versioned_contract():
         # retry) so a duplicate or slightly-off SIS section name can still be
         # resolved instead of always refusing. v31 adds the Bell Schedule
         # preview/apply write pair. v32 adds the three bounded SIS grade-bridge
-        # tools while v31 remains the immutable 49-tool snapshot.
+        # tools while v31 remains the immutable 49-tool snapshot. v33 adds the
+        # evidence-only SIS passback confirmation while v32 remains immutable.
     v1 = contract.load_contract(1)
     v2 = contract.load_contract(2)
     assert v1["schema_version"] == 1
@@ -90,7 +91,8 @@ def test_live_mcp_schema_matches_versioned_contract():
     assert v25["schema_version"] == 25
     assert len(v25["tools"]) == 42
     assert len(contract.load_contract(31)["tools"]) == 49
-    assert len(live["tools"]) == 52
+    assert len(contract.load_contract(32)["tools"]) == 52
+    assert len(live["tools"]) == 53
     # Panel theme tools: get_theme_contract, list_panel_themes,
     # preview/apply/delete_panel_theme
     v22 = contract.load_contract(22)

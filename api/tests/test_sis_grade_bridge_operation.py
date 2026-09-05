@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -50,14 +51,25 @@ class FakeCanvas:
             },
         }
         self.bridge_submissions = {}
+        self.groups = {}
+        self.group_categories = {}
+        self.group_members = {}
+        self.incomplete_group_memberships = set()
+        self.get_all_calls = []
         self.send_calls = []
         self.uncertain_on = None
         self.reject_grades = False
         self.reject_passback_once = False
 
     def get_all(self, path, params=None):
+        self.get_all_calls.append((path, copy.deepcopy(params)))
         if path.endswith("/assignments"):
             rows = list(self.assignments.values())
+        elif path.startswith("/api/v1/groups/") and path.endswith("/users"):
+            group_id = path.split("/groups/", 1)[1].split("/", 1)[0]
+            rows = self.group_members.get(group_id, [])
+            if group_id in self.incomplete_group_memberships:
+                return copy.deepcopy(rows), "pagination_incomplete", False
         elif path.endswith("/users"):
             rows = self.users
         elif path.endswith("/overrides"):
@@ -71,6 +83,14 @@ class FakeCanvas:
         return copy.deepcopy(rows), None, True
 
     def get(self, path, params=None, timeout=20):
+        if path.startswith("/api/v1/group_categories/"):
+            category_id = path.rsplit("/", 1)[1]
+            row = self.group_categories.get(category_id)
+            return (copy.deepcopy(row), None) if row else (None, "HTTP 404")
+        if path.startswith("/api/v1/groups/"):
+            group_id = path.rsplit("/", 1)[1]
+            row = self.groups.get(group_id)
+            return (copy.deepcopy(row), None) if row else (None, "HTTP 404")
         if "/submissions/" in path:
             user_id = path.rsplit("/", 1)[1]
             row = self.bridge_submissions.get(user_id, {
@@ -176,6 +196,31 @@ def _preview():
     )
 
 
+def _use_differentiation_tags(fake):
+    fake.overrides = {
+        "source-a": [{"id": "oa", "group_id": "tag-a", "due_at": fake.assignments["source-a"]["due_at"]}],
+        "source-b": [{"id": "ob", "group_id": "tag-b", "due_at": fake.assignments["source-b"]["due_at"]}],
+    }
+    fake.groups = {
+        "tag-a": {
+            "id": "tag-a", "course_id": "course-1",
+            "group_category_id": "category-a", "non_collaborative": True,
+        },
+        "tag-b": {
+            "id": "tag-b", "course_id": "course-1",
+            "group_category_id": "category-b", "non_collaborative": True,
+        },
+    }
+    fake.group_categories = {
+        "category-a": {"id": "category-a", "course_id": "course-1"},
+        "category-b": {"id": "category-b", "course_id": "course-1"},
+    }
+    fake.group_members = {
+        "tag-a": [{"id": "student-1"}, {"id": "student-2"}],
+        "tag-b": [{"id": "student-3"}],
+    }
+
+
 def test_grade_transport_uses_canvas_string_and_excused_payloads():
     assert _grade_request({"score": 8.5, "excused": False}) == {
         "posted_grade": "8.5"
@@ -275,6 +320,95 @@ def test_bridge_end_to_end_example_creates_copies_cuts_over_and_reconciles(
         stored["targets"][0]["baseline"],
     )
     assert reconciled["state"] == "applied"
+
+
+def test_differentiation_tag_contract_resolves_complete_membership_and_copies_grades(
+    bridge_harness,
+):
+    fake, registrations, _catalog, _refresh = bridge_harness
+    _use_differentiation_tags(fake)
+
+    preview = _preview()
+    result = sis_grade_bridge.apply_sis_grade_bridge(
+        preview["operation_id"], preview["batch_id"], preview["review_digest"]
+    )
+
+    assert preview["ok"] is True
+    assert preview["preview"]["source_targeting_kind"] == "differentiation_tag"
+    assert preview["preview"]["counts"]["assigned_active"] == 3
+    assert result["status"] == "applied"
+    assert set(fake.bridge_submissions) == {"student-1", "student-3"}
+    membership_reads = [
+        (path, params) for path, params in fake.get_all_calls
+        if path.startswith("/api/v1/groups/") and path.endswith("/users")
+    ]
+    assert {params["per_page"] for _path, params in membership_reads} == {100}
+    assert len(membership_reads) >= 4
+    stored = operations.get_operation(preview["operation_id"])
+    baseline = stored["targets"][0]["baseline"]
+    assert baseline["source_targeting_kind"] == "differentiation_tag"
+    assert [
+        row["kind"] for row in baseline["source_target_evidence"]
+    ] == ["differentiation_tag", "differentiation_tag"]
+    assert baseline["validation_digest"]
+    assert "tag-a" not in str(preview)
+    assert "tag-b" not in str(preview)
+    assert "category-a" not in str(preview)
+    assert "student-1" not in str(preview)
+    assert "tag-a" not in str(result)
+    assert "category-a" not in str(result)
+    assert "student-1" not in str(result)
+    assert "tag-a" not in str(registrations)
+    assert "category-a" not in str(registrations)
+    assert "student-1" not in str(registrations)
+
+
+@pytest.mark.parametrize(
+    ("violation", "expected_error"),
+    [
+        ("collaborative_group", "collaborative_group_not_allowed"),
+        ("group_assignment", "group_assignment_not_allowed"),
+        ("group_course_mismatch", "tag_group_course_mismatch"),
+        ("category_course_mismatch", "tag_category_course_mismatch"),
+        ("section_override", "section_override_not_allowed"),
+        ("mixed_family_targeting", "mixed_family_targeting"),
+        ("incomplete_membership", "tag_membership_incomplete"),
+        ("active_overlap", "overlapping_active_memberships"),
+    ],
+)
+def test_differentiation_tag_laws_refuse_unsafe_targeting_before_mutation(
+    bridge_harness, violation, expected_error,
+):
+    fake, _registrations, _catalog, _refresh = bridge_harness
+    _use_differentiation_tags(fake)
+    if violation == "collaborative_group":
+        fake.groups["tag-a"]["non_collaborative"] = False
+    elif violation == "group_assignment":
+        fake.assignments["source-a"]["group_category_id"] = "category-a"
+    elif violation == "group_course_mismatch":
+        fake.groups["tag-a"]["course_id"] = "course-other"
+    elif violation == "category_course_mismatch":
+        fake.group_categories["category-a"]["course_id"] = "course-other"
+    elif violation == "section_override":
+        fake.overrides["source-a"] = [{
+            "id": "oa", "course_section_id": "section-a",
+            "due_at": fake.assignments["source-a"]["due_at"],
+        }]
+    elif violation == "mixed_family_targeting":
+        fake.overrides["source-b"] = [{
+            "id": "ob", "student_ids": ["student-3"],
+            "due_at": fake.assignments["source-b"]["due_at"],
+        }]
+    elif violation == "incomplete_membership":
+        fake.incomplete_group_memberships.add("tag-a")
+    elif violation == "active_overlap":
+        fake.group_members["tag-b"].append({"id": "student-1"})
+
+    result = _preview()
+
+    assert result == {"ok": False, "error": expected_error, "blocking": True}
+    assert operations.list_operations() == []
+    assert fake.send_calls == []
 
 
 def test_overlap_law_refuses_before_operation_or_mutation(bridge_harness):
@@ -386,6 +520,109 @@ def test_uncertain_passback_is_never_resent(bridge_harness):
     assert len(passbacks) == 1
     assert registrations == {}
     assert catalog_calls == []
+
+
+def test_teacher_observed_passback_confirmation_never_resends_and_resumes(
+    bridge_harness,
+):
+    fake, registrations, catalog_calls, _refresh = bridge_harness
+    fake.uncertain_on = "passback"
+    preview = _preview()
+    first = sis_grade_bridge.apply_sis_grade_bridge(
+        preview["operation_id"], preview["batch_id"], preview["review_digest"]
+    )
+    stored = operations.get_operation(preview["operation_id"])
+    post = next(
+        step for step in stored["targets"][0]["steps"]
+        if step["step_key"] == "post_grades"
+    )
+    calls_before = len([
+        call for call in fake.send_calls if call[1].endswith("/post_grades")
+    ])
+
+    result = sis_grade_bridge.confirm_sis_grade_bridge_passback(
+        preview["operation_id"], post["outbound_started_at"]
+    )
+
+    calls_after = len([
+        call for call in fake.send_calls if call[1].endswith("/post_grades")
+    ])
+    assert first["status"] == "attention"
+    assert result["status"] == "applied"
+    assert result["passback"] == "accepted"
+    assert calls_before == calls_after == 1
+    assert registrations[("course-1", "Synthetic Family")][
+        "bridge_assignment_id"
+    ] == "9001"
+    assert catalog_calls == [("course-1", "assignments")]
+    confirmed = operations.get_operation(preview["operation_id"])
+    confirmed_post = next(
+        step for step in confirmed["targets"][0]["steps"]
+        if step["step_key"] == "post_grades"
+    )
+    assert confirmed_post["external_evidence"] == {
+        "kind": "teacher_observed_canvas_grade_sync_last_sync",
+        "observed_last_sync_at": datetime.fromisoformat(
+            post["outbound_started_at"]
+        ).isoformat(),
+    }
+    assert "student-1" not in str(result)
+
+
+def test_passback_confirmation_refuses_old_or_invalid_evidence_without_mutation(
+    bridge_harness,
+):
+    fake, _registrations, _catalog, _refresh = bridge_harness
+    fake.uncertain_on = "passback"
+    preview = _preview()
+    sis_grade_bridge.apply_sis_grade_bridge(
+        preview["operation_id"], preview["batch_id"], preview["review_digest"]
+    )
+    stored = operations.get_operation(preview["operation_id"])
+    post = next(
+        step for step in stored["targets"][0]["steps"]
+        if step["step_key"] == "post_grades"
+    )
+    older = (
+        datetime.fromisoformat(post["outbound_started_at"]) - timedelta(seconds=1)
+    ).isoformat()
+
+    missing_result = sis_grade_bridge.confirm_sis_grade_bridge_passback(
+        preview["operation_id"], ""
+    )
+    assert "required" in missing_result["error"]
+    assert operations.get_operation(preview["operation_id"]) == stored
+
+    old_result = sis_grade_bridge.confirm_sis_grade_bridge_passback(
+        preview["operation_id"], older
+    )
+    assert "predates" in old_result["error"]
+    assert operations.get_operation(preview["operation_id"]) == stored
+
+    invalid_result = sis_grade_bridge.confirm_sis_grade_bridge_passback(
+        preview["operation_id"], "2030-01-02T03:04:05"
+    )
+    assert "timezone-aware" in invalid_result["error"]
+    assert operations.get_operation(preview["operation_id"]) == stored
+
+    def add_other_incomplete(candidate):
+        other = next(
+            step for step in candidate["targets"][0]["steps"]
+            if step["step_key"] == "copy_grade:0"
+        )
+        other["state"] = "pending"
+        return candidate
+
+    operations.update_operation(preview["operation_id"], add_other_incomplete)
+    structurally_inapplicable = operations.get_operation(preview["operation_id"])
+    structural_result = sis_grade_bridge.confirm_sis_grade_bridge_passback(
+        preview["operation_id"], post["outbound_started_at"]
+    )
+    assert "sole incomplete" in structural_result["error"]
+    assert (
+        operations.get_operation(preview["operation_id"])
+        == structurally_inapplicable
+    )
 
 
 def test_definite_passback_retry_repairs_only_previous_bridge_description(

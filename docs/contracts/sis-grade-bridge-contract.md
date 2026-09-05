@@ -34,7 +34,7 @@ creation, every later run uses the registered IDs; it never rediscovers or retar
 Before any write, CanvasExpert must prove from live Canvas that:
 
 - every source is published, graded in points, visible only to overrides, and assigned through
-  explicit student overrides;
+  either explicit student overrides or exact Canvas Differentiation Tag overrides;
 - all sources have the same points possible, assignment group, and one common effective source
   due date;
 - no active student is assigned to more than one source;
@@ -46,6 +46,15 @@ Inactive source assignees are ignored. A student assigned to multiple sources bl
 operation. A source with `workflow_state=pending_review` is not final even when it has a numeric
 partial score; it is reported and skipped. `unsubmitted` and other ungraded source rows are also
 reported and skipped.
+
+A Differentiation Tag override is accepted only when it has one `group_id`, the resolved Group
+belongs to the selected course and explicitly returns `non_collaborative=true`, the assignment is
+not a group assignment, and the group's complete paginated membership can be resolved. Its Group
+Category must resolve in the selected course, but Canvas's omission of `non_collaborative` from the
+category response does not override the exact Group-level proof. Collaborative groups, section
+overrides, incomplete membership collections, mixed target kinds within a family, or group/course
+mismatches block preparation. Tag membership IDs and their digest remain private ledger evidence;
+they never enter synced settings or assistant output.
 
 ## 4. Bridge shape and grade law
 
@@ -71,8 +80,9 @@ copied. A blank or non-final source never becomes zero.
 
 ## 5. Review and assistant behavior
 
-The assistant-facing surface is three specific tools: list configured bridges, preview one
-family, and apply the exact preview. It is not a generic Canvas mutation tool.
+The assistant-facing surface has four specific tools: list configured bridges, preview one
+family, apply the exact preview, and confirm one otherwise-ambiguous passback from explicit
+teacher-observed Canvas Grade Sync evidence. It is not a generic Canvas mutation tool.
 
 Preview performs live reads inside CanvasExpert and returns only assignment-level facts,
 aggregate counts, warnings, opaque operation/batch identifiers, and the review digest. It never
@@ -84,6 +94,14 @@ A teacher may authorize the complete preview/apply cycle in the same request by 
 course and family or by explicitly requesting all already-registered bridges. Otherwise the
 assistant summarizes the preview before apply. Any blocking problem always stops regardless of
 preauthorization.
+
+Passback confirmation is a narrow recovery action, not an alternative success path. It is allowed
+only when the teacher explicitly reports the exact bridge row's Canvas Grade Sync `Last Sync`
+timestamp, that timestamp is at or after the operation's persisted passback `before_send` marker,
+and the same operation is stopped only at an ambiguous passback outcome. Confirmation records the
+student-free observed timestamp and evidence kind in the private ledger, never resends the Canvas
+request, and resumes only registration/reconciliation. A missing row, blank timestamp, older
+timestamp, approximate title match, or assistant inference cannot confirm passback.
 
 ## 6. Ordered write protocol
 
@@ -109,6 +127,9 @@ Each Canvas call is a separate, write-ahead-checkpointed ledger step. An uncerta
 or grade-passback outcome remains `sent_unknown` and is never resent by guess. Exact assignment
 and submission IDs plus exact postconditions are the only reconciliation evidence. A partial
 cutover remains visible in Attention and resumes only unfinished, exactly verifiable steps.
+The one additional passback postcondition is the explicit teacher-observed Canvas Grade Sync proof
+defined in section 5; it converts the unresolved passback step to applied without another outbound
+request.
 
 ## 7. Reconciliation and receipts
 

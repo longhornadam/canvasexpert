@@ -24,12 +24,21 @@ def test_plain_tools_delegate_to_shared_use_case(monkeypatch):
             "ok": True, "coordinates": [operation_id, batch_id, digest]
         },
     )
+    monkeypatch.setattr(
+        tools.sis_grade_bridge, "confirm_sis_grade_bridge_passback",
+        lambda operation_id, observed_at: {
+            "ok": True, "evidence": [operation_id, observed_at]
+        },
+    )
 
     assert tools.list_sis_grade_bridges("course-x")["course_id"] == "course-x"
     assert tools.preview_sis_grade_bridge("course-x", "Invented")["title"] == "Invented"
     assert tools.apply_sis_grade_bridge("op", "batch", "digest")["coordinates"] == [
         "op", "batch", "digest"
     ]
+    assert tools.confirm_sis_grade_bridge_passback(
+        "op", "2030-01-02T03:04:05-06:00"
+    )["evidence"] == ["op", "2030-01-02T03:04:05-06:00"]
 
 
 def test_mcp_preview_output_never_projects_private_student_rows(
@@ -100,3 +109,5 @@ def test_server_instructions_lock_one_command_preauthorization():
 
     assert "One teacher command may preauthorize that exact preview/apply cycle" in instructions
     assert "Never reuse that authorization" in instructions
+    assert "confirm_sis_grade_bridge_passback" in instructions
+    assert "never resend passback during confirmation" in instructions

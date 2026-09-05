@@ -53,7 +53,11 @@ _FERPA_NOTICE = (
     "before apply_sis_grade_bridge. One teacher command may preauthorize that exact "
     "preview/apply cycle only when it names the course and family (or explicitly names "
     "all already-registered bridges); any invariant failure still stops. Never reuse "
-    "that authorization for another family or any unbounded Canvas write."
+    "that authorization for another family or any unbounded Canvas write. An ambiguous "
+    "bridge passback may be confirmed only from the teacher's exact Canvas Grade Sync "
+    "row and a Last Sync timestamp at or after the persisted request marker; call "
+    "confirm_sis_grade_bridge_passback with that explicit evidence. Never infer the row "
+    "or timestamp, and never resend passback during confirmation."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -98,6 +102,16 @@ def apply_sis_grade_bridge(
     """Apply only the exact opaque SIS bridge review previously returned."""
     return _compact(tools.apply_sis_grade_bridge(
         operation_id, batch_id, review_digest
+    ))
+
+
+@mcp.tool()
+def confirm_sis_grade_bridge_passback(
+    operation_id: str, observed_last_sync_at: str,
+) -> str:
+    """Confirm one ambiguous passback from an exact teacher-observed Last Sync."""
+    return _compact(tools.confirm_sis_grade_bridge_passback(
+        operation_id, observed_last_sync_at
     ))
 
 

@@ -22,10 +22,11 @@ tests, fixtures, documentation, logs, or commits.
 
 ## 2. Acceptance criteria
 
-1. MCP schema version 32 exposes exactly three new specific tools:
+1. MCP schema version 33 exposes exactly four specific bridge tools:
    `list_sis_grade_bridges(course_id)`,
    `preview_sis_grade_bridge(course_id, family_title)`, and
-   `apply_sis_grade_bridge(operation_id, batch_id, review_digest)`.
+   `apply_sis_grade_bridge(operation_id, batch_id, review_digest)`, plus the narrow recovery tool
+   `confirm_sis_grade_bridge_passback(operation_id, observed_last_sync_at)`.
 2. Initial preview discovers only exact `<family_title> - <variant>` source titles, performs the
    live invariants in `docs/contracts/sis-grade-bridge-contract.md` sections 2-5, creates and
    freezes one `gradebook.sis_bridge` ledger operation, and returns no student identity or
@@ -37,6 +38,10 @@ tests, fixtures, documentation, logs, or commits.
    inactive rows are counted but never converted to scores. Overlapping active memberships,
    mixed points/groups/due dates, title/ID drift, bridge collisions, missing Current-course
    scope, and a changed registered bridge digest fail closed before mutation.
+   Source targeting may be all explicit-student overrides or all verified Canvas Differentiation
+   Tag overrides. A tag requires a same-course `non_collaborative=true` Group, same-course resolved
+   category, complete paginated membership, and a source that is not a group assignment; section,
+   collaborative-group, mixed-target, incomplete, and course-mismatched families fail closed.
 5. On success, source assignments are excluded and SIS-disabled; the bridge is whole-course,
    published, counted, SIS-enabled, and submitted to Canvas grade passback. The student-free
    registration and final bridge-state digest persist in synced settings.
@@ -44,9 +49,10 @@ tests, fixtures, documentation, logs, or commits.
    writes invoke the existing targeted submissions refresh. No mirror record authorizes a write.
 7. Retry/reconcile never duplicates the bridge, never resends an uncertain create or passback,
    and resumes only exact unfinished steps. A standard private ledger receipt is created.
-8. The existing 49 MCP tools remain unchanged in schema v31; v32 contains 52 tools and the live
-   registry exactly matches it. MCP instructions and `docs/mcp-server.md` explain the one-command
-   preauthorization rule without weakening review for unbounded writes.
+8. The existing 49 MCP tools remain unchanged in schema v31; immutable v32 contains 52 tools; v33
+   contains 53 tools; and the live registry exactly matches v33. MCP instructions and
+   `docs/mcp-server.md` explain the one-command preauthorization and evidence-confirmation rules
+   without weakening review for unbounded writes.
 9. A mocked end-to-end example proves create, 2+ source variants, grade copy, source cutover,
    bridge activation, passback, config registration, receipt, and reconciliation. Focused law
    tests prove overlap refusal, common-due-date refusal, pending-review skip, drift refusal,
@@ -63,6 +69,17 @@ tests, fixtures, documentation, logs, or commits.
     own common source due date, and produce its own ledger operation, registration, passback
     acceptance, reconciliation, and receipt. A blocking preview stops only that family; do not
     reinterpret this as a cross-family transaction or invent a shared due date.
+12. The passback-confirmation tool accepts only an unresolved SIS-bridge operation whose sole
+    incomplete outbound effect is passback, validates a parseable teacher-observed `Last Sync`
+    timestamp at or after the persisted `post_grades` outbound marker, records student-free
+    external evidence, and resumes without issuing `POST /post_grades`. Missing, older, or
+    structurally inapplicable evidence fails without ledger mutation. A focused law test proves
+    both the no-resend recovery and refusal cases.
+13. A focused contract/example test proves exact Differentiation Tag membership resolution and
+    grade copying through complete paginated Group membership. Law tests refuse collaborative
+    groups, actual group assignments, category/course mismatches, section or mixed target kinds,
+    incomplete membership, and active overlap. No Group, category, member, or student identity is
+    returned through MCP or persisted in synced bridge registration.
 
 ## 3. Explicit non-goals
 
@@ -104,8 +121,9 @@ Implementation ownership:
 - Add `api/sis_grade_bridge.py` as the shared assistant-facing use case. It owns list, creation of
   one prepared operation plus frozen batch, validation of opaque apply coordinates, invocation of
   the ledger executor, and PII-free result shaping. Do not call FastAPI routes from MCP.
-- Add thin functions/wrappers in `api/mcp_server/tools.py` and `server.py`; bump
-  `contract.py::TOOL_SCHEMA_VERSION` to 32 and add immutable `tool_schema_v32.json`.
+- Add thin functions/wrappers in `api/mcp_server/tools.py` and `server.py`; preserve immutable
+  `tool_schema_v32.json`, bump `contract.py::TOOL_SCHEMA_VERSION` to 33, and add immutable
+  `tool_schema_v33.json`.
 - Map `gradebook.sis_bridge` to `catalog.assignments` in
   `api/operation_ledger/catalog_reconcile.py`. The adapter invokes the existing
   `mirror_service.notify_course_changed(course_id)` once after confirmed grade writes.
@@ -115,7 +133,7 @@ Implementation ownership:
 - Tests mirror modules: `api/tests/test_sis_grade_bridge.py`,
   `api/tests/test_sis_grade_bridge_operation.py`, and
   `api/tests/mcp_server/test_sis_grade_bridge_tools.py`; update only the existing schema/ownership
-  contract tests needed for v32.
+  contract tests needed for v33.
 
 ## 5. Required execution details
 
@@ -143,6 +161,8 @@ Implementation ownership:
 - Grade passback calls `POST /api/v1/courses/<course_id>/post_grades` with only the bridge ID in
   Canvas's documented `{\"assignments\": [<bridge_id>]}` JSON shape.
   A successful Canvas response means `accepted`; do not claim an SIS readback.
+- Human passback confirmation is allowed only under contract section 5. It is an evidence-backed
+  ledger transition and registration resume, never a second Canvas passback request.
 - On successful apply, capture the final full bridge-state digest before registering. Future
   preview compares this to the saved digest and blocks external/manual target drift.
 - The live validation may read private Canvas data inside the local process, but stdout/chat/report
@@ -178,58 +198,86 @@ API suite unless focused failures show unexpected coupling.
 
 ## 8. Execution result
 
-**Traffic light:** YELLOW. The implementation gate passes and the first family's Canvas grade and
-assignment state is fully verified, but Canvas returned an ambiguous internal-server error to the
-single corrected passback retry. Registration and central catalog invalidation cannot run without
-definitive passback acceptance. Per the locked sequence, the two remaining authorized families
-were neither previewed nor mutated.
+**Traffic light:** YELLOW. The implementation and named gate pass. The first family is fully
+applied, evidence-confirmed without a passback resend, registered, invalidated, receipted, and
+verified. The two later independent families each passed preview, copied and verified every
+eligible grade, and reached the exact safe final Canvas assignment state, but each family's one
+passback request returned an ambiguous HTTP 500. Neither request was resent; both registrations
+and their catalog invalidations remain correctly blocked.
 
-**Commit:** the single scoped implementation commit containing this result; its resolved hash is
-reported in the executor's chat return after creation.
+**Commits:** base implementation `d4009008a89050d431da1ed6127b9e414c60851f`; one scoped
+follow-up commit contains schema v33 confirmation, Differentiation Tag support, and this result.
+Its resolved hash is reported in the executor's chat return after creation because a commit cannot
+contain its own hash.
 
 **Changed files:**
 
-- `api/platform_services/config/{sis_grade_bridge.py,__init__.py,_io.py}`
-- `api/operation_ledger/{adapters/sis_grade_bridge.py,adapters/__init__.py,__init__.py,catalog_reconcile.py}`
+- `api/operation_ledger/adapters/sis_grade_bridge.py`
 - `api/sis_grade_bridge.py`
-- `api/mcp_server/{tools.py,server.py,contract.py,tool_schema_v32.json}`
-- `api/tests/{test_sis_grade_bridge.py,test_sis_grade_bridge_operation.py,test_beta075_mcp.py}`
+- `api/mcp_server/{tools.py,server.py,contract.py,tool_schema_v33.json}`
+- `api/tests/{test_sis_grade_bridge_operation.py,test_beta075_mcp.py}`
 - `api/tests/mcp_server/test_sis_grade_bridge_tools.py`
-- `docs/contracts/{sis-grade-bridge-contract.md,canvas-transport-owners.json}`
+- `docs/contracts/sis-grade-bridge-contract.md`
 - `docs/reference/{operation-ledger-module-map.md,mutation-reconciliation-map.md}`
 - `docs/mcp-server.md` and this brief
-- the preceding completed direct brief was removed so `docs/handoffs/` retains one current brief
 
 **Verification evidence:**
 
 - `py -m pytest api/tests/test_sis_grade_bridge.py api/tests/test_sis_grade_bridge_operation.py api/tests/mcp_server/test_sis_grade_bridge_tools.py api/tests/test_operation_ledger.py api/tests/test_canvas_mutation_ownership.py api/tests/test_beta075_mcp.py api/tests/test_route_contract.py -p no:randomly -q`
-  — 72 passed.
+  — 83 passed.
 - `py -m compileall -q api/sis_grade_bridge.py api/operation_ledger/adapters/sis_grade_bridge.py api/platform_services/config/sis_grade_bridge.py api/mcp_server`
   — passed.
 - `git diff --check` — passed.
-- The mocked adapter/ownership focus was 20 passed and pins safe publish-before-grade ordering,
+- The focused adapter gate was 22 passed and pins safe publish-before-grade ordering,
   string grade transport, exact `{\"assignments\": [<integer bridge ID>]}` passback shape, one
-  description-only in-flight repair, and no duplicate create.
+  description-only in-flight repair, no duplicate create, complete paginated Differentiation Tag
+  membership and grade copying, and refusal of every locked unsafe tag-target case.
+- Schema checks preserve v31 at 49 tools and immutable v32 at 52 while the live v33 registry has
+  53. Passback confirmation tests prove strict timestamp/evidence checks and zero resend.
 - PII-free first live preview: three 100-point sources, one common group/date, no original bridge,
   no overlap; 25 active, 24 assigned, one uncovered, 22 eligible final, zero pending-review, two
   unsubmitted, zero inactive or other non-final rows.
 - Fresh read-only final-state audit: 22 of 22 eligible grades matched with zero read errors; all
   three sources were excluded and SIS-disabled; the bridge was published, whole-course, counted,
   SIS-enabled, override-free, and carried the exact required student-facing description.
-- Four standard private blocked receipts exist for the operation's completed attempts.
+- The evidence-confirmation issued zero passback POSTs and completed the first registration,
+  assignment-catalog invalidation, and applied receipt.
 
-**Live deviation:** Canvas first rejected grading while the bridge was unpublished, so the durable
-protocol now verifies a safe published-but-omitted/SIS-disabled state before grade writes. Grade
+**Historical transport deviations:** Canvas first rejected grading while the bridge was
+unpublished, so the durable protocol now verifies a safe published-but-omitted/SIS-disabled state
+before grade writes. Grade
 transport was aligned with Canvas's documented string form. The first passback attempt then
 returned a definite 400 because the mocked scalar payload did not satisfy Canvas's required
 `assignments` array. The one senior-authorized corrected retry used the official integer-array
 shape and returned HTTP 500 `internal_server_error`; it exposed no job/status ID or URL. Read-only
 course and section queries with `include[]=passback_status` returned no passback status, timestamp,
 or message, so success or failure cannot be proven and the request must not be resent by guess.
-The local registration remains absent and catalog invalidation remains pending. The two later
-families have no preview, operation, bridge, or mutation from this execution.
+The teacher's exact post-request Last Sync evidence later confirmed acceptance without a resend.
 
-**Unresolved decision:** obtain definitive external Canvas/SIS integration evidence for the
-ambiguous corrected passback request. Only after its outcome is known may the same ledger action be
-reconciled or explicitly retried; registration and the two remaining independent family cycles
-stay blocked until then.
+**PII-free later-family aggregate:**
+
+- Family 2: three verified tag-target sources; 25 active/assigned, zero uncovered/overlap/inactive,
+  23 eligible final, zero pending-review/other, and two unsubmitted. Its independently derived
+  common due date/group passed. The one passback POST followed 23 of 23 verified grades and the
+  complete structural cutover, then returned HTTP 500. One private receipt exists; registration
+  and catalog invalidation did not run.
+- Family 3: three verified tag-target sources; 25 active/assigned, zero uncovered/overlap/inactive,
+  20 eligible final, zero pending-review/other, and five unsubmitted. Its independently derived
+  common due date/group passed. The one passback POST followed 20 of 20 verified grades and the
+  complete structural cutover, then returned HTTP 500. One private receipt exists; registration
+  and catalog invalidation did not run.
+- For both tag families, complete membership resolved to aggregate variant counts 11/5/9 with no
+  overlap or uncovered active student. All Groups and categories resolved in the selected course,
+  every Group explicitly returned `non_collaborative=true`, no source was a group assignment, and
+  the category-level flag was absent as permitted by the contract. All three sources and the safe
+  whole-course bridge, including the required description, passed a fresh read-only audit.
+
+**Follow-up live deviation:** both later independent passback requests returned the same ambiguous
+HTTP 500 after Canvas state and grades had verified. Each ledger contains one persisted outbound
+marker, a blocked passback step, pending registration, and no resend. No runtime identity or
+per-student grade value entered source, tests, docs, logs, configuration, or this result.
+
+**Unresolved decision:** obtain exact post-request Canvas Grade Sync Last Sync evidence separately
+for each blocked bridge. If supplied, criterion 12 permits confirming each existing operation and
+finishing registration/catalog invalidation without another passback POST. Without that evidence,
+both operations must remain stopped.

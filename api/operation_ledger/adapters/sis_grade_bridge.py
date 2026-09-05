@@ -205,6 +205,8 @@ class SisGradeBridgeAdapter:
 
         source_states = []
         source_memberships: list[list[str]] = []
+        source_target_evidence: list[dict] = []
+        source_targeting_kinds: set[str] = set()
         effective_due_dates: list[str | None] = []
         for source in source_rows:
             _validate_source_shape(source)
@@ -213,10 +215,17 @@ class SisGradeBridgeAdapter:
                 f"/api/v1/courses/{course_id}/assignments/{source_id}/overrides",
                 {"per_page": 100},
             )
-            members, due_dates = _explicit_override_members(source, overrides)
+            members, due_dates, target_evidence = _source_override_members(
+                course_id, source, overrides
+            )
             source_memberships.append(sorted(members))
+            source_target_evidence.append(target_evidence)
+            source_targeting_kinds.add(target_evidence["kind"])
             effective_due_dates.extend(due_dates)
             source_states.append(_source_state(source, overrides))
+
+        if len(source_targeting_kinds) != 1:
+            raise _BridgeInvariantError("mixed_family_targeting")
 
         _validate_common_source_shape(source_rows, effective_due_dates)
         memberships_by_student: dict[str, list[int]] = {}
@@ -330,6 +339,8 @@ class SisGradeBridgeAdapter:
             "source_titles": [str(row.get("name") or "") for row in source_rows],
             "source_states": source_states,
             "source_memberships": source_memberships,
+            "source_target_evidence": source_target_evidence,
+            "source_targeting_kind": next(iter(source_targeting_kinds)),
             "active_student_ids": sorted(active_ids),
             "grade_entries": grade_entries,
             "points_possible": _normalized_number(first.get("points_possible")),
@@ -350,6 +361,8 @@ class SisGradeBridgeAdapter:
                 for state in source_states
             ],
             "source_memberships": source_memberships,
+            "source_target_evidence": source_target_evidence,
+            "source_targeting_kind": baseline["source_targeting_kind"],
             "active_student_ids": baseline["active_student_ids"],
             "grade_entries": grade_entries,
             "points_possible": baseline["points_possible"],
@@ -378,6 +391,7 @@ class SisGradeBridgeAdapter:
             "common_assignment_group": True,
             "common_due_date": True,
             "no_active_overlap": True,
+            "source_targeting_kind": baseline.get("source_targeting_kind"),
             "counts": copy.deepcopy(baseline.get("counts") or {}),
             "warnings": copy.deepcopy(baseline.get("warnings") or []),
         }
@@ -1013,27 +1027,109 @@ def _validate_source_shape(source: dict) -> None:
         raise _BridgeInvariantError("source_points_invalid")
 
 
-def _explicit_override_members(source: dict, overrides: list[dict]):
+def _source_override_members(
+    course_id: str, source: dict, overrides: list[dict]
+) -> tuple[set[str], list[str | None], dict]:
     if not overrides:
         raise _BridgeInvariantError("source_missing_student_overrides")
     members: set[str] = set()
     due_dates: list[str | None] = []
-    for override in overrides:
+    target_kind: str | None = None
+    private_overrides: list[dict] = []
+    for override in sorted(overrides, key=lambda row: str(row.get("id") or "")):
         student_ids = override.get("student_ids")
-        if not isinstance(student_ids, list) or not student_ids:
-            raise _BridgeInvariantError("source_has_nonstudent_override")
-        if override.get("group_id") is not None or override.get("course_section_id") is not None:
-            raise _BridgeInvariantError("source_has_nonstudent_override")
+        has_students = isinstance(student_ids, list) and bool(student_ids)
+        group_id = str(override.get("group_id") or "").strip()
+        has_group = bool(group_id)
+        if override.get("course_section_id") is not None:
+            raise _BridgeInvariantError("section_override_not_allowed")
+        if has_students and has_group:
+            raise _BridgeInvariantError("mixed_override_targeting")
+        if has_students:
+            current_kind = "explicit_students"
+            override_members = set()
+            for value in student_ids:
+                member_id = str(value or "").strip()
+                if not member_id:
+                    raise _BridgeInvariantError(
+                        "source_override_student_id_invalid"
+                    )
+                if member_id in override_members:
+                    raise _BridgeInvariantError("duplicate_source_membership")
+                override_members.add(member_id)
+            evidence = {
+                "override_id": str(override.get("id") or ""),
+                "member_ids": sorted(override_members),
+            }
+        elif has_group:
+            current_kind = "differentiation_tag"
+            override_members, evidence = _differentiation_tag_members(
+                course_id, source, override, group_id
+            )
+        else:
+            raise _BridgeInvariantError("source_override_target_invalid")
+        if target_kind is not None and current_kind != target_kind:
+            raise _BridgeInvariantError("mixed_source_targeting")
+        target_kind = current_kind
         effective_due = override.get("due_at") or source.get("due_at")
         due_dates.append(str(effective_due) if effective_due is not None else None)
-        for student_id in student_ids:
-            text = str(student_id or "").strip()
-            if not text:
-                raise _BridgeInvariantError("source_override_student_id_invalid")
-            if text in members:
+        for member_id in override_members:
+            if member_id in members:
                 raise _BridgeInvariantError("duplicate_source_membership")
-            members.add(text)
-    return members, due_dates
+            members.add(member_id)
+        private_overrides.append(evidence)
+    return members, due_dates, {
+        "kind": target_kind,
+        "overrides": private_overrides,
+    }
+
+
+def _differentiation_tag_members(
+    course_id: str, source: dict, override: dict, group_id: str
+) -> tuple[set[str], dict]:
+    if source.get("group_category_id") not in (None, ""):
+        raise _BridgeInvariantError("group_assignment_not_allowed")
+
+    group, error = canvas_client.canvas_get(f"/api/v1/groups/{group_id}")
+    if error or not isinstance(group, dict):
+        raise _BridgeReadError(str(error or "invalid group response"))
+    if str(group.get("course_id") or "") != course_id:
+        raise _BridgeInvariantError("tag_group_course_mismatch")
+    if group.get("non_collaborative") is not True:
+        raise _BridgeInvariantError("collaborative_group_not_allowed")
+
+    category_id = str(group.get("group_category_id") or "").strip()
+    if not category_id:
+        raise _BridgeInvariantError("tag_group_category_missing")
+    category, error = canvas_client.canvas_get(
+        f"/api/v1/group_categories/{category_id}"
+    )
+    if error or not isinstance(category, dict):
+        raise _BridgeReadError(str(error or "invalid group category response"))
+    if str(category.get("course_id") or "") != course_id:
+        raise _BridgeInvariantError("tag_category_course_mismatch")
+
+    rows, error, complete = canvas_client.canvas_get_all_complete(
+        f"/api/v1/groups/{group_id}/users", {"per_page": 100}
+    )
+    if error or not complete or not isinstance(rows, list):
+        raise _BridgeInvariantError("tag_membership_incomplete")
+    member_ids = {
+        str(row.get("id") or "").strip()
+        for row in rows
+        if str(row.get("id") or "").strip()
+    }
+    if len(member_ids) != len(rows):
+        raise _BridgeInvariantError("tag_membership_invalid")
+    return member_ids, {
+        "override_id": str(override.get("id") or ""),
+        "group_id": group_id,
+        "group_category_id": category_id,
+        "group_course_id": str(group.get("course_id")),
+        "category_course_id": str(category.get("course_id")),
+        "non_collaborative": True,
+        "member_ids": sorted(member_ids),
+    }
 
 
 def _validate_common_source_shape(
