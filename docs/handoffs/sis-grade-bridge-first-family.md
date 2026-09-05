@@ -1,6 +1,6 @@
 # SIS grade bridge — implementation and first three live families
 
-**Status:** APPLY AUTHORIZED — THREE SEQUENTIAL RUNTIME FAMILIES
+**Status:** YELLOW — TWO PASSBACK CONFIRMATIONS PENDING
 
 **Opened:** 2026-09-04
 
@@ -80,6 +80,17 @@ tests, fixtures, documentation, logs, or commits.
     groups, actual group assignments, category/course mismatches, section or mixed target kinds,
     incomplete membership, and active overlap. No Group, category, member, or student identity is
     returned through MCP or persisted in synced bridge registration.
+14. Before any push to `dev`, add one canonical `docs/guides/sis-grade-bridges.md` future-session
+    guide and route `docs/README.md`, `api/README.md`, `docs/mcp-server.md`, and the Gradebook
+    module map to it. The guide must cover the teacher outcome and naming model; source/bridge
+    invariants; direct-student and Differentiation Tag targeting; final-grade eligibility; the
+    four-tool list/preview/apply/confirm workflow; full write order; preauthorization limits;
+    privacy and storage boundaries; mirror/live-read ownership; passback request and honest
+    acceptance semantics; the observed HTTP-500/Last-Sync recovery; retry/Attention behavior;
+    receipts and registration; recurring `Update all grades` behavior; verification commands;
+    and a future-session continuation checklist pointing to this active brief. Examples use only
+    invented courses, titles, IDs, counts, and timestamps. No runtime identity, real assignment
+    title, per-student value, private path, credential, or copied live response enters the guide.
 
 ## 3. Explicit non-goals
 
@@ -130,6 +141,9 @@ Implementation ownership:
 - Update `docs/contracts/canvas-transport-owners.json`, current totals/family text in
   `docs/reference/mutation-reconciliation-map.md`, the adapter map, MCP documentation, and the
   MCP server's shared instructions.
+- Add the guide and cross-links required by acceptance criterion 14. The contract remains the
+  normative behavior authority; the guide explains operation and recovery without duplicating or
+  weakening contract rules. Do not add a second architecture contract or a transient run log.
 - Tests mirror modules: `api/tests/test_sis_grade_bridge.py`,
   `api/tests/test_sis_grade_bridge_operation.py`, and
   `api/tests/mcp_server/test_sis_grade_bridge_tools.py`; update only the existing schema/ownership
@@ -220,6 +234,8 @@ contain its own hash.
 - `docs/contracts/sis-grade-bridge-contract.md`
 - `docs/reference/{operation-ledger-module-map.md,mutation-reconciliation-map.md}`
 - `docs/mcp-server.md` and this brief
+- Documentation-only release follow-up: `docs/guides/sis-grade-bridges.md`, `docs/README.md`,
+  `api/README.md`, `docs/mcp-server.md`, `docs/reference/gradebook-module-map.md`, and this brief
 
 **Verification evidence:**
 
@@ -234,6 +250,8 @@ contain its own hash.
   membership and grade copying, and refusal of every locked unsafe tag-target case.
 - Schema checks preserve v31 at 49 tools and immutable v32 at 52 while the live v33 registry has
   53. Passback confirmation tests prove strict timestamp/evidence checks and zero resend.
+- Documentation gate: `py -m pytest api/tests/test_beta075_mcp.py -p no:randomly -q` — 6 passed;
+  `git diff --check` — passed; added-document-link path check — 10 checked, zero missing.
 - PII-free first live preview: three 100-point sources, one common group/date, no original bridge,
   no overlap; 25 active, 24 assigned, one uncovered, 22 eligible final, zero pending-review, two
   unsubmitted, zero inactive or other non-final rows.
@@ -281,3 +299,15 @@ per-student grade value entered source, tests, docs, logs, configuration, or thi
 for each blocked bridge. If supplied, criterion 12 permits confirming each existing operation and
 finishing registration/catalog invalidation without another passback POST. Without that evidence,
 both operations must remain stopped.
+
+**Documentation release gate:** passed. The canonical guide covers acceptance criterion 14 and is
+linked from all four routed documents. The contract remains normative; the guide contains only
+synthetic examples and generic future-session operation/recovery guidance. No code, schema, or test
+file changed in this documentation pass. One scoped documentation commit contains this release
+gate; its resolved hash is reported in chat because a commit cannot contain its own hash. Nothing
+was pushed.
+
+**Current continuation state:** the first operation is complete. Two independent operations have
+verified Canvas structures and grades and remain in Attention pending each exact bridge row's
+teacher-observed post-request Last Sync evidence. No passback resend is authorized or needed for
+confirmation.

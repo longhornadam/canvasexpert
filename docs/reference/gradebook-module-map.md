@@ -57,6 +57,10 @@ Feature ownership:
 - `gradebook_common.py` - shared Canvas fetch helpers used by the route modules
 - `gradebook_service.py` - shared sweep math, curve math, and curve event storage
 
+Assistant-operated SIS grade bridges do not belong to this Web UI facade. Start with the
+[SIS Grade Bridges guide](../guides/sis-grade-bridges.md), then follow its exact contract and
+Operation Ledger routing for preview, apply, recurring updates, or Attention recovery.
+
 ## Browser routing
 
 `gradebook.js` owns:
@@ -107,6 +111,8 @@ Namespace seams:
   - `gradebook_common.py`
 - route import / registration problems:
   - `gradebook.py`
+- SIS grade bridge preview, apply, update, or passback recovery:
+  - [`docs/guides/sis-grade-bridges.md`](../guides/sis-grade-bridges.md)
 
 ## Rule of thumb
 

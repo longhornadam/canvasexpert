@@ -114,6 +114,10 @@ starting a media session; ordinary grading never downloads it. Weights stay in
 **Full feature reference** (Settings, Dashboard, Push Quiz/Assignment/Page/Module,
 Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 
+Assistant-operated SIS grade bridges are documented in the
+[SIS Grade Bridges guide](../docs/guides/sis-grade-bridges.md). They are separate from the
+Gradebook web UI and use the reviewed Operation Ledger preview/apply/recovery path.
+
 ## What each push does automatically
 
 ### Quizzes (QuizForge)
@@ -175,6 +179,7 @@ Gradebook tools, Download Assignments, Course Info): **`api/webui/README.md`**.
 | `mcp_server/` | Local MCP tool registry, contracts, pseudonymized reads, and teacher-owned write tools |
 | `mirror/` | CanvasMirror storage, freshness envelopes, sync coordinator, and disk-only query services |
 | `operation_ledger/` | High-risk operation checkpoints, claims, receipts, and recovery coordination |
+| `../docs/guides/sis-grade-bridges.md` | SIS grade-bridge operation, recurring update, privacy, verification, and Attention recovery guide |
 | `work_registry/` | Local work items and the Home surface's progress projections |
 | `dailywriting/` | Writing Record and Writing Timeline extraction and storage helpers |
 | `rubrics/` | Default rubric library consumed by authoring and scoring skill generation |

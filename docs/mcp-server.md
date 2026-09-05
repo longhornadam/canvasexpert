@@ -112,6 +112,10 @@ persisted passback request marker, records only student-free evidence, and resum
 registration without another `POST /post_grades`. Never infer or approximate this
 evidence from a title or unrelated sync status.
 
+See the [SIS Grade Bridges guide](guides/sis-grade-bridges.md) for the complete four-tool
+workflow, recurring updates, privacy boundaries, and Attention recovery. The linked contract,
+not the guide, remains the normative behavior authority.
+
 `get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
 needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`, `assignment`, `page`, `rubric`) read the same
 `api/default_docs/AI Authoring/` file the web UI's `/api/download-contract` route serves,
