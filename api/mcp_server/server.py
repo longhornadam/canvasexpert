@@ -48,6 +48,12 @@ _FERPA_NOTICE = (
     "to retrieve the SAFE pseudonymized bundle, score it with your chosen LLM, "
     "then stage_scores to land the results in the queue for teacher review. "
     "Scores never post to Canvas via this path; the teacher reviews and pushes them."
+    " SIS grade bridges are a separate bounded write path: call "
+    "preview_sis_grade_bridge, summarize its aggregate review, and normally wait "
+    "before apply_sis_grade_bridge. One teacher command may preauthorize that exact "
+    "preview/apply cycle only when it names the course and family (or explicitly names "
+    "all already-registered bridges); any invariant failure still stops. Never reuse "
+    "that authorization for another family or any unbounded Canvas write."
 )
 
 mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
@@ -71,6 +77,28 @@ def list_courses() -> str:
     active=true marks a current course, lifecycle tells Canvas concluded status.
     Call first to get a course_id. No student data."""
     return _compact(tools.list_courses())
+
+
+@mcp.tool()
+def list_sis_grade_bridges(course_id: str) -> str:
+    """Configured SIS grade bridges for one Current course; student-free."""
+    return _compact(tools.list_sis_grade_bridges(course_id))
+
+
+@mcp.tool()
+def preview_sis_grade_bridge(course_id: str, family_title: str) -> str:
+    """Freeze one exact differentiated family and return an aggregate review."""
+    return _compact(tools.preview_sis_grade_bridge(course_id, family_title))
+
+
+@mcp.tool()
+def apply_sis_grade_bridge(
+    operation_id: str, batch_id: str, review_digest: str
+) -> str:
+    """Apply only the exact opaque SIS bridge review previously returned."""
+    return _compact(tools.apply_sis_grade_bridge(
+        operation_id, batch_id, review_digest
+    ))
 
 
 @mcp.tool()

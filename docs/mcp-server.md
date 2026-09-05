@@ -32,11 +32,14 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 31 (49 tools).
+Tool schema version 32 (52 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
 | `list_courses` | Every saved course (Current + Previous) | No |
+| `list_sis_grade_bridges(course_id)` | Configured whole-course SIS bridges for a Current course | No |
+| `preview_sis_grade_bridge(course_id, family_title)` | Live invariant check and aggregate, digest-protected review for one exact differentiated family | No |
+| `apply_sis_grade_bridge(operation_id, batch_id, review_digest)` | Applies only the exact frozen bridge review through the Operation Ledger | No |
 | `list_sections(course_id)` | Section ids and names from the local mirror roster; how to find the `section_id` or `section_name` `get_seating_context` takes | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Assignments from the local course catalog (disk-only); descriptions trimmed to a preview unless `full_descriptions` | No |
 | `get_modules(course_id, include_items=false)` | Module structure from the local course catalog (disk-only); `include_items` nests each module's items with their catalog `content_id` | No |
@@ -92,6 +95,14 @@ hasn't been refreshed yet, refresh it from the web UI first, then retry. Unlike 
 tools below, `get_modules` never refuses on staleness: it returns whatever module records
 the catalog holds, labeled with `source`, `synced_at`, and `state`, since module structure
 is far lower-risk than student data.
+
+The SIS grade-bridge pair is a bounded, family-specific Canvas write surface.
+Normally an assistant previews, summarizes the aggregate counts and warnings,
+and waits for the teacher before applying the returned opaque coordinates. One
+teacher command may preauthorize the complete preview/apply cycle only when it
+names that exact course and family, or explicitly requests all already-registered
+bridges. Any invariant failure still stops, and that authorization never extends
+to another family or to an unbounded Canvas write.
 
 `get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
 needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`, `assignment`, `page`, `rubric`) read the same

@@ -4,7 +4,8 @@ from .receipts import create_receipt, list_receipts, get_receipt, new_receipt
 from . import models, operations, batches, registry, executor, claims, recovery
 from .adapters import (
     AssignmentAdapter, PageAdapter, QuickAssignmentAdapter,
-    QuizAdapter, RubricAdapter, SeatingGroupSetAdapter, SweepAdapter,
+    QuizAdapter, RubricAdapter, SeatingGroupSetAdapter, SisGradeBridgeAdapter,
+    SweepAdapter,
 )
 
 __all__ = [
@@ -12,7 +13,8 @@ __all__ = [
     "models", "operations", "batches", "registry", "executor", "claims",
     "recovery",
     "AssignmentAdapter", "PageAdapter",
-    "QuickAssignmentAdapter", "QuizAdapter", "RubricAdapter", "SeatingGroupSetAdapter", "SweepAdapter",
+    "QuickAssignmentAdapter", "QuizAdapter", "RubricAdapter", "SeatingGroupSetAdapter",
+    "SisGradeBridgeAdapter", "SweepAdapter",
 ]
 
 registry.register(AssignmentAdapter())
@@ -21,4 +23,5 @@ registry.register(QuickAssignmentAdapter())
 registry.register(QuizAdapter())
 registry.register(RubricAdapter())
 registry.register(SeatingGroupSetAdapter())
+registry.register(SisGradeBridgeAdapter())
 registry.register(SweepAdapter())

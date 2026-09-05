@@ -107,6 +107,11 @@ from .seating import (
     get_seating_course_state, set_seating_course_state,
 )
 
+# --- SIS grade bridge registrations ---
+from .sis_grade_bridge import (
+    get_sis_grade_bridge, list_sis_grade_bridges, save_sis_grade_bridge,
+)
+
 # --- private I/O helpers (needed by sibling sub-modules and test monkeypatches) ---
 from . import _io
 

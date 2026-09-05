@@ -32,6 +32,9 @@ These are high-risk Canvas write flows.
 - `api/operation_ledger/adapters/quiz_steps.py` — shared quiz write-ahead helpers for
   quiz creation, item creation, assignment restriction, override creation, assignment
   patch verification, and Assignment-type module attachment.
+- `api/operation_ledger/adapters/sis_grade_bridge.py` — exact family discovery,
+  aggregate review, grade projection, source/bridge cutover, SIS passback,
+  registration, and ambiguous-outcome reconciliation for `gradebook.sis_bridge`.
 
 ## Shared Support
 
@@ -66,6 +69,7 @@ These are high-risk Canvas write flows.
 - `api/tests/test_quick_assignment_operation.py`
 - `api/tests/test_rubric_operation.py`
 - `api/tests/test_operation_ledger.py`
+- `api/tests/test_sis_grade_bridge_operation.py`
 - `api/tests/test_operation_routes.py`
 
 ## Source-size reports

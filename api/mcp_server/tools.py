@@ -40,7 +40,7 @@ import math
 from contextlib import contextmanager
 from datetime import date, timedelta
 
-from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, panel_themes, roster_context, roster_service
+from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, panel_themes, roster_context, roster_service, sis_grade_bridge
 from api.dataforge import canvas_join, grouping, history_store, paths as dataforge_paths, profile_export
 from api.dataforge.identity import IdentityMigrationError, VaultIdentity
 from api.mirror import queries as mirror_queries
@@ -167,6 +167,25 @@ def final_response_gate(payload: dict) -> dict:
     if error:
         return {"ok": False, "error": error}
     return pseudonym.gate(payload, vault)
+
+
+def list_sis_grade_bridges(course_id: str) -> dict:
+    """List student-free SIS grade-bridge registrations for one Current course."""
+    return sis_grade_bridge.list_sis_grade_bridges(course_id)
+
+
+def preview_sis_grade_bridge(course_id: str, family_title: str) -> dict:
+    """Prepare one exact family bridge and return only aggregate review facts."""
+    return sis_grade_bridge.preview_sis_grade_bridge(course_id, family_title)
+
+
+def apply_sis_grade_bridge(
+    operation_id: str, batch_id: str, review_digest: str
+) -> dict:
+    """Apply only the opaque, digest-protected SIS bridge review."""
+    return sis_grade_bridge.apply_sis_grade_bridge(
+        operation_id, batch_id, review_digest
+    )
 
 
 def _truncate_text(text: str, max_chars: int) -> str:

@@ -14,17 +14,18 @@ live `api/` tree: any unlisted mutation-shaped call, any stale listed owner,
 any duplicate key, or any out-of-vocabulary classification/scope/state fails
 the suite.
 
-## Current totals (from the JSON, 2026-07-19)
+## Current totals (from the JSON, 2026-09-04)
 
-- **50 owners total.** (Down from 56 — Batch 8 retired 4 dead ledger adapters, removing 6 owner entries.)
-- By classification: `canvas_mutation` 38, `canvas_read_acquisition` 5,
+- **53 owners total.**
+- By classification: `canvas_mutation` 41, `canvas_read_acquisition` 5,
   `canvas_upload` 2, `generic_transport_internal` 2, `canvas_mutation_native` 1,
   `diagnostic_probe` 1, `external` 1.
-- By reconciliation state: `none` 10, `n/a` 19, `targeted` 10, `invalidate` 11.
-- By scope (an owner may touch more than one): `private.submissions` 8,
-  `catalog.assignments` 7, `private.assignments` 7, `none` 8, `catalog.modules` 6,
-  `focused_evidence` 6, `new_quiz.metadata` 5, `private.groups` 4,
-  `private.submission_comments` 2, `gradebook.late_policy` 1,
+- By reconciliation state: `none` 8, `n/a` 20, `targeted` 12, `invalidate` 13.
+- By scope (an owner may touch more than one): `private.submissions` 9,
+  `catalog.assignments` 9, `none` 9, `catalog.modules` 6,
+  `focused_evidence` 6, `new_quiz.metadata` 5, `private.assignments` 5,
+  `private.groups` 5, `private.submission_comments` 2,
+  `gradebook.late_policy` 1,
   `new_quiz.responses` 1. `catalog.assignment_groups`, `private.roster`, and
   `unknown` are currently unused (no live mutation touches them).
 
@@ -73,6 +74,12 @@ ledger adapter `operation_ledger/adapters/curve.py` (`gradebook.curve` KIND) was
 reconciles, the latter is Batch 7 unit 02. The dead ledger adapter file and its
 contract and test entries have been removed.
 
+**Covered (targeted) — SIS bridge:**
+`operation_ledger/adapters/sis_grade_bridge.py` copies only finalized source
+grades/statuses to the whole-course bridge, verifies each write, then invokes
+`mirror_service.notify_course_changed` once for the course. Pending-review,
+unsubmitted, uncovered, and inactive rows never become scores.
+
 ### 2. Assignment/Quiz/Module structure (`catalog.assignments`, `catalog.modules`, `new_quiz.metadata`)
 
 **Covered (invalidate):** after each successfully-applied ledger operation,
@@ -99,6 +106,10 @@ because `rf.canvas_rubric_payload` builds a Course-level bookkeeping
 association (`association_type: "Course"`, no assignment linkage — assignment
 association is deferred to the `content.assignment` adapter), so a rubric
 create alters no assignments-catalog data.
+
+The `gradebook.sis_bridge` adapter is also covered: bridge create plus the
+source/bridge publish, exclusion, and SIS-flag patches map conservatively to
+`catalog.assignments` through the central post-apply invalidation hook.
 
 ### 3. Per-student assignment facts (`private.assignments`)
 

@@ -128,7 +128,8 @@ CONFIG_PATH = str(runtime_paths.local_app_dir() / "config.json")
 SYNCED_KEYS = ("saved_courses", "extra_time", "late_sweep", "tier_tags",
                "ai_ta_persona", "roster_student_settings", "roster_tier_schemes",
                "roster_group_schemes", "roster_score_matrices", "roster_relationships",
-               "seating_course_states", "monitored_students", "roster_baselines")
+               "seating_course_states", "monitored_students", "roster_baselines",
+               "sis_grade_bridges")
 
 
 def _machine_load():
