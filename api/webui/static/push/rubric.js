@@ -45,6 +45,6 @@
     if (!path) return alert("Pick a RubricForge file.");
     push.pushContent("rf", { path: path },
       getLog(), getBanner(), this,
-      'Push RubricForge file "' + path.split(/[\\/]/).pop() + '"');
+      "Create this rubric in Canvas.");
   });
 })();

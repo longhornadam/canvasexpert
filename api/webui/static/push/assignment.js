@@ -126,7 +126,6 @@
     if (mod) payload.module_name = mod;
     push.pushContent("af", payload,
       getLog(), getBanner(), this,
-      'Push AssignmentForge file "' + path.split(/[\\/]/).pop() + '"' +
-      (payload.published ? " (PUBLISHED)" : " (unpublished)"));
+      "Create this assignment in Canvas.");
   });
 })();

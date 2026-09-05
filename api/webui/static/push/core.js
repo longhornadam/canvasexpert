@@ -265,7 +265,7 @@
       targets: frozen.map(function (review) { return { name: review.course_name }; }),
       details: details,
       warnings: warnings,
-      confirmText: "Apply to Canvas",
+      confirmText: "Apply",
       cancelText: "Cancel",
     };
   }

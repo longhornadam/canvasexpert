@@ -54,8 +54,7 @@
     var mod = push.moduleChoice("pf-module");
     if (mod) payload.module_name = mod;
     push.pushContent("pf", payload, getLog(), getBanner(), this,
-      'Push PageForge file "' + path.split(/[\\/]/).pop() + '"' +
-      (payload.published ? " (PUBLISHED)" : " (unpublished)"));
+      "Create this page in Canvas.");
   });
 
   document.getElementById("btn-pf-prepare")?.addEventListener("click", function () {
