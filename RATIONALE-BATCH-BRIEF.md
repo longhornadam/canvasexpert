@@ -422,7 +422,35 @@ Every item must hold before you call the batch GREEN.
 
 ---
 
-## 9a. Pending live check for Unit C, to be run by the teacher
+## 9a-live. Test quiz pushed 2026-09-06, awaiting the teacher's student-side look
+
+Pushed to **CS 8, course 121046** (not the sandbox, at the teacher's direction):
+`https://pearland.instructure.com/courses/121046/assignments/3675645`
+
+Source file: `Library/Quizzes/html_quick_check_feedback_test.txt` in the workspace.
+Three items on HTML, the current module: one MC (per-choice feedback), one TF
+(single-rationale neutral feedback), one ESSAY (the exemplar). All three returned
+HTTP 200.
+
+**Confirmed by the push itself:** Canvas accepts and stores `feedback.neutral` on a
+human-graded essay item. That answers half of question 1. It does not answer when the
+student sees it.
+
+**State:** `published: false`, 100 points, assignment group 259100, no due date. No
+student can see it until the teacher publishes.
+
+**The specific risk signal to check.** `result_view_settings.display_item_response_qualifier`
+is `after_last_attempt`, which is attempt-based, not grading-based. If Canvas honors that
+literally on a human-graded item, the exemplar appears as soon as the student submits and
+before any grading, which is the answer-key failure mode. Check that first.
+
+**Also worth the teacher's eye, a design question rather than a defect:** on a wrong MC
+choice the concept sentence now appears twice in one feedback box, once in the correct
+answer's line and once in the chosen answer's line. That is decision D6 meeting the
+two-layer composition in `_because`. It reads redundantly. Deduplicating the shared
+leading sentence is possible but was not decided unilaterally.
+
+## 9b. Original sandbox procedure for Unit C
 
 The code and its test are green. The unit stays YELLOW until this runs, because an
 exemplar visible before grading is an answer key and no offline test can tell you which
