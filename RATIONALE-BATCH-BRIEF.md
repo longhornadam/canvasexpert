@@ -450,7 +450,30 @@ answer's line and once in the chosen answer's line. That is decision D6 meeting 
 two-layer composition in `_because`. It reads redundantly. Deduplicating the shared
 leading sentence is possible but was not decided unilaterally.
 
-## 9c. Live result 2026-09-06: the essay exemplar does not reach the student
+## 9c-RESOLVED. Unit C is GREEN. The essay exemplar behaves safely.
+
+Settled 2026-09-06 on live course 121046, quiz 3675645, by the teacher with a real
+enrolled student.
+
+- Before grading: the exemplar did **not** appear on the student results screen.
+- After grading: it appeared, labelled **General Feedback**, alongside the teacher's own
+  per-student comment labelled **Grader**.
+
+That is exactly the pattern the brief required and could not prove offline: absent at
+step 6, present at step 8. The exemplar cannot function as an answer key, because Canvas
+withholds it until the teacher has graded. `t_essay`'s `feedback.neutral` key stays.
+
+The earlier hypothesis in the superseded notes below, that New Quizzes never renders
+feedback on an item scored `None`, was wrong. It renders on grading rather than on
+submission. The teacher's own expectation had been that a student would see the exemplar
+immediately, so the safe behaviour is also the one neither of us predicted.
+
+Canvas gives the exemplar and the teacher's comment two distinct labels, which is better
+than hoped: a student can tell the model response apart from feedback written for them.
+
+**Whole batch is now GREEN.** This brief can be retired.
+
+## 9c-superseded. Interim reading taken before the essay was graded
 
 Teacher observation from the student side of quiz 3675645: the auto-scored feedback
 rendered correctly, and **the essay exemplar did not appear on the student results
