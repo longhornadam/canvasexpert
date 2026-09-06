@@ -55,6 +55,41 @@ def _because(text, rationale, correct):
     return f'<span style="color:{color}">{glyph} {stmt}</span>'
 
 
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
+def _drop_lead_if_seen(rationale, seen):
+    """Drop a rationale's opening concept sentence if this box already said it.
+
+    Every rationale on an item opens with the same concept sentence on purpose, so
+    whichever row a student lands on carries its own teaching. One feedback box can
+    show several rows at once (the correct answer plus the choice they picked), and
+    there the repetition is just noise. Keep the first occurrence, drop the rest.
+
+    Never returns empty: a one-sentence rationale has nothing after the lead, so it
+    is left alone.
+    """
+    text = (rationale or "").strip()
+    if not text:
+        return text
+    parts = _SENTENCE_SPLIT.split(text, 1)
+    lead = parts[0].strip()
+    rest = parts[1].strip() if len(parts) > 1 else ""
+    if lead in seen and rest:
+        return rest
+    seen.add(lead)
+    return text
+
+
+def _compose_feedback(parts):
+    """Join (choice_text, rationale, is_correct) rows into one feedback box."""
+    seen = set()
+    return " ".join(
+        _because(text, _drop_lead_if_seen(rationale, seen), correct)
+        for text, rationale, correct in parts
+    )
+
+
 def t_mc(item, pos):
     rat = {c["id"]: c.get("rationale", "")
            for c in (item.get("_rationale") or {}).get("choices", [])}
@@ -66,18 +101,19 @@ def t_mc(item, pos):
         if c.get("correct"):
             correct_qid = c["id"]
     correct_text = next(c["text"] for c in item["choices"] if c.get("correct"))
-    correct_stmt = _because(correct_text, rat.get(correct_qid, ""), True)
+    correct_row = (correct_text, rat.get(correct_qid, ""), True)
 
-    # Wrong choice -> "<correct> is correct because... <this> is wrong because..."
+    # Wrong choice -> "<correct> is correct. ... <this> is wrong. ..."
     # Correct choice -> just the correct statement.
     answer_feedback = {}
     for c in item["choices"]:
         cu = idmap[c["id"]]
         if c.get("correct"):
-            answer_feedback[cu] = _p(correct_stmt)
+            answer_feedback[cu] = _p(_compose_feedback([correct_row]))
         else:
-            wrong_stmt = _because(c["text"], rat.get(c["id"], ""), False)
-            answer_feedback[cu] = _p(f"{correct_stmt} {wrong_stmt}")
+            answer_feedback[cu] = _p(_compose_feedback(
+                [correct_row, (c["text"], rat.get(c["id"], ""), False)]
+            ))
     entry = {
         "title": item.get("id", "MC"),
         "item_body": item["prompt"],
@@ -101,16 +137,19 @@ def t_ma(item, pos):
         if c.get("correct"):
             correct.append(cu)
     # All correct statements, so a wrong selection still gets the full set.
-    all_correct = " ".join(_because(c["text"], rat.get(c["id"], ""), True)
-                           for c in item["choices"] if c.get("correct"))
+    correct_rows = [(c["text"], rat.get(c["id"], ""), True)
+                    for c in item["choices"] if c.get("correct")]
     answer_feedback = {}
     for c in item["choices"]:
         cu = idmap[c["id"]]
         if c.get("correct"):
-            answer_feedback[cu] = _p(_because(c["text"], rat.get(c["id"], ""), True))
+            answer_feedback[cu] = _p(_compose_feedback(
+                [(c["text"], rat.get(c["id"], ""), True)]
+            ))
         else:
-            wrong_stmt = _because(c["text"], rat.get(c["id"], ""), False)
-            answer_feedback[cu] = _p(f"{all_correct} {wrong_stmt}")
+            answer_feedback[cu] = _p(_compose_feedback(
+                correct_rows + [(c["text"], rat.get(c["id"], ""), False)]
+            ))
     entry = {
         "title": item.get("id", "MA"),
         "item_body": item["prompt"],

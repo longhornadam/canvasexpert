@@ -71,3 +71,72 @@ def test_per_choice_feedback_reads_as_sentences_not_a_because_clause():
     assert '"anchor" is correct.' in feedback
     assert '"paragraph" is wrong.' in feedback
     assert concept in feedback
+
+
+def test_repeated_concept_sentence_is_said_once_per_feedback_box():
+    """One box can show several rows; the shared concept sentence belongs once.
+
+    Rationales repeat their concept sentence across an item's choices on purpose,
+    so whichever row a student lands on teaches on its own. A single feedback box
+    shows the correct answer plus the choice they picked, and there the repeat is
+    noise. MA is the sharp case: every correct choice contributes a row.
+    """
+    from api.transform import t_ma
+
+    concept = "A multi-answer item needs every true option chosen."
+    item = {
+        "id": "m1",
+        "type": "MA",
+        "prompt": "<p>Pick the true ones.</p>",
+        "choices": [
+            {"id": "A", "text": "alpha", "correct": True},
+            {"id": "B", "text": "beta", "correct": True},
+            {"id": "C", "text": "gamma", "correct": False},
+        ],
+        "_rationale": {
+            "item_id": "m1",
+            "choices": [
+                {"id": "A", "correct": True, "rationale": f"{concept} Alpha is true, so it fits."},
+                {"id": "B", "correct": True, "rationale": f"{concept} Beta is true, so it fits."},
+                {"id": "C", "correct": False, "rationale": f"{concept} Gamma is false, so it does not fit."},
+            ],
+        },
+    }
+
+    built = t_ma(item, 1)["item"]["entry"]
+    labels = {c["id"]: c["item_body"] for c in built["interaction_data"]["choices"]}
+    wrong_box = next(fb for cid, fb in built["answer_feedback"].items()
+                     if "gamma" in labels[cid])
+
+    assert wrong_box.count(concept) == 1
+    # Every row's own applied sentence survives the dedupe.
+    for tail in ("Alpha is true", "Beta is true", "Gamma is false"):
+        assert tail in wrong_box
+
+
+def test_one_sentence_rationale_survives_dedupe_intact():
+    """Dropping the lead must never empty a rationale that is only a lead."""
+    from api.transform import t_mc
+
+    shared = "Same single sentence."
+    item = {
+        "id": "q1",
+        "type": "MC",
+        "prompt": "<p>p</p>",
+        "choices": [
+            {"id": "A", "text": "right", "correct": True},
+            {"id": "B", "text": "wrong", "correct": False},
+        ],
+        "_rationale": {
+            "item_id": "q1",
+            "choices": [
+                {"id": "A", "correct": True, "rationale": shared},
+                {"id": "B", "correct": False, "rationale": shared},
+            ],
+        },
+    }
+
+    wrong_box = next(fb for cid, fb in t_mc(item, 1)["item"]["entry"]["answer_feedback"].items()
+                     if "wrong" in fb)
+
+    assert '"wrong" is wrong. Same single sentence.' in wrong_box
