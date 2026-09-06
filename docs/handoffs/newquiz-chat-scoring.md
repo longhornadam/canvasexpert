@@ -108,6 +108,31 @@ rows to the live registry. Adding a tool stays red until the doc gains its row.
 
 ---
 
+## 2a. The teacher's target chain, stated 2026-09-06
+
+> chat with agent, agent refreshes CanvasMirror content, scores unscored content and gives
+> a score plus personalized feedback on Essay items, pushes to Canvas.
+
+Mapped to the tools:
+
+```
+start_scoring_session(course, assignment)   <- Unit B, shipped 5d2f965
+get_scoring_packet(session_id)              <- already shipped
+   ... the assistant scores, per item ...
+stage_scores(session_id, results, digest)   <- already shipped, takes item_id
+preview_new_quiz_scores(session_id)         <- Unit C
+apply_new_quiz_scores(operation_id, digest) <- Unit C
+```
+
+**The teacher's "refresh CanvasMirror" step is not needed in this chain.**
+`start_scoring_session` calls `assignment_refresh.refresh_assignment`, which reads a fresh
+New Quiz snapshot under `mirror_serve_max_age_hours` and re-fetches when stale. The
+separate `refresh_mirror` tool covers roster, assignments and submissions for the read
+tools; it does not fetch quiz item responses and is not a prerequisite here.
+
+**Canvas to SIS sync stays out of scope**, confirmed by the teacher as not wanted from the
+agent. That is the separate, already-shipped SIS grade-bridge surface.
+
 ## 3. Locked decisions
 
 **D1. Packet mode only.** The MCP session-start tool creates `mode="packet"` and nothing
@@ -133,6 +158,22 @@ and were live-verified; a parallel path would have none of them.
 **D5. Convergence moves with the finalize.** `_converge_new_quiz_after_finalize` moves out
 of the route into shared code so both the HTTP caller and the MCP caller get it. Landing a
 grade without invalidating the response snapshot is a defect, not an optimization.
+
+**D9. The preview freezes; the apply replays.** `review_new_quiz_finalization` already is a
+preflight freeze that returns a 15-minute review token per student. `preview_new_quiz_scores`
+calls it for each student carrying a staged score, stashes the resulting tokens, and returns
+aggregate facts plus an `operation_id` and `review_digest`. `apply_new_quiz_scores` replays
+the stashed tokens through `finalize_new_quiz`. This reuses the existing drift check rather
+than adding a second freeze.
+
+Consequence to document rather than engineer around: a teacher who takes longer than the
+token window gets a clean refusal on apply and re-runs the preview. That re-checks drift,
+which is the behaviour you want anyway.
+
+**D10. Stash the frozen set in the session file, not the operation ledger.** The session is
+already the unit of state and is already locked, and the lean default forbids adding a
+persistence format without an immediate second consumer. Key the stash by `operation_id`
+under the session.
 
 **D6. The preview carries no student identity.** It routes through the identity vault and
 the outbound safety scan like every other student-data tool, and reports aggregate counts
