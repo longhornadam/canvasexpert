@@ -131,8 +131,8 @@ Gradebook web UI and use the reviewed Operation Ledger preview/apply/recovery pa
   facts" — this is core QF pedagogy). Optional: hide results, access code,
   multiple attempts, time limit, one-at-a-time, calculator type.
 - Composes **per-choice colored feedback** — the targeted layer (an API detail):
-  `✓ "choice" is correct because <rationale>` (green), `✗ "choice" is wrong
-  because <rationale>` (red). MC/MA use per-choice `answer_feedback`; the other
+  `✓ "choice" is correct. <rationale>` (green), `✗ "choice" is wrong.
+  <rationale>` (red). MC/MA use per-choice `answer_feedback`; the other
   scored types use question-level `feedback.neutral`. We deliberately do **not**
   populate the question-level correct/incorrect boxes for MC/MA — the durable
   idea lives in the correct-answer rationale, kept at one layer for simplicity.

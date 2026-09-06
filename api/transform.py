@@ -35,18 +35,23 @@ def _neutral_feedback(item):
 
 # --------------------------------------------------------------------------- #
 def _because(text, rationale, correct):
-    """Compose the points-back norm: '"answer" is correct/wrong because <reason>'.
+    """Compose the points-back norm: '"answer" is correct/wrong. <rationale>'.
 
     Returns an HTML <span> colored green (correct) or red (wrong) with a ✓/✗ glyph.
-    Composes from a standard QuizForge per-choice rationale (the authored text is
-    the reason; the answer text + verb are added here). An API-presentation detail,
-    not a QuizForge-contract requirement. HTML in `text` (e.g. <em>) is preserved.
+    The verdict and the answer text are added here; the authored rationale follows
+    as its own sentences. An API-presentation detail, not a QuizForge-contract
+    requirement. HTML in `text` (e.g. <em>) is preserved.
+
+    The verdict is a complete sentence rather than a trailing "because" clause: a
+    rationale is now two sentences (a concept sentence, then a sentence tying it to
+    this choice), and "is correct because Each HTML element has one job..." does not
+    read as English. Keeping them as separate sentences composes with both shapes.
     """
-    verb = "is correct because" if correct else "is wrong because"
-    reason = (rationale or "").strip().rstrip(".")
+    verb = "is correct" if correct else "is wrong"
+    reason = (rationale or "").strip()
     color = "#1a6b1a" if correct else "#a50000"
     glyph = "✓" if correct else "✗"
-    stmt = f'"{text}" {verb} {reason}.'
+    stmt = f'"{text}" {verb}.' + (f" {reason}" if reason else "")
     return f'<span style="color:{color}">{glyph} {stmt}</span>'
 
 

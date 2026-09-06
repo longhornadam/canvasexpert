@@ -36,3 +36,38 @@ def test_essay_rationale_becomes_neutral_feedback_exemplar():
     built_bare = t_essay(item_without_exemplar, 2)
 
     assert built_bare["item"]["entry"]["feedback"] == {}
+
+
+def test_per_choice_feedback_reads_as_sentences_not_a_because_clause():
+    """A two-sentence rationale must not be spliced after "because".
+
+    The rationale shape is a concept sentence followed by a sentence tying it to
+    this choice, so the verdict has to stand as its own sentence. Splicing gives
+    "is correct because Each HTML element...", which is not English.
+    """
+    from api.transform import t_mc
+
+    concept = "Each HTML element has one specific job."
+    item = {
+        "id": "q1",
+        "type": "MC",
+        "prompt": "<p>Which element links to another page?</p>",
+        "choices": [
+            {"id": "A", "text": "anchor", "correct": True},
+            {"id": "B", "text": "paragraph", "correct": False},
+        ],
+        "_rationale": {
+            "item_id": "q1",
+            "choices": [
+                {"id": "A", "correct": True, "rationale": f"{concept} The anchor links, so it fits."},
+                {"id": "B", "correct": False, "rationale": f"{concept} A paragraph holds text, so it does not fit."},
+            ],
+        },
+    }
+
+    feedback = " ".join(t_mc(item, 1)["item"]["entry"]["answer_feedback"].values())
+
+    assert "because" not in feedback
+    assert '"anchor" is correct.' in feedback
+    assert '"paragraph" is wrong.' in feedback
+    assert concept in feedback
