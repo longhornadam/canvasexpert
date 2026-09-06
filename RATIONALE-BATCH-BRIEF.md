@@ -457,7 +457,41 @@ Do not create a second one.
 
 To be filled in by you.
 
-**Traffic light:** in progress.
+**Traffic light:** YELLOW. Units A, B, D, E and F are GREEN, accepted, and committed.
+Unit C's code and test are GREEN but the unit cannot close until the teacher runs the
+live check in section 9a, because an exemplar visible before grading would be an answer
+key and no offline test can tell you which way Canvas behaves.
+
+**Commit:** `6f5f7a8`, 29 files, 1213 insertions, 556 deletions.
+
+**Verification evidence, gathered by the orchestrator rather than taken from reports:**
+
+- All 13 quiz fixtures pass the shipped validator with 0 problems and 0 advisories. Two
+  executors wrote those fixtures independently against the contract while a third wrote
+  the validator, so this cross-check is the real proof the three agree.
+- The gate refuses all six failure modes, each with a teacher-readable message: 4 choices
+  against 3 rationales, four whitespace-only rationales, an MC entry with no `choices`
+  array, a choice id matching no choice on the item, a scored item with no `id`, and an
+  ESSAY with no exemplar.
+- Advisories fire without blocking. A one-sentence generic rationale that tells the
+  student to ask the teacher produces 6 advisories with `ok` still true. A 99-word essay
+  exemplar produces none, confirming the open-response exemption.
+- `py -m pytest api/tests -p no:randomly` gave `5 failed, 2437 passed`, the five being
+  exactly the baseline five, unchanged in identity.
+- `py -m pytest engine/tests engine/spec_engine/tests -p no:randomly` gave
+  `149 passed, 1 skipped`. `engine/tests` went 127 to 113, matching the 14 deleted tests.
+- `py api/validate_qf.py` exits 0 from the repository root and from an unrelated directory.
+- `/course-expert` rendered with zero console errors, and `/api/validate` returned the new
+  `{ok, problems, advisories}` shape over the wire for both a clean and an advisory-heavy
+  file.
+- Every fixture's `items` and `metadata` blocks are byte-identical to `HEAD`, confirming
+  the fixture executors touched only `rationales`.
+- Staged diff scanned for credentials and student data before commit: clean.
+
+**Orchestrator changes beyond executor work:** the missing-entry hard fail used one terse
+message for every type. It now names what to add per type, so a missing essay exemplar
+reads like the others instead of saying "missing rationale". Four test assertions that
+pinned the old wording were updated to match.
 
 **Dispatch deviation from section 5, decided by the orchestrator.** Section 5 planned four
 executors. Six were dispatched. Two reasons, both measured rather than assumed:
