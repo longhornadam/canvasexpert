@@ -64,7 +64,9 @@ def register_validation_routes(
             problems = validate_qf.validate(path, seen)
         except FileNotFoundError:
             return JSONResponse({"ok": False, "error": f"file not found: {path}"})
-        return JSONResponse({"ok": not problems, "problems": problems})
+        _, data, _ = validate_qf._load(path)
+        advisories = validate_qf.advise(data) if data is not None else []
+        return JSONResponse({"ok": not problems, "problems": problems, "advisories": advisories})
 
     @router.post("/api/physical/quiz")
     def api_physical_quiz(path: str = Form(...)):

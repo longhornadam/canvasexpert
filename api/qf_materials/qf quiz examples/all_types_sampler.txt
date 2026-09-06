@@ -121,26 +121,28 @@
     {
       "item_id": "mc_snippet_out",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "x holds 5 and 5 * 2 evaluates to 10" },
-        { "id": "B", "correct": false, "rationale": "that is what joining characters would give, but x holds the number 5 so Python does math" },
-        { "id": "C", "correct": false, "rationale": "Python evaluates the expression and prints its result, not the literal characters 5 * 2" }
+        { "id": "A", "correct": true, "rationale": "Python evaluates an expression's variables and operators to produce a single result before printing it. x holds 5, so 5 * 2 evaluates to 10, which the program prints." },
+        { "id": "B", "correct": false, "rationale": "Python evaluates an expression's variables and operators to produce a single result before printing it. 52 looks like joining the digits 5 and 2 as text, but x is a number, so Python multiplies them." },
+        { "id": "C", "correct": false, "rationale": "Python evaluates an expression's variables and operators to produce a single result before printing it. 5 * 2 is the code's own text, but Python evaluates it and prints the result, 10." }
       ]
     },
-    { "item_id": "tf_indent", "rationale": "Python uses indentation to define code blocks, so changing it changes how the code runs" },
+    { "item_id": "tf_indent", "rationale": "In Python, indentation is not just style; it defines which lines belong to a code block. This statement is true: changing indentation changes which lines run together and how the program behaves." },
     {
       "item_id": "ma_outputs",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "print() sends information to the screen for the user to see" },
-        { "id": "B", "correct": true, "rationale": "writing to a file is another way a program outputs information" },
-        { "id": "C", "correct": false, "rationale": "declaring a variable only stores data and shows nothing to the user" },
-        { "id": "D", "correct": false, "rationale": "comments are ignored by Python and never shown to the user" }
+        { "id": "A", "correct": true, "rationale": "A program's output is any information it sends where a user can see or access it. print() sends text straight to the screen, so it counts as output the user sees." },
+        { "id": "B", "correct": true, "rationale": "A program's output is any information it sends where a user can see or access it. Writing to a file also sends information somewhere the user can later open and read." },
+        { "id": "C", "correct": false, "rationale": "A program's output is any information it sends where a user can see or access it. Declaring a variable only stores a value in memory; it shows nothing to the user." },
+        { "id": "D", "correct": false, "rationale": "A program's output is any information it sends where a user can see or access it. Comments are ignored when the program runs, so they never appear anywhere the user looks." }
       ]
     },
-    { "item_id": "match_symbols", "rationale": "= assigns, == compares for equality, and + adds; checking NOT equal is the job of !=, the distractor." },
-    { "item_id": "fitb_variable", "rationale": "A variable is a named container that stores a value for later use." },
-    { "item_id": "num_modulo", "rationale": "The % operator gives the remainder; 7 divided by 3 leaves a remainder of 1." },
-    { "item_id": "order_steps", "rationale": "You write the code, save the file, run the program, then read the output it produces." },
-    { "item_id": "cat_tokens", "rationale": "for and if are reserved keywords; + and == are operators that act on values." }
+    { "item_id": "match_symbols", "rationale": "Python uses different symbols for assignment, comparison, and arithmetic, and each one has one specific job. Here = assigns, == checks equality, + adds, and the unlisted != checks for inequality instead." },
+    { "item_id": "fitb_variable", "rationale": "A variable is a named container that stores a value so a program can use it later. The blank names exactly that idea, so the correct word to fill in is variable." },
+    { "item_id": "num_modulo", "rationale": "The % operator, called modulo, returns the remainder left over after one number divides another. Dividing 7 by 3 goes in twice with 1 left over, so the answer is 1." },
+    { "item_id": "order_steps", "rationale": "Running a program follows a fixed order: you cannot see output before the code has actually run. Here that order is write the code, save the file, run the program, then read the output." },
+    { "item_id": "cat_tokens", "rationale": "Python code is built from keywords that control structure and operators that act on values. Here for and if are keywords, while + and == are operators, matching each group correctly." },
+    { "item_id": "essay_describe", "rationale": "= is the assignment operator. I use it to give a variable a value, like when I write x = 5 to store the number 5 in x. == is the comparison operator. I use it to ask whether two values are equal, like x == 5, which gives back True or False instead of changing anything. So = changes something, and == just asks a question about it." },
+    { "item_id": "upload_project", "rationale": "My file is named project.py. It has a short comment at the top explaining what the program does, uses clear variable names, and prints a final result so I can check it worked. Before uploading, I ran it myself from start to finish to make sure it finishes with no errors, then attached the single .py file as required." }
   ]
 }
 </QUIZFORGE_JSON>

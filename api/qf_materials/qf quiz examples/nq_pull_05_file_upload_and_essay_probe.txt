@@ -43,11 +43,19 @@
     {
       "item_id": "upload_q01_mc",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "The upload probe uses a small synthetic text file so no personal information is needed." },
-        { "id": "B", "correct": false, "rationale": "Personal photos should not be used for this sandbox data-pull test." },
-        { "id": "C", "correct": false, "rationale": "Real coursework is unnecessary and could add irrelevant private data to the test." },
-        { "id": "D", "correct": false, "rationale": "Student information must not be included in this synthetic upload probe." }
+        { "id": "A", "correct": true, "rationale": "A sandbox upload probe is designed to collect only small synthetic files, never real photos, coursework, or student data. This probe asks for a small synthetic .txt marker file, which fits that design exactly." },
+        { "id": "B", "correct": false, "rationale": "A sandbox upload probe is designed to collect only small synthetic files, never real photos, coursework, or student data. A personal photo with identifying details would introduce real information this sandbox probe must avoid." },
+        { "id": "C", "correct": false, "rationale": "A sandbox upload probe is designed to collect only small synthetic files, never real photos, coursework, or student data. A graded assignment from another course is real coursework, not the small synthetic file this probe expects." },
+        { "id": "D", "correct": false, "rationale": "A sandbox upload probe is designed to collect only small synthetic files, never real photos, coursework, or student data. A spreadsheet containing real student information is exactly the private data this sandbox probe must never collect." }
       ]
+    },
+    {
+      "item_id": "upload_q02_file",
+      "rationale": "A file named nq-upload-marker.txt containing two lines: NQ-UPLOAD-MARKER-17 and Blue."
+    },
+    {
+      "item_id": "upload_q03_essay_confirm",
+      "rationale": "NQ-UPLOAD-MARKER-17"
     }
   ]
 }

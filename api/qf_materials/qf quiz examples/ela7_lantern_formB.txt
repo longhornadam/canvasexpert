@@ -67,22 +67,23 @@
     {
       "item_id": "mc_inference",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "The light guided boats like a familiar face, so trust in it would ease worry." },
-        { "id": "B", "correct": false, "rationale": "The passage says storms were sometimes fierce, not that they had stopped." },
-        { "id": "C", "correct": false, "rationale": "He never missed a night, so he had not retired." },
-        { "id": "D", "correct": false, "rationale": "The cracks are mentioned but nothing says the lighthouse was rebuilt." }
+        { "id": "A", "correct": true, "rationale": "An inference is a conclusion drawn only from details the passage actually states, not from outside guesses. Here the light guided boats like a familiar face, so trusting it would ease the town's worry." },
+        { "id": "B", "correct": false, "rationale": "An inference is a conclusion drawn only from details the passage actually states, not from outside guesses. The passage only says storms were sometimes fierce, never that they had stopped for good." },
+        { "id": "C", "correct": false, "rationale": "An inference is a conclusion drawn only from details the passage actually states, not from outside guesses. The passage says he never missed a night, which means he had not retired." },
+        { "id": "D", "correct": false, "rationale": "An inference is a conclusion drawn only from details the passage actually states, not from outside guesses. The cracks are mentioned once, but nothing in the passage says the lighthouse was rebuilt." }
       ]
     },
     {
       "item_id": "ma_evidence",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "Never missing a night directly shows steady commitment." },
-        { "id": "B", "correct": true, "rationale": "Working through fierce storms shows he pushed past hardship." },
-        { "id": "C", "correct": false, "rationale": "The ash-colored sky sets the time of day, not the keeper's dedication." },
-        { "id": "D", "correct": false, "rationale": "The boats' distance describes the scene, not the keeper's effort." }
+        { "id": "A", "correct": true, "rationale": "Evidence for a character trait must show that trait through an actual action or choice made. Here never missing a night is an action that directly shows steady commitment." },
+        { "id": "B", "correct": true, "rationale": "Evidence for a character trait must show that trait through an actual action or choice made. Here working through fierce storms is an action that shows he pushed past hardship." },
+        { "id": "C", "correct": false, "rationale": "Evidence for a character trait must show that trait through an actual action or choice made. The ash-colored sky only sets the time of day; it shows no action of the keeper's." },
+        { "id": "D", "correct": false, "rationale": "Evidence for a character trait must show that trait through an actual action or choice made. The boats' distance only describes the scene; it shows no effort by the keeper." }
       ]
     },
-    { "item_id": "match_lit_terms", "rationale": "Setting is where/when; a simile compares with like or as; mood is the reader's feeling. The turning point describes climax, the distractor." }
+    { "item_id": "match_lit_terms", "rationale": "Literary terms each name a different part of how a story is built and how it feels. Here setting means where/when, simile means a like/as comparison, mood means the reader's feeling, and turning point is the unmatched distractor." },
+    { "item_id": "essay_simile", "rationale": "This comparison suggests that the boats felt comforted and safe when they saw the light, the same way a traveler feels relieved to spot a familiar face in a crowd. A familiar face means you are not lost and someone you trust is nearby. In the same way, the light meant the boats were not alone out on the water and could find their way home." }
   ]
 }
 </QUIZFORGE_JSON>

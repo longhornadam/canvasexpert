@@ -104,48 +104,48 @@
     {
       "item_id": "auto_q01_mc",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "This selected marker should reveal how choice text is recorded in the export." },
-        { "id": "B", "correct": false, "rationale": "This distractor is present to check that nonselected choice text does not appear as the response." },
-        { "id": "C", "correct": false, "rationale": "This distractor gives the item another plausible option without changing the intended marker." },
-        { "id": "D", "correct": false, "rationale": "This distractor helps confirm that Canvas records the chosen option, not every option." }
+        { "id": "A", "correct": true, "rationale": "Canvas's Student Analysis report records the exact text of the option a student selects, not the text of every option offered. Selecting this option should make MC-OPTION-ALPHA selected text appear as the recorded response." },
+        { "id": "B", "correct": false, "rationale": "Canvas's Student Analysis report records the exact text of the option a student selects, not the text of every option offered. MC-OPTION-BETA distractor text should never appear as the response unless a student actually picks it." },
+        { "id": "C", "correct": false, "rationale": "Canvas's Student Analysis report records the exact text of the option a student selects, not the text of every option offered. MC-OPTION-GAMMA distractor text exists only to confirm that unselected option text is excluded from the response." },
+        { "id": "D", "correct": false, "rationale": "Canvas's Student Analysis report records the exact text of the option a student selects, not the text of every option offered. MC-OPTION-DELTA distractor text is a second unselected choice used to check the same recording behavior." }
       ]
     },
     {
       "item_id": "auto_q02_ma",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "MA-ALPHA is one of the two selected markers for this multiple-answer encoding test." },
-        { "id": "B", "correct": true, "rationale": "MA-GAMMA is the second selected marker for this multiple-answer encoding test." },
-        { "id": "C", "correct": false, "rationale": "MA-BETA is a distractor so the export can be checked for only selected values." },
-        { "id": "D", "correct": false, "rationale": "MA-DELTA is a distractor and should not be credited as a selected tag." }
+        { "id": "A", "correct": true, "rationale": "A multiple-answer item's record should include every option a student selects and exclude every option left unselected. MA-ALPHA is one of the two tags marked selected, so it should be included in the recorded response." },
+        { "id": "B", "correct": true, "rationale": "A multiple-answer item's record should include every option a student selects and exclude every option left unselected. MA-GAMMA is the second tag marked selected, so it should also be included in the recorded response." },
+        { "id": "C", "correct": false, "rationale": "A multiple-answer item's record should include every option a student selects and exclude every option left unselected. MA-BETA is a distractor tag that a student should not select, so it must not appear in the response." },
+        { "id": "D", "correct": false, "rationale": "A multiple-answer item's record should include every option a student selects and exclude every option left unselected. MA-DELTA is a second distractor tag and should not be credited as a selected value." }
       ]
     },
     {
       "item_id": "auto_q03_tf",
-      "rationale": "The statement is true because this item exists specifically to check true-false report encoding."
+      "rationale": "A true-false item is auto-graded by comparing the student's boolean choice to the answer stored as true or false. This item's stored answer is true, so a student selecting True should score as correct here."
     },
     {
       "item_id": "auto_q04_fitb_open",
-      "rationale": "OPEN-FITB-17 is the requested open-entry marker."
+      "rationale": "An open-entry fill-in-the-blank item is auto-graded by matching the typed text exactly against the accepted answer string. OPEN-FITB-17 is the accepted answer, so typing it exactly should produce a correct auto-graded match."
     },
     {
       "item_id": "auto_q05_fitb_dropdown",
-      "rationale": "DROPDOWN-BETA is the requested dropdown marker."
+      "rationale": "A dropdown fill-in-the-blank item is auto-graded by matching the student's chosen option to the one marked as accepted. DROPDOWN-BETA is the accepted option, so choosing it from the dropdown should produce a correct match."
     },
     {
       "item_id": "auto_q06_numeric",
-      "rationale": "The numeric marker answer for this item is exactly 42."
+      "rationale": "A numerical item is auto-graded by comparing the student's typed number to the stored numeric answer using the evaluation rule. This item's stored answer is exactly 42, so typing 42 should produce a correct match."
     },
     {
       "item_id": "auto_q07_matching",
-      "rationale": "Each left marker matches the right marker with the same ending letter; the distractor has no partner."
+      "rationale": "A matching item is auto-graded by checking whether each left item is paired with its correct right item. Each left marker here pairs with the right marker sharing its ending letter, and the extra right marker is unused."
     },
     {
       "item_id": "auto_q08_ordering",
-      "rationale": "The intended order is FIRST, then SECOND, then THIRD."
+      "rationale": "An ordering item is auto-graded by checking whether the student's arranged sequence matches the one stored as correct. The stored correct sequence here is FIRST, then SECOND, then THIRD."
     },
     {
       "item_id": "auto_q09_categorization",
-      "rationale": "Markers beginning with RED belong in Red bucket, and markers beginning with BLUE belong in Blue bucket."
+      "rationale": "A categorization item is auto-graded by checking whether each labeled item was sorted into its matching category. Markers beginning with RED belong in Red bucket and markers beginning with BLUE belong in Blue bucket here."
     }
   ]
 }

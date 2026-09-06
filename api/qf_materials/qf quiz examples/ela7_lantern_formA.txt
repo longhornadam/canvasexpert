@@ -65,22 +65,23 @@
     {
       "item_id": "mc_theme",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "The keeper's steady, nightly service that lets the town sleep easier points to faithful dedication." },
-        { "id": "B", "correct": false, "rationale": "Difficulty is a detail, not the central idea; the focus is on his reliable care." },
-        { "id": "C", "correct": false, "rationale": "Storms appear but the passage is about the keeper, not weather prediction." },
-        { "id": "D", "correct": false, "rationale": "The opposite is shown: despite age, he never misses a night." }
+        { "id": "A", "correct": true, "rationale": "A passage's central idea is the main point it keeps returning to, not just any detail mentioned. Here the keeper's steady nightly service, which lets the town sleep easier, points to faithful dedication." },
+        { "id": "B", "correct": false, "rationale": "A passage's central idea is the main point it keeps returning to, not just any detail mentioned. Difficulty is only a detail here, since the passage's real focus is his reliable, steady care." },
+        { "id": "C", "correct": false, "rationale": "A passage's central idea is the main point it keeps returning to, not just any detail mentioned. Storms are mentioned, but the passage centers on the keeper, not on predicting weather." },
+        { "id": "D", "correct": false, "rationale": "A passage's central idea is the main point it keeps returning to, not just any detail mentioned. The passage shows the opposite: despite his age, the keeper never misses a night." }
       ]
     },
     {
       "item_id": "mc_vocab_dusk",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "Ash is gray, and the keeper works each evening, so the phrase signals fading daylight." },
-        { "id": "B", "correct": false, "rationale": "Morning sunlight would not be the color of ash and contradicts every evening." },
-        { "id": "C", "correct": false, "rationale": "Rain is mentioned elsewhere; this phrase describes the sky's color, not a storm." },
-        { "id": "D", "correct": false, "rationale": "Color of ash is a comparison to gray light, not literal fire." }
+        { "id": "A", "correct": true, "rationale": "A descriptive phrase's meaning comes from the details around it, not from reading each word literally. Here ash is gray, and the keeper climbs each evening, so the phrase points to fading daylight." },
+        { "id": "B", "correct": false, "rationale": "A descriptive phrase's meaning comes from the details around it, not from reading each word literally. Bright morning sunlight is not the color of ash, and the passage says every evening instead." },
+        { "id": "C", "correct": false, "rationale": "A descriptive phrase's meaning comes from the details around it, not from reading each word literally. Rain appears elsewhere in the passage, but this phrase describes the sky's color, not a storm." },
+        { "id": "D", "correct": false, "rationale": "A descriptive phrase's meaning comes from the details around it, not from reading each word literally. The color of ash compares the sky to gray light, not to literal fire or flame." }
       ]
     },
-    { "item_id": "fitb_setting", "rationale": "The keeper climbs the lighthouse stair each night, so the setting is a lighthouse." }
+    { "item_id": "fitb_setting", "rationale": "A story's setting is the place and time where its events actually happen. Here the keeper climbs the lighthouse stair every night, so the blank answer is lighthouse." },
+    { "item_id": "essay_theme_support", "rationale": "The keeper's behavior shows that he is dedicated and reliable. The passage says he never missed a night, even when the storms were fierce and the climb hurt his hands. That detail proves he takes his job seriously and keeps his promise to the town no matter how hard it gets." }
   ]
 }
 </QUIZFORGE_JSON>

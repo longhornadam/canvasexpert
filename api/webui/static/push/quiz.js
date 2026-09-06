@@ -169,11 +169,15 @@
     log("Validating…");
     var data = await push.postForm("/api/validate", { path: path });
     if (data.error) { log("ERROR: " + data.error); return; }
+    var advisoryLines = (data.advisories || []).map(function (a) { return "  ! " + a; });
+    var lines;
     if (data.ok) {
-      log("✓ No compliance issues found.");
+      lines = ["✓ No compliance issues found."].concat(advisoryLines);
+      log(lines.join("\n"));
       push.showBanner(document.getElementById("push-banner"), "ok", "✓ Validation passed — quiz is ready to push.");
     } else {
-      log(data.problems.map(function (p) { return "  ✗ " + p; }).join("\n"));
+      lines = data.problems.map(function (p) { return "  ✗ " + p; }).concat(advisoryLines);
+      log(lines.join("\n"));
       push.showBanner(document.getElementById("push-banner"), "fail",
         "✗ " + data.problems.length + " issue(s) found — see log above.");
     }

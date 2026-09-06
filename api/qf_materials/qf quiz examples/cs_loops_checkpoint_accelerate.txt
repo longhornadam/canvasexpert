@@ -72,23 +72,24 @@
     {
       "item_id": "mc_step_output",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "range(1, 6, 2) starts at 1 and steps by 2: 1, 3, 5, stopping before 6." },
-        { "id": "B", "correct": false, "rationale": "A step of 2 skips every other value, so 2 and 4 are not printed." },
-        { "id": "C", "correct": false, "rationale": "range stops before 6, so 7 is never reached." },
-        { "id": "D", "correct": false, "rationale": "Counting starts at the start value 1, not 2." }
+        { "id": "A", "correct": true, "rationale": "In Python, range(start, stop, step) begins counting at start, increases by step, and stops before stop. Here range(1, 6, 2) begins at 1 and rises by 2, giving 1, 3, 5, stopping before 6." },
+        { "id": "B", "correct": false, "rationale": "In Python, range(start, stop, step) begins counting at start, increases by step, and stops before stop. This choice steps by 1 instead of 2, so it wrongly includes 2 and 4 as well." },
+        { "id": "C", "correct": false, "rationale": "In Python, range(start, stop, step) begins counting at start, increases by step, and stops before stop. This choice adds an extra step to 7, but range always stops before its stop value, 6." },
+        { "id": "D", "correct": false, "rationale": "In Python, range(start, stop, step) begins counting at start, increases by step, and stops before stop. This choice wrongly starts counting at 2, but the start value here is actually 1." }
       ]
     },
     {
       "item_id": "ma_step_true",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "The first argument is the start value, 1." },
-        { "id": "B", "correct": true, "rationale": "The third argument, 2, is the step, so each value rises by 2." },
-        { "id": "C", "correct": false, "rationale": "range always stops before its stop argument, so 6 is excluded." },
-        { "id": "D", "correct": true, "rationale": "The values 1, 3, 5 are three values, so the body runs three times." }
+        { "id": "A", "correct": true, "rationale": "In range(start, stop, step), each of the three arguments controls one part of the counting pattern. Here the first argument, 1, is the start value counting begins from." },
+        { "id": "B", "correct": true, "rationale": "In range(start, stop, step), each of the three arguments controls one part of the counting pattern. Here the third argument, 2, is the step, so each value rises by 2." },
+        { "id": "C", "correct": false, "rationale": "In Python, range always stops before reaching its stop argument, never including that value itself. This choice wrongly claims 6 is included, but range(1, 6, 2) always stops before reaching 6." },
+        { "id": "D", "correct": true, "rationale": "A loop's body runs once for every value the range actually produces. Here range(1, 6, 2) produces three values, 1, 3, 5, so the body runs three times." }
       ]
     },
-    { "item_id": "num_step_runs", "rationale": "range(2, 10, 2) yields 2, 4, 6, 8 - four values - so the body runs four times." },
-    { "item_id": "fitb_step_arg", "rationale": "The third argument of range() is the step; it sets how much the counter changes each pass." }
+    { "item_id": "num_step_runs", "rationale": "In Python, range(start, stop, step) produces one value per step, and the body runs once per value. Here range(2, 10, 2) produces four values, 2, 4, 6, 8, so the body runs four times." },
+    { "item_id": "fitb_step_arg", "rationale": "In range(start, stop, step), the third argument controls how much the counter changes on each pass. The word that names this third argument, and belongs in the blank, is step." },
+    { "item_id": "essay_step", "rationale": "Right now the loop uses range(1, 6, 2), so it starts at 1 and adds 2 each time, printing 1, 3, 5. If I changed the step to 3, the loop would start at 1 again but add 3 each time instead of 2. That would give 1, then 4, and then it would stop, because the next value, 7, is past the stop value of 6. So changing the step from 2 to 3 means fewer numbers get printed, and they land farther apart." }
   ]
 }
 </QUIZFORGE_JSON>

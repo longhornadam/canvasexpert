@@ -302,6 +302,7 @@ def t_essay(item, pos):
         "interaction_data": {"rce": True, "word_count": True, "file_upload": False},
         "scoring_data": {"value": item.get("rubric_hint", "")},
         "scoring_algorithm": "None",
+        "feedback": _neutral_feedback(item),
     }
     return _wrap(entry, pos)
 
@@ -316,6 +317,7 @@ def t_fileupload(item, pos):
         "properties": {"allowed_types": fmts, "restrict_types": bool(fmts)},
         "scoring_data": {"value": ""},
         "scoring_algorithm": "None",
+        "feedback": _neutral_feedback(item),
     }
     return _wrap(entry, pos)
 

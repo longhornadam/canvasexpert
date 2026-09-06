@@ -70,24 +70,28 @@
     {
       "item_id": "stim_q01_mc",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "The Blue station final count is 18, which is higher than the Red station final count of 12." },
-        { "id": "B", "correct": false, "rationale": "The Red station final count is listed, but it is lower than the Blue station's final count." },
-        { "id": "C", "correct": false, "rationale": "The final counts are not equal; the table lists 12 for Red and 18 for Blue." },
-        { "id": "D", "correct": false, "rationale": "The table includes a Final count column for both stations." }
+        { "id": "A", "correct": true, "rationale": "A claim about the table is judged against its exact printed counts, not a guess. The table lists Blue station's final count as 18, which is higher than Red's final count of 12." },
+        { "id": "B", "correct": false, "rationale": "A claim about the table is judged against its exact printed counts, not a guess. The table lists Red station's final count as 12, which is lower than Blue's final count of 18." },
+        { "id": "C", "correct": false, "rationale": "A claim about the table is judged against its exact printed counts, not a guess. The table shows 12 for Red and 18 for Blue, so the final counts are not equal." },
+        { "id": "D", "correct": false, "rationale": "A claim about the table is judged against its exact printed counts, not a guess. The table includes a Final count column with a value listed for each station." }
       ]
     },
     {
       "item_id": "stim_q02_ma",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "Blue ended at 18 while Red ended at 12, so Blue ended with more tokens." },
-        { "id": "B", "correct": true, "rationale": "Red increased from 8 to 12, which is a gain of four tokens." },
-        { "id": "C", "correct": false, "rationale": "Red started with 8 and Blue started with 10, so Red did not start higher." },
-        { "id": "D", "correct": false, "rationale": "Blue finished with 18 tokens, not twelve." }
+        { "id": "A", "correct": true, "rationale": "A claim about the observation log is judged against its exact printed counts, not against an assumption. Blue ended at 18 and Red ended at 12, so Blue finished with more tokens." },
+        { "id": "B", "correct": true, "rationale": "A claim about the observation log is judged against its exact printed counts, not against an assumption. Red moved from 8 to 12 in the table, which is a gain of four tokens." },
+        { "id": "C", "correct": false, "rationale": "A claim about the observation log is judged against its exact printed counts, not against an assumption. Red started at 8 and Blue started at 10, so Red did not start with more." },
+        { "id": "D", "correct": false, "rationale": "A claim about the observation log is judged against its exact printed counts, not against an assumption. The table lists Blue's final count as 18, not twelve." }
       ]
     },
     {
       "item_id": "stim_q03_fitb",
-      "rationale": "The table shows the Blue station final count as 18."
+      "rationale": "An open-entry fill-in-the-blank item is auto-graded by matching the typed number against the value printed in the table. The table lists the Blue station's final count as 18, so typing 18 completes the blank correctly."
+    },
+    {
+      "item_id": "stim_q04_evidence_essay",
+      "rationale": "STIM-EVIDENCE: The Blue station's final count was 18 tokens, which is the detail I am citing from the table. I expect this response to be recoverable from the New Quizzes Student Analysis report because it is typed text."
     }
   ]
 }

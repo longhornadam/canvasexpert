@@ -52,15 +52,8 @@ class Quiz:
     
     def scorable_count(self) -> int:
         """Get count of scorable questions only.
-        
+
         Returns:
             Number of questions that contribute to score
         """
         return len(self.scorable_questions())
-
-    def has_rationales(self) -> bool:
-        """Check if rationales exist for all scorable questions."""
-        scorable = self.scorable_questions()
-        # Subtract ESSAY/FILEUPLOAD which don't need rationales
-        expected = len([q for q in scorable if q.qtype not in ['ESSAY', 'FILEUPLOAD']])
-        return len(self.rationales) >= expected

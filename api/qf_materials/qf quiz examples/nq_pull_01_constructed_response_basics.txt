@@ -64,15 +64,31 @@
     {
       "item_id": "basic_q01_anchor_mc",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "The quiz is designed to create known responses for a New Quizzes report pull test." },
-        { "id": "B", "correct": false, "rationale": "Speed grading is not the target; the key evidence is whether response text exports cleanly." },
-        { "id": "C", "correct": false, "rationale": "The quiz is not checking attendance because every item is built around response data." },
-        { "id": "D", "correct": false, "rationale": "Module navigation is not tested here; the items focus on exported answer content." }
+        { "id": "A", "correct": true, "rationale": "A sandbox quiz's purpose is defined by the response data it is designed to generate, not by any similar-looking activity. This quiz exists to test whether typed responses export correctly, so 'Response pull test' is the accurate purpose here." },
+        { "id": "B", "correct": false, "rationale": "A sandbox quiz's purpose is defined by the response data it is designed to generate, not by any similar-looking activity. Speed grading is a separate workflow that does not generate or test exported response text." },
+        { "id": "C", "correct": false, "rationale": "A sandbox quiz's purpose is defined by the response data it is designed to generate, not by any similar-looking activity. An attendance check records presence, which is not the response data this quiz is designed to produce." },
+        { "id": "D", "correct": false, "rationale": "A sandbox quiz's purpose is defined by the response data it is designed to generate, not by any similar-looking activity. A module navigation check tests page links, not the response text this quiz is built to capture." }
       ]
     },
     {
       "item_id": "basic_q02_fitb_marker",
-      "rationale": "The requested word is marker, which creates a simple auto-graded text response for the report."
+      "rationale": "A fill-in-the-blank item auto-grades by matching the exact text a student types against the accepted answer. Here the accepted answer is marker, so typing that word produces a simple auto-graded response for the report."
+    },
+    {
+      "item_id": "basic_q03_short_exact",
+      "rationale": "CR-BASIC-ALPHA one sentence."
+    },
+    {
+      "item_id": "basic_q04_two_line_response",
+      "rationale": "CR-BASIC-LINE-1\nCR-BASIC-LINE-2"
+    },
+    {
+      "item_id": "basic_q05_special_characters",
+      "rationale": "The exact marker text is CR-BASIC \"quoted\" <tag> & apostrophe."
+    },
+    {
+      "item_id": "basic_q06_formatting_reflection",
+      "rationale": "CR-BASIC-REFLECT: I typed my response on one line and used standard punctuation. I copied the marker text exactly as shown instead of retyping it from memory."
     }
   ]
 }

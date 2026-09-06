@@ -60,7 +60,7 @@
 - **TF** — `answer`: `true` or `false`.
 - **MATCHING** — `pairs`: `[ { "left": "...", "right": "..." }, ... ]` (min 2). Include at least one distractor (extra right-side option) to prevent elimination by process of elimination. Optional `distractors` array for extra right-side choices.
 - **FITB** — See Section 5a (Fill in the Blank Details) for full guidance.
-- **ESSAY** — Optional `length_guidance` (e.g., "5-8 sentences") and `rubric_hint`.
+- **ESSAY** — Optional `length_guidance` (e.g., "5-8 sentences") and `rubric_hint` (grader-side scoring note, never shown to students). Also needs a `rationales` entry (Section 11) holding the student-facing exemplar response.
 - **FILEUPLOAD** — Optional `requirements` text, `accepted_formats` (e.g., [".pdf", ".py"]), and `max_file_size_mb`.
 - **ORDERING** — `items`: array ordered from top to bottom (min 2). Optional `header` label. If `prompt` is omitted, the engine will reuse `header` as the prompt.
 - **CATEGORIZATION** — `prompt` is required; tell students what to do. `categories`: array of labels (min 2). `items`: `[ { "label": "...", "category": "..." }, ... ]`. Optional `distractors` array.
@@ -262,7 +262,7 @@ Exact phrasing lets validators detect meta-answers and excludes them from length
 
 ## 11. RATIONALES (JSON)
 
-**MC and MA items require per-choice rationales.** Each answer option — correct and incorrect — gets its own rationale. The engine cannot author these; if any choice is missing one, the quiz fails validation.
+**Every scored item requires a rationale.** MC and MA items require per-choice rationales: each answer option, correct and incorrect, gets its own rationale. Other scorable types (TF, FITB, MATCHING, ORDERING, NUMERICAL, CATEGORIZATION) take a single rationale. ESSAY and FILEUPLOAD take a single rationale too, holding a student-facing exemplar instead of an explanation. The engine cannot author any of these; if a scored item is missing its rationale, the quiz fails validation.
 
 **Required format for MC/MA:**
 ```json
@@ -270,27 +270,45 @@ Exact phrasing lets validators detect meta-answers and excludes them from length
   {
     "item_id": "mc_example",
     "choices": [
-      { "id": "A", "correct": true,  "rationale": "Why A is correct." },
-      { "id": "B", "correct": false, "rationale": "Why B is wrong." },
-      { "id": "C", "correct": false, "rationale": "Why C is wrong." },
-      { "id": "D", "correct": false, "rationale": "Why D is wrong." }
+      { "id": "A", "correct": true,  "rationale": "..." },
+      { "id": "B", "correct": false, "rationale": "..." },
+      { "id": "C", "correct": false, "rationale": "..." },
+      { "id": "D", "correct": false, "rationale": "..." }
     ]
   }
 ]
 ```
 The matching `items` entry must give each choice an `id` (`"A"`, `"B"`, …) so rationales align to choices.
 
+**The two-sentence rule.** Every rationale on an auto-graded item is exactly two sentences.
+- Sentence 1 is the note: state the concept in general terms, the way it would be written on the board. It does not mention the answer choices.
+- Sentence 2 applies that concept to this choice: why it fits, or why it does not.
+
+This applies to correct choices, distractors, and the single-rationale types alike. On a distractor, sentence two says why that choice does not fit.
+
+**The concept sentence may repeat across the choices of one item, and that repetition is intended, not duplication to fix.** A student reads only the row for the choice they picked, plus the row for the correct choice, never every row at once. Each row has to carry its own teaching on its own.
+
+**Worked example** (the teacher's own; the sentence-1 repetition between A and B is deliberate and must be preserved):
+
+> Prompt: "John and Sarah shared their different ideas about cars." Which of the words below is an abstract noun? A) Sarah B) ideas C) John D) cars. Correct: B.
+>
+> B: "An abstract noun is a thing that cannot be touched, heard, seen, tasted, or smelled. You cannot touch or see an idea, so *ideas* is abstract."
+>
+> A: "An abstract noun is a thing that cannot be touched, heard, seen, tasted, or smelled. *Sarah* is a person you can see and hear, so it is concrete, not abstract."
+
 **Rationale writing rules:**
 - One entry per scored item (skip STIMULUS / STIMULUS_END).
-- Correct-choice rationale: 1–2 sentences on why this answer IS correct. Connect the concept to the answer. Normal weight in rendered output.
-- Incorrect-choice rationale: 1–2 sentences naming what this choice actually describes and why it does not apply. Be specific to the distractor — never generic ("This is incorrect"). Italic in rendered output.
-- Target 15–30 words per rationale. Direct teaching voice.
+- Be specific to the distractor; never generic ("This is incorrect").
 - Never tell students to "ask/see your teacher"; rationales must stand alone.
+- Direct teaching voice throughout.
+- Roughly 15-40 words is the working range across both sentences for rationales on auto-graded items. The validator advises on length rather than blocking, since a natural two-sentence rationale can land outside that range. This range does not apply to the ESSAY/FILEUPLOAD exemplar below.
 
-**Other scorable types use a single rationale** (one string explaining the answer): TF, FITB, MATCHING, ORDERING, NUMERICAL. ESSAY and FILEUPLOAD are human-graded and take no rationale.
+**Other scorable types use a single rationale** (one string, following the same two-sentence rule): TF, FITB, MATCHING, ORDERING, NUMERICAL, CATEGORIZATION.
 ```json
-{ "item_id": "tf_example", "rationale": "Why the correct boolean value is correct." }
+{ "item_id": "tf_example", "rationale": "State the general concept first. Then say why this specific answer follows from it." }
 ```
+
+**ESSAY and FILEUPLOAD items take a single `rationale` holding a student-facing exemplar:** a short model response written at the student's reading level that a student can read and copy to earn correction points. High level, not exhaustive. Student language, not teacher language. It is not a rubric and not a grading note; `rubric_hint` remains the grader-side field and is unchanged. The exemplar is not bound by the 15-40 word range above: it runs as long as a real model response needs to be, typically a short paragraph.
 
 ## 12. EXECUTION WORKFLOW
 1. Parse teacher intent (topic, grade, tier).
@@ -309,7 +327,7 @@ The matching `items` entry must give each choice an `id` (`"A"`, `"B"`, …) so 
  Incorrect options check: Every distractor must truly be incorrect (no accidental second correct answer hidden among distractors).
  Answer balance (Section 10): correct answer longest ≤33% / shortest ≤33% of the time; distractors crafted as carefully as the key.
  FITB check: Single blank preferred; multi-blank only for conceptually linked content; max 3 blanks; Support tier uses dropdown/wordbank.
- Rationales (Section 11): one per scored item, skip stimuli; MC/MA need a per-choice rationale for every choice `id`; other scorable types use one string.
+ Rationales (Section 11): one per scored item, skip stimuli; every rationale is exactly two sentences (concept, then applied to this choice or answer); MC/MA need a per-choice rationale for every choice `id`; other scorable types use one two-sentence string; ESSAY/FILEUPLOAD take a single rationale holding a student-facing exemplar.
  Stimuli: set `stimulus_id` to attach; 2–4 questions per stimulus; every STIMULUS holds real content (passage/code/image/table), never a bare instruction.
 
 **Maintainer:** QuizForge Core Team  

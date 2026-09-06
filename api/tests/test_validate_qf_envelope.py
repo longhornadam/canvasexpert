@@ -100,4 +100,179 @@ def test_scored_item_without_a_rationale_is_rejected(tmp_path):
     payload = json.loads(json.dumps(ONE_GOOD_MC))
     payload.pop("rationales")
     problems = validate_qf.validate(_envelope(tmp_path, payload), set())
-    assert any("missing rationale" in p for p in problems), problems
+    assert any("no rationales entry" in p and "choices" in p for p in problems), problems
+
+
+# --- Depth checks: helpers ---
+#
+# These mirror the builder helpers from engine/tests/unit/test_rationale_rules.py
+# (the orphaned rule set being deleted in the same batch), but build raw
+# QuizForge envelopes instead of a domain Quiz, per decision D1: the gate reads
+# the file the teacher actually wrote.
+
+def _mc_item(item_id, n_choices):
+    return {
+        "id": item_id,
+        "type": "MC",
+        "prompt": "<p>Q?</p>",
+        "choices": [
+            {"id": chr(65 + i), "text": f"c{i}", "correct": i == 0}
+            for i in range(n_choices)
+        ],
+    }
+
+
+def _tf_item(item_id):
+    return {"id": item_id, "type": "TF", "prompt": "<p>Sky is blue?</p>", "answer": True}
+
+
+def _essay_item(item_id):
+    return {"id": item_id, "type": "ESSAY", "prompt": "<p>Discuss.</p>"}
+
+
+def _per_choice_rationale(item_id, rationale_texts):
+    return {
+        "item_id": item_id,
+        "choices": [
+            {"id": chr(65 + i), "correct": i == 0, "rationale": t}
+            for i, t in enumerate(rationale_texts)
+        ],
+    }
+
+
+def _single_rationale(item_id, text):
+    return {"item_id": item_id, "rationale": text}
+
+
+def _quiz(items, rationales):
+    return {"version": "3.0-json", "title": "T", "items": items, "rationales": rationales}
+
+
+# --- Depth checks: ported from engine/tests/unit/test_rationale_rules.py ---
+#
+# All 9 original cases, ported onto the new gate before that file (and the rule
+# set it tested) is deleted. The two ESSAY cases already encode the new D7
+# behavior: ESSAY now requires an exemplar instead of taking no rationale.
+
+def test_ported_mc_full_coverage_passes(tmp_path):
+    payload = _quiz([_mc_item("q1", 4)], [_per_choice_rationale("q1", ["a", "b", "c", "d"])])
+    assert validate_qf.validate(_envelope(tmp_path, payload), set()) == []
+
+
+def test_ported_mc_missing_entry_fails(tmp_path):
+    payload = _quiz([_mc_item("q1", 4)], [])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("no rationales entry" in p and "choices" in p for p in problems), problems
+
+
+def test_ported_mc_count_mismatch_fails(tmp_path):
+    payload = _quiz([_mc_item("q1", 4)], [_per_choice_rationale("q1", ["a", "b", "c"])])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("4 answer choices" in p and "lists 3" in p for p in problems), problems
+
+
+def test_ported_mc_empty_text_fails(tmp_path):
+    payload = _quiz([_mc_item("q1", 3)], [_per_choice_rationale("q1", ["a", "", "c"])])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("empty for choice(s) B" in p for p in problems), problems
+
+
+def test_ported_tf_with_single_rationale_passes(tmp_path):
+    payload = _quiz([_tf_item("tf1")],
+                     [_single_rationale("tf1", "True because the sky scatters blue light.")])
+    assert validate_qf.validate(_envelope(tmp_path, payload), set()) == []
+
+
+def test_ported_tf_without_rationale_fails(tmp_path):
+    payload = _quiz([_tf_item("tf1")], [])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("no rationales entry" in p and "why the correct answer is correct" in p for p in problems), problems
+
+
+def test_ported_essay_with_exemplar_passes(tmp_path):
+    payload = _quiz([_essay_item("e1")],
+                     [_single_rationale("e1", "A strong response connects evidence to a claim.")])
+    assert validate_qf.validate(_envelope(tmp_path, payload), set()) == []
+
+
+def test_ported_essay_without_exemplar_fails(tmp_path):
+    payload = _quiz([_essay_item("e1")], [])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("no rationales entry" in p and "exemplar" in p for p in problems), problems
+
+
+def test_ported_missing_id_fails(tmp_path):
+    payload = _quiz([_mc_item(None, 3)], [])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any('has no "id"' in p for p in problems), problems
+
+
+# --- Depth checks: new coverage not in the ported set ---
+
+def test_mc_rationale_missing_choices_array_is_rejected(tmp_path):
+    payload = _quiz([_mc_item("q1", 2)], [{"item_id": "q1", "rationale": "wrong shape for MC"}])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("no per-choice rationales" in p for p in problems), problems
+
+
+def test_mc_rationale_choice_id_mismatch_is_rejected(tmp_path):
+    payload = _quiz([_mc_item("q1", 2)], [_per_choice_rationale("q1", ["a", "b"])])
+    payload["rationales"][0]["choices"][1]["id"] = "Z"
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("does not match any choice" in p for p in problems), problems
+
+
+def test_single_rationale_whitespace_only_is_rejected(tmp_path):
+    payload = _quiz([_tf_item("tf1")], [_single_rationale("tf1", "   ")])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("rationale is empty" in p for p in problems), problems
+
+
+# --- Advisories: never block, apply only to auto-graded rationales ---
+
+def test_advise_flags_non_two_sentence_rationale(tmp_path):
+    one_sentence = "Only one sentence here explaining the choice at reasonable length."
+    payload = _quiz([_mc_item("q1", 2)],
+                     [_per_choice_rationale("q1", [one_sentence, one_sentence])])
+    _, data, _ = validate_qf._load(_envelope(tmp_path, payload))
+    advisories = validate_qf.advise(data)
+    assert any("not the usual two" in a for a in advisories), advisories
+
+
+def test_advise_flags_word_count_outside_range(tmp_path):
+    payload = _quiz([_tf_item("tf1")], [_single_rationale("tf1", "Short one. Too brief.")])
+    _, data, _ = validate_qf._load(_envelope(tmp_path, payload))
+    advisories = validate_qf.advise(data)
+    assert any("outside the usual 15 to 40" in a for a in advisories), advisories
+
+
+def test_advise_flags_generic_distractor_text(tmp_path):
+    payload = _quiz([_tf_item("tf1")],
+                     [_single_rationale("tf1", "This is incorrect. This is incorrect for this item.")])
+    _, data, _ = validate_qf._load(_envelope(tmp_path, payload))
+    advisories = validate_qf.advise(data)
+    assert any("generic" in a for a in advisories), advisories
+
+
+def test_advise_flags_ask_the_teacher_language(tmp_path):
+    payload = _quiz([_tf_item("tf1")],
+                     [_single_rationale("tf1", "Not sure why. Ask the teacher for help with this one.")])
+    _, data, _ = validate_qf._load(_envelope(tmp_path, payload))
+    advisories = validate_qf.advise(data)
+    assert any("ask or see the" in a for a in advisories), advisories
+
+
+def test_advise_exempts_essay_exemplars(tmp_path):
+    payload = _quiz([_essay_item("e1")], [_single_rationale("e1", "Short.")])
+    _, data, _ = validate_qf._load(_envelope(tmp_path, payload))
+    assert validate_qf.advise(data) == []
+
+
+def test_advise_is_empty_for_a_clean_two_sentence_rationale(tmp_path):
+    text = (
+        "Light scatters more at shorter wavelengths as it passes through the atmosphere. "
+        "Blue light scatters the most, which is why the sky looks blue."
+    )
+    payload = _quiz([_tf_item("tf1")], [_single_rationale("tf1", text)])
+    _, data, _ = validate_qf._load(_envelope(tmp_path, payload))
+    assert validate_qf.advise(data) == []

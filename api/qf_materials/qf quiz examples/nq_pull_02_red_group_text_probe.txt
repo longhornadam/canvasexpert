@@ -58,15 +58,27 @@
     {
       "item_id": "red_q01_group_mc",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "The title and directions identify this as the Red group version." },
-        { "id": "B", "correct": false, "rationale": "Blue names the companion variant, not this Red group quiz." },
-        { "id": "C", "correct": false, "rationale": "Green is a distractor and is not used for this sandbox split." },
-        { "id": "D", "correct": false, "rationale": "Orange is a distractor and is not used for this sandbox split." }
+        { "id": "A", "correct": true, "rationale": "A group-variant quiz's title and directions state which color group it belongs to, and only that color is the correct answer. This quiz's title and directions name Red, so Red is the correct group marker here." },
+        { "id": "B", "correct": false, "rationale": "A group-variant quiz's title and directions state which color group it belongs to, and only that color is the correct answer. Blue is the color used in the companion quiz, not the one named in this Red group quiz." },
+        { "id": "C", "correct": false, "rationale": "A group-variant quiz's title and directions state which color group it belongs to, and only that color is the correct answer. Green never appears in either group title, so it is only a distractor here." },
+        { "id": "D", "correct": false, "rationale": "A group-variant quiz's title and directions state which color group it belongs to, and only that color is the correct answer. Orange is not used for either group variant, so it functions only as a distractor here." }
       ]
     },
     {
       "item_id": "red_q02_group_dropdown",
-      "rationale": "The Red version should use Red as its group marker."
+      "rationale": "A dropdown fill-in-the-blank item is auto-graded by matching the student's selected option to the one marked as accepted. This item accepts Red as the group color, so selecting Red from the dropdown produces the correct match."
+    },
+    {
+      "item_id": "red_q03_two_line_marker",
+      "rationale": "RED-GROUP-LINE-1\nRED-GROUP-LINE-2"
+    },
+    {
+      "item_id": "red_q04_visibility_sentence",
+      "rationale": "RED-SENTENCE: This was the only group-specific quiz I could see in the course."
+    },
+    {
+      "item_id": "red_q05_special_marker",
+      "rationale": "The exact marker text is RED \"quote\" <group> & marker."
     }
   ]
 }

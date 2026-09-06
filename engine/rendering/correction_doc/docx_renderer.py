@@ -57,7 +57,7 @@ def _render_docx_item(doc, q_number: int, item: Dict, entry: RationalesEntry) ->
 
     if not entry.choices and getattr(entry, "text", None):
         qtype = item.get("type", "")
-        label = "A strong response:" if qtype in ("ESSAY", "FILEUPLOAD") else "Explanation:"
+        label = "Model response to copy:" if qtype in ("ESSAY", "FILEUPLOAD") else "Explanation:"
         p = doc.add_paragraph()
         lab = p.add_run(label + " ")
         lab.bold = True

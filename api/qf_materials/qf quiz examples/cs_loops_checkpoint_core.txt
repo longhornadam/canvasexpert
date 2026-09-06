@@ -76,24 +76,25 @@
     {
       "item_id": "mc_for_output",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "range(3) yields 0, 1, 2 and print() outputs each on its own line, so three lines appear." },
-        { "id": "B", "correct": false, "rationale": "This skips 0 and wrongly includes 3; range starts at 0 and stops before the argument." },
-        { "id": "C", "correct": false, "rationale": "Each print() call ends with a newline, so the values cannot land on one line." },
-        { "id": "D", "correct": false, "rationale": "The loop prints the counter each pass, not a single count of iterations." }
+        { "id": "A", "correct": true, "rationale": "In Python, range(n) starts counting at 0 and stops right before n. Here range(3) gives 0, 1, 2, and print() puts each one on its own line." },
+        { "id": "B", "correct": false, "rationale": "In Python, range(n) starts counting at 0 and stops right before n. This choice skips 0 and wrongly adds 3, but range(3) starts at 0 and stops before 3." },
+        { "id": "C", "correct": false, "rationale": "Each call to print() adds a newline, so its output always starts a fresh line. That means the three values print on separate lines, never combined onto a single line." },
+        { "id": "D", "correct": false, "rationale": "A loop that prints inside its body shows the counter's value once on every single pass. This choice shows only 3, the final count, but the loop actually prints each value as it runs." }
       ]
     },
-    { "item_id": "tf_range3", "rationale": "range(3) produces 0, 1, 2 and stops before 3, so 3 is never included." },
-    { "item_id": "num_runs", "rationale": "range(5) produces 0,1,2,3,4 - five values - so the body runs five times." },
+    { "item_id": "tf_range3", "rationale": "In Python, range(n) stops right before n, so the value n itself never appears. This statement is false: range(3) produces 0, 1, 2, and never includes 3." },
+    { "item_id": "num_runs", "rationale": "In Python, range(n) produces exactly n values, so the loop body runs n times total. Here range(5) gives five values, 0 through 4, so the loop body runs five times." },
     {
       "item_id": "ma_varnames",
       "choices": [
-        { "id": "A", "correct": true, "rationale": "Names may start with an underscore, so _count is valid." },
-        { "id": "B", "correct": true, "rationale": "Letters followed by digits are allowed, so total2 is valid." },
-        { "id": "C", "correct": false, "rationale": "Names cannot begin with a digit, so 2cool is invalid." },
-        { "id": "D", "correct": false, "rationale": "Names cannot contain spaces, so my var is invalid." }
+        { "id": "A", "correct": true, "rationale": "A valid Python name may use letters, digits, and underscores, as long as it does not start with a digit. _count starts with an underscore, not a digit, so it is a valid name." },
+        { "id": "B", "correct": true, "rationale": "A valid Python name may use letters, digits, and underscores, as long as it does not start with a digit. total2 starts with a letter and only adds digits after, so it is valid." },
+        { "id": "C", "correct": false, "rationale": "A valid Python name can never begin with a digit, since Python would read that as a number. 2cool starts with the digit 2, so it is not a valid variable name." },
+        { "id": "D", "correct": false, "rationale": "A valid Python name can never contain a space, since Python would read it as two separate words. my var has a space in the middle, so it is not a valid variable name." }
       ]
     },
-    { "item_id": "fitb_keyword", "rationale": "The for keyword begins a count-controlled loop in Python." }
+    { "item_id": "fitb_keyword", "rationale": "In Python, a for loop repeats its body once for each value in a sequence. The keyword that starts this kind of loop, and belongs in the blank, is for." },
+    { "item_id": "essay_explain", "rationale": "A for loop lets a program repeat a block of code once for each item in a sequence, like each number in a range or each item in a list. For example, I could use a for loop to print every student's name on a class roster instead of writing a separate print statement for each one. That way the same instructions run automatically for every item without me retyping them." }
   ]
 }
 </QUIZFORGE_JSON>

@@ -33,7 +33,7 @@ def _render_html_item(q_number: int, item: Dict, entry: RationalesEntry) -> str:
 
     if not entry.choices and getattr(entry, "text", None):
         qtype = item.get("type", "")
-        label = "A strong response:" if qtype in ("ESSAY", "FILEUPLOAD") else "Explanation:"
+        label = "Model response to copy:" if qtype in ("ESSAY", "FILEUPLOAD") else "Explanation:"
         body = (
             f'<p class="single-rationale"><strong>{label}</strong> '
             f'{_escape_html(_strip_html(entry.text))}</p>'

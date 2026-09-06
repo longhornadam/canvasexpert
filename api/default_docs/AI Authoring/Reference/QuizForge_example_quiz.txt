@@ -136,52 +136,52 @@
     {
       "item_id": "mc_indicator",
       "choices": [
-        { "id": "A", "correct": true,  "rationale": "Survival of planted grasses near monitored sensor sites is direct evidence the plants are establishing in the restoration zones." },
-        { "id": "B", "correct": false, "rationale": "Limiting volunteer species is a management choice, not a measure of whether the planted grasses themselves are taking hold." },
-        { "id": "C", "correct": false, "rationale": "Salinity staying above ocean levels describes water chemistry, and high salinity can actually stress new grasses rather than show success." },
-        { "id": "D", "correct": false, "rationale": "Unchanged bird counts track wildlife use, which varies seasonally and does not confirm that the grasses are reestablishing." }
+        { "id": "A", "correct": true,  "rationale": "A restoration succeeds when planted organisms survive and spread, not just when conditions look stable. Higher survival of planted grasses near sensor sites shows that growth, so it fits." },
+        { "id": "B", "correct": false, "rationale": "A restoration succeeds when planted organisms survive and spread, not just when conditions look stable. Limiting volunteer species manages the marsh, not whether planted grasses survive, so it does not fit." },
+        { "id": "C", "correct": false, "rationale": "A restoration succeeds when planted organisms survive and spread, not just when conditions look stable. Salinity above ocean levels describes water chemistry, not plant survival, so it does not fit." },
+        { "id": "D", "correct": false, "rationale": "A restoration succeeds when planted organisms survive and spread, not just when conditions look stable. Bird counts shift with seasons for unrelated reasons, so an unchanged count does not fit." }
       ]
     },
     {
       "item_id": "ma_code_safety",
       "choices": [
-        { "id": "A", "correct": true,  "rationale": "Filtering out None values before averaging prevents the calculation from failing on missing readings while keeping the valid data." },
-        { "id": "B", "correct": true,  "rationale": "Guarding against division by zero stops a crash when every reading is missing, so the script fails gracefully instead of erroring." },
-        { "id": "C", "correct": false, "rationale": "Replacing readings with zero corrupts the average by treating missing data as real measurements, hiding genuine salinity changes." },
-        { "id": "D", "correct": false, "rationale": "Printing without calculating the mean removes the analysis the script exists to perform, so salinity problems go undetected." }
+        { "id": "A", "correct": true,  "rationale": "Code that processes readings must handle missing values on purpose, or calculations crash or mislead. Filtering out None values before averaging keeps the calculation using only real readings, so it fits." },
+        { "id": "B", "correct": true,  "rationale": "Code that processes readings must handle missing values on purpose, or calculations crash or mislead. Guarding against division by zero stops a crash when every reading is missing, so it fits." },
+        { "id": "C", "correct": false, "rationale": "Code that processes readings must handle missing values on purpose, or calculations crash or mislead. Replacing missing readings with zero treats absent data as a real measurement, so it does not fit." },
+        { "id": "D", "correct": false, "rationale": "Code that processes readings must handle missing values on purpose, or calculations crash or mislead. Printing results without calculating the mean skips the required analysis, so it does not fit." }
       ]
     },
     {
       "item_id": "tf_biodiversity",
-      "rationale": "A single species leaves the marsh vulnerable because one pest or stressor can wipe out that monoculture. Biodiverse plantings spread risk, so monoculture is not safer."
+      "rationale": "A planting of only one species is more vulnerable, since one pest or storm wipes out everything. This marsh uses just one grass species, so it would be less resilient, making the statement true."
     },
     {
       "item_id": "fitb_phasechange",
-      "rationale": "Evaporation moves water from liquid to gas, so both blanks must reflect that phase change. States like solid ice or mist do not match the described evaporation process."
+      "rationale": "Evaporation is the phase change where a liquid absorbs energy and turns into a gas. Water starts as a liquid and evaporates into a gas before condensing in clouds, so 'liquid' and 'gas' are the two blanks."
     },
     {
       "item_id": "essay_fieldnotes",
-      "rationale": "A strong response links the qualitative observations to the sensor data trends and proposes at least one concrete restoration adjustment those insights justify, rather than only restating what the crew saw."
+      "rationale": "Field notes and sensor data work best together because each one fills in what the other misses. The crew noticed that salinity spiked after the windstorm, but the sensors show exactly how high it went and how long it stayed high. The crew also saw that taller grasses blocked spray from reaching new seedlings, which helps explain a pattern the sensors alone would not reveal. Putting the two together, the team can tell whether a spike is just a one-time storm effect or a sign the whole marsh is getting saltier. That matters for deciding what to do next: if the spike is temporary the team can keep watching, but if readings stay high near unprotected seedlings, the team should plant more tall grasses or add wind breaks there. Using both the story from the field and the numbers from the sensors gives the team a reason for its next move instead of a guess."
     },
     {
       "item_id": "fileupload_monitor",
-      "rationale": "A strong submission shows the sensor placement reasoning and any obstacles so reviewers can judge data quality; a generic photo without that context does not explain how location affects readings."
+      "rationale": "My photo shows the sensor placed at the marker stake closest to the tidal channel, about two meters from where the tall grasses start. I picked that spot because it floods first when the tide comes in, so it should catch salinity changes before the rest of the plot does. One obstacle is that the tall grasses next to the sensor block some of the wind and spray, which could make my readings a little lower than the rest of the marsh experiences. I noted that in my report so anyone comparing sensors understands why the numbers might differ."
     },
     {
       "item_id": "matching_terms",
-      "rationale": "Each term aligns with its fieldwork definition, reinforcing vocabulary accuracy. Swapping pairs would misrepresent methods like control plots or transects."
+      "rationale": "A matching item pairs each term with the definition it exactly describes, not a related idea. Salinity is dissolved salt, a transect is the sampling line, and a control plot stays unchanged for comparison."
     },
     {
       "item_id": "ordering_fieldwork",
-      "rationale": "Calibration precedes placement, then observation, then data upload to mirror real workflows. Jumping to data upload before collection would skip critical quality steps."
+      "rationale": "A field procedure must happen in the order that keeps data trustworthy, with setup before collection and collection before reporting. Sensors are calibrated before placement, placement before recording readings, and recording before uploading data, so this is the correct order."
     },
     {
       "item_id": "categorization_poem",
-      "rationale": "Lines with human-like actions are personification; vivid sensory images belong under imagery. Treating every line as imagery ignores the intentional personification of the marsh and sensors."
+      "rationale": "Personification gives a nonhuman thing human actions or feelings; imagery uses vivid sensory detail instead. The marsh 'keeping secrets' and sensors 'counting breath' act human, while trembling reeds and the egrets' ballet paint imagery."
     },
     {
       "item_id": "numerical_carbon",
-      "rationale": "Multiplying 2.5 hectares by 5.8 tons yields 14.5 tons, with a 2% margin allowing minor rounding. Using addition or ignoring the percent margin would misstate the stored carbon."
+      "rationale": "Total stored carbon equals the area covered times the average carbon stored per unit area. Multiplying 2.5 hectares by 5.8 tons per hectare gives 14.5 tons, within the stated margin."
     }
   ]
 }
