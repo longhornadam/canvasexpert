@@ -32,7 +32,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 34 (54 tools).
+Tool schema version 35 (56 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -51,20 +51,20 @@ Tool schema version 34 (54 tools).
 | `delete_learning_objective(course_id, entry_id, expected_revision)` | Directly deletes one selected reviewed objective with revision protection | No |
 | `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/` | No |
 | `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
-| `get_standards_profile()` | Published local DataForge standards profile, safety-scanned before return; no `course_id` and no Canvas call | Yes — pseudonymized |
-| `get_assessment_context(course_id, pseudonyms="")` | Bounded current-roster join with local longitudinal DataForge assessment evidence; exact trimmed/case-folded pseudonym filters, observational only, no Canvas fallback | Yes — pseudonymized |
-| `get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct", cutoffs="", no_data_group="", group_set_label="")` | Read-only Students-page grouping proposal over a local snapshot; exact teacher-safe group-set label, bounded pseudonym placements, no Canvas apply path | Yes — pseudonymized |
+| `get_standards_profile()` | Published local DataForge standards profile, safety-scanned before return; no `course_id` and no Canvas call | Yes, pseudonymized |
+| `get_assessment_context(course_id, pseudonyms="")` | Bounded current-roster join with local longitudinal DataForge assessment evidence; exact trimmed/case-folded pseudonym filters, observational only, no Canvas fallback | Yes, pseudonymized |
+| `get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct", cutoffs="", no_data_group="", group_set_label="")` | Read-only Students-page grouping proposal over a local snapshot; exact teacher-safe group-set label, bounded pseudonym placements, no Canvas apply path | Yes, pseudonymized |
 | `list_staged_content(kind="")` | Drafts already staged in the per-kind To Review folder, so an assistant can confirm a drop landed instead of losing track or duplicating it; pass `kind` to narrow, omit for all four | No |
-| `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes — pseudonymized |
-| `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes — pseudonymized |
-| `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected preview of a pseudonym-first settings change; use before apply | Yes — pseudonymized |
-| `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the exact reviewed preview through the existing Roster mutation path; a `canvas_group` patch reaches Canvas | Yes — pseudonymized |
-| `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes — pseudonymized |
-| `get_seating_context(course_id, section_name="", section_id="")` | `mirror+local`: one section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes — pseudonymized |
-| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes — pseudonymized |
-| `get_writing_history(pseudonym, since="", until="", include_text=false, max_text_chars=2000)` | One student's Writing Record across time: dated submissions, assignment context, word counts, segment attribution, structural flags. No `course_id`; this reads a private per-student store, not a course, and it does not score or judge work | Yes — pseudonymized |
-| `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes — pseudonymized |
-| `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No — returns a sync status, never course data |
+| `get_roster(course_id)` | Table of `(pseudonym, section_names)`, mirror-only | Yes, pseudonymized |
+| `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes, pseudonymized |
+| `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected preview of a pseudonym-first settings change; use before apply | Yes, pseudonymized |
+| `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the exact reviewed preview through the existing Roster mutation path; a `canvas_group` patch reaches Canvas | Yes, pseudonymized |
+| `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes, pseudonymized |
+| `get_seating_context(course_id, section_name="", section_id="")` | `mirror+local`: one section's current mirrored identity/membership plus private local pseudonymized supports, score values, AI-context notes, and pair preferences; excludes IDs, private notes, and private relationship reasons | Yes, pseudonymized |
+| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | One assignment's submissions, scrubbed, mirror-only | Yes, pseudonymized |
+| `get_writing_history(pseudonym, since="", until="", include_text=false, max_text_chars=2000)` | One student's Writing Record across time: dated submissions, assignment context, word counts, segment attribution, structural flags. No `course_id`; this reads a private per-student store, not a course, and it does not score or judge work | Yes, pseudonymized |
+| `get_gradebook_snapshot(course_id)` | Whole-course per-assignment/per-student stats, mirror-only | Yes, pseudonymized |
+| `refresh_mirror(course_id)` | Sync this course's local mirror from Canvas, then report freshness status | No, returns a sync status, never course data |
 | `get_bell_schedule(schedule_id="")` | Bell schedule CSV(s) from the workspace | No |
 | `preview_bell_schedule(schedule_id, content)` | Previews creating or replacing one Bell Schedule CSV, with base digest and before/after meeting projections | No |
 | `apply_bell_schedule(preview, expected_digest)` | Applies the exact reviewed Bell Schedule preview; refuses stale files or altered projections | No |
@@ -82,8 +82,10 @@ Tool schema version 34 (54 tools).
 | `apply_school_calendar_game_score(preview, expected_revision)` | Applies the exact reviewed game-score preview; refuses stale, altered, or non-game previews | No |
 | `start_scoring_session(course_id, assignment_id)` | Start a packet-mode PowerGrader session for one assignment (never assisted, never auto-post, no uploads); returns `{session_id, assignment_name, student_count, response_count, new_quiz_item_finalization_supported}` | No |
 | `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved, assignment_id, newer_session_exists, staged_at}` | No |
-| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard; context includes the declared rubric name and whether its text resolved | Yes — pseudonymized |
-| `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |
+| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard; context includes the declared rubric name and whether its text resolved | Yes, pseudonymized |
+| `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes, pseudonymized |
+| `preview_new_quiz_scores(session_id)` | Freezes a New Quiz item-finalization review for every student in the session carrying a staged item score; returns opaque `operation_id`/`review_digest` plus aggregate counts and warnings; no Canvas write | Yes, pseudonymized |
+| `apply_new_quiz_scores(operation_id, review_digest)` | Applies only the exact frozen New Quiz item-score review through the existing finalization lane, looping per student with per-student outcomes; idempotent | Yes, pseudonymized |
 | `get_theme_contract()` | The Panel theme format: the three or four colours and two names you set, the sixteen variables derived for you, and the closed font/ornament sets | No |
 | `list_panel_themes()` | Built-in Panel themes plus the teacher's own as `(key, label, origin, authored_at)`, with any theme file that could not be read | No |
 | `list_theme_art()` | Art files present in `Library/Panels/Themes/art/`, with each one's kind, dimensions or viewBox, and any diagnostic; call it so a theme references a filename that exists instead of an invented one | No |
@@ -243,6 +245,25 @@ to how far over the page landed.
 The safety scan walks dict keys, so it cannot see into `{columns, rows}` tables. Every tool
 that returns student text therefore gates the dict-row payload first and tabulates only after
 the gate has passed it, `get_scoring_packet` included.
+
+**New Quiz item-finalization write pair (v35).** `preview_new_quiz_scores(session_id)` and
+`apply_new_quiz_scores(operation_id, review_digest)` land the item scores `stage_scores`
+staged into Canvas, for a session whose `new_quiz_item_finalization_supported` flag is true.
+The pair mirrors the SIS grade-bridge shape: preview freezes one review per student carrying
+a staged item score (the same preflight freeze, drift check, and 15-minute review token the
+interactive PowerGrader queue already uses) and returns only aggregate counts and warnings,
+never a real name or Canvas/SIS id; apply takes nothing but the opaque `operation_id` and
+`review_digest` preview returned. The frozen review tokens are stashed on the session itself,
+not the Operation Ledger. Apply replays each stashed token through the existing finalization
+lane and reports one outcome per student (by pseudonym); a concluded or otherwise restricted
+enrollment can refuse one student without stopping the rest of the batch, and replaying the
+same `operation_id`/`review_digest` never re-applies a student who already finalized. A
+review token past its 15-minute window refuses cleanly and names `preview_new_quiz_scores`
+as the next step, rather than crashing or silently skipping that student. Normally an
+assistant previews, summarizes the aggregate counts and warnings, and waits for the teacher
+before applying. One teacher command may preauthorize the whole preview/apply cycle only
+when it names that exact course and that exact assignment; it never generalizes to another
+assignment, another course, or a later session, and any invariant failure still stops.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
 CanvasMirror. `get_seating_context` uses the current mirror for identity and section

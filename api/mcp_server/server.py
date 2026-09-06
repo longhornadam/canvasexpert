@@ -47,7 +47,13 @@ _FERPA_NOTICE = (
     "call list_scoring_sessions to list available sessions, get_scoring_packet "
     "to retrieve the SAFE pseudonymized bundle, score it with your chosen LLM, "
     "then stage_scores to land the results in the queue for teacher review. "
-    "Scores never post to Canvas via this path; the teacher reviews and pushes them."
+    "Staged scores never reach Canvas on their own. For a New Quiz they can be "
+    "landed through a separate bounded write pair: preview_new_quiz_scores freezes "
+    "the staged item scores and returns aggregate counts only, and "
+    "apply_new_quiz_scores lands exactly that frozen review. Summarize the preview "
+    "and normally wait for the teacher. One teacher command may preauthorize that "
+    "exact preview/apply cycle only when it names the course and the assignment; "
+    "never reuse that authorization for another assignment, course, or session."
     " SIS grade bridges are a separate bounded write path: call "
     "preview_sis_grade_bridge, summarize its aggregate review, and normally wait "
     "before apply_sis_grade_bridge. One teacher command may preauthorize that exact "
@@ -569,3 +575,26 @@ def stage_scores(session_id: str, results: list,
     staging works: scores 6 of 28, leaves 22 untouched. Does not post to Canvas.
     Course-gated. Never raises."""
     return _compact(tools.stage_scores(session_id, results, expected_packet_digest))
+
+
+@mcp.tool()
+def preview_new_quiz_scores(session_id: str) -> str:
+    """Freeze a New Quiz item-finalization review for every student in this
+    session carrying a staged item score, and stash it. Returns opaque
+    operation_id/review_digest plus aggregate counts (students, items, ready,
+    refused, already_finalized) and warnings; no real name or Canvas/SIS id,
+    no Canvas write. Pass operation_id and review_digest, unchanged, to
+    apply_new_quiz_scores. Course-gated. Never raises."""
+    return _compact(tools.preview_new_quiz_scores(session_id))
+
+
+@mcp.tool()
+def apply_new_quiz_scores(operation_id: str, review_digest: str) -> str:
+    """Apply exactly the New Quiz item scores preview_new_quiz_scores froze.
+    Takes only the opaque operation_id/review_digest pair; refuses cleanly,
+    with no Canvas call, on a mismatched digest, an unrecognized operation_id,
+    or an expired review. Idempotent: replaying the same coordinates never
+    re-applies an already-finalized student. Reports per-student outcomes by
+    pseudonym; a concluded or restricted enrollment can refuse one student
+    while the rest of the batch continues. Never raises."""
+    return _compact(tools.apply_new_quiz_scores(operation_id, review_digest))

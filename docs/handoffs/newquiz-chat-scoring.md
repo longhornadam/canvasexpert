@@ -494,3 +494,148 @@ codebase outside the scoring-packet surface itself, so I took `get_scoring_packe
 that the assistant should see the same number twice rather than two different notions of
 "how much work is here." Not run: `engine/tests` (untouched by this unit; no test under it
 references `api.mcp_server` or PowerGrader).
+
+**Wave 3 (Unit C's tool pair plus Unit D) accepted GREEN.**
+
+Added `preview_new_quiz_scores(session_id: str) -> dict` and
+`apply_new_quiz_scores(operation_id: str, review_digest: str) -> dict` to
+`api/mcp_server/tools.py`, registered in `api/mcp_server/server.py` right after
+`stage_scores`. Both are thin loops over the untouched, already-live-verified
+`session_actions.review_new_quiz_finalization` / `finalize_new_quiz` /
+`converge_new_quiz_after_finalize` (D4: no second finalization path was written or
+needed). `preview_new_quiz_scores` builds each candidate's decisions from
+`student["ai_item_results"]` (score/feedback `stage_scores` already merged, filtered to
+items carrying a score), calls `review_new_quiz_finalization` once per candidate, and
+copies the resulting `pending_new_quiz_review` token out of the session into a new stash
+keyed by a generated `operation_id`, before the next student's freeze overwrites that
+single-slot session field. Per D10, the stash lives under
+`session["new_quiz_scoring_operations"][operation_id]`, never the Operation Ledger.
+`apply_new_quiz_scores` takes only `(operation_id, review_digest)` per D3; the session_id
+is recovered by splitting `operation_id` on its own `"::"` separator
+(`f"{session_id}::{secrets.token_urlsafe(16)}"`), which is what makes the pair's opaque
+coordinate self-locating without a second lookup index or the ledger. It then re-injects
+each stashed student's frozen token into the session's single `pending_new_quiz_review`
+slot immediately before calling `finalize_new_quiz` for that student, so `finalize_new_quiz`
+sees exactly what the interactive route would have written.
+
+Return shapes: preview returns `{ok, operation_id, review_digest, counts: {students, items,
+ready, refused, already_finalized}, warnings, [refused_reasons]}`; apply returns `{ok,
+operation_id, counts: {finalized, already_applied, failed}, results: [{pseudonym, status,
+code, [error]}]}`. Neither ever carries a real name or Canvas/SIS id; per-student rows
+carry only the pseudonym the identity vault assigns (session students are stored with
+`user_id`/`real_name`, never a stored pseudonym, so both tools open the vault and call
+`vault.get_or_assign` themselves), and both pass their final payload through
+`pseudonym.gate` before returning, the same outbound safety scan every other student-data
+tool uses.
+
+**The `_notify_write_through` seam.** `converge_new_quiz_after_finalize` (moved by Wave 2B)
+takes `notify_write_through` as an injected callable. Its only real implementation reaches
+`mirror_service.notify_course_changed`, and `mirror_service` (`api.webui.mirror_service`,
+not `api.webui.routes.*`) is *already* an accepted `api.webui` import in this exact file --
+`_enqueue_sync = mirror_service.enqueue_sync` and `_wait_for_plan = mirror_service.wait_for_plan`
+are bound at module top for `refresh_mirror`, and `api/tests/mcp_server/test_tools.py`
+already documents that `api/mcp_server/pseudonym.py` reaches into `api.webui.routes.names`
+too. The actual guardrail, confirmed directly in `api/tests/test_beta075_mcp.py::
+test_http_and_mcp_share_use_cases_and_student_outputs_stay_green`, is a literal source
+check: `assert "webui.routes" not in tools_source`. It bans the HTTP *route* layer
+specifically (form parsing, uploads, the assisted auto-post trigger), not `api.webui` as a
+whole. So the seam is resolved by adding one small top-level function,
+`_new_quiz_notify_write_through(session, pushed)`, in `tools.py`, whose body is a
+deliberate duplicate of the route's own `_notify_write_through` (same course_id/pushed
+truthiness check, same best-effort try/except around `mirror_service.notify_course_changed`),
+reached the same way `_enqueue_sync`/`_wait_for_plan` already are. This is not a new import
+path or a new dependency; it is the same accepted seam, used a second way. Neither
+importing `api.webui.routes.powergrader` nor skipping convergence was needed or done.
+
+**Idempotency**, pinned as a law
+(`test_apply_twice_with_the_same_coordinates_writes_once`): calling `apply_new_quiz_scores`
+twice with the same `operation_id`/`review_digest` invokes the Canvas-touching `_new_quiz_apply`
+callable exactly once; the second call's per-student result reports `status: "already_applied"`
+via `finalize_new_quiz`'s own decision-digest short-circuit, which runs before the review-token
+check, so it doesn't need or use a live pending-review match. A related correctness point found
+during review rather than specified in the brief: `finalize_new_quiz` also refuses to *retry* an
+ambiguous or Canvas-rejected write through the same frozen token (it invalidates the session's
+live `pending_new_quiz_review` for exactly that reason), but naively re-injecting our own
+stashed copy of that token on every `apply_new_quiz_scores` call would silently defeat that
+existing protection. Fixed by pruning a student from the stash (persisted back to the session)
+whenever `finalize_new_quiz`'s failure code names an actual Canvas write attempt
+(`write_rejected`, `write_unknown`, `write_unverified` -- the only `new_quiz_grader.GraderError`
+codes reachable after `apply()`'s POST, as opposed to pre-write drift/validation codes, which
+stay retryable since no Canvas call was made for them). Pinned by
+`test_apply_never_retries_an_unverified_write_through_the_same_operation`.
+
+**Expiry**, pinned as a law (`test_apply_refuses_an_expired_review_token_cleanly`): a
+per-student review token past its 15-minute window fails through `finalize_new_quiz`'s own
+existing expiry check, surfacing as `{"status": "failed", "code": "review_expired"}` for that
+student -- no crash, no silent skip, and the rest of the batch is unaffected. No separate
+operation-level expiry gate was added on top: reusing `finalize_new_quiz`'s own per-student
+check (rather than adding a second one) is what keeps an idempotent replay of an
+already-finalized batch working correctly even after the review window has since closed for
+other, unrelated students in the same operation.
+
+Also pinned as laws: digest mismatch refusal
+(`test_apply_refuses_a_mismatched_review_digest_without_touching_canvas`, apply's
+Canvas-touching callable poisoned to raise if called) and apply refusing an `operation_id`
+it did not mint, both a same-session forged suffix and a syntactically unrelated string
+(`test_apply_refuses_an_operation_id_it_did_not_mint`). The no-identity law
+(`test_preview_never_projects_a_real_name_or_canvas_id`,
+`test_apply_results_never_project_a_real_name_or_canvas_id`) runs against a fixture student
+carrying both a real-looking `real_name` ("Learner One") and Canvas `user_id` ("900123",
+matching `api/tests/test_beta075_mcp.py`'s own synthetic-name convention) and asserts neither
+string appears anywhere in the serialized result. One contract test
+(`test_preview_counts_ready_refused_and_already_finalized_students`) parametrizes a mixed
+batch (one ready, one `speedgrader_required` refusal, one already-finalized-but-still-staged)
+against the aggregate `counts`/`refused_reasons` shape; another
+(`test_preview_refuses_cleanly_without_a_canvas_call`) parametrizes the session-not-found /
+unsupported-session / no-staged-scores refusals, each with the preflight callable poisoned to
+confirm no Canvas call is attempted. All new tests live in
+`api/tests/mcp_server/test_new_quiz_scoring_tools.py` (15 tests); no network, no Canvas call,
+no real course, no student data (synthetic placeholder names/ids only).
+
+Unit D landed in the same commit as required (the doc-pin test goes red the moment either
+tool registers without its row): `contract.TOOL_SCHEMA_VERSION` to 35,
+`api/mcp_server/tool_schema_v35.json` generated from the live registry (56 tools, the two
+New Quiz tools the only addition over v34), `api/tests/test_beta075_mcp.py` updated to pin
+v34 as the immutable 54-tool snapshot (matching v33's existing treatment) and assert 56
+live tools, `docs/mcp-server.md`'s version/count line, two new table rows, and a new
+paragraph documenting the pair plus the D7 preauthorization rule alongside the SIS bridge's
+existing one, and `api/tests/mcp_server/test_tools.py`'s expected tool set. `AGENTS.md`'s
+MCP routing row (D8) no longer says "Never a Canvas write"; it now says "a small number of
+bounded, documented Canvas write surfaces (also behind preview/apply pairs)", matching
+`docs/mcp-server.md`. `docs/reference/new-quizzes-grading-transport.md`'s item-finalization
+lane paragraph gained one sentence naming the MCP pair as a second caller of the same lane,
+explicit that it is not a second finalization path.
+
+Gate: `py -m pytest api/tests/mcp_server api/tests/powergrader api/tests/test_beta075_mcp.py
+api/tests/test_beta075_imports.py -p no:randomly -q` gave `389 passed`. Full suite:
+`py -m pytest api/tests -p no:randomly -q` gave `4 failed, 2463 passed`, the same four
+recorded above (dailywriting scrub guard, CanvasAgent instructions, theme studio, roster
+routes) and no others.
+
+Files changed: `api/mcp_server/tools.py`, `api/mcp_server/server.py`,
+`api/mcp_server/contract.py`, `api/mcp_server/tool_schema_v35.json` (new),
+`api/tests/mcp_server/test_new_quiz_scoring_tools.py` (new, 15 tests),
+`api/tests/mcp_server/test_tools.py`, `api/tests/test_beta075_mcp.py`,
+`docs/mcp-server.md`, `AGENTS.md`, `docs/reference/new-quizzes-grading-transport.md`.
+
+Deviations and open points, none blocking:
+- `docs/contracts/feedback-scoring-contract.md` was deliberately left untouched. It already
+  gained one sentence about `start_scoring_session` in Wave 2, and this wave's own Unit D
+  scope (as dispatched) names `tool_schema_v35.json`/`contract.py`, `docs/mcp-server.md`,
+  `test_tools.py`, `AGENTS.md`, and the transport reference doc, not this contract file. A
+  reader of that contract will not yet see the New Quiz write pair mentioned there; if that
+  drift matters, it's a small follow-up in the same spirit as the Wave 2 sentence.
+- `server.py`'s always-loaded `_FERPA_NOTICE` instructions text was not extended with the
+  New Quiz preauthorization rule (the SIS bridge's rule lives there too). The brief's Unit D
+  list does not name `server.py` instructions, and the brief separately asks to keep
+  always-loaded tool text short; `docs/mcp-server.md` carries the full rule per D7. Flagging
+  in case the senior wants parity with the SIS bridge's instructions-level treatment.
+- No automatic pruning of stale/old entries under `session["new_quiz_scoring_operations"]`.
+  Each `preview_new_quiz_scores` call adds one more entry; nothing removes an old one after
+  its student finalizes or its window closes. Bounded by how often a teacher scores a given
+  assignment from chat, and harmless (private session-file bytes, not a live risk), but
+  called out since it wasn't explicitly settled by the brief and has no test pinning a cap.
+- Two new table cells in `docs/mcp-server.md` ("Student data?" column) read "Yes,
+  pseudonymized" rather than the em-dash form ("Yes — pseudonymized") every other row in
+  that table already uses, to keep new prose free of em-dash characters per this batch's
+  constraint. The other 14 existing rows were left as they were (out of scope to rewrite).

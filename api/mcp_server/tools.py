@@ -37,10 +37,11 @@ import os
 import hashlib
 import json
 import math
+import secrets
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
-from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, panel_themes, roster_context, roster_service, sis_grade_bridge
+from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, operational_log, panel_themes, roster_context, roster_service, sis_grade_bridge
 from api.dataforge import canvas_join, grouping, history_store, paths as dataforge_paths, profile_export
 from api.dataforge.identity import IdentityMigrationError, VaultIdentity
 from api.mirror import queries as mirror_queries
@@ -3024,3 +3025,350 @@ def stage_scores(session_id: str, results: list, expected_packet_digest: str) ->
         result["scored"] = _scored_count(session)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# New Quiz item-finalization write pair (schema v35).
+#
+# Mirrors the SIS grade-bridge preview/apply shape (docs/handoffs/
+# newquiz-chat-scoring.md, D3): preview freezes a review and returns only
+# aggregate counts plus opaque coordinates; apply accepts nothing but those
+# coordinates and replays the frozen review. The write itself reuses
+# session_actions.review_new_quiz_finalization / finalize_new_quiz /
+# converge_new_quiz_after_finalize unchanged (D4) -- the same guarded,
+# drift-checked, receipt-backed lane the interactive PowerGrader queue uses.
+# Frozen review tokens are stashed on the session itself, keyed by a
+# generated operation_id, never in the Operation Ledger (D10): the session
+# is already the locked unit of state here, and nothing else needs a ledger
+# record for a New Quiz item score.
+# ---------------------------------------------------------------------------
+
+
+def _new_quiz_scored_decisions(student: dict) -> list[dict]:
+    """Item decisions for review_new_quiz_finalization/finalize_new_quiz,
+    built from whatever stage_scores already merged onto this student
+    (student["ai_item_results"], each {item_id, score, feedback}). Only
+    items carrying a score are included, so a session that only scores the
+    essay items on a mixed New Quiz never touches the auto-graded ones.
+    teacher_feedback stays empty: this chat path has no separate
+    teacher-authored note, only the score and feedback the assistant staged."""
+    decisions = []
+    for item in student.get("ai_item_results") or []:
+        if item.get("score") is None:
+            continue
+        decisions.append({
+            "item_id": str(item.get("item_id") or ""),
+            "score": item.get("score"),
+            "teacher_feedback": "",
+            "ta_feedback": str(item.get("feedback") or ""),
+        })
+    return decisions
+
+
+def _new_quiz_operation_digest(operation_id: str, ready_students: dict) -> str:
+    fingerprint = {
+        user_id: {
+            "decisions": entry["decisions"],
+            "review_token": (entry.get("pending") or {}).get("token"),
+        }
+        for user_id, entry in ready_students.items()
+    }
+    raw = json.dumps(
+        {"operation_id": operation_id, "students": fingerprint},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _new_quiz_preflight(session: dict, student: dict, decisions: list[dict]) -> dict:
+    from api.powergrader import new_quiz_grader
+
+    return new_quiz_grader.preflight(
+        canvas_base=config.get_canvas_base(), token=config.get_token(),
+        assignment_id=str(session["assignment_id"]), user_id=str(student["user_id"]),
+        decisions=decisions,
+    )
+
+
+def _new_quiz_apply(session: dict, student: dict, decisions: list[dict], pending: dict) -> dict:
+    from api.powergrader import new_quiz_grader
+
+    return new_quiz_grader.apply(
+        canvas_base=config.get_canvas_base(), token=config.get_token(),
+        assignment_id=str(session["assignment_id"]), user_id=str(student["user_id"]),
+        decisions=decisions, baseline=pending,
+    )
+
+
+# finalize_new_quiz's own apply(...) exception path already refuses to retry
+# an ambiguous or rejected write through the same frozen review token (it
+# invalidates the session's live pending_new_quiz_review specifically so a
+# second call cannot try the same POST again). Naively re-injecting our own
+# stashed copy of that token on every apply_new_quiz_scores call would defeat
+# that protection, so a student whose finalize_new_quiz failure code names an
+# actual Canvas write attempt is dropped from OUR stash too -- replaying the
+# same operation_id can no longer reach that student's write again. A refusal
+# that never touched Canvas (mismatched/expired review, unresolved
+# provenance, SpeedGrader-only evidence) carries no such risk and is left in
+# place, since retrying it is safe, if usually futile without a fresh preview.
+_NEW_QUIZ_UNVERIFIED_WRITE_CODES = {"write_rejected", "write_unknown", "write_unverified"}
+
+
+def _new_quiz_notify_write_through(session: dict, pushed) -> None:
+    """Best-effort write-through mirror refresh after one verified New Quiz
+    finalize.
+
+    Duplicates the small helper of the same name in the PowerGrader HTTP
+    route module (api/webui/routes/powergrader.py) on purpose rather than
+    importing it: that module is the HTTP route layer (form parsing,
+    uploads, the assisted auto-post trigger) and stays out of bounds for
+    this server. mirror_service itself is already an accepted api.webui
+    import in this module -- see _enqueue_sync/_wait_for_plan above -- so
+    notify_course_changed is reached the same way, not through a new import
+    path.
+    """
+    try:
+        course_id = (session or {}).get("course_id")
+        if course_id and pushed:
+            mirror_service.notify_course_changed(course_id)
+    except Exception as exc:
+        operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
+
+
+def preview_new_quiz_scores(session_id: str) -> dict:
+    """Freeze a New Quiz item-finalization review for every student in this
+    session who carries a staged item score (from stage_scores), stashing
+    the frozen review tokens on the session under a new operation_id. Makes
+    no Canvas write.
+
+    Returns on success: operation_id and review_digest (both opaque; pass
+    both, unchanged, to apply_new_quiz_scores), and counts: students (with a
+    staged score), items (distinct item_id across them), ready (froze
+    cleanly), refused, and already_finalized (already landed in an earlier
+    finalize). warnings names a refused student only by pseudonym and
+    reason, never a real name or Canvas/SIS id.
+
+    Refuses cleanly, with no Canvas call, when: the session is not found,
+    the course is not a Current course, this session has no New Quiz
+    item-finalization lane, or no student carries a staged item score.
+    Never raises.
+    """
+    from api.powergrader import session_actions, session_store
+
+    session = session_store.load_session(session_id)
+    if not session:
+        return {"ok": False, "error": "Session not found."}
+
+    gate_err = _course_gate_check(str(session.get("course_id") or ""))
+    if gate_err:
+        return {"ok": False, "error": gate_err}
+
+    if not session.get("new_quiz_item_finalization_supported"):
+        return {"ok": False, "error": "This session does not support New Quiz item finalization."}
+
+    candidates = []
+    for student in session.get("students") or []:
+        decisions = _new_quiz_scored_decisions(student)
+        if decisions:
+            candidates.append((student, decisions))
+    if not candidates:
+        return {
+            "ok": False,
+            "error": "No staged item scores are ready to preview. Stage scores first with stage_scores.",
+        }
+
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
+
+    item_ids: set = set()
+    already_finalized = 0
+    ready_students: dict = {}
+    warnings: list = []
+    refused_reasons: dict = {}
+
+    with _vault_transaction(vault):
+        for student, decisions in candidates:
+            user_id = str(student.get("user_id") or "")
+            pseudonym_value = vault.get_or_assign(user_id)
+            for decision in decisions:
+                item_ids.add(decision["item_id"])
+            if student.get("new_quiz_finalized"):
+                already_finalized += 1
+
+            with session_store.session_lock(session_id):
+                payload, _status = session_actions.review_new_quiz_finalization(
+                    session_id, user_id=user_id, decisions_json=json.dumps(decisions),
+                    load_session=session_store.load_session,
+                    save_session=session_store.save_session,
+                    preflight=_new_quiz_preflight,
+                )
+                pending = None
+                if payload.get("ok"):
+                    fresh = session_store.load_session(session_id) or {}
+                    pending = dict(fresh.get("pending_new_quiz_review") or {})
+
+            if pending is not None:
+                ready_students[user_id] = {
+                    "pseudonym": pseudonym_value, "pending": pending, "decisions": decisions,
+                }
+            else:
+                code = str(payload.get("code") or "refused")
+                refused_reasons[code] = refused_reasons.get(code, 0) + 1
+                warnings.append({
+                    "pseudonym": pseudonym_value, "code": code,
+                    "reason": payload.get("error") or code,
+                })
+
+    if not ready_students:
+        result = {"ok": False, "error": "No student is ready to finalize.", "warnings": warnings}
+        return pseudonym.gate(result, vault)
+
+    operation_id = f"{session_id}::{secrets.token_urlsafe(16)}"
+    review_digest = _new_quiz_operation_digest(operation_id, ready_students)
+
+    with session_store.session_lock(session_id):
+        session = session_store.load_session(session_id) or session
+        session.setdefault("new_quiz_scoring_operations", {})[operation_id] = {
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "review_digest": review_digest,
+            "course_id": session.get("course_id"),
+            "assignment_id": session.get("assignment_id"),
+            "students": ready_students,
+        }
+        session_store.save_session(session)
+
+    result = {
+        "ok": True,
+        "operation_id": operation_id,
+        "review_digest": review_digest,
+        "counts": {
+            "students": len(candidates),
+            "items": len(item_ids),
+            "ready": len(ready_students),
+            "refused": sum(refused_reasons.values()),
+            "already_finalized": already_finalized,
+        },
+        "warnings": warnings,
+    }
+    if refused_reasons:
+        result["refused_reasons"] = refused_reasons
+    return pseudonym.gate(result, vault)
+
+
+def apply_new_quiz_scores(operation_id: str, review_digest: str) -> dict:
+    """Apply exactly the New Quiz item scores preview_new_quiz_scores froze.
+
+    Takes only the opaque operation_id/review_digest pair preview_new_quiz_scores
+    returned; there is no session_id, course_id, or student parameter, so
+    nothing here can reach any session, course, or student beyond the one
+    already frozen.
+
+    Replays each stashed per-student review token through finalize_new_quiz
+    (the same guarded, drift-checked, receipt-backed item-finalization lane
+    the interactive PowerGrader queue uses -- D4, no second write path), then
+    converges the gradebook write-through and New Quiz response-snapshot
+    invalidation after each freshly verified finalize. A concluded or
+    otherwise restricted enrollment can still refuse one student (Canvas 403
+    per docs/reference/new-quizzes-grading-transport.md); that student's
+    outcome is reported and the rest of the batch continues -- partial
+    failure is the normal case, not a crash.
+
+    Idempotent: calling this again with the same operation_id and
+    review_digest never re-applies a student whose decisions already
+    finalized; that student reports status "already_applied" and Canvas is
+    not written again. A student whose review token has since expired
+    reports status "failed" with code "review_expired" rather than crashing
+    or silently skipping; run preview_new_quiz_scores again for that student.
+    A student whose write came back ambiguous or rejected is likewise never
+    retried through this same operation_id (finalize_new_quiz's own rule);
+    run preview_new_quiz_scores again for that student too.
+
+    Returns operation_id, counts (finalized, already_applied, failed), and a
+    results list keyed only by pseudonym, never a real name or Canvas/SIS id.
+
+    Refuses cleanly, with no Canvas call, when operation_id is not one
+    preview_new_quiz_scores minted, or review_digest does not match the
+    frozen review. Never raises.
+    """
+    from api.powergrader import session_actions, session_store
+
+    session_id, _sep, suffix = str(operation_id or "").partition("::")
+    if not session_id or not suffix:
+        return {"ok": False, "error": "Operation not found. Run preview_new_quiz_scores again."}
+
+    session = session_store.load_session(session_id)
+    if not session:
+        return {"ok": False, "error": "Operation not found. Run preview_new_quiz_scores again."}
+
+    gate_err = _course_gate_check(str(session.get("course_id") or ""))
+    if gate_err:
+        return {"ok": False, "error": gate_err}
+
+    stash = (session.get("new_quiz_scoring_operations") or {}).get(operation_id)
+    if not stash:
+        return {"ok": False, "error": "Operation not found. Run preview_new_quiz_scores again."}
+    if str(review_digest or "") != stash.get("review_digest"):
+        return {"ok": False, "error": "review_digest does not match. Run preview_new_quiz_scores again."}
+
+    vault, vault_err = _open_vault()
+    if vault_err:
+        return {"ok": False, "error": vault_err}
+
+    results = []
+    finalized = already_applied = failed = 0
+
+    for user_id, entry in list((stash.get("students") or {}).items()):
+        pseudonym_value = entry.get("pseudonym")
+        pending = entry.get("pending") or {}
+        decisions = entry.get("decisions") or []
+
+        with session_store.session_lock(session_id):
+            current = session_store.load_session(session_id)
+            if current is None:
+                payload = {"ok": False, "code": "session_missing", "error": "Session not found."}
+            else:
+                current["pending_new_quiz_review"] = dict(pending)
+                session_store.save_session(current)
+                payload, _status = session_actions.finalize_new_quiz(
+                    session_id, user_id=user_id, review_token=str(pending.get("token") or ""),
+                    decisions_json=json.dumps(decisions),
+                    load_session=session_store.load_session,
+                    save_session=session_store.save_session,
+                    apply=_new_quiz_apply,
+                )
+
+        status = payload.get("status")
+        if payload.get("ok") and status == "finalized":
+            finalized += 1
+            reloaded = session_store.load_session(session_id)
+            if reloaded is not None:
+                session_actions.converge_new_quiz_after_finalize(
+                    reloaded, user_id, notify_write_through=_new_quiz_notify_write_through,
+                )
+            results.append({"pseudonym": pseudonym_value, "status": "finalized", "code": payload.get("code")})
+        elif payload.get("ok") and status == "already_applied":
+            already_applied += 1
+            results.append({"pseudonym": pseudonym_value, "status": "already_applied", "code": payload.get("code")})
+        else:
+            failed += 1
+            code = str(payload.get("code") or "failed")
+            results.append({
+                "pseudonym": pseudonym_value, "status": "failed",
+                "code": code, "error": payload.get("error"),
+            })
+            if code in _NEW_QUIZ_UNVERIFIED_WRITE_CODES:
+                with session_store.session_lock(session_id):
+                    current = session_store.load_session(session_id)
+                    live_stash = ((current or {}).get("new_quiz_scoring_operations") or {}).get(operation_id)
+                    if live_stash is not None:
+                        (live_stash.get("students") or {}).pop(user_id, None)
+                        session_store.save_session(current)
+
+    result = {
+        "ok": failed == 0,
+        "operation_id": operation_id,
+        "counts": {"finalized": finalized, "already_applied": already_applied, "failed": failed},
+        "results": results,
+    }
+    return pseudonym.gate(result, vault)

@@ -105,7 +105,13 @@ check so Canvas drift does not weaken review or write safety.
     the route validates result-version stability (drift check against cached state digest),
     applies an idempotency key (keyed on user/state/decision digests), re-fetches and
     verifies the authoritative result post-write, and logs content-minimized receipts.
-    Concluded enrollment may return `403`.
+    Concluded enrollment may return `403`. A second caller reaches the same lane
+    unchanged (2026-09-06): the MCP server's `preview_new_quiz_scores` /
+    `apply_new_quiz_scores` pair calls `session_actions.review_new_quiz_finalization`
+    and `finalize_new_quiz` directly, one student per loop iteration, so an assistant
+    scoring a New Quiz from a conversation gets the identical freeze/drift/idempotency/
+    receipt behavior as the interactive PowerGrader queue. It is not a second
+    finalization path; there is exactly one, with two callers.
 - `api/powergrader/new_quiz_fetch.py` uses native result acquisition; the live participant
   result key `quiz_api_quiz_session_id` is normalized alongside older/synthetic
   `quiz_session_id` shapes (fixed 2026-07-14, live-verified: file evidence downloads).

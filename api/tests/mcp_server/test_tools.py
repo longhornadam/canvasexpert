@@ -2148,6 +2148,7 @@ def test_server_registers_the_expected_tool_set():
             "get_roster_student_settings", "preview_roster_student_change",
             "apply_roster_student_change", "clear_roster_student_field",
         "start_scoring_session", "list_scoring_sessions", "get_scoring_packet", "stage_scores",
+        "preview_new_quiz_scores", "apply_new_quiz_scores",
         "get_theme_contract", "list_panel_themes", "list_theme_art",
         "preview_panel_theme", "apply_panel_theme", "delete_panel_theme",
         }
