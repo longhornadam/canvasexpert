@@ -8,10 +8,9 @@
 Batch brief, not durable documentation. Delete it when the batch closes and is accepted.
 Read `AGENTS.md` first; this assumes it.
 
-It lives at the repository root rather than `docs/handoffs/` because
-`sis-grade-bridge-first-family.md` currently holds that folder's one-brief slot at YELLOW
-pending two teacher passback confirmations. Derive one executor brief at a time into
-`docs/handoffs/` as that slot frees, or ask the teacher to retire it.
+This is the single current direct brief. The SIS grade-bridge brief was retired on
+2026-09-06: the teacher confirmed its two outstanding passbacks landed and that the
+feature works in production.
 
 ---
 
