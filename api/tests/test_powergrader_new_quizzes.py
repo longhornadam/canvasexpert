@@ -13,7 +13,7 @@ from api.feedback_vault import Vault
 from api.powergrader import session_actions
 from api.powergrader import new_quiz_grader
 from api.powergrader import new_quiz_csv
-from api.webui.routes.powergrader_helpers import build_late_watch_state
+from api.powergrader.helpers import build_late_watch_state
 
 
 class _Response:

@@ -2132,6 +2132,9 @@ def test_server_registers_the_expected_tool_set():
         "get_authoring_contract", "get_product_guide", "get_standards_profile",
         "get_assessment_context", "get_assessment_grouping_proposal",
         "list_staged_content",
+        # Shipped with the SIS grade bridge; this set was never updated with them.
+        "list_sis_grade_bridges", "preview_sis_grade_bridge",
+        "apply_sis_grade_bridge", "confirm_sis_grade_bridge_passback",
         "get_bell_schedule", "preview_bell_schedule", "apply_bell_schedule",
         "get_day_schedule", "get_teacher_schedule",
         "save_teacher_schedule",

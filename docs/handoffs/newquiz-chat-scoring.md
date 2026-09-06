@@ -320,4 +320,27 @@ Standing constraints:
 
 ## 10. Execution result
 
-To be filled in by the orchestrator.
+**Traffic light:** in progress.
+
+**Preflight, run 2026-09-06 at `c85e53b`. All six held.**
+
+- Clean tree on `dev`, 0 behind `origin/dev`. Note: local commits are ahead and unpushed.
+- `review_new_quiz_finalization` and `finalize_new_quiz` still take injected
+  `load_session` / `save_session` (`session_actions.py:69` and `:159`).
+- `_converge_new_quiz_after_finalize` is still route-level with one caller
+  (`powergrader.py:912`). One test reaches it as `pg._converge_new_quiz_after_finalize`
+  (`api/tests/powergrader/test_interactive_autopush.py:505`), so that test moves with it
+  in Unit C. Recorded here so the executor does not discover it as a surprise.
+- `stage_scores` still takes `item_id` per result.
+- `docs/mcp-server.md` declares "Tool schema version 33 (53 tools)." and
+  `contract.TOOL_SCHEMA_VERSION` is 33.
+- `pg_start` spans `powergrader.py:290` to `:523`.
+
+**Baseline:**
+
+- `py -m pytest api/tests -p no:randomly -q` gave `5 failed, 2440 passed in 69.23s`.
+- `py -m pytest engine/tests -p no:randomly -q` gave `113 passed in 6.70s`.
+
+The five are the known pre-existing failures and are not to be fixed by any executor in
+this batch: dailywriting scrub guard, MCP tool registry, CanvasAgent instructions, theme
+studio, roster routes.
