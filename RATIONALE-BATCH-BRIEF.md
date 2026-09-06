@@ -450,6 +450,45 @@ answer's line and once in the chosen answer's line. That is decision D6 meeting 
 two-layer composition in `_because`. It reads redundantly. Deduplicating the shared
 leading sentence is possible but was not decided unilaterally.
 
+## 9c. Live result 2026-09-06: the essay exemplar does not reach the student
+
+Teacher observation from the student side of quiz 3675645: the auto-scored feedback
+rendered correctly, and **the essay exemplar did not appear on the student results
+screen at all**.
+
+Checked against Canvas afterward. The exemplar is still stored on the item, 382
+characters of `feedback.neutral`, so this is a rendering question and not a transport
+failure. The decisive comparison is within the same quiz and the same results view:
+
+| item | `scoring_algorithm` | carries `feedback.neutral` | student saw it |
+|---|---|---|---|
+| TF | `Equivalence` | yes | yes |
+| ESSAY | `None` | yes | no |
+
+Working hypothesis: New Quizzes renders item feedback only where the item has a scored
+evaluation to render it against. An essay scored `None` has no correctness for the
+results screen to attach feedback to, so the block is skipped. If that holds, grading
+will not change it, because grading assigns points without giving the item an
+evaluation.
+
+**Still unconfirmed, and it decides Unit C:** whether the essay had been graded at the
+time of the observation. If it had not, the post-grading check is still owed. If it had,
+`feedback.neutral` is the wrong transport for essays and the `t_essay` change should come
+out.
+
+If the transport is wrong, the exemplar is not lost. It already renders in the printed
+correction document under "Model response to copy:", which is the surface the teacher
+hands back for correction points anyway. The other candidate is a submission comment
+posted after grading, which is the PowerGrader path and arrives after grading by
+construction, so it cannot leak as an answer key. Neither was pursued pending the answer
+above.
+
+**A constraint worth keeping:** once a student submits an attempt, Canvas refuses to
+update that quiz's items. `PATCH .../items/{id}` returns 422 `cannot update an immutable
+item`. Fixing feedback on a quiz that has been taken means pushing a new quiz, not
+editing the old one. Quiz 3675661 ("HTML Quick Check v2") is that reissue, carrying the
+deduplicated per-choice feedback.
+
 ## 9b. Original sandbox procedure for Unit C
 
 The code and its test are green. The unit stays YELLOW until this runs, because an
