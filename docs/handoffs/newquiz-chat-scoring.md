@@ -396,3 +396,60 @@ CanvasAgent instructions, theme studio, roster routes) and no others.
 Files changed: `api/powergrader/session_actions.py`,
 `api/webui/routes/powergrader.py`, `api/tests/powergrader/test_interactive_autopush.py`
 (test removed), `api/tests/powergrader/test_session_actions.py` (new, test moved in).
+
+**Wave 2, Executor 2A (Unit B) accepted GREEN.** Added `start_scoring_session(course_id,
+assignment_id) -> dict` to `api/mcp_server/tools.py`, registered in
+`api/mcp_server/server.py` alongside the other scoring tools. Course-gated with the same
+`_course_gate_check` as every other student-data tool, then calls
+`start_workflow.run_start_session` with `mode="packet"` and every optional side effect
+hardcoded off (`auto_post="false"`, `watch_late="false"`, `source_uploads=None`,
+`source_files_json=""`, `source_text=""`, `oral_reading_enabled="false"`,
+`oral_reading_passage=""`); the function takes only `course_id`/`assignment_id`, so there
+is no argument surface that could ever request `assisted` mode or auto-post. On success it
+reloads the just-saved session for `new_quiz_item_finalization_supported`, and reuses
+`scoring_packet.build_packet`'s existing `total` computation (limit=1, include_context=false,
+falling back to `student_count` on any error) to report `response_count`, the same number
+`get_scoring_packet` will total later. On failure it surfaces `run_start_session`'s own
+payload `error` text verbatim rather than inventing new wording.
+
+Registry bump landed with it, since the doc-pin test goes red the moment any tool is
+registered without a matching row: `contract.TOOL_SCHEMA_VERSION` to 34,
+`api/mcp_server/tool_schema_v34.json` generated from the live registry after wiring (54
+tools, `start_scoring_session` the only addition over v33), `docs/mcp-server.md`'s
+version/count line and a new table row, `api/tests/test_beta075_mcp.py`'s version/count
+assertions, and `api/tests/mcp_server/test_tools.py`'s expected tool set.
+`docs/contracts/feedback-scoring-contract.md` step 1 gained one sentence noting an
+assistant over MCP can now start a session itself, packet mode only.
+
+Tests: new `api/tests/mcp_server/test_start_scoring_session.py` (7 tests) with
+`run_start_session` stubbed throughout. One example builds a packet-mode session end to
+end and asserts `response_count` (3, from a two-item/two-student SAFE bundle) differs from
+`student_count` (2), proving the count is read from the bundle rather than echoed. A
+second example covers the no-bundle fallback. Laws: refuses a non-Current course without
+ever calling `run_start_session` (a poisoned stub raises if it is), and a dedicated law
+captures the exact kwargs reaching `run_start_session` and asserts `mode == "packet"`,
+`auto_post == "false"`, and every upload/oral-reading argument stays at its off default,
+pinning the no-assisted/no-auto-post property directly rather than assuming it from the
+hardcoded call site. A parametrized contract test covers both named `run_start_session`
+refusals (no submissions, no workspace) surfacing verbatim. A final test pins the
+`server.py` wrapper's compact-JSON wiring.
+
+Gate: `py -m pytest api/tests/mcp_server api/tests/test_beta075_mcp.py
+api/tests/test_beta075_imports.py -p no:randomly -q` gave `153 passed`. Full suite:
+`py -m pytest api/tests -p no:randomly -q` gave `4 failed, 2448 passed`, the same four
+recorded above (dailywriting scrub guard, CanvasAgent instructions, theme studio, roster
+routes) and no others.
+
+Files changed: `api/mcp_server/tools.py`, `api/mcp_server/server.py`,
+`api/mcp_server/contract.py`, `api/mcp_server/tool_schema_v34.json` (new),
+`api/tests/mcp_server/test_start_scoring_session.py` (new),
+`api/tests/mcp_server/test_tools.py`, `api/tests/test_beta075_mcp.py`,
+`docs/mcp-server.md`, `docs/contracts/feedback-scoring-contract.md`.
+
+No deviation from the locked decisions. One thing the brief left open that I resolved by
+reuse rather than invention: "response count" has no prior single definition in this
+codebase outside the scoring-packet surface itself, so I took `get_scoring_packet`'s own
+`total` (scorable rows, distinct from `students_total`) as the authority, on the reasoning
+that the assistant should see the same number twice rather than two different notions of
+"how much work is here." Not run: `engine/tests` (untouched by this unit; no test under it
+references `api.mcp_server` or PowerGrader).

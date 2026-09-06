@@ -525,6 +525,17 @@ def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> s
 
 
 @mcp.tool()
+def start_scoring_session(course_id: str, assignment_id: str) -> str:
+    """Start a packet-mode PowerGrader scoring session for one assignment so
+    this chat can score it. Always packet mode: never opens an assisted
+    session against the teacher's own AI key, never turns on auto-post, no
+    file uploads. Returns session_id, assignment_name, student_count,
+    response_count, and new_quiz_item_finalization_supported. Pass session_id
+    to get_scoring_packet next. Course-gated. Never raises."""
+    return _compact(tools.start_scoring_session(course_id, assignment_id))
+
+
+@mcp.tool()
 def list_scoring_sessions() -> str:
     """PowerGrader sessions with SAFE bundles, newest first, filtered to Current
     courses. Returns {columns, rows} table of (session_id, assignment_name,

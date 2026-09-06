@@ -32,7 +32,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 33 (53 tools).
+Tool schema version 34 (54 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -80,6 +80,7 @@ Tool schema version 33 (53 tools).
 | `apply_school_calendar_event_change(preview, expected_revision)` | Applies a previewed public-event change; refuses stale or altered previews | No |
 | `preview_school_calendar_game_score(event_id, score)` | Previews changing the result of one existing `game` event while carrying every other field forward unchanged | No |
 | `apply_school_calendar_game_score(preview, expected_revision)` | Applies the exact reviewed game-score preview; refuses stale, altered, or non-game previews | No |
+| `start_scoring_session(course_id, assignment_id)` | Start a packet-mode PowerGrader session for one assignment (never assisted, never auto-post, no uploads); returns `{session_id, assignment_name, student_count, response_count, new_quiz_item_finalization_supported}` | No |
 | `list_scoring_sessions()` | PowerGrader sessions with SAFE bundles, Current courses only, as `{session_id, assignment_name, course_id, created, mode_label, total, scored, approved, assignment_id, newer_session_exists, staged_at}` | No |
 | `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | Pseudonymized student responses from one PowerGrader session's SAFE bundle, paged by response, text-only (no media), with a budget guard; context includes the declared rubric name and whether its text resolved | Yes — pseudonymized |
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes — pseudonymized |

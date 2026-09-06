@@ -2147,7 +2147,7 @@ def test_server_registers_the_expected_tool_set():
             "apply_learning_objective", "delete_learning_objective",
             "get_roster_student_settings", "preview_roster_student_change",
             "apply_roster_student_change", "clear_roster_student_field",
-        "list_scoring_sessions", "get_scoring_packet", "stage_scores",
+        "start_scoring_session", "list_scoring_sessions", "get_scoring_packet", "stage_scores",
         "get_theme_contract", "list_panel_themes", "list_theme_art",
         "preview_panel_theme", "apply_panel_theme", "delete_panel_theme",
         }

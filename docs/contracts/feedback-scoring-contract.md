@@ -178,7 +178,9 @@ for any Canvas write.
    the same session without a file: `get_scoring_packet` returns the SAFE bundle paged by
    response, and `stage_scores` hands results back under the same session lock and the same
    `import_results` validation, refusing on a `packet_digest` mismatch if the session was
-   re-run. Every step below applies unchanged; the route in is what differs.
+   re-run. An assistant over MCP can also start that session itself, with
+   `start_scoring_session`; it is packet mode only, never assisted and never
+   auto-post. Every step below applies unchanged; the route in is what differs.
 2. `validate_results(results, bundle, vault)` must be `ok` (hard errors block; warnings shown).
    A named Copilot batch is validated against that batch's required SAFE bundle. Late
    Copilot batches own their own SAFE-bundle path; an explicitly named path that is missing

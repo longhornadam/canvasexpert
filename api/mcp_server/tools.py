@@ -2696,6 +2696,80 @@ def _scored_count(session: dict) -> int:
                if student.get("ai_score") is not None)
 
 
+def start_scoring_session(course_id: str, assignment_id: str) -> dict:
+    """Start a packet-mode PowerGrader scoring session for one assignment.
+
+    Always packet mode: builds the Safe AI Packet this chat can score.
+    Never opens an assisted session (that would run the teacher's own AI
+    key) and never turns on auto-post to Canvas. No file uploads, no
+    oral-reading passage. Course-gated to Current courses only.
+
+    Returns on success: session_id, assignment_name, student_count,
+    response_count (scorable rows across all students, the same count
+    get_scoring_packet totals), and new_quiz_item_finalization_supported
+    (whether a New Quiz per-item write lane exists for this assignment).
+    Pass session_id to get_scoring_packet to continue.
+
+    Refuses cleanly when the course is not a Current course, the assignment
+    has no submissions, or the workspace is not configured. Creates a local
+    session file only; performs no Canvas write. Never raises.
+    """
+    gate_error = _course_gate_check(course_id)
+    if gate_error:
+        return {"ok": False, "error": gate_error}
+
+    from api.powergrader import scoring_packet as sp, session_store, start_workflow
+
+    result = start_workflow.run_start_session(
+        course_id=course_id,
+        assignment_id=assignment_id,
+        mode="packet",
+        watch_late="false",
+        auto_post="false",
+        rubric_name="",
+        persona_id="sage",
+        feedback_pattern_id="",
+        model_id="",
+        response_kind="scr",
+        source_text="",
+        source_files_json="",
+        source_uploads=None,
+        oral_reading_passage="",
+        oral_reading_enabled="false",
+        save_session=session_store.save_session,
+    )
+    if not result["ok"]:
+        return {"ok": False, "error": result["payload"].get("error") or "Could not start a scoring session."}
+
+    session_id = result["session_id"]
+    payload = result["payload"]
+    session = session_store.load_session(session_id) or {}
+
+    response_count = payload.get("student_count", 0)
+    bundle_path = _safe_bundle_path(session)
+    if bundle_path:
+        try:
+            with open(bundle_path, encoding="utf-8") as f:
+                safe_bundle = json.load(f)
+            page = sp.build_packet(
+                session=session, safe_bundle=safe_bundle,
+                offset=0, limit=1, include_context=False,
+            )
+            response_count = page.get("total", response_count)
+        except Exception:
+            pass
+
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "assignment_name": payload.get("assignment_name", ""),
+        "student_count": payload.get("student_count", 0),
+        "response_count": response_count,
+        "new_quiz_item_finalization_supported": bool(
+            session.get("new_quiz_item_finalization_supported")),
+    }
+
+
 def list_scoring_sessions() -> dict:
     """List PowerGrader sessions that have a SAFE bundle, newest first.
 
