@@ -112,6 +112,17 @@ check so Canvas drift does not weaken review or write safety.
     scoring a New Quiz from a conversation gets the identical freeze/drift/idempotency/
     receipt behavior as the interactive PowerGrader queue. It is not a second
     finalization path; there is exactly one, with two callers.
+
+    **Verification status of that second caller, as of 2026-09-06.** The lane itself was
+    live-verified on 2026-07-14 through the interactive queue and is unchanged. The MCP
+    pair around it has only ever run offline, against stubs. No sandbox course was
+    available when it shipped, so the first time `apply_new_quiz_scores` reaches Canvas
+    will be a real course. What is unproven is the wrapper: the per-student loop, the
+    frozen-token stash and its pruning, the digest check, and the convergence call. The
+    freeze, drift check, idempotency key, post-write verification and receipts underneath
+    are the same code the queue has already exercised live. Treat the first live run as
+    the verification it has not had: one student, then read the receipt and the Canvas
+    state before doing more.
 - `api/powergrader/new_quiz_fetch.py` uses native result acquisition; the live participant
   result key `quiz_api_quiz_session_id` is normalized alongside older/synthetic
   `quiz_session_id` shapes (fixed 2026-07-14, live-verified: file evidence downloads).
