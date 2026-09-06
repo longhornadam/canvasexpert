@@ -341,6 +341,58 @@ Standing constraints:
 - `py -m pytest api/tests -p no:randomly -q` gave `5 failed, 2440 passed in 69.23s`.
 - `py -m pytest engine/tests -p no:randomly -q` gave `113 passed in 6.70s`.
 
-The five are the known pre-existing failures and are not to be fixed by any executor in
-this batch: dailywriting scrub guard, MCP tool registry, CanvasAgent instructions, theme
-studio, roster routes.
+**Baseline is now four, not five.** The MCP tool registry failure turned out to be a loose
+end from the SIS grade-bridge batch: it shipped four tools and
+`test_server_registers_the_expected_tool_set` was never updated with them. That test
+enumerates the same set Units B and C add to, so leaving it red invited an executor to
+"fix" it and silently absorb the SIS drift. Closed by the orchestrator at `33d41a0`.
+
+The remaining four are pre-existing, unrelated, and not to be fixed by any executor in
+this batch: dailywriting scrub guard, CanvasAgent instructions, theme studio, roster
+routes. Cite this record rather than rerunning.
+
+**Wave 1 accepted GREEN at `33d41a0`.** `start_workflow.run_start_session` now owns the
+orchestration and carries no web-framework import, so it is callable from MCP. Route tests
+passed unedited; the full suite held at 2440 passed before the registry fix and 2441 after.
+
+**Correction to section 5, made by the orchestrator.** The plan said only Unit C's tools
+land with Unit D's registry bump. That was wrong: `test_mcp_server_doc_matches_the_live_registry`
+goes red the moment *any* tool is registered without its doc row, so Unit B must carry its
+own schema bump (v34, `tool_schema_v34.json`, `contract.TOOL_SCHEMA_VERSION`) and its own
+`docs/mcp-server.md` row and count. Unit C's pair then takes v35.
+
+**Also flagged during Wave 1:** `powergrader_helpers` moved from `api/webui/routes/` to
+`api/powergrader/helpers.py`. The extraction otherwise pointed `api/powergrader/` at
+`api/webui/routes/`, an inverted layer the MCP server was about to depend on.
+
+**Wave 2, Executor 2B (Unit C's convergence move, D5) accepted GREEN.** Moved
+`_converge_new_quiz_after_finalize` out of `api/webui/routes/powergrader.py` into
+`api/powergrader/session_actions.py` as `converge_new_quiz_after_finalize`, kept as its
+own function rather than folded into `finalize_new_quiz` (Unit C's plan text runs the
+convergence as a distinct step in the MCP apply loop after each verified finalize, so a
+future MCP caller needs to call it the same way the route now does). `_notify_write_through`
+stays route-level (it reaches `mirror_service`, a webui-layer module); the new function
+takes it as an injected `notify_write_through` keyword, same seam as `finalize_new_quiz`'s
+injected `load_session`/`save_session`. The route's call site is otherwise unchanged: same
+reload of the session via `_load_session(session_id)`, same guard
+(`status_code == 200 and payload.get("status") == "finalized"`), still outside the session
+lock, still best-effort. No double-invalidation risk: the route is the only caller today
+and calls it exactly once, same as before.
+
+Moved `test_converge_new_quiz_after_finalize_hits_both_surfaces` from
+`api/tests/powergrader/test_interactive_autopush.py:505` to new
+`api/tests/powergrader/test_session_actions.py`, mirroring the function's new module path.
+Reaches it as `session_actions.converge_new_quiz_after_finalize(...)` with an injected fake
+`notify_write_through` instead of patching `pg.mirror_service`; still asserts both surfaces
+(gradebook write-through call and `new_quizzes.invalidate_responses`) are hit with the
+right arguments.
+
+Gate: `py -m pytest api/tests/powergrader api/tests/webui/routes/test_powergrader.py
+api/tests/test_powergrader_new_quizzes.py api/tests/test_beta075_imports.py -p no:randomly -q`
+gave `250 passed`. Full suite: `py -m pytest api/tests -p no:randomly -q` gave
+`4 failed, 2441 passed`, the same four recorded above (dailywriting scrub guard,
+CanvasAgent instructions, theme studio, roster routes) and no others.
+
+Files changed: `api/powergrader/session_actions.py`,
+`api/webui/routes/powergrader.py`, `api/tests/powergrader/test_interactive_autopush.py`
+(test removed), `api/tests/powergrader/test_session_actions.py` (new, test moved in).

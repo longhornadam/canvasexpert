@@ -7,6 +7,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
+from api import operational_log
 from api.powergrader import blind_first
 from api.powergrader import late_catchup
 from api.powergrader import session_store
@@ -200,6 +201,27 @@ def finalize_new_quiz(session_id: str, *, user_id: str, review_token: str, decis
     invalidate_pending_review(session)
     save_session(session)
     return {"ok": True, "status": "finalized", "code": "finalized"}, 200
+
+
+def converge_new_quiz_after_finalize(session, user_id, *, notify_write_through) -> None:
+    """After a verified New Quiz finalize, converge both freshness surfaces:
+    the gradebook submission (write-through refresh) and the separate New Quiz
+    response snapshot (stale-invalidate so the next read re-fetches live via the
+    existing native chain). Best-effort; never fails the finalize that landed.
+
+    ``notify_write_through`` is injected because the gradebook refresh hook is
+    a webui-layer concern (it reaches CanvasMirror scheduling); this module
+    stays free of any import on ``api.webui``.
+    """
+    notify_write_through(session, [user_id])
+    try:
+        course_id = (session or {}).get("course_id")
+        assignment_id = (session or {}).get("assignment_id")
+        if course_id and assignment_id:
+            from api.mirror import new_quizzes
+            new_quizzes.invalidate_responses(course_id, assignment_id)
+    except Exception as exc:
+        operational_log.emit("new_quizzes.response_invalidate", "failed", error_class=type(exc))
 
 
 def _parse_ids(raw: str, *, allow_empty: bool = True) -> tuple[list[str] | None, str | None]:
