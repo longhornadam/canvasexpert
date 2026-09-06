@@ -2,6 +2,21 @@
 .pg-queue-body {
   display:flex; flex-direction:column; height:100vh; overflow:hidden;
 }
+/* The shared workspace shell sizes itself to content (flex:0 1 auto), which
+   is right for a scrolling page and wrong for this one: the queue is a fixed
+   100vh frame whose panes scroll internally, so a content-sized shell left
+   the grading panes short and the frame could not scroll to reach the rest.
+   Scoped to this page's body class so no other route is affected. */
+.pg-queue-body .ce-layout-main,
+.pg-queue-body .ce-shell {
+  flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+}
+.pg-queue-body .ce-workspace__grid { flex:1 1 auto; min-height:0; }
+.pg-queue-body .ce-workspace__stage { min-height:0; display:flex; flex-direction:column; }
+/* Full bleed: the shell's page padding and centring gutters are for reading
+   pages. This one is a working frame with its own topbar rule, and the
+   padding cost 80px of the submission's height and 140px of its width. */
+.pg-queue-body .ce-shell { padding:0; margin:0; max-width:none; }
 .pg-queue-shell {
   display:flex; flex:1 1 auto; flex-direction:column; min-height:0; padding:0;
 }
@@ -26,6 +41,29 @@
 .pg-progress-label { font-size:12px; color:var(--ce-ink-muted); display:block; margin-bottom:3px; }
 .pg-progress-bar  { height:6px; background:var(--ce-rule); overflow:hidden; }
 .pg-progress-fill { width:var(--ce-progress, 0%); height:100%; background:var(--ce-ok); transition:width .3s; }
+
+/* ── Session tools ────────────────────────────────────────────────────
+   Setup, privacy, packet and blind-first are read once at the start of a
+   session and then stop mattering, but they used to sit permanently above
+   the work: 715px of them in a 950px viewport, inside a 100vh frame with
+   no scroll, so the grading panes hung off the bottom unreachable.
+   Collapsed by default, and capped when open so they can never push the
+   work off screen again. */
+.pg-session-tools {
+  flex:0 0 auto; min-height:0;
+  background:var(--ce-surface); border-bottom:1px solid var(--ce-rule);
+}
+.pg-session-tools__summary {
+  display:flex; align-items:center; gap:7px;
+  padding:7px 16px; cursor:pointer;
+  font-size:12px; color:var(--ce-ink-muted);
+  list-style:none;
+}
+.pg-session-tools__summary::-webkit-details-marker { display:none; }
+.pg-session-tools__summary::before { content:"\25B8"; font-size:10px; }
+.pg-session-tools[open] .pg-session-tools__summary::before { content:"\25BE"; }
+.pg-session-tools__summary:hover { color:var(--ce-ink); }
+.pg-session-tools__body { max-height:45vh; overflow-y:auto; }
 
 .pg-privacy-strip {
   flex-shrink:0; padding:9px 16px; border-bottom:1px solid var(--ce-rule);

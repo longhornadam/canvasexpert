@@ -32,6 +32,10 @@
   </div>
 </div>
 
+<details id="pg-session-tools" class="pg-session-tools">
+  <summary class="pg-session-tools__summary">Session setup, privacy, and AI packet</summary>
+  <div class="pg-session-tools__body">
+
 <div id="pg-privacy-strip" class="pg-privacy-strip" hidden>
   <div class="pg-privacy-head">
     <strong>Privacy pipeline</strong>
@@ -75,6 +79,24 @@
   </details>
 </div>
 
+
+<!-- ── Blind-first strip ─────────────────────────────────────────────── -->
+<div id="pg-blind-strip" class="pg-privacy-strip" hidden>
+  <div class="pg-privacy-head">
+    <strong>Blind-first scoring</strong>
+    <span id="pg-blind-summary" class="pg-privacy-summary"></span>
+    <div id="pg-blind-actions" class="pg-privacy-actions">
+      <label class="pg-blind-threshold">Agreement within
+        <input type="number" id="pg-blind-threshold" min="0" step="0.5" class="ce-u-compact-input">
+        pt
+      </label>
+      <button type="button" id="pg-blind-toggle" class="small">Turn on blind-first</button>
+    </div>
+  </div>
+</div>
+  </div>
+</details>
+
 <div id="pg-staged-status" class="pg-privacy-strip" hidden>
   <span id="pg-staged-status-text"></span>
   <button type="button" id="pg-load-staged" class="primary small">Load them</button>
@@ -91,20 +113,6 @@
   </div>
 </div>
 
-<!-- ── Blind-first strip ─────────────────────────────────────────────── -->
-<div id="pg-blind-strip" class="pg-privacy-strip" hidden>
-  <div class="pg-privacy-head">
-    <strong>Blind-first scoring</strong>
-    <span id="pg-blind-summary" class="pg-privacy-summary"></span>
-    <div id="pg-blind-actions" class="pg-privacy-actions">
-      <label class="pg-blind-threshold">Agreement within
-        <input type="number" id="pg-blind-threshold" min="0" step="0.5" class="ce-u-compact-input">
-        pt
-      </label>
-      <button type="button" id="pg-blind-toggle" class="small">Turn on blind-first</button>
-    </div>
-  </div>
-</div>
 
 <!-- ── Main pane ─────────────────────────────────────────────────────── -->
 <div class="pg-main">
