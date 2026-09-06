@@ -41,14 +41,22 @@
 .pg-late-label { font-size:11px; font-weight:600; color:var(--ce-accent); text-transform:uppercase; background:var(--ce-accent-soft); padding:1px 6px; }
 .pg-privacy-actions { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; max-width:100%; }
 .pg-privacy-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:6px 12px; }
-.pg-privacy-step { display:grid; grid-template-columns:14px 1fr; gap:7px; align-items:start; min-width:0; }
+/* The text column needs min-width:0 of its own. A grid track's automatic
+   minimum is its content's min-content width, so without this the column
+   cannot shrink below the longest label and the step overflows its cell
+   into the neighbouring one. */
+.pg-privacy-step { display:grid; grid-template-columns:14px minmax(0,1fr); gap:7px; align-items:start; min-width:0; }
+.pg-privacy-step > * { min-width:0; }
 .pg-light {
   width:9px; height:9px; margin-top:4px; background:var(--ce-surface-soft);
 }
 .pg-light.ok { background:var(--ce-ok); }
 .pg-light.warn { background:var(--ce-attention); }
 .pg-light.failed { background:var(--ce-danger); }
-.pg-privacy-label { font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* Wraps rather than truncating. These labels are the record of what the
+   privacy pipeline did, so an ellipsis costs the teacher the one thing the
+   strip exists to tell them. */
+.pg-privacy-label { font-size:12px; font-weight:700; overflow-wrap:anywhere; }
 .pg-privacy-detail { font-size:11.5px; color:var(--ce-ink-muted); line-height:1.3; }
 .pg-privacy-actions-inline { margin-top:5px; }
 .pg-import-box { margin-top:8px; font-size:13px; }
