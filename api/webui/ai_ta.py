@@ -95,6 +95,15 @@ RETIRED_FILES = {
         "83d68d6cdb03eb4dbe009eceefec41a89f64447e8b1c6023502a9d887eecba2a",
         # Before the classroom display and its Panel theme tools were removed.
         "3f2e05954005949ba2116bb71ccc72f776b10b704d8128bf676cb419a3cf34fc",
+        # Before the CORE write rule was corrected: it had claimed the
+        # assistant never writes to Canvas at all, which the bounded New Quiz
+        # and SIS bridge operations contradict.
+        "19918f641efaab0447e756361de3eed45c065b4974398726568339592bf07898",
+        # Same correction, one release earlier: the version that shipped
+        # between the display removal and the guide scoping. A workspace
+        # seeded in between holds this one, and an unlisted hash reads as
+        # "the teacher edited it", so without this the fix never lands.
+        "c01072b33ce1e844244abebad374201c645ba6a72d24f782204cacfce696d07e",
     }),
     # Named the removed classroom display alongside Calendar.
     "Author a Class Schedule.txt": frozenset({
