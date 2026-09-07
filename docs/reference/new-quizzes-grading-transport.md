@@ -148,3 +148,11 @@ Canvas exposes one grader-feedback value per item. PowerGrader will keep the Tea
 Assistant block read-only and provide an optional teacher field above it. On finalization,
 Canvas receives teacher feedback, a separator, and the TA score/feedback block. When the
 teacher field is empty, omit the empty section and publish only the TA block.
+
+Since 2026-09-06 the assistant's block is prefixed with
+`Autofeedback from an automated assistant:` rather than the former `TA SCORE + FEEDBACK`
+heading. Item feedback posts under the teacher's own name, so the half an assistant wrote
+has to say so; a student cannot otherwise tell it apart from their teacher's words. The
+wording lives in `api/powergrader/attribution.py` and is shared with the reviewed
+assignment push and automatic posting. See the attribution guardrail in
+`docs/reference/powergrader-scoring-map.md`.

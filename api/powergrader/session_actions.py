@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from api import operational_log
+from api.powergrader import attribution
 from api.powergrader import blind_first
 from api.powergrader import late_catchup
 from api.powergrader import session_store
@@ -274,6 +275,10 @@ def _payload(student: dict, *, comments_only: bool = False) -> dict:
     # See docs/reference/powergrader-scoring-map.md (Guardrails: single grading surface).
     score = student.get("teacher_score")
     feedback = _strip_draft_banner((student.get("teacher_feedback") or "").strip())
+    # Words the assistant drafted must not reach a student under the teacher's
+    # name. The box holds both kinds, so provenance is decided by comparison.
+    if attribution.is_assistant_authored(feedback, student.get("ai_feedback")):
+        feedback = attribution.attribute(feedback)
     payload: dict = {}
     if comments_only:
         # Never touch the score or lateness of a quiz-engine-owned grade.

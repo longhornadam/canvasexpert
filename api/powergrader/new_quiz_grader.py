@@ -16,6 +16,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 
 from api.powergrader import new_quiz_fetch
+from api.powergrader.attribution import attribute
 
 
 TIMEOUT = 30
@@ -90,13 +91,19 @@ def _score_total(rows: list, fudge):
 
 
 def compose_feedback(teacher_feedback: str, ta_block: str) -> str:
+    """Compose one item's grader feedback, marking the assistant's half.
+
+    Canvas exposes a single grader-feedback value per item, so the teacher's
+    words and the assistant's arrive together under the teacher's name. The
+    assistant's block is labelled so a student can tell which is which.
+    """
     teacher = str(teacher_feedback or "").strip()
     ta = str(ta_block or "").strip()
     if not ta:
         raise GraderError("missing_ta_feedback")
     if not teacher:
-        return f"TA SCORE + FEEDBACK\n\n{ta}"
-    return f"MY FEEDBACK\n\n{teacher}\n\n-------\n\nTA SCORE + FEEDBACK\n\n{ta}"
+        return attribute(ta)
+    return f"MY FEEDBACK\n\n{teacher}\n\n-------\n\n{attribute(ta)}"
 
 
 def _signed_context(*, canvas_base: str, token: str, assignment_id: str, user_id: str, http_session=None):

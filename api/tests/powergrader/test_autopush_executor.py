@@ -110,7 +110,11 @@ def test_pushes_only_allowed_student_and_writes_grade_comment_payload_and_receip
     assert method == "PUT"
     assert path == "/api/v1/courses/course-1/assignments/assign-1/submissions/student-1"
     assert payload["submission"]["posted_grade"] == "93"
-    assert payload["comment"]["text_comment"] == "Strong answer"
+    # Auto-post writes with no teacher review, so the assistant's words carry
+    # the attribution before they ever reach a student.
+    assert payload["comment"]["text_comment"] == (
+        "Autofeedback from an automated assistant:\n\nStrong answer"
+    )
     assert session["students"][0]["posted"] is True
     assert session["students"][0]["status"] == "auto_pushed"
     assert session["students"][0]["autopush_idempotency_key"]

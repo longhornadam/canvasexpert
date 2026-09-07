@@ -11,6 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .attribution import attribute
 from .autopush_policy import POLICY_VERSION, evaluate_student_for_autopush
 from .late_catchup import apply_lateness_to_submission_payload
 
@@ -78,7 +79,9 @@ def _build_canvas_payload(context: dict, assignment: dict, student: dict, decisi
     if allow_grade_push:
         payload["submission"]["posted_grade"] = decision.get("score_text") or _text(student.get("ai_score"))
     if allow_comment_push and _feedback_present(student, ai_result):
-        payload["comment"] = {"text_comment": _text(student.get("ai_feedback"))}
+        # Nothing on this path is teacher-written: it posts the assistant's
+        # draft with no review, so it is always attributed.
+        payload["comment"] = {"text_comment": attribute(_text(student.get("ai_feedback")))}
     return payload
 
 

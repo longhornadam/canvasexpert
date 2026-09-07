@@ -377,7 +377,7 @@ def test_optional_teacher_observation_round_trips_but_never_enters_write_fields(
     )
     assert payload == {
         "submission": {"posted_grade": "8"},
-        "comment": {"text_comment": "Student-facing feedback only."},
+        "comment": {"text_comment": "Autofeedback from an automated assistant:\n\nStudent-facing feedback only."},
     }
     score, feedback = autopush_policy._effective_score_feedback(student, None)
     assert score == 8

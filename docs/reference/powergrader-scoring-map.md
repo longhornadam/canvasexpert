@@ -97,6 +97,27 @@ derivation against observed `route_bytes` behavior so it cannot drift again.
 
 ## Guardrails
 
+- **Assistant words are attributed; the teacher's are not.** Feedback reaches Canvas
+  under the teacher's own name, because it is their token and their gradebook. That is
+  right for words they wrote and wrong for words an assistant drafted: a student reading
+  it cannot tell the difference, and neither can the teacher weeks later. Every outbound
+  path that can carry assistant prose prefixes it with
+  `Autofeedback from an automated assistant:` followed by a blank line.
+  `api/powergrader/attribution.py` owns the wording so it cannot drift between the three
+  callers, and `api/tests/powergrader/test_attribution.py` pins the rule.
+  - The **reviewed assignment push** (`session_actions._payload`) has one feedback box
+    holding either kind, so provenance is decided by comparing it to the assistant's
+    draft. An accepted draft is marked, an accepted draft the teacher added a line to is
+    marked, and feedback the teacher wrote themselves goes out unmarked.
+  - **Automatic posting** (`autopush_executor`) is always marked. Nothing on that path is
+    teacher-written and nothing is reviewed before it posts.
+  - **New Quiz item finalization** (`new_quiz_grader.compose_feedback`) marks the
+    assistant's block. Canvas exposes one grader-feedback value per item, so a teacher
+    note and the assistant's block share a field under a `MY FEEDBACK` / attribution
+    split.
+  - Marking is idempotent, so a value that round-trips through a session file cannot
+    accumulate banners, and empty feedback stays empty so callers can keep using
+    falsiness to decide whether to send a comment at all.
 - **Single grading surface:** PowerGrader is the only code that writes a Canvas
   submission comment (`comment[text_comment]`) as AI feedback. Gradebook may write
   `posted_grade` for post-hoc adjustment (curve, late penalty, extension, policy) but
