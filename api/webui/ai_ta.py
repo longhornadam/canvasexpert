@@ -112,6 +112,10 @@ RETIRED_FILES = {
         # Before the direct write stopped being gated behind a second ask.
         # The teacher asking for the write is the authorization.
         "1da24d0600b3c50fd7ef78dadc22327dfdd4c38a2cca2d2adde2d2a36000d36a",
+        # Before CORE named the scoring write path. It had said a teacher
+        # could have "scores" written straight to Canvas, which promises
+        # generic grade posting; only New Quiz item scores can go.
+        "183bac2d77afc38c98c79def8cada375f7c9dea1afdb9fc15eae80adf54da931",
     }),
     # Named the removed classroom display alongside Calendar.
     "Author a Class Schedule.txt": frozenset({

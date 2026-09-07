@@ -84,8 +84,10 @@ def test_the_write_default_is_in_the_core(core):
 
     assert "you stage, the teacher pushes" in lowered
     assert "review" in lowered and "push" in lowered
-    # The teacher's own authority over a direct write has to survive here.
-    assert "straight to canvas" in lowered
+    # The teacher's authority over the direct write survives here, named to the
+    # path that exists: item finalization on a New Quiz, not grade posting at
+    # large. Compression is where a specific capability turns into a promise.
+    assert "new quiz item scores" in lowered
     assert "never write to canvas" not in lowered, (
         "CORE is denying the direct-write path again; staging is the default, "
         "not the limit of what a teacher can ask for"

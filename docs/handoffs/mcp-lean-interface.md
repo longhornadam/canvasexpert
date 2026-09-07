@@ -1,5 +1,12 @@
 # MCP lean interface
 
+> **Partly superseded, 2026-09-07.** This brief is still live for one thing only: the
+> pending Work and Cowork client compatibility checks under "Acceptance criteria". Its
+> write-policy decisions are no longer implementation authority. Commits `277e9d2` and
+> `5656dff` changed that direction after this brief was written, so anyone implementing
+> from here should read the current `_SERVER_INSTRUCTIONS` and `docs/mcp-server.md`
+> instead of decisions 5 and 6 below. The annotations inline mark what changed.
+
 Status: YELLOW. Senior accepted local implementation; external client checks pending.
 
 ## Objective and boundaries
@@ -79,7 +86,14 @@ Update this brief's Execution result. No other edits without senior direction.
    apply also reaches Canvas. New Quiz requires upstream staged scores. Preserve
    exact target-bounded preauthorization exceptions for New Quiz and SIS bridge,
    including all already-registered bridges; never generalize to roster or other
-   writes. Other changes are local. Teacher Schedule save is direct local write;
+   writes.
+   **Superseded by `5656dff`.** "Preauthorization exception" was the wrong frame:
+   it made the teacher's own request an exception to a default of asking again.
+   The teacher's ask is now the authorization, and the assistant runs the
+   preview/apply pair and reports what landed. What survives is the target
+   bounding, which this decision also names: one request covers the target the
+   teacher named and does not carry to another assignment, course, family, or
+   session. Do not restore the waiting default from this text. Other changes are local. Teacher Schedule save is direct local write;
    bell schedule has its own preview/apply pair. A preview may freeze local
    review state, so do not promise all previews change nothing. Keep revision,
    digest, review, and failure-stop rules. No workflow-policy expansion.
@@ -87,6 +101,11 @@ Update this brief's Execution result. No other edits without senior direction.
    necessary. Keep CORE delimiter format and all text ASCII. Keep existing
    writing_timeline, writing_record, all Author a ... contracts, and Forge
    staging appendix unchanged. Keep _SERVER_INSTRUCTIONS unchanged.
+   **Superseded by `5656dff`.** `_SERVER_INSTRUCTIONS` has since changed twice,
+   for the write posture above and to move the SIS passback evidence rule onto
+   its own tool. The Forge staging appendix also changed in `277e9d2`: it had
+   ended with "You never write to Canvas", which is false. Treat both as live
+   text, not frozen.
 7. Document topic routing and text-only result transport in docs/mcp-server.md.
    Update the download-identity test so CanvasAgent download equals topic=full,
    and topic sections are extracted from that same source. No browser UI code
@@ -159,6 +178,16 @@ transport, canonical guide routing, write-policy prose, and synthetic boundary
 evidence. The same Luna executor completed the correction round. The focused
 gate was not rerun by the senior; only missing schema evidence and a fresh
 stdio smoke were independently checked. No implementation decision remains.
+
+**Corrected 2026-09-07.** Two regressions survived that acceptance and were
+found by running the full suite rather than the `api/tests/mcp_server/` subset:
+CORE went 49 chars over its custom-instructions budget, and the write rule left
+CORE entirely. Both are fixed in `fe6ac12`. Two follow-on wording defects were
+fixed after that: the "never write to Canvas" claim in `277e9d2`, and CORE
+promising that generic "scores" could be written straight to Canvas when only
+New Quiz item scores can. The seeded-briefing hash was also not retired here,
+so the correction could not have reached a workspace already holding an earlier
+copy. A scoped test run is not acceptance.
 
 YELLOW (local implementation complete; external client acceptance remains
 pending for senior). The user authorized committing this batch on 2026-09-07;
