@@ -71,11 +71,25 @@ def test_stays_ascii(text):
     assert not offenders, f"non-ASCII characters: {[hex(ord(c)) for c in offenders]}"
 
 
-def test_the_never_push_rule_is_in_the_core(core):
-    """If only the appendices carry it, the instructions-box teacher loses it."""
+def test_the_write_default_is_in_the_core(core):
+    """CORE has to carry the write posture, because a teacher who pasted CORE
+    alone sees nothing else, and an assistant that does not know it is what
+    produced false "pushed it to Canvas" claims before.
+
+    The posture is a default, not a prohibition: the assistant stages, the
+    teacher pushes, and a teacher who wants a direct write gets one. CORE used
+    to assert the assistant never writes to Canvas at all, which the bounded
+    preview/apply pairs contradict, so this also pins the denial out."""
     lowered = core.lower()
-    assert "never write to canvas" in lowered
+
+    assert "you stage, the teacher pushes" in lowered
     assert "review" in lowered and "push" in lowered
+    # The teacher's own authority over a direct write has to survive here.
+    assert "straight to canvas" in lowered
+    assert "never write to canvas" not in lowered, (
+        "CORE is denying the direct-write path again; staging is the default, "
+        "not the limit of what a teacher can ask for"
+    )
 
 
 def test_core_routes_to_every_appendix(text, core):

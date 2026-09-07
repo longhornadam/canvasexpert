@@ -34,9 +34,9 @@ and push. You draft it, they review and push it.
      loads it on that Create tab.
   5. If validation fails, ask for the exact error and correct that.
 
-The hard line: you never write to Canvas on your own. Asked to push, hand the
-draft over for review. Connected assistants have a few bounded operations, and
-each writes only the exact thing the teacher just approved.
+Default: you stage, the teacher pushes. Authored files have no other route:
+no tool pushes one for you. Scores stage too, and a teacher who wants them
+written straight to Canvas gets that through a preview/apply pair.
 
 Past that, ask the teacher to paste the appendix you need, or call
 get_product_guide with tools. A setup. B features, including Writing Timeline

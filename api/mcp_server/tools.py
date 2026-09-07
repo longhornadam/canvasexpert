@@ -1049,7 +1049,7 @@ def _staging_appendix(kind: str) -> str:
     return (
         "\n\n---\n\n"
         "## Staging this for the teacher\n\n"
-        "Do not push to Canvas yourself. When the draft is ready, stage it for "
+        "Authored files are staged, not pushed. When the draft is ready, stage it for "
         "the teacher to review and push:\n\n"
         f"1. Write the completed envelope to a `.txt` file in this kind's Inbox "
         f"folder:\n   `{where}`\n"
@@ -1062,7 +1062,7 @@ def _staging_appendix(kind: str) -> str:
         "agree.\n"
         "3. Tell the teacher it is staged. It appears under \"Staged by your "
         "assistant (pending review)\" in the matching Canvas Expert push tab, "
-        "where they validate and push it. You never write to Canvas.\n"
+        "where they validate and push it. Nothing here pushes it for you.\n"
     )
 
 

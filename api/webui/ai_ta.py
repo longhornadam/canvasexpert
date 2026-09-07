@@ -104,6 +104,11 @@ RETIRED_FILES = {
         # seeded in between holds this one, and an unlisted hash reads as
         # "the teacher edited it", so without this the fix never lands.
         "c01072b33ce1e844244abebad374201c645ba6a72d24f782204cacfce696d07e",
+        # Before the CORE write rule stopped denying the direct-write path.
+        # Staging is the default, and a teacher who asks for a direct write
+        # gets one; "never write to Canvas on your own" only softened the
+        # denial instead of correcting it.
+        "cfbcb2e652948cb18ba2ebd1d22e6ffbba79757a9c50a3d4e0f44bd14286e962",
     }),
     # Named the removed classroom display alongside Calendar.
     "Author a Class Schedule.txt": frozenset({
