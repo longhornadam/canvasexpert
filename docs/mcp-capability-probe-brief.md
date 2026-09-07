@@ -16,6 +16,7 @@ Open your report with these, before you call anything:
 2. How many `canvas-expert` tools your client lists. Give the number.
 3. Whether all of them were visible up front, or whether your client hid them behind a search or "deferred tools" mechanism and surfaced only names.
 4. The server instruction text you received for `canvas-expert`, pasted verbatim. If it looks cut off, say so and quote its last complete sentence. This matters: we suspect some clients truncate it, and we need to know exactly where.
+5. Whether your very first tool result arrived intact. Say whether you got readable content back, whether it parsed as JSON, and whether your client raised any schema, validation, or "missing structured output" complaint, even a soft one you worked around. The way results are returned changed recently and no real client has exercised it yet, so this is the one line we need even if you run out of time for everything else.
 
 ## Ground rules
 
@@ -111,7 +112,7 @@ What goes in each:
 
 **10. Rewrite the always-loaded instructions.** The server instruction block is paid for on every single request, so length is a real cost. Rewrite it at whatever length you think is right, and say plainly what you cut and why it was safe to cut.
 
-**11. Client friction.** Anything that was your client's behaviour rather than the server's: truncated instructions, tool count limits, tool names being hidden behind search, schema rejections, arguments being coerced or dropped, results being reformatted. Quote error text where you have it.
+**11. Client friction.** Anything that was your client's behaviour rather than the server's: truncated instructions, tool count limits, tool names being hidden behind search, schema rejections, arguments being coerced or dropped, results being reformatted. Quote error text where you have it. Include how results presented themselves to you across the whole run, not just the first call: whether any result was empty, doubled, truncated, or reshaped, and whether your client ever preferred a different representation of the same result.
 
 **12. Open questions.** What you would ask the developer if you had one question, then five.
 
