@@ -12,6 +12,7 @@ instructions (not per tool), tool descriptions stay to a functional line or
 two, and every result is serialized compactly here — FastMCP would otherwise
 pretty-print dict returns with indent=2, which wastes client context on
 whitespace. List data is shaped as {columns, rows} tables in ``tools.py``.
+Wire character counts are a transport measure, not a per-turn token promise.
 """
 from __future__ import annotations
 
@@ -80,7 +81,7 @@ def _compact(payload: dict) -> str:
     return json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def list_courses() -> str:
     """This teacher's courses as {course_id, course_name, active, lifecycle};
     active=true marks a current course, lifecycle tells Canvas concluded status.
@@ -88,19 +89,19 @@ def list_courses() -> str:
     return _compact(tools.list_courses())
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def list_sis_grade_bridges(course_id: str) -> str:
     """Configured SIS grade bridges for one Current course; student-free."""
     return _compact(tools.list_sis_grade_bridges(course_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_sis_grade_bridge(course_id: str, family_title: str) -> str:
     """Freeze one exact differentiated family and return an aggregate review."""
     return _compact(tools.preview_sis_grade_bridge(course_id, family_title))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_sis_grade_bridge(
     operation_id: str, batch_id: str, review_digest: str
 ) -> str:
@@ -110,7 +111,7 @@ def apply_sis_grade_bridge(
     ))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def confirm_sis_grade_bridge_passback(
     operation_id: str, observed_last_sync_at: str,
 ) -> str:
@@ -125,7 +126,7 @@ def confirm_sis_grade_bridge_passback(
     ))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def list_sections(course_id: str) -> str:
     """A course's section names from the local mirror as a {columns, rows}
     table of (section_id, section_name). Call before get_seating_context to
@@ -133,7 +134,7 @@ def list_sections(course_id: str) -> str:
     return _compact(tools.list_sections(course_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_course_assignments(course_id: str, full_descriptions: bool = False) -> str:
     """A course's assignments from the local catalog as a {columns, rows} table
     (id, title, due_at, points_possible, published, description_text).
@@ -141,7 +142,7 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> s
     return _compact(tools.get_course_assignments(course_id, full_descriptions))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_modules(course_id: str, include_items: bool = False) -> str:
     """A course's modules from the local catalog as a {columns, rows} table
     (id, name, position, item_count). include_items=true adds each module's
@@ -149,20 +150,20 @@ def get_modules(course_id: str, include_items: bool = False) -> str:
     return _compact(tools.get_modules(course_id, include_items))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_course_pages(course_id: str, full_text: bool = False) -> str:
     """Published pages from the local v3 catalog as a bounded {columns, rows}
     table; full_text=true requests the complete normalized body. Current course only."""
     return _compact(tools.get_course_pages(course_id, full_text))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def list_learning_objectives(course_id: str) -> str:
     """Reviewed objectives for the Current course as a {columns, rows} table."""
     return _compact(tools.list_learning_objectives(course_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_learning_objective(course_id: str, objective: str,
                                effective_start: str, effective_end: str,
                                source_refs: list, replaces: str = None) -> str:
@@ -171,7 +172,7 @@ def preview_learning_objective(course_id: str, objective: str,
         course_id, objective, effective_start, effective_end, source_refs, replaces))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_learning_objective(course_id: str, preview: dict,
                              preview_digest: str, expected_revision: int) -> str:
     """Apply an exact reviewed objective preview after revision and source checks."""
@@ -179,35 +180,35 @@ def apply_learning_objective(course_id: str, preview: dict,
         course_id, preview, preview_digest, expected_revision))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def delete_learning_objective(course_id: str, entry_id: str,
                               expected_revision: int) -> str:
     """Delete one reviewed objective using an expected document revision."""
     return _compact(tools.delete_learning_objective(course_id, entry_id, expected_revision))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_roster(course_id: str) -> str:
     """Course roster as a {columns, rows} table of (pseudonym, section_names),
     sorted by pseudonym."""
     return _compact(tools.get_roster(course_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_roster_student_settings(course_id: str, pseudonym: str) -> str:
     """Read one current roster student's safe local settings by pseudonym;
     excludes stored nicknames and all identity IDs."""
     return _compact(tools.get_roster_student_settings(course_id, pseudonym))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_roster_student_change(course_id: str, pseudonym: str, patch: dict) -> str:
     """Preview a validated pseudonym-first roster settings change; apply the
     exact digest-protected preview only after teacher confirmation."""
     return _compact(tools.preview_roster_student_change(course_id, pseudonym, patch))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_roster_student_change(course_id: str, preview: dict,
                                 preview_digest: str, expected_settings_digest: str) -> str:
     """Apply an unchanged roster preview after current-course, pseudonym, and
@@ -216,7 +217,7 @@ def apply_roster_student_change(course_id: str, preview: dict,
         course_id, preview, preview_digest, expected_settings_digest))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
                                expected_settings_digest: str) -> str:
     """Directly clear one supported local setting with a fresh hidden digest;
@@ -225,7 +226,7 @@ def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
         course_id, pseudonym, field, expected_settings_digest))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_seating_context(course_id: str, section_name: str = "", section_id: str = "") -> str:
     """One section's pseudonymized seating context: supports, score values,
     AI-context notes, and pair preferences. section_name matches exactly, or
@@ -234,7 +235,7 @@ def get_seating_context(course_id: str, section_name: str = "", section_id: str 
     return _compact(tools.get_seating_context(course_id, section_name, section_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_submissions(course_id: str, assignment_id: str,
                     include_text: bool = True, pseudonyms: str = "",
                     max_text_chars: int = 2000) -> str:
@@ -250,7 +251,7 @@ def get_submissions(course_id: str, assignment_id: str,
     ))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_writing_history(pseudonym: str, since: str = "", until: str = "",
                         include_text: bool = False,
                         max_text_chars: int = 2000) -> str:
@@ -268,7 +269,7 @@ def get_writing_history(pseudonym: str, since: str = "", until: str = "",
     ))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_gradebook_snapshot(course_id: str) -> str:
     """Whole-course grading snapshot: class totals plus {columns, rows} tables
     of per-assignment stats (title, due_at, points, submitted, graded, missing,
@@ -277,25 +278,26 @@ def get_gradebook_snapshot(course_id: str) -> str:
     return _compact(tools.get_gradebook_snapshot(course_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_authoring_contract(kind: str) -> str:
     """Canonical Forge authoring contract. No student data."""
     return _compact(tools.get_authoring_contract(kind))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_product_guide(topic: str = "") -> str:
     """What CanvasExpert itself can do, so you plan and answer from the product
-    rather than guessing. Omit topic for the whole briefing (surfaces, the hard
-    lines, staging, privacy); topic="writing_timeline" for tracked vs
-    not-tracked writing assignments and what the timeline can and cannot show;
-    topic="writing_record" for get_writing_history, the per-student
-    longitudinal writing record. Every response lists the available topics.
+    rather than guessing. Omit topic for the compact capability overview;
+    topic="connected", "assessments", or "full" selects the matching
+    CanvasAgent guidance; topic="writing_timeline" selects tracked vs
+    not-tracked writing assignments; topic="writing_record" selects the
+    get_writing_history longitudinal writing record. Every response lists all
+    available topics.
     No student data."""
     return _compact(tools.get_product_guide(topic))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_standards_profile() -> str:
     """Published offline DataForge standards profile, safety-scanned and
     pseudonymized. No course_id and no Canvas call; Identity Vault access is
@@ -303,7 +305,7 @@ def get_standards_profile() -> str:
     return _compact(tools.get_standards_profile())
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_assessment_context(course_id: str, pseudonyms: str = "") -> str:
     """Current-roster assessment context by exact pseudonym filter, joined
     with bounded local longitudinal DataForge evidence; mirror-only and
@@ -311,7 +313,7 @@ def get_assessment_context(course_id: str, pseudonyms: str = "") -> str:
     return _compact(tools.get_assessment_context(course_id, pseudonyms))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_assessment_grouping_proposal(
     course_id: str,
     snapshot_id: str,
@@ -332,7 +334,7 @@ def get_assessment_grouping_proposal(
     ))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def list_staged_content(kind: str = "") -> str:
     """Drafts currently staged in the Inbox for the teacher to review, as a
     {columns, rows} table (kind, label). Pass kind to filter; omit for all.
@@ -340,7 +342,7 @@ def list_staged_content(kind: str = "") -> str:
     return _compact(tools.list_staged_content(kind))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def refresh_mirror(course_id: str) -> str:
     """Call only after a read refuses as stale. Triggers Canvas Expert's own
     sync of this course, then reports status (synced, syncing, or failed),
@@ -348,7 +350,7 @@ def refresh_mirror(course_id: str) -> str:
     return _compact(tools.refresh_mirror(course_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_bell_schedule(schedule_id: str = "") -> str:
     """Bell schedule(s) from the workspace as ordered meeting lists with
     {seq, period_id, start, end, segment} entries.
@@ -357,7 +359,7 @@ def get_bell_schedule(schedule_id: str = "") -> str:
     return _compact(tools.get_bell_schedule(schedule_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_bell_schedule(schedule_id: str, content: str) -> str:
     """Preview creating or replacing one Bell Schedule CSV. Never writes;
     summarize the before/after meeting projection and get teacher confirmation
@@ -365,14 +367,14 @@ def preview_bell_schedule(schedule_id: str, content: str) -> str:
     return _compact(tools.preview_bell_schedule(schedule_id, content))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_bell_schedule(preview: dict, expected_digest: str) -> str:
     """Apply an exact preview from preview_bell_schedule. Stale files,
     altered projections, and altered preview digests are refused."""
     return _compact(tools.apply_bell_schedule(preview, expected_digest))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_day_schedule(date: str) -> str:
     """Teacher blocks resolved for a specific date, plus the Calendar's own
     resolution state (unconfigured, invalid_calendar, outside_coverage,
@@ -383,21 +385,21 @@ def get_day_schedule(date: str) -> str:
     return _compact(tools.get_day_schedule(date))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_teacher_schedule() -> str:
     """Teacher schedule from workspace as version and blocks list with their
     periods and class labels. No student data."""
     return _compact(tools.get_teacher_schedule())
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def save_teacher_schedule(blocks: list) -> str:
     """Save the teacher's schedule blocks live to the workspace.
     No course ID or student data. No review queue."""
     return _compact(tools.save_teacher_schedule(blocks))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_school_calendar(date_from: str = "", date_to: str = "") -> str:
     """Read the canonical School Calendar: readiness plus a bounded range of
     days/grading-periods/events. Pass both date_from and date_to for range
@@ -405,7 +407,7 @@ def get_school_calendar(date_from: str = "", date_to: str = "") -> str:
     return _compact(tools.get_school_calendar(date_from, date_to))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_school_calendar_replacement(school_year: str, coverage_start: str, coverage_end: str,
                                        default_schedule_id: str, weekday_schedules: dict = None,
                                        no_school_dates: list = None,
@@ -427,7 +429,7 @@ def preview_school_calendar_replacement(school_year: str, coverage_start: str, c
     ))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_school_calendar_replacement(preview: dict, expected_revision: int) -> str:
     """Apply a preview returned by preview_school_calendar_replacement. Pass
     the preview object back verbatim along with its base_revision as
@@ -436,7 +438,7 @@ def apply_school_calendar_replacement(preview: dict, expected_revision: int) -> 
     return _compact(tools.apply_school_calendar_replacement(preview, expected_revision))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str = "",
                                    dates: list = None, date_from: str = "", date_to: str = "",
                                    weekdays: list = None) -> str:
@@ -451,7 +453,7 @@ def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str 
     ))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_school_calendar_change(preview: dict, expected_revision: int) -> str:
     """Apply a preview returned by preview_school_calendar_change. Pass the
     preview object back verbatim along with its base_revision as
@@ -460,7 +462,7 @@ def apply_school_calendar_change(preview: dict, expected_revision: int) -> str:
     return _compact(tools.apply_school_calendar_change(preview, expected_revision))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_school_calendar_event_change(action: str, event: dict = None,
                                          event_id: str = "") -> str:
     """Preview one structured public Calendar event upsert or delete.
@@ -469,7 +471,7 @@ def preview_school_calendar_event_change(action: str, event: dict = None,
     return _compact(tools.preview_school_calendar_event_change(action, event, event_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_school_calendar_event_change(preview: dict, expected_revision: int) -> str:
     """Apply a preview returned by preview_school_calendar_event_change.
     Stale revisions, altered digests, or altered projections are refused.
@@ -477,7 +479,7 @@ def apply_school_calendar_event_change(preview: dict, expected_revision: int) ->
     return _compact(tools.apply_school_calendar_event_change(preview, expected_revision))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_school_calendar_game_score(event_id: str, score: str) -> str:
     """Preview recording a score on one existing public Calendar game event.
     The event_id must identify an existing event whose kind is game. The
@@ -487,7 +489,7 @@ def preview_school_calendar_game_score(event_id: str, score: str) -> str:
     return _compact(tools.preview_school_calendar_game_score(event_id, score))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> str:
     """Apply a preview returned by preview_school_calendar_game_score.
     Stale revisions, altered digests, altered projections, and non-game event
@@ -495,7 +497,7 @@ def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> s
     return _compact(tools.apply_school_calendar_game_score(preview, expected_revision))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def start_scoring_session(course_id: str, assignment_id: str) -> str:
     """Start a packet-mode PowerGrader scoring session for one assignment so
     this chat can score it. Always packet mode: never opens an assisted
@@ -506,7 +508,7 @@ def start_scoring_session(course_id: str, assignment_id: str) -> str:
     return _compact(tools.start_scoring_session(course_id, assignment_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def list_scoring_sessions() -> str:
     """PowerGrader sessions with SAFE bundles, newest first, filtered to Current
     courses. Returns {columns, rows} table of (session_id, assignment_name,
@@ -515,7 +517,7 @@ def list_scoring_sessions() -> str:
     return _compact(tools.list_scoring_sessions())
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
                        include_context: bool = True) -> str:
     """Retrieve pseudonymized student responses from a PowerGrader session's
@@ -530,7 +532,7 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
         session_id, offset, limit, include_context))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def stage_scores(session_id: str, results: list,
                  expected_packet_digest: str) -> str:
     """Stage AI-generated scores into a PowerGrader session, awaiting teacher
@@ -542,7 +544,7 @@ def stage_scores(session_id: str, results: list,
     return _compact(tools.stage_scores(session_id, results, expected_packet_digest))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def preview_new_quiz_scores(session_id: str) -> str:
     """Freeze a New Quiz item-finalization review for every student in this
     session carrying a staged item score, and stash it. Returns opaque
@@ -553,7 +555,7 @@ def preview_new_quiz_scores(session_id: str) -> str:
     return _compact(tools.preview_new_quiz_scores(session_id))
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 def apply_new_quiz_scores(operation_id: str, review_digest: str) -> str:
     """Apply exactly the New Quiz item scores preview_new_quiz_scores froze.
     Takes only the opaque operation_id/review_digest pair; refuses cleanly,
@@ -571,14 +573,14 @@ def _strip_generated_schema_titles(mcp_server) -> int:
     FastMCP derives each schema from the function signature, and pydantic
     labels every property with a title made from that property's own name, so
     ``course_id`` ships as ``{"title": "Course Id", "type": "string"}``. The
-    key already said that. It is nobody's authored text and it is 17% of the
-    tool listing, which every client re-sends on every turn, so it is the
-    cheapest weight on this surface to lose.
+    key already said that. It is nobody's authored text and it is a large part
+    of the tool listing, so it is the cheapest wire weight on this surface to
+    lose. Client and model token treatment varies.
 
-    The generated output schema carries the same noise (every tool declares
-    ``{"result": {"title": "Result", "type": "string"}}``), so it is stripped
-    the same way. The schema itself stays: a client that validates structured
-    content against it keeps working.
+    Result transport is explicitly text-only on every tool, so FastMCP does not
+    advertise an output schema or structured result alongside the text. The
+    input schema itself stays intact: names, types, defaults, and required lists
+    remain available to clients.
 
     Names, types, defaults, and required lists are untouched, and the frozen
     ``tool_schema_vN.json`` snapshots record only property types, so no

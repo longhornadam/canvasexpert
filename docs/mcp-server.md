@@ -52,7 +52,7 @@ Tool schema version 36 (50 tools).
 | `apply_learning_objective(course_id, preview, preview_digest, expected_revision)` | Applies only the exact reviewed create or replacement preview after catalog/source/revision checks; replacement identity comes from the digest-protected preview | No |
 | `delete_learning_objective(course_id, entry_id, expected_revision)` | Directly deletes one selected reviewed objective with revision protection | No |
 | `get_authoring_contract(kind)` | Canonical authoring contract for Forge (`quiz`, `assignment`, `page`, `rubric`) from `api/default_docs/AI Authoring/` | No |
-| `get_product_guide(topic="")` | CanvasExpert's own product knowledge, served verbatim from the same `api/default_docs/AI Authoring/` source: the CanvasAgent briefing by default, `writing_timeline` for tracked vs not-tracked assignments | No |
+| `get_product_guide(topic="")` | CanvasExpert's own product knowledge from the canonical CanvasAgent source: `overview` is Appendix B; `setup`, `chat_authoring`, `connected`, `privacy`, `troubleshooting`, and `assessments` route to Appendix A-G; `full` returns the whole file; writing topics return their canonical guides | No |
 | `get_standards_profile()` | Published local DataForge standards profile, safety-scanned before return; no `course_id` and no Canvas call | Yes, pseudonymized |
 | `get_assessment_context(course_id, pseudonyms="")` | Bounded current-roster join with local longitudinal DataForge assessment evidence; exact trimmed/case-folded pseudonym filters, observational only, no Canvas fallback | Yes, pseudonymized |
 | `get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct", cutoffs="", no_data_group="", group_set_label="")` | Read-only Students-page grouping proposal over a local snapshot; exact teacher-safe group-set label, bounded pseudonym placements, no Canvas apply path | Yes, pseudonymized |
@@ -146,15 +146,17 @@ other fields. It is the preferred tool for recording a result on a game that is 
 calendar; it does not create or retarget events.
 
 `get_product_guide(topic="")` closes the gap between what the tool list implies and what
-the app actually does — an assistant that sees only the read tools cannot tell that
-Writing Timeline exists, or that every writing assignment is *tracked* (File Upload alone,
-`docx` alone, so PowerGrader reads the submitted document's revision history) or *not
-tracked*. It reads the same canonical files `/api/download-contract` hands out for pasting
-into a chat-only assistant (`CanvasAgent`, `WritingTimeline`), so a connected assistant and
-a pasted one work from one text rather than two that drift. Same gate posture as
-`get_authoring_contract`: no `course_id`, no vault, no safety scan. Every response also
-lists the available topics. The always-on server instructions point here rather than
-restating any of it.
+the app actually does. `overview` serves Appendix B, the compact capability map; `setup`,
+`chat_authoring`, `connected`, `privacy`, `troubleshooting`, and `assessments` serve the
+matching exact Appendix A-G slice from the same canonical CanvasAgent file; `full` serves
+the entire file. `writing_timeline` and `writing_record` continue to serve their own
+canonical files. Every successful response advertises every topic, and topic matching
+trims surrounding whitespace and ignores case. The download route's CanvasAgent bytes
+equal `topic="full"`; section topics are extracted from those same bytes. Results are
+text-only MCP content: the server returns one minified JSON text block and advertises no
+structured output schema or structured result. Same gate posture as
+`get_authoring_contract`: no `course_id`, no vault, no safety scan. The always-on server
+instructions point here rather than restating any of it.
 
 `get_standards_profile()` reads the one published local
 `For AI/DataForge/standards-profile.json` artifact. It is offline and has no
@@ -265,8 +267,14 @@ the student wrote it.
 
 ### Token-lean results
 
-Tool results occupy the assistant's context window and are re-sent on every following
-turn of the conversation, so the wire format is deliberately compact:
+Tool results are carried in protocol responses, so the wire format is deliberately
+compact. Client and model token treatment varies:
+
+- Every tool opts into text-only result transport. The returned content is one text block
+  containing the server's minified JSON; no structured output schema or structured result
+  accompanies it. This keeps
+  wire content small without changing tool names, inputs, or operations. Character counts
+  describe wire size only; they are not a per-turn token promise.
 
 - Results are minified JSON (the server serializes itself rather than letting FastMCP
   pretty-print).

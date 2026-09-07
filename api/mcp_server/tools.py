@@ -37,6 +37,7 @@ import os
 import hashlib
 import json
 import math
+import re
 import secrets
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -92,8 +93,8 @@ _pseudonym_gate = pseudonym.gate
 # ---------------------------------------------------------------------------
 # Token-lean payload shaping.
 #
-# MCP tool results live in the client's context window and are re-sent on
-# every following turn, so list data goes out as one {"columns": [...],
+# MCP tool results are carried in protocol responses, so list data goes out as
+# one {"columns": [...],
 # "rows": [[...]]} table instead of repeating JSON keys per row. The privacy
 # gate always runs on the dict-row payload BEFORE tabulation — never on the
 # tabular form, which the scanner's key-based walk cannot see into.
@@ -978,10 +979,30 @@ _STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric")
 # assistant, so connected and pasted assistants read one text, not two.
 _GUIDE_FILES = {
     "overview": "START HERE - CanvasAgent.txt",
+    "setup": "START HERE - CanvasAgent.txt",
+    "chat_authoring": "START HERE - CanvasAgent.txt",
+    "connected": "START HERE - CanvasAgent.txt",
+    "privacy": "START HERE - CanvasAgent.txt",
+    "troubleshooting": "START HERE - CanvasAgent.txt",
+    "assessments": "START HERE - CanvasAgent.txt",
+    "full": "START HERE - CanvasAgent.txt",
     "writing_timeline": "Writing Timeline (tracked assignments).txt",
     "writing_record": "Writing Record (longitudinal writing history).txt",
 }
 _DEFAULT_GUIDE_TOPIC = "overview"
+_CANVAS_AGENT_APPENDIXES = {
+    "setup": "A",
+    "overview": "B",
+    "chat_authoring": "C",
+    "connected": "D",
+    "privacy": "E",
+    "troubleshooting": "F",
+    "assessments": "G",
+}
+_CANVAS_AGENT_APPENDIX_ERROR = (
+    "CanvasAgent guide unavailable: expected Appendix A through G exactly once "
+    "and in order."
+)
 
 
 def _read_authoring_doc(filename: str, label: str) -> tuple[str | None, str | None]:
@@ -994,6 +1015,24 @@ def _read_authoring_doc(filename: str, label: str) -> tuple[str | None, str | No
             return handle.read(), None
     except OSError as error:
         return None, f"Could not read the {label}: {error}"
+
+
+def _read_canvasagent_topic(topic: str, guide_text: str) -> tuple[str | None, str | None]:
+    """Return one exact Appendix slice from the canonical CanvasAgent file."""
+    matches = list(re.finditer(r"(?m)^Appendix ([A-Z])\..*$", guide_text))
+    letters = [match.group(1) for match in matches]
+    if letters != list("ABCDEFG"):
+        return None, _CANVAS_AGENT_APPENDIX_ERROR
+    if topic == "full":
+        return guide_text, None
+
+    appendix = _CANVAS_AGENT_APPENDIXES.get(topic)
+    if appendix is None:
+        return None, f"unknown CanvasAgent topic '{topic}'"
+    index = ord(appendix) - ord("A")
+    start = matches[index].start()
+    end = matches[index + 1].start() if index + 1 < len(matches) else len(guide_text)
+    return guide_text[start:end].strip(), None
 
 
 def _staging_appendix(kind: str) -> str:
@@ -1057,17 +1096,11 @@ def get_authoring_contract(kind: str) -> dict:
 
 
 def get_product_guide(topic: str = "") -> dict:
-    """One CanvasExpert product guide, served verbatim from the same
-    ``api/default_docs/AI Authoring/`` source the web UI hands out. No
-    course_id, no student data — no course gate, no vault, no safety gate.
+    """Return a canonical CanvasAgent appendix or one standalone guide file.
 
-    ``topic`` defaults to the whole CanvasAgent briefing (what the app can do,
-    the hard lines, the staging loop, privacy, troubleshooting).
-    ``writing_timeline`` is the tracked / not-tracked reference.
-    ``writing_record`` covers get_writing_history: the per-student
-    longitudinal writing record, what it returns, and what it does not have
-    yet. Every response lists the available topics so the assistant learns
-    what else it can pull without a second guess."""
+    The connected tool and the web UI download route share one source file for
+    every topic. Appendix topics are extracted from that file so a correction
+    cannot make the connected and pasted guidance disagree."""
     requested = str(topic or "").strip().lower() or _DEFAULT_GUIDE_TOPIC
     filename = _GUIDE_FILES.get(requested)
     if filename is None:
@@ -1081,6 +1114,11 @@ def get_product_guide(topic: str = "") -> dict:
     guide_text, error = _read_authoring_doc(filename, f"{requested} guide")
     if error:
         return {"ok": False, "error": error}
+
+    if filename == _GUIDE_FILES["full"]:
+        guide_text, error = _read_canvasagent_topic(requested, guide_text)
+        if error:
+            return {"ok": False, "error": error}
 
     return {"ok": True, "topic": requested,
             "topics": list(_GUIDE_FILES), "guide": guide_text}

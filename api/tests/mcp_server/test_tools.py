@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import pytest
 from pathlib import Path
 
 # api/mcp_server/pseudonym.py reaches api.webui.routes.names, which (like the
@@ -590,11 +591,9 @@ def test_get_product_guide_defaults_to_the_overview_briefing():
     result = tools.get_product_guide()
     assert result["ok"] is True, json.dumps(result)
     assert result["topic"] == "overview"
-    # Every response advertises the other topics, so an assistant learns the
-    # writing-timeline / writing-record guides exist without having to guess
-    # a topic name.
-    assert result["topics"] == ["overview", "writing_timeline", "writing_record"]
-    assert "CanvasAgent" in result["guide"]
+    assert result["topics"] == list(tools._GUIDE_FILES)
+    assert result["guide"].startswith("Appendix B. What CanvasExpert can do")
+    assert len(result["guide"]) <= 7000
 
 
 def test_get_product_guide_writing_timeline_states_the_tracked_rule():
@@ -626,8 +625,7 @@ def test_get_product_guide_unknown_topic_returns_structured_error():
     assert result == {
         "ok": False,
         "error": ("unknown topic 'seating'; expected one of: "
-                  "overview, writing_timeline, writing_record "
-                  "(or omit for overview)"),
+                  f"{', '.join(tools._GUIDE_FILES)} (or omit for overview)"),
     }
 
 
@@ -653,6 +651,50 @@ def test_get_product_guide_writing_record_matches_served_file_bytes():
     result = tools.get_product_guide("writing_record")
     assert result["ok"] is True
     assert result["guide"] == expected
+
+
+def test_canvasagent_appendix_topics_are_exact_slices_of_one_canonical_source():
+    path = os.path.join(
+        tools.REPO_ROOT, "api", "default_docs", "AI Authoring",
+        "START HERE - CanvasAgent.txt")
+    with open(path, encoding="utf-8") as handle:
+        source = handle.read()
+    headings = list(__import__("re").finditer(r"(?m)^Appendix ([A-G])\..*$", source))
+    assert [match.group(1) for match in headings] == list("ABCDEFG")
+    for topic, letter in tools._CANVAS_AGENT_APPENDIXES.items():
+        index = ord(letter) - ord("A")
+        expected = source[headings[index].start():
+                          headings[index + 1].start() if index + 1 < len(headings)
+                          else len(source)].strip()
+        result = tools.get_product_guide(topic)
+        assert result["ok"] is True
+        assert result["guide"] == expected
+    assert tools.get_product_guide("full")["guide"] == source
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda source: source.replace("Appendix F. Troubleshooting\n\n", "", 1),
+    lambda source: source.replace(
+        "Appendix A. Getting CanvasExpert running\n",
+        "Appendix A. Duplicate heading\nAppendix A. Getting CanvasExpert running\n", 1),
+    lambda source: source.replace(
+        "Appendix A. Getting CanvasExpert running\n",
+        "Appendix B. Getting CanvasExpert running\n", 1
+    ).replace("Appendix B. What CanvasExpert can do\n",
+               "Appendix A. What CanvasExpert can do\n", 1),
+    lambda source: source.replace(
+        "Appendix C. Authoring when you have no tools (chat only)\n",
+        "Appendix H. Authoring when you have no tools (chat only)\n", 1),
+])
+def test_canvasagent_appendix_extraction_law_rejects_each_heading_anomaly(mutate):
+    path = os.path.join(
+        tools.REPO_ROOT, "api", "default_docs", "AI Authoring",
+        "START HERE - CanvasAgent.txt")
+    with open(path, encoding="utf-8") as handle:
+        source = handle.read()
+    extracted, error = tools._read_canvasagent_topic("connected", mutate(source))
+    assert extracted is None
+    assert error == tools._CANVAS_AGENT_APPENDIX_ERROR
 
 
 def test_get_product_guide_missing_file_returns_structured_error(monkeypatch):
@@ -683,7 +725,7 @@ def test_download_contract_route_serves_the_same_guides_as_the_mcp_tool():
     connected assistant's tool must never drift apart."""
     from api.webui.routes import library
 
-    for download_name, topic in (("CanvasAgent", "overview"),
+    for download_name, topic in (("CanvasAgent", "full"),
                                  ("WritingTimeline", "writing_timeline")):
         response = library.api_download_contract(download_name)
         with open(response.path, encoding="utf-8") as f:

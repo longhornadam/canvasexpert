@@ -1,10 +1,11 @@
 """Guards on the always-loaded MCP surface: the instruction block and the
 weight of the tool listing.
 
-Both are paid for on every request to every connected client. The instruction
-block has been observed truncating mid-sentence in a real client, so its
-length is a real cost and its ordering matters: routing and write rules come
-before the discovery hints, because the tail is what gets cut.
+The listing and instruction block are delivered to connected clients, so their
+serialized wire size is measured. Client and model token treatment varies. The
+instruction block has been observed truncating mid-sentence in a real client,
+so its ordering matters: routing and write rules come before discovery hints,
+because the tail is what gets cut.
 """
 import asyncio
 import json
@@ -16,6 +17,7 @@ from api.mcp_server import server
 # hold every client to that, but we can stop the block growing: any addition
 # now has to earn its place by displacing something.
 INSTRUCTION_BUDGET = 3000
+LISTING_BUDGET = 23000
 
 
 def test_instruction_block_stays_within_budget():
@@ -69,6 +71,10 @@ def test_no_generated_schema_titles_reach_the_client():
 
     assert server._STRIPPED_SCHEMA_TITLES > 0, "the strip pass found nothing to strip"
     assert '"title"' not in wire, "a generated schema title is reaching clients again"
+    assert len(wire) <= LISTING_BUDGET, (
+        f"serialized tools/list is {len(wire)} chars, over the {LISTING_BUDGET} "
+        "character budget"
+    )
 
 
 def test_the_schemas_themselves_survive_the_strip():
@@ -82,3 +88,74 @@ def test_the_schemas_themselves_survive_the_strip():
     assert schema["properties"]["course_id"] == {"type": "string"}
     assert schema["properties"]["max_text_chars"] == {"default": 2000, "type": "integer"}
     assert schema["properties"]["include_text"]["default"] is True
+
+
+def test_all_registered_tools_use_text_only_result_transport():
+    listed = asyncio.run(server.mcp.list_tools())
+    assert len(listed) == 50
+    registry = server.mcp._tool_manager._tools
+    assert all(tool.outputSchema is None for tool in listed)
+    assert all(item.fn_metadata.output_schema is None
+               for item in registry.values())
+
+
+def test_protocol_call_returns_one_text_block_without_structured_result():
+    result = asyncio.run(server.mcp.call_tool(
+        "get_product_guide", {"topic": "overview"}))
+    assert len(result) == 1
+    assert result[0].type == "text"
+    assert isinstance(result[0].text, str)
+
+
+def test_compact_preserves_unicode_tables_and_runs_final_gate(monkeypatch):
+    seen = []
+
+    def gate(payload):
+        seen.append(payload)
+        return {"ok": False, "error": "échec", "table": {
+            "columns": ["élève"], "rows": [["Zoë"]],
+        }}
+
+    monkeypatch.setattr(server.tools, "final_response_gate", gate)
+    wire = server._compact({"raw": "discarded"})
+
+    assert seen == [{"raw": "discarded"}]
+    assert "échec" in wire and "Zoë" in wire
+    assert "\\u00e9" not in wire
+    assert json.loads(wire)["table"]["rows"] == [["Zoë"]]
+
+
+def test_each_registered_wrapper_returns_one_gated_text_block(_synthetic_mcp):
+    async def call_all():
+        results = []
+        for name in _synthetic_mcp["names"]:
+            results.append((name, await server.mcp.call_tool(
+                name, _synthetic_mcp["required_arguments"](name))))
+        return results
+
+    results = asyncio.run(call_all())
+    assert len(results) == 50
+    assert len(_synthetic_mcp["calls"]) == 50
+    assert len(_synthetic_mcp["gated"]) == 50
+    for name, content in results:
+        assert len(content) == 1
+        assert content[0].type == "text"
+        assert json.loads(content[0].text) == {
+            "ok": True,
+            "delegate": name,
+            "table": {"columns": ["élève"], "rows": [["Zoë"]]},
+        }
+
+
+def test_wrapper_protocol_preserves_structured_failure(_synthetic_mcp, monkeypatch):
+    def refused(*args, **kwargs):
+        return {"ok": False, "error": "synthetic refusal"}
+
+    monkeypatch.setattr(server.tools, "list_courses", refused)
+    content = asyncio.run(server.mcp.call_tool("list_courses", {}))
+    assert len(content) == 1
+    assert json.loads(content[0].text) == {
+        "ok": False,
+        "delegate": None,
+        "table": {"columns": ["élève"], "rows": [["Zoë"]]},
+    }

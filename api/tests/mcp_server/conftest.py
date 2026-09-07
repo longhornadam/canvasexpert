@@ -3,9 +3,52 @@ from __future__ import annotations
 import pytest
 
 from api.feedback_vault import Vault
-from api.mcp_server import tools
+from api.mcp_server import server, tools
 from api.mirror import store as mirror_store
 from api.platform_services import workspace
+
+
+@pytest.fixture
+def _synthetic_mcp(monkeypatch):
+    """Stub every wrapper delegate for in-memory FastMCP boundary calls."""
+    names = sorted(server.mcp._tool_manager._tools)
+    calls = []
+    gated = []
+
+    for name in names:
+        def delegate(*args, _name=name, **kwargs):
+            calls.append((_name, args, kwargs))
+            return {"ok": True, "delegate": _name}
+        monkeypatch.setattr(tools, name, delegate)
+
+    def gate(payload):
+        gated.append(payload)
+        return {
+            "ok": payload.get("ok"),
+            "delegate": payload.get("delegate"),
+            "table": {"columns": ["élève"], "rows": [["Zoë"]]},
+        }
+    monkeypatch.setattr(tools, "final_response_gate", gate)
+
+    def required_arguments(name):
+        tool = next(item for item in server.mcp._tool_manager._tools.values()
+                    if item.name == name)
+        schema = tool.parameters
+        arguments = {}
+        for key in schema.get("required") or []:
+            kind = (schema.get("properties") or {}).get(key, {}).get("type")
+            arguments[key] = {
+                "string": f"synthetic-{name}-{key}",
+                "integer": 1,
+                "number": 1.0,
+                "boolean": False,
+                "array": [],
+                "object": {},
+            }.get(kind, None)
+        return arguments
+
+    return {"names": names, "calls": calls, "gated": gated,
+            "required_arguments": required_arguments}
 
 
 @pytest.fixture
