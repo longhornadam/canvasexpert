@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import pytest
 from pathlib import Path
@@ -147,6 +148,36 @@ def test_list_courses_empty(monkeypatch):
     assert tools.list_courses() == {"ok": True, "courses": []}
 
 
+def test_list_sis_grade_bridges_rejects_blank_course_id(monkeypatch):
+    monkeypatch.setattr(tools.config, "active_courses", lambda: [])
+    monkeypatch.setattr(tools.config, "saved_courses", lambda: [])
+
+    result = tools.list_sis_grade_bridges("  ")
+
+    assert result == {"ok": False, "error": "course_id is required"}
+
+
+def test_list_sis_grade_bridges_rejects_unknown_course_id(monkeypatch):
+    monkeypatch.setattr(tools.config, "active_courses", lambda: [{"id": "111"}])
+    monkeypatch.setattr(tools.config, "saved_courses", lambda: [{"id": "111"}])
+
+    result = tools.list_sis_grade_bridges("not-a-course-id")
+
+    assert result["ok"] is False
+    assert "Unknown course_id 'not-a-course-id'" in result["error"]
+    assert "list_courses" in result["error"]
+
+
+def test_list_sis_grade_bridges_keeps_known_previous_course_distinct(
+    monkeypatch, _set_previous_course,
+):
+    _set_previous_course("111")
+
+    result = tools.list_sis_grade_bridges("111")
+
+    assert result == {"ok": False, "error": "course is not in Current courses"}
+
+
 # --- course gating (shared by every course_id tool) -------------------------
 
 def test_course_gate_check_rejects_non_current_course(monkeypatch):
@@ -155,11 +186,47 @@ def test_course_gate_check_rejects_non_current_course(monkeypatch):
     assert tools._course_gate_check("111") is None
 
 
-def test_get_roster_rejects_non_current_course(monkeypatch, tmp_path, _use_vault, _set_active_courses):
-    _set_active_courses(["222"])
+def test_get_roster_rejects_non_current_course(
+    monkeypatch, tmp_path, _use_vault, _set_previous_course,
+):
+    _set_previous_course("111")
     result = tools.get_roster("111")
     assert result["ok"] is False
     assert "not a Current course" in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("reader", "arguments"),
+    [
+        (tools.list_sections, ("not-a-course-id",)),
+        (tools.get_course_assignments, ("not-a-course-id",)),
+        (tools.get_modules, ("not-a-course-id",)),
+        (tools.get_course_pages, ("not-a-course-id",)),
+        (tools.get_roster, ("not-a-course-id",)),
+        (tools.get_submissions, ("not-a-course-id", "assignment-id")),
+        (tools.get_gradebook_snapshot, ("not-a-course-id",)),
+    ],
+)
+def test_saved_course_readers_reject_unknown_id_before_refresh(
+    monkeypatch, reader, arguments,
+):
+    monkeypatch.setattr(tools.config, "active_courses", lambda: [{"id": "111"}])
+    monkeypatch.setattr(tools.config, "saved_courses", lambda: [{"id": "111"}])
+    monkeypatch.setattr(
+        tools.mirror_store, "read_roster",
+        lambda *_args, **_kwargs: pytest.fail("unknown ID reached mirror storage"),
+    )
+    monkeypatch.setattr(
+        tools, "read_catalog",
+        lambda *_args, **_kwargs: pytest.fail("unknown ID reached catalog storage"),
+    )
+
+    result = reader(*arguments)
+
+    assert result["ok"] is False
+    assert "Unknown course_id 'not-a-course-id'" in result["error"]
+    assert "list_courses" in result["error"]
+    assert "refresh" not in result["error"].lower()
 
 
 def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch, _set_active_courses):
@@ -587,13 +654,80 @@ def test_download_contract_route_returns_the_same_bytes_as_the_mcp_tool():
 
 # --- get_product_guide (no course_id, no student data -> no gates) ----------
 
+_GUIDE_TOPIC_SUMMARIES = {
+    "overview": "Product surfaces and capabilities (Appendix B).",
+    "setup": "Local setup and first-run expectations (Appendix A).",
+    "chat_authoring": "Chat-only authoring and Forge contracts (Appendix C).",
+    "connected": "Connected MCP workflows and write boundaries (Appendix D).",
+    "privacy": "Pseudonymization and external-AI boundaries (Appendix E).",
+    "troubleshooting": "Connection and workflow troubleshooting (Appendix F).",
+    "assessments": "Assessment and grouping guidance (Appendix G).",
+    "full": "Complete CanvasAgent guide, Appendices A through G.",
+    "writing_timeline": "Tracked-assignment timeline behavior and coverage.",
+    "writing_record": "Longitudinal writing evidence and current limits.",
+    "tools": "All MCP tools grouped by teacher-facing job.",
+}
+
+
 def test_get_product_guide_defaults_to_the_overview_briefing():
     result = tools.get_product_guide()
     assert result["ok"] is True, json.dumps(result)
     assert result["topic"] == "overview"
-    assert result["topics"] == list(tools._GUIDE_FILES)
+    assert result["topics"] == _GUIDE_TOPIC_SUMMARIES
     assert result["guide"].startswith("Appendix B. What CanvasExpert can do")
     assert len(result["guide"]) <= 7000
+
+
+def test_product_guide_sources_and_topic_summaries_are_complete():
+    assert list(tools._GUIDE_FILES) == list(_GUIDE_TOPIC_SUMMARIES)
+    for topic, source in tools._GUIDE_FILES.items():
+        assert set(source) in ({"file", "summary"}, {"generated", "summary"})
+        assert source["summary"] == _GUIDE_TOPIC_SUMMARIES[topic]
+        assert source["summary"].strip() and "\n" not in source["summary"]
+
+
+def test_generated_tool_inventory_covers_the_contract_exactly_once_by_job():
+    from api.mcp_server import contract
+
+    result = tools.get_product_guide("tools")
+    contract_names = {item["name"] for item in contract.load_contract()["tools"]}
+    grouped = [name for names in tools._TOOL_GROUPS.values() for name in names]
+    expected_groups = {
+        "Course discovery and catalog", "Create and Forge", "PowerGrader",
+        "SIS Grade Bridges", "Learning Objectives", "School Calendar",
+        "Writing Timeline", "Writing Record", "Students", "Seating",
+        "Assessments and DataForge",
+    }
+
+    assert result["ok"] is True
+    assert result["topic"] == "tools"
+    assert result["topics"] == _GUIDE_TOPIC_SUMMARIES
+    assert set(tools._TOOL_GROUPS) == expected_groups
+    assert all(tools._TOOL_GROUPS.values())
+    assert set(grouped) == contract_names and len(grouped) == len(contract_names) == 50
+    for name in contract_names:
+        assert len(re.findall(
+            rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])",
+            result["guide"],
+        )) == 1
+    assert "docs/mcp-server.md" not in result["guide"]
+
+
+def test_tool_grouping_guard_rejects_a_newly_registered_unplaced_tool():
+    from mcp.server.fastmcp import FastMCP
+    from api.mcp_server import contract
+
+    temporary = FastMCP("slice-c-inventory-test")
+
+    @temporary.tool(structured_output=False)
+    def slice_c_throwaway_tool() -> str:
+        """A temporary test-only tool."""
+        return "ok"
+
+    contract_names = {item["name"] for item in contract.load_contract()["tools"]}
+    registered_names = contract_names | set(temporary._tool_manager._tools)
+    with pytest.raises(ValueError, match="slice_c_throwaway_tool"):
+        tools._validated_tool_groups(registered_names)
 
 
 def test_get_product_guide_writing_timeline_states_the_tracked_rule():
@@ -645,7 +779,7 @@ def test_get_product_guide_writing_record_matches_served_file_bytes():
     """AC7: the topic's text is the same bytes as the served contract file."""
     path = os.path.join(
         tools.REPO_ROOT, "api", "default_docs", "AI Authoring",
-        tools._GUIDE_FILES["writing_record"])
+        tools._GUIDE_FILES["writing_record"]["file"])
     with open(path, encoding="utf-8") as handle:
         expected = handle.read()
     result = tools.get_product_guide("writing_record")
@@ -698,7 +832,9 @@ def test_canvasagent_appendix_extraction_law_rejects_each_heading_anomaly(mutate
 
 
 def test_get_product_guide_missing_file_returns_structured_error(monkeypatch):
-    monkeypatch.setitem(tools._GUIDE_FILES, "overview", "NoSuchGuide.txt")
+    monkeypatch.setitem(tools._GUIDE_FILES, "overview", {
+        "file": "NoSuchGuide.txt", "summary": _GUIDE_TOPIC_SUMMARIES["overview"],
+    })
     result = tools.get_product_guide()
     assert result["ok"] is False
     assert "overview" in result["error"]
@@ -946,8 +1082,10 @@ def test_get_submissions_failure(monkeypatch, tmp_path, _use_vault, _set_active_
         "ok": False, "error": "No such assignment in this course's local catalog."}
 
 
-def test_get_submissions_rejects_non_current_course(monkeypatch, tmp_path, _use_vault, _set_active_courses):
-    _set_active_courses(["222"])
+def test_get_submissions_rejects_non_current_course(
+    monkeypatch, tmp_path, _use_vault, _set_previous_course,
+):
+    _set_previous_course("111")
     result = tools.get_submissions("111", "700010")
     assert result["ok"] is False
     assert "not a Current course" in result["error"]
@@ -1478,8 +1616,10 @@ def test_get_gradebook_snapshot_failure(monkeypatch, tmp_path, _use_vault, _set_
         "ok": False, "error": tools._MIRROR_UNAVAILABLE_SNAPSHOT_ERROR}
 
 
-def test_get_gradebook_snapshot_rejects_non_current_course(monkeypatch, tmp_path, _use_vault, _set_active_courses):
-    _set_active_courses(["222"])
+def test_get_gradebook_snapshot_rejects_non_current_course(
+    monkeypatch, tmp_path, _use_vault, _set_previous_course,
+):
+    _set_previous_course("111")
     result = tools.get_gradebook_snapshot("111")
     assert result["ok"] is False
     assert "not a Current course" in result["error"]
@@ -2375,6 +2515,43 @@ def test_save_teacher_schedule_rejects_unknown_period(monkeypatch, tmp_path):
     assert not path.exists()
 
 
+def test_public_preview_results_carry_their_exact_next_procedure(monkeypatch):
+    monkeypatch.setattr(
+        tools.bell_schedule, "preview_bell_schedule",
+        lambda **_kwargs: ({"base_digest": "digest"}, []),
+    )
+    monkeypatch.setattr(tools.deps, "load_bell_schedules", lambda: ({"ordinary": {}}, []))
+    monkeypatch.setattr(
+        tools.school_calendar, "preview_replacement",
+        lambda **_kwargs: ({"base_revision": 0}, []),
+    )
+    monkeypatch.setattr(
+        tools.school_calendar, "preview_change",
+        lambda **_kwargs: ({"base_revision": 1}, []),
+    )
+    monkeypatch.setattr(
+        tools.school_calendar, "preview_event_change",
+        lambda **_kwargs: ({"base_revision": 2}, []),
+    )
+
+    results = {
+        "preview_bell_schedule": tools.preview_bell_schedule("ordinary", "csv"),
+        "preview_school_calendar_replacement": tools.preview_school_calendar_replacement(
+            "2026-27", "2026-08-17", "2027-06-04", "ordinary"
+        ),
+        "preview_school_calendar_change": tools.preview_school_calendar_change(
+            "no_school", dates=["2026-09-07"]
+        ),
+        "preview_school_calendar_event_change": tools.preview_school_calendar_event_change(
+            "delete", event_id="event-1"
+        ),
+    }
+
+    for name, result in results.items():
+        assert result["ok"] is True
+        assert result["next"] == tools._NEXT_STEPS[name]
+
+
 def test_server_registers_save_teacher_schedule_wrapper(monkeypatch):
     from api.mcp_server import server
 
@@ -2468,6 +2645,7 @@ def test_preview_school_calendar_change_forwards_advisory_conflicts(monkeypatch,
         date_to="2026-08-19", weekdays=[0, 1, 2])
 
     assert result["ok"] is True
+    assert result["next"] == tools._NEXT_STEPS["preview_school_calendar_change"]
     assert result["conflicts"] == [{
         "date": "2026-08-19", "reason": "kind_change",
         "from_kind": "no_school", "from_label": "Staff Development",
@@ -2536,6 +2714,7 @@ def test_game_score_preview_and_apply_preserves_existing_game_event(monkeypatch,
     preview = tools.preview_school_calendar_game_score("game-1", "Won 2-1")
 
     assert preview["ok"] is True
+    assert preview["next"] == tools._NEXT_STEPS["preview_school_calendar_game_score"]
     assert preview["game_score"] == {"event_id": "game-1", "score": "Won 2-1"}
     assert preview["before"]["result"] == "Scheduled"
     assert preview["after"] == {

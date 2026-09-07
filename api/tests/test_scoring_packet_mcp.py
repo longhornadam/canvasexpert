@@ -543,9 +543,11 @@ def test_get_scoring_packet_happy_path(monkeypatch, tmp_path):
     assert len(result["students"]["rows"]) == 6
     assert result["total"] == 6
     assert result["students_total"] == 3
+    assert result["next"] == tools._NEXT_STEPS["get_scoring_packet"]
 
     without_context = tools.get_scoring_packet("s1", include_context=False)
     assert without_context["ok"] is True
+    assert isinstance(without_context["next"], str)
     assert "contract" not in without_context
     assert "rubric" not in without_context
 

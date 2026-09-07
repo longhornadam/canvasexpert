@@ -193,6 +193,8 @@ def test_canvasagent_appendix_d_tools_match_the_live_registry():
     appendix = doc.split("Appendix D.", 1)[1].split("Appendix E.", 1)[0]
     mentioned = _toolish_mentions(appendix)
     assert mentioned
+    assert 'get_product_guide(topic="tools")' in appendix
+    assert "docs/mcp-server.md" not in appendix
     stale = sorted(mentioned - _live_tool_names())
     assert not stale, f"Appendix D names tools absent from the registry: {stale}"
 

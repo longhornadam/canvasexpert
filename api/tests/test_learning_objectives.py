@@ -50,6 +50,8 @@ def test_preview_apply_is_exact_revision_safe_and_atomic(tmp_path, monkeypatch):
     )
     assert preview["ok"] is True
     assert preview["preview"]["source_titles"] == ["Unit 1"]
+    assert preview["next"] == tools._NEXT_STEPS["preview_learning_objective"]
+    assert "current_revision as expected_revision" in preview["next"]
     applied = tools.apply_learning_objective(
         "course-1", preview["preview"], preview["preview_digest"], 0,
     )

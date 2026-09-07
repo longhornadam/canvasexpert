@@ -10,14 +10,30 @@ because the tail is what gets cut.
 import asyncio
 import json
 
-from api.mcp_server import server
+from api.mcp_server import server, tools
 
 
 # Observed truncation in a real client landed near 2,300 characters. We cannot
 # hold every client to that, but we can stop the block growing: any addition
 # now has to earn its place by displacing something.
 INSTRUCTION_BUDGET = 3000
-LISTING_BUDGET = 23000
+# Slice B moved post-call procedure into bounded result advisories.
+LISTING_BUDGET = 17717
+DESCRIPTION_BUDGET = 343
+
+RESULT_NEXT_TOOLS = {
+    "get_scoring_packet",
+    "start_scoring_session",
+    "preview_sis_grade_bridge",
+    "preview_learning_objective",
+    "preview_roster_student_change",
+    "preview_bell_schedule",
+    "preview_school_calendar_replacement",
+    "preview_school_calendar_change",
+    "preview_school_calendar_event_change",
+    "preview_school_calendar_game_score",
+    "preview_new_quiz_scores",
+}
 
 
 def test_instruction_block_stays_within_budget():
@@ -78,6 +94,78 @@ def test_no_generated_schema_titles_reach_the_client():
         f"serialized tools/list is {len(wire)} chars, over the {LISTING_BUDGET} "
         "character budget"
     )
+
+
+def test_every_tool_first_line_is_a_complete_useful_sentence():
+    """One real client renders exactly the first physical line and no more."""
+    listed = asyncio.run(server.mcp.list_tools())
+
+    for tool in listed:
+        first_line = (tool.description or "").split("\n", 1)[0].strip()
+        assert len(first_line) >= 30, (
+            f"{tool.name} first line is too short to identify its job: {first_line!r}"
+        )
+        assert first_line.endswith("."), (
+            f"{tool.name} first line is not a complete sentence: {first_line!r}"
+        )
+
+
+def test_each_description_stays_within_the_achieved_slice_b_maximum():
+    listed = asyncio.run(server.mcp.list_tools())
+
+    for tool in listed:
+        assert len(tool.description or "") <= DESCRIPTION_BUDGET, (
+            f"{tool.name} description is {len(tool.description or '')} chars, over the "
+            f"{DESCRIPTION_BUDGET}-character maximum"
+        )
+
+
+def test_next_procedures_are_static_bounded_and_gate_safe():
+    """Every registered tool is checked against B's exact result-advisory allowlist."""
+    registered = set(server.mcp._tool_manager._tools)
+
+    assert set(tools._NEXT_STEPS) == RESULT_NEXT_TOOLS
+    assert RESULT_NEXT_TOOLS < registered
+    for name in registered:
+        assert (name in tools._NEXT_STEPS) == (name in RESULT_NEXT_TOOLS)
+    for name, procedure in tools._NEXT_STEPS.items():
+        assert isinstance(procedure, str) and procedure.strip()
+        success = tools._with_next(name, {"ok": True})
+        refusal = tools._with_next(name, {"ok": False, "error": "synthetic"})
+        assert success == {"ok": True, "next": procedure}
+        assert refusal == {"ok": False, "error": "synthetic"}
+        assert tools.final_response_gate(success) == success
+
+
+def test_first_lines_disclose_preview_and_canvas_write_boundaries():
+    descriptions = {
+        tool.name: tool.description or ""
+        for tool in asyncio.run(server.mcp.list_tools())
+    }
+    first_lines = {
+        name: description.split("\n", 1)[0]
+        for name, description in descriptions.items()
+    }
+
+    for name in (
+        "preview_bell_schedule",
+        "preview_learning_objective",
+        "preview_roster_student_change",
+        "preview_school_calendar_replacement",
+        "preview_school_calendar_change",
+        "preview_school_calendar_event_change",
+        "preview_school_calendar_game_score",
+    ):
+        assert "without writing" in first_lines[name]
+    for name in ("preview_new_quiz_scores", "preview_sis_grade_bridge"):
+        assert "persist" in first_lines[name]
+        assert "local" in first_lines[name]
+    for name in ("apply_new_quiz_scores", "apply_sis_grade_bridge"):
+        assert "Canvas" in first_lines[name]
+    assert "Canvas membership" in first_lines["apply_roster_student_change"]
+    assert "list_courses" in first_lines["list_courses"]
+    assert "stand-ins" in first_lines["get_roster"]
+    assert "Never raises" not in "\n".join(descriptions.values())
 
 
 def test_the_schemas_themselves_survive_the_strip():

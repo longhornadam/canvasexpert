@@ -77,6 +77,8 @@ def test_get_preview_apply_and_clear_are_gated_and_private(monkeypatch, tmp_path
         "course-1", pseudo, {"add_nicknames": ["Sammy"],
                               "extra_time": {"enabled": True, "days": 2}})
     _assert_private(preview, pseudo)
+    assert preview["next"] == tools._NEXT_STEPS["preview_roster_student_change"]
+    assert pseudo not in preview["next"]
     assert '"nicknames":' not in json.dumps(preview["preview"])
     assert preview["preview"]["patch"] == {
         "add_nicknames": ["Sammy"], "extra_time": {"enabled": True, "days": 2}}

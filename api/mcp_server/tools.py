@@ -60,7 +60,7 @@ from api.dailywriting.store.identity import IdentityError
 from api.dailywriting.store.repo import Repository as DailyWritingRepository
 from api.dailywriting.store.repo import StoreError as DailyWritingStoreError
 
-from . import pseudonym
+from . import contract, pseudonym
 
 
 # Compatibility seams retained for existing route-style tests; the bound
@@ -133,6 +133,66 @@ MAX_ASSESSMENT_CONTEXT_ASSESSED_IN = 8
 MAX_ASSESSMENT_GROUPING_STUDENTS = 25
 MAX_ASSESSMENT_GROUPING_RESULT_CHARS = 20000
 
+_NEXT_STEPS = {
+    "get_scoring_packet": (
+        "Read total as response rows and students_total as people. Use next_offset for "
+        "the next page with include_context=false; after the final page, stage completed "
+        "scores with packet_digest."
+    ),
+    "start_scoring_session": (
+        "Call get_scoring_packet with session_id to retrieve the first scoring page."
+    ),
+    "preview_sis_grade_bridge": (
+        "Summarize the aggregate review and get teacher confirmation, then call "
+        "apply_sis_grade_bridge with batch_id, operation_id, and review_digest unchanged."
+    ),
+    "preview_learning_objective": (
+        "Summarize the preview and get teacher confirmation, then call "
+        "apply_learning_objective with course_id, preview, preview_digest, and "
+        "current_revision as expected_revision."
+    ),
+    "preview_roster_student_change": (
+        "Summarize the change and get teacher confirmation, then call "
+        "apply_roster_student_change with course_id, preview, preview_digest, and "
+        "settings_digest as expected_settings_digest."
+    ),
+    "preview_bell_schedule": (
+        "Summarize the before/after meetings and get teacher confirmation, then call "
+        "apply_bell_schedule with the preview and base_digest as expected_digest."
+    ),
+    "preview_school_calendar_replacement": (
+        "Summarize the replacement and get teacher confirmation, then call "
+        "apply_school_calendar_replacement with the preview and base_revision as "
+        "expected_revision."
+    ),
+    "preview_school_calendar_change": (
+        "Summarize the affected dates and conflicts and get teacher confirmation, then "
+        "call apply_school_calendar_change with the preview and base_revision as "
+        "expected_revision."
+    ),
+    "preview_school_calendar_event_change": (
+        "Summarize the before/after event and get teacher confirmation, then call "
+        "apply_school_calendar_event_change with the preview and base_revision as "
+        "expected_revision."
+    ),
+    "preview_school_calendar_game_score": (
+        "Summarize the before/after score and get teacher confirmation, then call "
+        "apply_school_calendar_game_score with the preview and base_revision as "
+        "expected_revision."
+    ),
+    "preview_new_quiz_scores": (
+        "Summarize the frozen review and get teacher confirmation, then call "
+        "apply_new_quiz_scores with operation_id and review_digest unchanged."
+    ),
+}
+
+
+def _with_next(tool_name: str, result: dict) -> dict:
+    """Attach one static post-result procedure to an authorized success payload."""
+    if result.get("ok"):
+        return {**result, "next": _NEXT_STEPS[tool_name]}
+    return result
+
 
 def _tabulate(rows: list[dict], columns: tuple[str, ...]) -> dict:
     return {"columns": list(columns),
@@ -178,7 +238,10 @@ def list_sis_grade_bridges(course_id: str) -> dict:
 
 def preview_sis_grade_bridge(course_id: str, family_title: str) -> dict:
     """Prepare one exact family bridge and return only aggregate review facts."""
-    return sis_grade_bridge.preview_sis_grade_bridge(course_id, family_title)
+    return _with_next(
+        "preview_sis_grade_bridge",
+        sis_grade_bridge.preview_sis_grade_bridge(course_id, family_title),
+    )
 
 
 def apply_sis_grade_bridge(
@@ -356,9 +419,24 @@ def _vault_transaction(vault):
             save()
 
 
+def _saved_course_gate_check(course_id: str) -> str | None:
+    """Reject IDs absent from list_courses before suggesting any refresh."""
+    course_key = str(course_id or "").strip()
+    saved_ids = {
+        str(course.get("id") or "").strip()
+        for course in [*(config.saved_courses() or []), *(config.active_courses() or [])]
+        if str(course.get("id") or "").strip()
+    }
+    if course_key not in saved_ids:
+        return (
+            f"Unknown course_id '{course_key}'; call list_courses and use a "
+            "returned course_id."
+        )
+    return None
+
+
 def _course_gate_check(course_id: str) -> str | None:
-    """Current-course scope check, same as the web UI. Returns an error
-    string if ``course_id`` is not an active (Current) course, else None."""
+    """Current-course scope check, same as the web UI."""
     return course_scope.current_course_error(course_id, config.active_courses())
 
 
@@ -562,12 +640,13 @@ def preview_roster_student_change(course_id: str, pseudonym: str, patch: dict) -
                "before": {key: before.get(key) for key in patch},
                "after": {key: after.get(key) for key in patch},
                "settings_digest": _canonical_digest(_roster_full_record(course_id, user_id, vault))}
-    return _gate_roster_result({
+    return _gate_roster_result(_with_next("preview_roster_student_change", {
+        "ok": True,
         "pseudonym": before["pseudonym"],
         "settings_digest": preview["settings_digest"],
         "preview": preview,
         "preview_digest": _canonical_digest(preview),
-    }, vault)
+    }), vault)
 
 
 def _apply_roster_update(course_id: str, vault, user_id: str, patch: dict) -> dict:
@@ -693,6 +772,9 @@ def list_sections(course_id: str) -> dict:
     data — no vault, no safety gate. Returns
     a {columns, rows} table of (section_id, section_name). Call this before
     get_seating_context to discover its section_id/section_name values."""
+    identity_error = _saved_course_gate_check(course_id)
+    if identity_error:
+        return {"ok": False, "error": identity_error}
     document = mirror_store.read_roster(course_id)
     if document is None:
         return {
@@ -719,6 +801,9 @@ def get_course_assignments(course_id: str, full_descriptions: bool = False) -> d
     Descriptions are trimmed to a preview unless ``full_descriptions`` is set;
     assignments go out as a {columns, rows} table."""
 
+    identity_error = _saved_course_gate_check(course_id)
+    if identity_error:
+        return {"ok": False, "error": identity_error}
     read_result = read_catalog(course_id)
     scope = read_service.catalog_assignments(
         course_id, catalog_reader=lambda _course_id: read_result)
@@ -760,6 +845,9 @@ def get_modules(course_id: str, include_items: bool = False) -> dict:
     own {columns, rows} table. The v3 catalog module contract has no published
     column; module item identity is carried as ``content_id``."""
 
+    identity_error = _saved_course_gate_check(course_id)
+    if identity_error:
+        return {"ok": False, "error": identity_error}
     read_result = read_catalog(course_id)
     # Age-gate the stored catalog against the same mirror serve-age window
     # used elsewhere, so "current" means fresh, not just last-refreshed-ever;
@@ -833,6 +921,9 @@ def get_course_pages(course_id: str, full_text: bool = False) -> dict:
     The refresh route is the only Canvas acquisition path. This read never
     refreshes, falls back to Canvas, or exposes the workspace path.
     """
+    identity_error = _saved_course_gate_check(course_id)
+    if identity_error:
+        return {"ok": False, "error": identity_error}
     gate_error = _course_gate_check(course_id)
     if gate_error:
         return {"ok": False, "error": gate_error}
@@ -890,7 +981,7 @@ def preview_learning_objective(course_id: str, objective: str,
             objective=objective, effective_start=effective_start,
             effective_end=effective_end, source_refs=source_refs, replaces=replaces,
         )
-        return {"ok": True, **result}
+        return _with_next("preview_learning_objective", {"ok": True, **result})
     except (OSError, TypeError, ValueError) as error:
         return {"ok": False, "error": str(error)}
 
@@ -977,17 +1068,143 @@ _STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric")
 # tells the teacher a feature they use every week isn't real. These are the
 # same canonical files the web UI hands out for pasting into a chat-only
 # assistant, so connected and pasted assistants read one text, not two.
+_TOOL_GROUPS = {
+    # Appendix B has no named surface for discovery and catalog reads. This is
+    # the one deliberately plain exception to its teacher-facing vocabulary.
+    # list_sections supplies a course-local discovery value for Seating;
+    # refresh_mirror advances the same saved-course read layer.
+    "Course discovery and catalog": (
+        "list_courses",
+        "get_course_assignments",
+        "get_modules",
+        "get_course_pages",
+        "list_sections",
+        "refresh_mirror",
+    ),
+    "Create and Forge": (
+        # The product guide selects the workflow; the contract and staged list
+        # are the two authoring-specific artifacts that workflow reaches.
+        "get_product_guide",
+        "get_authoring_contract",
+        "list_staged_content",
+    ),
+    "PowerGrader": (
+        "start_scoring_session",
+        "list_scoring_sessions",
+        "get_scoring_packet",
+        "stage_scores",
+        "preview_new_quiz_scores",
+        "apply_new_quiz_scores",
+        # The gradebook snapshot informs the scoring job; Appendix B's separate
+        # Gradebook tools surface has no direct MCP mutation surface.
+        "get_gradebook_snapshot",
+    ),
+    "SIS Grade Bridges": (
+        "list_sis_grade_bridges",
+        "preview_sis_grade_bridge",
+        "apply_sis_grade_bridge",
+        "confirm_sis_grade_bridge_passback",
+    ),
+    "Learning Objectives": (
+        "list_learning_objectives",
+        "preview_learning_objective",
+        "apply_learning_objective",
+        "delete_learning_objective",
+    ),
+    "School Calendar": (
+        # Bell variants and the teacher schedule are Calendar inputs, so they
+        # stay with the public date workflow instead of forming a new taxonomy.
+        "get_school_calendar",
+        "preview_school_calendar_replacement",
+        "apply_school_calendar_replacement",
+        "preview_school_calendar_change",
+        "apply_school_calendar_change",
+        "preview_school_calendar_event_change",
+        "apply_school_calendar_event_change",
+        "preview_school_calendar_game_score",
+        "apply_school_calendar_game_score",
+        "get_bell_schedule",
+        "preview_bell_schedule",
+        "apply_bell_schedule",
+        "get_day_schedule",
+        "get_teacher_schedule",
+        "save_teacher_schedule",
+    ),
+    # Mirror submissions are the evidence exposed by the Writing Timeline job.
+    "Writing Timeline": ("get_submissions",),
+    "Writing Record": ("get_writing_history",),
+    "Students": (
+        "get_roster",
+        "get_roster_student_settings",
+        "preview_roster_student_change",
+        "apply_roster_student_change",
+        "clear_roster_student_field",
+    ),
+    "Seating": ("get_seating_context",),
+    "Assessments and DataForge": (
+        "get_standards_profile",
+        "get_assessment_context",
+        "get_assessment_grouping_proposal",
+    ),
+}
+
+
+def _validated_tool_groups(tool_names=None) -> dict[str, tuple[str, ...]]:
+    expected = set(tool_names) if tool_names is not None else {
+        item["name"] for item in contract.load_contract()["tools"]
+    }
+    grouped = [name for names in _TOOL_GROUPS.values() for name in names]
+    duplicates = sorted({name for name in grouped if grouped.count(name) > 1})
+    missing = sorted(expected - set(grouped))
+    unknown = sorted(set(grouped) - expected)
+    empty = sorted(group for group, names in _TOOL_GROUPS.items() if not names)
+    if duplicates or missing or unknown or empty:
+        raise ValueError(
+            "tool inventory grouping mismatch: "
+            f"duplicates={duplicates}, missing={missing}, unknown={unknown}, empty={empty}"
+        )
+    return _TOOL_GROUPS
+
+
+def _build_tool_inventory() -> str:
+    schema = contract.load_contract()
+    groups = _validated_tool_groups(item["name"] for item in schema["tools"])
+    lines = [
+        "CanvasExpert MCP tools by job",
+        "",
+        f"{len(schema['tools'])} tools in schema version {schema['schema_version']}.",
+    ]
+    for group, names in groups.items():
+        lines.extend(("", f"## {group}", ", ".join(f"`{name}`" for name in names)))
+    return "\n".join(lines)
+
+
+# Each topic declares exactly one source: a canonical file or a generated
+# result. Summaries form the compact annotated table of contents returned with
+# every guide response; declaration order is the public topic order.
 _GUIDE_FILES = {
-    "overview": "START HERE - CanvasAgent.txt",
-    "setup": "START HERE - CanvasAgent.txt",
-    "chat_authoring": "START HERE - CanvasAgent.txt",
-    "connected": "START HERE - CanvasAgent.txt",
-    "privacy": "START HERE - CanvasAgent.txt",
-    "troubleshooting": "START HERE - CanvasAgent.txt",
-    "assessments": "START HERE - CanvasAgent.txt",
-    "full": "START HERE - CanvasAgent.txt",
-    "writing_timeline": "Writing Timeline (tracked assignments).txt",
-    "writing_record": "Writing Record (longitudinal writing history).txt",
+    "overview": {"file": "START HERE - CanvasAgent.txt",
+                 "summary": "Product surfaces and capabilities (Appendix B)."},
+    "setup": {"file": "START HERE - CanvasAgent.txt",
+              "summary": "Local setup and first-run expectations (Appendix A)."},
+    "chat_authoring": {"file": "START HERE - CanvasAgent.txt",
+                       "summary": "Chat-only authoring and Forge contracts (Appendix C)."},
+    "connected": {"file": "START HERE - CanvasAgent.txt",
+                  "summary": "Connected MCP workflows and write boundaries (Appendix D)."},
+    "privacy": {"file": "START HERE - CanvasAgent.txt",
+                "summary": "Pseudonymization and external-AI boundaries (Appendix E)."},
+    "troubleshooting": {"file": "START HERE - CanvasAgent.txt",
+                        "summary": "Connection and workflow troubleshooting (Appendix F)."},
+    "assessments": {"file": "START HERE - CanvasAgent.txt",
+                    "summary": "Assessment and grouping guidance (Appendix G)."},
+    "full": {"file": "START HERE - CanvasAgent.txt",
+             "summary": "Complete CanvasAgent guide, Appendices A through G."},
+    "writing_timeline": {"file": "Writing Timeline (tracked assignments).txt",
+                         "summary": "Tracked-assignment timeline behavior and coverage."},
+    "writing_record": {"file": "Writing Record (longitudinal writing history).txt",
+                       "summary": "Longitudinal writing evidence and current limits."},
+    "tools": {"generated": _build_tool_inventory,
+              "summary": "All MCP tools grouped by teacher-facing job."},
 }
 _DEFAULT_GUIDE_TOPIC = "overview"
 _CANVAS_AGENT_APPENDIXES = {
@@ -1102,8 +1319,8 @@ def get_product_guide(topic: str = "") -> dict:
     every topic. Appendix topics are extracted from that file so a correction
     cannot make the connected and pasted guidance disagree."""
     requested = str(topic or "").strip().lower() or _DEFAULT_GUIDE_TOPIC
-    filename = _GUIDE_FILES.get(requested)
-    if filename is None:
+    source = _GUIDE_FILES.get(requested)
+    if source is None:
         return {
             "ok": False,
             "error": (f"unknown topic '{requested}'; expected one of: "
@@ -1111,17 +1328,24 @@ def get_product_guide(topic: str = "") -> dict:
                       f"{_DEFAULT_GUIDE_TOPIC})"),
         }
 
-    guide_text, error = _read_authoring_doc(filename, f"{requested} guide")
-    if error:
-        return {"ok": False, "error": error}
-
-    if filename == _GUIDE_FILES["full"]:
-        guide_text, error = _read_canvasagent_topic(requested, guide_text)
+    if "generated" in source:
+        try:
+            guide_text = source["generated"]()
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
+    else:
+        filename = source["file"]
+        guide_text, error = _read_authoring_doc(filename, f"{requested} guide")
         if error:
             return {"ok": False, "error": error}
+        if filename == _GUIDE_FILES["full"]["file"]:
+            guide_text, error = _read_canvasagent_topic(requested, guide_text)
+            if error:
+                return {"ok": False, "error": error}
 
     return {"ok": True, "topic": requested,
-            "topics": list(_GUIDE_FILES), "guide": guide_text}
+            "topics": {name: item["summary"] for name, item in _GUIDE_FILES.items()},
+            "guide": guide_text}
 
 
 def _read_published_profile() -> tuple[dict | None, str, str]:
@@ -1842,6 +2066,9 @@ def get_roster(course_id: str) -> dict:
     CanvasMirror — never live Canvas; a stale or missing mirror is refused
     (call refresh_mirror first). Pseudonymized through the identity vault;
     gated by the outbound safety scan before tabulation."""
+    identity_error = _saved_course_gate_check(course_id)
+    if identity_error:
+        return {"ok": False, "error": identity_error}
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
@@ -2035,6 +2262,9 @@ def get_submissions(course_id: str, assignment_id: str,
     narrows to specific students; ``include_text=False`` drops the text
     column; text is trimmed to ``max_text_chars`` (0 = full). Attachments are
     never included. Gated by the outbound safety scan."""
+    identity_error = _saved_course_gate_check(course_id)
+    if identity_error:
+        return {"ok": False, "error": identity_error}
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
@@ -2168,6 +2398,9 @@ def get_gradebook_snapshot(course_id: str) -> dict:
     Served ONLY from the local CanvasMirror — never live Canvas; a stale or
     missing mirror is refused (call refresh_mirror first). Gated by the
     outbound safety scan before tabulation."""
+    identity_error = _saved_course_gate_check(course_id)
+    if identity_error:
+        return {"ok": False, "error": identity_error}
     err = _course_gate_check(course_id)
     if err:
         return {"ok": False, "error": err}
@@ -2288,7 +2521,7 @@ def preview_bell_schedule(schedule_id: str, content: str) -> dict:
         schedule_id=schedule_id, content=content)
     if preview is None:
         return {"ok": False, "problems": problems}
-    return {"ok": True, **preview}
+    return _with_next("preview_bell_schedule", {"ok": True, **preview})
 
 
 def apply_bell_schedule(preview: dict, expected_digest: str) -> dict:
@@ -2403,7 +2636,7 @@ def preview_school_calendar_replacement(school_year: str, coverage_start: str, c
     )
     if preview is None:
         return {"ok": False, "problems": problems}
-    return {"ok": True, **preview}
+    return _with_next("preview_school_calendar_replacement", {"ok": True, **preview})
 
 
 def apply_school_calendar_replacement(preview: dict, expected_revision: int) -> dict:
@@ -2441,7 +2674,7 @@ def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str 
     )
     if preview is None:
         return {"ok": False, "problems": problems}
-    return {"ok": True, **preview}
+    return _with_next("preview_school_calendar_change", {"ok": True, **preview})
 
 
 def apply_school_calendar_change(preview: dict, expected_revision: int) -> dict:
@@ -2466,7 +2699,7 @@ def preview_school_calendar_event_change(action: str, event: dict = None,
         action=action, event=event, event_id=(event_id or None))
     if preview is None:
         return {"ok": False, "problems": problems}
-    return {"ok": True, **preview}
+    return _with_next("preview_school_calendar_event_change", {"ok": True, **preview})
 
 
 def apply_school_calendar_event_change(preview: dict, expected_revision: int) -> dict:
@@ -2506,11 +2739,11 @@ def preview_school_calendar_game_score(event_id: str, score: str) -> dict:
         action="upsert", event=updated)
     if preview is None:
         return {"ok": False, "problems": problems}
-    return {
+    return _with_next("preview_school_calendar_game_score", {
         "ok": True,
         "game_score": {"event_id": event_id, "score": score},
         **preview,
-    }
+    })
 
 
 def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> dict:
@@ -2639,7 +2872,7 @@ def start_scoring_session(course_id: str, assignment_id: str) -> dict:
         except Exception:
             pass
 
-    return {
+    return _with_next("start_scoring_session", {
         "ok": True,
         "session_id": session_id,
         "assignment_name": payload.get("assignment_name", ""),
@@ -2647,7 +2880,7 @@ def start_scoring_session(course_id: str, assignment_id: str) -> dict:
         "response_count": response_count,
         "new_quiz_item_finalization_supported": bool(
             session.get("new_quiz_item_finalization_supported")),
-    }
+    })
 
 
 def list_scoring_sessions() -> dict:
@@ -2791,6 +3024,7 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
             }
         result["items"] = _tabulate(result["items"], _PACKET_ITEM_COLUMNS)
         result["students"] = _tabulate(result["students"], _PACKET_STUDENT_COLUMNS)
+        result = _with_next("get_scoring_packet", result)
     return result
 
 
@@ -3132,7 +3366,7 @@ def preview_new_quiz_scores(session_id: str) -> dict:
     }
     if refused_reasons:
         result["refused_reasons"] = refused_reasons
-    return pseudonym.gate(result, vault)
+    return pseudonym.gate(_with_next("preview_new_quiz_scores", result), vault)
 
 
 def apply_new_quiz_scores(operation_id: str, review_digest: str) -> dict:

@@ -25,6 +25,21 @@ def _current_course(course_id: str) -> bool:
 
 def list_sis_grade_bridges(course_id: str) -> dict:
     course_key = str(course_id or "").strip()
+    if not course_key:
+        return {"ok": False, "error": "course_id is required"}
+    saved_ids = {
+        str(course.get("id") or "").strip()
+        for course in [*(config.saved_courses() or []), *(config.active_courses() or [])]
+        if str(course.get("id") or "").strip()
+    }
+    if course_key not in saved_ids:
+        return {
+            "ok": False,
+            "error": (
+                f"Unknown course_id '{course_key}'; call list_courses and use a "
+                "returned course_id."
+            ),
+        }
     if not _current_course(course_key):
         return {"ok": False, "error": "course is not in Current courses"}
     try:

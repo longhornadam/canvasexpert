@@ -108,6 +108,8 @@ def test_preview_then_apply_finalizes_one_student_end_to_end(
         "students": 1, "items": 1, "ready": 1, "refused": 0, "already_finalized": 0,
     }
     assert preview["warnings"] == []
+    assert preview["next"] == tools._NEXT_STEPS["preview_new_quiz_scores"]
+    assert "900001" not in preview["next"] and "Learner One" not in preview["next"]
     operation_id, review_digest = preview["operation_id"], preview["review_digest"]
     assert operation_id.startswith("sess-nq::")
 

@@ -32,7 +32,9 @@ def test_plain_tools_delegate_to_shared_use_case(monkeypatch):
     )
 
     assert tools.list_sis_grade_bridges("course-x")["course_id"] == "course-x"
-    assert tools.preview_sis_grade_bridge("course-x", "Invented")["title"] == "Invented"
+    preview = tools.preview_sis_grade_bridge("course-x", "Invented")
+    assert preview["title"] == "Invented"
+    assert preview["next"] == tools._NEXT_STEPS["preview_sis_grade_bridge"]
     assert tools.apply_sis_grade_bridge("op", "batch", "digest")["coordinates"] == [
         "op", "batch", "digest"
     ]
@@ -100,6 +102,7 @@ def test_mcp_preview_output_never_projects_private_student_rows(
     serialized = server._compact(result)
 
     assert json.loads(serialized)["ok"] is True
+    assert result["next"] == tools._NEXT_STEPS["preview_sis_grade_bridge"]
     assert "private-student-id" not in serialized
     assert '"score":91' not in serialized
 

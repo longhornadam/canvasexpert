@@ -114,6 +114,7 @@ def test_start_scoring_session_creates_packet_session_end_to_end(monkeypatch, tm
         # read from the SAFE bundle rather than echoed from student_count.
         "response_count": 3,
         "new_quiz_item_finalization_supported": True,
+        "next": tools._NEXT_STEPS["start_scoring_session"],
     }
     assert captured["course_id"] == "111"
     assert captured["assignment_id"] == "700010"
@@ -135,6 +136,7 @@ def test_start_scoring_session_falls_back_to_student_count_without_a_bundle(monk
     assert result["student_count"] == 5
     assert result["response_count"] == 5
     assert result["new_quiz_item_finalization_supported"] is False
+    assert result["next"] == tools._NEXT_STEPS["start_scoring_session"]
 
 
 # --- laws: refusal behaviour --------------------------------------------------

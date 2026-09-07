@@ -243,7 +243,8 @@ bounded reviewed apply paths can reach Canvas: a roster preview carrying a
 canvas_group patch, New Quiz item finalization after staged scores, and a named
 SIS grade bridge. Everything else writes only to the teacher's computer.
 
-The full tool list is in docs/mcp-server.md. What matters while you work:
+For the full tool list grouped by job, call get_product_guide(topic="tools").
+What matters while you work:
 
 Reading
 
