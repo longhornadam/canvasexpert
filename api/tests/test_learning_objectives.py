@@ -5,7 +5,6 @@ import os
 from api import course_catalog, learning_objectives
 from api.mcp_server import tools
 from api.platform_services import workspace
-from api.webui.glass_data import learning_objective_payload
 
 
 STAMP = "2026-08-30T12:00:00+00:00"
@@ -165,60 +164,3 @@ def test_v1_document_is_rejected_without_migration(tmp_path, monkeypatch):
         assert str(error) == "objective_document_invalid"
     else:
         raise AssertionError("v1 document was accepted")
-
-
-def test_panel_only_invalidates_when_a_referenced_source_changes():
-    catalog = _catalog()
-    entry = {
-        "id": "obj-1",
-        "objective": "Read the welcome page.",
-        "effective_start": "2026-09-01",
-        "effective_end": "2026-09-12",
-        "source_refs": [{"kind": "page", "id": "p1", "title": "Welcome"}],
-        "source_digest": learning_objectives.source_digest(catalog, [{"kind": "page", "id": "p1", "title": "Welcome"}]),
-        "catalog_updated_at": STAMP,
-        "authored_at": STAMP,
-    }
-    document = {"version": 2, "revision": 1, "objectives": {"course-1": [entry]}}
-    changed_catalog = copy.deepcopy(catalog)
-    changed_catalog["updated_at"] = "2026-08-30T13:00:00+00:00"
-    assert learning_objective_payload(
-        "course-1", now=__import__("datetime").datetime(2026, 9, 5),
-        document_reader=lambda: document, catalog_reader=lambda _cid: {"catalog": changed_catalog},
-    )["state"] == "ready"
-    changed_catalog["pages"]["records"][0]["body_text"] = "Changed."
-    out = learning_objective_payload(
-        "course-1", now=__import__("datetime").datetime(2026, 9, 5),
-        document_reader=lambda: document, catalog_reader=lambda _cid: {"catalog": changed_catalog},
-    )
-    assert out["state"] == "changed_source"
-    assert out["message"] == "Objective needs review."
-
-
-def test_panel_reports_invalid_objective_document_as_attention():
-    out = learning_objective_payload(
-        "course-1", document_reader=lambda: {"broken": True},
-        catalog_reader=lambda _cid: {"catalog": _catalog()},
-    )
-    assert out["state"] == "catalog_needs_attention"
-
-
-def test_panel_distinguishes_stale_catalog_from_changed_source():
-    catalog = _catalog()
-    refs = [{"kind": "page", "id": "p1", "title": "Welcome"}]
-    entry = {
-        "id": "obj-1",
-        "objective": "Read the welcome page.", "effective_start": "2026-09-01",
-        "effective_end": "2026-09-12", "source_refs": refs,
-        "source_digest": learning_objectives.source_digest(catalog, refs),
-        "catalog_updated_at": STAMP, "authored_at": STAMP,
-    }
-    document = {"version": 2, "revision": 1, "objectives": {"course-1": [entry]}}
-    stale = copy.deepcopy(catalog)
-    stale["pages"]["state"] = "stale"
-    out = learning_objective_payload(
-        "course-1", now=__import__("datetime").datetime(2026, 9, 5),
-        document_reader=lambda: document, catalog_reader=lambda _cid: {"catalog": stale},
-    )
-    assert out["state"] == "catalog_needs_attention"
-    assert "Refresh" in out["message"]

@@ -93,6 +93,12 @@ RETIRED_FILES = {
         # Before Appendix A described the app's private Python environment and
         # Appendix D described resolving a shared section name by section_id.
         "83d68d6cdb03eb4dbe009eceefec41a89f64447e8b1c6023502a9d887eecba2a",
+        # Before the classroom display and its Panel theme tools were removed.
+        "3f2e05954005949ba2116bb71ccc72f776b10b704d8128bf676cb419a3cf34fc",
+    }),
+    # Named the removed classroom display alongside Calendar.
+    "Author a Class Schedule.txt": frozenset({
+        "b65df7567b0b26b29aa23c4c58ea4432767d8a7a05fb7987059fda9a30536275",
     }),
 }
 

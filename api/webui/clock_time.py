@@ -1,4 +1,4 @@
-"""Teacher-facing local wall-clock values used by Calendar and Glass.
+"""Teacher-facing local wall-clock values used by Calendar.
 
 The authored/display contract is ``h:mm AM`` or ``h:mm PM``.  A small
 minutes-since-midnight representation keeps comparisons independent of the

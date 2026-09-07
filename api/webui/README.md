@@ -57,8 +57,6 @@ Source tests never substitute for rendered verification.
 | `/course` | Course Info detail page | `course_info.js` |
 | `/settings` | Settings | `settings.js` |
 | `/calendar` | **Calendar** — school dates, Bell Schedules, Teacher Schedule | `pages/calendar.js` |
-| `/glass` | **Glass** — full-screen school-facing classroom board from the local School Calendar | `pages/glass.js` |
-| `/glass/data` | Glass's read-only calendar projection. Disk-only; never calls Canvas | route-driven |
 | `/connections` | **Connections** — health, support bundle, and copy-only MCP client snippets | `connections.js` |
 | `/routines` | **Routines** — local automation control surface | inline / route-driven |
 | `/assessments` | **Assessments** — local Eduphoria import, reports, dashboard, history, and read-only roster coverage | route-driven |
@@ -117,30 +115,6 @@ primary-nav page, not in Settings.
 - Teacher Schedule/Bell Schedule read-write: `api/webui/routes/schedule.py`, `api/webui/schedule_setup.py`
 
 For the full contract, see `docs/contracts/canonical-school-calendar-contract.md`.
-
-### Glass module routing
-
-Glass is a full-screen display surface with no app chrome. Its resolver, class projection, and
-calendar-only board projection live in `api/webui/glass.py`, `api/webui/glass_class.py`, and
-`api/webui/glass_board.py`; the route adapter is `api/webui/routes/glass.py`; its page owns
-`templates/glass.html`, `static/pages/glass.js`, and `static/pages/glass.css`. Both `/glass` and
-`/glass/data` are local-only: board mode reads calendar/schedule files, while class mode also
-reads the current course's local mirror and Learning Objectives document.
-
-The settled presentation is a three-column instrument panel with a single clinical header and a
-footer dock containing **Random Name**, **Timer**, **Quick Note**, and **Blank**. Class mode keeps
-operations left, the objective-centered instruction column dominant, and public school information
-right; board mode distributes only its public calendar/school regions across the same columns.
-There are no rendered column headings, dashboard metrics, placeholders, or inferred agenda/resource
-content. Cards are created only from the current projection: empty-ready regions disappear, repair
-and stale states remain concise, and a compact-complete item never enters emphasis rotation. Each
-column has at most one expanded eligible card. One page-level controller advances one eligible
-column at a time on an approximately eight-second cadence only when a column has at least two
-eligible cards; manual selection pauses it for 20 seconds and reduced motion disables rotation,
-ticker motion, and transitions. Refreshes preserve local Timer and Quick Note state, while mode or
-course changes clear class-only Random Name selection. The client clock and all simulated labels
-remain derived from the server-provided `context.at`; no Glass browser clock or live Canvas call is
-allowed.
 
 ### Assessments module routing
 

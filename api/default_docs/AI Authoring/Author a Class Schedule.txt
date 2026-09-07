@@ -1,7 +1,7 @@
 CLASS SCHEDULE & CALENDAR AUTHORING
 Version 2.0
 
-Use this guide when helping a teacher finish Panels/Calendar schedule setup. There
+Use this guide when helping a teacher finish Calendar schedule setup. There
 are three parts, all stored in the teacher's local workspace:
 
 1. Teacher Schedule.json maps unique stable block names to the bell periods for each class.

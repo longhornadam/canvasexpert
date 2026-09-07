@@ -130,8 +130,6 @@ EXPECTED = [
     ('/connections', ('GET',)),
     ('/docs', ('GET',)),
     ('/docs/oauth2-redirect', ('GET',)),
-    ('/glass', ('GET',)),
-    ('/glass/data', ('GET',)),
     ('/gradebook', ('GET',)),
     ('/calendar', ('GET',)),
     ('/openapi.json', ('GET',)),

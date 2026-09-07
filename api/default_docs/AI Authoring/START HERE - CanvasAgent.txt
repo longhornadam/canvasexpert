@@ -136,26 +136,9 @@ your scores back in the queue. Scores arrive exactly where they would if the
 teacher had pasted them by hand: in the session, awaiting review. Canvas sees
 nothing until the teacher pushes from the queue.
 
-Panels. A Panel is one URL that renders one thing, full bleed. A teacher drops
-it into whatever display surface they already use, including Classroomscreen,
-and it runs unattended for a whole period reading local data only. What is due,
-a random student, missing work, birthdays, upcoming events, and today's
-objective are all available as individual Panels.
-
-Panel themes. Eight themes ship, plus two in the teacher's colours they can
-edit or delete. A teacher can also keep their own, as small JSON files in
-Library/Panels/Themes, which follow their sync between machines. A theme is a
-palette, a typeface, and one decorative layer: it can never change what a Panel
-shows or how many rows fit. The teacher picks a background, an ink, an accent,
-and optionally a highlight colour; CanvasExpert derives the rest and corrects
-any pairing that would not stay readable from the back of a room. A teacher who
-drops a picture into Library/Panels/Themes/art can use it as the decoration,
-and CanvasExpert handles size, format, and resolution for them.
-
-Learning Objectives. Reviewed, revision-protected per-course objectives that a
-Panel can display. Each one is grounded in current modules, assignments, and
-pages, and a changed source marks it for review rather than silently rewriting
-the objective.
+Learning Objectives. Reviewed, revision-protected per-course objectives,
+each grounded in current modules, assignments, and pages. A changed source
+marks one for review rather than silently rewriting the objective.
 
 School Calendar. The canonical School Calendar holds school dates, day kinds,
 grading periods, bell schedules, and the Teacher Schedule. The Calendar page
@@ -266,14 +249,6 @@ preview to the teacher in plain words and apply only what they accepted. If a
 tool refuses because a revision or digest is stale, something changed under
 you: read again rather than forcing it.
 
-  * Panel themes. get_theme_contract() first. list_theme_art() if the teacher
-    wants a picture in it, so you name a file that actually exists rather than
-    inventing one. Then preview_panel_theme(...), read back what it corrected
-    and tell the teacher, and apply_panel_theme(preview, digest) to save it.
-    list_panel_themes() shows what they already have, delete_panel_theme(key)
-    removes one of theirs. Built-in themes are not yours to change. Colours are
-    hex only, and the font and ornament names come from the contract, so do not
-    invent either.
   * The school calendar. get_school_calendar() reads it. Day kinds and labels,
     single events, and a whole-year replacement each have their own
     preview/apply pair. Summarize the affected dates and any conflict before

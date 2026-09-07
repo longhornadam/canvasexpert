@@ -413,66 +413,63 @@ def test_needs_compact_layout_joins_every_child_component(tmp_path):
     assert shallow is False
     assert deep is True
 
-
-def test_migrate_legacy_glass_folders_both_present(tmp_path, monkeypatch):
-    """When both Library/Glass and To Review/Glass exist, both are moved to
-    _System/Archive/Legacy/ with the correct names."""
+def _panels_root(tmp_path):
     root = tmp_path / "CanvasExpert"
-    root.mkdir()
-    (root / "Library").mkdir()
-    (root / "Library" / "Glass").mkdir()
-    (root / "Library" / "Glass" / "example.txt").write_text("lib glass content")
-    (root / "To Review").mkdir()
-    (root / "To Review" / "Glass").mkdir()
-    (root / "To Review" / "Glass" / "example.txt").write_text("to review glass content")
-    (root / "_System").mkdir()
-    (root / "_System" / "Archive").mkdir()
+    (root / "Library" / "Panels").mkdir(parents=True)
+    return root
+
+
+def test_migrate_panels_moves_the_objectives_document(tmp_path, monkeypatch):
+    """The document a teacher authored survives the folder rename."""
+    root = _panels_root(tmp_path)
+    (root / "Library" / "Panels" / "Learning Objectives.json").write_text(
+        '{"version": 2, "revision": 7, "objectives": {}}')
+    (root / "Library" / "Panels" / "Themes").mkdir()
+    (root / "Library" / "Panels" / "Themes" / "bobcats.json").write_text("{}")
 
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
-    workspace.migrate_legacy_glass_folders()
+    workspace.migrate_legacy_panels_folder()
 
-    # Source folders should be gone
-    assert not (root / "Library" / "Glass").exists()
-    assert not (root / "To Review" / "Glass").exists()
-
-    # Destination folders should exist with correct names
-    assert (root / "_System" / "Archive" / "Legacy" / "Library-Glass" / "example.txt").exists()
-    assert (root / "_System" / "Archive" / "Legacy" / "Library-Glass" / "example.txt").read_text() == "lib glass content"
-    assert (root / "_System" / "Archive" / "Legacy" / "ToReview-Glass" / "example.txt").exists()
-    assert (root / "_System" / "Archive" / "Legacy" / "ToReview-Glass" / "example.txt").read_text() == "to review glass content"
-
-
-def test_migrate_legacy_glass_folders_absent_no_op(tmp_path, monkeypatch):
-    """When both legacy Glass folders are absent, the function is a no-op."""
-    root = tmp_path / "CanvasExpert"
-    root.mkdir()
-    (root / "Library").mkdir()
-    (root / "To Review").mkdir()
-
-    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
-    workspace.migrate_legacy_glass_folders()
-
-    # No archive structure created
+    moved = root / "Library" / "Learning Objectives" / "Learning Objectives.json"
+    assert moved.read_text() == '{"version": 2, "revision": 7, "objectives": {}}'
+    # Everything else went with the display, and nothing was archived.
+    assert not (root / "Library" / "Panels").exists()
     assert not (root / "_System").exists()
 
 
-def test_migrate_legacy_glass_folders_already_migrated_no_clobber(tmp_path, monkeypatch):
-    """When destination already exists, the function doesn't clobber and doesn't raise."""
-    root = tmp_path / "CanvasExpert"
-    root.mkdir()
-    (root / "Library").mkdir()
-    (root / "Library" / "Glass").mkdir()
-    (root / "Library" / "Glass" / "new.txt").write_text("new content")
-    (root / "_System").mkdir()
-    (root / "_System" / "Archive").mkdir()
-    (root / "_System" / "Archive" / "Legacy").mkdir()
-    (root / "_System" / "Archive" / "Legacy" / "Library-Glass").mkdir()
-    (root / "_System" / "Archive" / "Legacy" / "Library-Glass" / "existing.txt").write_text("existing content")
+def test_migrate_panels_deletes_a_folder_with_no_document(tmp_path, monkeypatch):
+    root = _panels_root(tmp_path)
+    (root / "Library" / "Panels" / "Themes").mkdir()
+    (root / "Library" / "Panels" / "Themes" / "bobcats.json").write_text("{}")
 
     monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
-    workspace.migrate_legacy_glass_folders()
+    workspace.migrate_legacy_panels_folder()
 
-    # Existing destination preserved
-    assert (root / "_System" / "Archive" / "Legacy" / "Library-Glass" / "existing.txt").read_text() == "existing content"
-    # Source still present (not moved when destination exists)
-    assert (root / "Library" / "Glass" / "new.txt").exists()
+    assert not (root / "Library" / "Panels").exists()
+
+
+def test_migrate_panels_will_not_delete_an_objectives_document_it_cannot_move(tmp_path, monkeypatch):
+    """Two machines syncing, or a half-finished earlier run: the canonical copy
+    at the destination wins, and the old folder is left rather than deleting an
+    authored document."""
+    root = _panels_root(tmp_path)
+    (root / "Library" / "Panels" / "Learning Objectives.json").write_text("old")
+    (root / "Library" / "Learning Objectives").mkdir(parents=True)
+    (root / "Library" / "Learning Objectives" / "Learning Objectives.json").write_text("current")
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    workspace.migrate_legacy_panels_folder()
+
+    assert (root / "Library" / "Learning Objectives" / "Learning Objectives.json").read_text() == "current"
+    assert (root / "Library" / "Panels" / "Learning Objectives.json").read_text() == "old"
+
+
+def test_migrate_panels_is_a_no_op_without_the_old_folder(tmp_path, monkeypatch):
+    root = tmp_path / "CanvasExpert"
+    (root / "Library").mkdir(parents=True)
+
+    monkeypatch.setattr(workspace, "workspace_root", lambda: str(root))
+    workspace.migrate_legacy_panels_folder()
+
+    assert not (root / "Library" / "Panels").exists()
+    assert not (root / "_System").exists()

@@ -60,7 +60,6 @@ from .routes.routines import router as _routines_router, _load_custom_routines, 
 from .routes.roster import router as _roster_router
 from .routes.roster_assessment_groups import router as _roster_assessment_groups_router
 from .routes.seating import router as _seating_router
-from .routes.glass import router as _glass_router
 from .routes.settings import router as _settings_router
 from .routes.powergrader import router as _powergrader_router
 from .routes.readiness import router as _readiness_router
@@ -93,9 +92,9 @@ async def _lifespan(app):
     except Exception as e:
         print(f"Workspace setup note: {e}")
     try:
-        workspace.migrate_legacy_glass_folders()
+        workspace.migrate_legacy_panels_folder()
     except Exception as e:
-        print(f"Legacy Glass folder migration note: {e}")
+        print(f"Legacy Panels folder migration note: {e}")
     try:
         # Pin the resolved workspace path so the headless MCP server (launched by
         # Claude Desktop / ChatGPT without the OneDrive env var) resolves the same
@@ -191,7 +190,6 @@ app.include_router(_routines_router)
 app.include_router(_roster_router)
 app.include_router(_roster_assessment_groups_router)
 app.include_router(_seating_router)
-app.include_router(_glass_router)
 app.include_router(_settings_router)
 app.include_router(_powergrader_router)
 app.include_router(_readiness_router)

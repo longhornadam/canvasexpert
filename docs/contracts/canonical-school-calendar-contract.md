@@ -171,9 +171,6 @@ calendar state never degrades to “weekends only,” “nothing scheduled,” o
 schedule. A feature that needs instructional-day math or a current class blocks elegantly and
 links to `/calendar`.
 
-A fixed teacher-block override is not part of the Glass URL. Glass follows the live canonical
-date, clock, and Teacher Schedule resolution and does not accept raw `?course=` pinning.
-
 ## 5. Editing operations
 
 The UI and MCP call the same application service and validators. There are three operation
@@ -227,9 +224,10 @@ payloads, not an authentication mechanism.
 ## 6. Calendar surface
 
 `/calendar` is a primary-nav working surface, not a Settings subsection. Its title and nav label
-are both **Calendar**. Glass is the classroom display surface.
+are both **Calendar**.
 
-The primary view begins with the Teacher Schedule because Glass consumes those blocks. It keeps
+The primary view begins with the Teacher Schedule because other surfaces resolve the current
+class from those blocks. It keeps
 the compact Calendar readiness line, a short upcoming-date list, and the date/range change
 control immediately below it. Bell Schedule reference, school-year setup, and public events
 remain on this page as collapsed secondary surfaces; direct Calendar-section links open the
@@ -295,30 +293,9 @@ teacher to its control.
 Home surfaces Calendar only for a concrete repair, using reason-specific copy and an exact
 Calendar-section link; it does not expose a “School Schedule” umbrella.
 
-## 7. Glass contract carried by Calendar
+## 7. Consumer rule
 
-Glass mirrors the live local date and clock. The builder does not gain a fake day, period, or
-clock preview, and Glass has no fixed-block URL override.
-
-If live resolution fails, the projected Glass display shows the schedule/calendar problem rather than
-quietly behaving like an empty day. Its action text is brief (for example, “Calendar needs
-attention. Open Calendar in Canvas Expert.”). The builder provides the clickable repair link.
-
-The What's due Glass region:
-
-- reads only a Current course, including when reached through a teacher block;
-- includes every due-today assignment through the end of the local calendar day, even after
-  its due time;
-- includes dates through `today + 7 calendar days` (today plus the next seven named dates);
-- orders future/upcoming items first, then earlier-today items; ties are chronological and
-  deterministic;
-- describes an earlier-today item neutrally, never as missing or late;
-- shows a Previous-course mapping as “This class is no longer current. Update its Canvas
-  course in Calendar.”
-
-## 8. Consumer rule
-
-All current consumers must use the canonical service in the cutover batch: Glass, Late Work Sweep,
+All current consumers must use the canonical service in the cutover batch: Late Work Sweep,
 Gradebook date arithmetic, Extensions, PowerGrader late work,
 built-in and custom routines, operation-ledger sweep planning, and MCP schedule/calendar reads.
 No consumer may import `config.calendars`, parse an academic/day-calendar file, or silently
@@ -336,7 +313,7 @@ resolve to loaded Bell Schedules. Unconfigured, invalid, out-of-coverage, and un
 states fail closed with the shared Calendar repair target. A bounded range projection never
 silently clips the caller's requested dates.
 
-## 9. Privacy and locality
+## 8. Privacy and locality
 
 The calendar is public, student-free school configuration. It may contain public district
 dates and bell times under the repository guardrail for seed files. It must not contain student

@@ -21,52 +21,51 @@ from mcp.server.fastmcp import FastMCP
 
 from . import tools
 
-_FERPA_NOTICE = (
+_SERVER_INSTRUCTIONS = (
     "CanvasExpert reads this teacher's own Canvas courses, assignments, "
     "rosters, grades, submissions, and seating context from a local copy on "
-    "their computer. Call list_courses first for a course_id. Student data is "
-    "pseudonymized through a local vault before you see it: stable one-word "
-    "fake names (e.g. \"Pikachu\") stand in for real students, and real names and "
-    "Canvas/SIS IDs never leave the machine. Do not re-identify anyone or save "
-    "student data to a file. get_roster, get_seating_context, get_submissions, "
-    "and get_gradebook_snapshot serve only from the local mirror and refuse "
-    "when it is stale; call refresh_mirror for that course, then retry once. "
+    "their computer. Call list_courses first for a course_id. Student data "
+    "comes through a local vault: stable one-word stand-in names (e.g. "
+    "\"Pikachu\") take the place of real students, and real names and Canvas/SIS "
+    "ids stay on the machine, so the stand-in is the only handle you have. "
+    "get_roster, get_seating_context, get_submissions, and "
+    "get_gradebook_snapshot serve only from the local mirror and refuse when "
+    "it is stale; call refresh_mirror for that course, then retry once. "
     "Results are compact JSON, with list data as {columns, rows} tables. "
-    "Prefer narrow calls: include_text=false or specific pseudonyms first. "
-    "To help the teacher create other content, call get_authoring_contract for the kind "
-    "and follow the staging steps in its response. Before answering what "
-    "CanvasExpert itself can do, or planning writing work, call "
-    "get_product_guide: it carries the app's surfaces and the tracked / "
-    "not-tracked Writing Timeline choice every writing assignment makes. Check "
-    "it before telling a teacher a feature does not exist. get_writing_history "
-    "reads a separate, private per-student writing record that some teachers "
-    "keep for daily or weekly short-writing practice -- pseudonym-first, no "
-    "course_id, for coaching a writer's development over time rather than "
-    "grading one assignment; call get_product_guide(topic=\"writing_record\") "
-    "before assuming it does not exist. For AI-assisted scoring in PowerGrader: "
-    "call list_scoring_sessions to list available sessions, get_scoring_packet "
-    "to retrieve the SAFE pseudonymized bundle, score it with your chosen LLM, "
-    "then stage_scores to land the results in the queue for teacher review. "
-    "Staged scores never reach Canvas on their own. For a New Quiz they can be "
-    "landed through a separate bounded write pair: preview_new_quiz_scores freezes "
-    "the staged item scores and returns aggregate counts only, and "
-    "apply_new_quiz_scores lands exactly that frozen review. Summarize the preview "
-    "and normally wait for the teacher. One teacher command may preauthorize that "
-    "exact preview/apply cycle only when it names the course and the assignment; "
-    "never reuse that authorization for another assignment, course, or session."
-    " SIS grade bridges are a separate bounded write path: call "
-    "preview_sis_grade_bridge, summarize its aggregate review, and normally wait "
-    "before apply_sis_grade_bridge. One teacher command may preauthorize that exact "
-    "preview/apply cycle only when it names the course and family (or explicitly names "
-    "all already-registered bridges); any invariant failure still stops. Never reuse "
-    "that authorization for another family or any unbounded Canvas write. An ambiguous "
-    "bridge passback may be confirmed only from the teacher's exact Canvas Grade Sync "
-    "row and a Last Sync timestamp at or after the persisted request marker; call "
-    "confirm_sis_grade_bridge_passback with that explicit evidence. Never infer the row "
-    "or timestamp, and never resend passback during confirmation."
+    "Prefer narrow calls: include_text=false or specific stand-ins first. "
+    "To help the teacher create other content, call get_authoring_contract "
+    "for the kind and follow the staging steps in its response. "
+    "For AI-assisted scoring: call list_scoring_sessions, get_scoring_packet "
+    "for the pseudonymized bundle, score it with your chosen LLM, then "
+    "stage_scores. The PowerGrader queue is where scored work belongs by "
+    "default; the teacher reviews it there, and staged scores never reach "
+    "Canvas on their own. Staging is also the way in to the New Quiz write "
+    "below, so nothing skips it. "
+    "If the teacher would rather land a New Quiz from the chat, "
+    "preview_new_quiz_scores freezes the staged item scores and returns "
+    "aggregate counts only, and apply_new_quiz_scores lands exactly that "
+    "frozen review. SIS grade bridges are a separate bounded path on their "
+    "own data: preview_sis_grade_bridge returns an aggregate review and "
+    "apply_sis_grade_bridge lands it. For either pair, summarize the preview "
+    "and wait for the teacher. One teacher command may preauthorize that "
+    "exact preview/apply cycle when it names the target: the course and "
+    "assignment for a New Quiz, the course and family for a bridge (or "
+    "explicitly all already-registered bridges). That authorization covers "
+    "that one cycle, not another assignment, course, family, or session, and "
+    "any invariant failure still stops. "
+    "Before answering what CanvasExpert itself can do, or planning writing "
+    "work, call get_product_guide: it carries the app's surfaces and the "
+    "tracked / not-tracked Writing Timeline choice every writing assignment "
+    "makes. Check it before telling a teacher a feature does not exist. "
+    "get_writing_history reads a separate, private per-student writing record "
+    "that some teachers keep for daily or weekly short-writing practice: "
+    "stand-in first, no course_id, for coaching a writer's development over "
+    "time rather than grading one assignment; call "
+    "get_product_guide(topic=\"writing_record\") before assuming it does not "
+    "exist."
 )
 
-mcp = FastMCP("canvas-expert", instructions=_FERPA_NOTICE)
+mcp = FastMCP("canvas-expert", instructions=_SERVER_INSTRUCTIONS)
 
 
 def run_stdio() -> None:
@@ -115,7 +114,12 @@ def apply_sis_grade_bridge(
 def confirm_sis_grade_bridge_passback(
     operation_id: str, observed_last_sync_at: str,
 ) -> str:
-    """Confirm one ambiguous passback from an exact teacher-observed Last Sync."""
+    """Confirm one ambiguous SIS passback from exact teacher-observed evidence.
+
+    Only the teacher's own Canvas Grade Sync row counts: pass the Last Sync
+    timestamp they read there, and only when it is at or after the persisted
+    request marker. Do not infer the row or the timestamp, and do not resend
+    passback while confirming."""
     return _compact(tools.confirm_sis_grade_bridge_passback(
         operation_id, observed_last_sync_at
     ))
@@ -180,45 +184,6 @@ def delete_learning_objective(course_id: str, entry_id: str,
                               expected_revision: int) -> str:
     """Delete one reviewed objective using an expected document revision."""
     return _compact(tools.delete_learning_objective(course_id, entry_id, expected_revision))
-
-
-@mcp.tool()
-def get_theme_contract() -> str:
-    """Panel theme format: the colours and names you set, what is derived, the rules."""
-    return _compact(tools.get_theme_contract())
-
-
-@mcp.tool()
-def list_panel_themes() -> str:
-    """Built-in Panel themes plus the teacher's own, as a {columns, rows} table."""
-    return _compact(tools.list_panel_themes())
-
-
-@mcp.tool()
-def list_theme_art() -> str:
-    """The art files in the theme art folder, their kind, dimensions or viewBox,
-    and any diagnostic. Reference filenames that exist; do not invent one."""
-    return _compact(tools.list_theme_art())
-
-
-@mcp.tool()
-def preview_panel_theme(key: str, label: str, colors: dict,
-                        font: str = "sans", ornament: str = "grid",
-                        art: list = None) -> str:
-    """Preview a Panel theme with its measured contrast and any correction made."""
-    return _compact(tools.preview_panel_theme(key, label, colors, font, ornament, art))
-
-
-@mcp.tool()
-def apply_panel_theme(preview: dict, preview_digest: str) -> str:
-    """Save an exact previewed theme into the teacher's synced Library."""
-    return _compact(tools.apply_panel_theme(preview, preview_digest))
-
-
-@mcp.tool()
-def delete_panel_theme(key: str) -> str:
-    """Delete one of the teacher's own Panel themes. Built-ins are not reachable."""
-    return _compact(tools.delete_panel_theme(key))
 
 
 @mcp.tool()
@@ -598,3 +563,41 @@ def apply_new_quiz_scores(operation_id: str, review_digest: str) -> str:
     pseudonym; a concluded or restricted enrollment can refuse one student
     while the rest of the batch continues. Never raises."""
     return _compact(tools.apply_new_quiz_scores(operation_id, review_digest))
+
+
+def _strip_generated_schema_titles(mcp_server) -> int:
+    """Drop pydantic's generated ``title`` from every tool's input schema.
+
+    FastMCP derives each schema from the function signature, and pydantic
+    labels every property with a title made from that property's own name, so
+    ``course_id`` ships as ``{"title": "Course Id", "type": "string"}``. The
+    key already said that. It is nobody's authored text and it is 17% of the
+    tool listing, which every client re-sends on every turn, so it is the
+    cheapest weight on this surface to lose.
+
+    The generated output schema carries the same noise (every tool declares
+    ``{"result": {"title": "Result", "type": "string"}}``), so it is stripped
+    the same way. The schema itself stays: a client that validates structured
+    content against it keeps working.
+
+    Names, types, defaults, and required lists are untouched, and the frozen
+    ``tool_schema_vN.json`` snapshots record only property types, so no
+    contract version moves. Runs once at import, after every tool is
+    registered.
+    """
+    removed = 0
+    registry = getattr(getattr(mcp_server, "_tool_manager", None), "_tools", {}) or {}
+    for tool in registry.values():
+        for attribute in ("parameters", "output_schema"):
+            schema = getattr(tool, attribute, None)
+            if not isinstance(schema, dict):
+                continue
+            if schema.pop("title", None) is not None:
+                removed += 1
+            for prop in (schema.get("properties") or {}).values():
+                if isinstance(prop, dict) and prop.pop("title", None) is not None:
+                    removed += 1
+    return removed
+
+
+_STRIPPED_SCHEMA_TITLES = _strip_generated_schema_titles(mcp)

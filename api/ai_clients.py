@@ -46,8 +46,12 @@ __all__ = [
 
 SERVER_NAME = "canvas-expert"
 _MARKER_COMMENT = (
-    "# Canvas Expert (read-only). Managed by the Canvas Expert CanvasAgent page."
+    "# Canvas Expert. Managed by the Canvas Expert CanvasAgent page."
 )
+# Earlier releases wrote a different marker (and called the page something
+# else), so disconnect has to recognize those too or it leaves one orphaned
+# comment behind per rename. Narrow enough not to eat a teacher's own comment.
+_MARKER_SIGNATURE = "Managed by the Canvas Expert"
 _MAX_BACKUPS = 5
 
 
@@ -284,6 +288,30 @@ def _is_our_table(dotted: str) -> bool:
     return len(parts) >= 2 and parts[0] == "mcp_servers" and parts[1] == SERVER_NAME
 
 
+def _is_marker_comment(line: str) -> bool:
+    stripped = line.strip()
+    return stripped.startswith("#") and _MARKER_SIGNATURE in stripped
+
+
+def _drop_our_preamble(out: list[str]) -> None:
+    """Drop the marker comments we wrote above our table, including ones from
+    an earlier release, plus any blank lines wedged between them. A blank line
+    is only removed when another of our markers sits above it, so the blank
+    separating our block from the teacher's own content survives."""
+    while out:
+        if _is_marker_comment(out[-1]):
+            out.pop()
+            continue
+        if not out[-1].strip():
+            above = len(out) - 2
+            while above >= 0 and not out[above].strip():
+                above -= 1
+            if above >= 0 and _is_marker_comment(out[above]):
+                out.pop()
+                continue
+        break
+
+
 def _strip_our_block(text: str) -> tuple[str, bool]:
     lines = text.splitlines()
     out: list[str] = []
@@ -293,8 +321,7 @@ def _strip_our_block(text: str) -> tuple[str, bool]:
     while index < total:
         header = _table_header(lines[index])
         if header is not None and _is_our_table(header):
-            if out and out[-1].strip() == _MARKER_COMMENT:
-                out.pop()
+            _drop_our_preamble(out)
             index += 1
             while index < total:
                 inner = _table_header(lines[index])

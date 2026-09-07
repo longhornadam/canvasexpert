@@ -49,7 +49,6 @@ That rules out a whole category of page that is easy to write by reflex:
 - **Reference copy is terse and factual.** Limits, addresses, and steps are a short list.
   Nothing is repeated for reassurance.
 
-Glass is the current full-screen classroom display surface and follows this convention.
 
 ## Page conventions
 

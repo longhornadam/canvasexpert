@@ -12,7 +12,6 @@ the relevant file under `tools/manifests/` for invocation details.
 | `test-failure-summarizer` | planned | Test/CI output is too large or noisy to inspect directly. |
 | `change-risk-summarizer` | planned | A large authorized diff needs compact risk and test routing. |
 | `size-report` | available | File sizes are needed without reading source contents. |
-| `design-theme-studio` | available | Panel themes need designing or comparing visually in Claude Design, or a card edited there needs importing back. Skip when authoring a theme conversationally: the MCP theme tools are shorter. |
 | `canvas-docs-scraper` | planned | Current official Canvas endpoint behavior must be verified. |
 | `canvas-api-inspector` | planned | Authorized live/fixture Canvas data needs normalized object relationships. Never expose secrets or student data. |
 

@@ -5,10 +5,11 @@ lets any MCP-capable assistant help plan lessons and manage rosters conversation
 while CanvasExpert keeps sole custody of the Canvas PAT and almost every write path.
 
 - **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
-  local copy on their computer. It never holds the Canvas token. Writes nothing beyond
-  the identity vault it already shares with the rest of CanvasExpert, except one
-  explicit, digest-protected roster tool (`canvas_group`) that reassigns a student's
-  real Canvas group membership when the teacher tells the assistant to do it.
+  local copy on their computer. It never holds the Canvas token. Three digest-protected
+  apply tools reach Canvas, each gated by its own preview: `apply_roster_student_change`
+  (only when the reviewed preview carries a `canvas_group` patch, which reassigns real
+  Canvas group membership), `apply_new_quiz_scores`, and `apply_sis_grade_bridge`.
+  Everything else writes only to local CanvasExpert state.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   one-word pseudonym (e.g. "Pikachu") — never a real name, Canvas user ID, or SIS ID. See
@@ -16,8 +17,9 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 - **Fail-closed.** Every student-data result also passes the existing outbound safety scan
   (`api/feedback_safety.py::scan_payload`) as a final check. If it isn't green, the tool
   withholds the payload and returns only a sanitized violation description.
-- **Session-local.** Nothing here logs tool arguments or results. Don't write results to a
-  file, and don't attempt to re-identify a student from a pseudonym.
+- **Session-local.** Nothing here logs tool arguments or results. The pseudonym is the
+  only student handle that crosses the wire, so it is also the only one an assistant has
+  to work with.
 - **stdio transport only.** No network port is ever bound.
 - **Mirror-bounded, never a live relay.** `get_roster`, `get_submissions`, and
   `get_gradebook_snapshot` serve exclusively from the local CanvasMirror
@@ -32,7 +34,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 35 (56 tools).
+Tool schema version 36 (50 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -86,12 +88,6 @@ Tool schema version 35 (56 tools).
 | `stage_scores(session_id, results, expected_packet_digest)` | Stage AI-generated scores back into a PowerGrader session for teacher review; returns updated count, unresolved count, and validation verdict; never posts to Canvas | Yes, pseudonymized |
 | `preview_new_quiz_scores(session_id)` | Freezes a New Quiz item-finalization review for every student in the session carrying a staged item score; returns opaque `operation_id`/`review_digest` plus aggregate counts and warnings; no Canvas write | Yes, pseudonymized |
 | `apply_new_quiz_scores(operation_id, review_digest)` | Applies only the exact frozen New Quiz item-score review through the existing finalization lane, looping per student with per-student outcomes; idempotent | Yes, pseudonymized |
-| `get_theme_contract()` | The Panel theme format: the three or four colours and two names you set, the sixteen variables derived for you, and the closed font/ornament sets | No |
-| `list_panel_themes()` | Built-in Panel themes plus the teacher's own as `(key, label, origin, authored_at)`, with any theme file that could not be read | No |
-| `list_theme_art()` | Art files present in `Library/Panels/Themes/art/`, with each one's kind, dimensions or viewBox, and any diagnostic; call it so a theme references a filename that exists instead of an invented one | No |
-| `preview_panel_theme(key, label, colors, font="sans", ornament="grid", art=None)` | Digest-protected preview of a theme: the derived palette, every measured contrast pairing, and any colour corrected to clear 4.5:1; `art` places named files from the art folder | No |
-| `apply_panel_theme(preview, preview_digest)` | Writes exactly the previewed theme to `Library/Panels/Themes/<key>.json`; refuses a stale or altered preview | No |
-| `delete_panel_theme(key)` | Deletes one of the teacher's own themes; built-in keys are refused | No |
 
 `get_course_assignments` and `get_modules` only read the local course catalog written by
 the CanvasExpert web UI — neither ever falls back to a live Canvas call. If the catalog
@@ -124,27 +120,6 @@ needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`
 `api/default_docs/AI Authoring/` file the web UI's `/api/download-contract` route serves,
 then receive the Forge-only staging appendix. The schedule writer is the only direct local
 write in this group and has no staging/review appendix.
-
-The six Panel theme tools take no `course_id` and carry no student data, so they need
-no course gate, no identity vault, and no safety scan. They are the one write surface here
-that hands an assistant a file-writing path with no teacher review queue in front of it,
-which is deliberate and rests on the format doing the safety work rather than the
-assistant: colours are parsed to integers and re-serialized (a colour cannot be a CSS
-fragment), fonts and ornaments come from closed sets (a theme cannot reach the network),
-the generated CSS can only ever produce `html[data-panel-theme="<key>"]` (a theme cannot
-change layout or what a Panel shows), and every text-on-background pairing is measured and
-corrected to at least 4.5:1 (an assistant cannot produce an illegible projector). A
-built-in key is refused rather than shadowed, at most 24 custom themes are kept, and a
-malformed file is skipped with a reason instead of taking a saved board down.
-
-Theme art keeps the same shape. An `art` entry names a file the teacher already put in
-`Library/Panels/Themes/art/`; the assistant cannot supply an image, a path, or a URL, only
-a filename that is already there, which is why `list_theme_art` exists and why inventing a
-name is the one thing to avoid. Placement, recolour, size, and opacity are closed sets and
-bounded numbers, so art can decorate a board but cannot resize its type or fetch anything.
-
-Call `get_theme_contract` first; `preview_panel_theme` reports what it corrected, which is
-worth telling the teacher. The theme format remains independent of the retired display route.
 
 `save_teacher_schedule` has no `course_id` parameter and makes no
 Canvas call; a teacher-set block `course_id` passes through untouched after string
@@ -284,9 +259,9 @@ the Learning Objective preview/apply pair require a Current course. `get_seating
 needs its `section_id` or `section_name` to resolve to exactly one mirror section: an id
 matches directly, a name matches exactly or, failing that, on a trim/case-fold retry, and
 it withholds all student data rather than guess when a name matches none or several
-sections (the latter names the candidate ids to retry with). Pseudonymized
-artifacts are scrubbed, not anonymous or guaranteed FERPA-safe; teachers review them before
-any external upload.
+sections (the latter names the candidate ids to retry with). Pseudonymized artifacts are
+scrubbed, not anonymous: the pseudonym is stable, and student text still comes through as
+the student wrote it.
 
 ### Token-lean results
 

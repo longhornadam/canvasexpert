@@ -40,9 +40,10 @@ WORKSPACE_NAME = "CanvasExpert"
 # absent here -- do not create it until that feature ships.
 LIBRARY_NAME = "Library"
 AI_AUTHORING_SUBFOLDER = "AI Authoring"
+LEARNING_OBJECTIVES_SUBFOLDER = "Learning Objectives"
 LIBRARY_SUBFOLDERS = [
     AI_AUTHORING_SUBFOLDER, "Rubrics", "Quizzes", "Assignments", "Pages",
-    "Calendars", "Source Materials", "Panels",
+    "Calendars", "Source Materials", LEARNING_OBJECTIVES_SUBFOLDER,
 ]
 
 # Assistant-staged drafts waiting for the teacher to push to Canvas.
@@ -444,19 +445,8 @@ def course_catalog_v3_previous_path(course_id, root=None):
 
 def learning_objectives_path(root=None):
     """The sole canonical reviewed Learning Objectives document."""
-    directory = library_folder("Panels", root)
+    directory = library_folder(LEARNING_OBJECTIVES_SUBFOLDER, root)
     return os.path.join(directory, "Learning Objectives.json") if directory else None
-
-
-def panel_themes_dir(root=None):
-    """Where the teacher's own Panel themes live, one JSON file each.
-
-    Synced rather than machine-local: a theme is something a teacher keeps,
-    shares with a colleague, and expects to still have on the other machine.
-    No student data ever goes here.
-    """
-    directory = library_folder("Panels", root)
-    return os.path.join(directory, "Themes") if directory else None
 
 
 def canvas_mirror_root(root=None):
@@ -742,9 +732,6 @@ def ensure_workspace():
         target_dir = os.path.join(root, LIBRARY_NAME, subfolder)
         os.makedirs(target_dir, exist_ok=True)
         _seed_folder_if_missing(os.path.join(DEFAULT_DOCS_DIR, subfolder), target_dir)
-    # The teacher's own Panel themes, one JSON file each.
-    os.makedirs(os.path.join(root, LIBRARY_NAME, "Panels", "Themes"), exist_ok=True)
-
     os.makedirs(os.path.join(root, TO_REVIEW_NAME), exist_ok=True)
     for subfolder in TO_REVIEW_SUBFOLDERS:
         os.makedirs(os.path.join(root, TO_REVIEW_NAME, subfolder), exist_ok=True)
@@ -770,41 +757,44 @@ def ensure_workspace():
     return root
 
 
-def migrate_legacy_glass_folders(root=None):
-    """One-time cleanup: move any pre-existing Library/Glass and To Review/Glass
-    folders (left over from before the Glass feature was removed) to
-    _System/Archive/Legacy/. No-ops when both are absent. Move only,
-    never unlink. Idempotent: once
-    moved, the source is gone, so this becomes a permanent no-op; the
-    destination-exists check also guards against clobbering on a re-run before
-    the source is fully gone (e.g. a partial prior move)."""
+def migrate_legacy_panels_folder(root=None):
+    """One-time cleanup of the old Library/Panels folder.
+
+    Library/Panels was named for the classroom display, which is gone. It also
+    held the canonical Learning Objectives document, which is not, so that
+    document moves to Library/Learning Objectives and the rest of the folder
+    is deleted. Nothing else in there outlived the display.
+
+    The one thing this will not delete is an objectives document it could not
+    move. If a document already exists at the destination (two machines
+    syncing, or a half-finished earlier run) the old folder is left alone
+    rather than taking an authored document down with it. Idempotent: once the
+    folder is gone this is a permanent no-op.
+    """
     base = _root_or_workspace(root)
     if not base:
         return
-    legacy_sources = [
-        (os.path.join(base, LIBRARY_NAME, "Glass"), "Library-Glass"),
-        (os.path.join(base, TO_REVIEW_NAME, "Glass"), "ToReview-Glass"),
-    ]
-    present = [(src, name) for src, name in legacy_sources if os.path.isdir(src)]
-    if not present:
+    legacy_dir = os.path.join(base, LIBRARY_NAME, "Panels")
+    if not os.path.isdir(legacy_dir):
         return
-    dest_root = system_folder("Archive", base)
-    if dest_root:
-        dest_root = os.path.join(dest_root, "Legacy")
-    if not dest_root:
-        return
+
+    document = "Learning Objectives.json"
+    source = os.path.join(legacy_dir, document)
+    target_dir = os.path.join(base, LIBRARY_NAME, LEARNING_OBJECTIVES_SUBFOLDER)
+    target = os.path.join(target_dir, document)
+    if os.path.isfile(source):
+        if os.path.exists(target):
+            return
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+            shutil.move(source, target)
+        except OSError:
+            return
+
     try:
-        os.makedirs(dest_root, exist_ok=True)
+        shutil.rmtree(legacy_dir)
     except OSError:
         return
-    for src, name in present:
-        dest = os.path.join(dest_root, name)
-        if os.path.exists(dest):
-            continue
-        try:
-            shutil.move(src, dest)
-        except OSError:
-            continue
 
 
 def path_within_workspace(path: str, root=None) -> bool:

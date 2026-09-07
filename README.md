@@ -37,11 +37,8 @@ grouping live next door.
 **Assessments** imports Eduphoria exports, matches them to your roster, and turns them into a standards
 profile, coverage reports, longitudinal history, and grouping suggestions.
 
-**Glass** puts the current classroom information on the board: schedule state, learning objective,
-what's due, missing work, celebrations, and a browser-side Random Name button.
-
 **Calendar** holds your school year, bell schedules, no-school days, public events, and your own teaching
-schedule in one place. Glass and the late-work sweep both read from it.
+schedule in one place. The late-work sweep and your routines both read from it.
 
 **Routines** run the recurring chores so you stop remembering them.
 

@@ -105,9 +105,22 @@ def test_mcp_preview_output_never_projects_private_student_rows(
 
 
 def test_server_instructions_lock_one_command_preauthorization():
-    instructions = server._FERPA_NOTICE
+    instructions = server._SERVER_INSTRUCTIONS
 
     assert "One teacher command may preauthorize that exact preview/apply cycle" in instructions
-    assert "Never reuse that authorization" in instructions
-    assert "confirm_sis_grade_bridge_passback" in instructions
-    assert "never resend passback during confirmation" in instructions
+    assert "not another assignment, course, family, or session" in instructions
+
+
+def test_passback_evidence_rule_rides_with_its_own_tool():
+    """The evidence rule lives on the tool, not in the always-loaded block: it
+    only matters once a passback is actually ambiguous, and the block is paid
+    for on every request."""
+    tool = server.mcp._tool_manager._tools["confirm_sis_grade_bridge_passback"]
+    # The docstring is hard-wrapped, so compare on collapsed whitespace.
+    description = " ".join((tool.description or "").split())
+
+    assert "Canvas Grade Sync row" in description
+    assert "at or after the persisted" in description
+    assert "Do not infer" in description
+    assert "do not resend passback while confirming" in description
+    assert "Grade Sync row" not in server._SERVER_INSTRUCTIONS

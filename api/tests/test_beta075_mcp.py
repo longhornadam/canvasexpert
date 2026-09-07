@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 35
+    assert contract.TOOL_SCHEMA_VERSION == 36
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -99,9 +99,9 @@ def test_live_mcp_schema_matches_versioned_contract():
     assert len(contract.load_contract(32)["tools"]) == 52
     assert len(contract.load_contract(33)["tools"]) == 53
     assert len(contract.load_contract(34)["tools"]) == 54
-    assert len(live["tools"]) == 56
-    # Panel theme tools: get_theme_contract, list_panel_themes,
-    # preview/apply/delete_panel_theme
+    assert len(contract.load_contract(35)["tools"]) == 56
+    # v36 removes the six Panel theme tools with the classroom display.
+    assert len(live["tools"]) == 50
     v22 = contract.load_contract(22)
     assert v22["schema_version"] == 22
     assert len(v22["tools"]) == 39
