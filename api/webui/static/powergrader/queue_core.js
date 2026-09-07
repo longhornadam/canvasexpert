@@ -129,6 +129,33 @@
   }
   queue.reloadSession = reloadSession;
 
+  function hasAiSuggestion(st) {
+    return !!st && st.ai_score !== null && st.ai_score !== undefined;
+  }
+
+  /* An assistant may score a handful of students out of a class of thirty.
+     Navigation is Previous/Next only, so without these the teacher has no way
+     to tell a staged score exists, let alone reach it. */
+  function nextAiSuggestionIndex(after) {
+    var start = typeof after === 'number' ? after : -1;
+    for (var i = start + 1; i < students.length; i++) {
+      if (hasAiSuggestion(students[i])) return i;
+    }
+    for (var j = 0; j <= start && j < students.length; j++) {
+      if (hasAiSuggestion(students[j])) return j;
+    }
+    return -1;
+  }
+
+  function aiSuggestionNote() {
+    var total = students.filter(hasAiSuggestion).length;
+    if (!total) return '';
+    return ' · ' + total + ' with AI suggestion';
+  }
+
+  queue.nextAiSuggestionIndex = nextAiSuggestionIndex;
+  queue.hasAiSuggestion = hasAiSuggestion;
+
   function renderStudent(i) {
     if (queue.stopMediaRecording) queue.stopMediaRecording();
     if (!students.length) { subPane.innerHTML = '<p class="pg-no-text">No students in session.</p>'; return; }
@@ -137,7 +164,7 @@
     var st = students[idx];
 
     updateProgress();
-    navCounter.textContent = (idx + 1) + ' / ' + students.length;
+    navCounter.textContent = (idx + 1) + ' / ' + students.length + aiSuggestionNote();
     prevBtn.disabled = idx === 0;
     nextBtn.disabled = idx === students.length - 1;
 

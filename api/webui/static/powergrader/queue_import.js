@@ -184,9 +184,17 @@
   function loadStagedScores() {
     if (!queue.reloadSession) return;
     if (loadStagedBtn) loadStagedBtn.disabled = true;
+    // Land on the staged work. This used to hold the current index, so a score
+    // staged on student 17 of 26 left the teacher on student 1 with nothing
+    // saying where it was, and Previous/Next as the only way to look.
     queue.reloadSession({
       indexOverride: getCurrentIndex(),
-      onSuccess: function(){ if (stagedStatus) stagedStatus.hidden = true; },
+      onSuccess: function(){
+        if (stagedStatus) stagedStatus.hidden = true;
+        if (!queue.nextAiSuggestionIndex || !queue.renderStudent) return;
+        var target = queue.nextAiSuggestionIndex(-1);
+        if (target >= 0) queue.renderStudent(target);
+      },
     }).finally(function(){ if (loadStagedBtn) loadStagedBtn.disabled = false; });
   }
 
