@@ -107,8 +107,8 @@ def test_mcp_preview_output_never_projects_private_student_rows(
 def test_server_instructions_lock_one_command_preauthorization():
     instructions = server._SERVER_INSTRUCTIONS
 
-    assert "One teacher command may preauthorize that exact preview/apply cycle" in instructions
-    assert "not another assignment, course, family, or session" in instructions
+    assert "Asking for the write is the authorization" in instructions
+    assert "does not carry to another assignment, course, family, or session" in instructions
 
 
 def test_passback_evidence_rule_rides_with_its_own_tool():

@@ -109,6 +109,9 @@ RETIRED_FILES = {
         # gets one; "never write to Canvas on your own" only softened the
         # denial instead of correcting it.
         "cfbcb2e652948cb18ba2ebd1d22e6ffbba79757a9c50a3d4e0f44bd14286e962",
+        # Before the direct write stopped being gated behind a second ask.
+        # The teacher asking for the write is the authorization.
+        "1da24d0600b3c50fd7ef78dadc22327dfdd4c38a2cca2d2adde2d2a36000d36a",
     }),
     # Named the removed classroom display alongside Calendar.
     "Author a Class Schedule.txt": frozenset({

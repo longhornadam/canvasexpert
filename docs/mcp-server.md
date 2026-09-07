@@ -97,12 +97,13 @@ the catalog holds, labeled with `source`, `synced_at`, and `state`, since module
 is far lower-risk than student data.
 
 The SIS grade-bridge pair is a bounded, family-specific Canvas write surface.
-Normally an assistant previews, summarizes the aggregate counts and warnings,
-and waits for the teacher before applying the returned opaque coordinates. One
-teacher command may preauthorize the complete preview/apply cycle only when it
-names that exact course and family, or explicitly requests all already-registered
-bridges. Any invariant failure still stops, and that authorization never extends
-to another family or to an unbounded Canvas write.
+A teacher who asks for the write has authorized it: the assistant runs the
+preview/apply cycle and reports what landed, rather than asking a second time
+for what was just requested. The authorization covers the course and family
+they named, or all already-registered bridges when they say so explicitly, and
+does not extend to another family or to an unbounded Canvas write. An assistant
+choosing the target itself should summarize the preview first. Any invariant
+failure still stops the write.
 
 An ambiguous bridge passback may be confirmed only when the teacher explicitly
 identifies the exact Canvas Grade Sync row and reports its `Last Sync` timestamp.
@@ -236,11 +237,11 @@ lane and reports one outcome per student (by pseudonym); a concluded or otherwis
 enrollment can refuse one student without stopping the rest of the batch, and replaying the
 same `operation_id`/`review_digest` never re-applies a student who already finalized. A
 review token past its 15-minute window refuses cleanly and names `preview_new_quiz_scores`
-as the next step, rather than crashing or silently skipping that student. Normally an
-assistant previews, summarizes the aggregate counts and warnings, and waits for the teacher
-before applying. One teacher command may preauthorize the whole preview/apply cycle only
-when it names that exact course and that exact assignment; it never generalizes to another
-assignment, another course, or a later session, and any invariant failure still stops.
+as the next step, rather than crashing or silently skipping that student. A teacher who asks
+for the write has authorized it: the assistant runs the preview/apply cycle and reports what
+landed. The authorization covers the course and assignment they named and never generalizes
+to another assignment, another course, or a later session. An assistant choosing the target
+itself should summarize the preview first, and any invariant failure still stops.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
 CanvasMirror. `get_seating_context` uses the current mirror for identity and section

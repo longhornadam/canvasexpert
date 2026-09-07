@@ -66,12 +66,12 @@ comments, rubric rows, attempts, timestamps, and New Quiz item scores are not co
 | `apply_sis_grade_bridge(operation_id, batch_id, review_digest)` | Apply only the exact frozen preview after a live drift check. |
 | `confirm_sis_grade_bridge_passback(operation_id, observed_last_sync_at)` | Confirm one otherwise-ambiguous passback from exact teacher-observed Canvas Grade Sync evidence, with no passback resend. |
 
-Normally the assistant previews, summarizes source count, aggregate grade-state buckets, warnings,
-and invariants, then waits for approval before apply. One teacher command may preauthorize preview
-and apply only when it names the exact course and family, or explicitly requests all already
-registered bridges. That authorization does not cover a different family, an unbounded write, or
-an invariant failure. Confirmation still requires the teacher's exact evidence; it is never
-inferred from the original authorization.
+A teacher who asks for the passback has authorized it: the assistant runs preview and apply and
+then reports the source count, aggregate grade-state buckets, warnings, and invariants it saw.
+The authorization covers the course and family they named, or all already registered bridges when
+they say so explicitly, and does not cover a different family, an unbounded write, or an invariant
+failure. An assistant choosing the family itself should summarize the preview first. Confirmation
+still requires the teacher's exact evidence; it is never inferred from the original request.
 
 Each family is an independent operation. A failure or Attention state in one family neither rolls
 back another family nor authorizes work around the blocked step.

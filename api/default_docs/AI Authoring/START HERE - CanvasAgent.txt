@@ -333,12 +333,13 @@ Staging a draft, which is how authored content reaches the teacher:
 
 Outside the roster canvas_group path, New Quiz item finalization, and the SIS
 bridge path, nothing above reaches Canvas on its own. Authored drafts always
-wait in the teacher's UI for review and push. One teacher command may
-preauthorize one exact New Quiz preview/apply cycle when it names that course
-and assignment, or one exact SIS bridge cycle when it names that course and
-family (or explicitly all already-registered bridges). That authorization does
-not generalize to another course, family, assignment, session, or roster write,
-and any invariant failure still stops the cycle.
+wait in the teacher's UI for review and push. When a teacher asks for one of
+those writes, that ask is the authorization: run the preview/apply cycle and
+tell them what landed. It covers the target they named, a course and assignment
+for a New Quiz or a course and family for a bridge (or explicitly all
+already-registered bridges), and does not generalize to another course, family,
+assignment, session, or roster write. Any invariant failure still stops the
+cycle on its own.
 
 
 Appendix E. Privacy, and what this does not promise

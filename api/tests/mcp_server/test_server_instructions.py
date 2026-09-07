@@ -49,15 +49,18 @@ def test_chat_side_canvas_landing_is_still_offered():
 
     assert "preview_new_quiz_scores" in instructions
     assert "apply_new_quiz_scores" in instructions
-    assert "land a New Quiz from the chat" in instructions
+    assert "wants a New Quiz landed from the chat, do it" in instructions
+    # The teacher's ask is the authorization, not a request for permission.
+    assert "asking again" in instructions
 
 
 def test_write_rules_precede_the_discovery_hints():
     """If a client truncates the tail, lose the product-guide nudge, not the
-    rule that says to wait for the teacher before applying."""
+    rule that bounds how far one teacher request reaches."""
     instructions = server._SERVER_INSTRUCTIONS
 
-    assert instructions.index("wait for the teacher") < instructions.index("get_product_guide")
+    assert (instructions.index("does not carry to another assignment")
+            < instructions.index("get_product_guide"))
 
 
 def test_no_generated_schema_titles_reach_the_client():
