@@ -24,12 +24,12 @@ from . import tools
 
 _SERVER_INSTRUCTIONS = (
     "CanvasExpert reads this teacher's own Canvas courses, assignments, "
-    "rosters, grades, submissions, and seating context from a local copy on "
+    "rosters, grades, and submissions from a local copy on "
     "their computer. Call list_courses first for a course_id. Student data "
     "comes through a local vault: stable one-word stand-in names (e.g. "
     "\"Pikachu\") take the place of real students, and real names and Canvas/SIS "
     "ids stay on the machine, so the stand-in is the only handle you have. "
-    "get_roster, get_seating_context, get_submissions, and "
+    "get_roster, get_submissions, and "
     "get_gradebook_snapshot serve only from the local mirror and refuse when "
     "it is stale; call refresh_mirror for that course, then retry once. "
     "Results are compact JSON: many lists use {columns, rows} tables, while "
@@ -130,8 +130,7 @@ def confirm_sis_grade_bridge_passback(
 
 @mcp.tool(structured_output=False)
 def list_sections(course_id: str) -> str:
-    """List a saved course's section names from the local mirror.
-    Call before get_seating_context to discover section values. No student data."""
+    """List a saved course's section names from the local mirror. No student data."""
     return _compact(tools.list_sections(course_id))
 
 

@@ -47,7 +47,7 @@ table rendering, and filtered/selected student access.
   validation, extra-time/monitored handling, and group reconciliation all still apply.
   Changes are pseudonym-first and digest-protected; a write refuses when settings moved
   since the read. The reads are a deliberately narrow projection, omitting stored
-  nicknames and seating private notes and scrubbing the AI-context note. Nicknames are
+  nicknames. Nicknames are
   unreachable through this path, blocked in the adapter as well as the tool layer,
   because `set_nicknames` would overwrite the teacher's scrub-coverage list.
 - Canvas group membership changes remain explicit live Canvas mutations owned by

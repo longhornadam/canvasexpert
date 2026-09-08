@@ -7,13 +7,6 @@ from collections.abc import Callable
 
 from api import feedback_vault, pseudonym_rename
 
-from api.roster_context import (
-    SEATING_CONTEXT_DEFAULT,
-    SEATING_CONTEXT_SUPPORTS,
-    normalize_seating_context,
-    validate_seating_context,
-)
-
 def update_student(
     course_id: str,
     user_id: str,
@@ -78,12 +71,6 @@ def update_student(
             return {"ok": False, "error": "pseudonym must be a non-empty string."}
     if "regenerate_pseudonym" in data and not isinstance(data["regenerate_pseudonym"], bool):
         return {"ok": False, "error": "regenerate_pseudonym must be a boolean."}
-
-    seating_context = None
-    if "seating_context" in data:
-        seating_context, err = validate_seating_context(data["seating_context"])
-        if err:
-            return {"ok": False, "error": err}
 
     classroom_profile = None
     if "classroom_profile" in data and data["classroom_profile"] is not None:
@@ -200,10 +187,6 @@ def update_student(
             return {"ok": False, "error": err}
         invalidate_groups(course_id, category_id)
 
-    if "seating_context" in data:
-        update_roster_student_settings(
-            course_id, user_id, {"seating_context": seating_context}
-        )
     if "classroom_profile" in data:
         update_roster_student_settings(
             course_id, user_id, {"classroom_profile": classroom_profile}

@@ -10,59 +10,12 @@ import math
 import re
 
 
-SEATING_CONTEXT_DEFAULT = {
-    "front_row": "none",
-    "near_teacher": "none",
-    "private_note": "",
-    "ai_context_note": "",
-}
-SEATING_CONTEXT_SUPPORTS = {"none", "preferred", "required"}
-
 SCORE_MATRIX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 SCORE_MATRIX_FIELDS = {"columns", "values_by_section"}
 SCORE_MATRIX_PATCH_FIELDS = {"columns", "section_id", "values"}
 
 RELATIONSHIP_TYPES = {"keep_apart", "preferred_pair"}
 RELATIONSHIP_FIELDS = {"student_a", "student_b", "type", "reason"}
-
-
-def normalize_seating_context(value: object) -> dict:
-    """Return the safe, complete Roster seating-context shape for stored data."""
-    context = dict(SEATING_CONTEXT_DEFAULT)
-    if not isinstance(value, dict):
-        return context
-    for key in ("front_row", "near_teacher"):
-        if value.get(key) in SEATING_CONTEXT_SUPPORTS:
-            context[key] = value[key]
-    for key in ("private_note", "ai_context_note"):
-        if isinstance(value.get(key), str):
-            context[key] = value[key]
-    return context
-
-
-def validate_seating_context(value: object) -> tuple[dict | None, str | None]:
-    """Validate one seating-context patch before storage."""
-    if not isinstance(value, dict):
-        return None, "seating_context must be an object."
-    expected = set(SEATING_CONTEXT_DEFAULT)
-    supplied = set(value)
-    if supplied != expected:
-        unknown = sorted(supplied - expected)
-        missing = sorted(expected - supplied)
-        details = []
-        if unknown:
-            details.append(f"unknown fields: {unknown}")
-        if missing:
-            details.append(f"missing fields: {missing}")
-        return None, "seating_context must contain exactly the supported fields (" + "; ".join(details) + ")."
-    for key in ("front_row", "near_teacher"):
-        if value[key] not in SEATING_CONTEXT_SUPPORTS:
-            return None, f"seating_context.{key} must be one of {sorted(SEATING_CONTEXT_SUPPORTS)}."
-    for key in ("private_note", "ai_context_note"):
-        if not isinstance(value[key], str):
-            return None, f"seating_context.{key} must be a string."
-    context = normalize_seating_context(value)
-    return (None if context == SEATING_CONTEXT_DEFAULT else context), None
 
 
 def _empty_score_matrix() -> dict:

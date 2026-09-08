@@ -20,7 +20,6 @@ from api import feedback_scrub
 from api import operational_log
 from api import roster_context
 from api import roster_service
-from api import seating_state
 from api.mirror import store as mirror_store
 from api.platform_services import config
 from api.platform_services.canvas_client import canvas_get_all, _canvas_send
@@ -45,7 +44,7 @@ router = APIRouter(prefix="/api/roster", tags=["roster"])
 # V3: Canvas group-backed keys only
 ALLOWED_STUDENT_PATCH_KEYS = {
     "nicknames", "pseudonym", "regenerate_pseudonym",
-    "extra_time", "monitored", "canvas_group", "seating_context",
+    "extra_time", "monitored", "canvas_group",
     "classroom_profile",
 }
 
@@ -245,7 +244,6 @@ def roster_get(course_id: str = Query("")):
     relationships = roster_context.normalize_relationships(
         config.get_roster_relationships(course_id)
     )
-    seating_doc = seating_state.normalize_state(config.get_seating_course_state(course_id))
 
     # Roster-change diff against the teacher's last acknowledged baseline.
     # Never written here -- see roster_context.diff_roster_baseline and the
@@ -322,9 +320,6 @@ def roster_get(course_id: str = Query("")):
         # Nicknames from vault
         nicknames = ve.get("nicknames", [])
         local_settings = raw_roster_settings.get(uid, {})
-        seating_context = roster_updates.normalize_seating_context(
-            local_settings.get("seating_context") if isinstance(local_settings, dict) else None
-        )
         profile_invalid = False
         try:
             classroom_profile = config.validate_classroom_profile(
@@ -348,7 +343,7 @@ def roster_get(course_id: str = Query("")):
             if change:
                 roster_change = {"changed_section": roster_changes.changed_section_detail(
                     change, score_matrix=score_matrix, relationships=relationships,
-                    seating_doc=seating_doc, section_names=section_map, name_by_id=name_by_id,
+                    section_names=section_map, name_by_id=name_by_id,
                 )}
 
         row = {
@@ -362,7 +357,6 @@ def roster_get(course_id: str = Query("")):
             "pseudonym": ve.get("pseudonym", ""),
             "extra_time": et,
             "monitored": {"enabled": monitored_flag, "note": monitored_note},
-            "seating_context": seating_context,
             "classroom_profile": classroom_profile,
             "canvas_groups": canvas_groups,
             "canvas_group": canvas_group,
@@ -419,7 +413,6 @@ def roster_get(course_id: str = Query("")):
             monitored=monitored,
             score_matrix=score_matrix,
             relationships=relationships,
-            seating_doc=seating_doc,
             section_names=section_map,
             name_by_id=name_by_id,
         )
@@ -461,7 +454,7 @@ def roster_student_update(
     """Update one student's roster settings (V3: Canvas groups are source of truth).
 
     Accepted patch fields: nicknames, pseudonym, regenerate_pseudonym,
-    extra_time, monitored, canvas_group, seating_context, classroom_profile.
+    extra_time, monitored, canvas_group, classroom_profile.
 
     Obsolete fields (rejected with clear error): tier_id, tier, planned_group.
     """
@@ -572,8 +565,6 @@ def roster_changes_migrate_section(course_id: str = Form(...), user_id: str = Fo
         set_roster_score_matrix=config.set_roster_score_matrix,
         get_roster_relationships=config.get_roster_relationships,
         set_roster_relationships=config.set_roster_relationships,
-        get_seating_course_state=config.get_seating_course_state,
-        set_seating_course_state=config.set_seating_course_state,
         get_roster_baseline=config.get_roster_baseline,
         set_roster_baseline=config.set_roster_baseline,
     )

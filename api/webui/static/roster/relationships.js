@@ -1,4 +1,4 @@
-/* Local-only, section-scoped seating relationship editor. */
+/* Local-only, section-scoped student pairing editor. */
 (function () {
   "use strict";
 

@@ -50,7 +50,7 @@ Make the calls the surface tells you to make first. Then note whether the surfac
 
 One cheap call per family, not an exhaustive crawl. Use the narrowest form on offer (`include_text=false`, a single stand-in name, one course) wherever a tool gives you the option.
 
-Families to touch, as far as your call budget allows: courses and sections, roster, gradebook, submissions, assignments, pages, modules, the schedule and calendar tools, learning objectives, standards, the writing record, scoring sessions, staged content, assessment context, seating, and whatever guide or contract tools exist.
+Families to touch, as far as your call budget allows: courses and sections, roster, gradebook, submissions, assignments, pages, modules, the schedule and calendar tools, learning objectives, standards, the writing record, scoring sessions, staged content, assessment context, and whatever guide or contract tools exist.
 
 For each family, record in one line: what you asked for, what shape came back, and whether the result was usable without a follow-up call.
 

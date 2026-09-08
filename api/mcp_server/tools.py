@@ -180,7 +180,7 @@ def _tabulate(rows: list[dict], columns: tuple[str, ...]) -> dict:
 _STUDENT_RESULT_KEYS = {
     "pseudonym", "roster", "submissions", "students", "student",
     "assessment_context", "placements", "writing_history",
-    "seating_context", "extra_time", "monitored", "classroom_profile",
+    "extra_time", "monitored", "classroom_profile",
 }
 
 
@@ -424,12 +424,9 @@ def _course_gate_check(course_id: str) -> str | None:
 
 _MCP_ROSTER_PATCH_KEYS = {
     "pseudonym", "regenerate_pseudonym", "extra_time", "monitored",
-    "canvas_group", "seating_context", "classroom_profile", "add_nicknames",
+    "canvas_group", "classroom_profile", "add_nicknames",
 }
-_MCP_ROSTER_CLEAR_KEYS = {"extra_time", "monitored", "seating_context", "classroom_profile"}
-# The seating fields an MCP caller may see and set. private_note is absent on
-# purpose: it is teacher-only, so it is neither returned nor writable here.
-_MCP_SEATING_KEYS = {"front_row", "near_teacher", "ai_context_note"}
+_MCP_ROSTER_CLEAR_KEYS = {"extra_time", "monitored", "classroom_profile"}
 
 
 def _canonical_digest(value: object) -> str:
@@ -480,30 +477,16 @@ def _roster_safe_projection(course_id: str, user_id: str, vault) -> dict:
     extra = record["extra_time"] or {}
     monitored = record["monitored"] or {}
     group = record["canvas_group"]
-    seating = roster_context.normalize_seating_context(local.get("seating_context"))
     profile = local.get("classroom_profile", config.empty_classroom_profile())
     try:
         profile = config.validate_classroom_profile(profile)
     except ValueError:
         profile = config.empty_classroom_profile()
-    # private_note is teacher-only and never leaves the machine, matching
-    # get_seating_context, which emits front_row/near_teacher plus a scrubbed
-    # ai_context_note and no private note at all. ai_context_note is free text
-    # a teacher typed, so it is scrubbed here rather than trusted: pseudonym.gate
-    # only soft-flags a roster name in free text, and a soft flag does not block.
-    replacement_map = feedback_scrub.build_replacement_map(
-        vault.entries(), set(config.active_protected_names())
-    )
     return {
         "pseudonym": record["vault"].get("pseudonym", ""),
         "extra_time": {"enabled": bool(extra), "days": extra.get("days", 0) if extra else 0},
         "monitored": {"enabled": bool(monitored)},
         "canvas_group": group,
-        "seating_context": {
-            "front_row": seating["front_row"], "near_teacher": seating["near_teacher"],
-            "ai_context_note": feedback_scrub.scrub_text(
-                seating["ai_context_note"], replacement_map),
-        },
         "classroom_profile": profile,
     }
 
@@ -540,42 +523,7 @@ def _validate_mcp_roster_patch(patch: object) -> tuple[dict | None, str | None]:
         or any(not isinstance(value, str) for value in patch["add_nicknames"])
     ):
         return None, "add_nicknames must be a list of strings."
-    if "seating_context" in patch:
-        seating = patch["seating_context"]
-        if not isinstance(seating, dict):
-            return None, "seating_context must be an object."
-        if "private_note" in seating:
-            return None, ("seating_context.private_note is not available through MCP; "
-                          "edit it in the Roster page.")
-        unknown = set(seating) - _MCP_SEATING_KEYS
-        if unknown:
-            return None, f"Unknown seating_context keys: {sorted(unknown)}"
     return patch, None
-
-
-def _merge_stored_private_note(course_id: str, user_id: str, patch: dict) -> dict:
-    """Fill the fields an MCP caller cannot see back in before storage.
-
-    validate_seating_context requires the exact full field set, and MCP can
-    neither read nor write private_note. Without this, every seating write from
-    an assistant would have to send a blank private note and would silently
-    erase whatever the teacher typed there.
-    """
-    if "seating_context" not in patch:
-        return patch
-    local = config.get_roster_student_settings(course_id) or {}
-    entry = local.get(str(user_id), {}) if isinstance(local, dict) else {}
-    stored = roster_context.normalize_seating_context(
-        entry.get("seating_context") if isinstance(entry, dict) else None)
-    merged = dict(patch)
-    supplied = dict(patch["seating_context"])
-    merged["seating_context"] = {
-        "front_row": supplied.get("front_row", stored["front_row"]),
-        "near_teacher": supplied.get("near_teacher", stored["near_teacher"]),
-        "ai_context_note": supplied.get("ai_context_note", stored["ai_context_note"]),
-        "private_note": stored["private_note"],
-    }
-    return merged
 
 
 def get_roster_student_settings(course_id: str, pseudonym: str) -> dict:
@@ -630,7 +578,7 @@ def preview_roster_student_change(course_id: str, pseudonym: str, patch: dict) -
 def _apply_roster_update(course_id: str, vault, user_id: str, patch: dict) -> dict:
     from api.webui import roster_mcp
     return roster_mcp.update_student(
-        course_id, user_id, _merge_stored_private_note(course_id, user_id, patch), vault)
+        course_id, user_id, patch, vault)
 
 
 def apply_roster_student_change(course_id: str, preview: dict,
@@ -679,8 +627,6 @@ def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
     patch = {
         "extra_time": {"enabled": False} if field == "extra_time" else None,
         "monitored": {"enabled": False} if field == "monitored" else None,
-        "seating_context": {"front_row": "none", "near_teacher": "none",
-                             "private_note": "", "ai_context_note": ""} if field == "seating_context" else None,
         "classroom_profile": config.empty_classroom_profile() if field == "classroom_profile" else None,
     }
     result = _apply_roster_update(course_id, vault, user_id, {field: patch[field]})
@@ -748,8 +694,7 @@ def list_sections(course_id: str) -> dict:
     """Section names from the local CanvasMirror roster (disk-only, no live
     Canvas fallback) for any saved course (Current or Previous). No student
     data — no vault, no safety gate. Returns
-    a {columns, rows} table of (section_id, section_name). Call this before
-    get_seating_context to discover its section_id/section_name values."""
+    a {columns, rows} table of (section_id, section_name)."""
     identity_error = _saved_course_gate_check(course_id)
     if identity_error:
         return {"ok": False, "error": identity_error}
@@ -1049,7 +994,6 @@ _STAGED_CONTRACT_KINDS = ("quiz", "assignment", "page", "rubric")
 _TOOL_GROUPS = {
     # Appendix B has no named surface for discovery and catalog reads. This is
     # the one deliberately plain exception to its teacher-facing vocabulary.
-    # list_sections supplies a course-local discovery value for Seating;
     # refresh_mirror advances the same saved-course read layer.
     "Course discovery and catalog": (
         "list_courses",
@@ -2163,56 +2107,6 @@ def get_roster(course_id: str) -> dict:
     return result
 
 
-def _resolve_section_id(sections: dict, *, section_id: str, section_name: str) -> tuple[str | None, str | None]:
-    """Resolve one mirror section id from an explicit id and/or a name.
-
-    A non-empty section_id is checked directly against the mirror's section
-    ids and wins outright, since an id is unambiguous by construction.
-    Otherwise section_name is matched exactly first, the common case the tool
-    description asks callers to use. A name matching zero sections gets one
-    retry, trimmed and case-folded on both sides, to absorb a stray SIS
-    whitespace or capitalization difference; that retry is accepted only when
-    it too lands on exactly one section, never when it would collapse two
-    sections the exact pass kept separate. A name matching two or more
-    sections, on either pass, is refused with the candidate ids rather than
-    guessed.
-
-    Returns ``(section_id, None)`` on one clear match, or ``(None, error)``.
-    """
-    by_id = {str(sid): str(name) for sid, name in sections.items()}
-
-    section_id = section_id.strip()
-    if section_id:
-        if section_id in by_id:
-            return section_id, None
-        return None, f"No section with id '{section_id}' exists in the local mirror."
-
-    exact = sorted(sid for sid, name in by_id.items() if name == section_name)
-    if len(exact) == 1:
-        return exact[0], None
-    if len(exact) > 1:
-        return None, (
-            f"{len(exact)} sections are named '{section_name}': ids "
-            f"{', '.join(exact)}. Call get_seating_context again with "
-            "section_id set to one of these."
-        )
-
-    loose_target = section_name.strip().casefold()
-    loose = sorted(
-        sid for sid, name in by_id.items() if name.strip().casefold() == loose_target
-    )
-    if len(loose) == 1:
-        return loose[0], None
-    if len(loose) > 1:
-        return None, (
-            f"{len(loose)} sections match '{section_name}' once case and "
-            f"whitespace are ignored: ids {', '.join(loose)}. Call "
-            "get_seating_context again with section_id set to one of these."
-        )
-
-    return None, f"No section named '{section_name}' exists in the local mirror."
-
-
 def get_submissions(course_id: str, assignment_id: str,
                     include_text: bool = True, pseudonyms: str = "",
                     max_text_chars: int = _DEFAULT_MAX_TEXT_CHARS) -> dict:
@@ -2409,7 +2303,7 @@ _REFRESH_TIMEOUT_SECONDS = 25.0
 # refresh_mirror drives a submissions delta (course.refresh) AND a roster
 # pass, so a roster that has aged past the serve window is recoverable on
 # demand. Without the explicit roster scope the manual refresh runs a delta
-# only, which never rewrites the roster file — get_roster/get_seating_context
+# only, which never rewrites the roster file — roster reads
 # would then refuse indefinitely (the assistant loops: refresh says "synced",
 # the roster stays stale) while the gradebook served fine off deltas. The
 # background heartbeat closes the same gap from the other side; see

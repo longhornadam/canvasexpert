@@ -31,8 +31,7 @@ school days instead of calendar days, honor per-student extra time, grant extens
 snapshots.
 
 **Students** is your class list plus the things Canvas will not hold: accommodations, extra time, small
-groups, monitoring flags, and private notes. Student reports pull it together per kid. Seating charts and
-grouping live next door.
+groups, monitoring flags, and private notes. Student reports pull it together per kid.
 
 **Assessments** imports Eduphoria exports, matches them to your roster, and turns them into a standards
 profile, coverage reports, longitudinal history, and grouping suggestions.

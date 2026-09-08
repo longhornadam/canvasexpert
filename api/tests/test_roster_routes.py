@@ -63,7 +63,6 @@ def isolated_roster(monkeypatch):
         "score_matrices": {},
         "relationships": {},
         "baselines": {},
-        "seating": {},
     }
 
     def fake_get_extra_time(course_id):
@@ -111,12 +110,6 @@ def isolated_roster(monkeypatch):
     def fake_set_roster_baseline(course_id, baseline):
         stores["baselines"][str(course_id)] = baseline
 
-    def fake_get_seating_course_state(course_id):
-        return stores["seating"].get(str(course_id), config.SEATING_COURSE_STATE_DEFAULT)
-
-    def fake_set_seating_course_state(course_id, state):
-        stores["seating"][str(course_id)] = state
-
     def fake_get_roster_group_scheme(course_id):
         return stores.get("group_schemes", {}).get(str(course_id), {})
 
@@ -153,8 +146,6 @@ def isolated_roster(monkeypatch):
     monkeypatch.setattr(roster_routes.config, "set_roster_relationships", fake_set_roster_relationships)
     monkeypatch.setattr(roster_routes.config, "get_roster_baseline", fake_get_roster_baseline)
     monkeypatch.setattr(roster_routes.config, "set_roster_baseline", fake_set_roster_baseline)
-    monkeypatch.setattr(roster_routes.config, "get_seating_course_state", fake_get_seating_course_state)
-    monkeypatch.setattr(roster_routes.config, "set_seating_course_state", fake_set_seating_course_state)
     monkeypatch.setattr(roster_routes.config, "active_protected_names", lambda: set())
     monkeypatch.setattr(roster_routes.config, "get_roster_group_scheme", fake_get_roster_group_scheme)
     monkeypatch.setattr(roster_routes.config, "set_roster_group_scheme", fake_set_roster_group_scheme)
@@ -221,54 +212,12 @@ def test_roster_get_merges_sources_without_sis(monkeypatch, isolated_roster):
     assert "pseudo_last" not in row
     assert row["extra_time"] == {"enabled": True, "days": 2}
     assert row["monitored"] == {"enabled": True, "note": "Private note"}
-    assert row["seating_context"] == {
-        "front_row": "none",
-        "near_teacher": "none",
-        "private_note": "",
-        "ai_context_note": "",
-    }
     assert data["score_matrix"] == {"columns": [], "values_by_section": {}}
     # V3: canvas_group instead of tier_id
     assert "canvas_group" in row
     assert row["canvas_groups"][0]["group_name"] == "Blue"
     assert "sis_id" not in row
     assert "Groups" not in str(data.get("groups", ""))
-
-
-def test_roster_get_uses_course_scoped_seating_context(monkeypatch, isolated_roster):
-    users = [{
-        "id": 101,
-        "name": "Test Student",
-        "sortable_name": "Student, Test",
-        "short_name": "Test",
-        "enrollments": [],
-    }]
-    isolated_roster["settings"]["1"] = {"101": {"seating_context": {
-        "front_row": "required",
-        "near_teacher": "preferred",
-        "private_note": "Teacher-only context.",
-        "ai_context_note": "Designated AI context.",
-    }}}
-    isolated_roster["settings"]["2"] = {"101": {"seating_context": {
-        "front_row": "none",
-        "near_teacher": "required",
-        "private_note": "",
-        "ai_context_note": "",
-    }}}
-    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
-    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
-    monkeypatch.setattr(roster_routes.mirror_store, "read_groups", lambda course_id: None)
-    monkeypatch.setattr(roster_routes.mirror_store, "write_groups", lambda course_id, categories: None)
-
-    first = client.get("/api/roster?course_id=1").json()["students"][0]
-    second = client.get("/api/roster?course_id=2").json()["students"][0]
-
-    assert first["seating_context"]["front_row"] == "required"
-    assert first["seating_context"]["near_teacher"] == "preferred"
-    assert first["seating_context"]["private_note"] == "Teacher-only context."
-    assert first["seating_context"]["ai_context_note"] == "Designated AI context."
-    assert second["seating_context"]["front_row"] == "none"
-    assert second["seating_context"]["near_teacher"] == "required"
 
 
 def test_roster_score_matrix_patch_round_trips_through_roster_get(monkeypatch, isolated_roster):
@@ -984,61 +933,6 @@ def test_roster_student_regeneration_returns_new_unused_pseudonym(monkeypatch, t
     assert data["pseudonym"] not in {first, second}
 
 
-def test_roster_student_saves_and_clears_seating_context(monkeypatch, isolated_roster):
-    users = [{
-        "id": 101,
-        "name": "Test Student",
-        "sortable_name": "Student, Test",
-        "short_name": "Test",
-        "enrollments": [],
-    }]
-    other_course_context = {
-        "front_row": "required",
-        "near_teacher": "none",
-        "private_note": "",
-        "ai_context_note": "",
-    }
-    isolated_roster["settings"]["2"] = {"101": {"seating_context": other_course_context}}
-    monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
-    monkeypatch.setattr(roster_routes, "_fetch_sections", lambda course_id: {})
-    context = {
-        "front_row": "preferred",
-        "near_teacher": "required",
-        "private_note": "Teacher-only context.",
-        "ai_context_note": "Designated AI context.",
-    }
-
-    saved = client.post("/api/roster/student", data={
-        "course_id": "1", "user_id": "101",
-        "patch": json.dumps({"seating_context": context}),
-    }).json()
-    reloaded = client.get("/api/roster?course_id=1").json()["students"][0]
-
-    assert saved["ok"] is True
-    assert reloaded["seating_context"] == context
-    assert isolated_roster["settings"]["2"]["101"]["seating_context"] == other_course_context
-
-    cleared = client.post("/api/roster/student", data={
-        "course_id": "1", "user_id": "101",
-        "patch": json.dumps({"seating_context": {
-            "front_row": "none",
-            "near_teacher": "none",
-            "private_note": "",
-            "ai_context_note": "",
-        }}),
-    }).json()
-    reloaded_after_clear = client.get("/api/roster?course_id=1").json()["students"][0]
-
-    assert cleared["ok"] is True
-    assert "seating_context" not in isolated_roster["settings"]["1"]["101"]
-    assert reloaded_after_clear["seating_context"] == {
-        "front_row": "none",
-        "near_teacher": "none",
-        "private_note": "",
-        "ai_context_note": "",
-    }
-
-
 def test_roster_student_saves_and_clears_classroom_profile(monkeypatch, isolated_roster):
     users = [{"id": 101, "name": "Test Student", "sortable_name": "Student, Test",
               "short_name": "Test", "enrollments": []}]
@@ -1092,52 +986,6 @@ def test_roster_get_warns_with_affected_student_when_profile_is_corrupt(monkeypa
     assert "classroom_profile_invalid" in data["students"][0]["warnings"]
     assert "Test Student" in data["note"]
     assert data["students"][0]["classroom_profile"] == config.empty_classroom_profile()
-
-
-@pytest.mark.parametrize("context", [
-    {
-        "front_row": "unsupported",
-        "near_teacher": "none",
-        "private_note": "",
-        "ai_context_note": "",
-    },
-    "not-an-object",
-    {
-        "front_row": "none",
-        "near_teacher": "none",
-        "private_note": "",
-        "ai_context_note": "",
-        "unexpected": True,
-    },
-    {
-        "front_row": "none",
-        "near_teacher": "none",
-        "private_note": 7,
-        "ai_context_note": "",
-    },
-])
-def test_roster_student_rejects_invalid_seating_context_without_partial_write(
-    isolated_roster, context
-):
-    existing = {
-        "front_row": "required",
-        "near_teacher": "preferred",
-        "private_note": "Existing private context.",
-        "ai_context_note": "Existing AI context.",
-    }
-    isolated_roster["settings"]["1"] = {"101": {"seating_context": existing}}
-
-    response = client.post("/api/roster/student", data={
-        "course_id": "1", "user_id": "101",
-        "patch": json.dumps({
-            "nicknames": ["Should not persist"],
-            "seating_context": context,
-        }),
-    }).json()
-
-    assert response["ok"] is False
-    assert isolated_roster["settings"]["1"]["101"]["seating_context"] == existing
-    assert isolated_roster["vault"].rows["101"]["nicknames"] == ["Addie"]
 
 
 def test_roster_student_rejects_obsolete_tier_id(isolated_roster):
@@ -1665,8 +1513,8 @@ def test_roster_get_reports_departed_student_with_every_kind_of_held_data(monkey
     }
     isolated_roster["extra_time"]["1"] = [{"id": "202", "name": "Riley Departed", "days": 3}]
     isolated_roster["monitored"]["202"] = {"name": "Riley Departed", "note": "watch"}
-    isolated_roster["settings"]["1"] = {"202": {"seating_context": {
-        "front_row": "required", "near_teacher": "none", "private_note": "", "ai_context_note": "",
+    isolated_roster["settings"]["1"] = {"202": {"classroom_profile": {
+        "birthday": "03-14", "celebrations": [],
     }}}
     isolated_roster["score_matrices"]["1"] = {
         "columns": [{"id": "score-writing", "label": "Writing"}],
@@ -1675,14 +1523,6 @@ def test_roster_get_reports_departed_student_with_every_kind_of_held_data(monkey
     isolated_roster["relationships"]["1"] = {"by_section": {"sec-a": [{
         "student_a": "101", "student_b": "202", "type": "keep_apart", "reason": "",
     }]}}
-    isolated_roster["seating"]["1"] = {
-        "layouts": [{"id": "layout-a", "name": "Room", "rows": 1, "columns": 1,
-                     "seats": [{"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"}],
-                     "near_teacher_seat_ids": []}],
-        "modes": [{"id": "mode-a", "name": "Fall chart", "section_id": "sec-a",
-                   "layout_id": "layout-a", "strategy": "manual",
-                   "assignment": {"seat-1-1": "202"}}],
-    }
     users = [{"id": 101, "name": "Ada Lovelace", "sortable_name": "Lovelace, Ada",
               "short_name": "Ada", "enrollments": [{"course_section_id": "sec-a"}]}]
     monkeypatch.setattr(roster_routes, "_fetch_students", lambda course_id: (users, None))
@@ -1699,7 +1539,6 @@ def test_roster_get_reports_departed_student_with_every_kind_of_held_data(monkey
         "score_values": [{"section_id": "sec-a", "section_name": "Period 1", "columns": ["score-writing"]}],
         "relationship_pairs": [{"section_id": "sec-a", "section_name": "Period 1",
                                 "partner_id": "101", "partner_name": "Ada Lovelace", "type": "keep_apart"}],
-        "seats": [{"section_id": "sec-a", "mode_id": "mode-a", "mode_name": "Fall chart", "seat_id": "seat-1-1"}],
     }]
 
 
@@ -1715,7 +1554,7 @@ def test_migrate_section_rejects_when_no_clean_swap_exists(monkeypatch, isolated
     assert "unambiguous" in data["error"]
 
 
-def test_migrate_section_moves_score_values_pairs_and_seat_then_updates_only_that_baseline(
+def test_migrate_section_moves_score_values_and_pairs_then_updates_only_that_baseline(
     monkeypatch, isolated_roster,
 ):
     isolated_roster["baselines"]["chg"] = {
@@ -1730,17 +1569,6 @@ def test_migrate_section_moves_score_values_pairs_and_seat_then_updates_only_tha
         {"student_a": "101", "student_b": "102", "type": "keep_apart", "reason": "r1"},
         {"student_a": "101", "student_b": "103", "type": "preferred_pair", "reason": "r2"},
     ]}}
-    isolated_roster["seating"]["chg"] = {
-        "layouts": [{"id": "layout-a", "name": "Room", "rows": 1, "columns": 2,
-                     "seats": [
-                         {"id": "seat-1-1", "row": 1, "column": 1, "label": "1-1"},
-                         {"id": "seat-1-2", "row": 1, "column": 2, "label": "1-2"},
-                     ],
-                     "near_teacher_seat_ids": []}],
-        "modes": [{"id": "mode-old", "name": "Fall chart", "section_id": "sec-old",
-                   "layout_id": "layout-a", "strategy": "manual",
-                   "assignment": {"seat-1-1": "101"}}],
-    }
     # 101 and 102 both moved from sec-old to sec-new; 103 stayed in sec-old.
     users = [
         {"id": 101, "name": "Mover One", "sortable_name": "One, Mover",
@@ -1769,10 +1597,6 @@ def test_migrate_section_moves_score_values_pairs_and_seat_then_updates_only_tha
     assert migration["broken_relationship_pairs"] == [
         {"student_a": "101", "student_b": "103", "type": "preferred_pair", "reason": "r2", "partner_id": "103"},
     ]
-    assert migration["cleared_seats"] == [
-        {"mode_id": "mode-old", "mode_name": "Fall chart", "seat_ids": ["seat-1-1"]},
-    ]
-
     # Score values moved wholesale (old section had nothing left to keep).
     matrix = isolated_roster["score_matrices"]["chg"]
     assert "sec-old" not in matrix["values_by_section"]
@@ -1787,10 +1611,6 @@ def test_migrate_section_moves_score_values_pairs_and_seat_then_updates_only_tha
     assert relationships["by_section"]["sec-new"] == [
         {"student_a": "101", "student_b": "102", "type": "keep_apart", "reason": "r1"},
     ]
-
-    # The stale seat is cleared, not guessed into a new-section seat.
-    seating = isolated_roster["seating"]["chg"]
-    assert seating["modes"][0]["assignment"] == {}
 
     # Only student 101's own baseline entry advanced; 102 and 103 are
     # untouched so their own still-open changes are not silently cleared.

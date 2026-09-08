@@ -179,56 +179,6 @@ def test_regeneration_returns_new_addressable_pseudonym(monkeypatch, tmp_path):
     assert tools.get_roster_student_settings("course-1", pseudo)["ok"] is False
 
 
-def _seated(note_private, note_ai):
-    return {"910001": {"seating_context": {
-        "front_row": "preferred", "near_teacher": "required",
-        "private_note": note_private, "ai_context_note": note_ai,
-    }}}
-
-
-def test_seating_notes_never_leave_the_machine(monkeypatch, tmp_path):
-    """private_note is teacher-only and ai_context_note is scrubbed.
-
-    pseudonym.gate only soft-flags a roster name in free text, and a soft flag
-    does not block, so an unscrubbed note would have reached the MCP client.
-    """
-    _path, pseudo = _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(tools.config, "get_roster_student_settings",
-                        lambda course_id: _seated("Sam Student melts down when cold-called.",
-                                                  "Sam Student reads below level."))
-
-    read = tools.get_roster_student_settings("course-1", pseudo)
-    _assert_private(read, pseudo)
-    assert "private_note" not in read["settings"]["seating_context"]
-    assert read["settings"]["seating_context"]["ai_context_note"] == f"{pseudo} reads below level."
-
-    preview = tools.preview_roster_student_change(
-        "course-1", pseudo, {"seating_context": {"front_row": "none"}})
-    _assert_private(preview, pseudo)
-    assert "private_note" not in json.dumps(preview)
-
-
-def test_mcp_cannot_write_private_note_and_never_erases_it(monkeypatch, tmp_path):
-    _path, pseudo = _setup(monkeypatch, tmp_path)
-    monkeypatch.setattr(tools.config, "get_roster_student_settings",
-                        lambda course_id: _seated("Keep this note.", ""))
-
-    rejected = tools.preview_roster_student_change("course-1", pseudo, {
-        "seating_context": {"front_row": "preferred", "near_teacher": "none",
-                            "private_note": "overwrite", "ai_context_note": ""}})
-    assert rejected["ok"] is False
-    assert "private_note is not available through MCP" in rejected["error"]
-
-    # A seating write that cannot see private_note must not blank it: the stored
-    # value is merged back in before validate_seating_context sees the record.
-    merged = tools._merge_stored_private_note(
-        "course-1", "910001", {"seating_context": {"front_row": "none"}})
-    assert merged["seating_context"] == {
-        "front_row": "none", "near_teacher": "required",
-        "ai_context_note": "", "private_note": "Keep this note.",
-    }
-
-
 def test_adapter_itself_refuses_the_replacing_nickname_key(monkeypatch, tmp_path):
     """The guard lives in the adapter, not only in the MCP tool above it.
 

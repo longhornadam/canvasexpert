@@ -3,19 +3,6 @@
 from api import roster_context
 
 
-def test_shared_normalizers_keep_existing_seating_and_score_shapes():
-    assert roster_context.normalize_seating_context(None) == {
-        "front_row": "none", "near_teacher": "none", "private_note": "", "ai_context_note": "",
-    }
-    assert roster_context._normalize_score_matrix({
-        "columns": [{"id": "score-a", "label": "Writing"}],
-        "values_by_section": {"section-a": {"student-a": {"score-a": 3}}},
-    }) == {
-        "columns": [{"id": "score-a", "label": "Writing"}],
-        "values_by_section": {"section-a": {"student-a": {"score-a": 3}}},
-    }
-
-
 def test_relationships_canonicalize_pair_and_reject_duplicates_atomically():
     saved, error = roster_context.replace_section_relationships(
         {"by_section": {}}, "section-a", [{

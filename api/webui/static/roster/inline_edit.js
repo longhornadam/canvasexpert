@@ -130,8 +130,6 @@
       }
     } else if (key === "monitored") {
       s.monitored = { enabled: !!value.enabled, note: value.note || "" };
-    } else if (key === "seating_context") {
-      s.seating_context = value;
     } else if (key === "classroom_profile") {
       s.classroom_profile = value;
     }
@@ -188,23 +186,6 @@
       if (button.dataset.profileBound) return;
       button.dataset.profileBound = "1";
       button.addEventListener("click", function () { addCelebration(row); });
-    });
-  }
-
-  function saveSeatingContext(userId) {
-    var row = tableBody.querySelector('tr[data-id="' + userId + '"]');
-    if (!row) return;
-    var frontRow = row.querySelector(".roster-v2-seating-front-row");
-    var nearTeacher = row.querySelector(".roster-v2-seating-near-teacher");
-    var privateNote = row.querySelector(".roster-v2-seating-private-note");
-    var aiContextNote = row.querySelector(".roster-v2-seating-ai-context-note");
-    if (!frontRow || !nearTeacher || !privateNote || !aiContextNote) return;
-
-    saveField(userId, "seating_context", {
-      front_row: frontRow.value,
-      near_teacher: nearTeacher.value,
-      private_note: privateNote.value,
-      ai_context_note: aiContextNote.value
     });
   }
 
@@ -297,14 +278,6 @@
       });
     });
 
-    tableBody.querySelectorAll(
-      ".roster-v2-seating-front-row, .roster-v2-seating-near-teacher, " +
-      ".roster-v2-seating-private-note, .roster-v2-seating-ai-context-note"
-    ).forEach(function (el) {
-      el.addEventListener("change", function () {
-        saveSeatingContext(el.dataset.id);
-      });
-    });
     tableBody.querySelectorAll(".roster-classroom-profile").forEach(function (editor) {
       attachProfileEvents(editor.closest("tr"));
     });

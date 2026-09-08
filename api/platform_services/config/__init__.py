@@ -101,12 +101,6 @@ from .roster import (
     compute_group_display, default_group_label,
 )
 
-# --- Seating physical state ---
-from .seating import (
-    SEATING_COURSE_STATE_DEFAULT,
-    get_seating_course_state, set_seating_course_state,
-)
-
 # --- SIS grade bridge registrations ---
 from .sis_grade_bridge import (
     get_sis_grade_bridge, list_sis_grade_bridges, save_sis_grade_bridge,

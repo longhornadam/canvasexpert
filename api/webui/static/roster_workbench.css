@@ -67,8 +67,6 @@
 .roster-col-group { width: 170px; }
 .roster-col-monitor { width: 42px; text-align: center; }
 .roster-col-note { width: 170px; }
-.roster-col-front-row, .roster-col-near-teacher { width: 100px; }
-.roster-col-private-note, .roster-col-ai-context-note { width: 180px; }
 .roster-col-status { width: 150px; }
 .roster-classroom-profile { display: grid; gap: 4px; white-space: normal; }
 .roster-classroom-profile > label { display: grid; gap: 2px; }

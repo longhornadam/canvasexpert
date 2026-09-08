@@ -162,7 +162,7 @@ def set_roster_relationships(course_id: str, relationships: dict):
 # Roster-change acknowledgment baseline
 #
 # Synced (not machine-local): this is the same course-scoped, Canvas-id-keyed
-# shape as roster_score_matrices/seating_course_states/monitored_students
+# shape as roster_score_matrices/monitored_students
 # above, all of which already sync so a teacher's own second PC sees the same
 # local roster state. It holds Canvas student and section ids only, never a
 # real name, so it sits on the same side of the privacy wall those do.

@@ -35,9 +35,7 @@ CONFIG_PATH = str(runtime_paths.local_app_dir() / "config.json")
 DEFAULT_DOCS_DIR = os.path.join(API_DIR, "default_docs")
 WORKSPACE_NAME = "CanvasExpert"
 
-# The Library: reusable collections the teacher authors or keeps. "Seating
-# Charts" is a locked name reserved for a future feature and is deliberately
-# absent here -- do not create it until that feature ships.
+# The Library: reusable collections the teacher authors or keeps.
 LIBRARY_NAME = "Library"
 AI_AUTHORING_SUBFOLDER = "AI Authoring"
 LEARNING_OBJECTIVES_SUBFOLDER = "Learning Objectives"

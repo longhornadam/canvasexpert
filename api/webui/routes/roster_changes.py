@@ -14,16 +14,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from api import roster_context, seating_state
+from api import roster_context
 
 
 def _has_local_settings(entry: dict | None) -> bool:
     """True when a roster_student_settings row holds more than empty defaults."""
     if not isinstance(entry, dict):
         return False
-    seating_context = entry.get("seating_context")
-    if isinstance(seating_context, dict) and seating_context != roster_context.SEATING_CONTEXT_DEFAULT:
-        return True
     profile = entry.get("classroom_profile")
     if isinstance(profile, dict) and (profile.get("birthday") or profile.get("celebrations")):
         return True
@@ -68,23 +65,6 @@ def _relationship_holdings(relationships: dict, student_id: str, section_ids, se
     return sorted(result, key=lambda item: (item["section_id"], item["partner_id"]))
 
 
-def _seat_holdings(seating_doc: dict, student_id: str, section_ids) -> list[dict]:
-    """Seats assigned to student_id, restricted to section_ids when given."""
-    result = []
-    for mode in (seating_doc or {}).get("modes", []):
-        if section_ids is not None and mode.get("section_id") not in section_ids:
-            continue
-        for seat_id, assigned_id in (mode.get("assignment") or {}).items():
-            if assigned_id == student_id:
-                result.append({
-                    "section_id": mode.get("section_id"),
-                    "mode_id": mode.get("id"),
-                    "mode_name": mode.get("name"),
-                    "seat_id": seat_id,
-                })
-    return sorted(result, key=lambda item: (item["section_id"], item["mode_id"]))
-
-
 def departed_detail(
     student_id: str,
     *,
@@ -94,7 +74,6 @@ def departed_detail(
     monitored: dict,
     score_matrix: dict,
     relationships: dict,
-    seating_doc: dict,
     section_names: dict,
     name_by_id: dict,
 ) -> dict:
@@ -108,7 +87,6 @@ def departed_detail(
         "monitored": student_id in monitored,
         "score_values": _score_holdings(score_matrix, student_id, None, section_names),
         "relationship_pairs": _relationship_holdings(relationships, student_id, None, section_names, name_by_id),
-        "seats": _seat_holdings(seating_doc, student_id, None),
     }
 
 
@@ -117,7 +95,6 @@ def changed_section_detail(
     *,
     score_matrix: dict,
     relationships: dict,
-    seating_doc: dict,
     section_names: dict,
     name_by_id: dict,
 ) -> dict:
@@ -130,7 +107,6 @@ def changed_section_detail(
         "new_section_names": [section_names.get(sid) or f"Section {sid}" for sid in change["new_section_ids"]],
         "score_values": _score_holdings(score_matrix, student_id, old_ids, section_names),
         "relationship_pairs": _relationship_holdings(relationships, student_id, old_ids, section_names, name_by_id),
-        "seats": _seat_holdings(seating_doc, student_id, old_ids),
         # Only a clean one-section-to-another swap is unambiguous enough to
         # move automatically -- see roster_context.diff_roster_baseline.
         "can_migrate": change["clean_swap"],
@@ -146,8 +122,6 @@ def migrate_student_section(
     set_roster_score_matrix: Callable[[str, dict], None],
     get_roster_relationships: Callable[[str], dict],
     set_roster_relationships: Callable[[str, dict], None],
-    get_seating_course_state: Callable[[str], dict],
-    set_seating_course_state: Callable[[str, dict], None],
     get_roster_baseline: Callable[[str], dict],
     set_roster_baseline: Callable[[str, dict], None],
 ) -> tuple[dict | None, str | None]:
@@ -232,28 +206,6 @@ def migrate_student_section(
     if moved_pairs:
         set_roster_relationships(course_id, {"by_section": by_section})
 
-    # Seat: the old chart's seat no longer describes where this student
-    # sits, and there is no safe seat to guess in the new section's chart --
-    # see seating_state.clear_student_from_section. Report exactly which
-    # mode/seat it was so the teacher can seat them again by hand.
-    seating_doc, seating_error = seating_state.validate_state(
-        seating_state.normalize_state(get_seating_course_state(course_id))
-    )
-    if seating_error:
-        seating_doc = seating_state.empty_state()
-    cleared_seats = [
-        {"mode_id": mode["id"], "mode_name": mode["name"],
-         "seat_ids": [seat for seat, assigned in mode["assignment"].items() if assigned == student_id]}
-        for mode in seating_doc["modes"]
-        if mode["section_id"] == old_section_id and student_id in mode["assignment"].values()
-    ]
-    if cleared_seats:
-        updated_seating, clear_error = seating_state.clear_student_from_section(
-            seating_doc, old_section_id, student_id
-        )
-        if clear_error is None and updated_seating is not None:
-            set_seating_course_state(course_id, updated_seating)
-
     # This student's own section-change warning is now resolved locally;
     # advance just their baseline entry so it clears without acknowledging
     # the whole roster, which would also silently clear any other student's
@@ -272,5 +224,4 @@ def migrate_student_section(
             for pair in moved_pairs
         ],
         "broken_relationship_pairs": broken_pairs,
-        "cleared_seats": cleared_seats,
     }, None

@@ -65,7 +65,7 @@ Tool schema version 39 (42 tools).
 | `apply_content_push(operation_id, batch_id, review_digest)` | Creates the exact frozen draft in Canvas through the Operation Ledger; same claims, drift check, and receipt as the push tab | No |
 | `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", post_to_sis=false)` | Stages one authored draft and creates it in Canvas in a single call; the draft stays staged as the artifact of record. Carries no dates: use the preview pair for those | No |
 | `get_roster(course_id)` | Current mirror roster as stable one-word stand-ins and section names | Yes, pseudonymized |
-| `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes, pseudonymized |
+| `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames are omitted | Yes, pseudonymized |
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
 | `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the unchanged preview; only a `canvas_group` patch reaches Canvas | Yes, pseudonymized |
 | `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes, pseudonymized |
@@ -151,9 +151,9 @@ The Calendar, Bell Schedule, and teacher-schedule tools are reads only
 (`get_school_calendar`, `get_bell_schedule`, `get_day_schedule`,
 `get_teacher_schedule`). They share the same exemption: no `course_id`, no student data,
 no course gate, no safety scan. Their write pairs were retired in schema v39 along with
-`get_seating_context`: all of them were built to feed the classroom display, which has
-since been removed, and a calendar edit wants a calendar in front of you, so those edits
-live in the web UI. What follows describes the retired shape and is kept only as
+`get_seating_context` and the whole Seating feature: all of them were built to feed the
+classroom display, which has since been removed, and a calendar edit wants a calendar in
+front of you, so those edits live in the web UI. What follows describes the retired shape and is kept only as
 background for the stored contracts. The event pair used `action="upsert"` with one complete
 structured event or `action="delete"` with its stable `event_id`; it mutates only the
 canonical `events` array and supports the same revision/digest/atomic-write boundary.
@@ -274,14 +274,11 @@ as their repair. `refresh_mirror` reports only its actual roster, assignments, a
 submissions scope; it does not refresh catalog modules or pages.
 
 The section, mirror, and Course Catalog reads named here reject an ID absent from
-`list_courses` before recommending a mirror or Course Catalog refresh. Student-data tools (`get_roster`, `get_submissions`, `get_gradebook_snapshot`, and
-`get_seating_context`) are scoped to Current courses (`config.active_courses()`). The
+`list_courses` before recommending a mirror or Course Catalog refresh. Student-data tools (`get_roster`, `get_submissions`, and
+`get_gradebook_snapshot`) are scoped to Current courses (`config.active_courses()`). The
 catalog reads (`list_sections`, `get_course_assignments`, and `get_modules`) and
 `refresh_mirror` accept any saved course, including Previous courses. `get_course_pages` and
-the Learning Objective preview/apply pair require a Current course. `get_seating_context`
-needs its `section_id` or `section_name` to resolve to exactly one mirror section: an id
-matches directly, a name matches exactly or, failing that, on a trim/case-fold retry, and
-it withholds all student data rather than guess when a name matches none or several
+the Learning Objective preview/apply pair require a Current course
 sections (the latter names the candidate ids to retry with). Pseudonymized artifacts are
 scrubbed, not anonymous: the pseudonym is stable, and student text still comes through as
 the student wrote it.

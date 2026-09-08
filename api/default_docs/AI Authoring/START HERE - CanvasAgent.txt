@@ -181,8 +181,6 @@ actually changes how other features treat them, so accommodations are honored
 automatically rather than remembered each time. Printable per-student reports
 over time, useful for conferences.
 
-Seating. Section seating context and pairing preferences.
-
 Gradebook tools. Late policies, late-work sweeps, curves with transparent
 math, and per-student extensions. Each previews what will change first.
 

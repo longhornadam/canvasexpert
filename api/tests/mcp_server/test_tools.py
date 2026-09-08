@@ -1331,13 +1331,6 @@ def test_get_roster_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, 
 
 # --- get_seating_context ----------------------------------------------------
 
-def _set_seating_context(monkeypatch, *, settings=None, matrix=None, relationships=None):
-    monkeypatch.setattr(tools.config, "get_roster_student_settings", lambda course_id: settings or {})
-    monkeypatch.setattr(tools.config, "get_roster_score_matrix", lambda course_id: matrix or {})
-    monkeypatch.setattr(tools.config, "get_roster_relationships", lambda course_id: relationships or {})
-    monkeypatch.setattr(tools.config, "active_protected_names", lambda: set())
-
-
 def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
     _mount_mirror()
     _set_active_courses([MIRROR_COURSE])
