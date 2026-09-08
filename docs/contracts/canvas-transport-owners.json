@@ -22,6 +22,7 @@
     "catalog.assignments",
     "catalog.modules",
     "catalog.assignment_groups",
+    "catalog.pages",
     "private.assignments",
     "private.submissions",
     "private.submission_comments",
@@ -164,9 +165,9 @@
       "call_index": 1,
       "call_form": "canvas_client._canvas_send(\"POST\", path, request) [create page]",
       "classification": "canvas_mutation",
-      "scopes": ["none"],
-      "reconciliation": "none",
-      "reason": "Page-body creation has no catalog scope. The central hook only invalidates catalog.modules when content.page has a module placement."
+      "scopes": ["catalog.pages"],
+      "reconciliation": "invalidate",
+      "reason": "Creates a Canvas page, which the v3 catalog projects as its own pages scope (read by the get_course_pages MCP tool and the web UI). The central operation-ledger post-apply hook invalidates catalog.pages after the confirmed operation succeeds, unconditionally for content.page; it additionally invalidates catalog.modules only when the payload carries a module placement."
     },
     {
       "path": "api/operation_ledger/adapters/page.py",
@@ -199,7 +200,7 @@
       "classification": "canvas_mutation",
       "scopes": ["none"],
       "reconciliation": "none",
-      "reason": "Creates a Course-level rubric: rf.canvas_rubric_payload sets rubric_association with association_type 'Course' and purpose 'bookkeeping' (no assignment linkage; assignment-rubric association is deferred to the content.assignment adapter, see rubric.py docstring). The create alters no assignments-catalog data, so the honest scope is 'none', not catalog.assignments. content.rubric maps to no catalog invalidate."
+      "reason": "Creates a Course-level rubric: rf.canvas_rubric_payload sets rubric_association with association_type 'Course' and purpose 'bookkeeping' (no assignment linkage; assignment-rubric association is deferred to the content.assignment adapter, see rubric.py docstring). The create alters no assignments-catalog data, so the honest scope is 'none', not catalog.assignments. The rubric object itself has no catalog projection; the only catalog scope content.rubric can invalidate is catalog.pages, and only via the optional student explainer page below."
     },
     {
       "path": "api/operation_ledger/adapters/rubric.py",
@@ -208,9 +209,9 @@
       "call_index": 2,
       "call_form": "canvas_client._canvas_send(\"POST\", page_path, request) [create optional student explainer page]",
       "classification": "canvas_mutation",
-      "scopes": ["none"],
-      "reconciliation": "none",
-      "reason": "content.rubric intentionally maps to no catalog invalidate in this unit; optional page bodies have no catalog scope."
+      "scopes": ["catalog.pages"],
+      "reconciliation": "invalidate",
+      "reason": "Creates a real Canvas page, indistinguishable in the v3 pages scope from one PageAdapter creates. This call runs only when the payload carries a student_page_title, so the central post-apply hook invalidates catalog.pages for content.rubric on exactly that condition and nothing otherwise."
     },
     {
       "path": "api/operation_ledger/adapters/quiz_steps.py",

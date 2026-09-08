@@ -10,17 +10,25 @@ minimal fix; the next catalog read or refresh repairs it wholesale.
 
 The kind -> scopes mapping is a conservative union (over-invalidating a
 possibly-unaffected scope is accepted); a kind absent from the map
-invalidates nothing. ``content.page`` is the one payload-sensitive case: a
-bare page (no ``module_name``) never touches Canvas module structure at
-all (see ``PageAdapter.execute``), so it must not mark ``catalog.modules``
-stale, while a page attached to a module does. See
-``docs/reference/mutation-reconciliation-map.md`` family 2.
+invalidates nothing. Two kinds are payload-sensitive:
+
+- ``content.page`` always creates or verifies a Canvas page, so it always
+  marks ``catalog.pages`` stale, but a bare page (no ``module_name``) never
+  touches Canvas module structure at all (see ``PageAdapter.execute``), so
+  it must not mark ``catalog.modules`` stale, while a page attached to a
+  module does.
+- ``content.rubric`` creates a Canvas page only when the payload carries a
+  ``student_page_title`` (see ``RubricAdapter.execute`` step 2), so it marks
+  ``catalog.pages`` stale in that case and nothing otherwise. The rubric
+  itself is a Course-level bookkeeping object with no catalog scope.
+
+See ``docs/reference/mutation-reconciliation-map.md`` family 2.
 """
 from api import course_catalog
 
 # Conservative kind -> catalog scopes union for kinds whose affected scopes
-# do not depend on payload contents. Any kind not present here invalidates
-# nothing (e.g. ``content.rubric``, dead/unregistered kinds).
+# do not depend on payload contents. Any kind not present here and not
+# payload-sensitive below invalidates nothing (e.g. dead/unregistered kinds).
 _KIND_TO_CATALOG_SCOPES: dict[str, frozenset[str]] = {
     "content.assignment": frozenset({"assignments", "modules"}),
     "content.quiz": frozenset({"assignments", "modules"}),
@@ -29,12 +37,20 @@ _KIND_TO_CATALOG_SCOPES: dict[str, frozenset[str]] = {
 }
 
 _PAGE_KIND = "content.page"
+_RUBRIC_KIND = "content.rubric"
 
 
 def _scopes_for(kind: str, payload: dict | None) -> frozenset[str]:
+    payload = payload or {}
     if kind == _PAGE_KIND:
-        module_name = (payload or {}).get("module_name")
-        return frozenset({"modules"}) if module_name else frozenset()
+        scopes = {"pages"}
+        if payload.get("module_name"):
+            scopes.add("modules")
+        return frozenset(scopes)
+    if kind == _RUBRIC_KIND:
+        if payload.get("student_page_title"):
+            return frozenset({"pages"})
+        return frozenset()
     return _KIND_TO_CATALOG_SCOPES.get(kind, frozenset())
 
 

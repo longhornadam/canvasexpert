@@ -14,17 +14,17 @@ live `api/` tree: any unlisted mutation-shaped call, any stale listed owner,
 any duplicate key, or any out-of-vocabulary classification/scope/state fails
 the suite.
 
-## Current totals (from the JSON, 2026-09-04)
+## Current totals (from the JSON, 2026-09-07)
 
 - **53 owners total.**
 - By classification: `canvas_mutation` 41, `canvas_read_acquisition` 5,
   `canvas_upload` 2, `generic_transport_internal` 2, `canvas_mutation_native` 1,
   `diagnostic_probe` 1, `external` 1.
-- By reconciliation state: `none` 8, `n/a` 20, `targeted` 12, `invalidate` 13.
+- By reconciliation state: `none` 6, `n/a` 20, `targeted` 12, `invalidate` 15.
 - By scope (an owner may touch more than one): `private.submissions` 9,
-  `catalog.assignments` 9, `none` 9, `catalog.modules` 6,
+  `catalog.assignments` 9, `none` 7, `catalog.modules` 6,
   `focused_evidence` 6, `new_quiz.metadata` 5, `private.assignments` 5,
-  `private.groups` 5, `private.submission_comments` 2,
+  `private.groups` 5, `catalog.pages` 2, `private.submission_comments` 2,
   `gradebook.late_policy` 1,
   `new_quiz.responses` 1. `catalog.assignment_groups`, `private.roster`, and
   `unknown` are currently unused (no live mutation touches them).
@@ -84,32 +84,46 @@ Canvas Grade Sync timestamp evidence defined by the bridge contract. That local
 ledger transition never sends another Canvas request; the resumed operation
 performs registration and then uses the same central catalog invalidation hook.
 
-### 2. Assignment/Quiz/Module structure (`catalog.assignments`, `catalog.modules`, `new_quiz.metadata`)
+### 2. Assignment/Quiz/Module/Page structure (`catalog.assignments`, `catalog.modules`, `catalog.pages`, `new_quiz.metadata`)
 
 **Covered (invalidate):** after each successfully-applied ledger operation,
 the central `operation_ledger.catalog_reconcile` hook marks the affected
 whole catalog scope stale through `course_catalog.invalidate_scope`. The
 kind-to-scope mapping is deliberately conservative: assignments and quizzes
 invalidate `catalog.assignments` plus `catalog.modules`, quick assignments
-invalidate assignments, and a page invalidates modules only when it has a
-module placement. Rubrics and bare pages invalidate no catalog scope. This
-whole-scope stale-mark is intentional; Canvas remains truth and the next
-catalog refresh refetches the collection. The ownership contract records ten
-honest `none` → `invalidate` call-owner transitions for these catalog scopes.
-It deliberately leaves `new_quiz.metadata` (including `ensure_item`) and
-both rubric owners at `none`; neither has an invalidate in this unit.
+invalidate assignments, and a page invalidates `catalog.pages` always plus
+`catalog.modules` when it has a module placement. This whole-scope
+stale-mark is intentional; Canvas remains truth and the next catalog refresh
+refetches the collection. The ownership contract carries fourteen call owners
+at `invalidate` on a `catalog.*` scope, two of them added on 2026-09-07 for
+`catalog.pages`. It deliberately leaves `new_quiz.metadata` (including
+`ensure_item`) at `none`; that has no invalidate in this unit.
 
-**No catalog scope exists (by design, not a gap):** page bodies
-(`PageAdapter.execute` create-page call, `RubricAdapter.execute`
-create-student-page call) have no dedicated catalog scope in the allowed
-vocabulary — this matches spine 7.1 ("page bodies are not a 1.0-beta
-requirement") and is recorded as scope `none`, not `unknown`. The
-`RubricAdapter.execute` create-rubric call is likewise scope `none`: a
-2026-07-19 audit corrected it from a misleading `catalog.assignments` tag,
-because `rf.canvas_rubric_payload` builds a Course-level bookkeeping
-association (`association_type: "Course"`, no assignment linkage — assignment
+**Pages (corrected 2026-09-07):** the v3 catalog carries a real `pages`
+scope, projected to teachers through the `get_course_pages` MCP tool and the
+web UI, and `course_catalog.INVALIDATABLE_SCOPES` accepts it. Earlier
+revisions of this document recorded page bodies as having *no* catalog scope,
+which was true of the pre-v3 vocabulary and stale afterwards. In the gap that left,
+a page created in Canvas by `PageAdapter.execute` (or the student explainer
+page created by `RubricAdapter.execute`) never marked the local pages scope
+stale, so `get_course_pages` kept reporting the pre-push record set, with a
+`current` freshness state and no stale note, until a teacher refreshed the
+catalog by hand. Both call owners are now scope `catalog.pages`,
+reconciliation `invalidate`. `content.page` invalidates `catalog.pages`
+unconditionally; `content.rubric` invalidates it only when the payload
+carries a `student_page_title`, which is the exact condition under which its
+`execute` creates a page. Both push routes reach this through the same
+post-apply hook; nothing in the push paths themselves changed.
+
+**Still no catalog scope (by design, not a gap):** the
+`RubricAdapter.execute` create-rubric call is scope `none`: a 2026-07-19
+audit corrected it from a misleading `catalog.assignments` tag, because
+`rf.canvas_rubric_payload` builds a Course-level bookkeeping association
+(`association_type: "Course"`, no assignment linkage — assignment
 association is deferred to the `content.assignment` adapter), so a rubric
-create alters no assignments-catalog data.
+create alters no assignments-catalog data. The rubric library itself has no
+catalog projection at all, so a rubric with no student page still
+invalidates nothing.
 
 The `gradebook.sis_bridge` adapter is also covered: bridge create plus the
 source/bridge publish, exclusion, and SIS-flag patches map conservatively to
@@ -240,9 +254,10 @@ Canvas content — spine 14.3 explicitly protects the report-create call as a
    late sweep is out of scope — CanvasExpert-owned (`n/a`), not a reconciliation gap.
 2. **Catalog structure** (family 2): **covered 2026-07-19** for
    `catalog.assignments` and `catalog.modules` by the central ledger post-apply
-   stale-mark hook (ten `none` → `invalidate` contract transitions). Rubric
-   library and `new_quiz.metadata` reconciliation remain outside this unit; a
-   per-record merge remains a later refinement, not Batch 7 work.
+   stale-mark hook (ten `none` → `invalidate` contract transitions), and
+   extended to `catalog.pages` on 2026-09-07 (two more). Rubric library and
+   `new_quiz.metadata` reconciliation remain outside this unit; a per-record
+   merge remains a later refinement, not Batch 7 work.
 3. **Per-student assignment facts** (family 3): **decided 2026-07-19 — deferred
    as a bounded, documented limitation, not an open gap.** Overrides/extensions
    have no mirror override projection; their only mirror footprint is

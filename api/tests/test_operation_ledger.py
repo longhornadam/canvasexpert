@@ -17,6 +17,7 @@ from api import course_catalog
 from api.operation_ledger import (
     batches, claims, executor, models, operations, paths, registry, storage,
 )
+from api.operation_ledger import catalog_reconcile as _catalog_reconcile
 from api.operation_ledger.catalog_reconcile import reconcile_catalog_after_apply
 
 
@@ -530,6 +531,16 @@ def test_recovery_atomicity_no_gap_for_new_attempt(tmp_path, monkeypatch):
 
 # ── Catalog reconciliation hook (Batch 7 unit 01) ───────────────────────
 
+def _fresh_scope(records):
+    return {
+        "state": "current",
+        "last_success_at": "2026-01-01T00:00:00+00:00",
+        "last_attempt_at": "2026-01-01T00:00:00+00:00",
+        "error_code": "",
+        "records": records,
+    }
+
+
 def _spy_invalidate_scope(monkeypatch):
     calls = []
 
@@ -635,10 +646,21 @@ def test_recovery_apply_invalidates_catalog_scopes(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     ("kind", "payload", "expected_scopes"),
     [
+        ("content.assignment", {}, {"assignments", "modules"}),
+        ("content.quiz", {}, {"assignments", "modules"}),
         ("content.quick_assignment", {}, {"assignments"}),
-        ("content.page", {}, set()),
-        ("content.page", {"module_name": "Unit 1"}, {"modules"}),
+        ("gradebook.sis_bridge", {}, {"assignments"}),
+        # A page always lands a Canvas page, so `pages` is unconditional; the
+        # module scope stays payload-sensitive (a bare page touches no module).
+        ("content.page", {}, {"pages"}),
+        ("content.page", {"module_name": "Unit 1"}, {"pages", "modules"}),
+        # A rubric is a Course-level bookkeeping object with no catalog scope,
+        # but its optional student explainer page is a real Canvas page.
         ("content.rubric", {}, set()),
+        ("content.rubric", {"student_page_title": "How this is graded"}, {"pages"}),
+        ("content.rubric", {"student_page_title": ""}, set()),
+        # An unmapped kind still invalidates nothing.
+        ("content.not_a_real_kind", {"module_name": "Unit 1"}, set()),
     ],
 )
 def test_catalog_reconcile_kind_mapping_respects_page_and_rubric_boundaries(
@@ -649,3 +671,137 @@ def test_catalog_reconcile_kind_mapping_respects_page_and_rubric_boundaries(
     reconcile_catalog_after_apply(kind, "303", payload=payload)
 
     assert set(calls) == {("303", scope) for scope in expected_scopes}
+
+
+def test_page_apply_invalidates_the_pages_catalog_scope(tmp_path, monkeypatch):
+    """The regression this guards: a page created in Canvas left the local
+    `pages` catalog scope fresh, so `get_course_pages` kept reporting the old
+    record set until someone refreshed the catalog by hand."""
+    _root(tmp_path, monkeypatch)
+    calls = _spy_invalidate_scope(monkeypatch)
+
+    class FakeAdapter:
+        kind = "content.page"
+        def capture_baseline(self, payload, target):
+            return {}
+        def check_drift(self, payload, target, baseline):
+            return False
+        def execute(self, payload, target, baseline, claim, context):
+            return {"state": "applied", "returned_object_id": "a-new-page"}
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: FakeAdapter())
+
+    op = _make_operation("op-catalog-page", targets=[models.new_target(
+        target_key="tk-catalog-page", idempotency_key="ik-catalog-page",
+        course_id="404")])
+    op["normalized_payload"] = {
+        "title": "Test", "body": "<p>Hi</p>", "published": True, "module_name": None,
+    }
+    operations.create_operation(op)
+    batch = batches.freeze_batch(["op-catalog-page"], {"op-catalog-page": [{}]})
+    operations.set_operation_review("op-catalog-page", batch)
+
+    result = executor.apply_operation(
+        "op-catalog-page", batch["batch_id"], batch["review_digest"])
+
+    assert result["status"] == "applied"
+    assert set(calls) == {("404", "pages")}
+
+
+def test_rubric_with_a_student_page_invalidates_pages_on_the_recovery_path(
+    tmp_path, monkeypatch,
+):
+    """RubricAdapter.execute creates a Canvas page whenever the payload carries
+    a student_page_title, on the crash-recovery apply seam as much as the
+    normal one."""
+    _root(tmp_path, monkeypatch)
+    from api.operation_ledger import recovery
+    calls = _spy_invalidate_scope(monkeypatch)
+
+    target = models.new_target(
+        target_key="tk-recover-rubric", idempotency_key="ik-recover-rubric",
+        course_id="505")
+    target["state"] = "sent_unknown"
+    target["attempt_id"] = "attempt-old"
+    op = _make_operation("op-recover-rubric", targets=[target])
+    op["kind"] = "content.rubric"
+    op["normalized_payload"] = {
+        "title": "Essay rubric", "student_page_title": "How this is graded",
+    }
+    operations.create_operation(op)
+
+    claim = models.new_claim(
+        claim_id="tk-recover-rubric:attempt-old",
+        target_key="tk-recover-rubric",
+        operation_id="op-recover-rubric",
+        attempt_id="attempt-old",
+        owner_pid=99999,
+        owner_started_at="2020-01-01T00:00:00+00:00",
+        payload_digest="digest")
+    claim["lease_expires_at"] = "2020-01-01T00:00:01+00:00"
+    storage.upsert_claim(claim)
+    claims.detect_expired_claims()
+
+    class FakeAdapter:
+        kind = "content.rubric"
+        def reconcile(self, payload, target, baseline):
+            return {"state": "applied", "returned_object_id": "rubric-1"}
+    monkeypatch.setattr(registry, "get_adapter", lambda kind: FakeAdapter())
+
+    summary = recovery.recover_pending_operations()
+
+    assert summary["recovered"] == 1
+    assert set(calls) == {("505", "pages")}
+
+
+def test_every_scope_the_hook_can_emit_is_a_real_invalidatable_scope():
+    """Vocabulary-drift guard. The hook names scopes as bare strings; a scope
+    that `course_catalog` does not accept would raise at apply time, and a real
+    scope the hook never names is a silent staleness gap (which is exactly how
+    `pages` was missed when the v3 catalog added it)."""
+    kinds = set(_catalog_reconcile._KIND_TO_CATALOG_SCOPES) | {
+        _catalog_reconcile._PAGE_KIND, _catalog_reconcile._RUBRIC_KIND}
+    scopes = set()
+    for kind in kinds:
+        for payload in ({}, {"module_name": "Unit 1"},
+                        {"student_page_title": "How this is graded"}):
+            scopes |= set(_catalog_reconcile._scopes_for(kind, payload))
+
+    assert scopes <= course_catalog.INVALIDATABLE_SCOPES, (
+        "hook emits a scope course_catalog.invalidate_scope would reject")
+    assert scopes == course_catalog.INVALIDATABLE_SCOPES - {"assignment_groups"}, (
+        "a v3 catalog scope gained or lost coverage in the post-apply hook: "
+        "confirm it against the adapters and update "
+        "docs/reference/mutation-reconciliation-map.md family 2")
+
+
+def test_page_apply_actually_marks_a_real_catalog_document_stale(tmp_path):
+    """End to end against a real v3 document: the pages scope flips to stale,
+    its records survive untouched, and no other scope moves."""
+    document = {
+        "version": course_catalog.CATALOG_VERSION,
+        "course_id": "606",
+        "course_name": "Fictional Course",
+        "updated_at": "2026-01-01T00:00:00+00:00",
+        "assignments": _fresh_scope({}),
+        "modules": _fresh_scope([]),
+        "assignment_groups": _fresh_scope([]),
+        "pages": _fresh_scope([{
+            "id": "500", "title": "Syllabus", "body_text": "hello",
+            "published": True, "front_page": False,
+            "updated_at": "2026-01-01T00:00:00+00:00",
+        }]),
+    }
+    course_catalog.write_catalog(copy.deepcopy(document), root=str(tmp_path))
+
+    reconcile_catalog_after_apply(
+        "content.page", "606", payload={"title": "New page"},
+        root=str(tmp_path), attempted_at="2026-02-02T00:00:00+00:00",
+    )
+
+    stored = course_catalog.read_catalog("606", root=str(tmp_path))["catalog"]
+    assert stored["pages"]["state"] == "stale"
+    assert stored["pages"]["error_code"] == "invalidated"
+    assert stored["pages"]["last_attempt_at"] == "2026-02-02T00:00:00+00:00"
+    assert stored["pages"]["records"] == document["pages"]["records"]
+    for other in ("assignments", "modules", "assignment_groups"):
+        assert stored[other] == document[other]
