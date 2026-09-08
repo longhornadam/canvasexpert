@@ -1,13 +1,17 @@
 # MCP lean interface
 
-> **Partly superseded, 2026-09-07.** This brief is still live for one thing only: the
-> pending Work and Cowork client compatibility checks under "Acceptance criteria". Its
-> write-policy decisions are no longer implementation authority. Commits `277e9d2` and
-> `5656dff` changed that direction after this brief was written, so anyone implementing
-> from here should read the current `_SERVER_INSTRUCTIONS` and `docs/mcp-server.md`
-> instead of decisions 5 and 6 below. The annotations inline mark what changed.
+> **Retired, 2026-09-07.** Nothing here is implementation authority. The last open
+> item, criterion F's external client checks, is closed out under "Execution result":
+> the ChatGPT Work half is satisfied by that day's capability probe, and the Cowork
+> half is blocked on a client tool-surface question that is not this brief's work and
+> now sits in `mcp-surface-legibility.md`. Its write-policy decisions were already
+> superseded by commits `277e9d2` and `5656dff`, so read the current
+> `_SERVER_INSTRUCTIONS` and `docs/mcp-server.md` rather than decisions 5 and 6 below.
+> Kept for the size measurements and the guide-routing decisions, which are still
+> accurate. The annotations inline mark what changed.
 
-Status: YELLOW. Senior accepted local implementation; external client checks pending.
+Status: RETIRED, closed 2026-09-07. Local implementation accepted; external client
+evidence recorded below.
 
 ## Objective and boundaries
 
@@ -163,6 +167,9 @@ showing text-only results remain usable. Executor should report this as pending
 senior/client evidence, not start or reconfigure either client. Local MCP SDK
 protocol evidence is required now and is not a substitute for these checks.
 
+> **Closed 2026-09-07.** ChatGPT Work: satisfied. Cowork: reassigned, not satisfied.
+> See the close-out under "Execution result". No further work belongs to this brief.
+
 ## Stop conditions
 
 Stop RED if the expected SDK/seam is absent, a tool cannot preserve its input or
@@ -234,9 +241,43 @@ ChatGPT Work and Claude Cowork smoke checks are pending senior evidence; no
 client was started or reconfigured here. Unresolved item is only that external
 client acceptance, not a local test or implementation failure.
 
-Remaining client check: after each existing Work/Cowork connection loads the
-updated server, read get_product_guide() and topic="full". Confirm the
-default begins with Appendix B, all ten topics are advertised, full returns
-the entire guide, and the client can use both results without a schema or
-parsing error. Do not run writes or fetch student data for this check.
-Record each client result here; retire this brief only after GREEN.
+## Close-out, 2026-09-07
+
+Criterion F was the only item still open. It is closed as follows, and this brief is
+retired.
+
+Local re-verification, run fresh at close-out rather than quoted from the execution
+result above: default topic `overview` returns 5,819 characters opening
+`Appendix B. What CanvasExpert can do`; exactly ten topics are advertised (overview,
+setup, chat_authoring, connected, privacy, troubleshooting, assessments, full,
+writing_timeline, writing_record); `topic="full"` returns 25,838 characters. Registry
+at 50 tools, `TOOL_SCHEMA_VERSION` 36, serialized listing 22,604 characters.
+Instructions are now 2,725 characters, up from the 2,641 recorded above because
+`277e9d2` and `5656dff` added write-policy prose, still inside the 3,000 cap.
+
+**ChatGPT Work: satisfied.** The 2026-09-07 capability probe from the ChatGPT/Codex
+desktop client (GPT-5, 37 calls, no writes) read the default guide plus the
+`connected`, `assessments` and `writing_record` topics, and the long page authoring
+contract. It reported every result as a single readable text block that parsed
+cleanly, with no schema, validation, or structured-output complaint from the client,
+and nothing empty, doubled, truncated, or reshaped across the whole run. Its
+capability map additionally claims reads of the setup, privacy, authoring and
+Writing Timeline guides. That is the text-only usability evidence F asked for.
+
+**Not exercised in either client:** `get_product_guide(topic="full")`. At 25,838
+characters it is the largest single result on the surface, and the local read above is
+clean, but no client has been handed a block that size. Carried as a single
+opportunistic read in the next Work or Cowork session and recorded in
+`mcp-surface-legibility.md`. It is not a blocker: nothing depends on `full` that the
+default and the narrow topics do not already cover.
+
+**Cowork: not satisfied, and reassigned.** That client's probe session received 7 of
+the 50 registered tools and zero characters of server instruction text, so
+`get_product_guide` was never reachable and the check could not run. None of that is
+caused by the work in this brief: there is one `FastMCP` instance (server.py:70), no
+tool gating anywhere in the server, and no tool allowlist in the connector writer
+(connections.py:52). The client and tunnel-profile question now sits in
+`mcp-surface-legibility.md` under "Out of scope, recorded", which is where it belongs,
+because it is a connection question rather than a guide or transport question.
+
+No decision, implementation, or verification item remains with this brief.
