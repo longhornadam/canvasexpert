@@ -1181,23 +1181,27 @@ def _staging_appendix(kind: str) -> str:
         f"the {kind.capitalize()} Inbox folder in the Canvas Expert workspace")
     return (
         "\n\n---\n\n"
-        "## Staging this for the teacher\n\n"
-        "Authored content is staged first. Staging is the default: it puts the "
-        "draft in front of the teacher in the matching Canvas Expert push tab, "
-        "under \"Staged by your assistant (pending review)\", where they can "
-        "validate and push it themselves.\n\n"
-        "Call stage_content with this kind, a short label, and the completed "
-        "envelope. Then tell the teacher it is staged.\n\n"
-        "If the teacher asks you to land it in Canvas rather than stage it for "
-        "review, that request is the authorization. Either call "
-        "push_content_live, which stages the draft and creates it in one call, "
-        "or stage it and then walk the pair: preview_content_push with this "
-        "kind and the draft's label, tell them what the preview says it will "
-        "create, then apply_content_push with the three coordinates unchanged. "
-        "Due, unlock and lock dates are only on the pair, so dated work goes "
-        "that way. "
-        "Both routes stage the draft either way, so there is always a file the "
-        "teacher can read afterwards.\n\n"
+        "## Getting this to the teacher\n\n"
+        "Every route stages the draft, so there is always a file the teacher "
+        "can read afterwards. What differs is where it stops.\n\n"
+        "**If the teacher asked for this in Canvas, put it there.** Call "
+        "push_content_live with this kind, a short label, the completed "
+        "envelope, and their course_id. It stages the draft and creates the "
+        "Canvas object in one call. Their request is the authorization: do "
+        "not stage it instead and ask, and do not ask them to confirm a "
+        "preview they did not ask for. Drafts land unpublished unless they "
+        "asked for published=true, so what you create is visible to them and "
+        "not yet to students -- they can edit or delete it by hand in Canvas "
+        "and tell you what to change.\n\n"
+        "**If they asked you to prepare it for their review**, call "
+        "stage_content with the same kind, label, and envelope, and tell them "
+        "it is staged. It appears in the matching Canvas Expert push tab under "
+        "\"Staged by your assistant (pending review)\" for them to validate "
+        "and push themselves.\n\n"
+        "**For due, unlock or lock dates**, stage it, then walk the pair: "
+        "preview_content_push with this kind and the draft's label carries "
+        "the dates, and apply_content_push with the three coordinates "
+        "unchanged lands it.\n\n"
         f"The Inbox for this kind is `{where}`. You do not need to write there "
         "yourself; stage_content handles the envelope and the byte-count marker "
         "that keeps a half-synced draft from being picked up.\n"
@@ -2043,10 +2047,14 @@ def push_content_live(
 ) -> dict:
     """Stage one authored draft and create it in Canvas in a single call.
 
-    For a teacher who has asked for the content to be landed. Staging still
-    happens, so the draft remains on disk as the artifact of record, and the
-    same baseline capture, frozen review, and drift check run internally
-    between staging and applying. Dates stay on the preview pair.
+    The route for a teacher who asked for the content in Canvas. Their ask is
+    the authorization: this is not a gate to route around, it is the gate --
+    staging still happens, so the draft remains on disk as the artifact of
+    record, and the same baseline capture, frozen review, and drift check run
+    internally between staging and applying. What it drops is the round trip
+    that asked the teacher to approve a review they never asked to see.
+
+    Dates stay on the preview pair.
     """
     return content_push.push_content_live(
         course_id, kind, label, content,

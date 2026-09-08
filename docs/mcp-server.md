@@ -11,8 +11,9 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
   carries a `canvas_group` patch, which reassigns real Canvas group membership),
   `apply_new_quiz_scores`, `apply_sis_grade_bridge`, `apply_content_push`, and
   `push_content_live`, which stages a draft and applies it in one call for a teacher
-  who asked for it to be landed. The freeze is internal there, not skipped: the same
-  baseline capture, frozen review, and drift check run between staging and applying.
+  who asked for content in their course. The freeze is internal there, not skipped: the
+  same baseline capture, frozen review, and drift check run between staging and
+  applying. What it drops is the round trip, not a safeguard.
   Everything else writes only to local CanvasExpert state.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
@@ -63,7 +64,7 @@ Tool schema version 39 (42 tools).
 | `list_staged_content(kind="")` | Drafts in the local review Inbox; pass `kind` to filter or omit it for all drafts | No |
 | `preview_content_push(course_id, kind, label, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Persists a local frozen review of one staged draft for one Current course; `next` carries the confirm-then-apply handoff | No |
 | `apply_content_push(operation_id, batch_id, review_digest)` | Creates the exact frozen draft in Canvas through the Operation Ledger; same claims, drift check, and receipt as the push tab | No |
-| `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", post_to_sis=false)` | Stages one authored draft and creates it in Canvas in a single call; the draft stays staged as the artifact of record. Carries no dates: use the preview pair for those | No |
+| `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", post_to_sis=false)` | The route for a teacher who asked for content in Canvas; stages the draft, freezes and drift-checks it internally, then creates it. Unpublished unless `published=true`. Carries no dates: use the preview pair for those | No |
 | `get_roster(course_id)` | Current mirror roster as stable one-word stand-ins and section names | Yes, pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames are omitted | Yes, pseudonymized |
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
@@ -98,12 +99,22 @@ tab. What changed is who performs that step. `stage_content` lets the assistant 
 draft itself, so a client with no file access can reach the Inbox, and the teacher no
 longer hand-drops a file in the middle of a request they already made.
 
-From there the teacher can push it in the tab, or ask the assistant to land it. Staging
-is still the default landing place; a teacher asking for content to be created is what
-selects the other path. `push_content_live` is that path: it stages the draft and applies
-it in one call, keeping the freeze internally so the baseline capture, persisted review,
-and drift check all still run. A draft that stages but fails to push is left staged on
-purpose, so the teacher can read what was authored.
+From there the route is chosen by what the teacher asked for, not by a default that
+outranks them. A teacher who asked for content in their course gets `push_content_live`:
+it stages the draft and applies it in one call, keeping the freeze internally so the
+baseline capture, persisted review, and drift check all still run. Their ask is the
+authorization, so the assistant does not stage the draft and ask again, and does not put
+a review in front of them that they never asked to see. A teacher who asked for a draft
+prepared for their review gets `stage_content` and stops there, with the draft waiting in
+the push tab. A draft that stages but fails to push is left staged on purpose, so the
+teacher can read what was authored.
+
+The reviewed-preview machinery is not what makes the write safe to skip asking about --
+it runs on every route. What the pair adds over the live push is a chance to look and a
+place to put dates, and a teacher who wants neither should not have to walk it. Drafts
+land unpublished unless `published=true`, which is the property that makes this
+recoverable: the teacher can edit or delete the object by hand in Canvas before any
+student sees it.
 
 The live push carries no due, unlock, or lock dates. Scheduling stays on
 `preview_content_push`, because dated work is the case that most wants a look before it

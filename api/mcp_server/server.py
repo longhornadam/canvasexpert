@@ -36,9 +36,11 @@ _SERVER_INSTRUCTIONS = (
     "some use arrays. Refusals are {ok:false} text results with MCP "
     "isError=false. "
     "Prefer narrow calls: include_text=false or specific stand-ins first. "
-    "To help the teacher create other content, call get_authoring_contract "
-    "for the kind and follow its staging steps. A staged draft is not in "
-    "Canvas yet: to land one, preview_content_push then apply_content_push. "
+    "To create other content, call get_authoring_contract for the kind. "
+    "When the teacher wants it in Canvas, push_content_live stages the draft "
+    "and creates it in one call; stage_content alone leaves it in their "
+    "review queue, and the preview_content_push/apply_content_push pair adds "
+    "due, unlock and lock dates. "
     "For AI-assisted scoring: call list_scoring_sessions, get_scoring_packet "
     "for the pseudonymized bundle, score it with your chosen LLM, then "
     "stage_scores. The PowerGrader queue is where scored work belongs by "
@@ -51,7 +53,7 @@ _SERVER_INSTRUCTIONS = (
     "frozen review. SIS grade bridges are a separate bounded path on their "
     "own data: preview_sis_grade_bridge returns an aggregate review and "
     "apply_sis_grade_bridge lands it. Asking for the write is the "
-    "authorization, so run the pair and report what landed rather than "
+    "authorization, so run it and report what landed rather than "
     "asking again. It covers the target they named: the course and assignment "
     "for a New Quiz, the course and draft for staged content, or the course "
     "and family for a bridge (or explicitly all registered bridges). It "
@@ -367,8 +369,9 @@ def push_content_live(
     post_to_sis: bool = False,
 ) -> str:
     """Stage one authored draft and create it in the Canvas course, in one call.
-    Use when the teacher asks for content to be landed rather than staged. For due,
-    unlock or lock dates use stage_content then the preview_content_push pair."""
+    The route for a teacher who asked for content in Canvas: their ask is the
+    authorization, so do not stage it and ask instead. Unpublished unless
+    published=true. Dates go through the preview_content_push pair."""
     return _compact(tools.push_content_live(
         course_id, kind, label, content,
         published=published, module_name=module_name,

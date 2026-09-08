@@ -305,29 +305,45 @@ under you: read again rather than forcing it.
     apply_new_quiz_scores after scores are staged. SIS bridges use
     preview_sis_grade_bridge and apply_sis_grade_bridge for the exact family.
 
-Staging a draft, which is how authored content reaches the teacher:
+How authored content reaches the teacher. Which one you use is decided by
+what they asked for, not by a default that outranks them:
 
-  1. Write the finished envelope as a .txt file into that kind's To Review
-     folder. The contract response tells you the exact path.
-  2. Write a sibling marker file with .done added to the same name, for example
-     my-quiz.txt and my-quiz.txt.done. Its only contents are the draft's size
-     in bytes, measured from the file on disk after writing it. Do not use the
-     length of the text you generated: a text-mode write can turn each line
-     ending into two bytes, so a count taken beforehand will not match and the
-     draft is held back on purpose until the sizes agree.
-  3. Tell the teacher it is staged. It appears under "Staged by your assistant
-     (pending review)" on the matching Create tab, where they can validate and
-     push it themselves.
-  4. If they would rather you land it, preview_content_push(course_id, kind,
-     label) freezes that one draft for that one course and returns what it will
-     create; apply_content_push lands it with the three coordinates unchanged.
-     The label is the one list_staged_content returns. Delivery options are per
-     kind: a page takes published and module_name, a rubric only published, and
-     a quiz or assignment also takes assignment_group_name, post_to_sis, and
-     ISO 8601 due_at, unlock_at, and lock_at. Naming one a kind cannot carry is
-     refused rather than quietly dropped, and a draft stays unpublished unless
-     you pass published=true. Read the preview to the teacher in plain words,
-     then apply.
+  * They asked for it in their Canvas course. Call
+    push_content_live(course_id, kind, label, content) with the finished
+    envelope. It stages the draft and creates the Canvas object in one call.
+    Their ask is the authorization: do not stage it and ask again, and do not
+    put a preview in front of them they did not ask to see. The draft stays
+    unpublished unless you pass published=true, so it is visible to them and
+    not yet to students -- they can edit or delete it by hand in Canvas and
+    tell you what to change. Report what landed, including the URL it returns.
+  * They asked you to prepare it for their review. Call
+    stage_content(kind, label, content) and stop there. Tell them it is
+    staged; it appears under "Staged by your assistant (pending review)" on
+    the matching Create tab, where they validate and push it themselves.
+  * It needs a due, unlock, or lock date. Stage it, then
+    preview_content_push(course_id, kind, label) freezes that one draft for
+    that one course and returns what it will create, and apply_content_push
+    lands it with the three coordinates unchanged. The label is the one
+    list_staged_content returns.
+
+Delivery options are per kind: a page takes published and module_name, a rubric
+only published, and a quiz or assignment also takes assignment_group_name,
+post_to_sis, and -- on the preview pair only -- ISO 8601 due_at, unlock_at, and
+lock_at. Naming one a kind cannot carry is refused rather than quietly dropped.
+
+Every route stages the draft, so there is always a file the teacher can read
+afterwards, and every route runs the same baseline capture, frozen review, and
+drift check. The live push keeps that freeze internally rather than skipping
+it; what it drops is the round trip.
+
+If you have file access you may write the Inbox yourself instead of calling
+stage_content: the envelope goes to <label>.txt in that kind's To Review
+folder, with a sibling <label>.txt.done whose only contents are the draft's
+size in bytes measured from the file on disk after writing it. Do not use the
+length of the text you generated -- a text-mode write can turn each line
+ending into two bytes, so a count taken beforehand will not match, and the
+draft is held back on purpose until the sizes agree. stage_content handles
+both files correctly, so prefer it.
 
 Outside the roster canvas_group path, New Quiz item finalization, the SIS
 bridge path, and a staged draft the teacher asked you to land, nothing above
