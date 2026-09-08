@@ -64,7 +64,7 @@ Tool schema version 38 (54 tools).
 | `list_staged_content(kind="")` | Drafts in the local review Inbox; pass `kind` to filter or omit it for all drafts | No |
 | `preview_content_push(course_id, kind, label, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Persists a local frozen review of one staged draft for one Current course; `next` carries the confirm-then-apply handoff | No |
 | `apply_content_push(operation_id, batch_id, review_digest)` | Creates the exact frozen draft in Canvas through the Operation Ledger; same claims, drift check, and receipt as the push tab | No |
-| `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Stages one authored draft and creates it in Canvas in a single call; the draft stays staged as the artifact of record | No |
+| `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", post_to_sis=false)` | Stages one authored draft and creates it in Canvas in a single call; the draft stays staged as the artifact of record. Carries no dates: use the preview pair for those | No |
 | `get_roster(course_id)` | Current mirror roster as stable one-word stand-ins and section names | Yes, pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes, pseudonymized |
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
@@ -116,7 +116,12 @@ is still the default landing place; a teacher asking for content to be created i
 selects the other path. `push_content_live` is that path: it stages the draft and applies
 it in one call, keeping the freeze internally so the baseline capture, persisted review,
 and drift check all still run. A draft that stages but fails to push is left staged on
-purpose, so the teacher can read what was authored. `preview_content_push` names the draft by the label
+purpose, so the teacher can read what was authored.
+
+The live push carries no due, unlock, or lock dates. Scheduling stays on
+`preview_content_push`, because dated work is the case that most wants a look before it
+lands, and every parameter is paid for in the tool listing of every session. Dated
+content goes `stage_content`, then the preview pair. `preview_content_push` names the draft by the label
 `list_staged_content` returns, builds the same adapter payload the push tab builds,
 captures the Canvas baseline, and persists one frozen operation; `apply_content_push`
 takes only the three coordinates that preview returned and runs the same Operation Ledger

@@ -373,19 +373,15 @@ def push_content_live(
     published: bool = False,
     module_name: str = "",
     assignment_group_name: str = "",
-    due_at: str = "",
-    unlock_at: str = "",
-    lock_at: str = "",
     post_to_sis: bool = False,
 ) -> str:
     """Stage one authored draft and create it in the Canvas course, in one call.
-    Use when the teacher asks for content to be landed rather than staged; same
-    content as stage_content, same options as preview_content_push."""
+    Use when the teacher asks for content to be landed rather than staged. For due,
+    unlock or lock dates use stage_content then the preview_content_push pair."""
     return _compact(tools.push_content_live(
         course_id, kind, label, content,
         published=published, module_name=module_name,
         assignment_group_name=assignment_group_name,
-        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
         post_to_sis=post_to_sis,
     ))
 

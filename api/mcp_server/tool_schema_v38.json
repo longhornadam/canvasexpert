@@ -542,14 +542,11 @@
         "assignment_group_name": "string",
         "content": "string",
         "course_id": "string",
-        "due_at": "string",
         "kind": "string",
         "label": "string",
-        "lock_at": "string",
         "module_name": "string",
         "post_to_sis": "boolean",
-        "published": "boolean",
-        "unlock_at": "string"
+        "published": "boolean"
       }
     },
     {

@@ -1288,6 +1288,8 @@ def _staging_appendix(kind: str) -> str:
         "or stage it and then walk the pair: preview_content_push with this "
         "kind and the draft's label, tell them what the preview says it will "
         "create, then apply_content_push with the three coordinates unchanged. "
+        "Due, unlock and lock dates are only on the pair, so dated work goes "
+        "that way. "
         "Both routes stage the draft either way, so there is always a file the "
         "teacher can read afterwards.\n\n"
         f"The Inbox for this kind is `{where}`. You do not need to write there "
@@ -2131,9 +2133,6 @@ def push_content_live(
     published: bool = False,
     module_name: str = "",
     assignment_group_name: str = "",
-    due_at: str = "",
-    unlock_at: str = "",
-    lock_at: str = "",
     post_to_sis: bool = False,
 ) -> dict:
     """Stage one authored draft and create it in Canvas in a single call.
@@ -2141,13 +2140,12 @@ def push_content_live(
     For a teacher who has asked for the content to be landed. Staging still
     happens, so the draft remains on disk as the artifact of record, and the
     same baseline capture, frozen review, and drift check run internally
-    between staging and applying.
+    between staging and applying. Dates stay on the preview pair.
     """
     return content_push.push_content_live(
         course_id, kind, label, content,
         published=published, module_name=module_name,
         assignment_group_name=assignment_group_name,
-        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
         post_to_sis=post_to_sis,
     )
 

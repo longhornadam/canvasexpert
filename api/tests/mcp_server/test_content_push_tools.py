@@ -626,14 +626,31 @@ def test_push_content_live_refuses_a_bad_label_before_touching_canvas(_adapter):
 
 
 def test_push_content_live_refuses_an_option_the_kind_cannot_carry(_adapter):
-    """Same per-kind option discipline as the preview path: a page has no due
-    date, and saying so beats silently dropping it."""
+    """Same per-kind option discipline as the preview path: a page has no
+    assignment group, and saying so beats silently dropping it."""
     result = content_push.push_content_live(
-        "course-x", "page", "dated", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>",
-        due_at="2026-10-01T23:59:00Z")
+        "course-x", "page", "grouped", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>",
+        assignment_group_name="Essays")
 
     assert result["ok"] is False
-    assert "due_at" in result["error"]
+    assert "assignment_group_name" in result["error"]
+
+
+def test_push_content_live_carries_no_scheduling_options():
+    """Dates are deliberately preview-only: the live push is for content a
+    teacher wants landed now, and dated work is exactly the case that wants a
+    look first. Pinned so a later convenience parameter is a decision rather
+    than a drift."""
+    import inspect
+
+    live = set(inspect.signature(content_push.push_content_live).parameters)
+    preview = set(inspect.signature(content_push.preview_content_push).parameters)
+
+    assert not live & {"due_at", "unlock_at", "lock_at"}
+    assert {"due_at", "unlock_at", "lock_at"} <= preview
+    # Everything else the live push takes still matches the preview path, so
+    # the two do not quietly drift apart on the options they share.
+    assert (live - {"content"}) <= preview
 
 
 def test_live_push_tools_delegate_to_the_shared_use_case(monkeypatch):

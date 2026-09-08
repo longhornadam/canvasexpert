@@ -23,10 +23,12 @@ INSTRUCTION_BUDGET = 3000
 # teacher's "publish it in module 3, due Friday" survives into the schema.
 # Raised again from 18,965 for stage_content and push_content_live, which let a
 # teacher's "push it live" complete without hand-dropping a file. Descriptions
-# were trimmed first; what remains is push_content_live's delivery options,
-# carried as named parameters for the same reason preview_content_push carries
-# them, so the trade is the same one already accepted above.
-LISTING_BUDGET = 20132
+# were trimmed first, and the live push carries no due/unlock/lock dates: those
+# stay on preview_content_push, which is the call that shows the teacher what
+# lands. Worth knowing before trading more parameters away, because that cut
+# bought only 109 characters -- the cost here is two tools existing at all, not
+# their options.
+LISTING_BUDGET = 20023
 DESCRIPTION_BUDGET = 343
 
 RESULT_NEXT_TOOLS = {

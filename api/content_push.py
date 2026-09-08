@@ -320,9 +320,6 @@ def push_content_live(
     published: bool = False,
     module_name: str = "",
     assignment_group_name: str = "",
-    due_at: str = "",
-    unlock_at: str = "",
-    lock_at: str = "",
     post_to_sis: bool = False,
 ) -> dict:
     """Stage one authored draft and land it in Canvas in a single call.
@@ -337,6 +334,11 @@ def push_content_live(
     course that changed underneath is still refused rather than overwritten. A
     draft that stages but fails to push is left staged on purpose, so the
     teacher can see what was authored and fix it.
+
+    Carries no due/unlock/lock dates. Every parameter here is paid for in the
+    tool listing of every session, and dated work is the case that most wants a
+    look before it lands, so scheduling stays on preview_content_push: stage the
+    draft, preview it with the dates, then apply.
     """
     staged = stage_content(kind, label, content)
     if not staged.get("ok"):
@@ -346,7 +348,6 @@ def push_content_live(
         course_id, kind, staged["label"],
         published=published, module_name=module_name,
         assignment_group_name=assignment_group_name,
-        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
         post_to_sis=post_to_sis,
     )
     if not review.get("ok"):
