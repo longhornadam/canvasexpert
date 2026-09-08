@@ -5,11 +5,11 @@ lets any MCP-capable assistant help plan lessons and manage rosters conversation
 while CanvasExpert keeps sole custody of the Canvas PAT and almost every write path.
 
 - **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
-  local copy on their computer. It never holds the Canvas token. Three digest-protected
+  local copy on their computer. It never holds the Canvas token. Four digest-protected
   apply tools reach Canvas, each gated by its own preview: `apply_roster_student_change`
   (only when the reviewed preview carries a `canvas_group` patch, which reassigns real
-  Canvas group membership), `apply_new_quiz_scores`, and `apply_sis_grade_bridge`.
-  Everything else writes only to local CanvasExpert state.
+  Canvas group membership), `apply_new_quiz_scores`, `apply_sis_grade_bridge`, and
+  `apply_content_push`. Everything else writes only to local CanvasExpert state.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   one-word pseudonym (e.g. "Pikachu") — never a real name, Canvas user ID, or SIS ID. See
@@ -34,7 +34,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 36 (50 tools).
+Tool schema version 37 (52 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -57,6 +57,8 @@ Tool schema version 36 (50 tools).
 | `get_assessment_context(course_id, pseudonyms="")` | Bounded local assessment evidence for exact Current-roster pseudonyms; observational only | Yes, pseudonymized |
 | `get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct", cutoffs="", no_data_group="", group_set_label="")` | Read-only grouping proposal using an exact teacher-safe group-set label; no Canvas apply path | Yes, pseudonymized |
 | `list_staged_content(kind="")` | Drafts in the local review Inbox; pass `kind` to filter or omit it for all drafts | No |
+| `preview_content_push(course_id, kind, label, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Persists a local frozen review of one staged draft for one Current course; `next` carries the confirm-then-apply handoff | No |
+| `apply_content_push(operation_id, batch_id, review_digest)` | Creates the exact frozen draft in Canvas through the Operation Ledger; same claims, drift check, and receipt as the push tab | No |
 | `get_roster(course_id)` | Current mirror roster as stable one-word stand-ins and section names | Yes, pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes, pseudonymized |
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
@@ -95,6 +97,21 @@ hasn't been refreshed yet, refresh it from the web UI first, then retry. Unlike 
 tools below, `get_modules` never refuses on staleness: it returns whatever module records
 the catalog holds, labeled with `source`, `synced_at`, and `state`, since module structure
 is far lower-risk than student data.
+
+The staged-content push pair lands authored content the assistant already staged.
+Authoring still stages first: the assistant writes the envelope and its `.done` marker
+into the per-kind To Review Inbox, exactly as `get_authoring_contract` describes, and the
+draft appears in the matching push tab. The teacher can push it there, or ask the
+assistant to land it. `preview_content_push` names the draft by the label
+`list_staged_content` returns, builds the same adapter payload the push tab builds,
+captures the Canvas baseline, and persists one frozen operation; `apply_content_push`
+takes only the three coordinates that preview returned and runs the same Operation Ledger
+apply, so a draft landed from chat and a draft landed from the web UI are the same write
+with the same claim, drift check, per-step checkpoints, and receipt. One draft, one
+course, one call: the assistant cannot reach a second course or a draft the teacher did
+not name, and a course that changed under the frozen review is refused as drift rather
+than overwritten. Delivery options are per kind, and naming one a kind cannot carry is
+refused rather than dropped. Drafts stay unpublished unless `published=true`.
 
 The SIS grade-bridge pair is a bounded, family-specific Canvas write surface.
 Preview persists a local frozen operation and returns all three coordinates apply needs:

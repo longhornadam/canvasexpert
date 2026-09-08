@@ -42,7 +42,7 @@ import secrets
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 
-from api import course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, operational_log, roster_context, roster_service, sis_grade_bridge
+from api import content_push, course_scope, feedback_scrub, gradebook_queries, gradebook_snapshot, learning_objectives, operational_log, roster_context, roster_service, sis_grade_bridge
 from api.dataforge import canvas_join, grouping, history_store, paths as dataforge_paths, profile_export
 from api.dataforge.identity import IdentityMigrationError, VaultIdentity
 from api.mirror import queries as mirror_queries
@@ -183,6 +183,11 @@ _NEXT_STEPS = {
     "preview_new_quiz_scores": (
         "Summarize the frozen review and get teacher confirmation, then call "
         "apply_new_quiz_scores with operation_id and review_digest unchanged."
+    ),
+    "preview_content_push": (
+        "Tell the teacher what the preview says this will create, then call "
+        "apply_content_push with operation_id, batch_id, and review_digest "
+        "unchanged. A teacher who asked for the push has already authorized it."
     ),
 }
 
@@ -1083,10 +1088,13 @@ _TOOL_GROUPS = {
     ),
     "Create and Forge": (
         # The product guide selects the workflow; the contract and staged list
-        # are the two authoring-specific artifacts that workflow reaches.
+        # are the two authoring-specific artifacts that workflow reaches, and
+        # the push pair is where a staged draft becomes real Canvas content.
         "get_product_guide",
         "get_authoring_contract",
         "list_staged_content",
+        "preview_content_push",
+        "apply_content_push",
     ),
     "PowerGrader": (
         "start_scoring_session",
@@ -1266,8 +1274,8 @@ def _staging_appendix(kind: str) -> str:
     return (
         "\n\n---\n\n"
         "## Staging this for the teacher\n\n"
-        "Authored files are staged, not pushed. When the draft is ready, stage it for "
-        "the teacher to review and push:\n\n"
+        "Authored files are staged first, never written straight to Canvas. When "
+        "the draft is ready, stage it:\n\n"
         f"1. Write the completed envelope to a `.txt` file in this kind's Inbox "
         f"folder:\n   `{where}`\n"
         "2. Write a sibling marker file named the same with `.done` added (for "
@@ -1279,7 +1287,10 @@ def _staging_appendix(kind: str) -> str:
         "agree.\n"
         "3. Tell the teacher it is staged. It appears under \"Staged by your "
         "assistant (pending review)\" in the matching Canvas Expert push tab, "
-        "where they validate and push it. Nothing here pushes it for you.\n"
+        "where they can validate and push it themselves. If they would rather "
+        "you land it, call preview_content_push with this kind and the draft's "
+        "label, tell them what the preview says it will create, then "
+        "apply_content_push with the three coordinates unchanged.\n"
     )
 
 
@@ -2040,6 +2051,63 @@ def list_staged_content(kind: str = "") -> dict:
         for entry in deps.list_inbox_files(k)
     ]
     return {"ok": True, "staged": _tabulate(rows, _STAGED_CONTENT_COLUMNS)}
+
+
+def preview_content_push(
+    course_id: str,
+    kind: str,
+    label: str,
+    published: bool = False,
+    module_name: str = "",
+    assignment_group_name: str = "",
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+    post_to_sis: bool = False,
+) -> dict:
+    """Freeze one staged draft (quiz/assignment/page/rubric, by the label
+    list_staged_content returns) into a persisted, digest-protected review for
+    one Current course, and return what it will create. No Canvas write here:
+    Canvas is read only to capture the baseline apply drift-checks against.
+
+    Delivery options are per kind -- a page takes published and module_name, a
+    rubric only published, and a quiz or assignment also takes
+    assignment_group_name, post_to_sis, and ISO 8601 due_at/unlock_at/lock_at.
+    Naming one a kind cannot carry is refused, not dropped. Drafts stay
+    unpublished unless published=true.
+
+    Returns operation_id, batch_id, and review_digest (pass all three,
+    unchanged, to apply_content_push) plus the frozen preview: the course, the
+    title, and whether an object of that name already exists in the course.
+    No course_id, student data, vault, or safety gate applies -- authored
+    content carries none.
+    """
+    return _with_next("preview_content_push", content_push.preview_content_push(
+        course_id, kind, label,
+        published=published, module_name=module_name,
+        assignment_group_name=assignment_group_name,
+        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
+        post_to_sis=post_to_sis,
+    ))
+
+
+def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> dict:
+    """Create exactly what preview_content_push froze in the Canvas course it
+    froze it against.
+
+    Takes only the three opaque coordinates that preview returned, so nothing
+    here can reach another draft, course, or kind. Runs the same Operation
+    Ledger apply the teacher's own push tab runs -- one claim, a drift check
+    against the frozen baseline, per-step checkpoints, and a durable receipt --
+    so a draft landed from chat and one landed from the web UI are the same
+    write. A draft whose course changed under the frozen review is refused as
+    drift rather than overwritten.
+
+    Returns the operation status and, per target, the state and the Canvas URL
+    of what was created. Refuses cleanly, with no Canvas call, when the
+    coordinates do not match a frozen content review.
+    """
+    return content_push.apply_content_push(operation_id, batch_id, review_digest)
 
 
 _MIRROR_UNAVAILABLE_ROSTER_ERROR = (

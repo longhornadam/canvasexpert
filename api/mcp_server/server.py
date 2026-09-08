@@ -37,7 +37,8 @@ _SERVER_INSTRUCTIONS = (
     "isError=false. "
     "Prefer narrow calls: include_text=false or specific stand-ins first. "
     "To help the teacher create other content, call get_authoring_contract "
-    "for the kind and follow the staging steps in its response. "
+    "for the kind and follow its staging steps. A staged draft is not in "
+    "Canvas yet: to land one, preview_content_push then apply_content_push. "
     "For AI-assisted scoring: call list_scoring_sessions, get_scoring_packet "
     "for the pseudonymized bundle, score it with your chosen LLM, then "
     "stage_scores. The PowerGrader queue is where scored work belongs by "
@@ -51,9 +52,10 @@ _SERVER_INSTRUCTIONS = (
     "own data: preview_sis_grade_bridge returns an aggregate review and "
     "apply_sis_grade_bridge lands it. Asking for the write is the "
     "authorization, so run the pair and report what landed rather than "
-    "asking again. It covers the target they named, the course and assignment "
-    "for a New Quiz or the course and family for a bridge (or explicitly all "
-    "already-registered bridges), and does not carry to another assignment, "
+    "asking again. It covers the target they named: the course and assignment "
+    "for a New Quiz, the course and draft for staged content, or the course "
+    "and family for a bridge (or explicitly all registered bridges). It "
+    "does not carry to another assignment, draft, "
     "course, family, or session. If their words do not pin the target down, "
     "ask which one; that is the only question worth stopping for. An "
     "invariant failure still stops the write on its own. "
@@ -317,6 +319,41 @@ def list_staged_content(kind: str = "") -> str:
     """List drafts currently staged in the teacher's local review Inbox.
     Pass kind to filter or omit it for all drafts. No student data."""
     return _compact(tools.list_staged_content(kind))
+
+
+@mcp.tool(structured_output=False)
+def preview_content_push(
+    course_id: str,
+    kind: str,
+    label: str,
+    published: bool = False,
+    module_name: str = "",
+    assignment_group_name: str = "",
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+    post_to_sis: bool = False,
+) -> str:
+    """Persist a local frozen review of one staged draft before anything reaches Canvas.
+    kind is quiz/assignment/page/rubric; label comes from list_staged_content. Quizzes and
+    assignments take the scheduling and grouping options, pages take module_name, and a
+    kind refuses an option it cannot carry. Dates are ISO 8601."""
+    return _compact(tools.preview_content_push(
+        course_id, kind, label,
+        published=published, module_name=module_name,
+        assignment_group_name=assignment_group_name,
+        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
+        post_to_sis=post_to_sis,
+    ))
+
+
+@mcp.tool(structured_output=False)
+def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> str:
+    """Create the exact frozen draft in the Canvas course its review was frozen against.
+    Use only the unchanged coordinates returned by preview_content_push."""
+    return _compact(tools.apply_content_push(
+        operation_id, batch_id, review_digest
+    ))
 
 
 @mcp.tool(structured_output=False)

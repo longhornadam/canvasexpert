@@ -17,8 +17,11 @@ from api.mcp_server import server, tools
 # hold every client to that, but we can stop the block growing: any addition
 # now has to earn its place by displacing something.
 INSTRUCTION_BUDGET = 3000
-# Slice B moved post-call procedure into bounded result advisories.
-LISTING_BUDGET = 17717
+# Slice B moved post-call procedure into bounded result advisories. Raised once
+# from 17,717 for the staged-content push pair: preview_content_push carries the
+# delivery options as named parameters rather than one opaque object, so the
+# teacher's "publish it in module 3, due Friday" survives into the schema.
+LISTING_BUDGET = 18965
 DESCRIPTION_BUDGET = 343
 
 RESULT_NEXT_TOOLS = {
@@ -33,6 +36,7 @@ RESULT_NEXT_TOOLS = {
     "preview_school_calendar_event_change",
     "preview_school_calendar_game_score",
     "preview_new_quiz_scores",
+    "preview_content_push",
 }
 
 
@@ -157,10 +161,12 @@ def test_first_lines_disclose_preview_and_canvas_write_boundaries():
         "preview_school_calendar_game_score",
     ):
         assert "without writing" in first_lines[name]
-    for name in ("preview_new_quiz_scores", "preview_sis_grade_bridge"):
-        assert "persist" in first_lines[name]
+    for name in ("preview_new_quiz_scores", "preview_sis_grade_bridge",
+                 "preview_content_push"):
+        assert "persist" in first_lines[name].casefold()
         assert "local" in first_lines[name]
-    for name in ("apply_new_quiz_scores", "apply_sis_grade_bridge"):
+    for name in ("apply_new_quiz_scores", "apply_sis_grade_bridge",
+                 "apply_content_push"):
         assert "Canvas" in first_lines[name]
     assert "Canvas membership" in first_lines["apply_roster_student_change"]
     assert "list_courses" in first_lines["list_courses"]
@@ -183,7 +189,7 @@ def test_the_schemas_themselves_survive_the_strip():
 
 def test_all_registered_tools_use_text_only_result_transport():
     listed = asyncio.run(server.mcp.list_tools())
-    assert len(listed) == 50
+    assert len(listed) == 52
     registry = server.mcp._tool_manager._tools
     assert all(tool.outputSchema is None for tool in listed)
     assert all(item.fn_metadata.output_schema is None
@@ -225,9 +231,9 @@ def test_each_registered_wrapper_returns_one_gated_text_block(_synthetic_mcp):
         return results
 
     results = asyncio.run(call_all())
-    assert len(results) == 50
-    assert len(_synthetic_mcp["calls"]) == 50
-    assert len(_synthetic_mcp["gated"]) == 50
+    assert len(results) == 52
+    assert len(_synthetic_mcp["calls"]) == 52
+    assert len(_synthetic_mcp["gated"]) == 52
     for name, content in results:
         assert len(content) == 1
         assert content[0].type == "text"
