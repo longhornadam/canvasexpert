@@ -324,7 +324,7 @@ teacher-selected object or write workflow. “Deferred” means do not add merel
 | Attachment/file bytes | Focused only | Canonical private evidence owner | PowerGrader, explicit open/download, portfolios | Never background-prefetch all files |
 | Assignment overrides | Focused/live | Command or focused report owner | Extensions, differentiation, write preflight | Do not globally mirror override trees for 1.0 beta |
 | Page/module item stubs | Required through modules | Student-free catalog | Course structure/navigation | Title/type/content ID only |
-| Page bodies | Deferred | No 1.0-beta projection | Possible future course search/AI context | Add only with a named consumer and plain-text allowlist |
+| Page bodies | Required since 2026-08-01 | Student-free catalog `pages` scope | `get_course_pages` MCP course context, web UI course-catalog route | Normalized plain text only; every URL rewritten to `[link]` |
 | Classic Quiz questions and detailed responses | Live/focused or Canvas-native | PowerGrader/SpeedGrader boundary | Grading | No broad mirror in 1.0 beta |
 | Teacher/TA/observer directory | Deferred/minimal classification only | None unless a current consumer proves need | Comment authorship edge cases | Do not mirror emails for convenience |
 | Student email and avatars | Live explicit action or remove consumer | No default persistence | Course Info edge case | Privacy cost exceeds routine value |
@@ -334,17 +334,32 @@ teacher-selected object or write workflow. “Deferred” means do not add merel
 | Grade-change audit history | Live/receipt-based | Operation receipts, not mirror | Reconciliation/support | Current state is not an audit log |
 | Operation plans, receipts, pseudonym vault | Outside CanvasMirror | Existing private owners | Writes, AI safety | Irreplaceable local state is not disposable mirror data |
 
-### 7.1 Why page bodies are not a 1.0-beta requirement
+### 7.1 Why page bodies were deferred, and what met the bar
 
-The project can create, reconcile, and place pages without using page bodies as routine read
-context. Those operations require live baselines and verification anyway. Module item stubs
-already answer the current navigation question: what page is placed where?
+Page bodies were originally deferred. The project can create, reconcile, and place pages
+without using page bodies as routine read context; those operations require live baselines
+and verification anyway, and module item stubs already answer the navigation question: what
+page is placed where? The bar for adding a scope was a concrete product needing local course
+search, course-context generation, content audits, or offline page review, built student-free,
+persisting normalized plain text plus stable identity/timestamps, and never storing raw HTML,
+signed URLs, or arbitrary page fields. Pages existing in Canvas was explicitly not reason
+enough on its own.
 
-A page-body scope becomes worthwhile if a concrete product needs local course search,
-course-context generation, content audits, or offline page review. That future scope should
-be student-free, persist normalized plain text plus stable identity/timestamps, and never
-store raw HTML, signed URLs, or arbitrary page fields. It should not be added during the
-1.0-beta migration merely because pages exist in Canvas.
+**That bar was met and the scope was added on 2026-08-01.** The named consumer is AI course
+context: the `get_course_pages` MCP tool serves page text to an assistant, with `full_text`
+for complete bodies. The v3 catalog carries a `pages` scope alongside assignments, modules,
+and assignment groups, acquired with `include[]=body` and normalized by `course_catalog`
+before anything is written to disk. Each of the original conditions holds in the code:
+records carry no student fields; `_page_text` parses HTML down to plain text and refuses
+control characters; identity and freshness are the Canvas page id and `updated_at`; raw HTML
+is never stored; every URL is rewritten to `[link]`, so a signed URL cannot survive
+normalization; and the six-key `PAGE_KEYS` allowlist is enforced by `_require_exact_keys`, so
+arbitrary Canvas page fields cannot leak in.
+
+The `pages` scope is invalidatable like any other, and the operation ledger marks it stale
+after a page push. See `docs/reference/mutation-reconciliation-map.md` family 2. The related
+non-goal in section 22 is unchanged and still holds: it forbids mirroring page bodies
+*without* a named course-search/context consumer, and this scope has one.
 
 ### 7.2 Course Catalog remains separate on disk
 
@@ -489,7 +504,7 @@ This table states the end-state owner, not permission to change every caller at 
 | New Quiz reports/responses | Focused response scope | PowerGrader report owner | Report generation never global heartbeat work |
 | Native New Quiz launch/result/item calls | None | Specialized PowerGrader grader/evidence owner | Credentials and signed URLs memory-only |
 | Files/attachments | Metadata in projections | Focused evidence/upload owner | No background binary sweep |
-| Pages | Module stubs only | Page operation adapter | Page bodies deferred |
+| Pages | Module stubs plus catalog `pages` scope | Page operation adapter; catalog owns the projection | Plain-text bodies only; no raw HTML or URLs |
 | Discussions/announcements/events | None | Future named consumer only | Out of 1.0-beta scope |
 
 Direct `requests.Session` usage should remain only where the shared core client cannot own
