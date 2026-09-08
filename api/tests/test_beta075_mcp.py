@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 38
+    assert contract.TOOL_SCHEMA_VERSION == 39
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -108,7 +108,12 @@ def test_live_mcp_schema_matches_versioned_contract():
     # v37 adds the staged-content push pair; v38 adds stage_content and
     # push_content_live, so an assistant can stage and land a draft itself.
     assert len(contract.load_contract(37)["tools"]) == 52
-    assert len(live["tools"]) == 54
+    # v38 added stage_content and push_content_live. v39 retires the calendar
+    # and bell write pairs, the teacher-schedule write, and get_seating_context,
+    # which were built to feed the classroom display: the reads stay, and those
+    # edits live in the web UI.
+    assert len(contract.load_contract(38)["tools"]) == 54
+    assert len(live["tools"]) == 42
     v22 = contract.load_contract(22)
     assert v22["schema_version"] == 22
     assert len(v22["tools"]) == 39
@@ -186,7 +191,7 @@ def test_mirror_doc_bound_tools_match_the_live_registry():
     path = Path(__file__).resolve().parents[2] / "docs" / "mirror.md"
     doc = path.read_text(encoding="utf-8")
     section = doc.split("## MCP reads and the refresh tool", 1)[1].split("## v1 non-goals", 1)[0]
-    expected = {"get_roster", "get_submissions", "get_gradebook_snapshot", "get_seating_context"}
+    expected = {"get_roster", "get_submissions", "get_gradebook_snapshot"}
     named = set(re.findall(r"\b(?:get|list|preview|apply|save|delete|clear|archive|stage|refresh)_[a-z0-9_]+", section))
     assert expected <= named
     assert named - {"refresh_mirror"} == expected

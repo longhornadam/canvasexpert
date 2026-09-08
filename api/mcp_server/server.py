@@ -224,14 +224,6 @@ def clear_roster_student_field(course_id: str, pseudonym: str, field: str,
 
 
 @mcp.tool(structured_output=False)
-def get_seating_context(course_id: str, section_name: str = "", section_id: str = "") -> str:
-    """Read one section's pseudonymized seating supports and pairing context.
-    section_name matches exactly or loosely on case and whitespace; use
-    section_id when ambiguous. No Canvas IDs or private reasons."""
-    return _compact(tools.get_seating_context(course_id, section_name, section_id))
-
-
-@mcp.tool(structured_output=False)
 def get_submissions(course_id: str, assignment_id: str,
                     include_text: bool = True, pseudonyms: str = "",
                     max_text_chars: int = 2000) -> str:
@@ -401,18 +393,6 @@ def get_bell_schedule(schedule_id: str = "") -> str:
 
 
 @mcp.tool(structured_output=False)
-def preview_bell_schedule(schedule_id: str, content: str) -> str:
-    """Preview creating or replacing one Bell Schedule CSV without writing."""
-    return _compact(tools.preview_bell_schedule(schedule_id, content))
-
-
-@mcp.tool(structured_output=False)
-def apply_bell_schedule(preview: dict, expected_digest: str) -> str:
-    """Apply the exact local Bell Schedule preview returned by preview_bell_schedule."""
-    return _compact(tools.apply_bell_schedule(preview, expected_digest))
-
-
-@mcp.tool(structured_output=False)
 def get_day_schedule(date: str) -> str:
     """Resolve the teacher's schedule blocks and Calendar state for one date.
     date is YYYY-MM-DD. Repeated blocks produce one entry per consecutive
@@ -427,86 +407,10 @@ def get_teacher_schedule() -> str:
 
 
 @mcp.tool(structured_output=False)
-def save_teacher_schedule(blocks: list) -> str:
-    """Save the teacher's schedule blocks live to the workspace.
-    No review queue."""
-    return _compact(tools.save_teacher_schedule(blocks))
-
-
-@mcp.tool(structured_output=False)
 def get_school_calendar(date_from: str = "", date_to: str = "") -> str:
     """Read canonical School Calendar readiness or one bounded date range.
     Pass both dates for a range or omit both for readiness only. No student data."""
     return _compact(tools.get_school_calendar(date_from, date_to))
-
-
-@mcp.tool(structured_output=False)
-def preview_school_calendar_replacement(school_year: str, coverage_start: str, coverage_end: str,
-                                       default_schedule_id: str, weekday_schedules: dict = None,
-                                       no_school_dates: list = None,
-                                       no_regular_classes_dates: list = None,
-                                       date_labels: dict = None, grading_periods: list = None,
-                                       events: list = None) -> str:
-    """Preview a complete one-year School Calendar replacement without writing.
-    Every covered date becomes instructional, a generated weekend, or an
-    explicit no-school/no-regular-classes day. No course ID or student data."""
-    return _compact(tools.preview_school_calendar_replacement(
-        school_year, coverage_start, coverage_end, default_schedule_id,
-        weekday_schedules, no_school_dates, no_regular_classes_dates,
-        date_labels, grading_periods, events,
-    ))
-
-
-@mcp.tool(structured_output=False)
-def apply_school_calendar_replacement(preview: dict, expected_revision: int) -> str:
-    """Apply the exact local School Calendar replacement preview.
-    Pass the preview back verbatim; stale revisions are refused."""
-    return _compact(tools.apply_school_calendar_replacement(preview, expected_revision))
-
-
-@mcp.tool(structured_output=False)
-def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str = "",
-                                   dates: list = None, date_from: str = "", date_to: str = "",
-                                   weekdays: list = None) -> str:
-    """Preview a local School Calendar day-kind, schedule, or label change without writing.
-    Pass explicit dates or a date range, optionally narrowed by weekdays. No student data."""
-    return _compact(tools.preview_school_calendar_change(
-        kind, schedule_id, label, dates, date_from, date_to, weekdays,
-    ))
-
-
-@mcp.tool(structured_output=False)
-def apply_school_calendar_change(preview: dict, expected_revision: int) -> str:
-    """Apply the exact local day change returned by preview_school_calendar_change.
-    Pass the preview back verbatim; stale revisions are refused."""
-    return _compact(tools.apply_school_calendar_change(preview, expected_revision))
-
-
-@mcp.tool(structured_output=False)
-def preview_school_calendar_event_change(action: str, event: dict = None,
-                                         event_id: str = "") -> str:
-    """Preview one public Calendar event upsert or delete without writing."""
-    return _compact(tools.preview_school_calendar_event_change(action, event, event_id))
-
-
-@mcp.tool(structured_output=False)
-def apply_school_calendar_event_change(preview: dict, expected_revision: int) -> str:
-    """Apply a preview returned by preview_school_calendar_event_change."""
-    return _compact(tools.apply_school_calendar_event_change(preview, expected_revision))
-
-
-@mcp.tool(structured_output=False)
-def preview_school_calendar_game_score(event_id: str, score: str) -> str:
-    """Preview one existing public Calendar game score without writing.
-    event_id must name an existing game; every other event field stays unchanged.
-    No student data."""
-    return _compact(tools.preview_school_calendar_game_score(event_id, score))
-
-
-@mcp.tool(structured_output=False)
-def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> str:
-    """Apply a preview returned by preview_school_calendar_game_score."""
-    return _compact(tools.apply_school_calendar_game_score(preview, expected_revision))
 
 
 @mcp.tool(structured_output=False)

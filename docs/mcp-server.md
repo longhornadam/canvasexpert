@@ -27,8 +27,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 - **stdio transport only.** No network port is ever bound.
 - **Mirror-bounded, never a live relay.** `get_roster`, `get_submissions`, and
   `get_gradebook_snapshot` serve exclusively from the local CanvasMirror
-  (`docs/mirror.md`). `get_seating_context` combines current mirrored identity
-  and section membership with private local Roster context. All four refuse
+  (`docs/mirror.md`). All three refuse
   with a clear error when the required mirror data is stale or missing, instead
   of fetching live from Canvas. The assistant's only way past a refusal is
   `refresh_mirror`, which triggers Canvas Expert's own sync and reports
@@ -38,7 +37,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 38 (54 tools).
+Tool schema version 39 (42 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -47,7 +46,7 @@ Tool schema version 38 (54 tools).
 | `preview_sis_grade_bridge(course_id, family_title)` | Persists a local aggregate, digest-protected review for one exact differentiated family; `next` carries the confirm-then-apply handoff | No |
 | `apply_sis_grade_bridge(operation_id, batch_id, review_digest)` | Writes only the unchanged frozen bridge coordinates to Canvas through the Operation Ledger | No |
 | `confirm_sis_grade_bridge_passback(operation_id, observed_last_sync_at)` | Confirms one ambiguous passback from an exact teacher-observed Canvas Grade Sync timestamp; never resends passback | No |
-| `list_sections(course_id)` | Saved section values from the local mirror; call before `get_seating_context` | No |
+| `list_sections(course_id)` | Saved section values from the local mirror | No |
 | `get_course_assignments(course_id, full_descriptions=false)` | Disk-only catalog assignments; descriptions are previews unless `full_descriptions=true` | No |
 | `get_modules(course_id, include_items=false)` | Disk-only catalog modules; set `include_items=true` to include their items | No |
 | `get_course_pages(course_id, full_text=false)` | Published normalized pages from the Current course's local v3 catalog; set `full_text=true` for complete bodies | No |
@@ -70,26 +69,14 @@ Tool schema version 38 (54 tools).
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
 | `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the unchanged preview; only a `canvas_group` patch reaches Canvas | Yes, pseudonymized |
 | `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes, pseudonymized |
-| `get_seating_context(course_id, section_name="", section_id="")` | One section's pseudonymized seating context; names match exactly or loosely, while `section_id` resolves ambiguity | Yes, pseudonymized |
 | `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | Mirror submissions not filtered to current enrollment; optional pseudonym narrowing and bounded text | Yes, pseudonymized |
 | `get_writing_history(pseudonym, since="", until="", include_text=false, max_text_chars=2000)` | Private longitudinal Writing Record evidence; date-bounded, optional prose, and never a score, coaching, or judgment | Yes, pseudonymized |
 | `get_gradebook_snapshot(course_id)` | Current-course pseudonymized gradebook snapshot from the local mirror | Yes, pseudonymized |
 | `refresh_mirror(course_id)` | Sync a saved course's mirror after a stale refusal, report status, then retry the read | No, returns a sync status, never course data |
 | `get_bell_schedule(schedule_id="")` | Workspace Bell Schedules; an empty id returns all variants | No |
-| `preview_bell_schedule(schedule_id, content)` | Preview creating or replacing one Bell Schedule CSV; `next` carries the confirm-then-apply handoff | No |
-| `apply_bell_schedule(preview, expected_digest)` | Applies the exact reviewed Bell Schedule preview; refuses stale files or altered projections | No |
 | `get_day_schedule(date)` | Calendar state and schedule blocks for one YYYY-MM-DD date; repeated blocks yield consecutive meeting runs | No |
 | `get_teacher_schedule()` | The teacher's local versioned schedule blocks | No |
-| `save_teacher_schedule(blocks)` | Saves the teacher's schedule blocks live with no review queue | No |
 | `get_school_calendar(date_from="", date_to="")` | Canonical School Calendar readiness, or a bounded range when both dates are given | No |
-| `preview_school_calendar_replacement(school_year, coverage_start, coverage_end, default_schedule_id, ...)` | Preview a complete one-year replacement; every covered date receives explicit semantics and `next` carries the apply handoff | No |
-| `apply_school_calendar_replacement(preview, expected_revision)` | Applies a previewed create/replace; refuses a stale `expected_revision` | No |
-| `preview_school_calendar_change(kind, ...)` | Preview a day-kind, schedule, or label change for dates or a weekday-narrowed range; `next` carries the apply handoff | No |
-| `apply_school_calendar_change(preview, expected_revision)` | Applies a previewed change; refuses a stale `expected_revision` | No |
-| `preview_school_calendar_event_change(action, event=None, event_id="")` | Preview one public event upsert or delete; `next` carries the confirm-then-apply handoff | No |
-| `apply_school_calendar_event_change(preview, expected_revision)` | Applies a previewed public-event change; refuses stale or altered previews | No |
-| `preview_school_calendar_game_score(event_id, score)` | Preview one existing game's score while preserving every other field; `next` carries the apply handoff | No |
-| `apply_school_calendar_game_score(preview, expected_revision)` | Applies the exact reviewed game-score preview; refuses stale, altered, or non-game previews | No |
 | `start_scoring_session(course_id, assignment_id)` | Start a local packet-mode session with no assisted AI, uploads, auto-post, or Canvas write; `next` routes to the first packet | No |
 | `list_scoring_sessions()` | Current-course PowerGrader sessions with SAFE bundles and no student response data | No |
 | `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | SAFE scoring packet with an authoritative contract and untrusted response text; `next` explains row/person counts and paging | Yes, pseudonymized |
@@ -158,26 +145,16 @@ not the guide, remains the normative behavior authority.
 `get_authoring_contract(kind)` takes no `course_id` and carries no student data, so it
 needs no course gate, no identity vault, and no safety scan. Forge kinds (`quiz`, `assignment`, `page`, `rubric`) read the same
 `api/default_docs/AI Authoring/` file the web UI's `/api/download-contract` route serves,
-then receive the Forge-only staging appendix. The schedule writer is the only direct local
-write in this group and has no staging/review appendix.
+then receive the Forge-only staging appendix.
 
-`save_teacher_schedule` has no `course_id` parameter and makes no
-Canvas call; a teacher-set block `course_id` passes through untouched after string
-validation, so an assistant can read, edit, and write the binding safely.
-
-The nine canonical Calendar tools (`get_school_calendar`,
-`preview_school_calendar_replacement`, `apply_school_calendar_replacement`,
-`preview_school_calendar_change`, `apply_school_calendar_change`,
-`preview_school_calendar_event_change`, `apply_school_calendar_event_change`,
-`preview_school_calendar_game_score`, `apply_school_calendar_game_score`) share the same
-exemption: no `course_id`, no student data, no course gate, no safety scan. All writes
-are staged preview/apply pairs, never a one-click overwrite: base revision is 0 only
-before any calendar exists, and every successful write after that — including a complete
-replacement — advances the revision by exactly one, never resetting it. The authoring
-contract instructs the assistant to translate pasted public schedule facts into a
-preview, summarize affected dates/years and conflicts, and apply only after the teacher
-accepts that summary — never inside an email/inbox integration or a free-text parser
-built into CanvasExpert itself. The event pair uses `action="upsert"` with one complete
+The Calendar, Bell Schedule, and teacher-schedule tools are reads only
+(`get_school_calendar`, `get_bell_schedule`, `get_day_schedule`,
+`get_teacher_schedule`). They share the same exemption: no `course_id`, no student data,
+no course gate, no safety scan. Their write pairs were retired in schema v39 along with
+`get_seating_context`: all of them were built to feed the classroom display, which has
+since been removed, and a calendar edit wants a calendar in front of you, so those edits
+live in the web UI. What follows describes the retired shape and is kept only as
+background for the stored contracts. The event pair used `action="upsert"` with one complete
 structured event or `action="delete"` with its stable `event_id`; it mutates only the
 canonical `events` array and supports the same revision/digest/atomic-write boundary.
 The game-score pair is intentionally narrower: it requires an existing stable event ID whose
@@ -287,8 +264,7 @@ to another assignment, another course, or a later session. An assistant choosing
 itself should summarize the preview first, and any invariant failure still stops.
 
 `get_roster`, `get_submissions`, and `get_gradebook_snapshot` only read the local
-CanvasMirror. `get_seating_context` uses the current mirror for identity and section
-membership, then joins the private local Roster context for that course. None fall back to
+CanvasMirror. None fall back to
 a live Canvas call. If the required mirror data is stale or missing, they return
 `{"ok": false, "error": "..."}` naming the problem; call `refresh_mirror(course_id)` and
 retry the same read once it reports `"synced"`.

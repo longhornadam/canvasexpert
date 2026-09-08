@@ -48,7 +48,7 @@ def due_passes(state: dict, now_iso: str, *,
     once a day: the roster file is rewritten only by a full or roster pass
     (never a delta), and reads serve it only while it is younger than the
     serve threshold (~6h). Left at a flat 24h cadence it went unservable for
-    most of every day — get_roster/get_seating_context refusing while deltas
+    most of every day — roster reads refusing while deltas
     kept the gradebook fresh. The daily figure stays as a floor via ``min``,
     so an unusually large serve window still refreshes the roster at least
     once a day.

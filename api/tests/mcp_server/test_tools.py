@@ -237,7 +237,6 @@ def test_student_tools_fail_closed_when_workspace_unresolved(monkeypatch, _set_a
     monkeypatch.setattr(workspace, "identity_vault_dir", lambda *a, **k: None)
     for result in (
         tools.get_roster("111"),
-        tools.get_seating_context("111", "Period 1"),
         tools.get_submissions("111", "700010"),
         tools.get_gradebook_snapshot("111"),
     ):
@@ -695,7 +694,7 @@ def test_generated_tool_inventory_covers_the_contract_exactly_once_by_job():
     expected_groups = {
         "Course discovery and catalog", "Create and Forge", "PowerGrader",
         "SIS Grade Bridges", "Learning Objectives", "School Calendar",
-        "Writing Timeline", "Writing Record", "Students", "Seating",
+        "Writing Timeline", "Writing Record", "Students",
         "Assessments and DataForge",
     }
 
@@ -704,7 +703,7 @@ def test_generated_tool_inventory_covers_the_contract_exactly_once_by_job():
     assert result["topics"] == _GUIDE_TOPIC_SUMMARIES
     assert set(tools._TOOL_GROUPS) == expected_groups
     assert all(tools._TOOL_GROUPS.values())
-    assert set(grouped) == contract_names and len(grouped) == len(contract_names) == 54
+    assert set(grouped) == contract_names and len(grouped) == len(contract_names) == 42
     for name in contract_names:
         assert len(re.findall(
             rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])",
@@ -1337,176 +1336,6 @@ def _set_seating_context(monkeypatch, *, settings=None, matrix=None, relationshi
     monkeypatch.setattr(tools.config, "get_roster_score_matrix", lambda course_id: matrix or {})
     monkeypatch.setattr(tools.config, "get_roster_relationships", lambda course_id: relationships or {})
     monkeypatch.setattr(tools.config, "active_protected_names", lambda: set())
-
-
-def test_get_seating_context_is_mirror_only_pseudonymized_and_scrubbed(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
-    _mount_mirror()
-    vault_path = _use_vault
-    _set_active_courses([MIRROR_COURSE])
-    users = [dict(FIXTURE_USERS[0]), dict(FIXTURE_USERS[1])]
-    users[1]["enrollments"] = [{"course_section_id": 800001}]
-    mirror_store.write_roster(MIRROR_COURSE, users, {"800001": "Period 1"}, root=str(tmp_path))
-    _set_seating_context(
-        monkeypatch,
-        settings={
-            "900001": {"seating_context": {
-                "front_row": "required", "near_teacher": "none",
-                "private_note": "private only", "ai_context_note": "Lee needs a calm start.",
-            }},
-            "900002": {"seating_context": {
-                "front_row": "none", "near_teacher": "preferred",
-                "private_note": "private only", "ai_context_note": "",
-            }},
-        },
-        matrix={
-            "columns": [{"id": "score-writing", "label": "Learner One writing"}],
-            "values_by_section": {"800001": {
-                "900001": {"score-writing": 4}, "900002": {"score-writing": 3},
-            }},
-        },
-        relationships={"by_section": {"800001": [{
-            "student_a": "900001", "student_b": "900002",
-            "type": "keep_apart", "reason": "private local reason",
-        }]}},
-    )
-    _forbid_live_reads(monkeypatch)
-
-    result = tools.get_seating_context(MIRROR_COURSE, "Period 1")
-
-    assert result["ok"] is True
-    assert result["source"] == "mirror+local"
-    assert len(result["students"]) == 2
-    assert result["students"] == sorted(result["students"], key=lambda item: item["pseudonym"])
-    assert all(set(item) == {"pseudonym", "supports", "scores", "ai_context_note"}
-               for item in result["students"])
-    assert all(item["scores"] for item in result["students"])
-    assert len(result["relationships"]) == 1
-    assert set(result["relationships"][0]) == {"type", "students"}
-    assert result["relationships"][0]["students"] == sorted(result["relationships"][0]["students"])
-    assert "private local reason" not in json.dumps(result)
-    assert "private only" not in json.dumps(result)
-    _assert_no_leaks(result)
-    assert feedback_safety.scan_payload(result, Vault(vault_path))["green"] is True
-
-
-def test_get_seating_context_requires_a_section_identifier(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
-    _mount_mirror()
-    _set_active_courses([MIRROR_COURSE])
-    mirror_store.write_roster(MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
-    _set_seating_context(monkeypatch)
-
-    for result in (
-        tools.get_seating_context(MIRROR_COURSE),
-        tools.get_seating_context(MIRROR_COURSE, ""),
-        tools.get_seating_context(MIRROR_COURSE, "   ", "  "),
-    ):
-        assert result == {"ok": False, "error": "A section_id or section_name is required."}
-
-
-def test_get_seating_context_unknown_name_is_distinguishable_from_ambiguous_name(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
-    """A name matching zero sections and a name matching several must fail
-    differently: the first says the name is unknown, the second is actionable
-    with the candidate section ids so the caller can retry precisely. Neither
-    leaks student data."""
-    _mount_mirror()
-    _set_active_courses([MIRROR_COURSE])
-    mirror_store.write_roster(
-        MIRROR_COURSE, FIXTURE_USERS,
-        {"800001": "Period", "800002": "Period"}, root=str(tmp_path),
-    )
-    _set_seating_context(monkeypatch)
-
-    missing = tools.get_seating_context(MIRROR_COURSE, "Missing")
-    assert missing["ok"] is False
-    assert set(missing) == {"ok", "error"}
-    assert "no section named" in missing["error"].lower()
-    assert "800001" not in missing["error"] and "800002" not in missing["error"]
-
-    ambiguous = tools.get_seating_context(MIRROR_COURSE, "Period")
-    assert ambiguous["ok"] is False
-    assert set(ambiguous) == {"ok", "error"}
-    assert "800001" in ambiguous["error"] and "800002" in ambiguous["error"]
-    assert "section_id" in ambiguous["error"]
-    assert ambiguous["error"] != missing["error"]
-
-
-def test_get_seating_context_resolves_by_section_id(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
-    """section_id is a second, unambiguous way in: it must reach the same
-    result a caller would already get from the matching exact section_name."""
-    _mount_mirror()
-    _set_active_courses([MIRROR_COURSE])
-    mirror_store.write_roster(MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP, root=str(tmp_path))
-    _set_seating_context(monkeypatch)
-    _forbid_live_reads(monkeypatch)
-
-    by_name = tools.get_seating_context(MIRROR_COURSE, "Period 1")
-    by_id = tools.get_seating_context(MIRROR_COURSE, section_id="800001")
-    assert by_id["ok"] is True
-    assert len(by_id["students"]) == 1
-    assert by_id == by_name
-
-    unknown_id = tools.get_seating_context(MIRROR_COURSE, section_id="999999")
-    assert unknown_id["ok"] is False
-    assert "999999" in unknown_id["error"]
-
-
-def test_get_seating_context_loose_match_absorbs_whitespace_and_case(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
-    """A SIS name that differs only by a stray trailing space or letter case
-    from what the caller typed must still resolve, as long as doing so stays
-    unambiguous."""
-    _mount_mirror()
-    _set_active_courses([MIRROR_COURSE])
-    mirror_store.write_roster(
-        MIRROR_COURSE, [FIXTURE_USERS[0]],
-        {"800001": "Period 1 "}, root=str(tmp_path),
-    )
-    _set_seating_context(monkeypatch)
-
-    result = tools.get_seating_context(MIRROR_COURSE, "period 1")
-    assert result["ok"] is True
-    assert len(result["students"]) == 1
-
-
-def test_get_seating_context_loose_match_refuses_a_new_ambiguity(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
-    """Two sections that are distinct under an exact match ("Period 1 " vs
-    "period 1") but collide once case and whitespace are ignored must refuse
-    rather than silently pick one -- loosening a match may never introduce
-    an ambiguity the exact pass did not already have."""
-    _mount_mirror()
-    _set_active_courses([MIRROR_COURSE])
-    mirror_store.write_roster(
-        MIRROR_COURSE, FIXTURE_USERS,
-        {"800001": "Period 1 ", "800002": "period 1"}, root=str(tmp_path),
-    )
-    _set_seating_context(monkeypatch)
-
-    result = tools.get_seating_context(MIRROR_COURSE, "Period 1")
-    assert result["ok"] is False
-    assert set(result) == {"ok", "error"}
-    assert "800001" in result["error"] and "800002" in result["error"]
-
-
-def test_get_seating_context_refuses_stale_mirror_and_vault_conflict(monkeypatch, tmp_path, _use_vault, _set_active_courses, _mount_mirror):
-    _mount_mirror()
-    _set_active_courses([MIRROR_COURSE])
-    mirror_store.write_roster(
-        MIRROR_COURSE, FIXTURE_USERS, SECTION_MAP,
-        root=str(tmp_path), attempted_at=_STALE_STAMP,
-    )
-    _set_seating_context(monkeypatch)
-    _forbid_live_reads(monkeypatch)
-    assert tools.get_seating_context(MIRROR_COURSE, "Period 1") == {
-        "ok": False, "error": tools._MIRROR_UNAVAILABLE_ROSTER_ERROR,
-    }
-
-    class ConflictedVault:
-        def conflicts(self):
-            return ["vault conflict.json"]
-
-    monkeypatch.setattr(tools, "_vault_factory", ConflictedVault)
-    result = tools.get_seating_context(MIRROR_COURSE, "Period 1")
-    assert result["ok"] is False
-    assert "conflict" in result["error"].lower()
 
 
 def test_get_submissions_serves_fresh_typed_mirror_with_zero_live_calls(monkeypatch, tmp_path, _rows, _use_vault, _set_active_courses, _mount_mirror):
@@ -2309,7 +2138,7 @@ def test_server_registers_the_expected_tool_set():
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
         "list_courses", "list_sections", "get_course_assignments", "get_modules",
-        "get_roster", "get_seating_context", "get_submissions",
+        "get_roster", "get_submissions",
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "get_standards_profile",
         "get_assessment_context", "get_assessment_grouping_proposal",
@@ -2318,14 +2147,8 @@ def test_server_registers_the_expected_tool_set():
         # Shipped with the SIS grade bridge; this set was never updated with them.
         "list_sis_grade_bridges", "preview_sis_grade_bridge",
         "apply_sis_grade_bridge", "confirm_sis_grade_bridge_passback",
-        "get_bell_schedule", "preview_bell_schedule", "apply_bell_schedule",
-        "get_day_schedule", "get_teacher_schedule",
-        "save_teacher_schedule",
+        "get_bell_schedule", "get_day_schedule", "get_teacher_schedule",
         "get_school_calendar",
-        "preview_school_calendar_replacement", "apply_school_calendar_replacement",
-        "preview_school_calendar_change", "apply_school_calendar_change",
-        "preview_school_calendar_event_change", "apply_school_calendar_event_change",
-        "preview_school_calendar_game_score", "apply_school_calendar_game_score",
         "get_course_pages", "list_learning_objectives", "preview_learning_objective",
             "apply_learning_objective", "delete_learning_objective",
             "get_roster_student_settings", "preview_roster_student_change",
@@ -2397,172 +2220,46 @@ def _teacher_schedule_workspace(monkeypatch, tmp_path):
     return calendars / "Teacher Schedule.json"
 
 
-def test_save_teacher_schedule_writes_blocks_and_returns_path(monkeypatch, tmp_path):
-    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    blocks = [{"name": "Algebra", "raw_periods": [1]}]
-
-    result = tools.save_teacher_schedule(blocks)
-
-    assert result == {"ok": True, "count": 1, "path": str(path)}
-    saved = json.loads(path.read_text(encoding="utf-8"))
-    assert saved["blocks"] == blocks
-    assert saved["version"] == "1.0-json"
-
-
-def test_save_teacher_schedule_preserves_unknown_keys_and_block_order(monkeypatch, tmp_path):
-    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    original = {
-        "_comment": "keep this",
-        "version": "custom-version",
-        "unknown": {"source": "hand"},
-        "blocks": [],
-    }
-    path.write_text(json.dumps(original), encoding="utf-8")
-    blocks = [
-        {"name": "Later", "raw_periods": [2]},
-        {"name": "Earlier", "raw_periods": [1]},
-    ]
-
-    result = tools.save_teacher_schedule(blocks)
-
-    assert result["ok"] is True
-    saved = json.loads(path.read_text(encoding="utf-8"))
-    assert saved["_comment"] == original["_comment"]
-    assert saved["version"] == original["version"]
-    assert saved["unknown"] == original["unknown"]
-    assert saved["blocks"] == blocks
-
-
-def test_save_teacher_schedule_preserves_course_id(monkeypatch, tmp_path):
-    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    monkeypatch.setattr(tools.config, "active_courses",
-                        lambda: [{"id": "9000001", "name": "Algebra", "active": True}])
-    blocks = [{
-        "name": "Algebra",
-        "raw_periods": [1],
-        "label": "Math 7",
-        "course_id": "9000001",
-        "custom": {"keep": True},
-    }]
-
-    result = tools.save_teacher_schedule(blocks)
-
-    assert result["ok"] is True
-    assert json.loads(path.read_text(encoding="utf-8"))["blocks"] == blocks
-
-
-def test_save_teacher_schedule_rejects_non_string_course_id(monkeypatch, tmp_path):
-    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    result = tools.save_teacher_schedule([
-        {"name": "Algebra", "raw_periods": [1], "course_id": 9000001},
-    ])
-    assert result == {
-        "ok": False,
-        "problems": ["block 'Algebra' course_id must be a string"],
-    }
-    assert not path.exists()
-
-
-def test_save_teacher_schedule_rejects_invalid_blocks_without_writing(monkeypatch, tmp_path):
-    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    original = '{"_comment":"keep","blocks":[{"name":"Old","raw_periods":[1]}]}'
-    path.write_text(original, encoding="utf-8")
-
-    result = tools.save_teacher_schedule([{"name": "", "raw_periods": []}])
-
-    assert result["ok"] is False
-    assert result["problems"] == [
-        "block at index 0 needs a non-empty string name",
-        "block '' must have a non-empty list of ints or non-empty strings for raw_periods",
-    ]
-    assert path.read_text(encoding="utf-8") == original
-
-
-def test_save_teacher_schedule_rejects_non_list(monkeypatch, tmp_path):
-    _teacher_schedule_workspace(monkeypatch, tmp_path)
-    result = tools.save_teacher_schedule({"name": "Algebra"})
-    assert result == {"ok": False, "problems": ["blocks must be a list"]}
-
-
-def test_save_teacher_schedule_rejects_intersecting_duplicate_names(monkeypatch, tmp_path):
-    _teacher_schedule_workspace(monkeypatch, tmp_path)
-    blocks = [
-        {"name": "Shared", "raw_periods": [1]},
-        {"name": "Shared", "raw_periods": [2]},
-    ]
-    result = tools.save_teacher_schedule(blocks)
-    assert result["ok"] is False
-    assert result["problems"] == ["block 'Shared' must be unique"]
-
-
-def test_save_teacher_schedule_rejects_duplicate_names_even_when_periods_differ(monkeypatch, tmp_path):
-    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    blocks = [
-        {"name": "Shared", "raw_periods": [1]},
-        {"name": "Shared", "raw_periods": [2]},
-    ]
-    result = tools.save_teacher_schedule(blocks)
-    assert result == {"ok": False, "problems": ["block 'Shared' must be unique"]}
-    assert not path.exists()
-
-
-def test_save_teacher_schedule_rejects_unknown_period(monkeypatch, tmp_path):
-    path = _teacher_schedule_workspace(monkeypatch, tmp_path)
-    result = tools.save_teacher_schedule([{"name": "Unknown", "raw_periods": [99]}])
-    assert result == {
-        "ok": False,
-        "problems": ["block 'Unknown': period '99' not found in any bell schedule"],
-    }
-    assert not path.exists()
-
-
-def test_public_preview_results_carry_their_exact_next_procedure(monkeypatch):
-    monkeypatch.setattr(
-        tools.bell_schedule, "preview_bell_schedule",
-        lambda **_kwargs: ({"base_digest": "digest"}, []),
-    )
-    monkeypatch.setattr(tools.deps, "load_bell_schedules", lambda: ({"ordinary": {}}, []))
-    monkeypatch.setattr(
-        tools.school_calendar, "preview_replacement",
-        lambda **_kwargs: ({"base_revision": 0}, []),
-    )
-    monkeypatch.setattr(
-        tools.school_calendar, "preview_change",
-        lambda **_kwargs: ({"base_revision": 1}, []),
-    )
-    monkeypatch.setattr(
-        tools.school_calendar, "preview_event_change",
-        lambda **_kwargs: ({"base_revision": 2}, []),
-    )
-
-    results = {
-        "preview_bell_schedule": tools.preview_bell_schedule("ordinary", "csv"),
-        "preview_school_calendar_replacement": tools.preview_school_calendar_replacement(
-            "2026-27", "2026-08-17", "2027-06-04", "ordinary"
-        ),
-        "preview_school_calendar_change": tools.preview_school_calendar_change(
-            "no_school", dates=["2026-09-07"]
-        ),
-        "preview_school_calendar_event_change": tools.preview_school_calendar_event_change(
-            "delete", event_id="event-1"
-        ),
-    }
-
-    for name, result in results.items():
-        assert result["ok"] is True
-        assert result["next"] == tools._NEXT_STEPS[name]
-
-
-def test_server_registers_save_teacher_schedule_wrapper(monkeypatch):
+def test_every_next_procedure_names_a_live_tool():
+    """_NEXT_STEPS tells an assistant what to call after a preview, so an entry
+    for a tool that no longer exists is an instruction to call nothing. This is
+    the defect retiring the calendar and bell write pairs actually left behind,
+    caught by hand at the time."""
     from api.mcp_server import server
 
-    monkeypatch.setattr(tools, "save_teacher_schedule", lambda blocks: {
-        "ok": True, "count": len(blocks), "path": "Teacher Schedule.json",
-    })
-    wire = server.save_teacher_schedule([{"name": "Algebra", "raw_periods": [1]}])
-    assert json.loads(wire) == {
-        "ok": True, "count": 1, "path": "Teacher Schedule.json",
+    registered = set(server.mcp._tool_manager._tools)
+    orphans = sorted(set(tools._NEXT_STEPS) - registered)
+
+    assert not orphans, f"next-procedure entries for tools that no longer exist: {orphans}"
+
+
+def test_every_next_procedure_points_at_a_live_tool_too():
+    """The procedure text names the apply call to make next. If that apply tool
+    was retired, the text sends the assistant at a tool that is not there."""
+    from api.mcp_server import server
+
+    from api.mcp_server import contract
+
+    registered = set(server.mcp._tool_manager._tools)
+    # A preview_/apply_ word can also be a parameter (preview_digest), so the
+    # schema's own parameter names are the exclusion list rather than a
+    # hand-kept one that would drift.
+    parameters = {
+        key
+        for tool in contract.load_contract()["tools"]
+        for key in tool["properties"]
     }
+    retired_mentions = []
+    for name, procedure in tools._NEXT_STEPS.items():
+        for word in procedure.replace(",", " ").replace(".", " ").split():
+            if not word.startswith(("apply_", "preview_")):
+                continue
+            if word in registered or word in parameters:
+                continue
+            retired_mentions.append((name, word))
+
+    assert not retired_mentions, (
+        f"next-procedure text names retired tool(s): {sorted(set(retired_mentions))}")
 
 
 def test_server_registers_get_school_calendar_wrapper(monkeypatch):
@@ -2573,112 +2270,6 @@ def test_server_registers_get_school_calendar_wrapper(monkeypatch):
     })
     wire = server.get_school_calendar("2026-08-17", "2026-08-21")
     assert json.loads(wire) == {"ok": True, "readiness": {"status": "ready"}}
-
-
-def test_server_registers_preview_school_calendar_replacement_wrapper(monkeypatch):
-    from api.mcp_server import server
-
-    monkeypatch.setattr(tools, "preview_school_calendar_replacement", lambda *args: {
-        "ok": True, "operation": "create", "base_revision": 0,
-        "proposed_school_year": "2026-27",
-    })
-    wire = server.preview_school_calendar_replacement(
-        "2026-27", "2026-08-17", "2027-06-04", "ordinary"
-    )
-    assert json.loads(wire) == {
-        "ok": True, "operation": "create", "base_revision": 0,
-        "proposed_school_year": "2026-27",
-    }
-
-
-def test_server_registers_apply_school_calendar_replacement_wrapper(monkeypatch):
-    from api.mcp_server import server
-
-    monkeypatch.setattr(tools, "apply_school_calendar_replacement",
-                        lambda preview, expected_revision: {
-        "ok": True, "revision": 1, "school_year": "2026-27",
-        "coverage": {"start": "2026-08-17", "end": "2027-06-04"}, "day_count": 292,
-    })
-    wire = server.apply_school_calendar_replacement({"base_revision": 0}, 0)
-    assert json.loads(wire) == {
-        "ok": True, "revision": 1, "school_year": "2026-27",
-        "coverage": {"start": "2026-08-17", "end": "2027-06-04"}, "day_count": 292,
-    }
-
-
-def test_server_registers_preview_school_calendar_change_wrapper(monkeypatch):
-    from api.mcp_server import server
-
-    monkeypatch.setattr(tools, "preview_school_calendar_change", lambda *args: {
-        "ok": True, "base_revision": 1, "affected": [], "is_noop": True,
-    })
-    wire = server.preview_school_calendar_change("no_school", "", "Field day")
-    assert json.loads(wire) == {
-        "ok": True, "base_revision": 1, "affected": [], "is_noop": True,
-    }
-
-
-def test_preview_school_calendar_change_forwards_advisory_conflicts(monkeypatch, tmp_path):
-    workspace_root = tmp_path / "workspace"
-    monkeypatch.setattr(workspace, "workspace_root", lambda: str(workspace_root))
-    monkeypatch.setattr(
-        workspace, "library_folder", lambda name: str(workspace_root / "Library" / name)
-    )
-    calendars = workspace_root / "Library" / "Calendars"
-    calendars.mkdir(parents=True)
-    calendar = {
-        "version": "1.0-json", "type": "SCHOOL_CALENDAR", "revision": 1,
-        "school_year": "2026-27", "coverage": {"start": "2026-08-17", "end": "2026-08-19"},
-        "days": {
-            "2026-08-17": {"kind": "instructional", "schedule_id": "ordinary"},
-            "2026-08-18": {"kind": "instructional", "schedule_id": "ordinary"},
-            "2026-08-19": {"kind": "no_school", "schedule_id": None,
-                            "label": "Staff Development"},
-        },
-        "grading_periods": [], "events": [],
-    }
-    (calendars / "School Calendar.json").write_text(json.dumps(calendar), encoding="utf-8")
-    monkeypatch.setattr(tools.deps, "load_bell_schedules",
-                        lambda: ({"friday_schedule": {}}, []))
-
-    result = tools.preview_school_calendar_change(
-        "instructional", "friday_schedule", "", date_from="2026-08-17",
-        date_to="2026-08-19", weekdays=[0, 1, 2])
-
-    assert result["ok"] is True
-    assert result["next"] == tools._NEXT_STEPS["preview_school_calendar_change"]
-    assert result["conflicts"] == [{
-        "date": "2026-08-19", "reason": "kind_change",
-        "from_kind": "no_school", "from_label": "Staff Development",
-        "to_kind": "instructional",
-    }]
-    assert result["mutation"]["entries"]["2026-08-19"]["label"] == "Staff Development"
-
-
-def test_server_registers_apply_school_calendar_change_wrapper(monkeypatch):
-    from api.mcp_server import server
-
-    monkeypatch.setattr(tools, "apply_school_calendar_change", lambda preview, expected_revision: {
-        "ok": True, "revision": expected_revision + 1,
-    })
-    wire = server.apply_school_calendar_change({"base_revision": 1}, 1)
-    assert json.loads(wire) == {"ok": True, "revision": 2}
-
-
-def test_server_registers_event_calendar_wrappers(monkeypatch):
-    from api.mcp_server import server
-
-    monkeypatch.setattr(tools, "preview_school_calendar_event_change", lambda *args: {
-        "ok": True, "operation": "event_change", "base_revision": 1,
-        "before": None, "after": {"id": "game-1"},
-    })
-    wire = server.preview_school_calendar_event_change("upsert", {"id": "game-1"})
-    assert json.loads(wire)["operation"] == "event_change"
-    monkeypatch.setattr(tools, "apply_school_calendar_event_change", lambda preview, expected_revision: {
-        "ok": True, "revision": expected_revision + 1,
-    })
-    wire = server.apply_school_calendar_event_change({"base_revision": 1}, 1)
-    assert json.loads(wire) == {"ok": True, "revision": 2}
 
 
 def _game_score_workspace(monkeypatch, tmp_path):
@@ -2709,54 +2300,3 @@ def _game_score_workspace(monkeypatch, tmp_path):
     return path
 
 
-def test_game_score_preview_and_apply_preserves_existing_game_event(monkeypatch, tmp_path):
-    path = _game_score_workspace(monkeypatch, tmp_path)
-
-    preview = tools.preview_school_calendar_game_score("game-1", "Won 2-1")
-
-    assert preview["ok"] is True
-    assert preview["next"] == tools._NEXT_STEPS["preview_school_calendar_game_score"]
-    assert preview["game_score"] == {"event_id": "game-1", "score": "Won 2-1"}
-    assert preview["before"]["result"] == "Scheduled"
-    assert preview["after"] == {
-        "id": "game-1", "kind": "game", "label": "Bobcats", "shape": "date",
-        "date": "2026-08-18", "detail": "Away", "result": "Won 2-1",
-    }
-    assert json.loads(path.read_text(encoding="utf-8"))["revision"] == 1
-
-    applied = tools.apply_school_calendar_game_score(preview, preview["base_revision"])
-
-    assert applied == {"ok": True, "revision": 2}
-    saved = json.loads(path.read_text(encoding="utf-8"))
-    assert saved["events"][0]["result"] == "Won 2-1"
-    assert saved["events"][0]["detail"] == "Away"
-    assert saved["events"][1]["label"] == "Fall Dance"
-
-
-def test_game_score_preview_requires_an_existing_game(monkeypatch, tmp_path):
-    _game_score_workspace(monkeypatch, tmp_path)
-
-    missing = tools.preview_school_calendar_game_score("missing", "Won 2-1")
-    non_game = tools.preview_school_calendar_game_score("dance-1", "Won 2-1")
-
-    assert missing["ok"] is False
-    assert "was not found" in missing["problems"][0]
-    assert non_game["ok"] is False
-    assert "not a game event" in non_game["problems"][0]
-
-
-def test_server_registers_game_score_wrappers(monkeypatch):
-    from api.mcp_server import server
-
-    monkeypatch.setattr(tools, "preview_school_calendar_game_score", lambda event_id, score: {
-        "ok": True, "operation": "event_change", "event_id": event_id, "score": score,
-    })
-    wire = server.preview_school_calendar_game_score("game-1", "Won 2-1")
-    assert json.loads(wire) == {
-        "ok": True, "operation": "event_change", "event_id": "game-1", "score": "Won 2-1",
-    }
-    monkeypatch.setattr(tools, "apply_school_calendar_game_score", lambda preview, expected_revision: {
-        "ok": True, "revision": expected_revision + 1,
-    })
-    wire = server.apply_school_calendar_game_score({"base_revision": 1}, 1)
-    assert json.loads(wire) == {"ok": True, "revision": 2}

@@ -12,11 +12,8 @@ monkeypatch them without touching the real Canvas API or identity vault
 Every ``course_id`` tool gates on ``config.active_courses()`` — the same
 Current-course scope the web UI uses. ``list_courses``,
 ``get_authoring_contract``, ``get_product_guide``, ``list_staged_content``,
-``get_bell_schedule``, ``get_day_schedule``, ``get_teacher_schedule``,
-``save_teacher_schedule``,
-``get_school_calendar``, ``preview_school_calendar_replacement``,
-``apply_school_calendar_replacement``,
-``preview_school_calendar_change``, ``apply_school_calendar_change``,
+``get_bell_schedule``, ``get_day_schedule``, ``get_teacher_schedule`` and
+``get_school_calendar`` are
 the only tools with no ``course_id`` and no student data, so they skip both the
 course gate and the outbound safety gate. ``get_writing_history`` breaks that
 pairing on purpose: it has no ``course_id`` either (the daily-writing store has
@@ -155,30 +152,6 @@ _NEXT_STEPS = {
         "Summarize the change and get teacher confirmation, then call "
         "apply_roster_student_change with course_id, preview, preview_digest, and "
         "settings_digest as expected_settings_digest."
-    ),
-    "preview_bell_schedule": (
-        "Summarize the before/after meetings and get teacher confirmation, then call "
-        "apply_bell_schedule with the preview and base_digest as expected_digest."
-    ),
-    "preview_school_calendar_replacement": (
-        "Summarize the replacement and get teacher confirmation, then call "
-        "apply_school_calendar_replacement with the preview and base_revision as "
-        "expected_revision."
-    ),
-    "preview_school_calendar_change": (
-        "Summarize the affected dates and conflicts and get teacher confirmation, then "
-        "call apply_school_calendar_change with the preview and base_revision as "
-        "expected_revision."
-    ),
-    "preview_school_calendar_event_change": (
-        "Summarize the before/after event and get teacher confirmation, then call "
-        "apply_school_calendar_event_change with the preview and base_revision as "
-        "expected_revision."
-    ),
-    "preview_school_calendar_game_score": (
-        "Summarize the before/after score and get teacher confirmation, then call "
-        "apply_school_calendar_game_score with the preview and base_revision as "
-        "expected_revision."
     ),
     "preview_new_quiz_scores": (
         "Summarize the frozen review and get teacher confirmation, then call "
@@ -1122,23 +1095,13 @@ _TOOL_GROUPS = {
         "delete_learning_objective",
     ),
     "School Calendar": (
-        # Bell variants and the teacher schedule are Calendar inputs, so they
-        # stay with the public date workflow instead of forming a new taxonomy.
+        # Reads only. The calendar and bell write pairs were retired with the
+        # classroom display they were built to feed; those edits live in the
+        # web UI, where a teacher can see a calendar while changing it.
         "get_school_calendar",
-        "preview_school_calendar_replacement",
-        "apply_school_calendar_replacement",
-        "preview_school_calendar_change",
-        "apply_school_calendar_change",
-        "preview_school_calendar_event_change",
-        "apply_school_calendar_event_change",
-        "preview_school_calendar_game_score",
-        "apply_school_calendar_game_score",
         "get_bell_schedule",
-        "preview_bell_schedule",
-        "apply_bell_schedule",
         "get_day_schedule",
         "get_teacher_schedule",
-        "save_teacher_schedule",
     ),
     # Mirror submissions are the evidence exposed by the Writing Timeline job.
     "Writing Timeline": ("get_submissions",),
@@ -1150,7 +1113,6 @@ _TOOL_GROUPS = {
         "apply_roster_student_change",
         "clear_roster_student_field",
     ),
-    "Seating": ("get_seating_context",),
     "Assessments and DataForge": (
         "get_standards_profile",
         "get_assessment_context",
@@ -2251,115 +2213,6 @@ def _resolve_section_id(sections: dict, *, section_id: str, section_name: str) -
     return None, f"No section named '{section_name}' exists in the local mirror."
 
 
-def get_seating_context(course_id: str, section_name: str = "", section_id: str = "") -> dict:
-    """Pseudonymized mirror+local seating context for one section.
-
-    Identify the section with section_id (unambiguous) or section_name (exact
-    match, or a trim/case-insensitive retry); a name matching zero or several
-    sections is refused with the candidate ids rather than guessed. Current
-    mirrored identity/membership is joined with private local Roster context,
-    carrying neither Canvas identifiers nor private local reasons/notes.
-    """
-    err = _course_gate_check(course_id)
-    if err:
-        return {"ok": False, "error": err}
-    if not isinstance(section_name, str) or not isinstance(section_id, str):
-        return {"ok": False, "error": "A section_id or section_name is required."}
-    if not section_name.strip() and not section_id.strip():
-        return {"ok": False, "error": "A section_id or section_name is required."}
-
-    vault, vault_err = _open_vault()
-    if vault_err:
-        return {"ok": False, "error": vault_err}
-    mirror_doc = _mirror_roster_doc(course_id)
-    if mirror_doc is None:
-        return {"ok": False, "error": _MIRROR_UNAVAILABLE_ROSTER_ERROR}
-
-    selected_section_id, resolve_err = _resolve_section_id(
-        mirror_doc["sections"], section_id=section_id, section_name=section_name
-    )
-    if resolve_err:
-        return {"ok": False, "error": resolve_err}
-
-    with _vault_transaction(vault):
-        users = mirror_doc["students"]
-        roster_service.upsert_roster(vault, users)
-        selected_users = []
-        for user in users:
-            enrolled_section_ids = {
-                str(enrollment.get("course_section_id") or "")
-                for enrollment in user.get("enrollments") or []
-            }
-            if selected_section_id in enrolled_section_ids and user.get("id") is not None:
-                selected_users.append(user)
-
-        settings = config.get_roster_student_settings(course_id)
-        score_matrix = roster_context._normalize_score_matrix(
-            config.get_roster_score_matrix(course_id)
-        )
-        relationships = roster_context.normalize_relationships(
-            config.get_roster_relationships(course_id)
-        )
-        replacement_map = feedback_scrub.build_replacement_map(
-            vault.entries(), set(config.active_protected_names())
-        )
-        columns = score_matrix["columns"]
-        values_by_student = score_matrix["values_by_section"].get(selected_section_id, {})
-        student_payload: list[dict] = []
-        pseudonyms_by_id: dict[str, str] = {}
-        selected_ids: set[str] = set()
-        for user in selected_users:
-            student_id = str(user["id"])
-            pseudo = vault.get_or_assign(user["id"])
-            pseudonyms_by_id[student_id] = pseudo
-            selected_ids.add(student_id)
-            local_settings = settings.get(student_id, {}) if isinstance(settings, dict) else {}
-            seating = roster_context.normalize_seating_context(
-                local_settings.get("seating_context") if isinstance(local_settings, dict) else None
-            )
-            raw_scores = values_by_student.get(student_id, {})
-            scores = [
-                {
-                    "label": feedback_scrub.scrub_text(column["label"], replacement_map),
-                    "value": raw_scores[column["id"]],
-                }
-                for column in columns
-                if column["id"] in raw_scores
-            ]
-            student_payload.append({
-                "pseudonym": pseudo,
-                "supports": {
-                    "front_row": seating["front_row"],
-                    "near_teacher": seating["near_teacher"],
-                },
-                "scores": scores,
-                "ai_context_note": feedback_scrub.scrub_text(
-                    seating["ai_context_note"], replacement_map
-                ),
-            })
-
-        relationship_payload = []
-        for item in relationships["by_section"].get(selected_section_id, []):
-            first, second = item["student_a"], item["student_b"]
-            if first not in selected_ids or second not in selected_ids:
-                continue
-            relationship_payload.append({
-                "type": item["type"],
-                "students": sorted((pseudonyms_by_id[first], pseudonyms_by_id[second])),
-            })
-
-        student_payload.sort(key=lambda item: item["pseudonym"])
-        relationship_payload.sort(
-            key=lambda item: (item["type"], item["students"][0], item["students"][1])
-        )
-        return pseudonym.gate({
-            "students": student_payload,
-            "relationships": relationship_payload,
-            "source": "mirror+local",
-            "synced_at": mirror_doc["last_success_at"],
-        }, vault)
-
-
 def get_submissions(course_id: str, assignment_id: str,
                     include_text: bool = True, pseudonyms: str = "",
                     max_text_chars: int = _DEFAULT_MAX_TEXT_CHARS) -> dict:
@@ -2623,24 +2476,6 @@ def get_bell_schedule(schedule_id: str = "") -> dict:
     }
 
 
-def preview_bell_schedule(schedule_id: str, content: str) -> dict:
-    """Preview replacing or creating one Bell Schedule CSV. Never writes."""
-    preview, problems = bell_schedule.preview_bell_schedule(
-        schedule_id=schedule_id, content=content)
-    if preview is None:
-        return {"ok": False, "problems": problems}
-    return _with_next("preview_bell_schedule", {"ok": True, **preview})
-
-
-def apply_bell_schedule(preview: dict, expected_digest: str) -> dict:
-    """Apply an exact Bell Schedule preview after teacher confirmation."""
-    result, problems = bell_schedule.apply_bell_schedule(
-        preview, expected_digest=expected_digest)
-    if result is None:
-        return {"ok": False, "problems": problems}
-    return {"ok": True, **result}
-
-
 def get_day_schedule(date: str) -> dict:
     """Resolve teacher blocks for a specific date.
 
@@ -2676,27 +2511,6 @@ def get_teacher_schedule() -> dict:
     }
 
 
-def save_teacher_schedule(blocks: list) -> dict:
-    """Replace the teacher's blocks in Teacher Schedule.json.
-
-    This has no ``course_id`` parameter and makes no Canvas call. A
-    teacher-set ``course_id`` field on a block passes through untouched after
-    string validation. No student data, no course gate, no safety gate.
-    Never raises.
-    """
-    if not isinstance(blocks, list):
-        return {"ok": False, "problems": ["blocks must be a list"]}
-
-    data, problems = schedule_setup.save_blocks(blocks)
-    if data is None:
-        return {"ok": False, "problems": problems}
-    return {
-        "ok": True,
-        "count": len(blocks),
-        "path": schedule_setup.teacher_schedule_path(),
-    }
-
-
 def get_school_calendar(date_from: str = "", date_to: str = "") -> dict:
     """Read the canonical School Calendar: readiness, plus a bounded range.
 
@@ -2716,163 +2530,6 @@ def get_school_calendar(date_from: str = "", date_to: str = "") -> dict:
         result["grading_periods"] = projection["grading_periods"]
         result["events"] = projection["events"]
     return result
-
-
-def preview_school_calendar_replacement(school_year: str, coverage_start: str, coverage_end: str,
-                                       default_schedule_id: str, weekday_schedules: dict = None,
-                                       no_school_dates: list = None,
-                                       no_regular_classes_dates: list = None,
-                                       date_labels: dict = None, grading_periods: list = None,
-                                       events: list = None) -> dict:
-    """Preview a complete school-year create/replace. Never writes.
-
-    No course_id, no student data -- no course gate, no safety gate.
-    Returns a staged preview (operation, base_revision, current/proposed
-    school year and coverage, material change counts, and a preview_digest)
-    to summarize for the teacher before calling
-    apply_school_calendar_replacement with its base_revision as
-    expected_revision. Rejects an instructional date naming a Bell Schedule
-    that is not currently loaded. Never raises.
-    """
-    bell_schedules, _bell_problems = deps.load_bell_schedules()
-    preview, problems = school_calendar.preview_replacement(
-        school_year=school_year, coverage_start=coverage_start, coverage_end=coverage_end,
-        default_schedule_id=default_schedule_id, weekday_schedules=weekday_schedules,
-        no_school_dates=no_school_dates, no_regular_classes_dates=no_regular_classes_dates,
-        date_labels=date_labels, grading_periods=grading_periods, events=events,
-        known_schedule_ids=set(bell_schedules),
-    )
-    if preview is None:
-        return {"ok": False, "problems": problems}
-    return _with_next("preview_school_calendar_replacement", {"ok": True, **preview})
-
-
-def apply_school_calendar_replacement(preview: dict, expected_revision: int) -> dict:
-    """Apply a preview returned by preview_school_calendar_replacement.
-
-    No course_id, no student data -- no course gate, no safety gate. Pass the
-    preview object back verbatim along with its base_revision as
-    expected_revision; a stale revision or an altered preview digest is
-    refused rather than silently written. Never raises.
-    """
-    doc, problems = school_calendar.apply_replacement(preview, expected_revision=expected_revision)
-    if doc is None:
-        return {"ok": False, "problems": problems}
-    return {"ok": True, "revision": doc["revision"], "school_year": doc["school_year"],
-            "coverage": doc["coverage"], "day_count": len(doc["days"])}
-
-
-def preview_school_calendar_change(kind: str, schedule_id: str = "", label: str = "",
-                                   dates: list = None, date_from: str = "", date_to: str = "",
-                                   weekdays: list = None) -> dict:
-    """Preview a day-kind/schedule/label change against the live calendar.
-
-    No course_id, no student data -- no course gate, no safety gate.
-    Summarize the affected dates and advisory conflicts for the teacher before
-    calling apply_school_calendar_change. Conflicts warn about weekends and
-    day-kind changes but do not refuse an otherwise valid apply. An empty
-    instructional label preserves the existing label. Rejects an instructional
-    new value naming a Bell Schedule that is not currently loaded. Never raises.
-    """
-    bell_schedules, _bell_problems = deps.load_bell_schedules()
-    preview, problems = school_calendar.preview_change(
-        kind=kind, schedule_id=(schedule_id or None), label=(label or None),
-        dates=dates, date_from=(date_from or None), date_to=(date_to or None),
-        weekdays=weekdays, known_schedule_ids=set(bell_schedules),
-    )
-    if preview is None:
-        return {"ok": False, "problems": problems}
-    return _with_next("preview_school_calendar_change", {"ok": True, **preview})
-
-
-def apply_school_calendar_change(preview: dict, expected_revision: int) -> dict:
-    """Apply a previously returned preview. Refuses a stale expected_revision.
-
-    No course_id, no student data -- no course gate, no safety gate. Never raises.
-    """
-    doc, problems = school_calendar.apply_change(preview, expected_revision=expected_revision)
-    if doc is None:
-        return {"ok": False, "problems": problems}
-    return {"ok": True, "revision": doc["revision"]}
-
-
-def preview_school_calendar_event_change(action: str, event: dict = None,
-                                        event_id: str = "") -> dict:
-    """Preview a public-event upsert or delete in the canonical Calendar.
-
-    ``action`` is ``upsert`` with one complete structured event, or ``delete``
-    with its stable ``event_id``. No course ID, student data, or direct write.
-    """
-    preview, problems = school_calendar.preview_event_change(
-        action=action, event=event, event_id=(event_id or None))
-    if preview is None:
-        return {"ok": False, "problems": problems}
-    return _with_next("preview_school_calendar_event_change", {"ok": True, **preview})
-
-
-def apply_school_calendar_event_change(preview: dict, expected_revision: int) -> dict:
-    """Apply a previewed public-event change after the teacher accepts it."""
-    doc, problems = school_calendar.apply_event_change(
-        preview, expected_revision=expected_revision)
-    if doc is None:
-        return {"ok": False, "problems": problems}
-    return {"ok": True, "revision": doc["revision"]}
-
-
-def preview_school_calendar_game_score(event_id: str, score: str) -> dict:
-    """Preview changing the result of one existing game event.
-
-    This is intentionally narrower than the general event upsert: the stable
-    event ID must already exist and identify a ``game`` event, and every other
-    event field is carried forward unchanged.  The canonical event preview
-    remains the write boundary; this helper only makes the safe operation
-    discoverable to an assistant recording a game score.
-    """
-    if not isinstance(event_id, str) or not event_id.strip():
-        return {"ok": False, "problems": ["event_id must be a non-empty string"]}
-    if not isinstance(score, str):
-        return {"ok": False, "problems": ["score must be a string"]}
-
-    doc, problems = school_calendar.read()
-    if doc is None:
-        return {"ok": False, "problems": problems}
-    current = next((event for event in doc["events"] if event.get("id") == event_id), None)
-    if current is None:
-        return {"ok": False, "problems": [f"event_id '{event_id}' was not found"]}
-    if current.get("kind") != "game":
-        return {"ok": False, "problems": [f"event_id '{event_id}' is not a game event"]}
-
-    updated = {**current, "result": score}
-    preview, problems = school_calendar.preview_event_change(
-        action="upsert", event=updated)
-    if preview is None:
-        return {"ok": False, "problems": problems}
-    return _with_next("preview_school_calendar_game_score", {
-        "ok": True,
-        "game_score": {"event_id": event_id, "score": score},
-        **preview,
-    })
-
-
-def apply_school_calendar_game_score(preview: dict, expected_revision: int) -> dict:
-    """Apply an exact preview returned by preview_school_calendar_game_score."""
-    marker = preview.get("game_score") if isinstance(preview, dict) else None
-    mutation = preview.get("mutation") if isinstance(preview, dict) else None
-    event = mutation.get("event") if isinstance(mutation, dict) else None
-    if (
-        not isinstance(marker, dict)
-        or not isinstance(event, dict)
-        or mutation.get("action") != "upsert"
-        or event.get("kind") != "game"
-        or marker.get("event_id") != event.get("id")
-        or marker.get("score") != event.get("result")
-    ):
-        return {"ok": False, "problems": ["a game-score preview is required"]}
-    doc, problems = school_calendar.apply_event_change(
-        preview, expected_revision=expected_revision)
-    if doc is None:
-        return {"ok": False, "problems": problems}
-    return {"ok": True, "revision": doc["revision"]}
 
 
 # --- Scoring Packet MCP Tools (v22) ----------------------------------------

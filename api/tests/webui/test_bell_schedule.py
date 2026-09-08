@@ -2,7 +2,6 @@ import json
 
 from fastapi.testclient import TestClient
 
-from api.mcp_server import tools
 from api.platform_services import workspace
 from api.webui import bell_schedule, school_calendar
 from api.webui.server import app
@@ -87,26 +86,3 @@ def test_preview_refuses_orphaned_calendar_reference(tmp_path):
     assert any("no file" in problem for problem in problems)
 
 
-def test_web_and_mcp_surfaces_use_the_same_operation(monkeypatch, tmp_path):
-    _seed_schedule(tmp_path)
-    monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
-
-    client = TestClient(app)
-    response = client.post("/api/calendar/bell-schedule/preview", data={
-        "schedule_id": "bell_schedule_late_start", "content": _CANONICAL,
-    })
-    assert response.status_code == 200
-    preview = response.json()
-    assert preview["ok"] is True
-
-    mcp_preview = tools.preview_bell_schedule("bell_schedule_late_start", _CANONICAL)
-    assert mcp_preview["ok"] is True
-    assert mcp_preview["mutation"] == preview["mutation"]
-    assert mcp_preview["preview_digest"] == preview["preview_digest"]
-
-    response = client.post("/api/calendar/bell-schedule/apply", data={
-        "expected_digest": preview["base_digest"],
-        "preview": json.dumps(preview),
-    })
-    assert response.status_code == 200
-    assert response.json()["ok"] is True

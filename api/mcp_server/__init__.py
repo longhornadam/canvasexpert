@@ -2,7 +2,7 @@
 
 Exposes the current read/authoring tool set (including list_courses, list_sections,
 get_course_assignments,
-get_modules, get_roster, get_seating_context, get_submissions,
+get_modules, get_roster, get_submissions,
 get_writing_history, get_gradebook_snapshot, get_authoring_contract,
 get_product_guide, get_standards_profile, list_staged_content, refresh_mirror) over stdio so any
 MCP-capable assistant can help plan lessons and manage rosters. CanvasExpert

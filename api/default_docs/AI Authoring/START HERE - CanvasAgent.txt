@@ -265,13 +265,14 @@ Reading
   * get_modules, get_course_assignments, and get_course_pages read a local
     catalog on disk, never live Canvas. If the catalog looks empty, the teacher
     refreshes it from the web UI.
-  * list_sections(course_id) lists section ids and names. Pass section_name to
-    get_seating_context for the common case; if it refuses because the name
-    is shared by more than one section, retry with one of the section_id
-    values it lists.
-  * get_roster, get_seating_context, get_submissions, and get_gradebook_snapshot
+  * list_sections(course_id) lists section ids and names.
+  * get_roster, get_submissions, and get_gradebook_snapshot
     read only the local mirror and will refuse when it is stale. When one
     refuses, call refresh_mirror(course_id), then retry that read once.
+  * get_school_calendar, get_bell_schedule, get_day_schedule and
+    get_teacher_schedule read the local calendar and schedules. They are
+    reads only: the teacher edits calendars and bell schedules in the
+    Canvas Expert web UI, where they can see a calendar while changing it.
   * get_writing_history(pseudonym) reads a separate private per-student writing
     record some teachers keep. It takes no course_id, and it exists to coach a
     writer over time rather than to grade one assignment.
@@ -289,16 +290,6 @@ the preview to the teacher in plain words and apply only what they accepted.
 If a tool refuses because a revision or digest is stale, something changed
 under you: read again rather than forcing it.
 
-  * The school calendar. get_school_calendar() reads it. Day kinds and labels,
-    single events, and a whole-year replacement each have their own
-    preview/apply pair. Summarize the affected dates and any conflict before
-    applying. Do not parse a calendar out of a forwarded email or free text and
-    apply it unattended.
-  * Game scores. After get_school_calendar() identifies the stable event_id,
-    use preview_school_calendar_game_score(event_id, score) for an existing
-    game. It changes only that event's result and returns before/after values;
-    summarize them and apply only after the teacher confirms. It cannot create
-    a game or change a non-game event.
   * Learning objectives. list_learning_objectives(course_id) reads them;
     preview_learning_objective and apply_learning_objective add or replace one,
     grounded in real module, assignment, or page records; delete_learning_objective
@@ -310,10 +301,6 @@ under you: read again rather than forcing it.
     reassigns the student's real Canvas group membership when the exact
     reviewed preview is applied. Nicknames are
     not yours to set.
-  * Teacher-owned schedules. get_teacher_schedule and save_teacher_schedule,
-    plus get_bell_schedule and get_day_schedule to read. save_teacher_schedule
-    writes the teacher's local schedule directly. Bell schedule changes use
-    preview_bell_schedule and apply_bell_schedule; confirm before applying.
   * Scoring. list_scoring_sessions, get_scoring_packet, stage_scores, as
     described under PowerGrader above. Staged scores wait for teacher review.
     New Quiz item finalization uses preview_new_quiz_scores and

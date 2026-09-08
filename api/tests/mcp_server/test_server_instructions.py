@@ -21,14 +21,14 @@ INSTRUCTION_BUDGET = 3000
 # from 17,717 for the staged-content push pair: preview_content_push carries the
 # delivery options as named parameters rather than one opaque object, so the
 # teacher's "publish it in module 3, due Friday" survives into the schema.
-# Raised again from 18,965 for stage_content and push_content_live, which let a
-# teacher's "push it live" complete without hand-dropping a file. Descriptions
-# were trimmed first, and the live push carries no due/unlock/lock dates: those
-# stay on preview_content_push, which is the call that shows the teacher what
-# lands. Worth knowing before trading more parameters away, because that cut
-# bought only 109 characters -- the cost here is two tools existing at all, not
-# their options.
-LISTING_BUDGET = 20023
+# Raised once for stage_content and push_content_live, then cut hard by
+# retiring the calendar and bell write pairs, the teacher-schedule write, and
+# get_seating_context: 12 tools built to feed the classroom display, which is
+# gone. Their reads stay. Note what the two numbers teach, because the next
+# person here will face the same choice: trimming push_content_live's date
+# parameters bought 109 characters, and dropping 12 tools bought 4,850. Tools
+# are the unit that costs, not their options.
+LISTING_BUDGET = 15173
 DESCRIPTION_BUDGET = 343
 
 RESULT_NEXT_TOOLS = {
@@ -37,11 +37,6 @@ RESULT_NEXT_TOOLS = {
     "preview_sis_grade_bridge",
     "preview_learning_objective",
     "preview_roster_student_change",
-    "preview_bell_schedule",
-    "preview_school_calendar_replacement",
-    "preview_school_calendar_change",
-    "preview_school_calendar_event_change",
-    "preview_school_calendar_game_score",
     "preview_new_quiz_scores",
     "preview_content_push",
 }
@@ -159,13 +154,8 @@ def test_first_lines_disclose_preview_and_canvas_write_boundaries():
     }
 
     for name in (
-        "preview_bell_schedule",
         "preview_learning_objective",
         "preview_roster_student_change",
-        "preview_school_calendar_replacement",
-        "preview_school_calendar_change",
-        "preview_school_calendar_event_change",
-        "preview_school_calendar_game_score",
     ):
         assert "without writing" in first_lines[name]
     for name in ("preview_new_quiz_scores", "preview_sis_grade_bridge",
@@ -196,7 +186,7 @@ def test_the_schemas_themselves_survive_the_strip():
 
 def test_all_registered_tools_use_text_only_result_transport():
     listed = asyncio.run(server.mcp.list_tools())
-    assert len(listed) == 54
+    assert len(listed) == 42
     registry = server.mcp._tool_manager._tools
     assert all(tool.outputSchema is None for tool in listed)
     assert all(item.fn_metadata.output_schema is None
@@ -238,9 +228,9 @@ def test_each_registered_wrapper_returns_one_gated_text_block(_synthetic_mcp):
         return results
 
     results = asyncio.run(call_all())
-    assert len(results) == 54
-    assert len(_synthetic_mcp["calls"]) == 54
-    assert len(_synthetic_mcp["gated"]) == 54
+    assert len(results) == 42
+    assert len(_synthetic_mcp["calls"]) == 42
+    assert len(_synthetic_mcp["gated"]) == 42
     for name, content in results:
         assert len(content) == 1
         assert content[0].type == "text"
