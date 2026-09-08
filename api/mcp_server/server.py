@@ -357,6 +357,40 @@ def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> 
 
 
 @mcp.tool(structured_output=False)
+def stage_content(kind: str, label: str, content: str) -> str:
+    """Stage one authored draft in the teacher's review Inbox.
+    kind is quiz/assignment/page/rubric; content is the completed envelope
+    from get_authoring_contract. No Canvas write."""
+    return _compact(tools.stage_content(kind, label, content))
+
+
+@mcp.tool(structured_output=False)
+def push_content_live(
+    course_id: str,
+    kind: str,
+    label: str,
+    content: str,
+    published: bool = False,
+    module_name: str = "",
+    assignment_group_name: str = "",
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+    post_to_sis: bool = False,
+) -> str:
+    """Stage one authored draft and create it in the Canvas course, in one call.
+    Use when the teacher asks for content to be landed rather than staged; same
+    content as stage_content, same options as preview_content_push."""
+    return _compact(tools.push_content_live(
+        course_id, kind, label, content,
+        published=published, module_name=module_name,
+        assignment_group_name=assignment_group_name,
+        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
+        post_to_sis=post_to_sis,
+    ))
+
+
+@mcp.tool(structured_output=False)
 def refresh_mirror(course_id: str) -> str:
     """Refresh a saved course's local CanvasMirror only after a read refuses as stale.
     It reports sync status, never data; after a successful sync, retry the refused read."""

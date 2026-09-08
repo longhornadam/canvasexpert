@@ -1092,9 +1092,11 @@ _TOOL_GROUPS = {
         # the push pair is where a staged draft becomes real Canvas content.
         "get_product_guide",
         "get_authoring_contract",
+        "stage_content",
         "list_staged_content",
         "preview_content_push",
         "apply_content_push",
+        "push_content_live",
     ),
     "PowerGrader": (
         "start_scoring_session",
@@ -1274,23 +1276,23 @@ def _staging_appendix(kind: str) -> str:
     return (
         "\n\n---\n\n"
         "## Staging this for the teacher\n\n"
-        "Authored files are staged first, never written straight to Canvas. When "
-        "the draft is ready, stage it:\n\n"
-        f"1. Write the completed envelope to a `.txt` file in this kind's Inbox "
-        f"folder:\n   `{where}`\n"
-        "2. Write a sibling marker file named the same with `.done` added (for "
-        "example `my-quiz.txt` and `my-quiz.txt.done`). Its only contents are "
-        "the draft's size in bytes, measured from the file on disk after you "
-        "write it. Do not use the length of the text you generated: a text-mode "
-        "write can turn each line ending into two bytes, so a count taken "
-        "beforehand will be wrong and the draft is held back until the sizes "
-        "agree.\n"
-        "3. Tell the teacher it is staged. It appears under \"Staged by your "
-        "assistant (pending review)\" in the matching Canvas Expert push tab, "
-        "where they can validate and push it themselves. If they would rather "
-        "you land it, call preview_content_push with this kind and the draft's "
-        "label, tell them what the preview says it will create, then "
-        "apply_content_push with the three coordinates unchanged.\n"
+        "Authored content is staged first. Staging is the default: it puts the "
+        "draft in front of the teacher in the matching Canvas Expert push tab, "
+        "under \"Staged by your assistant (pending review)\", where they can "
+        "validate and push it themselves.\n\n"
+        "Call stage_content with this kind, a short label, and the completed "
+        "envelope. Then tell the teacher it is staged.\n\n"
+        "If the teacher asks you to land it in Canvas rather than stage it for "
+        "review, that request is the authorization. Either call "
+        "push_content_live, which stages the draft and creates it in one call, "
+        "or stage it and then walk the pair: preview_content_push with this "
+        "kind and the draft's label, tell them what the preview says it will "
+        "create, then apply_content_push with the three coordinates unchanged. "
+        "Both routes stage the draft either way, so there is always a file the "
+        "teacher can read afterwards.\n\n"
+        f"The Inbox for this kind is `{where}`. You do not need to write there "
+        "yourself; stage_content handles the envelope and the byte-count marker "
+        "that keeps a half-synced draft from being picked up.\n"
     )
 
 
@@ -2108,6 +2110,46 @@ def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> 
     coordinates do not match a frozen content review.
     """
     return content_push.apply_content_push(operation_id, batch_id, review_digest)
+
+
+def stage_content(kind: str, label: str, content: str) -> dict:
+    """Write one authored draft into the teacher's per-kind To Review Inbox.
+
+    The staging step an assistant used to have to perform with file access:
+    the envelope and its byte-count marker are written together, so the draft
+    appears in the matching push tab for the teacher to review and land. No
+    Canvas write, and an existing label is refused rather than overwritten.
+    """
+    return content_push.stage_content(kind, label, content)
+
+
+def push_content_live(
+    course_id: str,
+    kind: str,
+    label: str,
+    content: str,
+    published: bool = False,
+    module_name: str = "",
+    assignment_group_name: str = "",
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+    post_to_sis: bool = False,
+) -> dict:
+    """Stage one authored draft and create it in Canvas in a single call.
+
+    For a teacher who has asked for the content to be landed. Staging still
+    happens, so the draft remains on disk as the artifact of record, and the
+    same baseline capture, frozen review, and drift check run internally
+    between staging and applying.
+    """
+    return content_push.push_content_live(
+        course_id, kind, label, content,
+        published=published, module_name=module_name,
+        assignment_group_name=assignment_group_name,
+        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
+        post_to_sis=post_to_sis,
+    )
 
 
 _MIRROR_UNAVAILABLE_ROSTER_ERROR = (

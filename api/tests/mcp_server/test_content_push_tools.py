@@ -493,3 +493,159 @@ def test_the_staging_appendix_offers_the_push_without_replacing_the_push_tab():
     assert "Canvas Expert push tab" in contract
     assert "preview_content_push" in contract
     assert "apply_content_push" in contract
+
+# --- staging from the assistant itself -----------------------------------------
+
+def test_stage_content_writes_a_draft_the_marker_gate_accepts(_workspace):
+    """The whole point: what stage_content writes must be immediately listable,
+    which means the .done marker has to match the file's real byte size."""
+    from api.webui import deps
+
+    result = content_push.stage_content(
+        "page", "Photosynthesis intro", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>")
+
+    assert result["ok"] is True
+    assert result["label"] == "Photosynthesis intro.txt"
+    listed = deps.list_inbox_files("page")
+    assert [entry["label"] for entry in listed] == ["Photosynthesis intro.txt"]
+
+
+def test_stage_content_marker_matches_bytes_not_character_count(_workspace):
+    """Two ways this goes wrong, and the body catches both: a text-mode write
+    turns each newline into two bytes on Windows, and a marker taken from the
+    generated string's length counts characters rather than bytes. The accented
+    characters make those two counts differ, so this can tell them apart
+    instead of passing by coincidence on plain ASCII."""
+    body = "première ligne\ndeuxième ligne\ntroisième ligne\n"
+    assert len(body) != len(body.encode("utf-8"))
+
+    content_push.stage_content("page", "multiline", body)
+
+    folder = runtime_paths.inbox_folder("page")
+    draft = os.path.join(str(folder), "multiline.txt")
+    marker = int(open(draft + ".done", encoding="utf-8").read().strip())
+    assert marker == os.path.getsize(draft) == len(body.encode("utf-8"))
+
+
+def test_stage_content_refuses_to_overwrite_a_staged_label(_workspace):
+    content_push.stage_content("page", "same-name", "first")
+
+    again = content_push.stage_content("page", "same-name", "second")
+
+    assert again["ok"] is False
+    assert "already staged" in again["error"]
+    folder = runtime_paths.inbox_folder("page")
+    assert open(os.path.join(str(folder), "same-name.txt"), encoding="utf-8").read() == "first"
+
+
+@pytest.mark.parametrize("label", [
+    "../escape", "sub/dir", "sub\\dir", "C:/tmp/x", "", "   ",
+    ".hidden", "trailing.", "CON", "nul", 'quote"mark', "star*",
+])
+def test_stage_content_refuses_a_label_that_is_not_a_plain_file_name(_workspace, label):
+    """A label from an assistant becomes a filename in the teacher's synced
+    workspace, so anything that could land outside this Inbox is refused
+    rather than rewritten into a different file than the one it named."""
+    result = content_push.stage_content("page", label, "body")
+
+    assert result["ok"] is False
+    folder = runtime_paths.inbox_folder("page")
+    assert os.listdir(str(folder)) == []
+
+
+def test_stage_content_refuses_an_unknown_kind_and_empty_content(_workspace):
+    assert content_push.stage_content("discussion", "x", "body")["ok"] is False
+    assert content_push.stage_content("page", "x", "   ")["ok"] is False
+    assert os.listdir(str(runtime_paths.inbox_folder("page"))) == []
+
+
+# --- push_content_live: stage, freeze, apply, in one call ----------------------
+
+def test_push_content_live_stages_then_lands_in_one_call(_adapter, monkeypatch):
+    landed = {}
+
+    def _fake_apply(op, batch, digest):
+        landed["coords"] = (op, batch, digest)
+        return {"ok": True, "status": "applied", "operation_id": op,
+                "target_results": [{"state": "applied",
+                                    "returned_object_url": "about:blank"}]}
+
+    monkeypatch.setattr(content_push.executor, "apply_operation", _fake_apply)
+
+    result = content_push.push_content_live(
+        "course-x", "page", "Cell cycle", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>",
+        published=True)
+
+    assert result["ok"] is True
+    assert result["staged_label"] == "Cell cycle.txt"
+    # The draft is still on disk afterwards: staging is the artifact of record,
+    # not a step the live push skips.
+    from api.webui import deps
+    assert [e["label"] for e in deps.list_inbox_files("page")] == ["Cell cycle.txt"]
+    # And it went through a real freeze, not straight to the adapter.
+    assert landed["coords"][0] and landed["coords"][2]
+
+
+def test_push_content_live_still_freezes_a_review_before_applying(_adapter, monkeypatch):
+    """The freeze is internal here, not skipped. Apply must receive the exact
+    coordinates of a persisted review, which is what the drift check hangs on."""
+    from api.operation_ledger import operations
+
+    monkeypatch.setattr(
+        content_push.executor, "apply_operation",
+        lambda op, batch, digest: {"ok": True, "status": "applied",
+                                   "operation_id": op, "target_results": []})
+
+    result = content_push.push_content_live(
+        "course-x", "page", "frozen", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>")
+
+    assert result["ok"] is True
+    listed = operations.list_operations_pii_minimized()
+    assert len(listed) == 1 and listed[0]["status"] in ("reviewed", "applied")
+
+
+def test_push_content_live_leaves_the_draft_staged_when_the_push_fails(_adapter):
+    """A push that cannot complete must not also swallow the evidence: the
+    teacher should be able to read what the assistant actually authored."""
+    result = content_push.push_content_live(
+        "not-a-current-course", "page", "orphan", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>")
+
+    assert result["ok"] is False
+    assert result["staged_label"] == "orphan.txt"
+    assert "staged" in result["note"]
+    from api.webui import deps
+    assert [e["label"] for e in deps.list_inbox_files("page")] == ["orphan.txt"]
+
+
+def test_push_content_live_refuses_a_bad_label_before_touching_canvas(_adapter):
+    result = content_push.push_content_live(
+        "course-x", "page", "../escape", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>")
+
+    assert result["ok"] is False
+    assert _adapter.requests == []
+
+
+def test_push_content_live_refuses_an_option_the_kind_cannot_carry(_adapter):
+    """Same per-kind option discipline as the preview path: a page has no due
+    date, and saying so beats silently dropping it."""
+    result = content_push.push_content_live(
+        "course-x", "page", "dated", "<PAGEFORGE_JSON>{}</PAGEFORGE_JSON>",
+        due_at="2026-10-01T23:59:00Z")
+
+    assert result["ok"] is False
+    assert "due_at" in result["error"]
+
+
+def test_live_push_tools_delegate_to_the_shared_use_case(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(content_push, "stage_content",
+                        lambda *a, **k: seen.setdefault("stage", (a, k)) or {"ok": True})
+    monkeypatch.setattr(content_push, "push_content_live",
+                        lambda *a, **k: seen.setdefault("live", (a, k)) or {"ok": True})
+
+    tools.stage_content("page", "l", "body")
+    tools.push_content_live("course-x", "quiz", "l", "body", published=True)
+
+    assert seen["stage"][0] == ("page", "l", "body")
+    assert seen["live"][0] == ("course-x", "quiz", "l", "body")
+    assert seen["live"][1]["published"] is True

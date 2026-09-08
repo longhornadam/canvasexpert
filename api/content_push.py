@@ -18,6 +18,11 @@ resolves that label against the marker-gated listing.
 
 from __future__ import annotations
 
+import os
+import re
+from pathlib import Path
+
+from api import runtime_paths
 from api.operation_ledger import batches, executor, models, operations, registry
 from api.operation_ledger.adapters.assignment import KIND as ASSIGNMENT_KIND
 from api.operation_ledger.adapters.page import KIND as PAGE_KIND
@@ -223,6 +228,145 @@ def preview_content_push(
     }
 
 
+# A label becomes a filename in the teacher's synced workspace, so it is
+# validated rather than sanitized: a label that cannot be used verbatim is
+# refused and renamed by the caller, never silently rewritten into a different
+# file than the one the assistant told the teacher about.
+_UNSAFE_LABEL_CHARS = re.compile(r'[<>:"/\\|?*]')
+_RESERVED_STEMS = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{n}" for n in range(1, 10)}
+    | {f"LPT{n}" for n in range(1, 10)}
+)
+_MAX_LABEL = 120
+
+
+def _safe_inbox_filename(label: str) -> tuple[str | None, str | None]:
+    """Return ``(filename, None)`` for one usable Inbox label, else an error."""
+    raw = str(label or "").strip()
+    if not raw:
+        return None, "label is required"
+    if raw != os.path.basename(raw) or os.path.isabs(raw) or ".." in raw:
+        return None, "label must be a plain file name, with no folders or path separators"
+    if any(ord(char) < 32 for char in raw):
+        return None, "label contains control characters"
+    if _UNSAFE_LABEL_CHARS.search(raw):
+        return None, 'label cannot contain any of < > : " / \\ | ? *'
+    if raw.startswith("."):
+        return None, "label cannot start with a dot"
+    filename = raw if raw.casefold().endswith(".txt") else f"{raw}.txt"
+    stem = filename[:-4]
+    if not stem or stem != stem.rstrip(" ."):
+        return None, "label cannot be empty or end with a space or dot"
+    if stem.upper() in _RESERVED_STEMS:
+        return None, f"'{stem}' is a reserved file name on Windows; choose another label"
+    if len(filename) > _MAX_LABEL:
+        return None, f"label is too long; keep it under {_MAX_LABEL} characters"
+    return filename, None
+
+
+def stage_content(kind: str, label: str, content: str) -> dict:
+    """Write one authored draft into the per-kind To Review Inbox.
+
+    Does for an assistant exactly what the staging appendix asks a
+    file-capable one to do by hand: the envelope goes to ``<label>.txt`` and a
+    sibling ``<label>.txt.done`` marker records the byte count measured from
+    the file on disk, so ``deps.list_inbox_files`` only lists it once both
+    agree. Written as bytes, so no text-mode line-ending translation can put
+    the marker out of step with the draft.
+
+    Refuses rather than overwrites: a label already staged belongs to whoever
+    staged it. Nothing here touches Canvas.
+    """
+    content_kind = str(kind or "").strip().lower()
+    if content_kind not in _LEDGER_KINDS:
+        return {"ok": False, "error": _kind_error(content_kind)}
+    filename, label_error = _safe_inbox_filename(label)
+    if label_error:
+        return {"ok": False, "error": label_error}
+    text = content if isinstance(content, str) else ""
+    if not text.strip():
+        return {"ok": False, "error": f"content is required to stage a {content_kind} draft"}
+
+    folder = runtime_paths.inbox_folder(content_kind)
+    if not folder:
+        return {
+            "ok": False,
+            "error": ("the Canvas Expert workspace is not configured, so there is "
+                      "nowhere to stage this draft"),
+        }
+    target = Path(folder) / filename
+    marker = Path(f"{target}.done")
+    if target.exists() or marker.exists():
+        return {
+            "ok": False,
+            "error": (f"a {content_kind} draft is already staged as '{filename}'; "
+                      "choose another label"),
+        }
+    try:
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        target.write_bytes(text.encode("utf-8"))
+        marker.write_text(str(target.stat().st_size), encoding="utf-8")
+    except OSError:
+        return {"ok": False, "error": f"the {content_kind} draft could not be staged"}
+    return {"ok": True, "kind": content_kind, "label": filename, "staged": True}
+
+
+def push_content_live(
+    course_id: str,
+    kind: str,
+    label: str,
+    content: str,
+    published: bool = False,
+    module_name: str = "",
+    assignment_group_name: str = "",
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+    post_to_sis: bool = False,
+) -> dict:
+    """Stage one authored draft and land it in Canvas in a single call.
+
+    The teacher asking for this is the authorization. Staging still happens, so
+    the draft is on disk as the artifact of record and can be read afterwards;
+    what goes away is the teacher having to drop the file by hand before saying
+    push.
+
+    The freeze is not skipped, only made internal: the same baseline capture,
+    persisted review, and drift check run between staging and applying, so a
+    course that changed underneath is still refused rather than overwritten. A
+    draft that stages but fails to push is left staged on purpose, so the
+    teacher can see what was authored and fix it.
+    """
+    staged = stage_content(kind, label, content)
+    if not staged.get("ok"):
+        return staged
+
+    review = preview_content_push(
+        course_id, kind, staged["label"],
+        published=published, module_name=module_name,
+        assignment_group_name=assignment_group_name,
+        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
+        post_to_sis=post_to_sis,
+    )
+    if not review.get("ok"):
+        return {
+            **review,
+            "staged_label": staged["label"],
+            "note": (f"The {staged['kind']} draft is staged as '{staged['label']}' and "
+                     "nothing reached Canvas. Fix the draft and push it again."),
+        }
+
+    landed = apply_content_push(
+        review["operation_id"], review["batch_id"], review["review_digest"],
+    )
+    return {
+        **landed,
+        "staged_label": staged["label"],
+        "preview": review.get("preview"),
+    }
+
+
 def apply_content_push(
     operation_id: str, batch_id: str, review_digest: str
 ) -> dict:
@@ -306,4 +450,6 @@ def _scrub_paths(value):
 __all__ = [
     "apply_content_push",
     "preview_content_push",
+    "push_content_live",
+    "stage_content",
 ]

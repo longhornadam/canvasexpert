@@ -21,7 +21,12 @@ INSTRUCTION_BUDGET = 3000
 # from 17,717 for the staged-content push pair: preview_content_push carries the
 # delivery options as named parameters rather than one opaque object, so the
 # teacher's "publish it in module 3, due Friday" survives into the schema.
-LISTING_BUDGET = 18965
+# Raised again from 18,965 for stage_content and push_content_live, which let a
+# teacher's "push it live" complete without hand-dropping a file. Descriptions
+# were trimmed first; what remains is push_content_live's delivery options,
+# carried as named parameters for the same reason preview_content_push carries
+# them, so the trade is the same one already accepted above.
+LISTING_BUDGET = 20132
 DESCRIPTION_BUDGET = 343
 
 RESULT_NEXT_TOOLS = {
@@ -189,7 +194,7 @@ def test_the_schemas_themselves_survive_the_strip():
 
 def test_all_registered_tools_use_text_only_result_transport():
     listed = asyncio.run(server.mcp.list_tools())
-    assert len(listed) == 52
+    assert len(listed) == 54
     registry = server.mcp._tool_manager._tools
     assert all(tool.outputSchema is None for tool in listed)
     assert all(item.fn_metadata.output_schema is None
@@ -231,9 +236,9 @@ def test_each_registered_wrapper_returns_one_gated_text_block(_synthetic_mcp):
         return results
 
     results = asyncio.run(call_all())
-    assert len(results) == 52
-    assert len(_synthetic_mcp["calls"]) == 52
-    assert len(_synthetic_mcp["gated"]) == 52
+    assert len(results) == 54
+    assert len(_synthetic_mcp["calls"]) == 54
+    assert len(_synthetic_mcp["gated"]) == 54
     for name, content in results:
         assert len(content) == 1
         assert content[0].type == "text"

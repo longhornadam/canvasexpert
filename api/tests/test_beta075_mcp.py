@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 37
+    assert contract.TOOL_SCHEMA_VERSION == 38
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -105,7 +105,10 @@ def test_live_mcp_schema_matches_versioned_contract():
     assert len(contract.load_contract(35)["tools"]) == 56
     # v36 removes the six Panel theme tools with the classroom display.
     assert len(contract.load_contract(36)["tools"]) == 50
-    assert len(live["tools"]) == 52
+    # v37 adds the staged-content push pair; v38 adds stage_content and
+    # push_content_live, so an assistant can stage and land a draft itself.
+    assert len(contract.load_contract(37)["tools"]) == 52
+    assert len(live["tools"]) == 54
     v22 = contract.load_contract(22)
     assert v22["schema_version"] == 22
     assert len(v22["tools"]) == 39

@@ -5,11 +5,15 @@ lets any MCP-capable assistant help plan lessons and manage rosters conversation
 while CanvasExpert keeps sole custody of the Canvas PAT and almost every write path.
 
 - **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
-  local copy on their computer. It never holds the Canvas token. Four digest-protected
-  apply tools reach Canvas, each gated by its own preview: `apply_roster_student_change`
-  (only when the reviewed preview carries a `canvas_group` patch, which reassigns real
-  Canvas group membership), `apply_new_quiz_scores`, `apply_sis_grade_bridge`, and
-  `apply_content_push`. Everything else writes only to local CanvasExpert state.
+  local copy on their computer. It never holds the Canvas token. Five tools reach
+  Canvas: four digest-protected applies, each gated by its own preview, and one
+  single-call push. `apply_roster_student_change` (only when the reviewed preview
+  carries a `canvas_group` patch, which reassigns real Canvas group membership),
+  `apply_new_quiz_scores`, `apply_sis_grade_bridge`, `apply_content_push`, and
+  `push_content_live`, which stages a draft and applies it in one call for a teacher
+  who asked for it to be landed. The freeze is internal there, not skipped: the same
+  baseline capture, frozen review, and drift check run between staging and applying.
+  Everything else writes only to local CanvasExpert state.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   one-word pseudonym (e.g. "Pikachu") — never a real name, Canvas user ID, or SIS ID. See
@@ -34,7 +38,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 37 (52 tools).
+Tool schema version 38 (54 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -56,9 +60,11 @@ Tool schema version 37 (52 tools).
 | `get_standards_profile()` | Published offline DataForge standards profile; no `course_id` or Canvas call, with Identity Vault access required | Yes, pseudonymized |
 | `get_assessment_context(course_id, pseudonyms="")` | Bounded local assessment evidence for exact Current-roster pseudonyms; observational only | Yes, pseudonymized |
 | `get_assessment_grouping_proposal(course_id, snapshot_id, method="overall_pct", cutoffs="", no_data_group="", group_set_label="")` | Read-only grouping proposal using an exact teacher-safe group-set label; no Canvas apply path | Yes, pseudonymized |
+| `stage_content(kind, label, content)` | Writes one authored draft and its `.done` marker into the per-kind review Inbox; refuses an existing label rather than overwriting | No |
 | `list_staged_content(kind="")` | Drafts in the local review Inbox; pass `kind` to filter or omit it for all drafts | No |
 | `preview_content_push(course_id, kind, label, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Persists a local frozen review of one staged draft for one Current course; `next` carries the confirm-then-apply handoff | No |
 | `apply_content_push(operation_id, batch_id, review_digest)` | Creates the exact frozen draft in Canvas through the Operation Ledger; same claims, drift check, and receipt as the push tab | No |
+| `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Stages one authored draft and creates it in Canvas in a single call; the draft stays staged as the artifact of record | No |
 | `get_roster(course_id)` | Current mirror roster as stable one-word stand-ins and section names | Yes, pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames and seating private notes are omitted, and the AI-context note is scrubbed | Yes, pseudonymized |
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
@@ -98,11 +104,19 @@ tools below, `get_modules` never refuses on staleness: it returns whatever modul
 the catalog holds, labeled with `source`, `synced_at`, and `state`, since module structure
 is far lower-risk than student data.
 
-The staged-content push pair lands authored content the assistant already staged.
-Authoring still stages first: the assistant writes the envelope and its `.done` marker
-into the per-kind To Review Inbox, exactly as `get_authoring_contract` describes, and the
-draft appears in the matching push tab. The teacher can push it there, or ask the
-assistant to land it. `preview_content_push` names the draft by the label
+The staged-content push tools land authored content in Canvas. Authoring still stages
+first, always: the envelope and its `.done` marker go into the per-kind To Review Inbox,
+exactly as `get_authoring_contract` describes, and the draft appears in the matching push
+tab. What changed is who performs that step. `stage_content` lets the assistant stage the
+draft itself, so a client with no file access can reach the Inbox, and the teacher no
+longer hand-drops a file in the middle of a request they already made.
+
+From there the teacher can push it in the tab, or ask the assistant to land it. Staging
+is still the default landing place; a teacher asking for content to be created is what
+selects the other path. `push_content_live` is that path: it stages the draft and applies
+it in one call, keeping the freeze internally so the baseline capture, persisted review,
+and drift check all still run. A draft that stages but fails to push is left staged on
+purpose, so the teacher can read what was authored. `preview_content_push` names the draft by the label
 `list_staged_content` returns, builds the same adapter payload the push tab builds,
 captures the Canvas baseline, and persists one frozen operation; `apply_content_push`
 takes only the three coordinates that preview returned and runs the same Operation Ledger
