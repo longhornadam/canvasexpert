@@ -111,7 +111,9 @@ def test_server_instructions_lock_one_command_preauthorization():
     instructions = server._SERVER_INSTRUCTIONS
 
     assert "Asking for the write is the authorization" in instructions
-    assert "does not carry to another assignment, course, family, or session" in instructions
+    # "draft" joined the list when the staged-content push pair landed; the
+    # rule itself is unchanged, so the bound is still one named target.
+    assert "does not carry to another assignment, draft, course, family, or session" in instructions
 
 
 def test_passback_evidence_rule_rides_with_its_own_tool():

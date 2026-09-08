@@ -113,9 +113,11 @@ other program relies on, and needs no admin.
 Appendix B. What CanvasExpert can do
 
 Create and Forge. Author a quiz, assignment, page, or rubric, validate it, then
-stage it for the teacher's UI review and push to one course or several with due
-dates, grading category, module
-placement, and publish state set together. Per-course details are matched by
+stage it for review and push to one course or several with due dates, grading
+category, module
+placement, and publish state set together. The teacher pushes from the Create
+tab, or, when CanvasExpert is connected as a tool provider, asks the assistant
+to land one staged draft in one course from the chat. Per-course details are matched by
 name, so one file works across sections. Quizzes can also compile offline into
 a Canvas-importable ZIP plus printable Word and PDF copies. Assignments and
 quizzes can carry differentiation tiers that assign to named Canvas groups, so
@@ -238,10 +240,11 @@ Appendix D. When CanvasExpert is connected as a tool provider
 If the teacher has connected CanvasExpert over MCP, your reach is of three
 kinds: you can read the teacher's local copy of their courses, you can write
 certain things to their own computer, and you can stage drafts for review.
-Authored Forge content is staged for the teacher's UI review and push. Three
-bounded reviewed apply paths can reach Canvas: a roster preview carrying a
-canvas_group patch, New Quiz item finalization after staged scores, and a named
-SIS grade bridge. Everything else writes only to the teacher's computer.
+Authored Forge content is always staged first, where the teacher can review and
+push it themselves or ask you to land it. Four bounded reviewed apply paths can
+reach Canvas: a roster preview carrying a canvas_group patch, New Quiz item
+finalization after staged scores, a named SIS grade bridge, and one staged
+draft. Everything else writes only to the teacher's computer.
 
 For the full tool list grouped by job, call get_product_guide(topic="tools").
 What matters while you work:
@@ -328,18 +331,29 @@ Staging a draft, which is how authored content reaches the teacher:
      ending into two bytes, so a count taken beforehand will not match and the
      draft is held back on purpose until the sizes agree.
   3. Tell the teacher it is staged. It appears under "Staged by your assistant
-     (pending review)" on the matching Create tab, where they validate and
-     push it.
+     (pending review)" on the matching Create tab, where they can validate and
+     push it themselves.
+  4. If they would rather you land it, preview_content_push(course_id, kind,
+     label) freezes that one draft for that one course and returns what it will
+     create; apply_content_push lands it with the three coordinates unchanged.
+     The label is the one list_staged_content returns. Delivery options are per
+     kind: a page takes published and module_name, a rubric only published, and
+     a quiz or assignment also takes assignment_group_name, post_to_sis, and
+     ISO 8601 due_at, unlock_at, and lock_at. Naming one a kind cannot carry is
+     refused rather than quietly dropped, and a draft stays unpublished unless
+     you pass published=true. Read the preview to the teacher in plain words,
+     then apply.
 
-Outside the roster canvas_group path, New Quiz item finalization, and the SIS
-bridge path, nothing above reaches Canvas on its own. Authored drafts always
-wait in the teacher's UI for review and push. When a teacher asks for one of
-those writes, that ask is the authorization: run the preview/apply cycle and
-tell them what landed. It covers the target they named, a course and assignment
-for a New Quiz or a course and family for a bridge (or explicitly all
-already-registered bridges), and does not generalize to another course, family,
-assignment, session, or roster write. Any invariant failure still stops the
-cycle on its own.
+Outside the roster canvas_group path, New Quiz item finalization, the SIS
+bridge path, and a staged draft the teacher asked you to land, nothing above
+reaches Canvas on its own. An unpushed draft waits in the teacher's UI. When a
+teacher asks for one of those writes, that ask is the authorization: run the
+preview/apply cycle and tell them what landed. It covers the target they named,
+a course and assignment for a New Quiz, a course and draft for staged content,
+or a course and family for a bridge (or explicitly all already-registered
+bridges), and does not generalize to another course, family, assignment, draft,
+session, or roster write. Any invariant failure still stops the cycle on its
+own.
 
 
 Appendix E. Privacy, and what this does not promise

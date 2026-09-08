@@ -116,6 +116,10 @@ RETIRED_FILES = {
         # could have "scores" written straight to Canvas, which promises
         # generic grade posting; only New Quiz item scores can go.
         "183bac2d77afc38c98c79def8cada375f7c9dea1afdb9fc15eae80adf54da931",
+        # Before a staged draft could be landed from the chat. Appendix D said
+        # authored content always waits in the UI for the teacher to push it,
+        # which the content push pair contradicts.
+        "d6898fbb9e3ebdf9b171eccc8789f1f492c848cabd76f7f04902eccfadfd60c7",
     }),
     # Named the removed classroom display alongside Calendar.
     "Author a Class Schedule.txt": frozenset({
