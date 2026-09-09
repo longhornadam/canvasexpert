@@ -38,7 +38,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 39 (42 tools).
+Tool schema version 40 (44 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -63,6 +63,8 @@ Tool schema version 39 (42 tools).
 | `stage_content(kind, label, content)` | Writes one authored draft and its `.done` marker into the per-kind review Inbox; refuses an existing label rather than overwriting | No |
 | `list_staged_content(kind="")` | Drafts in the local review Inbox; pass `kind` to filter or omit it for all drafts | No |
 | `preview_content_push(course_id, kind, label, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Persists a local frozen review of one staged draft for one Current course; `next` carries the confirm-then-apply handoff | No |
+| `list_groups(course_id)` | Current-course group-set and group names from the fresh local mirror, including the group set selected in Roster; no memberships or Canvas IDs | No |
+| `preview_differentiated_quiz_push(course_id, variants, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Persists a frozen review for staged QuizForge labels bound to distinct selected groups; `next` carries the existing `apply_content_push` handoff | No |
 | `apply_content_push(operation_id, batch_id, review_digest)` | Creates the exact frozen draft in Canvas through the Operation Ledger; same claims, drift check, and receipt as the push tab | No |
 | `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", post_to_sis=false)` | The route for a teacher who asked for content in Canvas; stages the draft, freezes and drift-checks it internally, then creates it. Unpublished unless `published=true`. Carries no dates: use the preview pair for those | No |
 | `get_roster(course_id)` | Current mirror roster as stable one-word stand-ins and section names | Yes, pseudonymized |
@@ -108,6 +110,12 @@ a review in front of them that they never asked to see. A teacher who asked for 
 prepared for their review gets `stage_content` and stops there, with the draft waiting in
 the push tab. A draft that stages but fails to push is left staged on purpose, so the
 teacher can read what was authored.
+
+Group discovery is mirror-only: `list_groups` returns only group-set and group names
+and the Roster-selected set, and refuses with `refresh_mirror` when the private group
+snapshot is stale or missing. Differentiated quiz preview is the separate write path:
+it resolves staged labels, captures a fresh private Canvas baseline through the
+Operation Ledger quiz adapter, and exposes only the safe frozen review projection.
 
 The reviewed-preview machinery is not what makes the write safe to skip asking about --
 it runs on every route. What the pair adds over the live push is a chance to look and a
@@ -178,7 +186,7 @@ the app actually does. Every successful response returns an ordered object that 
 all eleven topics with one-line summaries. `overview` serves Appendix B; the other named
 CanvasAgent sections serve their exact Appendix A-G slices; `full` serves the entire file;
 and the two writing topics serve their own canonical files. `tools` is generated from the
-frozen schema-v36 contract and groups all 50 tools exactly once by teacher-facing job.
+frozen schema-v40 contract and groups all 44 tools exactly once by teacher-facing job.
 Topic matching trims surrounding whitespace and ignores case. The download route's
 CanvasAgent bytes equal `topic="full"`; section topics are extracted from those same bytes.
 Results are text-only MCP content: the server returns one minified JSON text block and

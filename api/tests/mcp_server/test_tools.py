@@ -703,7 +703,7 @@ def test_generated_tool_inventory_covers_the_contract_exactly_once_by_job():
     assert result["topics"] == _GUIDE_TOPIC_SUMMARIES
     assert set(tools._TOOL_GROUPS) == expected_groups
     assert all(tools._TOOL_GROUPS.values())
-    assert set(grouped) == contract_names and len(grouped) == len(contract_names) == 42
+    assert set(grouped) == contract_names and len(grouped) == len(contract_names) == 44
     for name in contract_names:
         assert len(re.findall(
             rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])",
@@ -1583,8 +1583,53 @@ def test_refresh_mirror_accepts_previous_course(monkeypatch, _set_previous_cours
     assert result == {
         "ok": True,
         "status": "synced",
-        "message": "Mirror refreshed (roster, assignments, and submissions only). Re-read those tools now.",
+        "message": "Mirror refreshed (roster, groups, assignments, and submissions status only). Re-read the refused tool now.",
     }
+
+
+def test_list_groups_projects_names_and_selected_set_without_private_ids(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
+    monkeypatch.setattr(tools.read_service, "private_groups", lambda *args, **kwargs: {
+        "state": "current", "records": [{
+            "category_id": "category-secret", "category_name": "Teams",
+            "groups": [{"id": "group-secret", "name": "Blue",
+                         "student_ids": ["user-secret"],
+                         "memberships": [{"user_id": "user-secret"}]}],
+        }],
+    })
+    monkeypatch.setattr(tools.config, "get_roster_group_scheme",
+                        lambda _course: {"selected_group_category_id": "category-secret"})
+    result = tools.list_groups("111")
+    assert result == {"ok": True, "course_id": "111",
+                      "group_sets": [{"name": "Teams", "groups": [{"name": "Blue"}]}],
+                      "selected_group_set": "Teams"}
+    dumped = json.dumps(result)
+    for value in ("category-secret", "group-secret", "user-secret", "memberships", "student_ids"):
+        assert value not in dumped
+
+
+@pytest.mark.parametrize("scope", [
+    {"state": "missing", "records": []},
+    {"state": "stale", "records": []},
+    {"state": "current", "records": "bad"},
+])
+def test_list_groups_refuses_unusable_mirror_with_refresh_attention(monkeypatch, _set_active_courses, scope):
+    _set_active_courses(["111"])
+    monkeypatch.setattr(tools.read_service, "private_groups", lambda *args, **kwargs: scope)
+    result = tools.list_groups("111")
+    assert result["ok"] is False
+    assert result["attention"]["action"] == "refresh_mirror"
+
+
+def test_list_groups_without_roster_selection_still_lists_names(monkeypatch, _set_active_courses):
+    _set_active_courses(["111"])
+    monkeypatch.setattr(tools.read_service, "private_groups", lambda *args, **kwargs: {
+        "state": "current", "records": [{"category_id": "cat", "category_name": "Teams",
+                                             "groups": [{"name": "Blue"}]}]})
+    monkeypatch.setattr(tools.config, "get_roster_group_scheme", lambda _course: {})
+    result = tools.list_groups("111")
+    assert result["group_sets"][0]["groups"] == [{"name": "Blue"}]
+    assert result["attention"]["action"] == "select_group_set"
 
 
 def test_refresh_mirror_reports_synced_on_success(monkeypatch, _set_active_courses):
@@ -2130,12 +2175,12 @@ def test_server_registers_the_expected_tool_set():
 
     tool_names = set(mcp._tool_manager._tools.keys())
     assert tool_names == {
-        "list_courses", "list_sections", "get_course_assignments", "get_modules",
+        "list_courses", "list_sections", "list_groups", "get_course_assignments", "get_modules",
         "get_roster", "get_submissions",
         "get_writing_history", "get_gradebook_snapshot", "refresh_mirror",
         "get_authoring_contract", "get_product_guide", "get_standards_profile",
         "get_assessment_context", "get_assessment_grouping_proposal",
-        "list_staged_content", "preview_content_push", "apply_content_push",
+        "list_staged_content", "preview_content_push", "preview_differentiated_quiz_push", "apply_content_push",
         "stage_content", "push_content_live",
         # Shipped with the SIS grade bridge; this set was never updated with them.
         "list_sis_grade_bridges", "preview_sis_grade_bridge",

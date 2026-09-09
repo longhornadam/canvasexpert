@@ -20,7 +20,7 @@ from api.platform_services.canvas_client import canvas_get, canvas_get_all, canv
 router = APIRouter(tags=["courses"])
 
 
-GROUPS_MAX_AGE_HOURS = 24
+GROUPS_MAX_AGE_HOURS = read_service.GROUPS_MAX_AGE_HOURS
 
 
 def _local_students(course_id: str):

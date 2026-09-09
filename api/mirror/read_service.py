@@ -14,6 +14,7 @@ from . import store
 
 
 READ_SERVICE_VERSION = 1
+GROUPS_MAX_AGE_HOURS = 24.0
 
 LOCAL_DISPLAY = "local_display"
 OFFLINE = "offline"

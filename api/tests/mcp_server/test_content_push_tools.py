@@ -18,7 +18,7 @@ import pytest
 from api import content_push, runtime_paths
 from api.mcp_server import server, tools
 from api.operation_ledger import models
-from api.platform_services import config, workspace
+from api.platform_services import canvas_client, config, workspace
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +78,32 @@ class RecordingAdapter:
         }
 
 
+class DifferentiatedAdapter(RecordingAdapter):
+    kind = "content.quiz"
+
+    def build_payload(self, request):
+        self.requests.append(dict(request))
+        return request
+
+    def source_digest(self, payload):
+        return "source-digest"
+
+    def verify_targets(self, payload, targets):
+        return [{"course_id": targets[0]["course_id"], "target_key": "target",
+                 "idempotency_key": "idempotency"}]
+
+    def capture_baseline(self, payload, target):
+        return {"group_snapshot": {"tiers": [
+            {"student_count": 2}, {"student_count": 3}
+        ]}}
+
+    def freeze_review(self, payload, target, baseline):
+        return {"mode": "differentiated", "variants": [
+            {"group_name": row["group_name"], "title": "Same Quiz"}
+            for row in payload["variants"]
+        ]}
+
+
 @pytest.fixture
 def _adapter(monkeypatch, tmp_path):
     """One recording adapter behind a ledger writing to a temp private root."""
@@ -116,6 +142,38 @@ def test_tools_delegate_to_the_shared_use_case(monkeypatch):
     monkeypatch.setattr(content_push, "preview_content_push",
                         lambda *a, **k: {"ok": False, "error": "no"})
     assert "next" not in tools.preview_content_push("course-x", "page", "gone")
+
+
+def test_differentiated_preview_validates_exact_staged_labels_and_groups(_workspace, monkeypatch):
+    _stage("quiz", "one")
+    _stage("quiz", "two")
+    adapter = DifferentiatedAdapter()
+    monkeypatch.setattr(content_push.registry, "get_adapter", lambda _kind: adapter)
+    for variants, expected in [
+        ([{"label": "one", "group_name": "Blue"}], "at least two"),
+        ([{"label": "one", "group_name": "Blue", "extra": 1}, {"label": "two", "group_name": "Gold"}], "exactly"),
+        ([{"label": "one", "group_name": "Blue"}, {"label": "ONE.TXT", "group_name": "Gold"}], "unique"),
+        ([{"label": "one", "group_name": "Blue"}, {"label": "two", "group_name": " blue "}], "unique"),
+        ([{"label": r"C:\secret\one.txt", "group_name": "Blue"}, {"label": "two", "group_name": "Gold"}], "path"),
+    ]:
+        result = content_push.preview_differentiated_quiz_push("course-x", variants)
+        assert result["ok"] is False
+        assert expected in result["error"]
+    assert adapter.requests == []
+
+
+def test_differentiated_preview_refuses_baseline_error_before_persisting(_workspace, monkeypatch):
+    _stage("quiz", "one")
+    _stage("quiz", "two")
+    adapter = DifferentiatedAdapter()
+    adapter.capture_baseline = lambda payload, target: {"canvas_error": "private transport error"}
+    monkeypatch.setattr(content_push.registry, "get_adapter", lambda _kind: adapter)
+    result = content_push.preview_differentiated_quiz_push(
+        "course-x", [{"label": "one", "group_name": "Blue"},
+                      {"label": "two", "group_name": "Gold"}])
+    assert result["ok"] is False
+    assert result["blocking"] is True
+    assert "private transport error" not in json.dumps(result)
 
 
 # --- what the pair can reach ---------------------------------------------------
@@ -415,6 +473,97 @@ def test_a_real_pageforge_draft_freezes_through_the_real_adapter(_ledger):
         "baseline_has_existing_page": False,
         "baseline_page_url": None,
     }
+
+
+def test_mcp_differentiated_quiz_same_title_end_to_end_without_network(_ledger, monkeypatch):
+    """The complete assistant path uses the real QuizAdapter over fake transport."""
+    from api.mcp_server import tools
+    from api.operation_ledger.adapters import quiz as quiz_module
+
+    plan = {
+        "version": 1, "title": "Shared Quiz",
+        "quiz_payload": {"quiz": {"title": "Shared Quiz", "points_possible": 10}},
+        "items": [{"index": 1, "source_type": "MC", "payload": {"item": {"entry_type": "Item"}}}],
+        "assignment_settings": {}, "module": {},
+    }
+    monkeypatch.setattr(config, "saved_courses", lambda: [{"id": "course-x", "name": "Invented Course", "active": True}])
+    monkeypatch.setattr(config, "get_selected_group_category_id", lambda _course: "category-1")
+    monkeypatch.setattr(config, "get_roster_group_scheme", lambda _course: {"selected_group_category_id": "category-1"})
+    monkeypatch.setattr(tools.read_service, "private_groups", lambda *args, **kwargs: {
+        "state": "current", "records": [{"category_id": "category-1", "category_name": "Teams",
+                                             "groups": [{"id": "group-1", "name": "Blue"},
+                                                        {"id": "group-2", "name": "Gold"}]}]})
+    monkeypatch.setattr(quiz_module, "run_json_object", lambda *args, **kwargs: plan)
+
+    def fake_get_all(path, params=None, **kwargs):
+        if "group_categories" in path:
+            return ([{"id": "group-1", "name": "Blue"}, {"id": "group-2", "name": "Gold"}], None)
+        if "groups/group-1/memberships" in path:
+            return ([{"user_id": "student-1"}], None)
+        if "groups/group-2/memberships" in path:
+            return ([{"user_id": "student-2"}], None)
+        if "enrollments" in path:
+            return ([{"user_id": "student-1"}, {"user_id": "student-2"}], None)
+        return ([], None)
+    monkeypatch.setattr(canvas_client, "canvas_get_all", fake_get_all)
+    monkeypatch.setattr(canvas_client, "canvas_get", lambda path, **kwargs: ([], None))
+    sent = []
+    def fake_send(method, path, payload, **kwargs):
+        sent.append((method, path, payload))
+        if method == "POST" and path.endswith("/quizzes"):
+            return ({"id": "quiz-" + str(len([x for x in sent if x[1].endswith('/quizzes')]))}, None)
+        if method == "POST" and "/overrides" in path:
+            return ({"id": "override-1"}, None)
+        if method == "POST" and "/items" in path:
+            return ({"id": "item-1"}, None)
+        return ({}, None)
+    monkeypatch.setattr(canvas_client, "_canvas_send", fake_send)
+
+    assert json.loads((asyncio.run(server.mcp.call_tool("list_courses", {})))[0].text)["ok"]
+    groups = json.loads((asyncio.run(server.mcp.call_tool("list_groups", {"course_id": "course-x"})))[0].text)
+    assert groups["selected_group_set"] == "Teams"
+    assert [row["name"] for row in groups["group_sets"][0]["groups"]] == ["Blue", "Gold"]
+    for secret in ("category-1", "group-1", "group-2", "student-1", "student-2"):
+        assert secret not in json.dumps(groups)
+
+    for label in ("variant-a", "variant-b"):
+        staged = json.loads((asyncio.run(server.mcp.call_tool("stage_content", {
+            "kind": "quiz", "label": label,
+            "content": "<QUIZFORGE_JSON>{\"version\":1,\"title\":\"Shared Quiz\"}</QUIZFORGE_JSON>",
+        })))[0].text)
+        assert staged["ok"] is True
+    preview = json.loads((asyncio.run(server.mcp.call_tool("preview_differentiated_quiz_push", {
+        "course_id": "course-x", "variants": [
+            {"label": "variant-a", "group_name": "Blue"},
+            {"label": "variant-b", "group_name": "Gold"}],
+    })))[0].text)
+    assert preview["ok"] is True
+    assert preview["preview"]["only_visible_to_overrides"] is True
+    assert [(row["group"], row["student_count"]) for row in preview["preview"]["tiers"]] == [
+        ("Blue", 1), ("Gold", 1)
+    ]
+    applied = json.loads((asyncio.run(server.mcp.call_tool("apply_content_push", {
+        "operation_id": preview["operation_id"], "batch_id": preview["batch_id"],
+        "review_digest": preview["review_digest"],
+    })))[0].text)
+    assert applied["ok"] is True, applied
+    created = applied["targets"][0]["created"]
+    assert [row["group_name"] for row in created] == ["Blue", "Gold"]
+    assert len({row["url"] for row in created}) == 2
+    restrictions = [payload for method, path, payload in sent
+                    if method == "PUT" and "/assignments/" in path]
+    assert len(restrictions) == 2
+    assert all(payload["assignment"]["only_visible_to_overrides"] is True
+               for payload in restrictions)
+    overrides = [payload for method, path, payload in sent
+                 if method == "POST" and "/overrides" in path]
+    assert [payload["assignment_override"]["student_ids"] for payload in overrides] == [
+        ["student-1"], ["student-2"]
+    ]
+    serialized = json.dumps(preview) + json.dumps(applied)
+    assert all(secret not in serialized for secret in
+               ("category-1", "group-1", "group-2", "student-1", "student-2"))
+    assert "\\private\\" not in serialized and "/private/" not in serialized
 
 
 def test_a_real_assignmentforge_draft_carries_its_schedule(_ledger):

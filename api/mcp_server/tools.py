@@ -162,6 +162,10 @@ _NEXT_STEPS = {
         "apply_content_push with operation_id, batch_id, and review_digest "
         "unchanged. A teacher who asked for the push has already authorized it."
     ),
+    "preview_differentiated_quiz_push": (
+        "Tell the teacher what the differentiated review says this will create, then call "
+        "apply_content_push with operation_id, batch_id, and review_digest unchanged."
+    ),
 }
 
 
@@ -717,6 +721,91 @@ def list_sections(course_id: str) -> dict:
     }
 
 
+def list_groups(course_id: str) -> dict:
+    """List current-course group-set and group names from the local mirror only.
+
+    Memberships and Canvas identifiers are deliberately consumed here and never
+    enter the assistant-facing projection.
+    """
+    error = _course_gate_check(course_id)
+    if error:
+        return {"ok": False, "error": error}
+    try:
+        scope = read_service.private_groups(
+            course_id, max_age_hours=read_service.GROUPS_MAX_AGE_HOURS,
+        )
+    except Exception:
+        scope = {"state": "malformed", "records": None}
+    if scope.get("state") != "current":
+        state = scope.get("state") or "unavailable"
+        return {
+            "ok": False,
+            "error": "A fresh local Canvas group mirror is required for group discovery.",
+            "state": state,
+            "attention": {
+                "action": "refresh_mirror",
+                "reason": "Refresh the current course mirror, then retry list_groups.",
+            },
+        }
+    records = scope.get("records")
+    if not isinstance(records, list):
+        return {
+            "ok": False,
+            "error": "The local Canvas group mirror is malformed.",
+            "state": "malformed",
+            "attention": {
+                "action": "refresh_mirror",
+                "reason": "Refresh the current course mirror, then retry list_groups.",
+            },
+        }
+    group_sets = []
+    selected_id = str(
+        (config.get_roster_group_scheme(course_id) or {}).get(
+            "selected_group_category_id"
+        ) or ""
+    )
+    selected_name = None
+    for category in records:
+        if not isinstance(category, dict):
+            return {
+                "ok": False,
+                "error": "The local Canvas group mirror is malformed.",
+                "state": "malformed",
+                "attention": {"action": "refresh_mirror", "reason": "Refresh the current course mirror, then retry list_groups."},
+            }
+        category_name = str(category.get("category_name") or "").strip()
+        category_id = str(category.get("category_id") or "")
+        groups = category.get("groups")
+        if not category_name or not isinstance(groups, list):
+            return {
+                "ok": False,
+                "error": "The local Canvas group mirror is malformed.",
+                "state": "malformed",
+                "attention": {"action": "refresh_mirror", "reason": "Refresh the current course mirror, then retry list_groups."},
+            }
+        if selected_id and category_id == selected_id:
+            selected_name = category_name
+        safe_groups = []
+        for group in groups:
+            if not isinstance(group, dict) or not str(group.get("name") or "").strip():
+                return {
+                    "ok": False,
+                    "error": "The local Canvas group mirror is malformed.",
+                    "state": "malformed",
+                    "attention": {"action": "refresh_mirror", "reason": "Refresh the current course mirror, then retry list_groups."},
+                }
+            safe_groups.append({"name": str(group["name"]).strip()})
+        group_sets.append({"name": category_name, "groups": safe_groups})
+    result = {"ok": True, "course_id": str(course_id), "group_sets": group_sets,
+              "selected_group_set": selected_name}
+    if selected_name is None:
+        result["attention"] = {
+            "action": "select_group_set",
+            "reason": "Select the group set to use for Roster in the Roster page before differentiated delivery.",
+        }
+    return result
+
+
 def get_course_assignments(course_id: str, full_descriptions: bool = False) -> dict:
     """Assignment metadata from the local course catalog (disk-only, no live
     Canvas fallback — refresh the catalog from the web UI first) for any
@@ -1001,6 +1090,7 @@ _TOOL_GROUPS = {
         "get_modules",
         "get_course_pages",
         "list_sections",
+        "list_groups",
         "refresh_mirror",
     ),
     "Create and Forge": (
@@ -1012,6 +1102,7 @@ _TOOL_GROUPS = {
         "stage_content",
         "list_staged_content",
         "preview_content_push",
+        "preview_differentiated_quiz_push",
         "apply_content_push",
         "push_content_live",
     ),
@@ -2005,9 +2096,28 @@ def preview_content_push(
     ))
 
 
+def preview_differentiated_quiz_push(
+    course_id: str,
+    variants: list,
+    published: bool = False,
+    module_name: str = "",
+    assignment_group_name: str = "",
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+    post_to_sis: bool = False,
+) -> dict:
+    """Freeze several staged QuizForge labels for distinct selected groups."""
+    return _with_next("preview_differentiated_quiz_push", content_push.preview_differentiated_quiz_push(
+        course_id, variants, published=published, module_name=module_name,
+        assignment_group_name=assignment_group_name, due_at=due_at,
+        unlock_at=unlock_at, lock_at=lock_at, post_to_sis=post_to_sis,
+    ))
+
+
 def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> dict:
-    """Create exactly what preview_content_push froze in the Canvas course it
-    froze it against.
+    """Create exactly what preview_content_push or
+    preview_differentiated_quiz_push froze in the Canvas course it froze it against.
 
     Takes only the three opaque coordinates that preview returned, so nothing
     here can reach another draft, course, or kind. Runs the same Operation
@@ -2316,7 +2426,7 @@ _REFRESH_TIMEOUT_SECONDS = 25.0
 # the roster stays stale) while the gradebook served fine off deltas. The
 # background heartbeat closes the same gap from the other side; see
 # mirror_service.due_passes.
-_REFRESH_SCOPES = ["course.refresh", "roster"]
+_REFRESH_SCOPES = ["course.refresh", "roster", "groups"]
 
 
 def refresh_mirror(course_id: str) -> dict:
@@ -2339,7 +2449,7 @@ def refresh_mirror(course_id: str) -> dict:
     state = plan.get("state", "failed")
     if state == "succeeded":
         return {"ok": True, "status": "synced",
-                "message": "Mirror refreshed (roster, assignments, and submissions only). Re-read those tools now."}
+                "message": "Mirror refreshed (roster, groups, assignments, and submissions status only). Re-read the refused tool now."}
     if state in ("queued", "running"):
         return {"ok": True, "status": "syncing",
                 "message": "Still syncing — wait a few seconds, then try again."}

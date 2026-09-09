@@ -137,6 +137,12 @@ def list_sections(course_id: str) -> str:
 
 
 @mcp.tool(structured_output=False)
+def list_groups(course_id: str) -> str:
+    """List current-course group-set and group names from the local mirror only."""
+    return _compact(tools.list_groups(course_id))
+
+
+@mcp.tool(structured_output=False)
 def get_course_assignments(course_id: str, full_descriptions: bool = False) -> str:
     """Read a saved course's assignments from the local course catalog.
     Descriptions are previews unless full_descriptions=true. No student data."""
@@ -341,9 +347,25 @@ def preview_content_push(
 
 
 @mcp.tool(structured_output=False)
+def preview_differentiated_quiz_push(
+    course_id: str, variants: list, published: bool = False,
+    module_name: str = "", assignment_group_name: str = "", due_at: str = "",
+    unlock_at: str = "", lock_at: str = "", post_to_sis: bool = False,
+) -> str:
+    """Freeze staged QuizForge labels into a reviewed group-restricted quiz plan.
+    Use apply_content_push with the unchanged coordinates returned here."""
+    return _compact(tools.preview_differentiated_quiz_push(
+        course_id, variants, published=published, module_name=module_name,
+        assignment_group_name=assignment_group_name, due_at=due_at,
+        unlock_at=unlock_at, lock_at=lock_at, post_to_sis=post_to_sis,
+    ))
+
+
+@mcp.tool(structured_output=False)
 def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> str:
     """Create the exact frozen draft in the Canvas course its review was frozen against.
-    Use only the unchanged coordinates returned by preview_content_push."""
+    Use only the unchanged coordinates returned by preview_content_push or
+    preview_differentiated_quiz_push."""
     return _compact(tools.apply_content_push(
         operation_id, batch_id, review_digest
     ))

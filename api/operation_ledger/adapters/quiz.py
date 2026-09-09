@@ -83,7 +83,6 @@ class QuizAdapter:
             raise ValueError("differentiated mode requires at least two variants")
         settings = prepare_request.get("settings") or {}
         variants = []
-        titles = []
         for row in variants_in:
             path = row.get("path")
             group_name = row.get("group_name")
@@ -105,14 +104,11 @@ class QuizAdapter:
             quiz_payload = plan.get("quiz_payload")
             if not isinstance(quiz_payload, dict) or "quiz" not in quiz_payload:
                 raise ValueError("variant plan missing quiz_payload")
-            titles.append(plan["title"])
             variants.append({
                 "path": path,
                 "group_name": str(group_name).strip(),
                 "plan": plan,
             })
-        if len(set(titles)) != len(titles):
-            raise ValueError("variant plan titles must be unique")
         return {
             "mode": "differentiated",
             "variants": variants,

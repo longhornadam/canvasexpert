@@ -269,7 +269,7 @@ def test_build_payload_rejects_single_variant(tmp_path, monkeypatch):
         })
 
 
-def test_build_payload_rejects_duplicate_titles(tmp_path, monkeypatch):
+def test_build_payload_accepts_duplicate_titles(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_plan_subprocess(monkeypatch, {
         "/tmp/v0.txt": VARIANT_PLAN_A,
@@ -277,14 +277,16 @@ def test_build_payload_rejects_duplicate_titles(tmp_path, monkeypatch):
     })
 
     adapter = QuizAdapter()
-    with pytest.raises(ValueError, match="titles must be unique"):
-        adapter.build_payload({
+    payload = adapter.build_payload({
             "mode": "differentiated",
             "variants": [
                 {"path": "/tmp/v0.txt", "group_name": "Blue"},
                 {"path": "/tmp/v1.txt", "group_name": "Gold"},
             ],
         })
+    assert [variant["plan"]["title"] for variant in payload["variants"]] == [
+        VARIANT_PLAN_A["title"], VARIANT_PLAN_A["title"]
+    ]
 
 
 def test_build_payload_rejects_missing_group_name(tmp_path, monkeypatch):

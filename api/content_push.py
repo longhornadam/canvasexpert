@@ -228,6 +228,98 @@ def preview_content_push(
     }
 
 
+def preview_differentiated_quiz_push(
+    course_id: str,
+    variants: list,
+    *,
+    published: bool = False,
+    module_name: str = "",
+    assignment_group_name: str = "",
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+    post_to_sis: bool = False,
+) -> dict:
+    """Freeze a group-restricted QuizForge operation from staged labels."""
+    course_key = str(course_id or "").strip()
+    if not course_key:
+        return {"ok": False, "error": "course_id is required"}
+    if not _current_course(course_key):
+        return {"ok": False, "error": "course is not in Current courses"}
+    if not isinstance(variants, list) or len(variants) < 2:
+        return {"ok": False, "error": "variants must be a list of at least two variants"}
+    named, option_error = _collect_options("quiz", {
+        "published": published, "module_name": module_name,
+        "assignment_group_name": assignment_group_name, "due_at": due_at,
+        "unlock_at": unlock_at, "lock_at": lock_at, "post_to_sis": post_to_sis,
+    })
+    if option_error:
+        return {"ok": False, "error": option_error}
+
+    resolved = []
+    seen_labels = set()
+    seen_groups = set()
+    for variant in variants:
+        if not isinstance(variant, dict) or set(variant) != {"label", "group_name"}:
+            return {"ok": False, "error": "each variant must contain exactly label and group_name"}
+        label = variant["label"]
+        group_name = variant["group_name"]
+        if not isinstance(label, str) or not isinstance(group_name, str):
+            return {"ok": False, "error": "variant label and group_name must be strings"}
+        label = label.strip()
+        group_name = group_name.strip()
+        if not label or not group_name:
+            return {"ok": False, "error": "variant label and group_name cannot be blank"}
+        if os.path.isabs(label) or "/" in label or "\\" in label or ".." in label:
+            return {"ok": False, "error": "variant label must be a staged label, not a path"}
+        path, resolve_error = _resolve_staged_draft("quiz", label)
+        if resolve_error:
+            return {"ok": False, "error": resolve_error}
+        resolved_label = Path(path).name.casefold()
+        if resolved_label in seen_labels:
+            return {"ok": False, "error": "variant labels must be unique after resolution"}
+        group_key = group_name.casefold()
+        if group_key in seen_groups:
+            return {"ok": False, "error": "group names must be unique after trim and case-folding"}
+        seen_labels.add(resolved_label)
+        seen_groups.add(group_key)
+        resolved.append({"label": Path(path).name, "path": path, "group_name": group_name})
+
+    adapter = registry.get_adapter(QUIZ_KIND)
+    try:
+        payload = adapter.build_payload({"mode": "differentiated", "variants": resolved,
+                                         "settings": dict(named)})
+        target = adapter.verify_targets(payload, [{"course_id": course_key}])[0]
+        baseline = adapter.capture_baseline(payload, target)
+        safe = baseline.get("group_snapshot") if isinstance(baseline, dict) else None
+        tiers = safe.get("tiers") if isinstance(safe, dict) else None
+        if (not isinstance(safe, dict) or "canvas_error" in baseline or
+                not isinstance(tiers, list) or len(tiers) != len(resolved) or
+                any(not isinstance(tier, dict) or "student_count" not in tier
+                    for tier in tiers)):
+            return {"ok": False, "error": "the differentiated quiz baseline could not resolve every requested group", "blocking": True}
+        target_record = models.new_target(target_key=target["target_key"],
+                                          idempotency_key=target["idempotency_key"],
+                                          course_id=target["course_id"], baseline=baseline)
+        operation_id = models.new_operation_id()
+        operation = models.new_operation(operation_id=operation_id, kind=QUIZ_KIND,
+                                         source_ref={"type": "staged_inbox_differentiated", "value": "quiz"},
+                                         source_digest=adapter.source_digest(payload),
+                                         normalized_payload=payload, targets=[target_record])
+        operations.create_operation(operation)
+        frozen = adapter.freeze_review(payload, target_record, baseline)
+        batch = batches.freeze_batch([operation_id], {operation_id: [frozen]})
+        operations.set_operation_review(operation_id, batch)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "blocking": True}
+    except Exception:
+        return {"ok": False, "error": "the differentiated quiz push could not be prepared"}
+    return {"ok": True, "kind": "quiz", "variants": [
+        {"label": row["label"], "group_name": row["group_name"]} for row in resolved
+    ], "operation_id": operation_id, "batch_id": batch["batch_id"],
+            "review_digest": batch["review_digest"], "preview": _scrub_paths(frozen)}
+
+
 # A label becomes a filename in the teacher's synced workspace, so it is
 # validated rather than sanitized: a label that cannot be used verbatim is
 # refused and renamed by the caller, never silently rewritten into a different
@@ -390,7 +482,10 @@ def apply_content_push(
     except Exception:
         return {"ok": False, "error": "the content push could not complete"}
 
-    return _result_projection(operation, result)
+    # The executor returns a deliberately bounded target result; differentiated
+    # creation receipts are reconstructed from the persisted checkpoint steps.
+    latest_operation = operations.get_operation(operation_key) or operation
+    return _result_projection(latest_operation, result)
 
 
 def _content_kind(ledger_kind: str) -> str:
@@ -408,20 +503,37 @@ def _result_projection(operation: dict, result: dict) -> dict:
     from a push they asked for in chat.
     """
     targets = []
-    for target in result.get("target_results") or []:
+    differentiated = (operation.get("normalized_payload") or {}).get("mode") == "differentiated"
+    variants = (operation.get("normalized_payload") or {}).get("variants") or []
+    for target_index, target in enumerate(result.get("target_results") or []):
         row = {"state": target.get("state")}
         if target.get("returned_object_url"):
             row["url"] = target["returned_object_url"]
         if target.get("error_code"):
             row["error_code"] = target["error_code"]
+        stored_target = (operation.get("targets") or [])[target_index] if target_index < len(operation.get("targets") or []) else {}
+        step_source = target.get("steps") or (stored_target.get("steps") if differentiated else [])
         steps = [
             {"step": step.get("step_key"), "state": step.get("state"),
              "error_code": step.get("error_code")}
-            for step in target.get("steps") or []
+            for step in step_source
             if step.get("state") not in (None, "applied")
         ]
         if steps:
             row["unfinished_steps"] = steps
+        if differentiated:
+            created = []
+            for index, variant in enumerate(variants):
+                step = next((step for step in step_source
+                             if step.get("step_key") == f"create_quiz:{index}"
+                             and step.get("state") in ("applied", "skipped")
+                             and step.get("returned_object_url")), None)
+                if step:
+                    created.append({"group_name": variant.get("group_name"),
+                                    "title": (variant.get("plan") or {}).get("title"),
+                                    "url": step["returned_object_url"]})
+            if created:
+                row["created"] = created
         targets.append(row)
 
     return {
@@ -451,6 +563,7 @@ def _scrub_paths(value):
 __all__ = [
     "apply_content_push",
     "preview_content_push",
+    "preview_differentiated_quiz_push",
     "push_content_live",
     "stage_content",
 ]
