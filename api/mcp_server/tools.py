@@ -136,8 +136,16 @@ _NEXT_STEPS = {
         "the next page with include_context=false; after the final page, stage completed "
         "scores with packet_digest."
     ),
+    # One string covers both outcomes on purpose: the keys here are an exact
+    # allowlist of tool names, and a held-only session still needs saying
+    # something, or the caller pages after rows that do not exist and reports
+    # an empty assignment.
     "start_scoring_session": (
-        "Call get_scoring_packet with session_id to retrieve the first scoring page."
+        "Call get_scoring_packet with session_id to retrieve the first scoring "
+        "page. If response_count is 0 and held is not, there is no page to "
+        "fetch: held rows are attachment-only, media-only, or empty and stay "
+        "local by design, so name the held students and tell the teacher this "
+        "assignment needs review in PowerGrader itself instead."
     ),
     "preview_sis_grade_bridge": (
         "Summarize the aggregate review and get teacher confirmation, then call "
@@ -2596,9 +2604,17 @@ def start_scoring_session(course_id: str, assignment_id: str) -> dict:
 
     Returns on success: session_id, assignment_name, student_count,
     response_count (scorable rows across all students, the same count
-    get_scoring_packet totals), and new_quiz_item_finalization_supported
-    (whether a New Quiz per-item write lane exists for this assignment).
+    get_scoring_packet totals), held (responses carrying no scorable text —
+    attachment-only, media-only, or empty), held_pseudonyms (the distinct
+    students behind those, omitted when the outbound scan cannot clear the
+    names), and new_quiz_item_finalization_supported (whether a New Quiz
+    per-item write lane exists for this assignment).
     Pass session_id to get_scoring_packet to continue.
+
+    A response_count of 0 against a non-zero held is an assignment whose work
+    needs teacher review in PowerGrader, not an empty assignment: held work is
+    deliberately kept local rather than sent to a model, so the counts are
+    reported here instead of leaving the caller to infer an empty session.
 
     Refuses cleanly when the course is not a Current course, the assignment
     has no submissions, or the workspace is not configured. Creates a local
@@ -2636,6 +2652,8 @@ def start_scoring_session(course_id: str, assignment_id: str) -> dict:
     session = session_store.load_session(session_id) or {}
 
     response_count = payload.get("student_count", 0)
+    held = 0
+    held_pseudonyms: list[str] = []
     bundle_path = _safe_bundle_path(session)
     if bundle_path:
         try:
@@ -2646,18 +2664,38 @@ def start_scoring_session(course_id: str, assignment_id: str) -> dict:
                 offset=0, limit=1, include_context=False,
             )
             response_count = page.get("total", response_count)
+            # build_packet classifies the whole bundle before it slices the
+            # page, so the one-row limit above still yields session-wide
+            # held tallies rather than this page's share of them.
+            held = int(page.get("held") or 0)
+            held_pseudonyms = list(page.get("held_pseudonyms") or [])
         except Exception:
             pass
 
-    return _with_next("start_scoring_session", {
+    summary = {
         "ok": True,
         "session_id": session_id,
         "assignment_name": payload.get("assignment_name", ""),
         "student_count": payload.get("student_count", 0),
         "response_count": response_count,
+        "held": held,
         "new_quiz_item_finalization_supported": bool(
             session.get("new_quiz_item_finalization_supported")),
-    })
+    }
+
+    # Naming the held students is what makes a response_count of 0 actionable,
+    # but it puts pseudonyms into a summary that otherwise carries none, so the
+    # names take the same outbound scan every student-data read takes. A
+    # blocked or unavailable scan costs the names only: the session is already
+    # on disk, and dropping its session_id would strand it.
+    if held_pseudonyms:
+        vault, vault_error = _open_vault()
+        gated = {} if vault_error else _pseudonym_gate(
+            {"held_pseudonyms": held_pseudonyms}, vault)
+        if gated.get("ok"):
+            summary["held_pseudonyms"] = list(gated.get("held_pseudonyms") or [])
+
+    return _with_next("start_scoring_session", summary)
 
 
 def list_scoring_sessions() -> dict:
@@ -2666,7 +2704,16 @@ def list_scoring_sessions() -> dict:
     Returns {"ok": True, "sessions": {columns, rows}} where each row appends
     assignment_id, newer_session_exists, and staged_at after the established
     (session_id, assignment_name, course_id, created, mode_label, total,
-    scored, approved) columns. Current courses only. Sessions whose bundle is missing
+    scored, approved) columns.
+
+    ``total`` here counts *students* in the session (``len(students)``, straight
+    from the session summary). It is not get_scoring_packet's ``total``, which
+    counts scorable response rows, and the two legitimately disagree: an
+    attachment-only assignment lists 19 students here and totals 0 rows there.
+    The column name is load-bearing on the wire, so it stays; read it as the
+    session's roster size and take scorable volume from the packet.
+
+    Current courses only. Sessions whose bundle is missing
     from disk are left out rather than offered and then refused by
     get_scoring_packet. Session metadata only, so no safety gate is needed:
     nothing here is drawn from a student record. Never raises.
@@ -2721,6 +2768,11 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
     Paging walks responses, not students: on a multi-item quiz one student
     holds several rows, so offset, limit, total and next_offset all count
     rows. students_total carries the distinct-student count separately.
+
+    Do not read this ``total`` against list_scoring_sessions' ``total``, which
+    counts students in the session instead of scorable rows. A lower number
+    here is normal (held rows, or one row per student), and 0 against a
+    populated session usually means every response is held.
 
     Returns a packet with:
     - packet_digest: bundle identity, required by stage_scores

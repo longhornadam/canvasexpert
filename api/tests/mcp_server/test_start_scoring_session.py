@@ -113,6 +113,9 @@ def test_start_scoring_session_creates_packet_session_end_to_end(monkeypatch, tm
         # is deliberately not equal to student_count, proving the count is
         # read from the SAFE bundle rather than echoed from student_count.
         "response_count": 3,
+        # Every response carried text, so nothing is held and no pseudonym
+        # rides along in the summary.
+        "held": 0,
         "new_quiz_item_finalization_supported": True,
         "next": tools._NEXT_STEPS["start_scoring_session"],
     }
@@ -137,6 +140,102 @@ def test_start_scoring_session_falls_back_to_student_count_without_a_bundle(monk
     assert result["response_count"] == 5
     assert result["new_quiz_item_finalization_supported"] is False
     assert result["next"] == tools._NEXT_STEPS["start_scoring_session"]
+
+
+# --- example: held work is reported, not silently counted as nothing --------
+
+def _held_bundle(tmp_path, pseudonyms, *, scorable=()):
+    """A bundle whose responses carry no text, as attachment-only work does."""
+    students = [
+        {"pseudonym": name, "responses": [
+            {"item_id": "i1", "response": "", "prompt": "Q1", "possible": 100},
+        ]}
+        for name in pseudonyms
+    ]
+    students += [
+        {"pseudonym": name, "responses": [
+            {"item_id": "i1", "response": "real answer", "prompt": "Q1", "possible": 100},
+        ]}
+        for name in scorable
+    ]
+    return _write_bundle(tmp_path, students, name="held-bundle.json")
+
+
+def test_start_scoring_session_names_held_students_instead_of_reporting_an_empty_session(
+    monkeypatch, tmp_path, _set_active_courses, _use_vault,
+):
+    """The reported failure mode: an attachment-only assignment came back as
+    response_count 0 against 19 students with no reason given, which reads as
+    an empty assignment rather than work that is deliberately kept local."""
+    _set_active_courses(["111"])
+    monkeypatch.setattr(
+        "api.powergrader.start_workflow.run_start_session",
+        _fake_run_start_session(session_id="sess-held", assignment_name="My Poem",
+                                student_count=3),
+    )
+    bundle_path = _held_bundle(tmp_path, ["Pikachu", "Eevee", "Snorlax"])
+    sessions = {"sess-held": _fake_session("sess-held", "111", bundle_path=bundle_path)}
+    _bind_session_store(monkeypatch, sessions)
+
+    result = tools.start_scoring_session("111", "700030")
+
+    assert result["ok"] is True
+    assert result["session_id"] == "sess-held"
+    assert result["response_count"] == 0
+    assert result["held"] == 3
+    assert result["held_pseudonyms"] == ["Pikachu", "Eevee", "Snorlax"]
+    # The one static hint has to carry the held branch too, so a held-only
+    # session is never left reading as an empty assignment.
+    assert "held rows are attachment-only" in result["next"]
+
+
+def test_start_scoring_session_keeps_the_standard_hint_when_some_work_is_scorable(
+    monkeypatch, tmp_path, _set_active_courses, _use_vault,
+):
+    """Partly-held is still a scoring session: the packet reports held itself."""
+    _set_active_courses(["111"])
+    monkeypatch.setattr(
+        "api.powergrader.start_workflow.run_start_session",
+        _fake_run_start_session(session_id="sess-mixed", student_count=3),
+    )
+    bundle_path = _held_bundle(tmp_path, ["Pikachu"], scorable=["Eevee", "Snorlax"])
+    sessions = {"sess-mixed": _fake_session("sess-mixed", "111", bundle_path=bundle_path)}
+    _bind_session_store(monkeypatch, sessions)
+
+    result = tools.start_scoring_session("111", "700040")
+
+    assert result["response_count"] == 2
+    assert result["held"] == 1
+    assert result["held_pseudonyms"] == ["Pikachu"]
+    assert result["next"] == tools._NEXT_STEPS["start_scoring_session"]
+
+
+def test_start_scoring_session_drops_held_names_rather_than_the_session_id(
+    monkeypatch, tmp_path, _set_active_courses,
+):
+    """The names take the outbound scan every student-data read takes. When it
+    cannot run, the session is already on disk, so losing its session_id would
+    strand it: the count survives and only the names go."""
+    _set_active_courses(["111"])
+    monkeypatch.setattr(
+        "api.powergrader.start_workflow.run_start_session",
+        _fake_run_start_session(session_id="sess-novault", student_count=2),
+    )
+    bundle_path = _held_bundle(tmp_path, ["Pikachu", "Eevee"])
+    sessions = {"sess-novault": _fake_session("sess-novault", "111", bundle_path=bundle_path)}
+    _bind_session_store(monkeypatch, sessions)
+
+    def _unavailable():
+        raise tools._VaultUnavailable("Identity Vault is unavailable.")
+
+    monkeypatch.setattr(tools, "_vault_factory", _unavailable)
+
+    result = tools.start_scoring_session("111", "700050")
+
+    assert result["ok"] is True
+    assert result["session_id"] == "sess-novault"
+    assert result["held"] == 2
+    assert "held_pseudonyms" not in result
 
 
 # --- laws: refusal behaviour --------------------------------------------------
