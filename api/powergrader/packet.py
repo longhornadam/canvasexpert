@@ -150,7 +150,8 @@ def build_safe_ai_packet(
     # readable packet name plus its deepest expected child (the bundle JSON).
     # If even compact doesn't fit, _validate_packet_budget raises below.
     readable_name = safe_ai_packet_name(assignment_name, assignment_id=assignment_id)
-    compact = workspace.needs_compact_layout(safe_dir, readable_name, "Student Responses.json")
+    compact = workspace.needs_compact_layout(
+        safe_dir, readable_name, longest_packet_child(write_result))
 
     paths = packet_paths(safe_dir, assignment_name, assignment_id=assignment_id, compact=compact)
     packet_dir = paths["dir"]
@@ -214,6 +215,68 @@ def build_safe_ai_packet(
     }
 
 
+# Every file build_safe_ai_packet writes directly under the packet folder.
+# Single source of truth: both the readable-vs-compact probe and the budget
+# validator read this, so they cannot disagree about which child is deepest.
+# They previously did -- the probe measured "Student Responses.json" (22 chars)
+# while the validator checked "START HERE - Instructions for your AI.txt" (41),
+# so a packet folder could pass the probe by one character and fail validation
+# by eighteen.
+PACKET_FIXED_CHILDREN = (
+    "START HERE - Instructions for your AI.txt",
+    "Student Responses.json",
+    "Student Responses - readable.txt",
+    "Source Materials.txt",
+    "Paste Results Back Here - Format.txt",
+)
+
+
+def packet_child_names(write_result: dict | None = None) -> list[str]:
+    """Every file name written directly under the packet folder.
+
+    ``write_result`` adds the per-student files when they are known; the
+    preflight runs before they exist and passes nothing.
+    """
+    children = list(PACKET_FIXED_CHILDREN)
+    for student_txt in (write_result or {}).get("student_txts") or []:
+        children.append(os.path.basename(student_txt))
+    return children
+
+
+def longest_packet_child(write_result: dict | None = None) -> str:
+    """The child name that decides whether the packet folder fits its budget."""
+    return max(packet_child_names(write_result), key=len)
+
+
+def preflight_packet_budget(safe_dir: str, assignment_name: str,
+                            assignment_id: str = "") -> str | None:
+    """Check the packet folder will fit *before* any artifact is written.
+
+    Returns a teacher-facing message when even the compact layout cannot fit,
+    or None when the run may proceed. Callers write nothing until this passes:
+    the budget failure used to surface from ``build_safe_ai_packet``, which
+    runs after the flat SAFE/PRIVATE artifacts are already on disk, stranding
+    them with no registered session.
+
+    Per-student file names do not exist yet, so this measures the fixed
+    children -- which is what the readable-vs-compact decision turns on.
+    """
+    longest = longest_packet_child()
+    for compact in (False, True):
+        name = safe_ai_packet_name(assignment_name, assignment_id=assignment_id,
+                                   compact=compact)
+        projected = os.path.join(os.path.abspath(safe_dir), name, longest)
+        if len(projected) <= workspace.TEACHER_VISIBLE_BUDGET:
+            return None
+    return (
+        "This assignment's workspace folder is too deeply nested to hold a Safe AI "
+        f"Packet: even the shortened folder name projects past the "
+        f"{workspace.TEACHER_VISIBLE_BUDGET}-character path limit. Nothing was written. "
+        "Move the CanvasExpert workspace closer to the drive root, or shorten the "
+        "course or assignment name, then run this again."
+    )
+
+
 def _validate_packet_budget(packet_dir: str, write_result: dict) -> None:
     """Validate every expected packet child path against the budget.
 
@@ -221,19 +284,7 @@ def _validate_packet_budget(packet_dir: str, write_result: dict) -> None:
     TEACHER_VISIBLE_BUDGET.  This is called *before* any directory or file
     is created by the packet writer.
     """
-    # Expected children under packet_dir
-    children = [
-        "START HERE - Instructions for your AI.txt",
-        "Student Responses.json",
-        "Student Responses - readable.txt",
-        "Source Materials.txt",
-        "Paste Results Back Here - Format.txt",
-    ]
-    # Per-student files from write_result
-    for student_txt in write_result.get("student_txts") or []:
-        children.append(os.path.basename(student_txt))
-
-    for child in children:
+    for child in packet_child_names(write_result):
         projected = os.path.join(packet_dir, child)
         if len(projected) > workspace.TEACHER_VISIBLE_BUDGET:
             raise workspace.TeacherVisiblePathBudgetError(

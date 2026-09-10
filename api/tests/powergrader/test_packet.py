@@ -400,3 +400,93 @@ def test_packet_workflow_budget_exception_stops_before_writes(tmp_path, monkeypa
     # fires before any packet directory or file is created)
     assert not any(f.startswith("Packet-") or f.startswith("Safe AI Packet")
                    for f in os.listdir(workspace.extended_path(safe_dir)))
+
+
+# ── Path budget: probe/validator convergence and fail-closed preflight ──────
+#
+# Regression cover for the 2026-09-10 field failure: start_scoring_session died
+# with "Packet child path exceeds budget (248 > 230)" *after* the flat SAFE
+# artifacts were written, stranding them with no registered session.
+
+
+def test_compactness_probe_uses_the_longest_validated_child():
+    """LAW: the child that decides readable-vs-compact is the longest child the
+    validator will check.
+
+    These were two hand-maintained lists. The probe measured a 22-character
+    name while the validator checked a 41-character one, so a packet folder
+    could pass the probe by one character and fail validation by eighteen.
+    Asserted over the shared list so a newly added packet file cannot
+    reintroduce the gap.
+    """
+    write_result = {"student_txts": [os.path.join("x", "Sparky McGee - responses.txt")]}
+    children = packet.packet_child_names(write_result)
+
+    assert packet.longest_packet_child(write_result) == max(children, key=len)
+    for child in children:
+        assert len(child) <= len(packet.longest_packet_child(write_result))
+
+
+def test_packet_builds_at_the_measured_failing_depth(tmp_path):
+    """EXAMPLE: the exact shape that failed in the field now builds.
+
+    The real packet dir was 206 characters, which projected 229 against the
+    22-char probe child (fits, stay readable) and 248 against the real 41-char
+    child (raise). With the probe corrected, this selects the compact layout
+    and succeeds.
+    """
+    longest = packet.longest_packet_child()
+    readable = packet.safe_ai_packet_name("Fictional Unit Quiz", assignment_id="900002")
+    compact = packet.safe_ai_packet_name(
+        "Fictional Unit Quiz", assignment_id="900002", compact=True)
+
+    # Every base depth where the readable folder cannot hold its longest child
+    # but the compact one can. The old probe mis-decided only across part of
+    # this band -- deeper than that it happened to pick compact for the wrong
+    # reason -- so the band is swept rather than sampled at one depth.
+    floor = workspace.TEACHER_VISIBLE_BUDGET - len(readable) - len(longest) - 2
+    ceiling = workspace.TEACHER_VISIBLE_BUDGET - len(compact) - len(longest) - 2
+    if ceiling - len(str(tmp_path)) - 1 < 1:
+        pytest.skip("temp path already deeper than the readable/compact window")
+
+    for depth in range(max(floor + 1, len(str(tmp_path)) + 2), ceiling + 1):
+        base = tmp_path / f"d{depth}"
+        base.mkdir()
+        safe_dir = base / ("g" * (depth - len(str(base)) - 1))
+        safe_dir.mkdir()
+        assert len(str(safe_dir)) == depth
+
+        how_to = safe_dir / "HOW-TO.txt"
+        how_to.write_text("score it", encoding="utf-8")
+        write_result = {"how_to_score": str(how_to), "student_txts": []}
+
+        info = packet.build_safe_ai_packet(
+            "Fictional Unit Quiz", str(safe_dir), write_result, _bundle(),
+            assignment_id="900002",
+        )
+
+        assert os.path.isdir(workspace.extended_path(info["packet_folder"]))
+        for child in packet.PACKET_FIXED_CHILDREN:
+            projected = os.path.join(info["packet_folder"], child)
+            assert len(projected) <= workspace.TEACHER_VISIBLE_BUDGET, (depth, child)
+
+
+def test_preflight_passes_when_the_packet_fits(tmp_path):
+    assert packet.preflight_packet_budget(str(tmp_path), "Essay", "42") is None
+
+
+def test_preflight_refuses_and_writes_nothing_when_even_compact_overflows(tmp_path):
+    """LAW: a budget failure leaves nothing on disk.
+
+    The orphaned-packet bug: artifacts were written first and the budget
+    checked second, so the failure stranded them.
+    """
+    deep = tmp_path
+    while len(str(deep)) < workspace.TEACHER_VISIBLE_BUDGET:
+        deep = deep / ("h" * 40)
+    before = sorted(p for p in tmp_path.rglob("*"))
+
+    message = packet.preflight_packet_budget(str(deep), "Fictional Unit Quiz", "900002")
+
+    assert message and "Nothing was written" in message
+    assert sorted(p for p in tmp_path.rglob("*")) == before

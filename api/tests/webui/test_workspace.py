@@ -473,3 +473,51 @@ def test_migrate_panels_is_a_no_op_without_the_old_folder(tmp_path, monkeypatch)
 
     assert not (root / "Library" / "Panels").exists()
     assert not (root / "_System").exists()
+
+
+# ── Reserve-branch path segments ────────────────────────────────────────────
+
+
+def _duplicated_segments(path: str) -> list[str]:
+    """Segments whose ' — ' halves repeat, e.g. 'For AI — For AI' or
+    'Quiz — 900002 — 900002'."""
+    bad = []
+    for segment in str(path).split(os.sep):
+        parts = [p.strip() for p in segment.split(" — ") if p.strip()]
+        if len(parts) != len(set(parts)):
+            bad.append(segment)
+    return bad
+
+
+def test_reserve_branch_paths_contain_no_duplicated_segments(tmp_path):
+    """LAW: no reserve-branch path repeats a name or an id within one segment.
+
+    Both reserve branches passed displays that already carried the id, and
+    passed bare constants as tuples against themselves, producing
+    'For AI — For AI', 'Course Name — 900001 — 900001' and
+    'Student Work — Student Work'. That wasted roughly forty characters of a
+    230-character budget before any real content.
+    """
+    for path in (
+        workspace.ai_run_folder(
+            "Fictional Course", "900001", "Fictional Assignment", "900002",
+            "assisted", run_timestamp="20260910-111320-596588",
+            root=str(tmp_path), reserve=60,
+        ),
+        workspace.grading_keys_assignment_folder(
+            "Fictional Course", "900001", "Fictional Assignment", "900002",
+            root=str(tmp_path), reserve=60,
+        ),
+    ):
+        assert path
+        assert not _duplicated_segments(path), _duplicated_segments(path)
+        # The stable ids still survive -- de-duplication must not drop them.
+        assert "900001" in path and "900002" in path
+
+
+def test_teacher_visible_path_tuple_takes_raw_display_and_id(tmp_path):
+    """The tuple contract is (raw display, raw id); the helper joins them once."""
+    result = workspace.teacher_visible_path(
+        str(tmp_path), ("Fictional Course", "900001"), filename="f.txt")
+    assert "Fictional Course — 900001" in result
+    assert "900001 — 900001" not in result

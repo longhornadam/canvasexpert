@@ -111,9 +111,13 @@ def teacher_visible_path(
         Absolute base directory (e.g. workspace root).
     *components:
         Ordered path segments to join under *base*.  Each may be a plain
-        string or a ``(display, stable_id)`` tuple.  For tuples, the
-        component becomes ``<display> — <id>`` and the stable id portion
-        is always preserved in the compact fallback.
+        string or a ``(display, stable_id)`` tuple.  For tuples, pass the
+        **raw** display and the **raw** id: this builds ``<display> — <id>``
+        itself via ``named_id_folder`` and the stable id portion is always
+        preserved in the compact fallback.  Never pre-join the id into the
+        display (that yields ``Name — 123 — 123``), and never pass a bare
+        constant as a tuple against itself (that yields ``For AI — For AI``).
+        A component with no stable id is a plain string.
     filename:
         Optional final file name with extension.
     reserve:
@@ -142,7 +146,9 @@ def teacher_visible_path(
     for c in components:
         if isinstance(c, tuple):
             display, stable_id = c
-            raw_segments.append(f"{display} — {stable_id}")
+            # named_id_folder owns the join, so a caller passes the raw display
+            # and the raw id and cannot double-append the id into the display.
+            raw_segments.append(named_id_folder(display, stable_id))
         else:
             raw_segments.append(str(c))
 
@@ -166,7 +172,7 @@ def teacher_visible_path(
             # name so that two different assignments with the same stable ID
             # still produce distinct paths.
             short_hash = _deterministic_hash(f"{display}—{stable_id}")
-            compact_segments.append(f"{short_hash} — {stable_id}")
+            compact_segments.append(f"{short_hash} — {safe_id(stable_id)}")
         else:
             # Non-identity component: shorten aggressively.
             short = _deterministic_hash(str(c))
@@ -511,11 +517,11 @@ def grading_keys_assignment_folder(course_name, course_id, assignment_name, assi
     if reserve:
         return teacher_visible_path(
             base,
-            (STUDENT_WORK_NAME, STUDENT_WORK_NAME),
-            (GRADING_KEYS_NAME, GRADING_KEYS_NAME),
-            (named_id_folder(course_name, course_id), course_id),
-            ("Assignments", "Assignments"),
-            (named_id_folder(assignment_name, assignment_id), assignment_id),
+            STUDENT_WORK_NAME,
+            GRADING_KEYS_NAME,
+            (course_name, course_id),
+            "Assignments",
+            (assignment_name, assignment_id),
             reserve=reserve,
         )
     return bounded_join(base, STUDENT_WORK_NAME, GRADING_KEYS_NAME, named_id_folder(course_name, course_id),
@@ -642,9 +648,9 @@ def ai_run_folder(course_name, course_id, assignment_name, assignment_id,
     if reserve:
         return teacher_visible_path(
             base,
-            (FOR_AI_NAME, FOR_AI_NAME),
-            (named_id_folder(course_name, course_id), course_id),
-            (named_id_folder(assignment_name, assignment_id), assignment_id),
+            FOR_AI_NAME,
+            (course_name, course_id),
+            (assignment_name, assignment_id),
             f"{safe_component(stamp, 32)} — {safe_component(mode, 32)}",
             reserve=reserve,
         )

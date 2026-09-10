@@ -180,6 +180,26 @@ def run_ai_workflow(
                 source_context=source_context,
             )
 
+        # Fail closed before the first write. build_safe_ai_packet validates the
+        # same budget, but it runs after write_safe_and_private has already put
+        # the flat SAFE/PRIVATE artifacts on disk, so a failure there stranded
+        # them with no registered session.
+        budget_error = packet.preflight_packet_budget(
+            safe_dir, artifact_name, assignment_id=str(assignment_id or ""))
+        if budget_error:
+            privacy_steps.append(privacy.privacy_step(
+                "safe_private", "Wrote Safe AI Packet and Private decoder artifacts",
+                "failed", budget_error,
+            ))
+            return ai_workflow_support.workflow_result(
+                ok=False,
+                error=budget_error,
+                privacy_steps=privacy_steps,
+                privacy_artifacts=privacy_artifacts,
+                ai_by_uid=ai_by_uid,
+                source_context=source_context,
+            )
+
         write_result = fp.write_safe_and_private(
             bundle,
             vault,
