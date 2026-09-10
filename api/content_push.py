@@ -25,6 +25,7 @@ from pathlib import Path
 from api import runtime_paths
 from api.operation_ledger import batches, executor, models, operations, registry
 from api.operation_ledger.adapters.assignment import KIND as ASSIGNMENT_KIND
+from api.operation_ledger.adapters.assignment_update import KIND as ASSIGNMENT_UPDATE_KIND
 from api.operation_ledger.adapters.page import KIND as PAGE_KIND
 from api.operation_ledger.adapters.quiz import KIND as QUIZ_KIND
 from api.operation_ledger.adapters.rubric import KIND as RUBRIC_KIND
@@ -320,6 +321,83 @@ def preview_differentiated_quiz_push(
             "review_digest": batch["review_digest"], "preview": _scrub_paths(frozen)}
 
 
+def preview_assignment_update(
+    course_id: str,
+    assignment_id: str,
+    *,
+    published: bool | None = None,
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+) -> dict:
+    """Freeze a publish/date patch against one existing Canvas assignment.
+
+    Unlike the staged-content family above, there is no draft and no label:
+    the caller names the exact Canvas ``assignment_id`` and only that
+    assignment's ``published`` state and three schedule dates are ever read
+    or changed. Canvas is read once, live, to capture the baseline apply
+    drift-checks against and to freeze the field diff shown here -- never
+    the mirror or the Course Catalog. Supplying no field at all is refused
+    before anything reaches Canvas.
+    """
+    course_key = str(course_id or "").strip()
+    if not course_key:
+        return {"ok": False, "error": "course_id is required"}
+    if not _current_course(course_key):
+        return {"ok": False, "error": "course is not in Current courses"}
+
+    prepare_request = {"assignment_id": assignment_id}
+    if published is not None:
+        prepare_request["published"] = published
+    for key, value in (("due_at", due_at), ("unlock_at", unlock_at), ("lock_at", lock_at)):
+        text = str(value or "").strip()
+        if text:
+            prepare_request[key] = text
+
+    adapter = registry.get_adapter(ASSIGNMENT_UPDATE_KIND)
+    try:
+        payload = adapter.build_payload(prepare_request)
+        target = adapter.verify_targets(payload, [{"course_id": course_key}])[0]
+        baseline = adapter.capture_baseline(payload, target)
+        if not isinstance(baseline, dict) or baseline.get("canvas_error"):
+            return {
+                "ok": False,
+                "error": "the assignment could not be read from Canvas",
+                "blocking": True,
+            }
+        target_record = models.new_target(
+            target_key=target["target_key"],
+            idempotency_key=target["idempotency_key"],
+            course_id=target["course_id"],
+            baseline=baseline,
+        )
+        operation_id = models.new_operation_id()
+        operation = models.new_operation(
+            operation_id=operation_id,
+            kind=ASSIGNMENT_UPDATE_KIND,
+            source_ref={"type": "assignment_id", "value": str(assignment_id)},
+            source_digest=adapter.source_digest(payload),
+            normalized_payload=payload,
+            targets=[target_record],
+        )
+        operations.create_operation(operation)
+        frozen = adapter.freeze_review(payload, target_record, baseline)
+        batch = batches.freeze_batch([operation_id], {operation_id: [frozen]})
+        operations.set_operation_review(operation_id, batch)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "blocking": True}
+    except Exception:
+        return {"ok": False, "error": "the assignment update could not be prepared"}
+
+    return {
+        "ok": True,
+        "operation_id": operation_id,
+        "batch_id": batch["batch_id"],
+        "review_digest": batch["review_digest"],
+        "preview": frozen,
+    }
+
+
 # A label becomes a filename in the teacher's synced workspace, so it is
 # validated rather than sanitized: a label that cannot be used verbatim is
 # refused and renamed by the caller, never silently rewritten into a different
@@ -488,6 +566,41 @@ def apply_content_push(
     return _result_projection(latest_operation, result)
 
 
+def apply_assignment_update(
+    operation_id: str, batch_id: str, review_digest: str
+) -> dict:
+    """Write exactly the frozen assignment field patch to Canvas.
+
+    A sibling to ``apply_content_push``, not a reuse of it: this operation
+    kind is never staged-inbox content, so it is refused by
+    ``apply_content_push``'s kind gate on purpose. Same coordinates
+    contract, same Operation Ledger apply -- one claim, a drift check
+    against the frozen ``updated_at``, and a durable receipt.
+    """
+    operation_key = str(operation_id or "").strip()
+    batch_key = str(batch_id or "").strip()
+    digest = str(review_digest or "").strip()
+    if not operation_key or not batch_key or not digest:
+        return {
+            "ok": False,
+            "error": "operation_id, batch_id, and review_digest are required",
+        }
+    operation = operations.get_operation(operation_key)
+    if operation is None or operation.get("kind") != ASSIGNMENT_UPDATE_KIND:
+        return {"ok": False, "error": "assignment update operation was not found"}
+    try:
+        result = executor.apply_operation(operation_key, batch_key, digest)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception:
+        return {"ok": False, "error": "the assignment update could not complete"}
+
+    latest_operation = operations.get_operation(operation_key) or operation
+    projected = _result_projection(latest_operation, result)
+    projected["kind"] = "assignment_update"
+    return projected
+
+
 def _content_kind(ledger_kind: str) -> str:
     for name, value in _LEDGER_KINDS.items():
         if value == ledger_kind:
@@ -561,7 +674,9 @@ def _scrub_paths(value):
 
 
 __all__ = [
+    "apply_assignment_update",
     "apply_content_push",
+    "preview_assignment_update",
     "preview_content_push",
     "preview_differentiated_quiz_push",
     "push_content_live",

@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 40
+    assert contract.TOOL_SCHEMA_VERSION == 41
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -113,7 +113,12 @@ def test_live_mcp_schema_matches_versioned_contract():
     # which were built to feed the classroom display: the reads stay, and those
     # edits live in the web UI.
     assert len(contract.load_contract(38)["tools"]) == 54
-    assert len(live["tools"]) == 44
+    # v40 stays the immutable 44-tool snapshot. v41 adds the id-addressed
+    # assignment update pair, preview_assignment_update and
+    # apply_assignment_update, so an assistant can publish/re-date an
+    # existing assignment without a second create or a description touch.
+    assert len(contract.load_contract(40)["tools"]) == 44
+    assert len(live["tools"]) == 46
     v22 = contract.load_contract(22)
     assert v22["schema_version"] == 22
     assert len(v22["tools"]) == 39

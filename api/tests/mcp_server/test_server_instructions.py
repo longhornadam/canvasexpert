@@ -28,7 +28,12 @@ INSTRUCTION_BUDGET = 3000
 # person here will face the same choice: trimming push_content_live's date
 # parameters bought 109 characters, and dropping 12 tools bought 4,850. Tools
 # are the unit that costs, not their options.
-LISTING_BUDGET = 16095
+# Raised once for preview_assignment_update/apply_assignment_update, the
+# id-addressed publish/date patch pair for an assignment that already
+# exists: both descriptions were already trimmed to single sentences before
+# raising this, so the remaining cost is the two tools' own name/schema
+# structure, not wordy prose.
+LISTING_BUDGET = 16979
 DESCRIPTION_BUDGET = 343
 
 RESULT_NEXT_TOOLS = {
@@ -40,6 +45,7 @@ RESULT_NEXT_TOOLS = {
     "preview_new_quiz_scores",
     "preview_content_push",
     "preview_differentiated_quiz_push",
+    "preview_assignment_update",
 }
 
 
@@ -187,7 +193,7 @@ def test_the_schemas_themselves_survive_the_strip():
 
 def test_all_registered_tools_use_text_only_result_transport():
     listed = asyncio.run(server.mcp.list_tools())
-    assert len(listed) == 44
+    assert len(listed) == 46
     registry = server.mcp._tool_manager._tools
     assert all(tool.outputSchema is None for tool in listed)
     assert all(item.fn_metadata.output_schema is None
@@ -229,9 +235,9 @@ def test_each_registered_wrapper_returns_one_gated_text_block(_synthetic_mcp):
         return results
 
     results = asyncio.run(call_all())
-    assert len(results) == 44
-    assert len(_synthetic_mcp["calls"]) == 44
-    assert len(_synthetic_mcp["gated"]) == 44
+    assert len(results) == 46
+    assert len(_synthetic_mcp["calls"]) == 46
+    assert len(_synthetic_mcp["gated"]) == 46
     for name, content in results:
         assert len(content) == 1
         assert content[0].type == "text"

@@ -634,6 +634,96 @@ def test_the_frozen_operation_is_visible_to_the_teacher_and_applies_once(_ledger
     assert "does not match" in wrong_digest["error"]
 
 
+# --- preview_assignment_update / apply_assignment_update: id-addressed, no draft ---
+
+_LIVE_ASSIGNMENT_FOR_UPDATE = {
+    "id": 24680,
+    "name": "Found Poetry",
+    "html_url": "https://c/course-x/assignments/24680",
+    "updated_at": "2026-09-01T12:00:00Z",
+    "published": False,
+    "due_at": None,
+    "unlock_at": None,
+    "lock_at": None,
+}
+
+
+@pytest.fixture
+def _assignment_update_ledger(monkeypatch, tmp_path):
+    """A real ledger and the real AssignmentUpdateAdapter over a fake Canvas
+    transport that knows about exactly one existing assignment."""
+    from api.operation_ledger import paths
+
+    monkeypatch.setattr(paths, "private_root", lambda: tmp_path / "private")
+    monkeypatch.setattr(
+        canvas_client, "canvas_get",
+        lambda path, params=None, timeout=20: (
+            (dict(_LIVE_ASSIGNMENT_FOR_UPDATE), None)
+            if "assignments/24680" in path else (None, "HTTP 404: Not Found")
+        ),
+    )
+    sent = []
+
+    def fake_send(method, path, payload, timeout=30):
+        sent.append((method, path, payload))
+        return {"id": 24680, "html_url": _LIVE_ASSIGNMENT_FOR_UPDATE["html_url"]}, None
+
+    monkeypatch.setattr(canvas_client, "_canvas_send", fake_send)
+    return sent
+
+
+def test_preview_then_apply_a_date_change_sends_exactly_one_put(_assignment_update_ledger):
+    """Example: the one happy path -- preview a date change against an
+    existing assignment, apply it, and land exactly one Canvas PUT carrying
+    only the field that changed."""
+    sent = _assignment_update_ledger
+
+    preview = content_push.preview_assignment_update(
+        "course-x", "24680", due_at="2026-09-11T23:59:00Z")
+
+    assert preview["ok"] is True
+    assert preview["preview"]["assignment_name"] == "Found Poetry"
+    assert preview["preview"]["changes"] == [
+        {"field": "due_at", "from": None, "to": "2026-09-11T23:59:00Z"},
+    ]
+    assert sent == []  # no Canvas write yet
+
+    applied = content_push.apply_assignment_update(
+        preview["operation_id"], preview["batch_id"], preview["review_digest"])
+
+    assert applied["ok"] is True
+    assert applied["kind"] == "assignment_update"
+    assert len(sent) == 1
+    method, path, request = sent[0]
+    assert method == "PUT"
+    assert "assignments/24680" in path
+    assert request == {"assignment": {"due_at": "2026-09-11T23:59:00Z"}}
+
+
+def test_apply_assignment_update_is_refused_by_apply_content_push(_assignment_update_ledger):
+    """The two apply kinds are siblings, not aliases: apply_content_push's
+    staged-content kind gate must refuse an assignment-update operation."""
+    preview = content_push.preview_assignment_update(
+        "course-x", "24680", published=True)
+
+    result = content_push.apply_content_push(
+        preview["operation_id"], preview["batch_id"], preview["review_digest"])
+
+    assert result == {"ok": False, "error": "content push operation was not found"}
+
+
+def test_preview_assignment_update_refuses_with_no_field_and_no_canvas_call(
+    _assignment_update_ledger,
+):
+    sent = _assignment_update_ledger
+
+    result = content_push.preview_assignment_update("course-x", "24680")
+
+    assert result["ok"] is False
+    assert "at least one of" in result["error"]
+    assert sent == []
+
+
 # --- the staging contract still says where drafts go ---------------------------
 
 def test_the_staging_appendix_offers_the_push_without_replacing_the_push_tab():

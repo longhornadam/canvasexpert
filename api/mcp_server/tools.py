@@ -174,6 +174,11 @@ _NEXT_STEPS = {
         "Tell the teacher what the differentiated review says this will create, then call "
         "apply_content_push with operation_id, batch_id, and review_digest unchanged."
     ),
+    "preview_assignment_update": (
+        "Tell the teacher what the field diff says this will change, then call "
+        "apply_assignment_update with operation_id, batch_id, and review_digest "
+        "unchanged. A teacher who asked for the update has already authorized it."
+    ),
 }
 
 
@@ -1113,6 +1118,10 @@ _TOOL_GROUPS = {
         "preview_differentiated_quiz_push",
         "apply_content_push",
         "push_content_live",
+        # Publish/re-date an assignment that already exists, addressed by
+        # Canvas assignment_id -- a sibling write path, not staged content.
+        "preview_assignment_update",
+        "apply_assignment_update",
     ),
     "PowerGrader": (
         "start_scoring_session",
@@ -2140,6 +2149,44 @@ def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> 
     coordinates do not match a frozen content review.
     """
     return content_push.apply_content_push(operation_id, batch_id, review_digest)
+
+
+def preview_assignment_update(
+    course_id: str,
+    assignment_id: str,
+    published: bool = None,
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+) -> dict:
+    """Freeze a publish/date patch against one existing Canvas assignment.
+
+    No draft, no label: assignment_id names the exact Canvas assignment, and
+    only its published state and three schedule dates are ever read or
+    changed -- description, points, and assignment group stay untouched.
+    Canvas is read live to freeze the field diff and the drift anchor;
+    never the mirror or Course Catalog. Supplying no field at all is refused
+    before anything reaches Canvas.
+    """
+    gate_error = _course_gate_check(course_id)
+    if gate_error:
+        return {"ok": False, "error": gate_error}
+    return _with_next("preview_assignment_update", content_push.preview_assignment_update(
+        course_id, assignment_id, published=published,
+        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
+    ))
+
+
+def apply_assignment_update(operation_id: str, batch_id: str, review_digest: str) -> dict:
+    """Write exactly what preview_assignment_update froze to Canvas.
+
+    Same coordinates contract as apply_content_push: the three opaque values
+    preview returned, nothing else. Runs the same Operation Ledger apply --
+    one claim, a drift check against the frozen updated_at, and a durable
+    receipt. Blocked as drift_detected, not overwritten, if the assignment
+    changed in Canvas since the preview.
+    """
+    return content_push.apply_assignment_update(operation_id, batch_id, review_digest)
 
 
 def stage_content(kind: str, label: str, content: str) -> dict:

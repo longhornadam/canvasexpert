@@ -5,16 +5,16 @@ lets any MCP-capable assistant help plan lessons and manage rosters conversation
 while CanvasExpert keeps sole custody of the Canvas PAT and almost every write path.
 
 - **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
-  local copy on their computer. It never holds the Canvas token. Five tools reach
-  Canvas: four digest-protected applies, each gated by its own preview, and one
+  local copy on their computer. It never holds the Canvas token. Six tools reach
+  Canvas: five digest-protected applies, each gated by its own preview, and one
   single-call push. `apply_roster_student_change` (only when the reviewed preview
   carries a `canvas_group` patch, which reassigns real Canvas group membership),
-  `apply_new_quiz_scores`, `apply_sis_grade_bridge`, `apply_content_push`, and
-  `push_content_live`, which stages a draft and applies it in one call for a teacher
-  who asked for content in their course. The freeze is internal there, not skipped: the
-  same baseline capture, frozen review, and drift check run between staging and
-  applying. What it drops is the round trip, not a safeguard.
-  Everything else writes only to local CanvasExpert state.
+  `apply_new_quiz_scores`, `apply_sis_grade_bridge`, `apply_content_push`,
+  `apply_assignment_update`, and `push_content_live`, which stages a draft and applies
+  it in one call for a teacher who asked for content in their course. The freeze is
+  internal there, not skipped: the same baseline capture, frozen review, and drift
+  check run between staging and applying. What it drops is the round trip, not a
+  safeguard. Everything else writes only to local CanvasExpert state.
 - **Pseudonymized, not anonymous.** Every student-data tool routes its result through the identity vault
   (`api/feedback_vault.py`) before returning it. Students are identified only by a stable
   one-word pseudonym (e.g. "Pikachu") — never a real name, Canvas user ID, or SIS ID. See
@@ -38,7 +38,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 40 (44 tools).
+Tool schema version 41 (46 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -67,6 +67,8 @@ Tool schema version 40 (44 tools).
 | `preview_differentiated_quiz_push(course_id, variants, published=false, module_name="", assignment_group_name="", due_at="", unlock_at="", lock_at="", post_to_sis=false)` | Persists a frozen review for staged QuizForge labels bound to distinct selected groups; `next` carries the existing `apply_content_push` handoff | No |
 | `apply_content_push(operation_id, batch_id, review_digest)` | Creates the exact frozen draft in Canvas through the Operation Ledger; same claims, drift check, and receipt as the push tab | No |
 | `push_content_live(course_id, kind, label, content, published=false, module_name="", assignment_group_name="", post_to_sis=false)` | The route for a teacher who asked for content in Canvas; stages the draft, freezes and drift-checks it internally, then creates it. Unpublished unless `published=true`. Carries no dates: use the preview pair for those | No |
+| `preview_assignment_update(course_id, assignment_id, published=None, due_at="", unlock_at="", lock_at="")` | Persists a local frozen field-diff review against one existing Canvas assignment named by id, read live from Canvas; refuses with no Canvas call when no field is supplied | No |
+| `apply_assignment_update(operation_id, batch_id, review_digest)` | Writes only the frozen published/due_at/unlock_at/lock_at patch to Canvas through the Operation Ledger; blocked as `drift_detected` rather than overwritten if the assignment changed since preview | No |
 | `get_roster(course_id)` | Current mirror roster as stable one-word stand-ins and section names | Yes, pseudonymized |
 | `get_roster_student_settings(course_id, pseudonym)` | Safe local settings projection; stored nicknames are omitted | Yes, pseudonymized |
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
@@ -137,6 +139,16 @@ course, one call: the assistant cannot reach a second course or a draft the teac
 not name, and a course that changed under the frozen review is refused as drift rather
 than overwritten. Delivery options are per kind, and naming one a kind cannot carry is
 refused rather than dropped. Drafts stay unpublished unless `published=true`.
+
+`preview_assignment_update`/`apply_assignment_update` is a separate, narrower write pair
+for an assignment that already exists: there is no draft and no label, only a Canvas
+`assignment_id` the caller supplies. Only `published` and the three schedule dates can
+change; `description`, points, and assignment group are never read or resent, so nothing
+on this path can flatten them. The preview reads the assignment live from Canvas -- never
+the mirror or Course Catalog -- freezes its `updated_at` as the drift anchor, and shows a
+`{field, from, to}` row per changed field. Supplying no field at all is refused before
+Canvas is ever called, and apply is blocked as `drift_detected`, not overwritten, if the
+assignment changed in Canvas since the preview.
 
 The SIS grade-bridge pair is a bounded, family-specific Canvas write surface.
 Preview persists a local frozen operation and returns all three coordinates apply needs:

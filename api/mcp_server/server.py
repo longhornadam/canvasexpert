@@ -372,6 +372,30 @@ def apply_content_push(operation_id: str, batch_id: str, review_digest: str) -> 
 
 
 @mcp.tool(structured_output=False)
+def preview_assignment_update(
+    course_id: str,
+    assignment_id: str,
+    published: bool = None,
+    due_at: str = "",
+    unlock_at: str = "",
+    lock_at: str = "",
+) -> str:
+    """Freeze a publish/date patch for one existing Canvas assignment by id, refused with no Canvas call if no field is supplied."""
+    return _compact(tools.preview_assignment_update(
+        course_id, assignment_id, published=published,
+        due_at=due_at, unlock_at=unlock_at, lock_at=lock_at,
+    ))
+
+
+@mcp.tool(structured_output=False)
+def apply_assignment_update(operation_id: str, batch_id: str, review_digest: str) -> str:
+    """Write the frozen assignment patch preview_assignment_update returned, blocked as drift_detected if the assignment changed since preview."""
+    return _compact(tools.apply_assignment_update(
+        operation_id, batch_id, review_digest
+    ))
+
+
+@mcp.tool(structured_output=False)
 def stage_content(kind: str, label: str, content: str) -> str:
     """Stage one authored draft in the teacher's review Inbox.
     kind is quiz/assignment/page/rubric; content is the completed envelope

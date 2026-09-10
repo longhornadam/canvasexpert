@@ -31,6 +31,7 @@ from api import course_catalog
 # payload-sensitive below invalidates nothing (e.g. dead/unregistered kinds).
 _KIND_TO_CATALOG_SCOPES: dict[str, frozenset[str]] = {
     "content.assignment": frozenset({"assignments", "modules"}),
+    "content.assignment_update": frozenset({"assignments"}),
     "content.quiz": frozenset({"assignments", "modules"}),
     "content.quick_assignment": frozenset({"assignments"}),
     "gradebook.sis_bridge": frozenset({"assignments"}),
