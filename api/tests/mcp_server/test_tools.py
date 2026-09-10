@@ -703,7 +703,7 @@ def test_generated_tool_inventory_covers_the_contract_exactly_once_by_job():
     assert result["topics"] == _GUIDE_TOPIC_SUMMARIES
     assert set(tools._TOOL_GROUPS) == expected_groups
     assert all(tools._TOOL_GROUPS.values())
-    assert set(grouped) == contract_names and len(grouped) == len(contract_names) == 46
+    assert set(grouped) == contract_names and len(grouped) == len(contract_names) == 48
     for name in contract_names:
         assert len(re.findall(
             rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])",
@@ -2194,6 +2194,7 @@ def test_server_registers_the_expected_tool_set():
             "apply_roster_student_change", "clear_roster_student_field",
         "start_scoring_session", "list_scoring_sessions", "get_scoring_packet", "stage_scores",
         "preview_new_quiz_scores", "apply_new_quiz_scores",
+        "preview_assignment_scores", "apply_assignment_scores",
         }
 
 

@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 42
+    assert contract.TOOL_SCHEMA_VERSION == 43
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -121,9 +121,14 @@ def test_live_mcp_schema_matches_versioned_contract():
     # named session_id, so get_scoring_packet, stage_scores, and
     # preview_new_quiz_scores now take scoring_session_id instead. v41
     # remains the immutable 46-tool snapshot under the old name.
+    # v43 adds the ordinary-assignment PowerGrader score write pair,
+    # preview_assignment_scores and apply_assignment_scores, so an assistant
+    # can post staged scores and feedback from chat instead of the queue
+    # button alone. v42 remains the immutable 46-tool snapshot.
     assert len(contract.load_contract(40)["tools"]) == 44
     assert len(contract.load_contract(41)["tools"]) == 46
-    assert len(live["tools"]) == 46
+    assert len(contract.load_contract(42)["tools"]) == 46
+    assert len(live["tools"]) == 48
     v22 = contract.load_contract(22)
     assert v22["schema_version"] == 22
     assert len(v22["tools"]) == 39

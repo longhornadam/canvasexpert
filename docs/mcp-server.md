@@ -5,13 +5,16 @@ lets any MCP-capable assistant help plan lessons and manage rosters conversation
 while CanvasExpert keeps sole custody of the Canvas PAT and almost every write path.
 
 - **Local and indirect.** Serves this teacher's own Canvas data from Canvas Expert's
-  local copy on their computer. It never holds the Canvas token. Six tools reach
-  Canvas: five digest-protected applies, each gated by its own preview, and one
-  single-call push. `apply_roster_student_change` (only when the reviewed preview
-  carries a `canvas_group` patch, which reassigns real Canvas group membership),
-  `apply_new_quiz_scores`, `apply_sis_grade_bridge`, `apply_content_push`,
-  `apply_assignment_update`, and `push_content_live`, which stages a draft and applies
-  it in one call for a teacher who asked for content in their course. The freeze is
+  local copy on their computer. It never holds the Canvas token. Eight tools reach
+  Canvas: five digest-protected applies, each gated by its own preview, one
+  single-call push, and the `preview_assignment_scores` / `apply_assignment_scores`
+  pair for posting PowerGrader scores to an ordinary assignment. `apply_roster_student_change`
+  (only when the reviewed preview carries a `canvas_group` patch, which reassigns
+  real Canvas group membership), `apply_new_quiz_scores`, `apply_sis_grade_bridge`,
+  `apply_content_push`, `apply_assignment_update`, and `push_content_live`, which
+  stages a draft and applies it in one call for a teacher who asked for content in
+  their course. `preview_assignment_scores` reads Canvas only to capture the current
+  score baseline; `apply_assignment_scores` writes the frozen review. The freeze is
   internal there, not skipped: the same baseline capture, frozen review, and drift
   check run between staging and applying. What it drops is the round trip, not a
   safeguard. Everything else writes only to local CanvasExpert state.
@@ -38,7 +41,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 42 (46 tools).
+Tool schema version 43 (48 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -88,6 +91,8 @@ Tool schema version 42 (46 tools).
 | `stage_scores(scoring_session_id, results, expected_packet_digest)` | Stage AI scores locally with packet-digest protection; partial staging preserves other scores and never posts to Canvas | Yes, pseudonymized |
 | `preview_new_quiz_scores(scoring_session_id)` | Persist a frozen review of current staging; re-freeze after edits, and use `next` for the apply handoff | Yes, pseudonymized |
 | `apply_new_quiz_scores(operation_id, review_digest)` | Write the frozen review—not later staging—to Canvas; invalid coordinates do not write and replay skips finalized students | Yes, pseudonymized |
+| `preview_assignment_scores(scoring_session_id)` | Freeze what staged AI scores would post for one ordinary-assignment session and raise any question that must be answered first; reads Canvas for the current baseline and writes nothing | Yes, pseudonymized |
+| `apply_assignment_scores(scoring_session_id, review_digest, answers=None)` | Post exactly what `preview_assignment_scores` froze once every raised question has an answer; same reviewed transport as the teacher's own queue button | Yes, pseudonymized |
 
 `get_course_assignments` and `get_modules` only read the local course catalog written by
 the CanvasExpert web UI — neither ever falls back to a live Canvas call. If the catalog

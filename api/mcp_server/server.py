@@ -545,4 +545,21 @@ def _strip_generated_schema_titles(mcp_server) -> int:
     return removed
 
 
+@mcp.tool(structured_output=False)
+def preview_assignment_scores(scoring_session_id: str) -> str:
+    """Freeze what staged AI scores would post for one assignment, and ask first.
+    Every question it returns must be answered before apply_assignment_scores will
+    write. Reads Canvas for the baseline; writes nothing. Course-gated."""
+    return _compact(tools.preview_assignment_scores(scoring_session_id))
+
+
+@mcp.tool(structured_output=False)
+def apply_assignment_scores(scoring_session_id: str, review_digest: str,
+                            answers: dict | None = None) -> str:
+    """Post exactly what preview_assignment_scores froze, once its questions are answered.
+    Same reviewed transport as the teacher's own queue button: frozen review, drift
+    check, per-student idempotency. Course-gated."""
+    return _compact(tools.apply_assignment_scores(scoring_session_id, review_digest, answers))
+
+
 _STRIPPED_SCHEMA_TITLES = _strip_generated_schema_titles(mcp)

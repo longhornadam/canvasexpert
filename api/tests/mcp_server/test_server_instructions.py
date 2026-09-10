@@ -38,12 +38,15 @@ INSTRUCTION_BUDGET = 3000
 # argument literally named session_id, so get_scoring_packet, stage_scores,
 # and preview_new_quiz_scores now take scoring_session_id instead -- 8 extra
 # characters per parameter/required-list occurrence, across three tools.
-LISTING_BUDGET = 17027
+# Raised once for preview_assignment_scores and apply_assignment_scores, the
+# ordinary-assignment PowerGrader score write pair.
+LISTING_BUDGET = 17956
 DESCRIPTION_BUDGET = 343
 
 RESULT_NEXT_TOOLS = {
     "get_scoring_packet",
     "start_scoring_session",
+    "preview_assignment_scores",
     "preview_sis_grade_bridge",
     "preview_learning_objective",
     "preview_roster_student_change",
@@ -198,7 +201,7 @@ def test_the_schemas_themselves_survive_the_strip():
 
 def test_all_registered_tools_use_text_only_result_transport():
     listed = asyncio.run(server.mcp.list_tools())
-    assert len(listed) == 46
+    assert len(listed) == 48
     registry = server.mcp._tool_manager._tools
     assert all(tool.outputSchema is None for tool in listed)
     assert all(item.fn_metadata.output_schema is None
@@ -240,9 +243,9 @@ def test_each_registered_wrapper_returns_one_gated_text_block(_synthetic_mcp):
         return results
 
     results = asyncio.run(call_all())
-    assert len(results) == 46
-    assert len(_synthetic_mcp["calls"]) == 46
-    assert len(_synthetic_mcp["gated"]) == 46
+    assert len(results) == 48
+    assert len(_synthetic_mcp["calls"]) == 48
+    assert len(_synthetic_mcp["gated"]) == 48
     for name, content in results:
         assert len(content) == 1
         assert content[0].type == "text"

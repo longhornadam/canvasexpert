@@ -147,6 +147,9 @@ _NEXT_STEPS = {
         "local by design, so name the held students and tell the teacher this "
         "assignment needs review in PowerGrader itself instead."
     ),
+    "preview_assignment_scores": (
+        "Put each question to the teacher in your own words and get a real answer; do not pick one for them. Then call apply_assignment_scores with review_digest and an answers map. A skip_those answer drops those students from the write."
+    ),
     "preview_sis_grade_bridge": (
         "Summarize the aggregate review and get teacher confirmation, then call "
         "apply_sis_grade_bridge with batch_id, operation_id, and review_digest unchanged."
@@ -1130,6 +1133,10 @@ _TOOL_GROUPS = {
         "stage_scores",
         "preview_new_quiz_scores",
         "apply_new_quiz_scores",
+        # The ordinary-assignment twin of the New Quiz pair: staged scores
+        # reach Canvas from the conversation instead of only from the queue.
+        "preview_assignment_scores",
+        "apply_assignment_scores",
         # The gradebook snapshot informs the scoring job; Appendix B's separate
         # Gradebook tools surface has no direct MCP mutation surface.
         "get_gradebook_snapshot",
@@ -3372,4 +3379,153 @@ def apply_new_quiz_scores(operation_id: str, review_digest: str) -> dict:
         "counts": {"finalized": finalized, "already_applied": already_applied, "failed": failed},
         "results": results,
     }
+    return pseudonym.gate(result, vault)
+
+
+_SCORING_APPLY_UNRESOLVED = (
+    "Some pseudonyms are not in this session: {names}. Call get_scoring_packet "
+    "for the current roster of stand-in names."
+)
+
+
+def _scoring_apply_session(scoring_session_id: str):
+    """Load a session for the chat-side push, or return a refusal.
+
+    Returns (session, vault, error_dict). New Quiz sessions are refused rather
+    than handled: their scores belong to the quiz engine, and they have their
+    own teacher-reviewed item-finalization lane.
+    """
+    from api.powergrader import session_actions, session_store
+
+    session = session_store.load_session(scoring_session_id)
+    if not session:
+        return None, None, {"ok": False, "error": "Session not found."}
+
+    gate_err = _course_gate_check(str(session.get("course_id") or ""))
+    if gate_err:
+        return None, None, {"ok": False, "error": gate_err}
+
+    if session_actions._writeback_mode(session) != "full":
+        return None, None, {
+            "ok": False,
+            "error": ("This is a New Quiz session: its scores belong to the quiz "
+                      "engine, not the assignment total. Use preview_new_quiz_scores "
+                      "and apply_new_quiz_scores instead."),
+        }
+    return session, _vault_factory(), None
+
+
+def _scoring_apply_names(vault) -> tuple[dict, list]:
+    """(user_id -> pseudonym, every pseudonym in the vault)."""
+    by_id, every = {}, []
+    for entry in vault.entries():
+        name = str(entry.get("pseudonym") or "").strip()
+        if not name:
+            continue
+        by_id[str(entry.get("canvas_id"))] = name
+        every.append(name)
+    return by_id, every
+
+
+def _scoring_apply_safe(plan: dict, names: dict) -> dict:
+    """Re-express a user_id-keyed plan in pseudonyms only.
+
+    The powergrader layer speaks Canvas user_id. Nothing below this line may
+    cross the MCP boundary, including inside question and error text.
+    """
+    def label(user_id: str) -> str:
+        return names.get(str(user_id)) or "(unknown student)"
+
+    return {
+        "students": sorted(label(uid) for uid in plan["candidate_ids"]),
+        "questions": [
+            {
+                "id": question["id"],
+                "detail": question["detail"],
+                "students": sorted(label(uid) for uid in question["user_ids"]),
+                "answer_with": question["options"],
+            }
+            for question in plan["questions"]
+        ],
+        "notes": plan["notes"],
+    }
+
+
+def preview_assignment_scores(scoring_session_id: str) -> dict:
+    """Freeze what staged AI scores would post to Canvas for one session, and
+    ask anything that needs a decision first.
+
+    Reads Canvas to capture the current score baseline; writes nothing, here or
+    locally. The reply carries the stand-in names whose work would post, a
+    review_digest, and a `questions` list.
+
+    Every question blocks apply_assignment_scores until answered, and the
+    answer changes what lands -- a score above what the item is worth, a score
+    Canvas already has, feedback staged with no score, feedback quoting a
+    stand-in name, and students who would receive nothing because their work
+    was held out of the AI packet. Answer each with one of its `answer_with`
+    values.
+
+    For ordinary assignments. A New Quiz session is refused and pointed at
+    preview_new_quiz_scores.
+    """
+    from api.powergrader import scoring_apply
+
+    session, vault, error = _scoring_apply_session(scoring_session_id)
+    if error:
+        return error
+
+    names, every_pseudonym = _scoring_apply_names(vault)
+    plan = scoring_apply.build_plan(
+        session, pseudonyms=every_pseudonym)
+    if not plan.get("ok"):
+        return {"ok": False, "error": plan.get("error") or "Could not build the push plan."}
+    if not plan["candidate_ids"]:
+        return {"ok": False,
+                "error": "No staged scores are waiting to post in this session."}
+
+    result = {"ok": True, "review_digest": plan["digest"], **_scoring_apply_safe(plan, names)}
+    return _with_next("preview_assignment_scores", pseudonym.gate(result, vault))
+
+
+def apply_assignment_scores(scoring_session_id: str, review_digest: str,
+                            answers: dict | None = None) -> dict:
+    """Post exactly what preview_assignment_scores froze.
+
+    `answers` maps each question id to one of the options that question
+    offered. Every question must be answered: this refuses with
+    unanswered_questions rather than guessing, and a `skip_those` answer really
+    does drop those students from the write.
+
+    Approves the covered rows locally, then goes through the same reviewed
+    transport the teacher's own queue button uses -- one frozen review, a drift
+    check against fresh Canvas state, per-student idempotency, and a push log.
+    Refuses as plan_changed when the staged scores or Canvas moved since the
+    preview.
+    """
+    from api.powergrader import scoring_apply, session_store
+
+    session, vault, error = _scoring_apply_session(scoring_session_id)
+    if error:
+        return error
+
+    names, every_pseudonym = _scoring_apply_names(vault)
+    with session_store.session_lock(scoring_session_id):
+        payload, _status = scoring_apply.apply_plan(
+            scoring_session_id,
+            expected_digest=review_digest,
+            answers=answers,
+            load_session=session_store.load_session,
+            save_session=session_store.save_session,
+            pseudonyms=every_pseudonym,
+        )
+
+    result = dict(payload)
+    # push_grades reports per-user_id; the boundary reports per stand-in name.
+    for key in ("results", "user_ids"):
+        result.pop(key, None)
+    if payload.get("ok"):
+        result["skipped"] = sorted(
+            names.get(str(uid)) or "(unknown student)" for uid in payload.get("skipped") or [])
+        _new_quiz_notify_write_through(session, payload.get("pushed"))
     return pseudonym.gate(result, vault)
