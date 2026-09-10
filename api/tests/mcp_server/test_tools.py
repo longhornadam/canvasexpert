@@ -1022,6 +1022,31 @@ def test_get_submissions_include_text_false_drops_text_column(monkeypatch, tmp_p
     assert "essay body" not in dumped
 
 
+@pytest.mark.parametrize("include_text", [True, False])
+def test_submission_membership_keeps_historical_rows_and_gates_exact_payload(
+    monkeypatch, _submissions_fixture, _rows, include_text,
+):
+    _submissions_fixture({900001: "<p>Current work.</p>", 900099: "<p>Historical work.</p>"})
+    scanned = []
+    original_gate = tools.pseudonym.gate
+
+    def capture(payload, vault):
+        scanned.append(json.loads(json.dumps(payload)))
+        return original_gate(payload, vault)
+
+    monkeypatch.setattr(tools.pseudonym, "gate", capture)
+    result = tools.get_submissions("111", "700010", include_text=include_text)
+
+    assert result["ok"] is True
+    rows = _rows(result["submissions"])
+    assert len(rows) == 2
+    assert [row["current_enrollment"] for row in rows] == [True, False]
+    assert scanned[0]["submissions"] == rows
+    assert all(("text" in row) is include_text for row in rows)
+    assert all("user_id" not in row for row in scanned[0]["submissions"])
+    _assert_no_leaks(result)
+
+
 def test_get_submissions_pseudonyms_filter_narrows_rows(monkeypatch, tmp_path, _rows, _submissions_fixture):
     _submissions_fixture()
     everyone = _rows(tools.get_submissions("111", "700010")["submissions"])
@@ -1404,7 +1429,7 @@ def test_get_gradebook_snapshot_happy(monkeypatch, tmp_path, _rows, _use_vault, 
     assert result["student_count"] == 2
     assert _rows(result["assignments"]) == [{
         "id": "700010", "title": "Quiz 1", "due_at": "2026-07-01",
-        "points": 10, "submitted": 2, "graded": 1, "missing": 0, "late": 0, "avg_pct": 90,
+        "points": 10, "has_submission": 2, "has_grade": 1, "missing": 0, "late": 0, "avg_pct": 90,
     }]
     assert result["students"]["columns"] == ["pseudonym", "missing", "late", "ungraded", "pct"]
     assert len(result["students"]["rows"]) == 2

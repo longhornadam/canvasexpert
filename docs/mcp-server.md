@@ -77,9 +77,9 @@ Tool schema version 43 (48 tools).
 | `preview_roster_student_change(course_id, pseudonym, patch)` | Digest-protected pseudonym-first settings preview; `next` carries the confirm-then-apply handoff | Yes, pseudonymized |
 | `apply_roster_student_change(course_id, preview, preview_digest, expected_settings_digest)` | Applies the unchanged preview; only a `canvas_group` patch reaches Canvas | Yes, pseudonymized |
 | `clear_roster_student_field(course_id, pseudonym, field, expected_settings_digest)` | Direct digest-protected clear for supported local settings; nickname fields are rejected | Yes, pseudonymized |
-| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | Mirror submissions not filtered to current enrollment; optional pseudonym narrowing and bounded text | Yes, pseudonymized |
+| `get_submissions(course_id, assignment_id, include_text=true, pseudonyms="", max_text_chars=2000)` | Mirror submissions including historical rows; current_enrollment marks same-mirror roster membership; optional pseudonym narrowing and bounded text | Yes, pseudonymized |
 | `get_writing_history(pseudonym, since="", until="", include_text=false, max_text_chars=2000)` | Private longitudinal Writing Record evidence; date-bounded, optional prose, and never a score, coaching, or judgment | Yes, pseudonymized |
-| `get_gradebook_snapshot(course_id)` | Current-course pseudonymized gradebook snapshot from the local mirror | Yes, pseudonymized |
+| `get_gradebook_snapshot(course_id)` | Current-course pseudonymized gradebook snapshot from the local mirror, using the roster population for student and assignment counts | Yes, pseudonymized |
 | `refresh_mirror(course_id)` | Sync a saved course's mirror after a stale refusal, report status, then retry the read | No, returns a sync status, never course data |
 | `get_bell_schedule(schedule_id="")` | Workspace Bell Schedules; an empty id returns all variants | No |
 | `get_day_schedule(date)` | Calendar state and schedule blocks for one YYYY-MM-DD date; repeated blocks yield consecutive meeting runs | No |
@@ -255,7 +255,9 @@ returns only each draft's label, never its absolute path. Pass `kind` to narrow 
 
 **Scoring Packet Workflow (v22).** `list_scoring_sessions()` discovers PowerGrader sessions
 with AI-ready SAFE bundles in Current courses; a session whose bundle is no longer on disk is
-left out rather than offered and then refused. `get_scoring_packet()` retrieves one session's
+left out rather than offered and then refused. Both list and packet compute
+`newer_session_exists` using only readable, listed sessions for the same course and assignment;
+equal creation timestamps do not establish a newer session. `get_scoring_packet()` retrieves one session's
 pseudonymized student responses with full text (no truncation, no media) and a digest for
 concurrency protection. The response includes a server-authored contract (scoring
 instructions) when `include_context=true`, so later pages can set it false and save the
@@ -273,6 +275,14 @@ carries the distinct-student count separately. Walk pages by following `next_off
 is absent rather than comparing an offset against `total`. Over the 25,000-token budget the
 page is refused rather than trimmed, and the refusal names a smaller `limit` that fits, scaled
 to how far over the page landed.
+
+Packet membership counts are separate: `session_student_count` counts distinct private
+session students, `bundle_student_count` counts distinct SAFE pseudonyms, and
+`excluded_student_count` is the nonnegative session-minus-bundle count gap. This aggregate
+does not join private identities to pseudonyms or infer why a student was excluded.
+`students_without_responses` counts bundle students with no response rows; `held` counts
+responses without scorable text. A 19-student session with 16 held bundle students therefore
+reports 3 excluded students, 16 held responses, and 0 scorable rows.
 
 The safety scan walks dict keys, so it cannot see into `{columns, rows}` tables. Every tool
 that returns student text therefore gates the dict-row payload first and tabulates only after
@@ -341,6 +351,13 @@ compact. Client and model token treatment varies:
   students; `max_text_chars` (default 2000, `0` = full) trims each submission's text with
   an explicit `…[truncated N more chars]` marker. The cheap pattern is status first, then
   full text for only the students that matter.
+- Submission rows retain historical records and append `current_enrollment`, determined
+  from membership in the same mirror roster. It does not describe a historical enrollment date.
+- Gradebook assignment columns `has_submission` and `has_grade` count roster records with
+  a submission timestamp and graded records with a score, respectively. Manual grades
+  without a submission count toward `has_grade` and averages. Their difference is not an
+  ungraded-work count: `total_ungraded` sums the returned students' submitted or pending-review
+  work awaiting grading. Excused and unpublished work is omitted from these counts.
 - `get_assessment_context` accepts the same comma-separated, trimmed, case-insensitive
   pseudonym filter and returns compact student rows with bounded standards evidence;
   omit the filter for the current roster (up to 25 students), or name only the students

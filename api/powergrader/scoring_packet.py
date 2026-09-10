@@ -67,6 +67,10 @@ def build_packet(
     - students: list of {pseudonym, item_id, text} for this page
     - total: scorable rows in the whole bundle
     - students_total: distinct students holding at least one scorable row
+    - session_student_count: distinct students in the private session
+    - bundle_student_count: distinct pseudonyms in the SAFE bundle
+    - excluded_student_count: nonnegative session-minus-bundle count gap
+    - students_without_responses: bundle students with no response rows
     - returned: rows in this page
     - next_offset: offset of the next page, absent on the final page
     - held: responses with no scorable text (media-only or empty)
@@ -77,6 +81,14 @@ def build_packet(
     Raises PacketTooLarge when the page projects over the token budget.
     """
     students = safe_bundle.get("students") or []
+    session_student_count = len({
+        str(student["user_id"]) for student in session.get("students") or []
+        if student.get("user_id") is not None
+    })
+    bundle_pseudonyms = {student.get("pseudonym", "") for student in students}
+    responding_pseudonyms = {
+        student.get("pseudonym", "") for student in students if student.get("responses")
+    }
 
     # One scorable row per (student, response carrying text). Held rows are
     # the ones no model can score: media-only or empty submissions. Each
@@ -124,6 +136,10 @@ def build_packet(
         "students": page,
         "total": total,
         "students_total": len({row["pseudonym"] for row in scorable}),
+        "session_student_count": session_student_count,
+        "bundle_student_count": len(bundle_pseudonyms),
+        "excluded_student_count": max(0, session_student_count - len(bundle_pseudonyms)),
+        "students_without_responses": len(bundle_pseudonyms - responding_pseudonyms),
         "returned": len(page),
         "held": held,
         "held_pseudonyms": held_pseudonyms,

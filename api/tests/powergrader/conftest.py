@@ -1,10 +1,39 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
+from types import SimpleNamespace
 
 import pytest
 from docx import Document
+
+
+@pytest.fixture
+def _signed_grader_http():
+    def build(preview_url, *, launch_form=True):
+        calls = []
+        form = ('<form action="https://quiz.invalid/signed"><input name="participant_session_id" '
+                'value="synthetic-participant"><input name="signature" value="synthetic-signature"></form>')
+        replies = iter([
+            {"session_url": "https://canvas.invalid/session"},
+            {},
+            {"data": {"assignment": {"submissionsConnection": {"nodes": [{"previewUrl": preview_url}]}}}},
+            form if launch_form else '<script>ENV.NEW_QUIZZES = {"token":"native-only"};</script>',
+            "window.launch_params = " + json.dumps({"access_token": "synthetic-launch-token",
+                                                    "launch_url": "https://quiz.invalid/launch"}) + ";",
+        ])
+
+        def request(method, url, **kwargs):
+            calls.append((method, url, kwargs))
+            reply = next(replies)
+            return SimpleNamespace(status_code=200, text=reply if isinstance(reply, str) else "",
+                                   json=lambda: reply if isinstance(reply, dict) else None)
+
+        return SimpleNamespace(get=lambda url, **kw: request("GET", url, **kw),
+                               post=lambda url, **kw: request("POST", url, **kw)), calls
+
+    return build
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"

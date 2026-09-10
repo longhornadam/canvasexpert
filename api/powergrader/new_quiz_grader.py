@@ -11,7 +11,7 @@ import copy
 import hashlib
 import json
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
 
 import requests
 
@@ -126,6 +126,15 @@ def _signed_context(*, canvas_base: str, token: str, assignment_id: str, user_id
     if len(nodes) != 1 or not isinstance(nodes[0], dict) or not nodes[0].get("previewUrl"):
         raise GraderError("preview_missing")
     preview_url = str(nodes[0]["previewUrl"])
+    parsed_preview = urlparse(preview_url)
+    if parsed_preview.path.endswith("/external_tools/retrieve"):
+        # Canvas can default this endpoint to native, sessionless HTML. This
+        # grader needs the signed web form and its write-capable credentials.
+        option = "new_quizzes_native_experience_sessionless"
+        query = [(key, value) for key, value in parse_qsl(parsed_preview.query, keep_blank_values=True)
+                 if key != option]
+        query.append((option, "false"))
+        preview_url = parsed_preview._replace(query=urlencode(query)).geturl()
     preview = _require(session.get(preview_url, timeout=TIMEOUT), "preview_launch")
     form = _LaunchForm(); form.feed(getattr(preview, "text", ""))
     participant_session_id = form.values.get("participant_session_id")

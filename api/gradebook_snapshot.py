@@ -28,7 +28,7 @@ def build_snapshot(students, assignments, subs) -> dict:
     for sub in subs:
         a = amap.get(sub.get("assignment_id"))
         s = smap.get(sub.get("user_id"))
-        if not a or sub.get("excused"):
+        if not a or not s or sub.get("excused"):
             continue
         state = sub.get("workflow_state", "")
         if sub.get("submitted_at"):
@@ -82,8 +82,7 @@ def build_snapshot(students, assignments, subs) -> dict:
         "class_avg": class_avg,
         "student_count": len(out_students),
         "total_missing": sum(s["missing"] for s in out_students),
-        "total_ungraded": sum(a["submitted"] - a["graded"]
-                              for a in out_assignments if a["submitted"] > a["graded"]),
+        "total_ungraded": sum(s["ungraded"] for s in out_students),
         "assignments": out_assignments,
         "students": out_students,
     }

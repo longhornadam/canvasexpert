@@ -101,12 +101,12 @@ _DESCRIPTION_PREVIEW_CHARS = 300
 _DEFAULT_MAX_TEXT_CHARS = 2000
 
 _SUBMISSION_COLUMNS = ("pseudonym", "workflow_state", "submitted_at", "late",
-                       "missing", "excused", "score", "grade", "text")
+                       "missing", "excused", "score", "grade", "text", "current_enrollment")
 _ROSTER_COLUMNS = ("pseudonym", "section_names")
 _ASSIGNMENT_COLUMNS = ("id", "title", "due_at", "points_possible",
                        "published", "description_text")
-_GRADEBOOK_ASSIGNMENT_COLUMNS = ("id", "title", "due_at", "points", "submitted",
-                                 "graded", "missing", "late", "avg_pct")
+_GRADEBOOK_ASSIGNMENT_COLUMNS = ("id", "title", "due_at", "points", "has_submission",
+                                 "has_grade", "missing", "late", "avg_pct")
 _GRADEBOOK_STUDENT_COLUMNS = ("pseudonym", "missing", "late", "ungraded", "pct")
 _MODULE_COLUMNS = ("id", "name", "position", "item_count")
 _MODULE_ITEM_COLUMNS = ("id", "type", "title", "position", "content_id")
@@ -2296,7 +2296,8 @@ def get_submissions(course_id: str, assignment_id: str,
     refused (call refresh_mirror first). ``pseudonyms`` (comma-separated)
     narrows to specific students; ``include_text=False`` drops the text
     column; text is trimmed to ``max_text_chars`` (0 = full). Attachments are
-    never included. Gated by the outbound safety scan."""
+    never included. Historical rows remain; ``current_enrollment`` marks
+    membership in this bundle's mirror roster. Gated by the outbound safety scan."""
     identity_error = _saved_course_gate_check(course_id)
     if identity_error:
         return {"ok": False, "error": identity_error}
@@ -2321,6 +2322,12 @@ def get_submissions(course_id: str, assignment_id: str,
         assignment, subs = bundle["assignment"], bundle["rows"]
 
         rows = pseudonym.pseudonymize_submission_rows(vault, subs)
+        current_pseudonyms = {
+            vault.get_or_assign(student["id"])
+            for student in bundle["roster"] if student.get("id") is not None
+        }
+        for row in rows:
+            row["current_enrollment"] = row["pseudonym"] in current_pseudonyms
         wanted = {p.strip().casefold() for p in pseudonyms.split(",") if p.strip()}
         if wanted:
             rows = [r for r in rows if r["pseudonym"].casefold() in wanted]
@@ -2430,6 +2437,9 @@ def get_gradebook_snapshot(course_id: str) -> dict:
     """Whole-course grading snapshot, pseudonymized: per-assignment stats
     (``title`` instead of ``name``, no ``html_url``) and per-student stats
     (``pseudonym`` instead of a name), each as a {columns, rows} table.
+    ``has_submission`` counts roster rows with a submitted_at timestamp;
+    ``has_grade`` counts graded roster rows with scores, including manual
+    grades without a submission. Their difference is not ungraded work.
     Served ONLY from the local CanvasMirror — never live Canvas; a stale or
     missing mirror is refused (call refresh_mirror first). Gated by the
     outbound safety scan before tabulation."""
@@ -2453,6 +2463,8 @@ def get_gradebook_snapshot(course_id: str) -> dict:
     for a in snapshot["assignments"]:
         row = {k: v for k, v in a.items() if k not in ("name", "html_url")}
         row["title"] = a.get("name", "")
+        row["has_submission"] = row.pop("submitted")
+        row["has_grade"] = row.pop("graded")
         assignment_rows.append(row)
 
     payload = {
@@ -2628,14 +2640,27 @@ def _newer_session_flags(summaries: list[dict]) -> dict[str, bool]:
         flags[session_id] = bool(assignment_id and any(
             str(other.get("course_id") or "") == course_id
             and str(other.get("assignment_id") or "") == assignment_id
-            and (
-                str(other.get("created") or "") > created
-                or (str(other.get("created") or "") == created and other_index < index)
-            )
+            and str(other.get("created") or "") > created
             for other_index, other in enumerate(summaries)
             if other_index != index
         ))
     return flags
+
+
+def _visible_scoring_sessions() -> list[tuple[dict, dict]]:
+    """Use the same readable, Current-course bundle population for both reads."""
+    from api.powergrader import session_store
+
+    active_course_ids = {str(c.get("id", "")) for c in config.active_courses()}
+    visible = []
+    for summary in session_store.list_session_summaries():
+        if str(summary.get("course_id") or "") not in active_course_ids:
+            continue
+        session = session_store.load_session(str(summary.get("session_id") or ""))
+        if session and _safe_bundle_path(session):
+            visible.append((summary, session))
+    visible.sort(key=lambda pair: str(pair[0].get("created") or ""), reverse=True)
+    return visible
 
 
 def _staged_marker(session: dict) -> dict:
@@ -2767,26 +2792,18 @@ def list_scoring_sessions() -> dict:
     The column name is load-bearing on the wire, so it stays; read it as the
     session's roster size and take scorable volume from the packet.
 
+    ``newer_session_exists`` compares strictly newer visible sessions for the
+    same course and assignment; equal timestamps do not establish order.
     Current courses only. Sessions whose bundle is missing
     from disk are left out rather than offered and then refused by
     get_scoring_packet. Session metadata only, so no safety gate is needed:
     nothing here is drawn from a student record. Never raises.
     """
-    from api.powergrader import session_store
-
-    active_course_ids = {str(c.get("id", "")) for c in config.active_courses()}
     rows = []
-    summaries = [summary for summary in session_store.list_session_summaries()
-                 if str(summary.get("course_id") or "") in active_course_ids]
-    summaries.sort(key=lambda summary: str(summary.get("created") or ""), reverse=True)
-    newer_flags = _newer_session_flags(summaries)
+    visible = _visible_scoring_sessions()
+    newer_flags = _newer_session_flags([summary for summary, _ in visible])
 
-    for summary in summaries:
-        # The summary carries neither bundle presence nor a scored count, so
-        # the full session is read for the Current-course candidates only.
-        session = session_store.load_session(str(summary.get("session_id") or ""))
-        if not session or not _safe_bundle_path(session):
-            continue
+    for summary, session in visible:
         students = session.get("students") or []
         marker = _staged_marker(session)
         rows.append([
@@ -2825,8 +2842,9 @@ def get_scoring_packet(scoring_session_id: str, offset: int = 0, limit: int = 10
 
     Do not read this ``total`` against list_scoring_sessions' ``total``, which
     counts students in the session instead of scorable rows. A lower number
-    here is normal (held rows, or one row per student), and 0 against a
-    populated session usually means every response is held.
+    here can reflect held responses, students excluded from the SAFE bundle,
+    or bundle students without response rows. Membership counts expose those
+    differences separately from response paging.
 
     Returns a packet with:
     - packet_digest: bundle identity, required by stage_scores
@@ -2834,6 +2852,10 @@ def get_scoring_packet(scoring_session_id: str, offset: int = 0, limit: int = 10
     - students: {columns, rows} table of (pseudonym, item_id, text)
     - total: scorable rows in the whole session
     - students_total: distinct students holding at least one scorable row
+    - session_student_count / bundle_student_count: distinct membership counts
+    - excluded_student_count: nonnegative session-minus-bundle count gap,
+      without an identity join or inferred exclusion reason
+    - students_without_responses: bundle students with no response rows
     - returned: rows in this page
     - next_offset: offset for the next page, absent on the final page
     - held: responses with no scorable text (media-only or empty)
@@ -2899,8 +2921,7 @@ def get_scoring_packet(scoring_session_id: str, offset: int = 0, limit: int = 10
     # scanner's key-based walk cannot reach it.
     result = _pseudonym_gate(packet, _vault_factory())
     if result.get("ok"):
-        summaries = [summary for summary in session_store.list_session_summaries()
-                     if str(summary.get("course_id") or "") == str(session.get("course_id") or "")]
+        summaries = [summary for summary, _ in _visible_scoring_sessions()]
         result["newer_session_exists"] = _newer_session_flags(summaries).get(
             str(session.get("session_id") or session_id), False)
         if include_context:

@@ -225,3 +225,23 @@ def _on_disk_scoring_session(tmp_path, monkeypatch):
         return session_id
 
     return build
+
+
+@pytest.fixture
+def _scoring_visibility_case(_on_disk_scoring_session, monkeypatch):
+    from api.powergrader import session_store
+
+    def build(*, course="111", assignment="700010", created="2026-01-02T08:00:00",
+              visible=True, readable=True):
+        _on_disk_scoring_session("current")
+        current = session_store.load_session("current")
+        candidate = {**current, "session_id": "candidate", "course_id": course,
+                     "assignment_id": assignment, "created": created}
+        if not visible:
+            candidate["privacy_artifacts"] = {}
+        sessions = {"current": current, "candidate": candidate if readable else None}
+        monkeypatch.setattr(session_store, "load_session", sessions.get)
+        monkeypatch.setattr(session_store, "list_session_summaries", lambda: [candidate, current])
+        return "current"
+
+    return build

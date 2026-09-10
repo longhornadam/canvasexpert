@@ -53,6 +53,22 @@ manual/run/direct-push HTTP routes are removed. The implementation modules are r
 only where they provide compatibility helpers or shared engines; they are not a
 teacher-facing alternate Canvas write path.
 
+## Rubric context
+
+`get_scoring_packet` resolves the session's selected local rubric through
+`powergrader.context.load_rubric_text`. Its `rubric.included` flag reports whether
+that text was resolved; it does not report whether Canvas has an attached rubric.
+`start_scoring_session` currently selects no rubric. Automatic ingestion of
+Canvas-native assignment or New Quiz item rubrics is not implemented. Assignment
+descriptions and item prompts still travel as scoring context; the app does not
+classify that prose as a formal rubric or invent missing criteria.
+
+The September 10 reported ordinary assignment and two New Quizzes were checked
+through read-only assignment requests: none had an attached Canvas rubric. Their
+empty rubric flags therefore do not demonstrate a dropped Canvas rubric. Adding
+rubric selection to connected session creation or automatic Canvas rubric ingestion
+is a separate feature decision, including which source takes precedence.
+
 ## Shared privacy and scoring engines
 
 These modules are shared, load-bearing engines that PowerGrader imports. They keep the

@@ -130,6 +130,14 @@ check so Canvas drift does not weaken review or write safety.
   its Phase A full-result POST was rejected without changing the authoritative result.
   The current item-finalization adapter acquires the web-session/GraphQL signed grader launch
   for each deliberate finalization, keeping all launch/session/result credentials in memory.
+- The signed adapter explicitly sets `new_quizzes_native_experience_sessionless=false`
+  on GraphQL preview URLs ending in `/external_tools/retrieve` (2026-09-10). Canvas can
+  otherwise return native `ENV.NEW_QUIZZES` HTML with no signed form. The request option
+  selects Canvas's existing signed web flow while preserving nested launch arguments;
+  unsupported forms still fail with `signed_launch_shape`. It does not substitute the
+  native read credential for a grading credential. Canvas's
+  [external tools controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/external_tools_controller.rb)
+  supports this true/false request option.
 - Live report shape (verified 2026-07-14): upload answers arrive as filename-only strings
   with no file refs — `normalize()` seeds the expected file record from the answer so the
   native transport can materialize the upload. `item_responses[].item_type` carries the
