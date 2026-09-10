@@ -541,3 +541,45 @@ def test_build_request_does_not_require_signoff_for_plain_persona():
     system = body["messages"][0]["content"]
     assert "Drafted by" not in system
     assert "persona signoff" not in system
+
+
+def test_pseudonym_quoting_rule_reaches_every_ai_facing_artifact():
+    """LAW: the don't-quote-a-pseudonym rule reaches every text the scoring AI reads.
+
+    Scrubbing is whole-word and biases to over-correction, so a student surname
+    that is also a common noun ("bell", "brown") replaces that word everywhere it
+    appears in prose. An AI told to "quote briefly from the response" will
+    otherwise quote the substituted token straight back into student-facing
+    feedback. Asserted on both artifacts, because the packet ships two: the
+    START HERE instructions and the paste-back format.
+    """
+    from api.powergrader import packet
+
+    bundle = {"contract_version": "1.0", "quiz_title": "Essay", "students": []}
+    artifacts = [
+        fp.build_contract_text("Sage"),
+        packet.paste_format_text(bundle, None),
+    ]
+
+    for text in artifacts:
+        assert "Never quote a pseudonym back in `feedback`" in text
+        assert "whole words" in text
+
+
+def test_ai_facing_packet_text_stays_pastable_plain_text():
+    """LAW: both packet artifacts stay ASCII.
+
+    The teacher pastes these into a chat assistant and reads results back on a
+    cp1252 console, the same reason the product guides are ASCII-only
+    (api/tests/mcp_server/test_tools.py). Both files were ASCII by habit rather
+    than by rule until an em-dash in a new scoring rule broke it; pinned here so
+    the next edit cannot.
+    """
+    from api.powergrader import packet
+
+    bundle = {"contract_version": "1.0", "quiz_title": "Essay", "students": []}
+    for label, text in (("START HERE", fp.build_contract_text("Sage")),
+                        ("paste-back", packet.paste_format_text(bundle, None))):
+        offenders = sorted({char for char in text if ord(char) > 127})
+        assert not offenders, (
+            f"{label} is not ASCII: {[hex(ord(c)) for c in offenders]}")

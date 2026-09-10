@@ -65,6 +65,10 @@ def scoring_output_contract(
         f"Copy pseudonym and item_id exactly from {identity_source} so results can be matched.",
         "If the bundle includes `shared_context`, use that assignment/source material when scoring every response. Do not ask for missing source material unless it is truly impossible to score without it.",
         "Quote briefly from the response to justify the score.",
+        "Never quote a pseudonym back in `feedback`. Scrubbing replaces real names "
+        "wherever they appear as whole words, so an ordinary word in a response may "
+        "have been swapped for a pseudonym: a student surname that is also a common "
+        "noun. Quote around it, or paraphrase.",
         "Do not identify students.",
         "`score` may be a number or null for comment-only feedback.",
         "`feedback` must be non-empty.",
