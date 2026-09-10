@@ -19,7 +19,7 @@ def _explode_live(*_args, **_kwargs):
 def test_live_mcp_schema_matches_versioned_contract():
     from api.mcp_server import server
 
-    assert contract.TOOL_SCHEMA_VERSION == 41
+    assert contract.TOOL_SCHEMA_VERSION == 42
     expected = contract.load_contract()
     live = contract.live_contract(server.mcp)
     assert live == expected
@@ -117,7 +117,12 @@ def test_live_mcp_schema_matches_versioned_contract():
     # assignment update pair, preview_assignment_update and
     # apply_assignment_update, so an assistant can publish/re-date an
     # existing assignment without a second create or a description touch.
+    # v42 is a rename only: a remote bridge strips any argument literally
+    # named session_id, so get_scoring_packet, stage_scores, and
+    # preview_new_quiz_scores now take scoring_session_id instead. v41
+    # remains the immutable 46-tool snapshot under the old name.
     assert len(contract.load_contract(40)["tools"]) == 44
+    assert len(contract.load_contract(41)["tools"]) == 46
     assert len(live["tools"]) == 46
     v22 = contract.load_contract(22)
     assert v22["schema_version"] == 22

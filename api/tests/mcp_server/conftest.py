@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from api.feedback_vault import Vault
@@ -154,3 +156,72 @@ def _submissions_fixture(request, _mount_mirror, _use_vault, _set_active_courses
         mirror_store.record_pass("111", "full", ok=True, root=root)
 
     return submissions_fixture
+
+
+@pytest.fixture
+def _on_disk_scoring_session(tmp_path, monkeypatch):
+    """Write a real, pre-rename-shaped PowerGrader session to disk and wire
+    the tool layer to read it.
+
+    Proves the scoring_session_id rename (docs/handoffs/scoring-session-id-rename.md)
+    is a call-boundary change only: the on-disk session file, and the SAFE
+    bundle it points to, stay keyed ``session_id`` exactly as
+    ``session_store`` writes them today (locked decision 3), so a session
+    created before the rename needs no rewrite to remain readable.
+    """
+    def build(session_id="sess-onboundary", course_id="111",
+              pseudonym_value="Pikachu", canvas_id="900001"):
+        from api.powergrader import session_store
+
+        monkeypatch.setattr(workspace, "workspace_root", lambda: str(tmp_path))
+        monkeypatch.setattr(
+            tools.config, "active_courses",
+            lambda: [{"id": course_id, "name": f"Course {course_id}"}],
+        )
+        monkeypatch.setattr(
+            tools.config, "get_persona",
+            lambda _persona_id: {"name": "Test TA", "signoff_policy": "none"},
+        )
+        monkeypatch.setattr(
+            "api.powergrader.context.load_rubric_text", lambda _rubric_name: "",
+        )
+
+        vault = Vault(str(tmp_path / "vault.json"))
+        vault.get_or_assign(canvas_id, real_name="Real Student")
+        vault.set_pseudonym(canvas_id, pseudonym_value)
+        vault.save()
+        monkeypatch.setattr(tools, "_vault_factory", lambda: vault)
+
+        bundle_path = tmp_path / "bundle.json"
+        bundle_path.write_text(json.dumps({
+            "contract_version": "1.0",
+            "quiz_title": "Test Quiz",
+            "students": [{
+                "pseudonym": pseudonym_value,
+                "responses": [{
+                    "item_id": "item-1",
+                    "prompt": "Explain your answer.",
+                    "response": "An answer to the question with enough words to be scorable.",
+                    "possible": 10,
+                }],
+            }],
+        }), encoding="utf-8")
+
+        # This dict is exactly the shape session_store persists today -- keyed
+        # session_id -- written through the real, unmocked session_store so
+        # the on-disk file is genuine, not an in-memory stand-in.
+        session_store.save_session({
+            "session_id": session_id,
+            "course_id": course_id,
+            "assignment_name": "Quiz 1",
+            "assignment_id": "700010",
+            "created": "2026-01-01T08:00:00",
+            "mode": "packet",
+            "rubric_name": "",
+            "persona_id": "test-persona",
+            "students": [{"user_id": canvas_id, "status": "pending"}],
+            "privacy_artifacts": {"safe_bundle": str(bundle_path)},
+        })
+        return session_id
+
+    return build

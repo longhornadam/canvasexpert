@@ -112,7 +112,7 @@ _MODULE_COLUMNS = ("id", "name", "position", "item_count")
 _MODULE_ITEM_COLUMNS = ("id", "type", "title", "position", "content_id")
 _PAGE_COLUMNS = ("id", "title", "body_text", "published", "front_page", "updated_at")
 _STAGED_CONTENT_COLUMNS = ("kind", "label")
-_SCORING_SESSION_COLUMNS = ("session_id", "assignment_name", "course_id", "created",
+_SCORING_SESSION_COLUMNS = ("scoring_session_id", "assignment_name", "course_id", "created",
                             "mode_label", "total", "scored", "approved",
                             "assignment_id", "newer_session_exists", "staged_at")
 _PACKET_ITEM_COLUMNS = ("item_id", "prompt", "possible")
@@ -141,7 +141,7 @@ _NEXT_STEPS = {
     # something, or the caller pages after rows that do not exist and reports
     # an empty assignment.
     "start_scoring_session": (
-        "Call get_scoring_packet with session_id to retrieve the first scoring "
+        "Call get_scoring_packet with scoring_session_id to retrieve the first scoring "
         "page. If response_count is 0 and held is not, there is no page to "
         "fetch: held rows are attachment-only, media-only, or empty and stay "
         "local by design, so name the held students and tell the teacher this "
@@ -2649,14 +2649,14 @@ def start_scoring_session(course_id: str, assignment_id: str) -> dict:
     key) and never turns on auto-post to Canvas. No file uploads, no
     oral-reading passage. Course-gated to Current courses only.
 
-    Returns on success: session_id, assignment_name, student_count,
+    Returns on success: scoring_session_id, assignment_name, student_count,
     response_count (scorable rows across all students, the same count
     get_scoring_packet totals), held (responses carrying no scorable text —
     attachment-only, media-only, or empty), held_pseudonyms (the distinct
     students behind those, omitted when the outbound scan cannot clear the
     names), and new_quiz_item_finalization_supported (whether a New Quiz
     per-item write lane exists for this assignment).
-    Pass session_id to get_scoring_packet to continue.
+    Pass scoring_session_id to get_scoring_packet to continue.
 
     A response_count of 0 against a non-zero held is an assignment whose work
     needs teacher review in PowerGrader, not an empty assignment: held work is
@@ -2721,7 +2721,7 @@ def start_scoring_session(course_id: str, assignment_id: str) -> dict:
 
     summary = {
         "ok": True,
-        "session_id": session_id,
+        "scoring_session_id": session_id,
         "assignment_name": payload.get("assignment_name", ""),
         "student_count": payload.get("student_count", 0),
         "response_count": response_count,
@@ -2750,7 +2750,7 @@ def list_scoring_sessions() -> dict:
 
     Returns {"ok": True, "sessions": {columns, rows}} where each row appends
     assignment_id, newer_session_exists, and staged_at after the established
-    (session_id, assignment_name, course_id, created, mode_label, total,
+    (scoring_session_id, assignment_name, course_id, created, mode_label, total,
     scored, approved) columns.
 
     ``total`` here counts *students* in the session (``len(students)``, straight
@@ -2802,12 +2802,12 @@ def list_scoring_sessions() -> dict:
     }
 
 
-def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
+def get_scoring_packet(scoring_session_id: str, offset: int = 0, limit: int = 10,
                        include_context: bool = True) -> dict:
     """Retrieve a page of student responses from a PowerGrader session's SAFE bundle.
 
     Parameters:
-    - session_id: PowerGrader session UUID
+    - scoring_session_id: PowerGrader session UUID
     - offset: starting row (default 0)
     - limit: rows to return (default 10)
     - include_context: if True, include contract text, rubric, shared materials
@@ -2836,7 +2836,7 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
     - estimated_tokens: projected token count for this response
 
     Course-gated on the session's course_id. Refuses when:
-    - session_id is not found
+    - scoring_session_id is not found
     - session has no SAFE bundle
     - teacher's course is not a Current course
     - the page projects over the token budget (retry with a smaller limit)
@@ -2845,6 +2845,9 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
     """
     from api.powergrader import context, session_store, scoring_packet as sp
 
+    # The MCP-visible name is scoring_session_id; below this boundary the
+    # session-store concept stays session_id (locked decision 3).
+    session_id = scoring_session_id
     session = session_store.load_session(session_id)
     if not session:
         return {"ok": False, "error": "Session not found."}
@@ -2904,11 +2907,11 @@ def get_scoring_packet(session_id: str, offset: int = 0, limit: int = 10,
     return result
 
 
-def stage_scores(session_id: str, results: list, expected_packet_digest: str) -> dict:
+def stage_scores(scoring_session_id: str, results: list, expected_packet_digest: str) -> dict:
     """Stage AI-generated scores into a PowerGrader session.
 
     Parameters:
-    - session_id: PowerGrader session UUID
+    - scoring_session_id: PowerGrader session UUID
     - results: list of scoring dicts (each with pseudonym, item_id, score, feedback)
     - expected_packet_digest: SHA-256 from a prior get_scoring_packet call
       (prevents staging stale scores if the session has been re-run)
@@ -2924,7 +2927,7 @@ def stage_scores(session_id: str, results: list, expected_packet_digest: str) ->
     is enabled (teacher pushes manually via the queue).
 
     Course-gated on the session's course_id. Refuses when:
-    - session_id is not found
+    - scoring_session_id is not found
     - teacher's course is not a Current course
     - expected_packet_digest does not match current bundle state (session re-run)
 
@@ -2934,6 +2937,10 @@ def stage_scores(session_id: str, results: list, expected_packet_digest: str) ->
     from datetime import datetime
 
     from api.powergrader import import_results, scoring_packet as sp, session_actions, session_store
+
+    # The MCP-visible name is scoring_session_id; below this boundary the
+    # session-store concept stays session_id (locked decision 3).
+    session_id = scoring_session_id
 
     # Same lock the web UI's import-results route takes, so a teacher working
     # the queue and an assistant staging over MCP cannot interleave a
@@ -3124,7 +3131,7 @@ def _new_quiz_notify_write_through(session: dict, pushed) -> None:
         operational_log.emit("mirror.notify_course_changed", "failed", error_class=type(exc))
 
 
-def preview_new_quiz_scores(session_id: str) -> dict:
+def preview_new_quiz_scores(scoring_session_id: str) -> dict:
     """Freeze a New Quiz item-finalization review for every student in this
     session who carries a staged item score (from stage_scores), stashing
     the frozen review tokens on the session under a new operation_id. Makes
@@ -3143,6 +3150,11 @@ def preview_new_quiz_scores(session_id: str) -> dict:
     Never raises.
     """
     from api.powergrader import session_actions, session_store
+
+    # The MCP-visible name is scoring_session_id; below this boundary the
+    # session-store concept, and the operation_id composite built further
+    # down, stay session_id (locked decisions 3 and 5).
+    session_id = scoring_session_id
 
     session = session_store.load_session(session_id)
     if not session:
@@ -3249,7 +3261,7 @@ def apply_new_quiz_scores(operation_id: str, review_digest: str) -> dict:
     """Apply exactly the New Quiz item scores preview_new_quiz_scores froze.
 
     Takes only the opaque operation_id/review_digest pair preview_new_quiz_scores
-    returned; there is no session_id, course_id, or student parameter, so
+    returned; there is no scoring_session_id, course_id, or student parameter, so
     nothing here can reach any session, course, or student beyond the one
     already frozen.
 

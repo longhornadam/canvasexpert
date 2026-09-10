@@ -33,7 +33,12 @@ INSTRUCTION_BUDGET = 3000
 # exists: both descriptions were already trimmed to single sentences before
 # raising this, so the remaining cost is the two tools' own name/schema
 # structure, not wordy prose.
-LISTING_BUDGET = 16979
+# Raised once for the scoring_session_id rename
+# (docs/handoffs/scoring-session-id-rename.md): a remote bridge strips any
+# argument literally named session_id, so get_scoring_packet, stage_scores,
+# and preview_new_quiz_scores now take scoring_session_id instead -- 8 extra
+# characters per parameter/required-list occurrence, across three tools.
+LISTING_BUDGET = 17027
 DESCRIPTION_BUDGET = 343
 
 RESULT_NEXT_TOOLS = {

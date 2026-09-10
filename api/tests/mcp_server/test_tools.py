@@ -2339,3 +2339,21 @@ def _game_score_workspace(monkeypatch, tmp_path):
     return path
 
 
+def test_get_scoring_packet_reads_a_pre_rename_on_disk_session(_on_disk_scoring_session):
+    """scoring_session_id (docs/handoffs/scoring-session-id-rename.md) is a
+    call-boundary rename only: a session written to disk in the shape
+    session_store has always used -- keyed session_id, never rewritten by
+    this change -- must still load and score through the new
+    scoring_session_id argument.
+    """
+    session_id = _on_disk_scoring_session()
+
+    result = tools.get_scoring_packet(scoring_session_id=session_id)
+
+    assert result["ok"] is True, result
+    assert result["packet_digest"]
+    assert result["total"] == 1
+    assert result["students_total"] == 1
+    assert result["students"]["rows"][0][0] == "Pikachu"
+
+

@@ -449,7 +449,7 @@ def test_list_scoring_sessions_counts_scored_students(monkeypatch, tmp_path):
     row = result["sessions"]["rows"][0]
 
     assert list(result["sessions"]["columns"]) == [
-        "session_id", "assignment_name", "course_id", "created",
+        "scoring_session_id", "assignment_name", "course_id", "created",
         "mode_label", "total", "scored", "approved",
         "assignment_id", "newer_session_exists", "staged_at",
     ]

@@ -38,7 +38,7 @@ while CanvasExpert keeps sole custody of the Canvas PAT and almost every write p
 
 ## Tools
 
-Tool schema version 41 (46 tools).
+Tool schema version 42 (46 tools).
 
 | Tool | Purpose | Student data? |
 |---|---|---|
@@ -84,9 +84,9 @@ Tool schema version 41 (46 tools).
 | `get_school_calendar(date_from="", date_to="")` | Canonical School Calendar readiness, or a bounded range when both dates are given | No |
 | `start_scoring_session(course_id, assignment_id)` | Start a local packet-mode session with no assisted AI, uploads, auto-post, or Canvas write; `next` routes to the first packet | No |
 | `list_scoring_sessions()` | Current-course PowerGrader sessions with SAFE bundles and no student response data | No |
-| `get_scoring_packet(session_id, offset=0, limit=10, include_context=true)` | SAFE scoring packet with an authoritative contract and untrusted response text; `next` explains row/person counts and paging | Yes, pseudonymized |
-| `stage_scores(session_id, results, expected_packet_digest)` | Stage AI scores locally with packet-digest protection; partial staging preserves other scores and never posts to Canvas | Yes, pseudonymized |
-| `preview_new_quiz_scores(session_id)` | Persist a frozen review of current staging; re-freeze after edits, and use `next` for the apply handoff | Yes, pseudonymized |
+| `get_scoring_packet(scoring_session_id, offset=0, limit=10, include_context=true)` | SAFE scoring packet with an authoritative contract and untrusted response text; `next` explains row/person counts and paging | Yes, pseudonymized |
+| `stage_scores(scoring_session_id, results, expected_packet_digest)` | Stage AI scores locally with packet-digest protection; partial staging preserves other scores and never posts to Canvas | Yes, pseudonymized |
+| `preview_new_quiz_scores(scoring_session_id)` | Persist a frozen review of current staging; re-freeze after edits, and use `next` for the apply handoff | Yes, pseudonymized |
 | `apply_new_quiz_scores(operation_id, review_digest)` | Write the frozen review—not later staging—to Canvas; invalid coordinates do not write and replay skips finalized students | Yes, pseudonymized |
 
 `get_course_assignments` and `get_modules` only read the local course catalog written by
@@ -273,7 +273,7 @@ The safety scan walks dict keys, so it cannot see into `{columns, rows}` tables.
 that returns student text therefore gates the dict-row payload first and tabulates only after
 the gate has passed it, `get_scoring_packet` included.
 
-**New Quiz item-finalization write pair (v35).** `preview_new_quiz_scores(session_id)` and
+**New Quiz item-finalization write pair (v35).** `preview_new_quiz_scores(scoring_session_id)` and
 `apply_new_quiz_scores(operation_id, review_digest)` land the item scores `stage_scores`
 staged into Canvas, for a session whose `new_quiz_item_finalization_supported` flag is true.
 The pair mirrors the SIS grade-bridge shape: preview persists a local frozen review per student carrying

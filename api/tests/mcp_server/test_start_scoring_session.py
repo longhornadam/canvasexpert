@@ -105,7 +105,7 @@ def test_start_scoring_session_creates_packet_session_end_to_end(monkeypatch, tm
 
     assert result == {
         "ok": True,
-        "session_id": "sess-1",
+        "scoring_session_id": "sess-1",
         "assignment_name": "Essay 1",
         "student_count": 2,
         # 2 students x 2 items + 1 student x 1 item = 3 scorable rows, the
@@ -180,7 +180,7 @@ def test_start_scoring_session_names_held_students_instead_of_reporting_an_empty
     result = tools.start_scoring_session("111", "700030")
 
     assert result["ok"] is True
-    assert result["session_id"] == "sess-held"
+    assert result["scoring_session_id"] == "sess-held"
     assert result["response_count"] == 0
     assert result["held"] == 3
     assert result["held_pseudonyms"] == ["Pikachu", "Eevee", "Snorlax"]
@@ -210,12 +210,12 @@ def test_start_scoring_session_keeps_the_standard_hint_when_some_work_is_scorabl
     assert result["next"] == tools._NEXT_STEPS["start_scoring_session"]
 
 
-def test_start_scoring_session_drops_held_names_rather_than_the_session_id(
+def test_start_scoring_session_drops_held_names_rather_than_the_scoring_session_id(
     monkeypatch, tmp_path, _set_active_courses,
 ):
     """The names take the outbound scan every student-data read takes. When it
-    cannot run, the session is already on disk, so losing its session_id would
-    strand it: the count survives and only the names go."""
+    cannot run, the session is already on disk, so losing its scoring_session_id
+    would strand it: the count survives and only the names go."""
     _set_active_courses(["111"])
     monkeypatch.setattr(
         "api.powergrader.start_workflow.run_start_session",
@@ -233,7 +233,7 @@ def test_start_scoring_session_drops_held_names_rather_than_the_session_id(
     result = tools.start_scoring_session("111", "700050")
 
     assert result["ok"] is True
-    assert result["session_id"] == "sess-novault"
+    assert result["scoring_session_id"] == "sess-novault"
     assert result["held"] == 2
     assert "held_pseudonyms" not in result
 
