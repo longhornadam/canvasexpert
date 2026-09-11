@@ -83,8 +83,8 @@ def test_staar_bands_use_highest_matching_band_and_quartiles_are_deterministic()
 
 def test_staar_bands_reject_a_snapshot_with_no_band_columns():
     """A breakdown export with no TX band columns places everyone in Support.
-    Say that the method is wrong for this snapshot rather than reporting three
-    empty tiers, which describes the symptom and not the cause."""
+    Say that the method is wrong for this snapshot rather than accepting that
+    result, which would describe the symptom and not the cause."""
     no_bands = {
         **SNAPSHOT,
         "students": [
@@ -120,6 +120,20 @@ def test_staar_bands_still_work_when_only_some_students_have_bands():
         "canvas-1": "Support", "canvas-2": "Core", "canvas-3": "Accelerate",
         "canvas-4": "Extend", "canvas-5": "Support",
     }
+
+
+def test_grouping_keeps_empty_tiers_and_digest_for_all_support_distribution():
+    low_snapshot = {
+        **SNAPSHOT,
+        "students": [{**student, "pct": 10} for student in SNAPSHOT["students"]],
+    }
+    proposal = build_grouping_proposal(
+        low_snapshot, COVERAGE, ROSTER, GROUP_SET, no_data_group="Support",
+    )
+
+    assert [tier["student_count"] for tier in proposal["tiers"]] == [5, 0, 0, 0]
+    assert {row["canvas_id"] for row in proposal["placements"]} == {row["id"] for row in ROSTER}
+    assert proposal["proposal_digest"]
 
 
 @pytest.mark.parametrize(

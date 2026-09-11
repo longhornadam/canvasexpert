@@ -765,6 +765,20 @@ def test_safe_projection_timestamps_are_central(tmp_path, _timeline_docx):
     "Probably copied from another source.",
     "This should be investigated as an honor code violation.",
     "Written by an AI, not the student.",
+    "These timestamps do not establish cheating. The student probably used AI.",
+    "These timestamps do not establish cheating; the student probably used AI.",
+    "These timestamps do not establish cheating\nbut the student probably used AI.",
+    "This does not rule out cheating",
+    "This is not proof, but the student probably used AI.",
+    "The student used ChatGPT to write this.",
+    "Disciplinary action is warranted.",
+    "These timestamps do not establish cheating, but the student probably used AI.",
+    "These timestamps cannot rule out cheating.",
+    "These timestamps do not establish cheating;the student used ChatGPT.",
+    "There is no evidence of plagiarism, however the student probably copied this.",
+    "These timestamps do not establish cheating and the student used ChatGPT.",
+    "The response was written by ChatGPT.",
+    "The student used AI to write this.",
 ])
 def test_integrity_conclusions_never_reach_the_teacher(observation):
     assert (
@@ -779,6 +793,17 @@ def test_integrity_conclusions_never_reach_the_teacher(observation):
     "Editing time is 42 minutes across 7 revisions.",
     "The document has no revision trail at all.",
     "Most insertions are short and evenly spaced.",
+    "These timestamps do not establish cheating.",
+    "The timeline cannot determine whether AI was used.",
+    "There is no evidence of plagiarism in these timestamps.",
+    "The student made discipline-specific vocabulary revisions.",
+    "The timeline mentions ChatGPT as a file author; these timestamps do not establish cheating.",
+    "There are three revisions; the timeline cannot determine whether AI was used.",
+    "There are three revisions. These timestamps do not establish cheating.",
+    "These timestamps cannot prove plagiarism.",
+    "The revision trail does not establish cheating.",
+    "The timeline does not justify a penalty.",
+    "The revision history alone cannot establish authorship.",
 ])
 def test_process_descriptions_survive_the_guard(observation):
     assert writing_timeline.sanitize_process_observation(observation) == observation

@@ -148,13 +148,15 @@ Rules enforced by `validate_results`:
   teacher UI only; it is not concatenated into `feedback`.
 - The "never an integrity conclusion" rule above is **enforced in code, not only in
   the prompt**. `reidentify` passes the string through
-  `writing_timeline.sanitize_process_observation`, which replaces any observation
+  `writing_timeline.sanitize_process_observation`, which replaces an observation
   reading as an integrity verdict, hedged authorship claim, or penalty/escalation
-  recommendation with a fixed withheld notice. `validate_results` still only
+  recommendation with a fixed withheld notice. Explicit evidence-limit statements
+  can remain when they are the complete observation; a disclaimer cannot shelter a
+  separate accusation. `validate_results` still only
   type-checks the field, so a well-formed accusation passes validation and is
   caught at re-identification — the single funnel where model output becomes a
-  teacher-facing row. The guard fails closed: a false positive costs one
-  observation, a false negative puts an accusation in front of a teacher.
+  teacher-facing row. The guard remains conservative around accusations while
+  preserving neutral process observations and bounded evidence-limit statements.
 - When a packet or Copilot batch contains `oral_reading`, its reply is one
   top-level envelope with `packet_digest` and `results`. `packet_digest` is import
   metadata, not a result-object field: PowerGrader rejects an absent or mismatched

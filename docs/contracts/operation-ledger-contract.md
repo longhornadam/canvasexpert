@@ -39,6 +39,10 @@ source digest, review digest, status, timestamps, and ordered targets. Each targ
 - returned Canvas object/correlation ID when known;
 - redacted error code plus PRIVATE diagnostic.
 
+Quiz item rejections may also carry a bounded `failed_items` projection with each
+source item’s id (when present), source type, 1-based plan index, stable field hint,
+and parsed Canvas status. It contains no request payload or private diagnostic.
+
 Idempotency is target-level. Operation-level keys do not prove that a partially applied
 multi-target operation is safe to repeat.
 

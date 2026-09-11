@@ -630,6 +630,57 @@ def test_quiz_create_failure_stops_variant(monkeypatch):
     assert len(calls) == 1  # only create_quiz:0 attempted
 
 
+def test_item_rejection_identifies_source_item_in_differentiated_push(monkeypatch):
+    _mock_active_courses(monkeypatch)
+    _mock_get_extra_time(monkeypatch)
+    adapter = QuizAdapter()
+    resolved = {
+        "safe": {"tiers": [
+            {"index": 0, "label": "variant_0", "group_name": "Blue", "group_id": "10",
+             "student_count": 2, "membership_digest": "d1"},
+            {"index": 1, "label": "variant_1", "group_name": "Gold", "group_id": "20",
+             "student_count": 1, "membership_digest": "d2"},
+        ]},
+        "student_ids_by_group": {"10": ["9001", "9002"], "20": ["9003"]},
+    }
+    monkeypatch.setattr(quiz_adapter_module, "resolve_assignment_groups", lambda *a, **k: resolved)
+
+    calls = []
+    def send(method, path, body, timeout=30):
+        calls.append(path)
+        if len(calls) == 4:  # item 1 of variant 0
+            return None, "HTTP 422: invalid accept shape"
+        if "quizzes" in path and "items" not in path and "modules" not in path:
+            return {"id": 100}, None
+        if isinstance(body, dict) and body.get("assignment", {}).get("only_visible_to_overrides"):
+            return {"id": 101}, None
+        if "overrides" in path:
+            return {"id": 102}, None
+        return {"id": 103}, None
+    monkeypatch.setattr(canvas_client, "_canvas_send", send)
+
+    payload = {
+        "mode": "differentiated",
+        "variants": _make_variants(VARIANT_PLAN_A, VARIANT_PLAN_B),
+    }
+    baseline = {"group_snapshot": resolved["safe"]}
+    result = adapter.execute(
+        payload, {"course_id": "101", "steps": []},
+        baseline, {}, Context(),
+    )
+
+    assert result["state"] == "partial"
+    assert result["failed_items"] == [{
+        "item_index": 1,
+        "field": "item",
+        "id": "q1",
+        "source_type": "MC",
+        "canvas_status": 422,
+        "reason": "Canvas rejected this quiz item.",
+    }]
+    assert "9001" not in json.dumps(result)
+
+
 def test_second_variant_failure_is_partial(monkeypatch):
     _mock_active_courses(monkeypatch)
     _mock_get_extra_time(monkeypatch)

@@ -624,6 +624,8 @@ def _result_projection(operation: dict, result: dict) -> dict:
             row["url"] = target["returned_object_url"]
         if target.get("error_code"):
             row["error_code"] = target["error_code"]
+        if target.get("failed_items"):
+            row["failed_items"] = target["failed_items"]
         stored_target = (operation.get("targets") or [])[target_index] if target_index < len(operation.get("targets") or []) else {}
         step_source = target.get("steps") or (stored_target.get("steps") if differentiated else [])
         steps = [

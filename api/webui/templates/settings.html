@@ -325,16 +325,14 @@
 <section class="ce-panel ce-settings-panel" id="tier-tags-card">
   <h2>Differentiation tags</h2>
   <p class="ce-hint">
-    Optional. Canvas Expert's tiers — <strong>Support, Core, Accelerate, Extend</strong> —
-    stay private. The tag you set here is the only label a <em>student</em> sees on that
-    tier's assignment, so keep it neutral (a color, a form letter). Leave a tag blank for a
-    completely untagged assignment name. Tags double as version labels for anti-cheating and
-    A/B testing — students can't tell a tier from a random form.
+    Optional labels saved for <strong>Support, Core, Accelerate, and Extend</strong>. You
+    decide whether students see readiness names or other labels. Assignment and quiz titles
+    come from the authored files; saving a tag here does not rename them.
   </p>
   <form id="tier-tags-form">
     <div class="settings-grid ce-settings-tier-grid">
       {% for name in ["Support", "Core", "Accelerate", "Extend"] %}
-      <label>{{ name }} tag <small class="lbl-hint">(student-visible; blank = none)</small>
+      <label>{{ name }} tag <small class="lbl-hint">(optional)</small>
         <input type="text" class="tier-tag-input" data-tier="{{ name }}"
                value="{{ tier_tags[name] }}" placeholder="e.g. {{ {'Support':'Red','Core':'Blue','Accelerate':'Silver','Extend':'White'}[name] }}"
                autocomplete="off">

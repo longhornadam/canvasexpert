@@ -2,10 +2,63 @@
 
 from __future__ import annotations
 
+import re
+
 from .. import models
 from .adapter_support import build_result, ensure_step, is_uncertain, replace_step
 from .module_placement import attach_assignment_type_module_item
 from api.platform_services import canvas_client, config
+
+
+_ITEM_FIELDS = (
+    "answer_mode", "accept", "options", "choices", "matches",
+    "categories", "distractors",
+)
+
+
+def _failed_item_details(
+    *,
+    item_payload: dict,
+    source_item_id: object,
+    source_type: object,
+    plan_index: object,
+    error: object,
+) -> dict:
+    """Build a small, PII-free explanation for a definitive item rejection."""
+    def bounded(value: object) -> str:
+        return " ".join(str(value).split())[:120]
+
+    try:
+        item_index = int(plan_index)
+    except (TypeError, ValueError):
+        item_index = 0
+    if item_index < 1:
+        item_index = 1
+
+    item = item_payload.get("item") if isinstance(item_payload, dict) else {}
+    item = item if isinstance(item, dict) else {}
+    error_text = str(error or "").lower()
+    present = [name for name in _ITEM_FIELDS if name in item]
+    field = next(
+        (name for name in _ITEM_FIELDS if name in item and name in error_text),
+        None,
+    )
+    if field is None:
+        field = present[0] if len(present) == 1 else "item"
+
+    details = {"item_index": item_index, "field": field}
+    if source_item_id is not None and bounded(source_item_id):
+        details["id"] = bounded(source_item_id)
+    if source_type is not None and bounded(source_type):
+        details["source_type"] = bounded(source_type)
+    status = re.search(r"\bHTTP\s+(\d{3})\b", str(error or ""), re.IGNORECASE)
+    if status:
+        details["canvas_status"] = int(status.group(1))
+    details["reason"] = (
+        f"Canvas rejected the {field} field for this quiz item."
+        if field != "item" else "Canvas rejected this quiz item."
+    )
+    return details
 
 
 def build_assignment_patch(assignment_settings: dict) -> dict:
@@ -251,6 +304,9 @@ def ensure_item(
     quiz_url: str | None,
     step_key: str,
     item_payload: dict,
+    source_item_id: object = None,
+    source_type: object = None,
+    plan_index: object = None,
     steps: list[dict],
     context,
     failure_state: str,
@@ -306,6 +362,13 @@ def ensure_item(
             returned_object_url=quiz_url,
             error_code=item_step["error_code"],
             private_diagnostic=error,
+            failed_items=[_failed_item_details(
+                item_payload=item_payload,
+                source_item_id=source_item_id,
+                source_type=source_type,
+                plan_index=plan_index,
+                error=error,
+            )] if state != "sent_unknown" else None,
         )
     item_id = str(response.get("id")) if isinstance(response, dict) and response.get("id") is not None else None
     if not item_id:

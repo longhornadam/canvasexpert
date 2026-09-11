@@ -29,7 +29,7 @@ withheld with a structured error that does not echo a private path or value.
 Grouping is a local preview over current mirrored roster/group documents and
 offline history. It requires exact roster coverage, always includes the explicit
 No Data group, and produces Support, Core, Accelerate, and Extend with the
-locked score/mastery rules. The teacher reviews the proposal before invoking the
+locked score/mastery rules; any of the four tiers may have count 0. The teacher reviews the proposal before invoking the
 existing digest-protected roster bulk apply transport. DataForge adds no Canvas
 transport and never posts automatically.
 

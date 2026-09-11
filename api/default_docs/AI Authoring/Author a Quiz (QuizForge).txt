@@ -200,10 +200,9 @@ challenge**. What flexes is **language register (grammar + vocabulary), extraneo
 load, structure, scaffolds, and rigor of coverage** — never the learning objective and never
 a watered-down standard. **Support is access to the same work, not a smaller version of it.**
 
-**Keep the tier out of the title.** When authoring a set of tier quizzes, give every tier
-file the **same clean `title`** (the readiness tier is set by which Canvas group the variant
-is assigned to, not by the name). Never put "Support/Core/Accelerate/Extend" in a quiz
-`title` — students must not see their tier.
+**Title wording is the teacher's choice.** When authoring tier quizzes, the teacher may
+use a shared title or include a tier/form label. The readiness tier is still set by the
+Canvas group assignment, and the contract does not conceal or automatically rewrite titles.
 
 **The four tiers (lowest → highest readiness)** — Canvas Expert's fixed product standard:
 - **Support** *(below grade level)* — the **same Bloom target and standard as Core**, reached by removing barriers: high-frequency vocabulary, define complex terms, active voice, shorter sentences; reduce extraneous load with Word Banks or Dropdowns for FITB, chunking, sentence starters for essays, text descriptions for visuals. Addresses **language or motivation** barriers, **never** ability — do not lower the cognitive bar or condescend.

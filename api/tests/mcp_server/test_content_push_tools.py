@@ -425,6 +425,35 @@ def test_apply_surfaces_the_unfinished_step_when_a_push_needs_attention(monkeypa
     }]
 
 
+def test_apply_surfaces_failed_quiz_item_metadata(monkeypatch):
+    monkeypatch.setattr(content_push.operations, "get_operation", lambda _id: {
+        "operation_id": "op-1", "kind": "content.quiz",
+    })
+    monkeypatch.setattr(content_push.executor, "apply_operation", lambda *_a: {
+        "ok": False,
+        "operation_id": "op-1",
+        "status": "failed",
+        "target_results": [{
+            "target_key": "target-key",
+            "state": "failed",
+            "error_code": "item_rejected",
+            "failed_items": [{
+                "id": "q09_weak_argument",
+                "source_type": "MC",
+                "item_index": 9,
+                "field": "choices",
+                "canvas_status": 422,
+                "reason": "Canvas rejected the choices field for this quiz item.",
+            }],
+        }],
+    })
+
+    result = content_push.apply_content_push("op-1", "batch-1", "digest-1")
+
+    assert result["targets"][0]["failed_items"][0]["id"] == "q09_weak_argument"
+    assert result["targets"][0]["failed_items"][0]["item_index"] == 9
+
+
 def test_a_drift_refusal_from_the_executor_is_reported_not_raised(monkeypatch):
     monkeypatch.setattr(content_push.operations, "get_operation", lambda _id: {
         "operation_id": "op-1", "kind": "content.page",

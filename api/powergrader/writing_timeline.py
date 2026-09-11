@@ -620,8 +620,8 @@ _INTEGRITY_CONCLUSION_PATTERNS = tuple(
         r"\b(honor|honour) code\b",
         # Attribution to a generator or to another person.
         r"\bai.?(generated|written|authored)\b",
-        r"\b(generated|written|authored) by (an? )?(ai|llm|bot|chatbot|machine)\b",
-        r"\b(chatgpt|copilot|gemini|llm|chatbot)\b",
+        r"\b(generated|written|authored) by (an? )?(ai|llm|bot|chatbot|machine|chatgpt|copilot|gemini)\b",
+        r"\b(?:used|asked|copied from|generated with)\s+(?:chatgpt|copilot|gemini|ai|llm|chatbot|an? ai|an? llm|a chatbot)\b",
         r"\bsomeone else (wrote|authored|typed|did)\b",
         r"\bnot (the )?(real |actual )?author\b",
         r"\bdid ?n[o']?t (write|author)\b",
@@ -631,7 +631,7 @@ _INTEGRITY_CONCLUSION_PATTERNS = tuple(
         r"copied|outside help|another person|used ai)\b",
         # Penalty or escalation recommendations.
         r"\bpenal\w*\b",
-        r"\bdiscipl\w*\b",
+        r"\bdisciplin\w*\s+action\b",
         r"\b(give|assign|award)\w* (them |the student )?a? ?zero\b",
         r"\bscore of zero\b",
         r"\b(report|refer|escalate) (this |them |the student )?to\b",
@@ -639,19 +639,49 @@ _INTEGRITY_CONCLUSION_PATTERNS = tuple(
     )
 )
 
+# These are bounded evidence-limit clauses, rather than integrity conclusions.
+# Their subject, negative predicate, and complement are deliberately finite so
+# arbitrary accusations cannot be absorbed by a disclaimer.
+_EVIDENCE_LIMITATION_CLAUSE = re.compile(
+    r"^(?:(?:(?:the|these|this)\s+)?(?:timestamps?|timeline|revision\s+trail|"
+    r"history|revision\s+history|records?|metadata|evidence)(?:\s+alone)?\s+"
+    r"(?:do not|does not|cannot|can't|doesn't)\s+"
+    r"(?:establish|prove|show|demonstrate|confirm|indicate|determine|justify|support)\s+"
+    r"(?:cheating|plagiarism|authorship|academic\s+dishonesty|AI\s+use|whether\s+AI\s+was\s+used|"
+    r"a\s+penalty|disciplinary\s+action)(?:\s+(?:from|in)\s+(?:(?:the|these|this)\s+)?"
+    r"(?:timestamps?|records?|history|metadata|evidence))?"
+    r"|there\s+(?:is|are)\s+no\s+evidence\s+of\s+"
+    r"(?:cheating|plagiarism|authorship|academic\s+dishonesty|AI\s+use|whether\s+AI\s+was\s+used|"
+    r"a\s+penalty|disciplinary\s+action)(?:\s+(?:from|in)\s+(?:(?:the|these|this)\s+)?"
+    r"(?:timestamps?|records?|history|metadata|evidence))?)$",
+    re.IGNORECASE,
+)
+
+
+def _observation_clauses(text: str) -> list[str]:
+    """Return bounded clauses without changing the original observation."""
+    return [part.strip(" \t\r\n,;.?!") for part in re.split(
+        r"[.!?;\r\n]+|\s+(?:but|however|yet|nevertheless|although|and)\s+",
+        text,
+        flags=re.IGNORECASE,
+    ) if part.strip(" \t\r\n,;.?!")]
+
 
 def sanitize_process_observation(value) -> str:
     """Blank a teacher-only observation that reads as an integrity conclusion.
 
-    The scoring contract forbids these in prose, but a prompt rule is not an
-    enforcement boundary.  This fails closed on purpose: a false positive costs
-    one observation, while a false negative puts an accusation about a real
-    student in front of a teacher.
+    The scoring contract forbids unsupported integrity conclusions in prose, but
+    a prompt rule is not an enforcement boundary. Explicit evidence-limit
+    clauses are retained only when they match the bounded grammar; accusations
+    elsewhere still fail closed.
     """
     text = str(value or "").strip()
     if not text:
         return ""
-    for pattern in _INTEGRITY_CONCLUSION_PATTERNS:
-        if pattern.search(text):
-            return OBSERVATION_WITHHELD_NOTICE
+    for clause in _observation_clauses(text):
+        if _EVIDENCE_LIMITATION_CLAUSE.fullmatch(clause):
+            continue
+        for pattern in _INTEGRITY_CONCLUSION_PATTERNS:
+            if pattern.search(clause):
+                return OBSERVATION_WITHHELD_NOTICE
     return text

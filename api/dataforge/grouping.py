@@ -88,9 +88,8 @@ def _has_band_data(student: dict) -> bool:
     """Whether a snapshot row carries any STAAR band column at all.
 
     Absent bands and failed bands both read as "not met", so without this check
-    a snapshot that has no band columns places every student in Support and then
-    fails the empty-tier guard, which reports a distribution problem for what is
-    really a wrong-method choice.
+    a snapshot that has no band columns would place every student in Support,
+    which is a wrong-method choice.
     """
     return any(_text(student.get(key)) for key in BAND_KEYS)
 
@@ -252,12 +251,6 @@ def build_grouping_proposal(
     by_group = defaultdict(list)
     for placement in placements:
         by_group[placement["group"]].append(placement["canvas_id"])
-    empty = [name for name in GROUP_NAMES if not by_group[name]]
-    if empty:
-        raise GroupingValidationError(
-            "The proposal would leave these required tiers empty: " + ", ".join(empty) + "."
-        )
-
     tiers = [
         {
             "name": name,

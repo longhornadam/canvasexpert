@@ -8,7 +8,7 @@ validates with `py validate_qf.py` (run from the project root).
 
 | File | Group | Variant | Purpose |
 |---|---|---|---|
-| `cs_loops_checkpoint_support.txt` | `cs_loops_checkpoint` | Support | Differentiation set: **same standard, the 4 product tiers** Support/Core/Accelerate/Extend. Note all four share one clean `title` — the readiness tier lives in `metadata.variant_label`, never the student-visible name. |
+| `cs_loops_checkpoint_support.txt` | `cs_loops_checkpoint` | Support | Differentiation set: **same standard, the 4 product tiers** Support/Core/Accelerate/Extend. Titles and visible labels are teacher-chosen; the readiness tier also lives in `metadata.variant_label`. |
 | `cs_loops_checkpoint_core.txt` | `cs_loops_checkpoint` | Core | Support scaffolds the *same* trace as Core (word-bank FITB, defined terms, sentence-starter essay) — it does not lower the standard. |
 | `cs_loops_checkpoint_accelerate.txt` | `cs_loops_checkpoint` | Accelerate | Accelerate raises rigor on the same standard (start/step ranges, required reasoning). |
 | `cs_loops_checkpoint_extend.txt` | `cs_loops_checkpoint` | Extend | Extend pushes furthest (accumulator trace, categorization, justify-with-evidence). |

@@ -283,6 +283,7 @@ def _execute_target(adapter, operation: dict, payload: dict, target: dict) -> di
             "returned_object_url": result.get("returned_object_url"),
             "error_code": result.get("error_code"),
             "private_diagnostic": result.get("private_diagnostic"),
+            "failed_items": result.get("failed_items"),
         }
     finally:
         claims.release_claim(claim["claim_id"])
@@ -341,6 +342,7 @@ def _update_target_result(operation_id: str, target_key: str, result: dict,
             target["returned_object_url"] = result["returned_object_url"]
         target["error_code"] = result.get("error_code")
         target["private_diagnostic"] = result.get("private_diagnostic")
+        target["failed_items"] = copy.deepcopy(result.get("failed_items"))
         if result.get("steps"):
             target["steps"] = copy.deepcopy(result["steps"])
         target["updated_at"] = models.now_iso()
@@ -355,6 +357,7 @@ def _receipt_targets(targets: list[dict]) -> list[dict]:
         "returned_object_id": t.get("returned_object_id"),
         "returned_object_url": t.get("returned_object_url"),
         "error_code": t.get("error_code"),
+        "failed_items": copy.deepcopy(t.get("failed_items")),
         "steps": _safe_steps(t.get("steps", [])),
     } for t in targets]
 
@@ -375,6 +378,7 @@ def _project_target_results(results: list[dict]) -> list[dict]:
         "returned_object_id": r.get("returned_object_id"),
         "returned_object_url": r.get("returned_object_url"),
         "error_code": r.get("error_code"),
+        "failed_items": copy.deepcopy(r.get("failed_items")),
         "steps": _safe_steps(r.get("steps", [])),
     } for r in results]
 

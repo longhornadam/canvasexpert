@@ -89,12 +89,10 @@ these names; the pusher matches each `group` to the same-named Canvas group per 
 ```
 
 - Each tier becomes a **separate Canvas assignment** assigned only to that tier's students (via an assignment override on the named Canvas group). Tier assignments are visible **only** to their assigned students.
-- `label` (required): one of the four standard names; appended to the title (`"Title — Support"`).
-  **`label` is the private readiness identity, never shown to students.** It selects the
-  Canvas group and is the internal tier name (Support/Core/Accelerate/Extend). The
-  student-visible assignment name is the clean base `title`; if the teacher has set a
-  display tag for that tier in Settings, only that neutral tag is appended. Do **not** put
-  the readiness word in `title`.
+- `label` (required): one of the four standard names. It selects the Canvas group and is
+  the internal tier name (Support/Core/Accelerate/Extend). Assignment titles and any
+  student-visible labels are the teacher's choice; the contract does not conceal or
+  automatically rewrite them.
 - `group` (required): the Canvas **group name**, matched by name per course. Courses should have groups named exactly **Support / Core / Accelerate / Extend**.
 - `scaffolding` (optional, HTML): appended to the base `description` in a visually distinct panel — word banks, sentence starters, chunked steps, worked examples (Support); extension/justification prompts (Accelerate/Extend).
 - `description` (optional, HTML): **full replacement** of the base description for this tier, when appending scaffolding isn't enough. If both are present, `description` wins and `scaffolding` is appended to it.

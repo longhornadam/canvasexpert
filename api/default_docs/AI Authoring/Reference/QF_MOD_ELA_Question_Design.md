@@ -347,17 +347,23 @@ D) Patience can sometimes reduce productivity in fast-paced environments [Plausi
 
 ### 5.1 Three Tiers of Cognitive Demand
 
-**Tier 1: Recall/Recognition (20-30% of quiz)**
+For grade 7 ELAR, choose the mix for the teacher's purpose while preserving meaningful
+opportunities for inference and text evidence, analysis of theme, craft, or structure,
+vocabulary in context, and revision/editing when those are the intended targets. A quiz
+may emphasize one demand or combine several; there is no required percentage by tier.
+For the grade 7 ELAR skill focus, see the [TEA grade 7 ELAR breakout](https://tea.texas.gov/sites/default/files/P2019_Breakout_ELAR%20Grade%207_Revised%201-18-18.pdf).
+
+**Tier 1: Recall/Recognition**
 - What is, Who, When, Where, Define, Identify
 - Single fact retrieval or term recognition
 - Example: "What season is mentioned in paragraph 2?"
 
-**Tier 2: Application/Analysis (40-60% of quiz)**
+**Tier 2: Application/Analysis**
 - Why, How, What is the effect of, What does this reveal, Infer, Explain
 - Requires reasoning, cause-effect analysis, inference
 - Example: "Why does the author describe origami sessions in detail?"
 
-**Tier 3: Synthesis/Evaluation (20-30% of quiz)**
+**Tier 3: Synthesis/Evaluation**
 - Evaluate, Justify, Compare across texts, Defend, Which evidence best supports
 - Requires evaluation, cross-textual comparison, claim justification
 - Example: "Which evidence best supports that the grandmother's teachings are universal?"
@@ -384,18 +390,18 @@ The author uses dialogue in paragraph 5 primarily to—
 
 ## PART 6: ACCESSIBILITY & LANGUAGE CLARITY
 
-### 6.1 Sentence Structure Limits
+### 6.1 Sentence Structure and Access
 
-- Keep question stems ≤ 25 words
-- Use active voice wherever possible
-- Limit to 2 subordinate clauses maximum
-- Break complex questions into multiple simpler questions
+- Use clear, grade-appropriate wording and break up complexity when it helps students
+  understand the task. There is no fixed word or clause limit; the teacher's purpose and
+  the text determine the necessary complexity.
 
 ### 6.2 Vocabulary Considerations
 
-- Define discipline-specific terms on first use
-- Avoid idioms without context
-- Avoid culturally specific references without explanation
+- Explain unfamiliar terms when needed for access, without defining away a vocabulary or
+  craft feature that is itself the target of the question
+- Contextualize idioms or cultural references when the background is incidental to the
+  assessed skill. Preserve and assess them when they are part of the text or target skill.
 - If assessing vocabulary, provide sentence context
 
 **Example - Context provided:**
@@ -410,12 +416,9 @@ D) reminded of earlier times
 
 ### 6.3 Negative Questions (Use Sparingly)
 
-**Avoid questions with "NOT" or "EXCEPT" unless absolutely necessary.**
-
-If you must use negative phrasing:
-- Capitalize NOT or EXCEPT
-- Limit to 1 per quiz maximum
-- Justify in your working notes why positive phrasing wouldn't work
+Use positive wording when it makes the task clearer, but use NOT or EXCEPT when the
+teacher's purpose or the text calls for it. Make the negative term conspicuous and ensure
+the wording is unambiguous; there is no fixed per-quiz cap or working-note requirement.
 
 ---
 
@@ -453,8 +456,8 @@ QUESTION [N] PRE-GENERATION PLAN
 Target length-category: [shortest / medium / longest]
 Justification: [Running tally shows ___; need ___ to balance]
 
-Cognitive tier: [1 / 2 / 3]
-Assessment focus: [What understanding does this test?]
+Cognitive demand: [recall / application / analysis / synthesis / evaluation, as appropriate]
+Assessment focus: [What understanding does this test, and why does this item mix fit the teacher's purpose?]
 
 Misconception Map:
   A: [Misconception type and student reasoning]
@@ -521,13 +524,12 @@ Before submitting your completed quiz, verify:
 - [ ] All distractors are meaningfully different from each other
 - [ ] All 3+ word answers share grammatical structure
 - [ ] Character lengths within ±10-12% (except single-word answers)
-- [ ] Question stem is clear, precise, ≤25 words
-- [ ] Cognitive tier matches intended purpose
+- [ ] Question stem is clear, precise, and grade-appropriate
+- [ ] Cognitive demand matches the teacher's intended purpose
 
 ### Quiz-Level Checks (Full Assessment)
 - [ ] Length distribution: 20-30% longest, 20-30% shortest, 40-60% medium
-- [ ] Tier distribution: Appropriate for quiz purpose (formative/summative)
-- [ ] No more than 1 negative question (NOT/EXCEPT)
+- [ ] Item mix and cognitive demand fit the teacher's assessment purpose
 - [ ] All questions self-contained OR stimulus explicitly provided
 - [ ] No cultural bias or inaccessible language without context
 

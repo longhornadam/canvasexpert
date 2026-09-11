@@ -91,8 +91,9 @@ def build_result(
     returned_object_url: str | None = None,
     error_code: str | None = None,
     private_diagnostic: str | None = None,
+    failed_items: list[dict] | None = None,
 ) -> dict:
-    return {
+    result = {
         "state": state,
         "returned_object_id": returned_object_id,
         "returned_object_url": returned_object_url,
@@ -100,3 +101,6 @@ def build_result(
         "private_diagnostic": private_diagnostic,
         "steps": steps,
     }
+    if failed_items is not None:
+        result["failed_items"] = failed_items
+    return result

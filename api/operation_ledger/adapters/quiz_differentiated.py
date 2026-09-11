@@ -96,13 +96,16 @@ def execute(
             if result is not None:
                 return result
 
-        for item in plan.get("items", []):
+        for ordinal, item in enumerate(plan.get("items", []), start=1):
             result = quiz_steps.ensure_item(
                 course_id=course_id,
                 quiz_id=quiz_id,
                 quiz_url=quiz_url,
                 step_key=f"create_item:{index}:{item.get('index', 0)}",
                 item_payload=item.get("payload", {}),
+                source_item_id=item.get("source_item_id", item.get("id")),
+                source_type=item.get("source_type", item.get("type")),
+                plan_index=item.get("index", ordinal),
                 steps=steps,
                 context=context,
                 failure_state=_variant_failure_state(steps),

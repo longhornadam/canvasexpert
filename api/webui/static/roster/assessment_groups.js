@@ -191,7 +191,12 @@
           return;
         }
         setStatus("Applying reviewed placement...", false);
-        applyTier(tiers, 0, []);
+        // The preview keeps empty tiers so its shape and digest stay stable, but
+        // the bulk endpoint quite properly refuses an empty write.
+        var applyTiers = tiers.filter(function (tier) {
+          return Array.isArray(tier.student_ids) && tier.student_ids.length > 0;
+        });
+        applyTier(applyTiers, 0, []);
       })
       .catch(function (error) {
         setStatus("The preview could not be re-checked, so nothing was written: " + error.message, true);

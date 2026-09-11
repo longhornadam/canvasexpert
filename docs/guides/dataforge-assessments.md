@@ -10,7 +10,8 @@ proposal.
    Vault never travels with it.
 3. Open **Students** and preview the proposal. The preview must cover the current
    roster exactly, include **No Data**, and produce **Support**, **Core**,
-   **Accelerate**, and **Extend**.
+   **Accelerate**, and **Extend**; tiers with no students remain in the preview with
+   count 0 so the four-tier shape is stable.
 4. Review the counts and membership, then use the existing bulk group-apply
    action. CanvasExpert does not apply groups automatically.
 

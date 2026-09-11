@@ -137,6 +137,7 @@ def new_target(*, target_key: str, idempotency_key: str, course_id: str,
         "steps": steps or [],
         "error_code": None,
         "private_diagnostic": None,
+        "failed_items": None,
         "updated_at": ts,
     }
 

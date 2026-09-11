@@ -647,6 +647,14 @@ def test_apply_item_create_failure(tmp_path, monkeypatch):
     result = executor.apply_operation(op_id, batch["batch_id"], batch["review_digest"])
     assert result["ok"] is False
     assert result["target_results"][0]["state"] == "failed"
+    assert result["target_results"][0]["failed_items"] == [{
+        "item_index": 1,
+        "field": "item",
+        "id": "q1",
+        "source_type": "MC",
+        "canvas_status": 500,
+        "reason": "Canvas rejected this quiz item.",
+    }]
 
 
 def test_apply_quiz_create_sent_unknown(tmp_path, monkeypatch):
