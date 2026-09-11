@@ -174,3 +174,15 @@ def test_fitb_multi_blank_builds_one_open_entry_per_blank():
     assert len(built["scoring_data"]["value"]) == 2
     assert all(row["scoring_algorithm"] == "TextCloseEnough"
                for row in built["scoring_data"]["value"])
+
+
+def test_fitb_multi_blank_rejects_more_than_three_blanks():
+    item = {
+        "id": "fitb3",
+        "type": "FITB",
+        "prompt": "[blank1] [blank2] [blank3] [blank4]",
+        "accept": [["a"], ["b"], ["c"], ["d"]],
+    }
+    import pytest
+    with pytest.raises(ValueError, match="at most 3 blanks"):
+        t_fitb(item, 1)

@@ -81,6 +81,11 @@ def prepare_items(data):
         if it["type"] in ("STIMULUS", "STIMULUS_END"):
             continue
         it = dict(it)
+        if it.get("type") == "FITB":
+            tokens = re.findall(r"\[blank\d*\]", str(it.get("prompt") or ""))
+            accept = it.get("accept")
+            if len(tokens) <= 1 and isinstance(accept, list) and len(accept) == 1 and isinstance(accept[0], list):
+                it["accept"] = accept[0]
         # inline stimulus by EXPLICIT id only (never implicit, to avoid
         # gluing a code block onto an unrelated generic question)
         sid = it.get("stimulus_id")

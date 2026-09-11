@@ -227,6 +227,9 @@ def t_fitb(item, pos):
         accept = accept[0]
 
     if len(tokens) > 1:
+        if len(tokens) > 3:
+            raise ValueError(
+                f"{item.get('id')}: multi-blank FITB supports at most 3 blanks.")
         if mode != "open_entry":
             raise ValueError(
                 f"{item.get('id')}: multi-blank FITB supports open_entry only; "

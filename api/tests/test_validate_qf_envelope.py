@@ -260,6 +260,17 @@ def test_fitb_single_blank_accepts_nested_accept_shape(tmp_path):
     assert validate_qf.validate(_envelope(tmp_path, payload), set()) == []
 
 
+def test_fitb_multi_blank_rejects_more_than_three_blanks(tmp_path):
+    payload = _quiz([{
+        "id": "fitb-too-many",
+        "type": "FITB",
+        "prompt": "[blank1] [blank2] [blank3] [blank4]",
+        "accept": [["a"], ["b"], ["c"], ["d"]],
+    }], [_single_rationale("fitb-too-many", "Each answer would complete a linked blank in the sentence.")])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("at most 3 linked blanks" in p for p in problems), problems
+
+
 # --- Advisories: never block, apply only to auto-graded rationales ---
 
 def test_advise_flags_non_two_sentence_rationale(tmp_path):

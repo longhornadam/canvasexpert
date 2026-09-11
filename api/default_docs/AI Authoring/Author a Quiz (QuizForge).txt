@@ -77,6 +77,7 @@ FITB questions have historically caused the most LLM errors. Follow these rules 
 ### Single-Blank FITB (Preferred)
 - `prompt` must contain exactly one `[blank]` token.
 - `accept`: array of acceptable answers (strings). Example: `"accept": ["mitochondria", "the mitochondria"]`
+- A single blank may also use a one-element nested form such as `"accept": [["mitochondria", "the mitochondria"]]`; QuizForge normalizes it to the flat form.
 - `case_sensitive`: defaults to `false`. Leave it `false` unless the teacher explicitly requires case-sensitive grading (e.g., programming variables, chemical formulas, proper nouns). Canvas is case-sensitive by default, so QuizForge must override this.
 
 ### Multi-Blank FITB (Use Sparingly)
