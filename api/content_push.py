@@ -626,6 +626,9 @@ def _result_projection(operation: dict, result: dict) -> dict:
             row["error_code"] = target["error_code"]
         if target.get("failed_items"):
             row["failed_items"] = target["failed_items"]
+        for key in ("cleanup_required", "rollback_state", "rollback_error_code"):
+            if target.get(key) is not None:
+                row[key] = target[key]
         stored_target = (operation.get("targets") or [])[target_index] if target_index < len(operation.get("targets") or []) else {}
         step_source = target.get("steps") or (stored_target.get("steps") if differentiated else [])
         steps = [

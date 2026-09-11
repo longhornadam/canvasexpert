@@ -215,49 +215,105 @@ def t_numeric(item, pos):
 
 
 def t_fitb(item, pos):
-    # rich-fill-blank, single blank (all current fixtures are single-blank).
     tokens = re.findall(r"\[blank\d*\]", item["prompt"])
-    if len(tokens) != 1:
-        raise NotImplementedError(
-            f"{item.get('id')}: only single-blank FITB is supported "
-            f"(found {len(tokens)} blanks)")
-    accept = item.get("accept", [])
-    answer = accept[0] if accept else ""
+    accept = item.get("accept", []) or []
+    mode = str(item.get("answer_mode", "open_entry") or "open_entry").lower()
     case_sensitive = bool(item.get("case_sensitive", False))
-    mode = item.get("answer_mode", "open_entry")
-    bid = _u()
-
     body = re.sub(r"\[blank\d*\]", "`Blank`", item["prompt"])
 
-    if mode in ("wordbank", "dropdown"):
-        atype = "wordbank" if mode == "wordbank" else "dropdown"
-        word_bank = [{"id": _u(), "item_body": o} for o in item.get("options", [])]
-        blanks = [{"id": bid, "answer_type": atype}]
-    else:
-        atype = "openEntry"
-        word_bank = []
-        blanks = [{"id": bid, "answer_type": atype}]
+    # A one-element array-of-arrays is an unambiguous single-blank form. Keep
+    # it equivalent to the documented flat accept list.
+    if len(tokens) <= 1 and isinstance(accept, list) and len(accept) == 1 and isinstance(accept[0], list):
+        accept = accept[0]
 
-    entry = {
-        "title": item.get("id", "FITB"),
-        "item_body": body,
-        "interaction_type_slug": "rich-fill-blank",
-        "interaction_data": {
-            "blanks": blanks,
-            "word_bank_choices": word_bank,
-            "reuse_word_bank_choices": bool(word_bank),
-        },
-        "scoring_data": {
-            "value": [{
+    if len(tokens) > 1:
+        if mode != "open_entry":
+            raise ValueError(
+                f"{item.get('id')}: multi-blank FITB supports open_entry only; "
+                f"use separate single-blank items for {mode}.")
+        if not isinstance(accept, list) or len(accept) != len(tokens) or not all(isinstance(group, list) and group for group in accept):
+            raise ValueError(
+                f"{item.get('id')}: multi-blank FITB requires one non-empty "
+                "accept array per blank.")
+        blanks = []
+        values = []
+        for group in accept:
+            bid = _u()
+            answer = str(group[0])
+            blanks.append({"id": bid, "answer_type": "openEntry"})
+            values.append({
                 "id": bid,
                 "scoring_data": {
                     "value": answer,
                     "blank_text": answer,
                     "ignore_case": not case_sensitive,
-                    "edit_distance": 1,   # server requires > 0
+                    "edit_distance": 1,
                 },
                 "scoring_algorithm": "TextCloseEnough",
-            }],
+            })
+        interaction_data = {
+            "blanks": blanks,
+            "word_bank_choices": [],
+            "reuse_word_bank_choices": False,
+        }
+        scoring_data = {"value": values, "working_item_body": body}
+    else:
+        bid = _u()
+        answers = [str(value) for value in accept if not isinstance(value, list)] if isinstance(accept, list) else []
+        answer = answers[0] if answers else ""
+        options = [str(value) for value in (item.get("options") or [])]
+        if mode == "wordbank":
+            if not options:
+                raise ValueError(f"{item.get('id')}: FITB wordbank requires a non-empty options array.")
+            word_bank = [{"id": _u(), "item_body": option} for option in options]
+            selected = next((choice for choice in word_bank if choice["item_body"].strip().lower() in {value.strip().lower() for value in answers}), None)
+            if selected is None:
+                raise ValueError(f"{item.get('id')}: FITB wordbank accept answer must appear in options.")
+            blanks = [{"id": bid, "choices": None, "answer_type": "wordbank"}]
+            interaction_data = {
+                "blanks": blanks,
+                "word_bank_choices": word_bank,
+                "reuse_word_bank_choices": True,
+            }
+            scoring_data = {"value": answer, "choice_id": selected["id"], "blank_text": answer}
+            scoring_algorithm = "TextEquivalence"
+        elif mode == "dropdown":
+            if not options:
+                raise ValueError(f"{item.get('id')}: FITB dropdown requires a non-empty options array.")
+            choices = [{"id": _u(), "position": index, "item_body": option} for index, option in enumerate(options, 1)]
+            selected = next((choice for choice in choices if choice["item_body"].strip().lower() in {value.strip().lower() for value in answers}), None)
+            if selected is None:
+                raise ValueError(f"{item.get('id')}: FITB dropdown accept answer must appear in options.")
+            blanks = [{"id": bid, "choices": choices, "answer_type": "dropdown"}]
+            interaction_data = {"blanks": blanks}
+            scoring_data = {"value": selected["id"], "blank_text": answer}
+            scoring_algorithm = "Equivalence"
+        else:
+            blanks = [{"id": bid, "answer_type": "openEntry"}]
+            interaction_data = {
+                "blanks": blanks,
+                "word_bank_choices": [],
+                "reuse_word_bank_choices": False,
+            }
+            scoring_data = {
+                "value": answer,
+                "blank_text": answer,
+                "ignore_case": not case_sensitive,
+                "edit_distance": 1,
+            }
+            scoring_algorithm = "TextCloseEnough"
+
+    entry = {
+        "title": item.get("id", "FITB"),
+        "item_body": body,
+        "interaction_type_slug": "rich-fill-blank",
+        "interaction_data": interaction_data,
+        "scoring_data": {
+            "value": ([{
+                "id": bid,
+                "scoring_data": scoring_data,
+                "scoring_algorithm": scoring_algorithm,
+            }] if len(tokens) <= 1 else scoring_data["value"]),
             "working_item_body": body,
         },
         "scoring_algorithm": "MultipleMethods",

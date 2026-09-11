@@ -41,6 +41,12 @@ def execute(
         plan = variant["plan"]
         title = plan.get("title", f"Untitled variant {index}")
         failure_state = _variant_failure_state(steps)
+        quiz_step_before = next((step for step in steps if step.get("step_key") == f"create_quiz:{index}"), {})
+        quiz_created_here = (
+            not target.get("returned_object_id")
+            and not quiz_step_before.get("returned_object_id")
+            and not quiz_step_before.get("outbound_started_at")
+        )
         quiz_id, quiz_url, result = quiz_steps.ensure_quiz(
             course_id=course_id,
             step_key=f"create_quiz:{index}",
@@ -111,6 +117,18 @@ def execute(
                 failure_state=_variant_failure_state(steps),
             )
             if result is not None:
+                if result.get("error_code") == "item_rejected" and quiz_created_here and quiz_id:
+                    rollback = quiz_steps.rollback_quiz(
+                        course_id=course_id,
+                        quiz_id=quiz_id,
+                        step_key=f"rollback_quiz:{index}",
+                        steps=steps,
+                        context=context,
+                    )
+                    result["rollback_state"] = rollback["state"]
+                    result["cleanup_required"] = rollback["state"] != "applied"
+                    if rollback.get("error_code"):
+                        result["rollback_error_code"] = rollback["error_code"]
                 return result
 
         assignment_settings = plan.get("assignment_settings", {})

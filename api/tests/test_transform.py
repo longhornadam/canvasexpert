@@ -10,7 +10,7 @@ is no rationale, so no feedback content is added).
 
 Offline: builds a plain dict through t_essay directly, no network, no Canvas.
 """
-from api.transform import t_essay
+from api.transform import t_essay, t_fitb
 
 
 def test_essay_rationale_becomes_neutral_feedback_exemplar():
@@ -140,3 +140,37 @@ def test_one_sentence_rationale_survives_dedupe_intact():
                      if "wrong" in fb)
 
     assert '"wrong" is wrong. Same single sentence.' in wrong_box
+
+
+def test_fitb_wordbank_uses_canvas_choice_id_scoring():
+    built = t_fitb({
+        "id": "fitb1",
+        "type": "FITB",
+        "prompt": "The powerhouse is the [blank].",
+        "answer_mode": "wordbank",
+        "accept": ["mitochondria"],
+        "options": ["mitochondria", "nucleus"],
+    }, 1)["item"]["entry"]
+
+    blank = built["interaction_data"]["blanks"][0]
+    choices = built["interaction_data"]["word_bank_choices"]
+    score = built["scoring_data"]["value"][0]
+    selected = next(choice for choice in choices if choice["item_body"] == "mitochondria")
+    assert blank["answer_type"] == "wordbank"
+    assert blank["choices"] is None
+    assert score["scoring_algorithm"] == "TextEquivalence"
+    assert score["scoring_data"]["choice_id"] == selected["id"]
+
+
+def test_fitb_multi_blank_builds_one_open_entry_per_blank():
+    built = t_fitb({
+        "id": "fitb2",
+        "type": "FITB",
+        "prompt": "The [blank1] is near the [blank2].",
+        "accept": [["school"], ["park", "the park"]],
+    }, 1)["item"]["entry"]
+
+    assert len(built["interaction_data"]["blanks"]) == 2
+    assert len(built["scoring_data"]["value"]) == 2
+    assert all(row["scoring_algorithm"] == "TextCloseEnough"
+               for row in built["scoring_data"]["value"])

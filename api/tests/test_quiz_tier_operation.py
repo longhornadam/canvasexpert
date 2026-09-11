@@ -648,6 +648,8 @@ def test_item_rejection_identifies_source_item_in_differentiated_push(monkeypatc
     calls = []
     def send(method, path, body, timeout=30):
         calls.append(path)
+        if method == "DELETE":
+            return {}, None
         if len(calls) == 4:  # item 1 of variant 0
             return None, "HTTP 422: invalid accept shape"
         if "quizzes" in path and "items" not in path and "modules" not in path:
@@ -679,6 +681,9 @@ def test_item_rejection_identifies_source_item_in_differentiated_push(monkeypatc
         "reason": "Canvas rejected this quiz item.",
     }]
     assert "9001" not in json.dumps(result)
+    assert result["rollback_state"] == "applied"
+    assert result["cleanup_required"] is False
+    assert any(path.endswith("/quizzes/100") for path in calls)
 
 
 def test_second_variant_failure_is_partial(monkeypatch):

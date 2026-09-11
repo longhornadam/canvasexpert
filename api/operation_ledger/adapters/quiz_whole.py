@@ -12,6 +12,12 @@ def execute(payload: dict, target: dict, context, *, ordered_steps) -> dict:
     plan = payload.get("plan", {})
     title = plan.get("title", "Untitled quiz")
     steps = ordered_steps(target)
+    quiz_step_before = find_step(steps, "create_quiz:0")
+    quiz_created_here = (
+        not target.get("returned_object_id")
+        and not quiz_step_before.get("returned_object_id")
+        and not quiz_step_before.get("outbound_started_at")
+    )
     quiz_id, quiz_url, result = quiz_steps.ensure_quiz(
         course_id=course_id,
         step_key="create_quiz:0",
@@ -40,6 +46,18 @@ def execute(payload: dict, target: dict, context, *, ordered_steps) -> dict:
             failure_state="failed",
         )
         if result is not None:
+            if result.get("error_code") == "item_rejected" and quiz_created_here and quiz_id:
+                rollback = quiz_steps.rollback_quiz(
+                    course_id=course_id,
+                    quiz_id=quiz_id,
+                    step_key="rollback_quiz:0",
+                    steps=steps,
+                    context=context,
+                )
+                result["rollback_state"] = rollback["state"]
+                result["cleanup_required"] = rollback["state"] != "applied"
+                if rollback.get("error_code"):
+                    result["rollback_error_code"] = rollback["error_code"]
             return result
 
     assignment_settings = plan.get("assignment_settings", {})

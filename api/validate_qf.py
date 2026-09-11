@@ -93,6 +93,9 @@ def validate(path, seen_types):
             if n < 2:
                 problems.append(f"{name}: MA {iid!r} has {n} correct (need >=2)")
 
+        if t == "FITB":
+            problems.extend(_check_fitb_shape(name, iid, idx, it))
+
         if t not in PER_CHOICE_RATIONALE and t not in SCORED_SINGLE_RATIONALE:
             continue  # STIMULUS / STIMULUS_END carry no rationale
 
@@ -142,6 +145,40 @@ def validate(path, seen_types):
     print(f"       title: {title}")
     print(f"       group: {grp}  |  variant: {label}")
     print(f"       items: {summary}")
+    return problems
+
+
+def _check_fitb_shape(name, iid, index, item):
+    """Reject FITB shapes the planner cannot turn into a valid Canvas item."""
+    problems = []
+    prompt = str(item.get("prompt") or "")
+    blanks = re.findall(r"\[blank\d*\]", prompt)
+    accept = item.get("accept")
+    mode = str(item.get("answer_mode", "open_entry") or "open_entry").lower()
+    label = f"{name}: FITB item {iid!r}"
+    if len(blanks) > 3:
+        problems.append(f"{label} has {len(blanks)} blanks; use at most 3 linked blanks.")
+    if len(blanks) > 1:
+        if mode != "open_entry":
+            problems.append(f"{label} multi-blank answer_mode {mode!r} is unsupported; use open_entry.")
+        if not isinstance(accept, list) or len(accept) != len(blanks) or not all(isinstance(group, list) and group for group in accept):
+            problems.append(f"{label} multi-blank accept must be one non-empty array per blank.")
+        return problems
+
+    if isinstance(accept, list) and len(accept) == 1 and isinstance(accept[0], list):
+        # The parser accepts this equivalent single-blank form; the pusher
+        # normalizes it before building the Canvas payload.
+        accept = accept[0]
+    if not isinstance(accept, list) or not accept or any(isinstance(value, list) for value in accept):
+        problems.append(f"{label} accept must be a non-empty flat array for a single blank.")
+    if mode in {"wordbank", "dropdown"}:
+        options = item.get("options")
+        if not isinstance(options, list) or not options:
+            problems.append(f"{label} {mode} requires a non-empty options array.")
+        elif isinstance(accept, list):
+            option_values = {str(value).strip().casefold() for value in options}
+            if not any(str(value).strip().casefold() in option_values for value in accept if not isinstance(value, list)):
+                problems.append(f"{label} {mode} accept answer must appear in options.")
     return problems
 
 

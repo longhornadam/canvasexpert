@@ -390,6 +390,41 @@ def ensure_item(
     return None
 
 
+def rollback_quiz(
+    *,
+    course_id: str,
+    quiz_id: str,
+    step_key: str,
+    steps: list[dict],
+    context,
+) -> dict:
+    """Delete a quiz created by this attempt after a definitive item failure."""
+    rollback_path = f"/api/quiz/v1/courses/{course_id}/quizzes/{quiz_id}"
+    rollback_step = ensure_step(steps, step_key)
+    if rollback_step.get("state") == "applied":
+        return {"state": "applied"}
+    if rollback_step.get("outbound_started_at"):
+        return {"state": "sent_unknown", "error_code": "rollback_unknown"}
+
+    digest = models.sha256_dict({"method": "DELETE", "path": rollback_path, "payload": {}})
+    rollback_step = context.before_send(step_key, digest)
+    replace_step(steps, rollback_step)
+    _response, error = canvas_client._canvas_send("DELETE", rollback_path, {})
+    if error:
+        state = "sent_unknown" if is_uncertain(error) else "failed"
+        rollback_step["state"] = state
+        rollback_step["error_code"] = "rollback_unknown" if state == "sent_unknown" else "rollback_failed"
+        rollback_step["private_diagnostic"] = error
+        rollback_step = context.checkpoint_step(rollback_step)
+        replace_step(steps, rollback_step)
+        return {"state": state, "error_code": rollback_step["error_code"]}
+
+    rollback_step["state"] = "applied"
+    rollback_step = context.checkpoint_step(rollback_step)
+    replace_step(steps, rollback_step)
+    return {"state": "applied"}
+
+
 def patch_assignment(
     *,
     course_id: str,

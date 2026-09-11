@@ -92,6 +92,9 @@ def build_result(
     error_code: str | None = None,
     private_diagnostic: str | None = None,
     failed_items: list[dict] | None = None,
+    cleanup_required: bool | None = None,
+    rollback_state: str | None = None,
+    rollback_error_code: str | None = None,
 ) -> dict:
     result = {
         "state": state,
@@ -103,4 +106,10 @@ def build_result(
     }
     if failed_items is not None:
         result["failed_items"] = failed_items
+    if cleanup_required is not None:
+        result["cleanup_required"] = cleanup_required
+    if rollback_state is not None:
+        result["rollback_state"] = rollback_state
+    if rollback_error_code is not None:
+        result["rollback_error_code"] = rollback_error_code
     return result

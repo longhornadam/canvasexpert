@@ -228,6 +228,38 @@ def test_single_rationale_whitespace_only_is_rejected(tmp_path):
     assert any("rationale is empty" in p for p in problems), problems
 
 
+def test_fitb_wordbank_requires_options_before_push(tmp_path):
+    payload = _quiz([{
+        "id": "fitb-wordbank",
+        "type": "FITB",
+        "prompt": "The powerhouse is the [blank].",
+        "answer_mode": "wordbank",
+        "accept": ["mitochondria"],
+    }], [_single_rationale("fitb-wordbank", "The answer names the organelle that produces cellular energy.")])
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("wordbank requires" in p and "options" in p for p in problems), problems
+
+
+def test_fitb_multi_blank_shape_is_validated_by_item(tmp_path):
+    payload = _quiz([{
+        "id": "fitb-multi",
+        "type": "FITB",
+        "prompt": "The [blank1] is near the [blank2].",
+        "accept": [["school"], ["park"]],
+    }], [_single_rationale("fitb-multi", "Each answer completes its linked blank in the sentence.")])
+    assert validate_qf.validate(_envelope(tmp_path, payload), set()) == []
+
+
+def test_fitb_single_blank_accepts_nested_accept_shape(tmp_path):
+    payload = _quiz([{
+        "id": "fitb-nested",
+        "type": "FITB",
+        "prompt": "The powerhouse is the [blank1].",
+        "accept": [["mitochondria", "the mitochondria"]],
+    }], [_single_rationale("fitb-nested", "The accepted terms identify the organelle that produces cellular energy.")])
+    assert validate_qf.validate(_envelope(tmp_path, payload), set()) == []
+
+
 # --- Advisories: never block, apply only to auto-graded rationales ---
 
 def test_advise_flags_non_two_sentence_rationale(tmp_path):

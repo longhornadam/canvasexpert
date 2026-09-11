@@ -618,6 +618,7 @@ def test_apply_item_create_failure(tmp_path, monkeypatch):
     send_calls = _mock_canvas_send(monkeypatch, [
         ({"id": 1001}, None),  # create_quiz:0 succeeds
         (None, "HTTP 500: server error"),  # create_item:0:1 fails
+        ({}, None),  # rollback_quiz:0 succeeds
     ])
 
     adapter = QuizAdapter()
@@ -655,6 +656,52 @@ def test_apply_item_create_failure(tmp_path, monkeypatch):
         "canvas_status": 500,
         "reason": "Canvas rejected this quiz item.",
     }]
+    assert result["target_results"][0]["rollback_state"] == "applied"
+    assert result["target_results"][0]["cleanup_required"] is False
+    assert send_calls[2]["method"] == "DELETE"
+    assert send_calls[2]["path"].endswith("/quizzes/1001")
+
+
+def test_apply_item_rejection_reports_cleanup_when_rollback_fails(tmp_path, monkeypatch):
+    _root(tmp_path, monkeypatch)
+    _mock_active_courses(monkeypatch)
+    _mock_plan_subprocess(monkeypatch)
+    _mockcanvas_get(monkeypatch, [([], None), ([], None), ([], None)])
+    send_calls = _mock_canvas_send(monkeypatch, [
+        ({"id": 1001}, None),
+        (None, "HTTP 422: invalid item"),
+        (None, "HTTP 403: forbidden"),
+    ])
+
+    adapter = QuizAdapter()
+    payload = adapter.build_payload({"path": "/tmp/algebra.txt"})
+    targets_in = adapter.verify_targets(payload, [{"course_id": "101"}])
+    target_records = []
+    frozen = []
+    for target in targets_in:
+        baseline = adapter.capture_baseline(payload, target)
+        target_records.append(models.new_target(
+            target_key=target["target_key"], idempotency_key=target["idempotency_key"],
+            course_id=target["course_id"], baseline=baseline))
+        frozen.append(adapter.freeze_review(payload, target, baseline))
+
+    op_id = models.new_operation_id()
+    op = models.new_operation(
+        operation_id=op_id, kind="content.quiz",
+        source_ref={"type": "workspace_relative", "value": "/tmp/algebra.txt"},
+        source_digest=adapter.source_digest(payload), normalized_payload=payload,
+        targets=target_records)
+    operations.create_operation(op)
+    batch = batches.freeze_batch([op_id], {op_id: frozen})
+    operations.set_operation_review(op_id, batch)
+
+    result = executor.apply_operation(op_id, batch["batch_id"], batch["review_digest"])
+    target_result = result["target_results"][0]
+    assert target_result["error_code"] == "item_rejected"
+    assert target_result["rollback_state"] == "failed"
+    assert target_result["rollback_error_code"] == "rollback_failed"
+    assert target_result["cleanup_required"] is True
+    assert send_calls[2]["method"] == "DELETE"
 
 
 def test_apply_quiz_create_sent_unknown(tmp_path, monkeypatch):

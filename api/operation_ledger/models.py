@@ -138,6 +138,9 @@ def new_target(*, target_key: str, idempotency_key: str, course_id: str,
         "error_code": None,
         "private_diagnostic": None,
         "failed_items": None,
+        "cleanup_required": None,
+        "rollback_state": None,
+        "rollback_error_code": None,
         "updated_at": ts,
     }
 
