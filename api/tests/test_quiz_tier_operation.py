@@ -289,6 +289,23 @@ def test_build_payload_accepts_duplicate_titles(tmp_path, monkeypatch):
     ]
 
 
+def test_differentiated_baseline_keys_repeated_titles_by_variant(monkeypatch):
+    _mock_active_courses(monkeypatch)
+    adapter = QuizAdapter()
+    monkeypatch.setattr(quiz_adapter_module, "resolve_assignment_groups", lambda *a, **k: {
+        "safe": {"tiers": []}, "student_ids_by_group": {},
+    })
+    calls = []
+    def get(path, params=None, timeout=20):
+        calls.append(params["search_term"])
+        return ([{"id": str(10 + len(calls)), "name": params["search_term"]}], None)
+    monkeypatch.setattr(canvas_client, "canvas_get", get)
+    payload = {"mode": "differentiated", "variants": _make_variants(VARIANT_PLAN_A, VARIANT_PLAN_A)}
+    baseline = adapter.capture_baseline(payload, {"course_id": "101"})
+    assert set(baseline["existing_by_variant"]) == {"blue", "gold"}
+    assert calls == [VARIANT_PLAN_A["title"], VARIANT_PLAN_A["title"]]
+
+
 def test_build_payload_rejects_missing_group_name(tmp_path, monkeypatch):
     _root(tmp_path, monkeypatch)
     _mock_plan_subprocess(monkeypatch, {

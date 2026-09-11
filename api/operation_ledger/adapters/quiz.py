@@ -32,6 +32,13 @@ from api.webui.runner import run_json_object
 KIND = "content.quiz"
 
 
+def _variant_identity(variant: dict, index: int) -> str:
+    plan = variant.get("plan") or {}
+    metadata = plan.get("metadata") or {}
+    explicit = metadata.get("variant") or metadata.get("variant_label")
+    return _normalize(explicit or variant.get("group_name") or f"variant_{index}")
+
+
 class QuizAdapter:
     kind = KIND
 
@@ -237,10 +244,9 @@ class QuizAdapter:
             return {"canvas_error": str(exc)}
 
         existing_by_title = {}
-        for v in variants:
+        existing_by_variant = {}
+        for index, v in enumerate(variants):
             title = v["plan"].get("title", "")
-            if title in existing_by_title:
-                continue
             assignments, error = canvas_client.canvas_get(
                 f"/api/v1/courses/{course_id}/assignments",
                 params={"per_page": 100, "search_term": title},
@@ -253,11 +259,13 @@ class QuizAdapter:
                 if row.get("id") is not None
                 and _normalize(row.get("name")) == _normalize(title)
             ]
-            existing_by_title[title] = matches
+            existing_by_variant[_variant_identity(v, index)] = matches
+            existing_by_title.setdefault(title, matches)
 
         return {
             "group_snapshot": resolved["safe"],
             "existing_by_title": existing_by_title,
+            "existing_by_variant": existing_by_variant,
         }
 
     def check_drift(self, payload: dict, target: dict, baseline: dict) -> bool:
@@ -278,7 +286,8 @@ class QuizAdapter:
                     if step.get("step_key", "").startswith("create_quiz:")
                     and step.get("returned_object_id") is not None
                 }
-                for title, matches in fresh.get("existing_by_title", {}).items():
+                existing_map = fresh.get("existing_by_variant") or fresh.get("existing_by_title", {})
+                for matches in existing_map.values():
                     current = {m["id"] for m in matches}
                     if current - known:
                         return True

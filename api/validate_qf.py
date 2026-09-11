@@ -88,10 +88,12 @@ def validate(path, seen_types):
             n = sum(1 for c in it.get("choices", []) if c.get("correct"))
             if n != 1:
                 problems.append(f"{name}: MC {iid!r} has {n} correct (need 1)")
+            problems.extend(_check_letter_choice_ids(name, iid, it))
         if t == "MA":
             n = sum(1 for c in it.get("choices", []) if c.get("correct"))
             if n < 2:
                 problems.append(f"{name}: MA {iid!r} has {n} correct (need >=2)")
+            problems.extend(_check_letter_choice_ids(name, iid, it))
 
         if t == "FITB":
             problems.extend(_check_fitb_shape(name, iid, idx, it))
@@ -180,6 +182,21 @@ def _check_fitb_shape(name, iid, index, item):
             if not any(str(value).strip().casefold() in option_values for value in accept if not isinstance(value, list)):
                 problems.append(f"{label} {mode} accept answer must appear in options.")
     return problems
+
+
+def _check_letter_choice_ids(name, iid, item):
+    ids = [choice.get("id") for choice in item.get("choices", [])
+           if isinstance(choice, dict)]
+    if not ids or not all(isinstance(value, str) and len(value) == 1 and value.isupper()
+                          for value in ids):
+        return []
+    expected = [chr(ord("A") + offset) for offset in range(len(ids))]
+    if ids != expected:
+        return [
+            f"{name}: {item.get('type')} item {iid!r} choice ids must be contiguous "
+            f"letters starting at A (expected {', '.join(expected)}; found {', '.join(ids)})."
+        ]
+    return []
 
 
 def _check_per_choice(name, t, iid, item, entry):

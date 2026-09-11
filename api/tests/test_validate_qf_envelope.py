@@ -222,6 +222,13 @@ def test_mc_rationale_choice_id_mismatch_is_rejected(tmp_path):
     assert any("does not match any choice" in p for p in problems), problems
 
 
+def test_mc_non_contiguous_choice_ids_are_rejected(tmp_path):
+    payload = _quiz([_mc_item("q1", 4)], [_per_choice_rationale("q1", ["a", "b", "c", "d"])])
+    payload["items"][0]["choices"][3]["id"] = "E"
+    problems = validate_qf.validate(_envelope(tmp_path, payload), set())
+    assert any("choice ids must be contiguous" in p for p in problems), problems
+
+
 def test_single_rationale_whitespace_only_is_rejected(tmp_path):
     payload = _quiz([_tf_item("tf1")], [_single_rationale("tf1", "   ")])
     problems = validate_qf.validate(_envelope(tmp_path, payload), set())

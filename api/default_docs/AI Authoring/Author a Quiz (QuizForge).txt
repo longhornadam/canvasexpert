@@ -55,7 +55,7 @@
 - **`metadata.teks`** (string or array of strings): the TEKS standard code(s) the item assesses, e.g. `"metadata": { "teks": "126.34(c)(4)(A)" }` or `"teks": ["126.34(c)(4)(A)", "126.34(c)(5)(B)"]`. Use the bare code (no "TEKS " prefix — tools add it). The Canvas-API backend reports per-standard coverage and embeds a small visible TEKS label on each tagged question. (Per-question Canvas Outcome alignment is UI-only, so it is not done programmatically.) Tag every scored item with the standard it targets when standards tracking is desired.
 
 ## 5. QUESTION TYPE FIELDS & RULES
-- **MC** — `choices` array (2–7). Each choice: `{ "text": "...", "correct": true|false, "id": "A" }`. List correct choice first when practical to reduce LLM error.
+- **MC** — `choices` array (2–7). Each choice: `{ "text": "...", "correct": true|false, "id": "A" }`; letter ids must be contiguous from A. List correct choice first when practical to reduce LLM error.
 - **MA** — Like MC but one or more `correct: true`.
 - **TF** — `answer`: `true` or `false`.
 - **MATCHING** — `pairs`: `[ { "left": "...", "right": "..." }, ... ]` (min 2). Include at least one distractor (extra right-side option) to prevent elimination by process of elimination. Optional `distractors` array for extra right-side choices.
@@ -327,6 +327,7 @@ This applies to correct choices, distractors, and the single-rationale types ali
  Incorrect options check: Every distractor must truly be incorrect (no accidental second correct answer hidden among distractors).
  Answer balance (Section 10): correct answer longest ≤33% / shortest ≤33% of the time; distractors crafted as carefully as the key.
  FITB check: Single blank preferred; multi-blank only for conceptually linked content; max 3 blanks; Support tier uses dropdown/wordbank.
+ Choice IDs: MC/MA letter ids are contiguous from A (A, B, C, ...); do not skip a letter.
  Rationales (Section 11): one per scored item, skip stimuli; every rationale is exactly two sentences (concept, then applied to this choice or answer); MC/MA need a per-choice rationale for every choice `id`; other scorable types use one two-sentence string; ESSAY/FILEUPLOAD take a single rationale holding a student-facing exemplar.
  Stimuli: set `stimulus_id` to attach; 2–4 questions per stimulus; every STIMULUS holds real content (passage/code/image/table), never a bare instruction.
 
